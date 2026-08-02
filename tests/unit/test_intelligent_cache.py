@@ -1593,6 +1593,239 @@ class TestRedisCacheLayerInvalidateByTags:
 
         assert result == 0
 
+    async def test_invalidate_issues_tags_concurrently(self):
+        """Per-tag work must overlap rather than run one tag at a time.
+
+        This is the non-vacuity guard for the change: a serial ``for`` loop
+        yields a peak of exactly 1, so this assertion fails on the previous
+        implementation.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_smembers(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so sibling tags can start if the fan-out is concurrent.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return {b"key1"}
+
+        conn.smembers = AsyncMock(side_effect=_tracking_smembers)
+        conn.delete = AsyncMock(return_value=1)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags([f"tag{i}" for i in range(5)])
+
+        assert peak > 1
+        assert conn.smembers.call_count == 5
+        assert result == 5
+
+    async def test_invalidate_stays_within_concurrency_bound(self):
+        """A large tag list must not fan out past the connection-pool budget."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_smembers(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return set()
+
+        conn.smembers = AsyncMock(side_effect=_tracking_smembers)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags([f"tag{i}" for i in range(50)])
+
+        assert result == 0
+        assert conn.smembers.call_count == 50
+        assert peak <= layer._tag_write_limit
+
+    async def test_invalidate_holds_one_permit_across_both_commands(self):
+        """smembers and delete for a tag are scheduled under one permit.
+
+        Holding the permit across the pair keeps each tag's invalidation as one
+        indivisible unit of scheduled work, so with a single permit the pairs
+        run to completion without interleaving. (This does not change peak pool
+        usage -- redis.asyncio returns a connection to the pool between the two
+        awaits -- it pins the per-tag scheduling policy so a later refactor
+        cannot silently split the pair.)
+        """
+        layer = self._connected_layer()
+        layer._tag_write_limit = 1
+        conn = _make_redis_conn()
+
+        order = []
+
+        async def _smembers(name, *_args, **_kwargs):
+            order.append(("smembers", name))
+            await asyncio.sleep(0)
+            return {b"key1"}
+
+        async def _delete(*args, **_kwargs):
+            order.append(("delete", args[-1]))
+            await asyncio.sleep(0)
+            return 1
+
+        conn.smembers = AsyncMock(side_effect=_smembers)
+        conn.delete = AsyncMock(side_effect=_delete)
+
+        with _patch_redis(conn):
+            await layer.invalidate_by_tags(["tag1", "tag2"])
+
+        # With one permit the pairs must not interleave.
+        assert order == [
+            ("smembers", "uvai:tag:tag1"),
+            ("delete", "uvai:tag:tag1"),
+            ("smembers", "uvai:tag:tag2"),
+            ("delete", "uvai:tag:tag2"),
+        ]
+
+    async def test_invalidate_cancellation_drains_before_conn_closes(self):
+        """Cancellation must unwind every child before the connection closes.
+
+        This is the explicit cancellation-parity claim: gather() does not
+        complete its outer future until every cancelled child has finished, so
+        the enclosing ``async with redis.Redis(...)`` cannot close ``conn``
+        while a child could still issue a command on it.
+        """
+        layer = self._connected_layer()
+        layer._tag_write_limit = 4
+        conn = _make_redis_conn()
+
+        events: list[tuple] = []
+        all_blocked = asyncio.Event()
+        entered = 0
+
+        async def _blocking_smembers(name, *_args, **_kwargs):
+            nonlocal entered
+            events.append(("cmd", "smembers", name))
+            entered += 1
+            if entered == 3:
+                all_blocked.set()
+            try:
+                await asyncio.sleep(3600)
+                return {b"key1"}
+            finally:
+                events.append(("unwind", name))
+
+        async def _delete(*args, **_kwargs):
+            events.append(("cmd", "delete", args[-1]))
+            return 1
+
+        async def _aexit(*_args, **_kwargs):
+            events.append(("aexit",))
+            return False
+
+        conn.smembers = AsyncMock(side_effect=_blocking_smembers)
+        conn.delete = AsyncMock(side_effect=_delete)
+        conn.__aexit__ = AsyncMock(side_effect=_aexit)
+
+        with _patch_redis(conn):
+            task = asyncio.create_task(layer.invalidate_by_tags(["t1", "t2", "t3"]))
+            try:
+                await asyncio.wait_for(all_blocked.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                task.cancel()
+                try:
+                    await task
+                except BaseException:
+                    pass
+                pytest.fail(
+                    f"tags were not issued concurrently; only {entered} in flight"
+                )
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        kinds = [e[0] for e in events]
+        assert "aexit" in kinds, f"connection never closed: {events}"
+        aexit_idx = kinds.index("aexit")
+
+        # Every child finished its finally path before the connection closed.
+        assert kinds.count("unwind") == 3, f"not all children unwound: {events}"
+        assert all(
+            i < aexit_idx for i, e in enumerate(events) if e[0] == "unwind"
+        ), f"a child unwound after conn close: {events}"
+
+        # No Redis command was issued after the connection closed.
+        assert all(
+            i < aexit_idx for i, e in enumerate(events) if e[0] == "cmd"
+        ), f"command issued after conn close: {events}"
+
+    async def test_invalidate_failure_drains_in_flight_work(self):
+        """A failing tag returns 0 with no per-tag task left in flight."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        started = 0
+        finished = 0
+
+        async def _flaky_smembers(name, *_args, **_kwargs):
+            nonlocal started, finished
+            started += 1
+            await asyncio.sleep(0)
+            finished += 1
+            if name.endswith("tag3"):
+                raise RuntimeError("redis unavailable")
+            return set()
+
+        conn.smembers = AsyncMock(side_effect=_flaky_smembers)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags([f"tag{i}" for i in range(6)])
+
+        assert result == 0
+        # Every scheduled tag ran to completion before the method returned.
+        assert started == 6
+        assert finished == started
+
+    async def test_invalidate_shares_tag_write_budget_with_set(self):
+        """set() and invalidate_by_tags() must draw from one shared budget.
+
+        Both hold connections from the same pool, so separate budgets would let
+        a concurrent set storm and invalidation storm each claim the full limit.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracked(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        async def _tracked_smembers(*_args, **_kwargs):
+            await _tracked()
+            return set()
+
+        conn.sadd = AsyncMock(side_effect=_tracked)
+        conn.smembers = AsyncMock(side_effect=_tracked_smembers)
+
+        with _patch_redis(conn):
+            await asyncio.gather(
+                layer.set("k", "v", tags=[f"s{i}" for i in range(40)]),
+                layer.invalidate_by_tags([f"i{i}" for i in range(40)]),
+            )
+
+        assert conn.sadd.call_count == 40
+        assert conn.smembers.call_count == 40
+        assert peak <= layer._tag_write_limit
+
 
 class TestRedisCacheLayerUpdateAvgAccessTime:
     """Tests for RedisCacheLayer._update_avg_access_time() — lines 442-450"""
