@@ -61,6 +61,39 @@ def _safe_rmtree(path: Path) -> None:
     shutil.rmtree(path, ignore_errors=True)
 
 
+async def _make_scaffold_dir(prefix: str) -> Path:
+    """Create a temp scaffold directory off the loop, cleaning it up if the
+    caller is cancelled while ``mkdtemp`` is still running.
+
+    ``asyncio.to_thread`` cannot interrupt ``mkdtemp`` once it has started, so a
+    cancellation delivered during the hop can still leave a directory on disk
+    whose path never reaches the caller -- the assignment that would hand it to
+    a higher-level cleanup scope never happens. This helper owns that window: it
+    waits for the worker to settle, removes any directory the worker created,
+    and only then propagates the ``CancelledError``. The removal is synchronous
+    because the directory is freshly created and empty, and cleanup on the
+    cancellation path must complete rather than risk a second cancellation.
+    """
+    task = asyncio.ensure_future(asyncio.to_thread(tempfile.mkdtemp, prefix=prefix))
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:
+            if not cancelled:
+                raise
+    if cancelled:
+        created: Optional[str] = None
+        with contextlib.suppress(Exception):
+            created = task.result()
+        if created is not None:
+            _safe_rmtree(Path(created))
+        raise asyncio.CancelledError
+    return Path(task.result())
+
+
 #: One scaffolding step. ``(path, None)`` creates a directory; ``(path, text)``
 #: writes a file. Steps are applied in list order.
 WritePlan = list[tuple[Path, Optional[str]]]
@@ -216,18 +249,16 @@ class ProjectCodeGenerator:
             if build_plan:
                 video_analysis["build_plan"] = build_plan
 
-            # Create temporary project directory
-            temp_dir = await _run_offloop(
-                tempfile.mkdtemp, prefix="uvai_project_"
-            )
-            project_path = Path(temp_dir)
+            # Create temporary project directory. ``_make_scaffold_dir`` owns
+            # cleanup for the window where cancellation lands *during* mkdtemp:
+            # the directory can already exist on disk before its path reaches
+            # the cleanup scope below, so the helper removes it itself.
+            project_path = await _make_scaffold_dir("uvai_project_")
 
-            # Once the scaffold directory exists it is owned by nobody until we
-            # return its path. If generation is cancelled or fails, that path
-            # never reaches a caller, so a half-written ``uvai_project_*`` tree
-            # would leak. The write hops are shielded (see ``_run_offloop``), so
-            # by the time cleanup runs the filesystem is settled and rmtree does
-            # not race a live writer.
+            # Past this point the path is known, so a cancelled or failed
+            # generation removes the scaffold here. The write hops are shielded
+            # (see ``_run_offloop``), so by the time cleanup runs the filesystem
+            # is settled and rmtree does not race a live writer.
             try:
                 # Generate project structure based on type
                 if project_type == "web":

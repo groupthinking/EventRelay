@@ -1079,6 +1079,51 @@ class TestScaffoldingCancellationSafety:
             "cancelled generation leaked its scaffold directory"
         )
 
+    async def test_cancelled_during_mkdtemp_removes_created_dir(
+        self, monkeypatch, tmp_path
+    ):
+        """Cancellation *during* mkdtemp must not leak the created directory.
+
+        The directory can materialise on the worker thread before its path is
+        assigned into the cleanup scope, so `_make_scaffold_dir` has to remove it
+        itself before propagating the cancellation.
+        """
+        import youtube_extension.backend.code_generator as cg_module
+
+        created = tmp_path / "uvai_project_mkdtemp_cancel"
+        started = threading.Event()
+        release = threading.Event()
+
+        def _blocking_mkdtemp(prefix):
+            # Park inside mkdtemp so we can cancel before it returns the path.
+            started.set()
+            release.wait(5)
+            created.mkdir()
+            return str(created)
+
+        monkeypatch.setattr(cg_module.tempfile, "mkdtemp", _blocking_mkdtemp)
+
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        task = asyncio.ensure_future(
+            gen.generate_project(
+                _build_video_analysis("T", "auJzb1D-fag", "S", []),
+                {"project_type": "web", "technologies": ["react"]},
+            )
+        )
+
+        while not started.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        # Let the shielded mkdtemp worker finish creating the directory.
+        release.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert not created.exists(), (
+            "cancellation during mkdtemp leaked the scaffold directory"
+        )
+
     async def test_failed_generation_removes_orphan_scaffold(
         self, monkeypatch, tmp_path
     ):
