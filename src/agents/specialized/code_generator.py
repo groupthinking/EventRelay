@@ -43,7 +43,8 @@ class CodeGeneratorAgent:
                     except ValidationError as e:
                         raise HTTPException(status_code=400, detail=str(e))
                     except Exception as e:
-                        raise HTTPException(status_code=500, detail=str(e))
+                        logger.error(f"Unexpected error: {{e}}", exc_info=True)
+                        raise HTTPException(status_code=500, detail="Internal server error")
             """
             ),
             "rest_api": textwrap.dedent(
