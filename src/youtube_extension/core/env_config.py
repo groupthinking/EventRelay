@@ -25,7 +25,9 @@ def _raw_override(name: str) -> str | None:
     return raw.strip()
 
 
-def _fallback(name: str, raw: str, default: int | float, requirement: str) -> int | float:
+def _fallback(
+    name: str, raw: str, default: int | float, requirement: str
+) -> int | float:
     logger.warning(
         "Ignoring invalid %s=%r; expected %s. Using default %r.",
         name,

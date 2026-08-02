@@ -14,7 +14,10 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from youtube_extension.core.env_config import positive_finite_float_env, positive_int_env
+from youtube_extension.core.env_config import (
+    positive_finite_float_env,
+    positive_int_env,
+)
 
 try:
     from google.cloud import firestore

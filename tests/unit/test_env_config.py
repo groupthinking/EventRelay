@@ -53,7 +53,10 @@ class TestPositiveIntEnv:
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
             assert positive_int_env(_VAR, 8) == expected
 
-    @pytest.mark.parametrize("raw", ["0", "-1", "abc", "1.5", "inf", "nan"])
+    @pytest.mark.parametrize(
+        "raw",
+        ["0", "-1", "-42", "abc", "1.5", "8x", "0x10", "inf", "nan"],
+    )
     def test_invalid_logs_and_falls_back(self, raw, caplog):
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
             assert positive_int_env(_VAR, 8) == 8
@@ -93,7 +96,22 @@ class TestPositiveFiniteFloatEnv:
             assert positive_finite_float_env(_VAR, 30.0) == expected
 
     @pytest.mark.parametrize(
-        "raw", ["inf", "Infinity", "-inf", "nan", "0", "-1", "abc", "1.2.3"]
+        "raw",
+        # "0.0" and "NaN" are spelling variants that ``float()`` accepts but the
+        # guard must still reject; "12s" is the unit-suffix typo a human writes.
+        [
+            "inf",
+            "Infinity",
+            "-inf",
+            "nan",
+            "NaN",
+            "0",
+            "0.0",
+            "-1",
+            "abc",
+            "1.2.3",
+            "12s",
+        ],
     )
     def test_invalid_logs_and_falls_back(self, raw, caplog):
         with patch.dict(os.environ, {_VAR: raw}, clear=False):
@@ -186,8 +204,10 @@ class TestTunableConstantWiring:
     def test_invalid_override_logs_and_uses_default(self, module, constant):
         result = _import_constant(module, constant, "0")
         assert result.returncode == 0, result.stderr
-        expected = "30.0" if constant.endswith("TIMEOUT_SECONDS") else (
-            "16" if constant == "CLEANUP_DELETE_CONCURRENCY" else "8"
+        expected = (
+            "30.0"
+            if constant.endswith("TIMEOUT_SECONDS")
+            else ("16" if constant == "CLEANUP_DELETE_CONCURRENCY" else "8")
         )
         assert result.stdout.strip() == expected
         assert constant in result.stderr
