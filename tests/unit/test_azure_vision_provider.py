@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import builtins
 import sys
+import threading
 import types as _types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1194,3 +1196,92 @@ class TestAzureVisionEstimateCost:
         cost1 = provider.estimate_cost(60.0, [AnalysisType.OCR])
         cost2 = provider.estimate_cost(60.0, [AnalysisType.OCR, AnalysisType.FACE_DETECTION])
         assert cost2 > cost1
+
+
+# ===========================================================================
+# Local image reads must not block the event loop
+# ===========================================================================
+
+
+class _ThreadRecordingHandle:
+    """File-object proxy that records the calling thread on every ``read``."""
+
+    def __init__(self, handle, threads):
+        self._handle = handle
+        self._threads = threads
+
+    def read(self, *args, **kwargs):
+        self._threads.append(threading.get_ident())
+        return self._handle.read(*args, **kwargs)
+
+    def __enter__(self):
+        self._handle.__enter__()
+        return self
+
+    def __exit__(self, *exc_info):
+        return self._handle.__exit__(*exc_info)
+
+    def __getattr__(self, name):
+        return getattr(self._handle, name)
+
+
+class _ThreadRecordingOpen:
+    """Wrap ``builtins.open`` and record which thread *reads* a target path.
+
+    Off-loop execution is asserted by *thread identity* rather than elapsed
+    wall-clock time, which is flaky on loaded CI runners. The recording hooks
+    ``read()`` on the returned handle rather than ``open()`` itself, so a
+    regression that opens the file on a worker thread but reads its bytes back
+    on the event loop is still caught. Only the target path is wrapped so
+    unrelated ``open`` traffic (logging, coverage) cannot contaminate the
+    result.
+    """
+
+    def __init__(self, target):
+        self._real_open = builtins.open
+        self._target = str(target)
+        self.threads: list[int] = []
+
+    def __call__(self, file, *args, **kwargs):
+        handle = self._real_open(file, *args, **kwargs)
+        if str(file) == self._target:
+            return _ThreadRecordingHandle(handle, self.threads)
+        return handle
+
+
+class TestAzureVisionImageReadOffEventLoop:
+    async def test_local_file_read_runs_on_worker_thread(self, tmp_path):
+        provider = _make_provider()
+        img_file = tmp_path / "frame.jpg"
+        img_file.write_bytes(b"\xff\xd8\xff\xe0")
+        recorder = _ThreadRecordingOpen(img_file)
+        loop_thread = threading.get_ident()
+
+        with patch("builtins.open", recorder):
+            result = await provider._prepare_image_input(str(img_file))
+
+        assert result == b"\xff\xd8\xff\xe0"
+        assert recorder.threads, "expected the provider to read the local image file"
+        assert loop_thread not in recorder.threads, (
+            "local image bytes were read on the event loop thread; the read must "
+            "be offloaded to a worker thread"
+        )
+
+    async def test_http_url_performs_no_disk_read(self, tmp_path):
+        """The URL branch must remain untouched: Azure fetches it directly."""
+        provider = _make_provider()
+        decoy = tmp_path / "unused.jpg"
+        decoy.write_bytes(b"\x00")
+        recorder = _ThreadRecordingOpen(decoy)
+
+        with patch("builtins.open", recorder):
+            result = await provider._prepare_image_input("https://example.com/img.jpg")
+
+        assert result is None
+        assert recorder.threads == []
+
+    async def test_missing_file_still_raises_file_not_found(self, tmp_path):
+        """Offloading must not swallow or re-wrap I/O errors."""
+        provider = _make_provider()
+        with pytest.raises(FileNotFoundError):
+            await provider._prepare_image_input(str(tmp_path / "does-not-exist.jpg"))
