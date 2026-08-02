@@ -27,6 +27,7 @@ from ..exceptions import (
     ConfigurationError,
     RateLimitError,
 )
+from ..media_paths import resolve_local_media_path
 
 logger = logging.getLogger(__name__)
 
@@ -181,9 +182,12 @@ class GoogleCloudAI(BaseCloudAI):
             if image_url.startswith(('http://', 'https://')):
                 image.source.image_uri = image_url
             else:
-                # For local files
-                with open(image_url, 'rb') as image_file:
-                    image.content = image_file.read()
+                # Local file. The path is caller-supplied, so validate it
+                # against CLOUD_AI_MEDIA_ROOT before opening anything.
+                safe_path = resolve_local_media_path(
+                    image_url, provider=self.provider.value
+                )
+                image.content = safe_path.read_bytes()
 
             # Prepare features
             features = self._prepare_vision_features(analysis_types)
@@ -200,6 +204,11 @@ class GoogleCloudAI(BaseCloudAI):
                 response, image_url, analysis_types, processing_time
             )
 
+        except CloudAIError:
+            # Typed errors (e.g. UnsafeMediaPathError from the local-path guard)
+            # already carry provider and error_code; re-wrapping them would
+            # flatten them into a generic CloudAIError and lose that type.
+            raise
         except Exception as e:
             raise CloudAIError(
                 f"Google Cloud image analysis failed: {e}",
