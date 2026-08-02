@@ -1384,3 +1384,27 @@ class TestCleanupDownloadArtifactsOffEventLoop:
         # The original exception survives; no OSError leaks out of cleanup.
         with pytest.raises(Boom, match="the real error"):
             await failing_operation()
+
+    async def test_cleanup_is_total_for_non_oserror_failures(self):
+        """A NUL byte in either path must not escape as ``ValueError``.
+
+        ``shutil.rmtree(..., ignore_errors=True)`` only suppresses ``OSError``:
+        a NUL byte makes its internal ``lstat`` raise ``ValueError``, and
+        ``Path.unlink`` raises the same directly. Because the helper runs from
+        a ``finally``, either escape would replace the in-flight exception --
+        the exact defect the removal of the ``exists()`` probes fixed. No
+        mocking is used, so this exercises the real stdlib behaviour.
+        """
+        nul_video = pathlib.Path("/tmp/eventrelay-nul\x00.mp4")
+        nul_root = pathlib.Path("/tmp/eventrelay-nul\x00-dir")
+
+        # Premise: the bare calls really are not OSError-total.
+        with pytest.raises(ValueError, match="null"):
+            nul_video.unlink()
+        with pytest.raises(ValueError, match="null"):
+            shutil.rmtree(nul_root, ignore_errors=True)
+
+        # Contract: the helper swallows both and returns normally.
+        await TranscriptActionWorkflow._cleanup_download_artifacts(
+            nul_video, nul_root
+        )

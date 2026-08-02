@@ -895,17 +895,28 @@ class TranscriptActionWorkflow:
         def _cleanup() -> None:
             # Both branches are total. This runs from a ``finally``, so raising
             # here would replace whatever exception is already propagating.
+            #
             # Note the absence of ``exists()`` probes: ``exists()`` performs a
-            # stat and can itself raise ``OSError``, which is exactly the
-            # masking this must avoid. ``unlink`` already raises
-            # ``FileNotFoundError`` for absent paths and ``rmtree`` is a no-op.
+            # stat and can itself raise, which is exactly the masking this must
+            # avoid. ``unlink`` already raises ``FileNotFoundError`` for absent
+            # paths and ``rmtree`` tolerates them.
+            #
+            # The guards catch ``Exception``, not ``OSError``, because neither
+            # call is OSError-total. A path holding a NUL byte makes ``unlink``
+            # raise ``ValueError: embedded null character``, and makes
+            # ``rmtree`` raise the same from its internal ``lstat`` despite
+            # ``ignore_errors=True`` -- that flag only suppresses ``OSError``.
+            # ``CancelledError`` is a ``BaseException``, so it still propagates.
             if video_path is not None:
                 try:
                     video_path.unlink()
-                except OSError:
-                    pass
+                except Exception:  # noqa: BLE001 - must not mask in-flight error
+                    logger.debug("Cleanup failed for %s", video_path, exc_info=True)
             if temp_root is not None:
-                shutil.rmtree(temp_root, ignore_errors=True)
+                try:
+                    shutil.rmtree(temp_root, ignore_errors=True)
+                except Exception:  # noqa: BLE001 - must not mask in-flight error
+                    logger.debug("Cleanup failed for %s", temp_root, exc_info=True)
 
         await asyncio.shield(asyncio.to_thread(_cleanup))
 
