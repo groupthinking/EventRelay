@@ -1231,3 +1231,23 @@ class TestGoogleCloudImageReadOffEventLoop:
 
         assert recorder.threads == []
         assert mock_vision.Image.return_value.source.image_uri == "https://example.com/img.jpg"
+
+    async def test_missing_local_file_wrapped_in_cloud_ai_error(self, tmp_path):
+        """A missing local image surfaces as ``CloudAIError`` from the public API.
+
+        Unlike Azure's private ``_prepare_image_input`` (which propagates
+        ``FileNotFoundError``), Google's public ``analyze_image`` catches it in
+        its broad ``except Exception`` and re-raises as ``CloudAIError``. Pin
+        that wrapper contract so moving the read off the loop cannot silently
+        alter how a missing file is reported.
+        """
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        missing = tmp_path / "does-not-exist.jpg"
+        mock_vision = self._vision_modules()
+
+        with self._patched_modules(mock_vision):
+            with pytest.raises(CloudAIError):
+                await provider.analyze_image(
+                    str(missing), [AnalysisType.LABEL_DETECTION]
+                )
