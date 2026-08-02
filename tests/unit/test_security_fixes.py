@@ -410,9 +410,11 @@ class TestSecurityBestPractices:
 
         canonical = _canonical_floors()
         command = _pip_install_command(dockerfile.read_text())
-        assert "--trusted-host" not in shlex.split(command), (
-            "Dockerfile.production must use normal TLS certificate validation"
-        )
+        tokens = shlex.split(command)
+        assert not any(
+            token == "--trusted-host" or token.startswith("--trusted-host=")
+            for token in tokens
+        ), "Dockerfile.production must use normal TLS certificate validation"
         installed = _installed_requirements(command)
 
         assert installed, "Dockerfile.production declares no pinned dependencies"
