@@ -286,7 +286,12 @@ class RedisCacheLayer(IntelligentCacheLayer):
         self._tag_write_semaphore_loop: Optional[asyncio.AbstractEventLoop] = None
 
     def _get_tag_write_semaphore(self) -> asyncio.Semaphore:
-        """Semaphore shared by every ``set()`` call on this layer.
+        """Semaphore shared by every tag fan-out on this layer.
+
+        Two paths acquire it: ``set()``, which issues one ``sadd`` per tag, and
+        ``invalidate_by_tags()``, which issues an ``smembers``/``delete`` pair
+        per tag. Both draw from the same budget, so a ``set()`` storm and an
+        invalidation storm cannot each claim ``_tag_write_limit`` connections.
 
         The limiter has to be per-instance rather than per-call: all callers
         share ``self.redis_pool``, so a per-call semaphore would let N
@@ -310,11 +315,12 @@ class RedisCacheLayer(IntelligentCacheLayer):
         ``redis.asyncio`` pool caches connections whose transports are bound to
         the loop that opened them, so a ``RedisCacheLayer`` is already
         event-loop-affine through ``self.redis_pool`` -- and that affinity
-        applies equally to ``get()``, ``delete()``, ``clear()`` and
-        ``invalidate_by_tags()``, none of which this limiter touches. Enforcing
-        a loop-ownership contract is a layer-wide concern tracked in #1162;
-        guarding only this one path would give a misleading partial guarantee.
-        Use one layer per event loop.
+        applies equally to ``get()``, ``delete()`` and ``clear()``, none of
+        which this limiter touches -- and to the two paths that do acquire it,
+        since bounding fan-out is not the same guarantee as owning a loop.
+        Enforcing a loop-ownership contract is a layer-wide concern tracked in
+        #1162; guarding only these paths would give a misleading partial
+        guarantee. Use one layer per event loop.
         """
         loop = asyncio.get_running_loop()
 
@@ -504,19 +510,42 @@ class RedisCacheLayer(IntelligentCacheLayer):
 
         try:
             async with redis.Redis(connection_pool=self.redis_pool) as conn:
-                total_deleted = 0
+                semaphore = self._get_tag_write_semaphore()
 
-                for tag in tags:
-                    # Get all keys with this tag
-                    keys = await conn.smembers(f"uvai:tag:{tag}")
+                async def _invalidate_tag(tag: str) -> int:
+                    # One permit covers both commands for a tag rather than one
+                    # each. The delete operates on the members smembers just
+                    # returned, so the pair is causally ordered and cannot be
+                    # interleaved; holding the permit across both keeps the
+                    # number of concurrently held pool connections equal to the
+                    # permit count instead of twice it.
+                    async with semaphore:
+                        keys = await conn.smembers(f"uvai:tag:{tag}")
 
-                    if keys:
+                        if not keys:
+                            return 0
+
                         # Delete cache entries
                         cache_keys = [f"uvai:cache:{key.decode()}" if isinstance(key, bytes) else f"uvai:cache:{key}" for key in keys]
                         stat_keys = [f"uvai:stats:{key.decode()}" if isinstance(key, bytes) else f"uvai:stats:{key}" for key in keys]
 
-                        deleted = await conn.delete(*(cache_keys + stat_keys + [f"uvai:tag:{tag}"]))
-                        total_deleted += deleted
+                        return await conn.delete(*(cache_keys + stat_keys + [f"uvai:tag:{tag}"]))
+
+                # return_exceptions=True so that one failing tag cannot leave
+                # sibling tasks still in flight once this method returns, which
+                # would let them touch conn after the enclosing async with has
+                # closed it. The first failure is re-raised below so the
+                # existing handler still reports 0.
+                results = await asyncio.gather(
+                    *(_invalidate_tag(tag) for tag in tags),
+                    return_exceptions=True,
+                )
+
+                total_deleted = 0
+                for result in results:
+                    if isinstance(result, BaseException):
+                        raise result
+                    total_deleted += result
 
                 logger.info(f"L2 Redis TAG INVALIDATION: {total_deleted} entries for tags {tags}")
                 return total_deleted
