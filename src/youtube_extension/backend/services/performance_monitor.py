@@ -270,7 +270,8 @@ class PerformanceMonitor:
 
     async def _store_metric(self, metric: PerformanceMetric):
         """Store metric in database"""
-        try:
+
+        def _write() -> None:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -290,6 +291,8 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to store metric in database: {e}")
 
@@ -353,7 +356,8 @@ class PerformanceMonitor:
 
     async def _store_alert(self, alert: PerformanceAlert):
         """Store alert in database"""
-        try:
+
+        def _write() -> None:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -375,6 +379,8 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to store alert in database: {e}")
 
@@ -498,7 +504,8 @@ class PerformanceMonitor:
 
     async def _basic_cleanup(self):
         """Basic cleanup fallback when service is not available"""
-        try:
+
+        def _purge() -> None:
             cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
             conn = sqlite3.connect(self.db_path)
@@ -518,8 +525,9 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_purge)
             logger.info("Basic cleanup completed successfully")
-
         except Exception as e:
             logger.error(f"Error in basic cleanup: {e}")
 
@@ -562,7 +570,8 @@ class PerformanceMonitor:
 
     async def get_current_performance_summary(self) -> dict[str, dict[str, float]]:
         """Get current performance summary (last hour averages)"""
-        try:
+
+        def _query() -> dict[str, dict[str, float]]:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -582,6 +591,8 @@ class PerformanceMonitor:
             conn.close()
             return dict(results)
 
+        try:
+            return await asyncio.to_thread(_query)
         except Exception as e:
             logger.error(f"Error getting performance summary: {e}")
             return {}
@@ -658,7 +669,8 @@ class PerformanceMonitor:
 
     async def _get_recent_metrics_summary(self) -> dict[str, Any]:
         """Get recent metrics summary"""
-        try:
+
+        def _query() -> dict[str, Any]:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -683,6 +695,8 @@ class PerformanceMonitor:
             conn.close()
             return metrics_summary
 
+        try:
+            return await asyncio.to_thread(_query)
         except Exception as e:
             logger.error(f"Error getting recent metrics summary: {e}")
             return {}
@@ -798,7 +812,8 @@ class PerformanceMonitor:
 
     async def _store_benchmark_result(self, result: dict[str, Any]):
         """Store benchmark result in database"""
-        try:
+
+        def _write() -> None:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -824,6 +839,8 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to store benchmark result: {e}")
 

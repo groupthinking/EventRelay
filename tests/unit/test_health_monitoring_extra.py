@@ -10,12 +10,12 @@ from pathlib import Path
 
 # Restore real psutil before import (test_index_analysis.py mocks it globally)
 import psutil as _real_psutil
+
 sys.modules['psutil'] = _real_psutil
 
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
-import pytest
 
 from youtube_extension.backend.services.health_monitoring_service import (
     ApplicationChecker,
@@ -30,7 +30,6 @@ from youtube_extension.backend.services.health_monitoring_service import (
     SystemHealth,
     SystemResourceChecker,
 )
-
 
 # ===========================================================================
 # ApplicationChecker
@@ -327,7 +326,6 @@ class TestHealthMonitoringServiceMethods:
         assert svc.rate_limit_check() is True
 
     def test_rate_limit_check_blocks_when_exceeded(self) -> None:
-        import os
         svc = HealthMonitoringService(config=_MINIMAL_CONFIG)
         svc._rate_limit_rps = 2
         svc.rate_limit_check()

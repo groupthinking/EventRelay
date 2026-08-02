@@ -8,8 +8,6 @@ import types as _types
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import pytest
-
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 

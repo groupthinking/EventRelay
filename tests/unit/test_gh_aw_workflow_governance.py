@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-import tomllib
 from pathlib import Path
 
-import yaml
-
 import conftest as suite_conftest
+import tomllib
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 

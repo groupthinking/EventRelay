@@ -20,8 +20,6 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from youtube_extension.backend.services.load_balancer import (
@@ -33,7 +31,6 @@ from youtube_extension.backend.services.load_balancer import (
     ServiceInstance,
     ServiceStatus,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -893,8 +890,6 @@ class TestShouldScaleDown:
 # ===========================================================================
 
 import asyncio
-import types as _types
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from youtube_extension.backend.services.load_balancer import (
     ServiceDiscovery,

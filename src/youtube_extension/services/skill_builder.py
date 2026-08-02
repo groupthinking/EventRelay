@@ -30,7 +30,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ class SkillBuilder:
         # → {"lessons": ["Always set NODE_VERSION=20 for Next.js on Vercel", ...], ...}
     """
 
-    def __init__(self, skills_dir: Optional[Path] = None) -> None:
+    def __init__(self, skills_dir: Path | None = None) -> None:
         self.skills_dir: Path = skills_dir or Path(
             os.getenv("UVAI_SKILLS_DIR", str(_DEFAULT_SKILLS_DIR))
         )
@@ -102,9 +102,9 @@ class SkillBuilder:
         framework: str,
         deployment_target: str,
         success: bool,
-        error_message: Optional[str] = None,
-        config: Optional[Dict[str, Any]] = None,
-        generated_files: Optional[List[str]] = None,
+        error_message: str | None = None,
+        config: dict[str, Any] | None = None,
+        generated_files: list[str] | None = None,
     ) -> None:
         """
         Record the outcome of a deployment attempt and update skill weights.
@@ -115,7 +115,7 @@ class SkillBuilder:
         sid = _skill_id(framework, deployment_target)
         skill = self._load_skill(sid)
 
-        event: Dict[str, Any] = {
+        event: dict[str, Any] = {
             "timestamp": _now_iso(),
             "framework": framework,
             "deployment_target": deployment_target,
@@ -156,7 +156,7 @@ class SkillBuilder:
         framework: str,
         deployment_target: str,
         max_lessons: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Return a context dict suitable for injecting into LLM prompts.
 
@@ -188,7 +188,7 @@ class SkillBuilder:
             "has_data": bool(skill.get("events")),
         }
 
-    def list_skills(self) -> List[Dict[str, Any]]:
+    def list_skills(self) -> list[dict[str, Any]]:
         """Return a summary of all stored skills."""
         summaries = []
         for path in sorted(self.skills_dir.glob(f"*{_SKILL_FILE_SUFFIX}")):
@@ -221,7 +221,7 @@ class SkillBuilder:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _load_skill(self, skill_id: str) -> Dict[str, Any]:
+    def _load_skill(self, skill_id: str) -> dict[str, Any]:
         skill_path = self.skills_dir / f"{skill_id}{_SKILL_FILE_SUFFIX}"
         if skill_path.exists():
             try:
@@ -230,13 +230,13 @@ class SkillBuilder:
                 pass
         return {"events": [], "lessons": {}, "success_rate": 0.5}
 
-    def _save_skill(self, skill_id: str, skill: Dict[str, Any]) -> None:
+    def _save_skill(self, skill_id: str, skill: dict[str, Any]) -> None:
         skill_path = self.skills_dir / f"{skill_id}{_SKILL_FILE_SUFFIX}"
         # Keep events list bounded to avoid unbounded growth
         skill["events"] = skill["events"][-100:]
         skill_path.write_text(json.dumps(skill, indent=2))
 
-    def _derive_lesson(self, event: Dict[str, Any]) -> Optional[str]:
+    def _derive_lesson(self, event: dict[str, Any]) -> str | None:
         """
         Heuristically derive a human-readable lesson from a deployment event.
 
@@ -262,7 +262,7 @@ class SkillBuilder:
         framework: str,
         target: str,
         error: str,
-        config: Dict[str, Any],
+        config: dict[str, Any],
     ) -> str:
         error_lower = error.lower()
 
@@ -308,8 +308,8 @@ class SkillBuilder:
     def _lesson_from_success(
         framework: str,
         target: str,
-        config: Dict[str, Any],
-    ) -> Optional[str]:
+        config: dict[str, Any],
+    ) -> str | None:
         if not config:
             return None
         key_settings = {k: v for k, v in config.items() if v}
@@ -321,10 +321,10 @@ class SkillBuilder:
         )
 
     def _add_lesson(
-        self, skill: Dict[str, Any], lesson: str, success: bool
+        self, skill: dict[str, Any], lesson: str, success: bool
     ) -> None:
         """Add or update a lesson entry with an EMA-based weight."""
-        lessons: Dict[str, Any] = skill.setdefault("lessons", {})
+        lessons: dict[str, Any] = skill.setdefault("lessons", {})
 
         # Use a short hash as key to de-duplicate near-identical lessons
         key = hashlib.sha256(lesson.encode()).hexdigest()[:12]
@@ -357,10 +357,10 @@ class SkillBuilder:
 # Module-level singleton
 # ---------------------------------------------------------------------------
 
-_skill_builder: Optional[SkillBuilder] = None
+_skill_builder: SkillBuilder | None = None
 
 
-def get_skill_builder(skills_dir: Optional[Path] = None) -> SkillBuilder:
+def get_skill_builder(skills_dir: Path | None = None) -> SkillBuilder:
     """Return (or create) the module-level SkillBuilder singleton."""
     global _skill_builder  # noqa: PLW0603
     if _skill_builder is None:

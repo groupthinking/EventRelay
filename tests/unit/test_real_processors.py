@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -35,10 +35,9 @@ from youtube_extension.backend.services.real_ai_processor import (  # noqa: E402
     AIProvider,
     ProcessingType,
     RealAIProcessorService,
-    get_ai_processor,
     analyze_video_with_ai,
+    get_ai_processor,
 )
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers / factories
@@ -976,7 +975,6 @@ class TestAnalyzeVideoContent:
 
 class TestModuleLevelAIHelpers:
     def test_get_ai_processor_creates_singleton(self):
-        import youtube_extension.backend.services.real_ai_processor as _mod
         with patch("youtube_extension.backend.services.real_ai_processor.check_rate_limit_decorator",
                    new=lambda s: lambda fn: fn):
             p1 = get_ai_processor()
@@ -1029,7 +1027,9 @@ def _make_video_processor(tmp_path, youtube_service=None, ai_processor=None, ena
              "FALLBACK_TO_CACHE": "true" if enable_cache else "false",
              "MAX_RETRY_ATTEMPTS": "2",
          }):
-        from youtube_extension.backend.services.real_video_processor import RealVideoProcessor
+        from youtube_extension.backend.services.real_video_processor import (
+            RealVideoProcessor,
+        )
         proc = RealVideoProcessor()
         proc.cache_dir = tmp_path / "cache"
         proc.cache_dir.mkdir(parents=True, exist_ok=True)
@@ -1090,7 +1090,8 @@ class TestCacheHelpers:
 
     async def test_load_from_cache_ignores_stale_file(self, tmp_path):
         """Files older than 24h should not be returned."""
-        import os, time
+        import os
+        import time
         proc = _make_video_processor(tmp_path)
         data = {"video_id": "auJzb1D-fag", "success": True}
         cache_path = proc._get_cache_path("auJzb1D-fag")
@@ -1427,7 +1428,9 @@ class TestModuleLevelVideoHelpers:
                    return_value=MagicMock()), \
              patch("youtube_extension.backend.services.real_video_processor.get_ai_processor",
                    return_value=MagicMock()):
-            from youtube_extension.backend.services.real_video_processor import get_real_video_processor
+            from youtube_extension.backend.services.real_video_processor import (
+                get_real_video_processor,
+            )
             p1 = get_real_video_processor()
             p2 = get_real_video_processor()
 
@@ -1440,7 +1443,9 @@ class TestModuleLevelVideoHelpers:
 
         with patch("youtube_extension.backend.services.real_video_processor.get_real_video_processor",
                    return_value=mock_proc):
-            from youtube_extension.backend.services.real_video_processor import process_video_real
+            from youtube_extension.backend.services.real_video_processor import (
+                process_video_real,
+            )
             result = await process_video_real("https://youtube.com/watch?v=auJzb1D-fag")
 
         mock_proc.process_video.assert_awaited_once()
@@ -1452,7 +1457,9 @@ class TestModuleLevelVideoHelpers:
 
         with patch("youtube_extension.backend.services.real_video_processor.get_real_video_processor",
                    return_value=mock_proc):
-            from youtube_extension.backend.services.real_video_processor import validate_and_process_video
+            from youtube_extension.backend.services.real_video_processor import (
+                validate_and_process_video,
+            )
             result = await validate_and_process_video("https://youtube.com/watch?v=auJzb1D-fag")
 
         mock_proc.validate_and_process.assert_awaited_once()

@@ -15,9 +15,7 @@ from youtube_extension.backend.api.v1.models import (
     AgentDispatchResponse,
     AgentExecution,
     AgentStatus,
-    AgentStatusResponse,
     ApiResponse,
-    EventExtractRequest,
     EventExtractResponse,
     ExtractedEvent,
     JobStatus,
@@ -25,9 +23,7 @@ from youtube_extension.backend.api.v1.models import (
     KnowledgeIngestResponse,
     VideoJobStatusResponse,
     VideoProcessJobRequest,
-    VideoProcessJobResponse,
 )
-
 
 # ── Model validation tests ──
 

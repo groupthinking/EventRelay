@@ -13,7 +13,6 @@ from youtube_extension.integrations.cloud_ai.exceptions import (
     ServiceUnavailableError,
 )
 
-
 # ===========================================================================
 # CloudAIError (base)
 # ===========================================================================

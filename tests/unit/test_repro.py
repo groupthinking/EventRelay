@@ -6,8 +6,6 @@ import sys
 import uuid
 from pathlib import Path
 
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from youtube_extension.utils.repro import attach_repro_id_to_payload, get_repro_id

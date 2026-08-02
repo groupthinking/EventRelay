@@ -6,8 +6,6 @@ import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
@@ -15,11 +13,10 @@ sys.modules.pop("youtube_extension.backend.deploy.vercel", None)
 sys.modules.pop("youtube_extension.backend.deploy.netlify", None)
 sys.modules.pop("youtube_extension.backend.deploy.fly", None)
 
-from youtube_extension.backend.deploy.vercel import VercelAdapter, VERCEL_API
-from youtube_extension.backend.deploy.netlify import NetlifyAdapter, NETLIFY_API
+from youtube_extension.backend.deploy.core import DeploymentError, DeploymentResult
 from youtube_extension.backend.deploy.fly import FlyAdapter
-from youtube_extension.backend.deploy.core import DeploymentResult, DeploymentError
-
+from youtube_extension.backend.deploy.netlify import NetlifyAdapter
+from youtube_extension.backend.deploy.vercel import VercelAdapter
 
 # ===========================================================================
 # VercelAdapter.__init__

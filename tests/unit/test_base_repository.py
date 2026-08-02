@@ -10,26 +10,24 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from youtube_extension.backend.repositories.base import (
-    BaseRepository,
-    TenantAwareRepository,
-)
-
-
 # ---------------------------------------------------------------------------
 # Helpers / fake model
 # ---------------------------------------------------------------------------
 # Use real SQLAlchemy mapped models so select(Model) works without errors
-
 from sqlalchemy import Boolean, Column, Integer, String
 from sqlalchemy.orm import DeclarativeBase
+
+from youtube_extension.backend.repositories.base import (
+    BaseRepository,
+    TenantAwareRepository,
+)
 
 
 class _TestBase(DeclarativeBase):

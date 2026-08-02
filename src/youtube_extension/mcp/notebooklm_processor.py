@@ -6,8 +6,9 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 try:
-    from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
+
+    from mcp import ClientSession, StdioServerParameters
     HAS_MCP_CLIENT = True
 except ImportError:
     HAS_MCP_CLIENT = False

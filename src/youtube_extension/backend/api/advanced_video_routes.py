@@ -5,7 +5,7 @@ Temporal analysis, structured output, and CloudEvents publishing endpoints.
 """
 
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -30,7 +30,7 @@ class TemporalSegmentRequest(BaseModel):
 class TemporalEventsRequest(BaseModel):
     """Request for extracting timestamped events."""
     video_url: str
-    event_types: Optional[List[str]] = Field(
+    event_types: Optional[list[str]] = Field(
         None,
         description="Event types to focus on (e.g., ['code_change', 'api_call'])"
     )
@@ -62,7 +62,7 @@ class TimelineRequest(BaseModel):
 class SegmentComparisonRequest(BaseModel):
     """Request for comparing multiple segments."""
     video_url: str
-    segments: List[Tuple[str, str]] = Field(
+    segments: list[tuple[str, str]] = Field(
         ...,
         description="List of (start_time, end_time) tuples to compare"
     )
@@ -81,7 +81,7 @@ class StructuredAnalysisRequest(BaseModel):
     """Request for analysis with structured JSON output schema."""
     video_url: str
     prompt: str
-    schema: Dict = Field(
+    schema: dict = Field(
         ...,
         description="JSON schema for structured output",
         example={
@@ -108,7 +108,7 @@ class StructuredAnalysisRequest(BaseModel):
 async def analyze_segment(request: TemporalSegmentRequest):
     """
     Analyze a specific time segment of a video.
-    
+
     Example:
     ```json
     {
@@ -150,9 +150,9 @@ async def analyze_segment(request: TemporalSegmentRequest):
 async def extract_temporal_events(request: TemporalEventsRequest):
     """
     Extract all timestamped events from a video.
-    
+
     Optionally publishes events to EventMesh as CloudEvents.
-    
+
     Example:
     ```json
     {
@@ -218,7 +218,7 @@ async def extract_temporal_events(request: TemporalEventsRequest):
 async def answer_temporal_question(request: TemporalQuestionRequest):
     """
     Answer a question about a video with temporal context.
-    
+
     Example:
     ```json
     {
@@ -251,12 +251,12 @@ async def answer_temporal_question(request: TemporalQuestionRequest):
 async def create_timeline(request: TimelineRequest):
     """
     Create a detailed timeline of video content.
-    
+
     Granularity options:
     - "fine": Every 5-10 seconds
     - "medium": Every 30-60 seconds (default)
     - "coarse": Major section boundaries only
-    
+
     Example:
     ```json
     {
@@ -292,7 +292,7 @@ async def create_timeline(request: TimelineRequest):
 async def compare_segments(request: SegmentComparisonRequest):
     """
     Compare multiple time segments within a video.
-    
+
     Example:
     ```json
     {
@@ -327,7 +327,7 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
     """
     Extract step-by-step tutorial instructions with timestamps.
     Optimized for instructional/tutorial videos.
-    
+
     Example:
     ```json
     {
@@ -356,10 +356,10 @@ async def extract_tutorial_steps(request: TutorialStepsRequest):
 async def analyze_with_schema(request: StructuredAnalysisRequest):
     """
     Analyze video with structured JSON output conforming to provided schema.
-    
+
     Uses Gemini's response_schema to enforce output structure.
     Optionally publishes result as a CloudEvent.
-    
+
     Example:
     ```json
     {
@@ -444,19 +444,19 @@ async def analyze_with_schema(request: StructuredAnalysisRequest):
 async def publish_video_event(
     source: str,
     event_type: str,
-    data: Dict,
+    data: dict,
     subject: Optional[str] = None,
     backend: Optional[str] = None
 ):
     """
     Manually publish a video analysis event as a CloudEvent.
-    
+
     Supports multiple backends:
     - pubsub: Google Cloud Pub/Sub
     - http: HTTP webhook
     - openwhisk: Apache OpenWhisk trigger
     - file: Local file (for testing)
-    
+
     Example:
     ```json
     {

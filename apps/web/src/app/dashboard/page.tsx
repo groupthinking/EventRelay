@@ -28,9 +28,11 @@ const DashboardSplitView = dynamic(
 // ============================================
 function VideoCard({
   video,
+  priority = false,
   onClick
 }: {
   video: Video;
+  priority?: boolean;
   onClick: () => void;
 }) {
   return (
@@ -49,6 +51,7 @@ function VideoCard({
             src={video.thumbnail}
             alt={video.title}
             fill
+            priority={priority}
             className="object-cover transition-transform duration-500 group-hover:scale-105"
             sizes="(max-width: 768px) 100vw, 33vw"
           />
@@ -296,8 +299,8 @@ function DashboardContent() {
                 </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredVideos.map((video) => (
-                    <VideoCard key={video.id} video={video} onClick={() => selectVideo(video.id)} />
+                  {filteredVideos.map((video, index) => (
+                    <VideoCard key={video.id} video={video} priority={index === 0} onClick={() => selectVideo(video.id)} />
                   ))}
                 </div>
               )}

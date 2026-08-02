@@ -18,7 +18,6 @@ from youtube_extension.backend.services.intelligent_cache import (
     InMemoryCacheLayer,
 )
 
-
 # ===========================================================================
 # CacheEntry dataclass
 # ===========================================================================

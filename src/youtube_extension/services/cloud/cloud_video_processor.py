@@ -10,19 +10,17 @@ Cloud-native video processor using:
 - Cloud Run for serverless scaling
 """
 
-import asyncio
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ..cloud import (
-    get_firestore_service,
-    get_cloud_tasks_service,
-    get_vertex_ai_service,
     VideoProcessingState,
     VideoProcessingTask,
+    get_cloud_tasks_service,
+    get_firestore_service,
+    get_vertex_ai_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,9 +32,9 @@ class VideoProcessingResult:
     video_id: str
     video_url: str
     success: bool
-    metadata: Optional[Dict[str, Any]] = None
-    transcript: Optional[Dict[str, Any]] = None
-    ai_analysis: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
+    transcript: Optional[dict[str, Any]] = None
+    ai_analysis: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     processing_time: float = 0.0
     from_cache: bool = False
@@ -319,7 +317,7 @@ class CloudNativeVideoProcessor:
             # Assume it's already an ID
             return video_url
 
-    async def _fetch_metadata(self, video_url: str) -> Dict[str, Any]:
+    async def _fetch_metadata(self, video_url: str) -> dict[str, Any]:
         """
         Fetch video metadata.
 
@@ -336,7 +334,7 @@ class CloudNativeVideoProcessor:
             'description': 'Video description',
         }
 
-    async def _extract_transcript(self, video_id: str) -> Dict[str, Any]:
+    async def _extract_transcript(self, video_id: str) -> dict[str, Any]:
         """
         Extract video transcript.
 
@@ -354,9 +352,9 @@ class CloudNativeVideoProcessor:
     async def _analyze_with_vertex_ai(
         self,
         video_id: str,
-        metadata: Dict[str, Any],
-        transcript: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any],
+        transcript: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Analyze video using Vertex AI Agent Builder.
 

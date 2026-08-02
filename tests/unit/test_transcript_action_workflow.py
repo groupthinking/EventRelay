@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 from dataclasses import asdict
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -743,7 +742,9 @@ class TestRun:
                 pass
 
         # Speech service that also returns empty (so all fallbacks fail)
-        from youtube_extension.services.ai.speech_to_text_service import SpeechToTextResult
+        from youtube_extension.services.ai.speech_to_text_service import (
+            SpeechToTextResult,
+        )
         failing_speech_result = SpeechToTextResult(
             success=False,
             transcript="",
