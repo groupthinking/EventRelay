@@ -65,9 +65,9 @@ valid. Referenced paths were checked against the working tree:
 
 ## Agent completion enforcement
 
-| `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; missing/stale/mutable evidence, untrusted label provenance, and custom roles all fail closed. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
+| `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; stale/mutable evidence, untrusted label provenance, and custom roles all fail closed, and once the policy is provisioned a missing report fails closed too. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
 
-The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists and therefore blocks until a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.
+The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists. While those allowlists are empty the Check reports **neutral (advisory)** rather than blocking, so it does not train reviewers to ignore a permanently red gate; it becomes blocking once a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.
 
 ## Repository governance workflows
 
