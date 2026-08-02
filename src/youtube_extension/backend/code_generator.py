@@ -245,33 +245,42 @@ class ProjectCodeGenerator:
                 raise asyncio.CancelledError
             project_path = Path(temp_dir)
 
-            # Generate project structure based on type
-            if project_type == "api":
-                generation = self._generate_api_project(project_path, video_analysis, technologies, features)
-            elif project_type == "mobile":
-                generation = self._generate_mobile_project(project_path, video_analysis, technologies, features)
-            else:
-                generation = self._generate_web_project(project_path, video_analysis, technologies, features)
+            # From here the path is known, so every exit that does not hand it
+            # back is responsible for removing it.
+            try:
+                # Generate project structure based on type
+                if project_type == "api":
+                    generation = self._generate_api_project(project_path, video_analysis, technologies, features)
+                elif project_type == "mobile":
+                    generation = self._generate_mobile_project(project_path, video_analysis, technologies, features)
+                else:
+                    generation = self._generate_web_project(project_path, video_analysis, technologies, features)
 
-            # Scaffolding is atomic with respect to cancellation, as it was
-            # before the writes moved off the loop. Draining first guarantees
-            # no worker is still writing when the directory is removed.
-            result, cancelled = await _run_to_completion(generation)
-            if cancelled:
+                # Scaffolding is atomic with respect to cancellation, as it was
+                # before the writes moved off the loop. Draining first guarantees
+                # no worker is still writing when the directory is removed.
+                result, cancelled = await _run_to_completion(generation)
+                if cancelled:
+                    await _discard_project_dir(project_path)
+                    raise asyncio.CancelledError
+
+                result["project_path"] = str(project_path)
+                result["project_type"] = project_type
+                result["technologies"] = technologies
+                result["features"] = features
+                # Include the structured BuildPlan artifact in the result so that
+                # callers (e.g. API endpoints and tests) can inspect it.
+                if build_plan is not None:
+                    result["build_plan"] = build_plan
+
+                logger.info(f"✅ Project generated successfully at {project_path}")
+                return result
+            except Exception:
+                # A failed generation never returns the path, so nothing
+                # downstream can clean it up. The writers are already drained
+                # by ``_run_to_completion``, so removal cannot race one.
                 await _discard_project_dir(project_path)
-                raise asyncio.CancelledError
-
-            result["project_path"] = str(project_path)
-            result["project_type"] = project_type
-            result["technologies"] = technologies
-            result["features"] = features
-            # Include the structured BuildPlan artifact in the result so that
-            # callers (e.g. API endpoints and tests) can inspect it.
-            if build_plan is not None:
-                result["build_plan"] = build_plan
-
-            logger.info(f"✅ Project generated successfully at {project_path}")
-            return result
+                raise
 
         except Exception as e:
             logger.error(f"❌ Project generation failed: {e}")

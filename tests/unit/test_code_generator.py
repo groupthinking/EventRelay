@@ -830,6 +830,22 @@ class TestScaffoldingWritesOffLoop:
 
         return _tracked
 
+    @staticmethod
+    def _recording_mkdir(record: list[str]):
+        """Record the thread that ran each ``Path.mkdir``.
+
+        Directory creation is part of the write plan, so an implementation that
+        moved only ``open`` off the loop would still be a regression. Hooking
+        ``mkdir`` closes that gap.
+        """
+        real_mkdir = Path.mkdir
+
+        def _tracked(self, *args, **kwargs):
+            record.append(threading.current_thread().name)
+            return real_mkdir(self, *args, **kwargs)
+
+        return _tracked
+
     @pytest.mark.parametrize(
         "generator_name",
         [
@@ -848,17 +864,52 @@ class TestScaffoldingWritesOffLoop:
         loop_thread = threading.current_thread().name
 
         seen: list[str] = []
-        monkeypatch.setattr("builtins.open", self._recording_open(seen))
+        mkdirs: list[str] = []
 
         project = tmp_path / "project"
         project.mkdir()
+
+        # Patch only after the test root exists, otherwise setup trips the hook.
+        monkeypatch.setattr("builtins.open", self._recording_open(seen))
+        monkeypatch.setattr(Path, "mkdir", self._recording_mkdir(mkdirs))
+
         await getattr(gen, generator_name)(project, analysis, ["database"])
 
         assert seen, "expected the generator to write at least one file"
-        offenders = [name for name in seen if name == loop_thread]
+        offenders = [name for name in seen + mkdirs if name == loop_thread]
         assert not offenders, (
-            f"{generator_name} performed {len(offenders)} of {len(seen)} writes "
-            f"on the event loop thread ({loop_thread})"
+            f"{generator_name} performed {len(offenders)} of "
+            f"{len(seen) + len(mkdirs)} filesystem operations on the event "
+            f"loop thread ({loop_thread})"
+        )
+
+    async def test_directory_creation_never_touches_loop_thread(
+        self, monkeypatch, tmp_path
+    ):
+        """Proves the ``Path.mkdir`` hook above is live, not vacuous.
+
+        ``_generate_react_project`` is the generator that creates
+        subdirectories, so it is the one that can demonstrate the hook fires.
+        Without this the sibling test could pass while every ``mkdir`` still
+        ran on the loop.
+        """
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        analysis = _build_video_analysis(
+            "Dashboard Tutorial", "auJzb1D-fag", "A summary.", ["state"]
+        )
+        loop_thread = threading.current_thread().name
+
+        project = tmp_path / "project"
+        project.mkdir()
+
+        mkdirs: list[str] = []
+        monkeypatch.setattr(Path, "mkdir", self._recording_mkdir(mkdirs))
+        await gen._generate_react_project(project, analysis, ["database"])
+
+        assert mkdirs, "expected the react generator to create subdirectories"
+        assert loop_thread not in mkdirs, (
+            f"{len([n for n in mkdirs if n == loop_thread])} of {len(mkdirs)} "
+            f"mkdir calls ran on the event loop thread ({loop_thread})"
         )
 
     async def test_mkdtemp_runs_off_loop(self, monkeypatch, tmp_path):
@@ -1086,3 +1137,83 @@ class TestCancellationSafety:
         assert explicit["project_type"] == "web"
         assert Path(explicit["project_path"]).is_dir()
         assert tree(explicit) == tree(defaulted) != []
+
+
+class TestFailedGenerationCleanup:
+    """A generation that raises must not strand the directory it created.
+
+    ``generate_project`` is the only holder of the scaffold path until it
+    returns, so an exception on the way out leaves a directory that no caller
+    can ever name, let alone remove. The caller in
+    ``video_processing_service.py`` reads ``project_path`` only on the success
+    path, so nothing downstream is deprived by removing it here.
+    """
+
+    @staticmethod
+    def _analysis_and_config():
+        return (
+            {
+                "title": "T",
+                "description": "d",
+                "key_concepts": [],
+                "technologies": ["react"],
+            },
+            {"project_type": "web", "technologies": ["react"], "features": []},
+        )
+
+    async def test_failed_generation_leaves_no_orphan_directory(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+        from youtube_extension.backend import code_generator as cg
+
+        def boom(plan):
+            raise RuntimeError("disk exploded")
+
+        monkeypatch.setattr(cg, "_apply_write_plan", boom)
+
+        analysis, config = self._analysis_and_config()
+        with pytest.raises(RuntimeError, match="disk exploded"):
+            await ProjectCodeGenerator(use_ai_generation=False).generate_project(
+                analysis, config
+            )
+
+        assert list(tmp_path.glob("uvai_project_*")) == [], (
+            "a failed generation stranded its scaffolding directory"
+        )
+
+    async def test_original_exception_is_not_masked_by_cleanup(
+        self, monkeypatch, tmp_path
+    ):
+        """Cleanup failure must never replace the error that caused it."""
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+        from youtube_extension.backend import code_generator as cg
+
+        def boom(plan):
+            raise RuntimeError("original failure")
+
+        def exploding_rmtree(*args, **kwargs):
+            raise OSError("cleanup also failed")
+
+        monkeypatch.setattr(cg, "_apply_write_plan", boom)
+        monkeypatch.setattr(cg.shutil, "rmtree", exploding_rmtree)
+
+        analysis, config = self._analysis_and_config()
+        with pytest.raises(RuntimeError, match="original failure"):
+            await ProjectCodeGenerator(use_ai_generation=False).generate_project(
+                analysis, config
+            )
+
+    async def test_successful_generation_keeps_its_directory(
+        self, monkeypatch, tmp_path
+    ):
+        """Guards against the cleanup firing on the happy path."""
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+
+        analysis, config = self._analysis_and_config()
+        result = await ProjectCodeGenerator(use_ai_generation=False).generate_project(
+            analysis, config
+        )
+
+        assert Path(result["project_path"]).is_dir()
+        assert len(list(tmp_path.glob("uvai_project_*"))) == 1
