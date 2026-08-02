@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import subprocess
 import sys
+import threading
 import types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1366,3 +1368,129 @@ class TestSupportedPlatforms:
 
     def test_includes_fly(self) -> None:
         assert "fly" in DeploymentManager.SUPPORTED_PLATFORMS
+
+
+# ===========================================================================
+# verify_project — event-loop offloading regression tests
+#
+# verify_project() is `async def` but shells out to npm/npx via
+# subprocess.run(), which is a blocking call. Run directly it freezes the
+# event loop for up to the subprocess timeout (180 s + 180 s + 60 s = 420 s
+# worst case), stalling every other request in the process.
+#
+# These tests assert the work happens on a *worker* thread. They use thread
+# identity rather than wall-clock timing so they are deterministic in CI.
+# ===========================================================================
+
+
+class _ThreadRecordingRun:
+    """Stand-in for ``subprocess.run`` that records its executing thread."""
+
+    def __init__(self, results=None, before_return=None) -> None:
+        self._results = list(results or [])
+        self._before_return = before_return
+        self.thread_ids: list[int] = []
+        self.commands: list[list[str]] = []
+
+    def __call__(self, cmd, *args, **kwargs):
+        # Recorded at the point the blocking work would occur, so a
+        # regression back to a bare call is observable.
+        self.thread_ids.append(threading.get_ident())
+        self.commands.append(cmd)
+        if self._before_return is not None:
+            self._before_return()
+        if self._results:
+            return self._results.pop(0)
+        return MagicMock(returncode=0, stdout="ok", stderr="")
+
+
+class TestVerifyProjectRunsOffEventLoop:
+    async def test_npm_calls_run_off_the_event_loop(self, tmp_path) -> None:
+        """npm install and npm run build must not execute on the loop thread."""
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        mgr = _make_manager()
+        recorder = _ThreadRecordingRun()
+
+        loop_thread_id = threading.get_ident()
+        with patch(
+            "youtube_extension.backend.deployment_manager.subprocess.run", recorder
+        ):
+            result = await mgr.verify_project(str(tmp_path))
+
+        assert result["passed"] is True
+        # Guard: without this a bypassed patch would satisfy the loop below
+        # vacuously and the test would pass while proving nothing.
+        assert len(recorder.thread_ids) == 2, recorder.commands
+        for tid, cmd in zip(recorder.thread_ids, recorder.commands):
+            assert tid != loop_thread_id, f"{cmd} ran on the event loop thread"
+
+    async def test_typescript_check_runs_off_the_event_loop(self, tmp_path) -> None:
+        """The npx tsc call must also be offloaded."""
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        (tmp_path / "tsconfig.json").write_text("{}")
+        mgr = _make_manager()
+        recorder = _ThreadRecordingRun()
+
+        loop_thread_id = threading.get_ident()
+        with patch(
+            "youtube_extension.backend.deployment_manager.subprocess.run", recorder
+        ):
+            result = await mgr.verify_project(str(tmp_path))
+
+        assert result["passed"] is True
+        assert len(recorder.thread_ids) == 3, recorder.commands
+        assert all(tid != loop_thread_id for tid in recorder.thread_ids)
+
+    async def test_event_loop_still_runs_tasks_during_verification(
+        self, tmp_path
+    ) -> None:
+        """The loop must make progress while a subprocess is in flight.
+
+        The fake subprocess blocks until a coroutine scheduled on the loop
+        releases it. If verify_project held the loop, that coroutine could
+        never run and the wait would time out -- so this is a behavioural
+        proof of concurrency, not a timing measurement.
+        """
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        mgr = _make_manager()
+
+        released = threading.Event()
+        loop_progressed: list[str] = []
+
+        def _block_until_loop_runs() -> None:
+            # Fails the test (rather than hanging CI) if the loop is blocked.
+            assert released.wait(timeout=10), "event loop never ran concurrently"
+
+        recorder = _ThreadRecordingRun(before_return=_block_until_loop_runs)
+
+        async def _heartbeat() -> None:
+            await asyncio.sleep(0)
+            loop_progressed.append("tick")
+            released.set()
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.subprocess.run", recorder
+        ):
+            await asyncio.gather(
+                mgr.verify_project(str(tmp_path)),
+                _heartbeat(),
+            )
+
+        assert loop_progressed == ["tick"]
+        assert len(recorder.thread_ids) == 2
+
+    async def test_timeout_expired_still_reported_after_offloading(
+        self, tmp_path
+    ) -> None:
+        """Offloading must not change how subprocess timeouts surface."""
+        (tmp_path / "package.json").write_text('{"name": "test"}')
+        mgr = _make_manager()
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(["npm"], 180),
+        ):
+            result = await mgr.verify_project(str(tmp_path))
+
+        assert result["passed"] is False
+        assert "timeout" in result["summary"].lower()
