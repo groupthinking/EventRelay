@@ -3,6 +3,16 @@
 **Runbook:** PR Remediation & Publish Runbook (action-forcing, RASOR).
 **Surface:** GitHub MCP, authenticated as `groupthinking` (repo owner, write+merge capable).
 **Generated:** 2026-08-01T21:00Z (scheduled/unattended run — no human watching live).
+**Revised:** 2026-08-02 after owner review of PR #1177 — see *Corrections from review* below.
+
+---
+
+## Corrections from review (applied 2026-08-02)
+
+Owner review on #1177 caught two factual errors in the first draft; both are fixed inline below and summarized here:
+
+1. **#1118 is NOT green.** Current state is `mergeable=CONFLICTING`, `mergeStateStatus=DIRTY`, `draft=true`. It needs a rebase before anything, and it's under security review — the proxy-credential-leak it fixes may already be closed on `main`, in which case it should be **closed as obsolete, not rebased**. It is *not* fast-trackable.
+2. **"Green/red" is not a usable signal for most of this backlog.** At the time these PRs last ran CI, *every* PR in the repo was red for two content-independent reasons: (a) `Agent completion enforcement` → `missing_trusted_publication` (empty allowlists in `.github/agent-lock/trusted-publishers.json` under `fail_closed`), and (b) `gitleaks (working tree)` false-positive on `uv.lock:5129`. Uniform red carries no information, so "no distinguishable blocker" must not be read as "safe" — that misread is what run #1128 made for #999–#1008, where #999/#1003 actually fail `build` and #1000 fails `test`/`Coverage`/`truth-gate`. Both systemic gates are now fixed on `main` (#1151, #1142), **but existing PRs won't reflect that until rebased** (checks don't re-run retroactively). **Rule: green/red on any PR not updated since 2026-08-02 is not a usable input. Rank on `build`/`test`/`Coverage`/`validate-gh-aw`, and require ≥1 *green required* check before classifying anything as fast-trackable.**
 
 ---
 
@@ -34,11 +44,16 @@ you are reading is itself another instance of that pattern — see *Recommendati
 ## What was verified this run
 
 - Listed all open PRs (oldest-first). All 30 are `draft: true`.
-- Spot-checked CI on the newest substantive security PR **#1118** (proxy-credential
-  leak fix): **all 4 checks success** (Vercel ×2, CodeRabbit, truth-gate). It is
-  green and blocked *only* by draft status + human merge approval.
-- Per-PR CI for the remaining 29 was **not** polled: it does not change any terminal
-  state, since all 30 stop at the scope gate regardless of CI.
+- Spot-checked the *combined commit status* of **#1118** (proxy-credential leak fix):
+  the 4 posted statuses (Vercel ×2, CodeRabbit, truth-gate) were success. **This was
+  misread as "green" in the first draft — it is not.** Combined status ≠ required
+  checks ≠ mergeability. Per owner review, #1118 is `mergeable=CONFLICTING` /
+  `mergeStateStatus=DIRTY`: it needs a rebase, is under security review, and may be
+  closeable as obsolete. It is **not** merge-ready.
+- Per-PR *required*-check state (`build`/`test`/`Coverage`/`validate-gh-aw`) for the
+  rest was **not** polled and, per the *Corrections* note, would be stale anyway for
+  any PR not rebased since the 2026-08-02 gate fixes. It does not change any terminal
+  state here, since all 30 stop at the scope gate regardless of CI.
 
 ---
 
@@ -74,7 +89,7 @@ you are reading is itself another instance of that pattern — see *Recommendati
 | #1080 | perf(ci): replace Math.max spread anti-pattern | 07-29 | ✅ | scope gate | DEFERRED(draft) |
 | #1114 | fix(deps): realign apps/web lockfile | 07-30 | ✅ | scope gate | DEFERRED(draft) |
 | #1117 | fix(deps): raise brace-expansion override floors | 07-30 | ✅ | scope gate | DEFERRED(draft) |
-| #1118 | fix(security): stop proxy credential leakage | 07-31 | ✅ | CI verified green | DEFERRED(draft) — merge-ready if un-drafted |
+| #1118 | fix(security): stop proxy credential leakage | 07-31 | ✅ | scope gate | DEFERRED(draft) — **CONFLICTING/DIRTY, needs rebase; verify vuln still open on `main` or close as obsolete** |
 | #1119 | test(web): billing chat gating asserts real behaviour | 07-31 | ✅ | scope gate | DEFERRED(draft) |
 
 **Terminal-state tally:** 30 × `DEFERRED(draft)`. 0 `MERGED`. 0 `HALTED`
@@ -84,11 +99,20 @@ you are reading is itself another instance of that pattern — see *Recommendati
 
 ## Grouping for human action
 
-**A. Ready or near-ready — un-draft + review to merge (highest value):**
-- #1118 fix(security): proxy credential leakage — **CI green now**, security fix.
-- #734 / #810 — security fixes (DNS rebinding, log injection).
-- #869 — high-priority bug (webhook outbox retries).
-- #1075 — pipeline-critical bug (transcript preservation).
+**A. Candidates to *evaluate* for merge — NOT a fast-track list (corrected):**
+These are the substantive security/bug PRs by topic, but *none* is classified as
+fast-trackable here, because their current CI is not a usable signal (see *Corrections*).
+Before any of these is proposed for merge it must be **rebased onto current `main`**
+(to pick up the #1151/#1142 gate fixes) and then show **≥1 green required check**
+(`build`/`test`/`Coverage`/`validate-gh-aw`):
+- #1118 proxy credential leak — **blocked first on CONFLICTING/DIRTY + obsolescence check** (may be closed, not merged).
+- #734 / #810 — security (DNS rebinding, log injection) — rebase, then verify required checks.
+- #869 — high-priority bug (webhook outbox retries) — rebase, then verify required checks.
+- #1075 — pipeline-critical bug (transcript preservation) — rebase, then verify required checks.
+
+Do **not** infer "safe" from the absence of a distinguishable red check: until rebased,
+these were uniformly red for the two content-independent gate reasons in *Corrections*,
+which is exactly the misread that broke run #1128.
 
 **B. Dependency bumps — low-risk, batchable once un-drafted:**
 - #1000 actions/checkout, #1003 actions/github-script, #1114 lockfile, #1117 brace-expansion.
@@ -110,17 +134,30 @@ unattended run — after first overriding each author's explicit draft designati
 exactly the irreversible, human-owned step the PUBLISH GATE reserves. So all 30 are
 correctly `DEFERRED`, and this run stops short of merging.
 
-Concrete asks for a human (staged commands, none executed):
+The backlog is a **generation-rate problem, not a review-capacity one.** Per owner
+review, **46 of 50 open PRs are drafts; only 4 are actually proposed for merge.**
+Automation opens drafts faster than anything converts them, and each triage run adds
+one more PR to the pile it reports on (#1044, #1059, #1128, and this one are all
+triage-run artifacts). A report that must be reviewed and merged to be *read* is
+self-defeating when the thing being reported on is an unreviewable backlog.
 
-1. **Drain the duplicate + stale-triage backlog (12 PRs)** so the signal-to-noise of
-   the open list recovers: close C (#961, #995, #996, #1040, #1043, #1045, #1050,
-   #1064) and D (#1044, #1059, #1076, #1077).
-2. **Fast-track group A** (5 security/bug PRs): mark Ready → review → merge. #1118 is
-   already green.
-3. **Decide the loop's future.** This routine keeps emitting draft PRs that never
-   merge. Either (a) add an `automerge` label + `auto_merge_policy: label:automerge`
-   convention so green low-risk PRs can land, or (b) reduce this routine's cadence /
-   pause it until the backlog is drained — otherwise every firing grows the pile.
+Concrete asks for a human (none executed autonomously):
+
+1. **Change where this routine writes.** Emit the triage report to a GitHub **issue or
+   a workflow-run summary**, not a PR. This stops the loop from adding to its own pile.
+2. **Pause / slow the routine until the backlog is drained** (owner's preferred
+   option). `automerge`-based auto-merge only becomes safe *after* the two systemic
+   gates (#1151, #1142) are confirmed clearing on **rebased** PRs — otherwise it
+   automates the exact "uniform-red = safe" misread that broke run #1128.
+3. **Drain the backlog:** close the `duplicate`-labeled set (#961, #995, #996, #1040,
+   #1043, #1045, #1050, #1064) and the superseded triage snapshots (#1044, #1059 are
+   red-check-era artifacts; #1076, #1077 too). *Left to the owner — this run does not
+   close others' or prior PRs.*
+4. **Evaluate the security/bug PRs individually** (group A) only after rebasing each
+   and confirming ≥1 green required check. #1118 specifically may be **closed as
+   obsolete** rather than merged — verify the vuln is still open on `main` first.
 
 *Nothing here was merged, closed, or un-drafted automatically — those are human
-decisions, surfaced for sign-off.*
+decisions, surfaced for sign-off. This revision incorporates owner review of #1177
+(2026-08-02); it does not act on the review's "can be closed" suggestion for #1044/#1059,
+which remains the owner's call.*
