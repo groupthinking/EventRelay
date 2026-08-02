@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 from dataclasses import asdict
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -22,6 +21,22 @@ from youtube_extension.services.cloud.cloud_tasks_queue import CloudTasksQueueSe
 from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_skill_builder(monkeypatch, tmp_path) -> None:
+    """Workflow unit tests must not use the process user's persistent skills."""
+    skill_builder = MagicMock()
+    skill_builder.get_context.return_value = {
+        "has_data": False,
+        "lessons": [],
+        "success_rate": 0,
+    }
+    skill_builder.skills_dir = tmp_path / "skills"
+    monkeypatch.setattr(
+        "youtube_extension.services.workflows.transcript_action_workflow.get_skill_builder",
+        lambda: skill_builder,
+    )
 
 
 class _UnexpectedYouTubeService:
@@ -727,7 +742,9 @@ class TestRun:
                 pass
 
         # Speech service that also returns empty (so all fallbacks fail)
-        from youtube_extension.services.ai.speech_to_text_service import SpeechToTextResult
+        from youtube_extension.services.ai.speech_to_text_service import (
+            SpeechToTextResult,
+        )
         failing_speech_result = SpeechToTextResult(
             success=False,
             transcript="",

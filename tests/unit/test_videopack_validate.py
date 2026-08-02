@@ -22,7 +22,10 @@ sys.modules.pop("youtube_extension.videopack.schema", None)
 sys.modules.pop("youtube_extension.videopack.validate", None)
 
 from youtube_extension.videopack.schema import (
-    Keyframe, Metrics, Provenance, Transcript, TranscriptSegment, VideoPackV0, VPVersion
+    Provenance,
+    Transcript,
+    TranscriptSegment,
+    VideoPackV0,
 )
 from youtube_extension.videopack.validate import validate_pack
 

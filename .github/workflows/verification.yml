@@ -1,7 +1,7 @@
 name: "Hybrid Refactor Verification Gates"
 
-# Fallback for .github/agentic/verification-loop.aw.yml
-# Runs the same 4-layer verification on every PR targeting the refactor branch
+# Legacy hybrid-refactor verification workflow
+# (kept branch-scoped for historical compatibility)
 
 on:
   pull_request:
@@ -84,7 +84,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: "pip"
@@ -148,7 +148,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 

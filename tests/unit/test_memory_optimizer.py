@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import sys
+import types
 from datetime import datetime, timezone
 from pathlib import Path
 
 # Remove any mock installed by test_index_analysis.py so we get real psutil
 sys.modules.pop('psutil', None)
 import psutil as _real_psutil
+
 sys.modules['psutil'] = _real_psutil
 # Force reimport of memory_optimizer so it gets real psutil
 sys.modules.pop('youtube_extension.backend.services.memory_optimizer', None)
@@ -22,6 +24,25 @@ from youtube_extension.backend.services.memory_optimizer import (
     MemoryProfiler,
     MemorySnapshot,
 )
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_process_metrics(monkeypatch):
+    """Keep unit tests independent of the runner's PID namespace."""
+    import youtube_extension.backend.services.memory_optimizer as module
+
+    process = types.SimpleNamespace(
+        memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024),
+    )
+    fake_psutil = types.SimpleNamespace(
+        Process=lambda: process,
+        virtual_memory=lambda: types.SimpleNamespace(
+            total=8 * 1024**3,
+            available=4 * 1024**3,
+            percent=50.0,
+        ),
+    )
+    monkeypatch.setattr(module, "psutil", fake_psutil)
 
 
 # ===========================================================================
@@ -472,6 +493,7 @@ class TestTakeSnapshot:
 class TestTakeSnapshotErrorPath:
     async def test_snapshot_returns_fallback_on_psutil_error(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             virtual_memory=lambda: (_ for _ in ()).throw(OSError("fail")),
@@ -486,6 +508,7 @@ class TestTakeSnapshotErrorPath:
 
     async def test_snapshot_fallback_has_zero_total_memory(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             virtual_memory=lambda: (_ for _ in ()).throw(RuntimeError("fail")),
@@ -518,6 +541,7 @@ class TestAnalyzeMemoryUsage:
 
     async def test_normal_memory_no_alert_methods_called(self):
         from unittest.mock import AsyncMock, patch
+
         from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         p = MemoryProfiler()
         snap = self._make_snapshot(process_memory_mb=256.0)
@@ -529,6 +553,7 @@ class TestAnalyzeMemoryUsage:
 
     async def test_warning_threshold_triggers_warning(self):
         from unittest.mock import AsyncMock, patch
+
         from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         p = MemoryProfiler()
         # warning_mb = 1024; use value between warning and critical
@@ -541,6 +566,7 @@ class TestAnalyzeMemoryUsage:
 
     async def test_critical_threshold_triggers_critical_alert(self):
         from unittest.mock import AsyncMock, patch
+
         from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         p = MemoryProfiler()
         # critical_mb = 2048
@@ -553,6 +579,7 @@ class TestAnalyzeMemoryUsage:
 
     async def test_cleanup_threshold_triggers_cleanup(self):
         from unittest.mock import AsyncMock, patch
+
         from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         p = MemoryProfiler()
         # cleanup_mb = 1536
@@ -618,8 +645,9 @@ class TestGetObjectTrends:
 
 class TestGetTracebackInfo:
     def test_returns_string_when_not_tracing(self):
-        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         import tracemalloc
+
+        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         tracemalloc.stop()  # ensure not tracing
         p = MemoryProfiler()
         info = p._get_traceback_info("dict")
@@ -627,8 +655,9 @@ class TestGetTracebackInfo:
         assert "Tracemalloc not available" in info
 
     def test_returns_string_when_tracing(self):
-        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         import tracemalloc
+
+        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         tracemalloc.start()
         try:
             p = MemoryProfiler()
@@ -667,6 +696,7 @@ class TestMemoryProfilerStartStop:
 
     def test_stop_tracking_clears_flag(self):
         import tracemalloc
+
         from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         tracemalloc.start()
         p = MemoryProfiler()
@@ -690,6 +720,7 @@ class TestMemoryProfilerStartStop:
 class TestTriggerMemoryCleanup:
     async def test_cleanup_runs_sync_callbacks(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -705,6 +736,7 @@ class TestTriggerMemoryCleanup:
 
     async def test_cleanup_runs_async_callbacks(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -722,6 +754,7 @@ class TestTriggerMemoryCleanup:
 
     async def test_cleanup_handles_callback_exception(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -737,9 +770,9 @@ class TestTriggerMemoryCleanup:
         await p._trigger_memory_cleanup()
 
     async def test_cleanup_runs_gc_collect(self, monkeypatch):
-        import gc
         import types
         from unittest.mock import patch
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -761,6 +794,7 @@ class TestTriggerMemoryCleanup:
 class TestTriggerAggressiveCleanup:
     async def test_aggressive_cleanup_runs_without_error(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -774,6 +808,7 @@ class TestTriggerAggressiveCleanup:
     async def test_aggressive_cleanup_calls_trigger_memory_cleanup(self, monkeypatch):
         import types
         from unittest.mock import AsyncMock, patch
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -807,6 +842,7 @@ class TestTriggerMemoryAlerts:
 
     async def test_trigger_critical_alert_calls_aggressive_cleanup(self):
         from unittest.mock import AsyncMock, patch
+
         from youtube_extension.backend.services.memory_optimizer import MemoryProfiler
         p = MemoryProfiler()
         snap = MemorySnapshot(
@@ -829,7 +865,11 @@ class TestTriggerMemoryAlerts:
 class TestHandleMemoryLeak:
     async def test_handle_leak_low_severity_no_cleanup(self):
         from unittest.mock import AsyncMock, patch
-        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler, MemoryLeak
+
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryLeak,
+            MemoryProfiler,
+        )
         p = MemoryProfiler()
         leak = MemoryLeak(
             object_type="dict", count=100, growth_rate=50.0,
@@ -843,7 +883,11 @@ class TestHandleMemoryLeak:
 
     async def test_handle_leak_high_severity_triggers_cleanup(self):
         from unittest.mock import AsyncMock, patch
-        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler, MemoryLeak
+
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryLeak,
+            MemoryProfiler,
+        )
         p = MemoryProfiler()
         leak = MemoryLeak(
             object_type="list", count=1000, growth_rate=600.0,
@@ -857,7 +901,11 @@ class TestHandleMemoryLeak:
 
     async def test_handle_leak_critical_severity_triggers_cleanup(self):
         from unittest.mock import AsyncMock, patch
-        from youtube_extension.backend.services.memory_optimizer import MemoryProfiler, MemoryLeak
+
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryLeak,
+            MemoryProfiler,
+        )
         p = MemoryProfiler()
         leak = MemoryLeak(
             object_type="tuple", count=5000, growth_rate=1100.0,
@@ -878,6 +926,7 @@ class TestHandleMemoryLeak:
 class TestMemoryEfficientDecorator:
     async def test_async_wrapper_returns_result(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -893,6 +942,7 @@ class TestMemoryEfficientDecorator:
 
     def test_sync_wrapper_returns_result(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -907,9 +957,10 @@ class TestMemoryEfficientDecorator:
         assert result == 15
 
     def test_sync_wrapper_chooses_sync_path_for_non_coroutine(self, monkeypatch):
-        import types
-        import youtube_extension.backend.services.memory_optimizer as _mod
         import asyncio
+        import types
+
+        import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
                 memory_info=lambda: types.SimpleNamespace(rss=100 * 1024**2)
@@ -932,6 +983,7 @@ class TestMemoryEfficientDecorator:
 class TestTrackMemoryUsageDecorator:
     async def test_tracks_memory_and_returns_result(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -948,6 +1000,7 @@ class TestTrackMemoryUsageDecorator:
     async def test_sync_function_tracked_returns_result(self, monkeypatch):
         """track_memory_usage always wraps in an async wrapper; calling sync fn still works."""
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -969,12 +1022,15 @@ class TestTrackMemoryUsageDecorator:
 
 class TestConvenienceFunctions:
     async def test_get_memory_status_returns_dict(self):
-        from youtube_extension.backend.services.memory_optimizer import get_memory_status
+        from youtube_extension.backend.services.memory_optimizer import (
+            get_memory_status,
+        )
         result = await get_memory_status()
         assert isinstance(result, dict)
 
     async def test_optimize_memory_returns_dict(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             virtual_memory=lambda: types.SimpleNamespace(
@@ -990,6 +1046,7 @@ class TestConvenienceFunctions:
 
     async def test_cleanup_memory_runs_without_error(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -1001,7 +1058,8 @@ class TestConvenienceFunctions:
 
     def test_register_cleanup_callback_stored(self):
         from youtube_extension.backend.services.memory_optimizer import (
-            register_cleanup_callback, memory_profiler
+            memory_profiler,
+            register_cleanup_callback,
         )
         cb = lambda: None
         initial_count = len(memory_profiler.cleanup_callbacks)
@@ -1010,7 +1068,9 @@ class TestConvenienceFunctions:
 
     async def test_stop_monitoring_noop_when_not_started(self):
         """Calling stop_memory_monitoring() when not started should not raise."""
-        from youtube_extension.backend.services.memory_optimizer import stop_memory_monitoring
+        from youtube_extension.backend.services.memory_optimizer import (
+            stop_memory_monitoring,
+        )
         await stop_memory_monitoring()  # should not raise
 
 
@@ -1022,21 +1082,31 @@ class TestConvenienceFunctions:
 class TestOptimizeGarbageCollectionDetails:
     async def test_gc_optimize_has_thresholds_set(self):
         import gc
-        from youtube_extension.backend.services.memory_optimizer import MemoryOptimizer, MemoryProfiler
+
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryOptimizer,
+            MemoryProfiler,
+        )
         opt = MemoryOptimizer(MemoryProfiler())
         result = await opt._optimize_garbage_collection()
         assert "thresholds_set" in result
         assert result["thresholds_set"] == gc.get_threshold()
 
     async def test_gc_optimize_has_initial_and_final_stats(self):
-        from youtube_extension.backend.services.memory_optimizer import MemoryOptimizer, MemoryProfiler
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryOptimizer,
+            MemoryProfiler,
+        )
         opt = MemoryOptimizer(MemoryProfiler())
         result = await opt._optimize_garbage_collection()
         assert "initial_stats" in result
         assert "final_stats" in result
 
     async def test_gc_optimize_objects_collected_non_negative(self):
-        from youtube_extension.backend.services.memory_optimizer import MemoryOptimizer, MemoryProfiler
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryOptimizer,
+            MemoryProfiler,
+        )
         opt = MemoryOptimizer(MemoryProfiler())
         result = await opt._optimize_garbage_collection()
         assert result["objects_collected"] >= 0
@@ -1049,13 +1119,19 @@ class TestOptimizeGarbageCollectionDetails:
 
 class TestOptimizeDataStructures:
     async def test_has_dict_optimizations_key(self):
-        from youtube_extension.backend.services.memory_optimizer import MemoryOptimizer, MemoryProfiler
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryOptimizer,
+            MemoryProfiler,
+        )
         opt = MemoryOptimizer(MemoryProfiler())
         result = await opt._optimize_data_structures()
         assert "dict_optimizations" in result
 
     async def test_has_list_optimizations_key(self):
-        from youtube_extension.backend.services.memory_optimizer import MemoryOptimizer, MemoryProfiler
+        from youtube_extension.backend.services.memory_optimizer import (
+            MemoryOptimizer,
+            MemoryProfiler,
+        )
         opt = MemoryOptimizer(MemoryProfiler())
         result = await opt._optimize_data_structures()
         assert "list_optimizations" in result
@@ -1069,6 +1145,7 @@ class TestOptimizeDataStructures:
 class TestGetMemoryReportWithHistory:
     async def test_report_memory_history_shows_last_snapshots(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             virtual_memory=lambda: types.SimpleNamespace(
@@ -1088,6 +1165,7 @@ class TestGetMemoryReportWithHistory:
 
     async def test_report_active_leaks_count_matches(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.memory_optimizer as _mod
         fake = types.SimpleNamespace(
             virtual_memory=lambda: types.SimpleNamespace(

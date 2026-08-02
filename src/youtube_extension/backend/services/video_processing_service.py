@@ -465,7 +465,6 @@ class VideoProcessingService:
         """Fallback processing using LangExtract MCP service"""
         try:
             import json as _json
-            import subprocess
 
             payload = _json.dumps({
                 "method": "tools/call",
@@ -497,18 +496,32 @@ class VideoProcessingService:
                 )
                 return None
 
-            proc = subprocess.run(
-                ["python3", server_path],
-                input=payload.encode(),
-                capture_output=True,
-                timeout=60
+            # Spawned via asyncio so the MCP server subprocess never blocks the
+            # event loop; a synchronous subprocess.run here stalls every other
+            # request for the full timeout window.
+            proc = await asyncio.create_subprocess_exec(
+                "python3",
+                server_path,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
 
-            if proc.returncode != 0:
-                logger.warning(f"LangExtract MCP call failed: {_safe_log(proc.stderr.decode()[:200])}")
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(input=payload.encode()), timeout=60
+                )
+            except asyncio.TimeoutError:
+                proc.kill()
+                await proc.wait()
+                logger.warning("LangExtract MCP call timed out after 60s")
                 return None
 
-            out = proc.stdout.decode().strip().splitlines()[-1]
+            if proc.returncode != 0:
+                logger.warning(f"LangExtract MCP call failed: {_safe_log(stderr.decode()[:200])}")
+                return None
+
+            out = stdout.decode().strip().splitlines()[-1]
             res = _json.loads(out).get("result", {})
 
             if "error" in res:

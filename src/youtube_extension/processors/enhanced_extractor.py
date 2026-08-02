@@ -55,7 +55,6 @@ from dataclasses import asdict, dataclass
 from enum import Enum
 
 import pandas as pd
-
 from youtube_extension.processors.scoring_engine import ScoringEngine
 
 # Configure logging
@@ -324,7 +323,7 @@ class EnhancedVideoExtractor:
         # 3. Apply Unified World Class Scoring (Unified Pipeline)
         try:
             # We need to convert our TranscriptSegment list to the list of dicts expected by ScoringEngine
-            transcript_dicts = [asdict(seg) for seg in transcript]
+            [asdict(seg) for seg in transcript]
             # We also need a dict-like representation of metadata for some scoring functions
             # Ideally we pass the raw response, but we can reconstruct a subset from VideoMetadata
             # or better yet, since we don't store raw response in self, let's use what we have.
@@ -332,7 +331,7 @@ class EnhancedVideoExtractor:
             # We can mock this structure from our standardized VideoMetadata to keep interfaces clean.
 
             # Reconstruct minimal video_info for scoring
-            scorable_video_info = {
+            {
                'contentDetails': {'duration': f"PT{int(transcript[-1].end if transcript else 0)}S"}, # Approx if needed
                'statistics': {
                    'viewCount': 0, # We don't have this in analyze_content args!

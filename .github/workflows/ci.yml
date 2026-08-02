@@ -28,7 +28,19 @@ jobs:
             exit 1
           fi
           echo "No conflict markers found."
-      - uses: actions/setup-python@v6
+      - name: No IDE self-identifiers in shared .vscode config
+        run: |
+          # VS Code forks (Antigravity, Cursor, Windsurf) write their own
+          # extension IDs into workspace settings; those IDs resolve to
+          # nothing in stock VS Code and fail silently. Mirrors the
+          # vscode-ide-self-reference pre-commit hook, which not every
+          # committer has installed.
+          if git grep -nE 'google\.antigravity|anysphere\.|codeium\.windsurf' -- .vscode/; then
+            echo "::error::IDE self-identifier found in shared .vscode/ config (see matches above)."
+            exit 1
+          fi
+          echo "No IDE self-identifiers found."
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Python source compiles (no import-time SyntaxErrors)
@@ -61,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install ruff
@@ -86,12 +98,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install dependencies
         run: |
-          pip install -e .[dev] 2>/dev/null || true
-          pip install pydantic pytest pytest-asyncio fastapi httpx psutil aiofiles aiohttp starlette
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev,youtube]"
       - name: Run tests
-        run: PYTHONPATH=src python -m pytest tests/unit/ -v --override-ini="addopts=" --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
+        run: PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 --override-ini="addopts=" --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"

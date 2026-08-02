@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from youtube_extension.services.agents.dto import AgentRequest, AgentResult
 from youtube_extension.services.agents.adapters.agent_orchestrator import (
     A2AContextMessage,
     AgentOrchestrator,
     OrchestrationResult,
 )
 from youtube_extension.services.agents.base_agent import BaseAgent
-
+from youtube_extension.services.agents.dto import AgentRequest, AgentResult
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes

@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-import io
 import json
 import sys
-import types
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, Mock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 

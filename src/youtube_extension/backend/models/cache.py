@@ -8,7 +8,7 @@ Models for intelligent caching, cache statistics, and performance optimization.
 
 from datetime import datetime, timedelta
 from enum import Enum as PyEnum
-from typing import Any, List, Optional
+from typing import Any, Optional
 
 from sqlalchemy import BigInteger, Boolean, Enum, Float, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
@@ -369,7 +369,7 @@ class CacheStats(BaseModel):
     )
 
     # Top performing caches
-    top_entries: Mapped[List[dict[str, Any]]] = mapped_column(
+    top_entries: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB,
         default=[],
         nullable=False,

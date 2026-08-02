@@ -26,7 +26,6 @@ from fastapi import (
     Response,
     status,
 )
-from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
@@ -2147,9 +2146,11 @@ async def get_agent_status(agent_id: str):
     tags=["Agents"],
 )
 async def send_a2a_message(
-    body: dict[str, Any] = {},
+    body: dict[str, Any] = None,
 ):
     """Send a context-share or tool-request message between agents."""
+    if body is None:
+        body = {}
     sender = body.get("sender", "frontend")
     recipient = body.get("recipient")
     content = body.get("content", {})

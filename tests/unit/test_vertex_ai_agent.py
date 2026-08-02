@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
-import types as _types
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -94,7 +92,6 @@ def mock_vertexai():
 def service(mock_vertexai):
     """Return an initialised VertexAIAgentService with mocked SDK."""
     from youtube_extension.services.cloud.vertex_ai_agent import (
-        AgentConfig,
         VertexAIAgentService,
     )
 

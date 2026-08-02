@@ -629,12 +629,15 @@ class APICostMonitor:
         # Lock for thread safety
         self._lock = threading.Lock()
 
-        configured_url = (
-            database_url
-            or os.getenv("API_COST_DATABASE_URL")
-            or os.getenv("DATABASE_URL")
-        )
-        configured_path = db_path or os.getenv("API_COST_MONITOR_DB_PATH")
+        if database_url:
+            configured_url = database_url
+            configured_path = None
+        elif db_path:
+            configured_url = None
+            configured_path = db_path
+        else:
+            configured_url = os.getenv("API_COST_DATABASE_URL") or os.getenv("DATABASE_URL")
+            configured_path = os.getenv("API_COST_MONITOR_DB_PATH")
 
         if configured_url:
             self.database_url: Optional[URL] = _normalize_database_url(configured_url)

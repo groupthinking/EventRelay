@@ -5,8 +5,6 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-import pytest
-
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
@@ -19,7 +17,6 @@ from youtube_extension.backend.deploy.core import (
     EnvironmentValidator,
     RetryConfig,
 )
-
 
 # ===========================================================================
 # DeploymentError

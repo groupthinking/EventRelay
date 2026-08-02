@@ -30,7 +30,7 @@ def mock_gemini_service():
 
 class TestTemporalSegment:
     """Test temporal segment utilities."""
-    
+
     def test_segment_creation(self):
         """Test creating a temporal segment."""
         segment = TemporalSegment(
@@ -38,33 +38,33 @@ class TestTemporalSegment:
             end_time="3:45",
             description="Code demo section"
         )
-        
+
         assert segment.start_time == "1:30"
         assert segment.end_time == "3:45"
         assert segment.description == "Code demo section"
-    
+
     def test_timestamp_to_seconds(self):
         """Test timestamp conversion."""
         segment = TemporalSegment(start_time="0:00", end_time="1:00")
-        
+
         assert segment.to_seconds("1:30") == 90
         assert segment.to_seconds("0:45") == 45
         assert segment.to_seconds("1:00:30") == 3630
-    
+
     def test_duration_calculation(self):
         """Test segment duration calculation."""
         segment = TemporalSegment(
             start_time="1:30",
             end_time="3:45"
         )
-        
+
         # 3:45 - 1:30 = 2:15 = 135 seconds
         assert segment.duration_seconds == 135
 
 
 class TestTemporalEvent:
     """Test temporal event structure."""
-    
+
     def test_event_creation(self):
         """Test creating a temporal event."""
         event = TemporalEvent(
@@ -74,7 +74,7 @@ class TestTemporalEvent:
             confidence=0.95,
             metadata={"file": "api.py"}
         )
-        
+
         assert event.timestamp == "2:30"
         assert event.event_type == "code_change"
         assert event.description == "API endpoint modified"
@@ -94,7 +94,7 @@ class TestTemporalVideoAnalyzer:
         mock_response.key_events = [{"event": "Function defined", "timestamp": "2:00"}]
         mock_response.timestamps = [{"timestamp": "2:00", "event": "Function defined"}]
         mock_gemini_service.analyze_video.return_value = mock_response
-        
+
         analyzer = TemporalVideoAnalyzer()
         result = await analyzer.analyze_segment(
             video_url="https://youtube.com/watch?v=example",
@@ -102,17 +102,17 @@ class TestTemporalVideoAnalyzer:
             end_time="3:00",
             focus="code"
         )
-        
+
         assert result.summary == "Code demonstration in this segment"
         assert len(result.key_events) > 0
-        
+
         # Verify the call included temporal context
         call_args = mock_gemini_service.analyze_video.call_args
         assert "1:30" in call_args[0][1]  # Prompt includes start time
         assert "3:00" in call_args[0][1]  # Prompt includes end time
-        
+
         await analyzer.close()
-    
+
     @pytest.mark.asyncio
     async def test_extract_temporal_events(self, mock_gemini_service):
         """Test extracting timestamped events."""
@@ -138,45 +138,45 @@ class TestTemporalVideoAnalyzer:
         })
         mock_response.key_events = []
         mock_gemini_service.analyze_video.return_value = mock_response
-        
+
         analyzer = TemporalVideoAnalyzer()
         events = await analyzer.extract_temporal_events(
             video_url="https://youtube.com/watch?v=example",
             event_types=["code_change", "api_call"]
         )
-        
+
         assert len(events) == 2
         assert events[0].timestamp == "1:00"
         assert events[0].event_type == "code_change"
         assert events[1].timestamp == "2:30"
         assert events[1].event_type == "api_call"
-        
+
         await analyzer.close()
-    
+
     @pytest.mark.asyncio
     async def test_temporal_question(self, mock_gemini_service):
         """Test temporal question answering."""
         mock_gemini_service.answer_video_question.return_value = (
             "Answer: The API is called at 2:30\nEvidence at 2:30: HTTP POST request visible"
         )
-        
+
         analyzer = TemporalVideoAnalyzer()
         answer = await analyzer.temporal_question(
             video_url="https://youtube.com/watch?v=example",
             question="When is the API called?",
             time_context="between 2:00 and 3:00"
         )
-        
+
         assert "2:30" in answer
         assert "API" in answer
-        
+
         # Verify temporal context was included
         call_args = mock_gemini_service.answer_video_question.call_args
         prompt = call_args[0][1]
         assert "between 2:00 and 3:00" in prompt
-        
+
         await analyzer.close()
-    
+
     @pytest.mark.asyncio
     async def test_create_timeline(self, mock_gemini_service):
         """Test creating video timeline."""
@@ -203,20 +203,20 @@ class TestTemporalVideoAnalyzer:
         })
         mock_response.key_events = []
         mock_gemini_service.analyze_video.return_value = mock_response
-        
+
         analyzer = TemporalVideoAnalyzer()
         timeline = await analyzer.create_timeline(
             video_url="https://youtube.com/watch?v=example",
             granularity="medium"
         )
-        
+
         assert len(timeline) == 3
         assert timeline[0]["section_title"] == "Introduction"
         assert timeline[1]["section_title"] == "Code Demo"
         assert timeline[2]["section_title"] == "Testing"
-        
+
         await analyzer.close()
-    
+
     @pytest.mark.asyncio
     async def test_compare_segments(self, mock_gemini_service):
         """Test comparing multiple segments."""
@@ -235,19 +235,19 @@ class TestTemporalVideoAnalyzer:
         })
         mock_response.key_events = []
         mock_gemini_service.analyze_video.return_value = mock_response
-        
+
         analyzer = TemporalVideoAnalyzer()
         comparison = await analyzer.compare_segments(
             video_url="https://youtube.com/watch?v=example",
             segments=[("1:00", "2:00"), ("3:00", "4:00")],
             comparison_focus="code quality"
         )
-        
+
         assert comparison["segments_analyzed"] == 2
         assert len(comparison["comparisons"]) > 0
-        
+
         await analyzer.close()
-    
+
     @pytest.mark.asyncio
     async def test_extract_tutorial_steps(self, mock_gemini_service):
         """Test extracting tutorial steps."""
@@ -274,24 +274,24 @@ class TestTemporalVideoAnalyzer:
         })
         mock_response.key_events = []
         mock_gemini_service.analyze_video.return_value = mock_response
-        
+
         analyzer = TemporalVideoAnalyzer()
         steps = await analyzer.extract_tutorial_steps(
             video_url="https://youtube.com/watch?v=example"
         )
-        
+
         assert len(steps) == 2
         assert steps[0]["step_number"] == 1
         assert steps[0]["title"] == "Setup project"
         assert steps[1]["step_number"] == 2
         assert steps[1]["title"] == "Install dependencies"
-        
+
         await analyzer.close()
 
 
 class TestTemporalAnalysisIntegration:
     """Integration tests for temporal analysis."""
-    
+
     @pytest.mark.asyncio
     async def test_segment_to_events_workflow(self, mock_gemini_service):
         """Test workflow from segment analysis to event extraction."""
@@ -299,7 +299,7 @@ class TestTemporalAnalysisIntegration:
         segment_response = MagicMock()
         segment_response.summary = "Code section with API calls"
         segment_response.key_events = []
-        
+
         # Mock events extraction
         events_response = MagicMock()
         events_response.summary = json.dumps({
@@ -313,30 +313,30 @@ class TestTemporalAnalysisIntegration:
             ]
         })
         events_response.key_events = []
-        
+
         mock_gemini_service.analyze_video.side_effect = [
             segment_response,
             events_response
         ]
-        
+
         analyzer = TemporalVideoAnalyzer()
-        
+
         # Analyze segment
         segment_result = await analyzer.analyze_segment(
             "https://youtube.com/watch?v=example",
             "1:00",
             "2:00"
         )
-        
+
         # Extract events
         events = await analyzer.extract_temporal_events(
             "https://youtube.com/watch?v=example",
             event_types=["api_call"]
         )
-        
+
         assert segment_result.summary is not None
         assert len(events) > 0
-        
+
         await analyzer.close()
 
 

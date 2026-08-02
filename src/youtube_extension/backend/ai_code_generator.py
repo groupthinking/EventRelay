@@ -485,7 +485,7 @@ CRITICAL CONSTRAINTS (MUST FOLLOW EXACTLY):
 - Import ONLY from 'lucide-react' for icons, 'react' for hooks.
 
 CRITICAL CONSTRAINTS (MUST FOLLOW):
-- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
+- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json).
 - DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
 - All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
 - Keep it simple and functional.
@@ -697,7 +697,7 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
         # For agent/MCP apps or dashboards with container features: Add dockerode
-        if (architecture.get("type") in ("agent", "fullstack_app") or 
+        if (architecture.get("type") in ("agent", "fullstack_app") or
             "docker" in str(architecture.get("features", [])).lower() or
             "dashboard" in str(architecture.get("features", [])).lower()):
             package["dependencies"]["dockerode"] = "^4.0.2"

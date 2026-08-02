@@ -1,9 +1,10 @@
-import os
-import pytest
-from unittest.mock import MagicMock
-import sys
 import importlib.util
+import os
+import sys
 from pathlib import Path
+from unittest.mock import MagicMock
+
+import pytest
 
 # Mock pydantic if it's not available
 try:

@@ -3,8 +3,7 @@
 
 from __future__ import annotations
 
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -13,7 +12,6 @@ from youtube_extension.backend.containers.service_container import (
     get_service,
     get_service_container,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -432,14 +430,18 @@ class TestServiceFactories:
         sc = _bare_container()
         sc._config = {}
         service = sc._create_notification_service()
-        from youtube_extension.backend.services.notification_service import NotificationService
+        from youtube_extension.backend.services.notification_service import (
+            NotificationService,
+        )
         assert isinstance(service, NotificationService)
 
     def test_create_health_monitoring_service(self):
         sc = _bare_container()
         sc._config = {}
         service = sc._create_health_monitoring_service()
-        from youtube_extension.backend.services.health_monitoring_service import HealthMonitoringService
+        from youtube_extension.backend.services.health_monitoring_service import (
+            HealthMonitoringService,
+        )
         assert isinstance(service, HealthMonitoringService)
 
     def test_create_cache_service(self):
@@ -470,7 +472,9 @@ class TestServiceFactories:
         sc = _bare_container()
         sc._config = {}
         manager = sc._create_websocket_connection_manager()
-        from youtube_extension.backend.services.websocket_service import WebSocketConnectionManager
+        from youtube_extension.backend.services.websocket_service import (
+            WebSocketConnectionManager,
+        )
         assert isinstance(manager, WebSocketConnectionManager)
 
     def test_create_hybrid_processor_service(self, monkeypatch):
@@ -484,7 +488,9 @@ class TestServiceFactories:
         sc = _bare_container()
         sc._config = {}
         service = sc._create_hybrid_processor_service()
-        from youtube_extension.services.ai.hybrid_processor_service import HybridProcessorService
+        from youtube_extension.services.ai.hybrid_processor_service import (
+            HybridProcessorService,
+        )
         assert isinstance(service, HybridProcessorService)
 
     def test_create_pubsub_service(self, monkeypatch):
@@ -522,7 +528,9 @@ class TestServiceFactories:
         sc.register_singleton("video_processor_factory", sc._create_video_processor_factory)
         sc.register_singleton("cache_service", lambda: sc._create_cache_service())
         service = sc._create_video_processing_service()
-        from youtube_extension.backend.services.video_processing_service import VideoProcessingService
+        from youtube_extension.backend.services.video_processing_service import (
+            VideoProcessingService,
+        )
         assert isinstance(service, VideoProcessingService)
 
     def test_create_websocket_service(self):
@@ -533,7 +541,9 @@ class TestServiceFactories:
         sc.register_singleton("video_processing_service", sc._create_video_processing_service)
         sc.register_singleton("websocket_connection_manager", sc._create_websocket_connection_manager)
         service = sc._create_websocket_service()
-        from youtube_extension.backend.services.websocket_service import WebSocketService
+        from youtube_extension.backend.services.websocket_service import (
+            WebSocketService,
+        )
         assert isinstance(service, WebSocketService)
 
     def test_create_agent_orchestrator(self):
@@ -545,7 +555,9 @@ class TestServiceFactories:
         sc = _bare_container()
         sc._config = {}
         orchestrator = sc._create_agent_orchestrator()
-        from youtube_extension.services.agents.adapters.agent_orchestrator import AgentOrchestrator
+        from youtube_extension.services.agents.adapters.agent_orchestrator import (
+            AgentOrchestrator,
+        )
         assert isinstance(orchestrator, AgentOrchestrator)
 
     def test_create_mcp_orchestrator(self):
@@ -609,7 +621,9 @@ class TestGetServiceConvenienceFunction:
         original = sc_module._service_container
         sc_module._service_container = None
         try:
-            from youtube_extension.backend.services.metrics_service import MetricsService
+            from youtube_extension.backend.services.metrics_service import (
+                MetricsService,
+            )
             result = get_service("metrics_service")
             assert isinstance(result, MetricsService)
         finally:

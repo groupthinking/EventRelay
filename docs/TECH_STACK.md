@@ -202,8 +202,7 @@ EventRelay/
 # Frontend
 cd apps/web && npm run dev
 
-# Backend
-cd src/youtube_extension/backend
-python -m uvicorn main:app --reload --port 8000
+# Backend (run from the repo root; PYTHONPATH=src is required)
+PYTHONPATH=src python -m uvicorn youtube_extension.main:app --reload --port 8000
 
 # Deploy Backend (Cloud Build)

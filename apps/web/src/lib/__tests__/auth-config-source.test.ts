@@ -10,9 +10,17 @@ function readSource(relativePath: string) {
 }
 
 describe('auth configuration source safety', () => {
-  it('does not point NextAuth custom signIn page at its own API route', () => {
+  it('uses the local login page instead of the default Auth.js sign-in page', () => {
     const source = readSource('lib/auth.ts');
+    expect(source).toContain("signIn: '/login'");
     expect(source).not.toContain("signIn: '/api/auth/signin'");
+  });
+
+  it('keeps the Google sign-in asset local to avoid CSP-hosted icon failures', () => {
+    const source = readSource('app/login/GoogleSignInButton.tsx');
+    expect(source).toContain("signIn('google'");
+    expect(source).toContain('<svg');
+    expect(source).not.toContain('<Image');
   });
 
   it('accepts both project-specific and common Google OAuth env names', () => {

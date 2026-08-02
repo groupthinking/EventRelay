@@ -50,7 +50,7 @@ The project uses [Trivy](https://github.com/aquasecurity/trivy) for automated co
 To run Trivy locally before pushing:
 ```bash
 # Scan the production Docker image
-docker build -t eventrelay:test -f Dockerfile.production .
+docker build -t eventrelay:test -f infrastructure/docker/Dockerfile.production .
 docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasecurity/trivy:latest image eventrelay:test
 ```
 

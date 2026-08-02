@@ -1,6 +1,5 @@
 import json
-import pytest
-from pathlib import Path
+
 from scripts.maintenance.deduplicate_knowledge import KnowledgeDeduplicator
 
 
@@ -68,7 +67,7 @@ def test_knowledge_deduplicator_run(tmp_path):
     assert stats["deduplicated_techs"] == 2
 
     # Check database was modified on disk
-    with open(db_file, "r", encoding="utf-8") as f:
+    with open(db_file, encoding="utf-8") as f:
         data = json.load(f)
     assert len(data["videos"]) == 2
     assert "docker" in data["technologies"]
@@ -79,7 +78,7 @@ def test_knowledge_deduplicator_run(tmp_path):
     assert stats_c["deduplicated_techs"] == 1
     assert "containers consolidated into docker" in stats_c["consolidated_similar"]
 
-    with open(db_file, "r", encoding="utf-8") as f:
+    with open(db_file, encoding="utf-8") as f:
         data_c = json.load(f)
     assert "containers" not in data_c["technologies"]
     assert "docker" in data_c["technologies"]

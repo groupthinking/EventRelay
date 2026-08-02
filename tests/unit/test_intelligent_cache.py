@@ -6,6 +6,7 @@ Redis is not installed; stub it before importing the module under test.
 
 import sys
 import types as _types
+import asyncio
 
 # --- Redis stub (must happen before module import) ---
 _redis_mod = _types.ModuleType("redis")
@@ -32,7 +33,6 @@ from youtube_extension.backend.services.intelligent_cache import (
     IntelligentCacheLayer,
     datetime_decoder,
 )
-
 
 # ---------------------------------------------------------------------------
 # DateTimeEncoder
@@ -565,7 +565,9 @@ class TestIntelligentCacheSystem:
     """Tests for IntelligentCacheSystem that orchestrates multiple layers."""
 
     def setup_method(self):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         # Build a system with only an in-memory L1 layer (no Redis required).
         self.system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         self.system.layers = [
@@ -727,7 +729,9 @@ class TestAdaptiveTtl:
     """Cover the frequency branches inside _calculate_adaptive_ttl."""
 
     def _make_system(self):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         system.layers = [
             InMemoryCacheLayer("L1", max_size=100, max_size_bytes=1024 * 1024)
@@ -785,7 +789,9 @@ class TestAnalyzePerformanceSuggestions:
     """Ensure all three optimization suggestion branches are exercised."""
 
     def _make_system_with_history(self, records):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         system.layers = [
             InMemoryCacheLayer("L1", max_size=100, max_size_bytes=1024 * 1024)
@@ -1033,17 +1039,16 @@ class TestGlobalCacheDeleteAndInvalidateTags:
 
 
 # make IntelligentCacheSystem importable in tests defined above
-from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem  # noqa: E402
-
-
 # ---------------------------------------------------------------------------
 # RedisCacheLayer (L2 Cache) — covers lines 254-450
 # ---------------------------------------------------------------------------
-
-import unittest.mock as _mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from youtube_extension.backend.services.intelligent_cache import RedisCacheLayer
+from youtube_extension.backend.services.intelligent_cache import (
+    TAG_WRITE_CONCURRENCY,
+    IntelligentCacheSystem,  # noqa: E402
+    RedisCacheLayer,
+)
 
 
 def _make_redis_conn(
@@ -1265,6 +1270,146 @@ class TestRedisCacheLayerSet:
             await layer.set("k", "v", tags=["tag1", "tag2"])
 
         assert conn.sadd.call_count == 2
+
+    async def test_set_tag_writes_stay_within_concurrency_bound(self):
+        """A large tag list must not fan out past the connection-pool budget.
+
+        redis-py's async pool defaults to max_connections=20 and every
+        in-flight command holds a connection, so unbounded concurrency here
+        would be able to exhaust the pool.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so other pending tag writes can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+        tags = [f"tag{i}" for i in range(50)]
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", tags=tags)
+
+        assert result is True
+        assert conn.sadd.call_count == 50
+        assert peak <= layer._tag_write_limit
+
+    async def test_set_tag_write_failure_returns_false_and_drains(self):
+        """A failing tag write returns False with no writes left in flight."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        started = 0
+        finished = 0
+
+        async def _flaky_sadd(name, *_args, **_kwargs):
+            nonlocal started, finished
+            started += 1
+            await asyncio.sleep(0)
+            if name.endswith("tag3"):
+                finished += 1
+                raise RuntimeError("redis unavailable")
+            finished += 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_flaky_sadd)
+        tags = [f"tag{i}" for i in range(6)]
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", tags=tags)
+
+        assert result is False
+        # Every scheduled write ran to completion before set() returned.
+        assert finished == started
+
+    async def test_concurrent_sets_share_one_tag_write_budget(self):
+        """Concurrent set() calls must share the tag-write budget.
+
+        The limiter has to be per-layer, not per-call: every caller draws from
+        the same connection pool, so N concurrent writers each running their
+        own budget would still exhaust it. warm_cache() gathers set() calls,
+        so this is a reachable path.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so every other pending tag write can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+        tags = [f"tag{i}" for i in range(20)]
+
+        with _patch_redis(conn):
+            results = await asyncio.gather(
+                *(layer.set(f"k{i}", "v", tags=tags) for i in range(5))
+            )
+
+        assert all(results)
+        assert conn.sadd.call_count == 100
+        # Aggregate in-flight writes stay within the single shared budget,
+        # not 5x it, and leave headroom under the pool's max_connections.
+        assert peak <= layer._tag_write_limit
+        assert layer._tag_write_limit < layer.max_connections
+
+    async def test_tag_write_limit_scales_down_for_small_pools(self):
+        """A small pool must not be handed a fan-out wider than itself."""
+        small = RedisCacheLayer("L2", max_connections=4)
+        assert small._tag_write_limit >= 1
+        assert small._tag_write_limit < small.max_connections
+
+        default = RedisCacheLayer("L2")
+        assert default._tag_write_limit == TAG_WRITE_CONCURRENCY
+
+    def test_tag_write_semaphore_is_replaced_after_its_loop_closes(self):
+        """The semaphore must not stay bound to a loop that has closed.
+
+        Scope: this covers the *semaphore* only. An asyncio.Semaphore binds to
+        the first loop that uses it and raises for every other one, so a
+        semaphore retained past its loop's lifetime would raise on the next
+        loop. This module builds an IntelligentCacheSystem singleton at import
+        time, outside any loop, so that is reachable -- e.g. a process calling
+        asyncio.run() more than once, or a suite giving each test a fresh loop.
+
+        This does NOT establish that reusing a RedisCacheLayer or its
+        redis.asyncio ConnectionPool across loops is safe. The pool caches
+        connections whose transports are bound to the loop that opened them and
+        has no ownership contract; see issue #1162. Redis is mocked here, so
+        only semaphore replacement is exercised.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        async def _write(key, tag):
+            with _patch_redis(conn):
+                return await layer.set(key, "v", tags=[tag])
+
+        assert asyncio.run(_write("k", "a")) is True
+        first = layer._tag_write_semaphore
+        first_loop = layer._tag_write_semaphore_loop
+        assert first is not None
+        assert first_loop is not None and first_loop.is_closed()
+
+        assert asyncio.run(_write("k2", "b")) is True
+        assert layer._tag_write_semaphore is not first
+        assert layer._tag_write_semaphore_loop is not first_loop
 
     async def test_set_stores_metadata(self):
         layer = self._connected_layer()

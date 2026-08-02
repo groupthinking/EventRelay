@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -49,7 +49,7 @@ class EventPayload(BaseModel):
             "Legacy types (user_login, mention, insight) accepted for backward compat."
         ),
     )
-    data: Optional[Dict[str, Any]] = Field(
+    data: Optional[dict[str, Any]] = Field(
         default_factory=dict, description="Event data payload"
     )
     timestamp: Optional[datetime] = Field(
@@ -76,7 +76,7 @@ class ClassifiedEventResponse(BaseModel):
     status: str
     type: str
     classified_type: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 @router.post("/", status_code=200, response_model=ClassifiedEventResponse)
@@ -170,6 +170,6 @@ def process_event(event: EventPayload, classified_type: EventType):
         severity = event.severity or "medium"
         print(f"  → ALERT [{severity}]: {(event.data or {}).get('title', '')}")
     elif classified_type == EventType.CODE:
-        print(f"  → CODE snippet captured")
+        print("  → CODE snippet captured")
     elif classified_type == EventType.TOPIC:
-        print(f"  → TOPIC logged")
+        print("  → TOPIC logged")

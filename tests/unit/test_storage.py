@@ -1,10 +1,10 @@
 """
 Storage Tests - Basic functionality for file operations and data persistence.
 """
-import os
 import tempfile
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestStorage:
