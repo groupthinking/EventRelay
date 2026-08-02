@@ -1132,6 +1132,111 @@ class TestCacheHelpers:
         assert result is None
 
 
+class _ThreadRecordingJSON:
+    """Proxy around the real ``json`` module that records executing thread ids.
+
+    Used to prove that parse/serialize work is handed to a worker thread rather
+    than running inline on the event loop thread.
+    """
+
+    def __init__(self, real_json):
+        self._real = real_json
+        self.load_threads = []
+        self.dump_threads = []
+
+    def load(self, *args, **kwargs):
+        import threading
+        self.load_threads.append(threading.get_ident())
+        return self._real.load(*args, **kwargs)
+
+    def dump(self, *args, **kwargs):
+        import threading
+        self.dump_threads.append(threading.get_ident())
+        return self._real.dump(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._real, name)
+
+
+class TestCacheDiskIOOffEventLoop:
+    """Cache disk I/O must not block the event loop thread.
+
+    These assert on *which thread* executes the blocking work (identity, not
+    wall-clock timing) so they are deterministic under CI load.
+    """
+
+    async def test_load_from_cache_parses_off_event_loop(self, tmp_path):
+        import threading
+
+        proc = _make_video_processor(tmp_path)
+        cache_path = proc._get_cache_path("auJzb1D-fag")
+        cache_path.write_text(json.dumps({"video_id": "auJzb1D-fag", "success": True}))
+
+        # Reach the module globals via a method that exists both before and
+        # after this change; sibling test modules rebind youtube_extension.*
+        # in sys.modules, so patching a re-imported module object is unreliable.
+        module_globals = type(proc)._load_from_cache.__globals__
+        recorder = _ThreadRecordingJSON(module_globals["json"])
+        loop_thread = threading.get_ident()
+
+        with patch.dict(module_globals, {"json": recorder}):
+            result = await proc._load_from_cache("auJzb1D-fag")
+
+        assert result is not None
+        assert result["video_id"] == "auJzb1D-fag"
+        assert recorder.load_threads, "json.load was never invoked"
+        assert loop_thread not in recorder.load_threads, (
+            "cache parse ran on the event loop thread"
+        )
+
+    async def test_save_to_cache_serializes_off_event_loop(self, tmp_path):
+        import threading
+
+        proc = _make_video_processor(tmp_path)
+        module_globals = type(proc)._save_to_cache.__globals__
+        recorder = _ThreadRecordingJSON(module_globals["json"])
+        loop_thread = threading.get_ident()
+
+        with patch.dict(module_globals, {"json": recorder}):
+            await proc._save_to_cache("auJzb1D-fag", {"video_id": "auJzb1D-fag"})
+
+        assert proc._get_cache_path("auJzb1D-fag").exists()
+        assert recorder.dump_threads, "json.dump was never invoked"
+        assert loop_thread not in recorder.dump_threads, (
+            "cache serialize ran on the event loop thread"
+        )
+
+    async def test_load_from_cache_treats_exact_ttl_as_stale(self, tmp_path):
+        """Boundary: an entry aged exactly the TTL is a miss, matching prior behaviour."""
+        import os
+        import time
+
+        proc = _make_video_processor(tmp_path)
+        cache_path = proc._get_cache_path("auJzb1D-fag")
+        cache_path.write_text(json.dumps({"video_id": "auJzb1D-fag"}))
+
+        boundary = time.time() - 86400
+        os.utime(cache_path, (boundary, boundary))
+
+        assert await proc._load_from_cache("auJzb1D-fag") is None
+
+    async def test_cache_roundtrip_preserves_payload(self, tmp_path):
+        proc = _make_video_processor(tmp_path)
+        payload = {
+            "video_id": "auJzb1D-fag",
+            "success": True,
+            "ai_analysis": {"summary": "nested", "topics": ["a", "b"]},
+        }
+
+        await proc._save_to_cache("auJzb1D-fag", payload)
+        loaded = await proc._load_from_cache("auJzb1D-fag")
+
+        assert loaded is not None
+        assert loaded["ai_analysis"] == payload["ai_analysis"]
+        assert loaded["cached"] is True
+        assert loaded["cache_age_hours"] >= 0
+
+
 class TestProcessVideo:
     async def test_returns_cached_result_when_available(self, tmp_path):
         proc = _make_video_processor(tmp_path)

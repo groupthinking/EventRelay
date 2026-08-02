@@ -35,6 +35,9 @@ from .real_youtube_api import get_youtube_service
 # Configure logging
 logger = logging.getLogger(__name__)
 
+# Cached results older than this are treated as misses.
+_CACHE_TTL_SECONDS = 86400  # 24 hours
+
 class RealVideoProcessor:
     """
     Complete real video processing service
@@ -70,6 +73,35 @@ class RealVideoProcessor:
         """Get cache file path for video"""
         return self.cache_dir / f"{video_id}_processed.json"
 
+    @staticmethod
+    def _read_cache_file(cache_path: Path) -> Optional[tuple[dict[str, Any], float]]:
+        """Read and parse a cache entry.
+
+        Blocking: performs ``exists``/``stat``/``open``/``json.load``. Always run
+        this off the event loop. Keeping the whole sequence in a single call also
+        avoids a stat/read race across separate thread hops.
+
+        Returns ``(payload, cache_age_seconds)`` for a fresh entry, else ``None``.
+        """
+        if not cache_path.exists():
+            return None
+
+        cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
+        if cache_age >= _CACHE_TTL_SECONDS:
+            return None
+
+        with open(cache_path, encoding='utf-8') as f:
+            return json.load(f), cache_age
+
+    @staticmethod
+    def _write_cache_file(cache_path: Path, payload: dict[str, Any]) -> None:
+        """Serialize ``payload`` to ``cache_path``.
+
+        Blocking: performs ``open``/``json.dump``. Always run off the event loop.
+        """
+        with open(cache_path, 'w', encoding='utf-8') as f:
+            json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+
     async def _load_from_cache(self, video_id: str) -> Optional[dict[str, Any]]:
         """Load processed result from cache if available"""
         if not self.enable_caching:
@@ -77,18 +109,16 @@ class RealVideoProcessor:
 
         try:
             cache_path = self._get_cache_path(video_id)
-            if cache_path.exists():
-                # Check if cache is recent (less than 24 hours old)
-                cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
-                if cache_age < 86400:  # 24 hours
-                    with open(cache_path, encoding='utf-8') as f:
-                        cached_result = json.load(f)
+            entry = await asyncio.to_thread(self._read_cache_file, cache_path)
+            if entry is None:
+                return None
 
-                    cached_result['cached'] = True
-                    cached_result['cache_age_hours'] = round(cache_age / 3600, 2)
+            cached_result, cache_age = entry
+            cached_result['cached'] = True
+            cached_result['cache_age_hours'] = round(cache_age / 3600, 2)
 
-                    logger.info(f"📁 Using cached result for {video_id} (age: {cached_result['cache_age_hours']}h)")
-                    return cached_result
+            logger.info(f"📁 Using cached result for {video_id} (age: {cached_result['cache_age_hours']}h)")
+            return cached_result
 
         except Exception as e:
             logger.warning(f"Error loading cache: {e}")
@@ -106,8 +136,7 @@ class RealVideoProcessor:
             # Remove cache-specific fields before saving
             clean_result = {k: v for k, v in result.items() if k not in ['cached', 'cache_age_hours']}
 
-            with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(clean_result, f, indent=2, ensure_ascii=False, default=str)
+            await asyncio.to_thread(self._write_cache_file, cache_path, clean_result)
 
             logger.debug(f"💾 Saved result to cache: {cache_path}")
 
