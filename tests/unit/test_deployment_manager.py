@@ -1690,3 +1690,74 @@ class TestUploadToGithubOffLoopReads:
                 await asyncio.wait_for(
                     mgr._upload_to_github(str(tmp_path), "repo"), timeout=30
                 )
+
+    async def test_read_and_encode_both_run_off_the_event_loop_thread(
+        self, tmp_path
+    ) -> None:
+        """Pin both halves of the offloaded hop to a worker thread.
+
+        ``test_file_read_runs_off_the_event_loop_thread`` records the thread that
+        *calls* ``open()``; that alone would still pass an implementation which
+        offloaded ``open`` but ran the handle's ``read()`` or the CPU-bound
+        ``base64.b64encode`` back on the loop. This test records the thread that
+        executes ``read()`` and the thread that executes ``b64encode`` and
+        asserts neither is the loop thread, so the whole read+encode operation is
+        pinned off the event loop rather than only the ``open`` call.
+        """
+        (tmp_path / "index.ts").write_text("const x = 1;")
+        mgr = _make_manager(github_token="tok")
+
+        loop_thread_id = threading.get_ident()
+        read_thread_ids: list[int] = []
+        encode_thread_ids: list[int] = []
+        real_open = open
+        real_b64encode = base64.b64encode
+
+        class _RecordingHandle:
+            """Wrap a file object and record the thread that runs ``read()``."""
+
+            def __init__(self, fh) -> None:
+                self._fh = fh
+
+            def read(self, *args, **kwargs):
+                read_thread_ids.append(threading.get_ident())
+                return self._fh.read(*args, **kwargs)
+
+            def __enter__(self):
+                self._fh.__enter__()
+                return self
+
+            def __exit__(self, *exc):
+                return self._fh.__exit__(*exc)
+
+        def recording_open(file, *args, **kwargs):
+            return _RecordingHandle(real_open(file, *args, **kwargs))
+
+        def recording_b64encode(data, *args, **kwargs):
+            encode_thread_ids.append(threading.get_ident())
+            return real_b64encode(data, *args, **kwargs)
+
+        session_cm = _make_capturing_upload_session([])
+
+        with patch(
+            "youtube_extension.backend.deployment_manager.aiohttp.ClientSession",
+            return_value=session_cm,
+        ), patch(
+            "youtube_extension.backend.deployment_manager.open",
+            recording_open,
+            create=True,
+        ), patch(
+            "youtube_extension.backend.deployment_manager.base64.b64encode",
+            recording_b64encode,
+        ):
+            result = await mgr._upload_to_github(str(tmp_path), "repo")
+
+        assert result["files_uploaded"] == 1
+        assert read_thread_ids, "the project file was never read"
+        assert encode_thread_ids, "the payload was never encoded"
+        assert loop_thread_id not in read_thread_ids, (
+            "file read ran on the event loop thread; it must be offloaded"
+        )
+        assert loop_thread_id not in encode_thread_ids, (
+            "base64 encode ran on the event loop thread; it must be offloaded"
+        )
