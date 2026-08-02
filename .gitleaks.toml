@@ -5,7 +5,10 @@
 useDefault = true
 
 [allowlist]
-description = "Paths excluded from secret scanning"
+description = "Paths and patterns excluded from secret scanning"
+# `regexTarget = "line"` so the digest allowlist below matches against the full
+# source line (the SHA-256 follows `hash = "sha256:`), not just the captured token.
+regexTarget = "line"
 paths = [
   # Vendored saved web pages from Google (AI Studio / APIs Explorer): contain
   # Google's own public page keys, not EventRelay credentials.
@@ -14,4 +17,13 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+]
+regexes = [
+  # Lockfiles (e.g. uv.lock) record package artifact digests as
+  # `hash = "sha256:<64 hex>"`. The high-entropy hex trips the bundled
+  # square-access-token rule -- e.g. parso 0.8.7's sdist digest "sha256:eaaac4c9..."
+  # shares the "eaaa" shape of a Square token. These are integrity digests for
+  # public PyPI artifacts, not credentials, so suppress the digest lines
+  # specifically while leaving the rest of every lockfile scanned.
+  '''hash = "sha256:[0-9a-f]{64}"''',
 ]
