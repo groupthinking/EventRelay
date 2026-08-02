@@ -1,4 +1,5 @@
 import 'server-only';
+import { formatApiError } from '@/lib/error-handling';
 
 import { backendHeaders } from '@/lib/pipeline-backend';
 
@@ -63,7 +64,7 @@ export async function checkBackendHealth(
       configured: true,
       available: false,
       host: backendHost(url),
-      reason: error instanceof Error ? error.message : String(error),
+      reason: formatApiError(error).message,
     };
   }
 }

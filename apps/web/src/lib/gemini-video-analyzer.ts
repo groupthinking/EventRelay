@@ -1,4 +1,5 @@
 import 'server-only';
+import { formatApiError } from '@/lib/error-handling';
 
 /**
  * Agentic Video Intelligence Engine — Gemini + Google Search grounding.
@@ -297,7 +298,7 @@ export async function analyzeVideoWithGemini(
       const resultText = response.text || '{}';
       return parseAnalysisResult(resultText);
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage = formatApiError(error).message;
       const retryable =
         error instanceof AnalysisParseError ||
         errorMessage.includes('503') ||

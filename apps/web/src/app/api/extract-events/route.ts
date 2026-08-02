@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { formatApiError } from '@/lib/error-handling';
 import { Type } from '@google/genai';
 import { NextResponse } from 'next/server';
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
@@ -255,7 +256,7 @@ Respond with ONLY valid JSON matching the required structure.`;
     return NextResponse.json({ success: true, provider, data: parsed });
   } catch (error) {
     console.error('Event extraction error:', error);
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatApiError(error).message;
 
     return NextResponse.json({
       success: false,

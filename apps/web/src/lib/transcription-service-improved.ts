@@ -1,4 +1,5 @@
 import 'server-only';
+import { formatApiError } from '@/lib/error-handling';
 
 import OpenAI from 'openai';
 import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-metadata';
@@ -125,7 +126,7 @@ export async function fetchTranscript({
     } catch (error) {
       console.warn(
         'Backend transcript unavailable:',
-        error instanceof Error ? error.message : String(error)
+        formatApiError(error).message
       );
       // Continue to fallback strategies
     }
@@ -143,7 +144,7 @@ export async function fetchTranscript({
     } catch (error) {
       console.warn(
         'YouTube metadata fetch failed:',
-        error instanceof Error ? error.message : String(error)
+        formatApiError(error).message
       );
       // Continue without metadata
     }
@@ -207,7 +208,7 @@ INSTRUCTIONS:
         };
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = formatApiError(error).message;
       console.warn('Gemini transcription failed:', errorMsg);
 
       // Handle specific errors
@@ -262,7 +263,7 @@ Be thorough — capture all key points, quotes, technical details, and chapter b
         };
       }
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorMsg = formatApiError(error).message;
       console.warn('OpenAI transcription failed:', errorMsg);
 
       if (errorMsg.includes('429')) {
