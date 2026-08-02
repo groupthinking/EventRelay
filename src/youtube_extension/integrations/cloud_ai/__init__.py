@@ -12,8 +12,14 @@ from .base import (
     VideoAnalysisResult,
 )
 from .config import CloudAIConfig
-from .exceptions import CloudAIError, ConfigurationError, RateLimitError
+from .exceptions import (
+    CloudAIError,
+    ConfigurationError,
+    RateLimitError,
+    UnsafeMediaPathError,
+)
 from .integrator import CloudAIIntegrator
+from .media_paths import MEDIA_ROOT_ENV_VAR, get_media_root, resolve_local_media_path
 
 __all__ = [
     "BaseCloudAI",
@@ -25,5 +31,9 @@ __all__ = [
     "CloudAIConfig",
     "CloudAIError",
     "RateLimitError",
-    "ConfigurationError"
+    "ConfigurationError",
+    "UnsafeMediaPathError",
+    "MEDIA_ROOT_ENV_VAR",
+    "get_media_root",
+    "resolve_local_media_path",
 ]

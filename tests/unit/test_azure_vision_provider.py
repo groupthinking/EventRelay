@@ -301,10 +301,11 @@ class TestAzureVisionPrepareImageInput:
         result = await provider._prepare_image_input("https://example.com/img.jpg")
         assert result is None
 
-    async def test_local_file_reads_bytes_fixture(self, tmp_path):
+    async def test_local_file_reads_bytes_fixture(self, tmp_path, monkeypatch):
         provider = _make_provider()
         img_file = tmp_path / "test.jpg"
         img_file.write_bytes(b"\xff\xd8\xff")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         result = await provider._prepare_image_input(str(img_file))
         assert result == b"\xff\xd8\xff"
 
