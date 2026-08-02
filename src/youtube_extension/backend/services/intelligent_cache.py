@@ -513,12 +513,20 @@ class RedisCacheLayer(IntelligentCacheLayer):
                 semaphore = self._get_tag_write_semaphore()
 
                 async def _invalidate_tag(tag: str) -> int:
-                    # One permit covers both commands for a tag rather than one
-                    # each. The delete operates on the members smembers just
-                    # returned, so the pair is causally ordered and cannot be
-                    # interleaved; holding the permit across both keeps the
-                    # number of concurrently held pool connections equal to the
-                    # permit count instead of twice it.
+                    # One permit is held for the whole smembers->delete pair
+                    # rather than re-acquired per command. This bounds the
+                    # number of tag invalidations in progress at once to the
+                    # permit count and keeps each tag's causally-ordered pair
+                    # (delete operates on the members smembers just returned) as
+                    # one indivisible unit of scheduled work.
+                    #
+                    # It does NOT lower peak pool-connection usage: redis.asyncio
+                    # checks a connection out only for the duration of each
+                    # command and returns it to the pool between the two awaits,
+                    # so acquiring the permit per command would cap in-flight
+                    # commands at the same limit. The reason to hold across the
+                    # pair is scheduling determinism and avoiding permit churn,
+                    # not preventing a doubling of held connections.
                     async with semaphore:
                         keys = await conn.smembers(f"uvai:tag:{tag}")
 

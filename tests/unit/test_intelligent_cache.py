@@ -1651,11 +1651,14 @@ class TestRedisCacheLayerInvalidateByTags:
         assert peak <= layer._tag_write_limit
 
     async def test_invalidate_holds_one_permit_across_both_commands(self):
-        """smembers and delete for a tag must not be split across permits.
+        """smembers and delete for a tag are scheduled under one permit.
 
-        The delete operates on the members smembers just returned, so a permit
-        that is released between them would let the number of concurrently held
-        pool connections reach twice the budget.
+        Holding the permit across the pair keeps each tag's invalidation as one
+        indivisible unit of scheduled work, so with a single permit the pairs
+        run to completion without interleaving. (This does not change peak pool
+        usage -- redis.asyncio returns a connection to the pool between the two
+        awaits -- it pins the per-tag scheduling policy so a later refactor
+        cannot silently split the pair.)
         """
         layer = self._connected_layer()
         layer._tag_write_limit = 1
@@ -1686,6 +1689,61 @@ class TestRedisCacheLayerInvalidateByTags:
             ("smembers", "uvai:tag:tag2"),
             ("delete", "uvai:tag:tag2"),
         ]
+
+    async def test_invalidate_starts_no_command_after_context_exit_on_cancel(self):
+        """A cancelled invalidate issues no Redis command after conn closes.
+
+        Regression guard for the cancellation-parity claim: if the task running
+        invalidate_by_tags() is cancelled while a child is blocked in smembers,
+        gather cancels the children and CancelledError unwinds out through the
+        ``async with redis.Redis(...)`` context manager. A cancelled child may
+        still run its ``finally`` (releasing the semaphore), but it must never
+        start a new command on the connection once __aexit__ has closed it.
+        """
+        layer = self._connected_layer()
+        layer._tag_write_limit = 2
+        conn = _make_redis_conn()
+
+        events: list[tuple[str, object]] = []
+        first_smembers = asyncio.Event()
+
+        async def _blocking_smembers(name, *_args, **_kwargs):
+            events.append(("smembers_start", name))
+            first_smembers.set()
+            await asyncio.sleep(3600)  # block until cancelled
+            events.append(("smembers_end", name))  # unreachable once cancelled
+            return set()
+
+        async def _delete(*args, **_kwargs):
+            events.append(("delete_start", args[-1]))
+            return 1
+
+        conn.smembers = AsyncMock(side_effect=_blocking_smembers)
+        conn.delete = AsyncMock(side_effect=_delete)
+
+        original_aexit = conn.__aexit__
+
+        async def _tracking_aexit(*args, **kwargs):
+            events.append(("aexit", None))
+            return await original_aexit(*args, **kwargs)
+
+        conn.__aexit__ = AsyncMock(side_effect=_tracking_aexit)
+
+        with _patch_redis(conn):
+            task = asyncio.ensure_future(layer.invalidate_by_tags(["t1", "t2"]))
+            await first_smembers.wait()  # a child is now mid-smembers
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        # The connection context manager exited, and nothing issued a command
+        # after it did.
+        assert ("aexit", None) in events
+        aexit_index = events.index(("aexit", None))
+        after_exit = events[aexit_index + 1 :]
+        assert not any(
+            kind in ("smembers_start", "delete_start") for kind, _ in after_exit
+        )
 
     async def test_invalidate_failure_drains_in_flight_work(self):
         """A failing tag returns 0 with no per-tag task left in flight."""
