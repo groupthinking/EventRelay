@@ -15,6 +15,23 @@ from datetime import datetime
 from pathlib import Path
 
 
+# CWE-117 (log injection / log forging): line-breaking characters that let a
+# user-controlled value spawn a second, forged log line. Neutralized in the
+# FINAL rendered record — see StructuredFormatter.format() — so exc_info
+# tracebacks and structured ``extra`` fields are covered even when a value was
+# not sanitized at the call site. Escaping (rather than dropping) keeps the
+# content greppable while guaranteeing one log call renders as one physical line.
+_LOG_FORGERY_ESCAPES = {
+    0x0A: "\\n",       # line feed
+    0x0D: "\\r",       # carriage return
+    0x0B: "\\v",       # vertical tab
+    0x0C: "\\f",       # form feed
+    0x85: "\\x85",     # NEL (Unicode next line)
+    0x2028: "\\u2028",  # line separator
+    0x2029: "\\u2029",  # paragraph separator
+}
+
+
 class StructuredFormatter(logging.Formatter):
     """
     Custom formatter for structured logging with enhanced metadata.
@@ -39,7 +56,12 @@ class StructuredFormatter(logging.Formatter):
         # Format the base message
         formatted_message = super().format(record)
 
-        return formatted_message
+        # CWE-117: neutralize CR/LF (and other line separators) in the fully
+        # rendered record. This covers the message, any exc_info traceback text
+        # (including ``str(exc)``) and structured ``extra`` fields the format
+        # string references, so a user-controlled value carrying "\r\n" cannot
+        # forge an additional log line even when it was not sanitized inline.
+        return formatted_message.translate(_LOG_FORGERY_ESCAPES)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
