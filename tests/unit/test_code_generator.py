@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import tempfile
+import threading
 from pathlib import Path
 
 import pytest
 
 from youtube_extension.backend.code_generator import (
     ProjectCodeGenerator,
+    _apply_write_plan,
     _build_title,
     _extract_video_id,
     get_code_generator,
@@ -800,3 +802,179 @@ class TestGetCodeGenerator:
         gen2 = get_code_generator(use_ai_generation=False)
         assert gen1 is gen2
         cg_module._code_generator = None  # clean up
+
+
+# ===========================================================================
+# Scaffolding disk I/O runs off the event loop (issue #1250)
+# ===========================================================================
+
+
+class TestScaffoldingWritesOffLoop:
+    """Every filesystem call must land on a worker thread, not the loop.
+
+    These assert *thread identity* rather than elapsed time: a wall-clock
+    threshold would be flaky under CI contention and would still pass if the
+    work ran on the loop but happened to be fast.
+    """
+
+    @staticmethod
+    def _recording_open(record: list[str]):
+        """Wrap ``builtins.open`` so each call records its executing thread."""
+        import builtins
+
+        real_open = builtins.open
+
+        def _tracked(*args, **kwargs):
+            record.append(threading.current_thread().name)
+            return real_open(*args, **kwargs)
+
+        return _tracked
+
+    @pytest.mark.parametrize(
+        "generator_name",
+        [
+            "_generate_react_project",
+            "_generate_vanilla_js_project",
+            "_generate_python_api",
+        ],
+    )
+    async def test_generator_writes_never_touch_loop_thread(
+        self, monkeypatch, tmp_path, generator_name
+    ):
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        analysis = _build_video_analysis(
+            "Dashboard Tutorial", "auJzb1D-fag", "A summary.", ["state", "charts"]
+        )
+        loop_thread = threading.current_thread().name
+
+        seen: list[str] = []
+        monkeypatch.setattr("builtins.open", self._recording_open(seen))
+
+        project = tmp_path / "project"
+        project.mkdir()
+        await getattr(gen, generator_name)(project, analysis, ["database"])
+
+        assert seen, "expected the generator to write at least one file"
+        offenders = [name for name in seen if name == loop_thread]
+        assert not offenders, (
+            f"{generator_name} performed {len(offenders)} of {len(seen)} writes "
+            f"on the event loop thread ({loop_thread})"
+        )
+
+    async def test_mkdtemp_runs_off_loop(self, monkeypatch, tmp_path):
+        """The project directory itself is also created off-loop."""
+        import youtube_extension.backend.code_generator as cg_module
+
+        loop_thread = threading.current_thread().name
+        seen: list[str] = []
+        real_mkdtemp = tempfile.mkdtemp
+
+        def _tracked(*args, **kwargs):
+            seen.append(threading.current_thread().name)
+            return real_mkdtemp(*args, **kwargs)
+
+        monkeypatch.setattr(cg_module.tempfile, "mkdtemp", _tracked)
+
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        await gen.generate_project(
+            _build_video_analysis("T", "auJzb1D-fag", "S", []),
+            {"project_type": "web", "technologies": ["react"]},
+        )
+
+        assert seen, "expected mkdtemp to be called"
+        assert loop_thread not in seen, (
+            f"tempfile.mkdtemp ran on the event loop thread ({loop_thread})"
+        )
+
+    @pytest.mark.parametrize(
+        ("generator_name", "expected_files"),
+        [
+            ("_generate_react_project", 6),
+            ("_generate_vanilla_js_project", 4),
+            ("_generate_python_api", 3),
+        ],
+    )
+    async def test_batches_into_a_single_thread_hop(
+        self, monkeypatch, tmp_path, generator_name, expected_files
+    ):
+        """Cost is O(1) thread hops per generator, not O(files).
+
+        Guards against a regression that offloads each write individually,
+        which would still pass the thread-identity tests above while paying
+        one context switch per file.
+        """
+        import youtube_extension.backend.code_generator as cg_module
+
+        real_to_thread = asyncio.to_thread
+        hops: list[str] = []
+
+        async def _counting(func, /, *args, **kwargs):
+            hops.append(getattr(func, "__name__", repr(func)))
+            return await real_to_thread(func, *args, **kwargs)
+
+        monkeypatch.setattr(cg_module.asyncio, "to_thread", _counting)
+
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        project = tmp_path / "project"
+        project.mkdir()
+        await getattr(gen, generator_name)(
+            project,
+            _build_video_analysis("T", "auJzb1D-fag", "S", []),
+            ["database"],
+        )
+
+        assert hops == ["_apply_write_plan"], (
+            f"expected exactly one batched hop, got {hops}"
+        )
+        written = [p for p in project.rglob("*") if p.is_file()]
+        assert len(written) == expected_files
+
+
+class TestApplyWritePlan:
+    """Contract of the batched write helper itself."""
+
+    def test_applies_steps_in_order_so_dirs_precede_their_files(self, tmp_path):
+        nested = tmp_path / "src"
+        plan = [
+            (nested, None),
+            (nested / "App.js", "console.log(1);"),
+        ]
+        _apply_write_plan(plan)
+
+        assert nested.is_dir()
+        assert (nested / "App.js").read_text() == "console.log(1);"
+
+    def test_directory_step_tolerates_an_existing_directory(self, tmp_path):
+        existing = tmp_path / "public"
+        existing.mkdir()
+        _apply_write_plan([(existing, None)])  # must not raise
+        assert existing.is_dir()
+
+    def test_does_not_suppress_errors_and_leaves_earlier_steps_applied(
+        self, tmp_path
+    ):
+        """A failing step raises, exactly as the inline sequence did.
+
+        Uses a real invalid path rather than a mock so the stdlib itself
+        produces the failure.
+        """
+        good = tmp_path / "first.txt"
+        plan = [
+            (good, "written"),
+            (tmp_path / "bad\x00name.txt", "never"),
+            (tmp_path / "third.txt", "unreached"),
+        ]
+
+        with pytest.raises(ValueError, match="null"):
+            _apply_write_plan(plan)
+
+        assert good.read_text() == "written"
+        assert not (tmp_path / "third.txt").exists()
+
+    def test_writes_content_verbatim_without_adding_a_trailing_newline(
+        self, tmp_path
+    ):
+        target = tmp_path / "package.json"
+        payload = json.dumps({"name": "x", "version": "1.0.0"}, indent=2)
+        _apply_write_plan([(target, payload)])
+        assert target.read_bytes() == payload.encode()
