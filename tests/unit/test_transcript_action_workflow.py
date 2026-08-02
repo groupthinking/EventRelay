@@ -1329,11 +1329,12 @@ class TestCleanupDownloadArtifactsOffEventLoop:
             TranscriptActionWorkflow._cleanup_download_artifacts(None, temp_root)
         )
 
-        for _ in range(500):
-            if started.is_set():
-                break
+        # Wall-clock deadline rather than a fixed iteration budget: a loaded
+        # CI runner can stretch each sleep well past 10ms.
+        deadline = time.monotonic() + 30.0
+        while not started.is_set():
+            assert time.monotonic() < deadline, "cleanup never started"
             await asyncio.sleep(0.01)
-        assert started.is_set(), "cleanup never started"
 
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -1344,3 +1345,42 @@ class TestCleanupDownloadArtifactsOffEventLoop:
 
         # Let the shielded inner task settle before the loop closes.
         await asyncio.sleep(0.1)
+
+    async def test_cleanup_does_not_mask_in_flight_exception(
+        self, monkeypatch, tmp_path
+    ):
+        """A cleanup failure must never replace the exception being propagated.
+
+        The helper runs from a ``finally``. If it raised, it would discard the
+        real error and report a spurious filesystem fault instead. Both removal
+        primitives are therefore total.
+        """
+
+        def exploding_unlink(self, *args, **kwargs):
+            raise PermissionError("read-only filesystem")
+
+        def exploding_stat(self, *args, **kwargs):
+            raise OSError("stat exploded")
+
+        monkeypatch.setattr(pathlib.Path, "unlink", exploding_unlink)
+        # ``Path.exists()`` is implemented via ``stat()``. Patching stat proves
+        # the helper never probes a path in a way that could itself raise.
+        # ``shutil.rmtree`` is left real: its ``ignore_errors=True`` is the
+        # documented mechanism that makes the directory removal total, so
+        # patching it away would test a guarantee the code never claimed.
+        monkeypatch.setattr(pathlib.Path, "stat", exploding_stat)
+
+        class Boom(Exception):
+            pass
+
+        async def failing_operation():
+            try:
+                raise Boom("the real error")
+            finally:
+                await TranscriptActionWorkflow._cleanup_download_artifacts(
+                    tmp_path / "video.mp4", tmp_path / "absent_tree"
+                )
+
+        # The original exception survives; no OSError leaks out of cleanup.
+        with pytest.raises(Boom, match="the real error"):
+            await failing_operation()

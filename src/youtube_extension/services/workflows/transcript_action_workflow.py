@@ -880,15 +880,31 @@ class TranscriptActionWorkflow:
         cancellation delivered during the ``finally`` skip cleanup and leak the
         tree. Shielding preserves that "always cleans up" property while still
         yielding the loop, and still re-raises ``CancelledError`` to the caller.
+
+        ``CancelledError`` is deliberately allowed to propagate rather than
+        being suppressed in favour of any exception already in flight. Python
+        chains the in-flight exception onto it as ``__context__``, so no
+        diagnostic information is lost, whereas swallowing it would report a
+        cancelled task as ``cancelled() is False`` and defeat
+        ``asyncio.timeout``. The caller in ``_extract_transcript`` catches
+        ``Exception``, so a suppressed cancellation would be downgraded to a
+        per-source error and the pipeline would keep issuing network calls
+        after the request was abandoned.
         """
 
         def _cleanup() -> None:
-            if video_path is not None and video_path.exists():
+            # Both branches are total. This runs from a ``finally``, so raising
+            # here would replace whatever exception is already propagating.
+            # Note the absence of ``exists()`` probes: ``exists()`` performs a
+            # stat and can itself raise ``OSError``, which is exactly the
+            # masking this must avoid. ``unlink`` already raises
+            # ``FileNotFoundError`` for absent paths and ``rmtree`` is a no-op.
+            if video_path is not None:
                 try:
                     video_path.unlink()
                 except OSError:
                     pass
-            if temp_root is not None and temp_root.exists():
+            if temp_root is not None:
                 shutil.rmtree(temp_root, ignore_errors=True)
 
         await asyncio.shield(asyncio.to_thread(_cleanup))
