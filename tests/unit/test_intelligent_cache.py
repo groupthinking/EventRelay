@@ -1690,60 +1690,77 @@ class TestRedisCacheLayerInvalidateByTags:
             ("delete", "uvai:tag:tag2"),
         ]
 
-    async def test_invalidate_starts_no_command_after_context_exit_on_cancel(self):
-        """A cancelled invalidate issues no Redis command after conn closes.
+    async def test_invalidate_cancellation_drains_before_conn_closes(self):
+        """Cancellation must unwind every child before the connection closes.
 
-        Regression guard for the cancellation-parity claim: if the task running
-        invalidate_by_tags() is cancelled while a child is blocked in smembers,
-        gather cancels the children and CancelledError unwinds out through the
-        ``async with redis.Redis(...)`` context manager. A cancelled child may
-        still run its ``finally`` (releasing the semaphore), but it must never
-        start a new command on the connection once __aexit__ has closed it.
+        This is the explicit cancellation-parity claim: gather() does not
+        complete its outer future until every cancelled child has finished, so
+        the enclosing ``async with redis.Redis(...)`` cannot close ``conn``
+        while a child could still issue a command on it.
         """
         layer = self._connected_layer()
-        layer._tag_write_limit = 2
+        layer._tag_write_limit = 4
         conn = _make_redis_conn()
 
-        events: list[tuple[str, object]] = []
-        first_smembers = asyncio.Event()
+        events: list[tuple] = []
+        all_blocked = asyncio.Event()
+        entered = 0
 
         async def _blocking_smembers(name, *_args, **_kwargs):
-            events.append(("smembers_start", name))
-            first_smembers.set()
-            await asyncio.sleep(3600)  # block until cancelled
-            events.append(("smembers_end", name))  # unreachable once cancelled
-            return set()
+            nonlocal entered
+            events.append(("cmd", "smembers", name))
+            entered += 1
+            if entered == 3:
+                all_blocked.set()
+            try:
+                await asyncio.sleep(3600)
+                return {b"key1"}
+            finally:
+                events.append(("unwind", name))
 
         async def _delete(*args, **_kwargs):
-            events.append(("delete_start", args[-1]))
+            events.append(("cmd", "delete", args[-1]))
             return 1
+
+        async def _aexit(*_args, **_kwargs):
+            events.append(("aexit",))
+            return False
 
         conn.smembers = AsyncMock(side_effect=_blocking_smembers)
         conn.delete = AsyncMock(side_effect=_delete)
-
-        original_aexit = conn.__aexit__
-
-        async def _tracking_aexit(*args, **kwargs):
-            events.append(("aexit", None))
-            return await original_aexit(*args, **kwargs)
-
-        conn.__aexit__ = AsyncMock(side_effect=_tracking_aexit)
+        conn.__aexit__ = AsyncMock(side_effect=_aexit)
 
         with _patch_redis(conn):
-            task = asyncio.ensure_future(layer.invalidate_by_tags(["t1", "t2"]))
-            await first_smembers.wait()  # a child is now mid-smembers
+            task = asyncio.create_task(layer.invalidate_by_tags(["t1", "t2", "t3"]))
+            try:
+                await asyncio.wait_for(all_blocked.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                task.cancel()
+                try:
+                    await task
+                except BaseException:
+                    pass
+                pytest.fail(
+                    f"tags were not issued concurrently; only {entered} in flight"
+                )
             task.cancel()
             with pytest.raises(asyncio.CancelledError):
                 await task
 
-        # The connection context manager exited, and nothing issued a command
-        # after it did.
-        assert ("aexit", None) in events
-        aexit_index = events.index(("aexit", None))
-        after_exit = events[aexit_index + 1 :]
-        assert not any(
-            kind in ("smembers_start", "delete_start") for kind, _ in after_exit
-        )
+        kinds = [e[0] for e in events]
+        assert "aexit" in kinds, f"connection never closed: {events}"
+        aexit_idx = kinds.index("aexit")
+
+        # Every child finished its finally path before the connection closed.
+        assert kinds.count("unwind") == 3, f"not all children unwound: {events}"
+        assert all(
+            i < aexit_idx for i, e in enumerate(events) if e[0] == "unwind"
+        ), f"a child unwound after conn close: {events}"
+
+        # No Redis command was issued after the connection closed.
+        assert all(
+            i < aexit_idx for i, e in enumerate(events) if e[0] == "cmd"
+        ), f"command issued after conn close: {events}"
 
     async def test_invalidate_failure_drains_in_flight_work(self):
         """A failing tag returns 0 with no per-tag task left in flight."""

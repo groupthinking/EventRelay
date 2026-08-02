@@ -518,7 +518,8 @@ class RedisCacheLayer(IntelligentCacheLayer):
                     # number of tag invalidations in progress at once to the
                     # permit count and keeps each tag's causally-ordered pair
                     # (delete operates on the members smembers just returned) as
-                    # one indivisible unit of scheduled work.
+                    # one indivisible unit of scheduled work. It also bounds how
+                    # many tags can sit half-invalidated if a delete fails.
                     #
                     # It does NOT lower peak pool-connection usage: redis.asyncio
                     # checks a connection out only for the duration of each
