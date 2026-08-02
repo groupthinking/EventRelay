@@ -1,0 +1,8 @@
+⚡ Bolt: Optimize timestamp finding in workflow checks
+
+💡 What: Optimize timestamp finding in `latestIso` function by replacing `.map` and `Math.max(...times)` with a single `.reduce()` operation.
+🎯 Why: `.map` followed by `Math.max(...times)` allocates unnecessary intermediate arrays and can throw "Maximum call stack size exceeded" on large data sets.
+📊 Impact: Avoids stack overflow for large arrays and speeds up execution by iterating through the array once instead of multiple times without intermediate array creation.
+🔬 Measurement: Validated via pytest tests for workflow governance.
+
+<!-- agent-lock-manifest {"issue_number": 1256, "agent_login": "jules", "run_id": "bolt-opt-latest-iso"} -->
