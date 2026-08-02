@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
+import pathlib
+import shutil
+import threading
+import time
 from dataclasses import asdict
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -1189,3 +1194,144 @@ class TestFallbackTranscriptWithGemini:
 
         assert result["text"] == "Gemini transcript"
         assert result["source"] == "gemini_video"
+
+
+# ---------------------------------------------------------------------------
+# _cleanup_download_artifacts
+# ---------------------------------------------------------------------------
+
+class TestCleanupDownloadArtifactsOffEventLoop:
+    """The Gemini fallback must not delete downloaded video trees inline.
+
+    ``_fallback_transcript_with_gemini`` downloads a full video into a
+    temporary tree, so the ``finally`` cleanup is unbounded disk work. These
+    tests pin that work to a worker thread rather than the event loop.
+    """
+
+    async def test_cleanup_runs_off_event_loop(self, monkeypatch, tmp_path):
+        loop_thread = threading.get_ident()
+        seen: dict[str, int] = {}
+        calls = {"unlink": 0, "rmtree": 0}
+
+        real_unlink = pathlib.Path.unlink
+        real_rmtree = shutil.rmtree
+
+        def recording_unlink(self, *args, **kwargs):
+            seen["unlink"] = threading.get_ident()
+            calls["unlink"] += 1
+            return real_unlink(self, *args, **kwargs)
+
+        def recording_rmtree(path, *args, **kwargs):
+            seen["rmtree"] = threading.get_ident()
+            calls["rmtree"] += 1
+            return real_rmtree(path, *args, **kwargs)
+
+        monkeypatch.setattr(pathlib.Path, "unlink", recording_unlink)
+        monkeypatch.setattr(shutil, "rmtree", recording_rmtree)
+
+        temp_root = tmp_path / "gemini_video_abc"
+        temp_root.mkdir()
+        video_path = temp_root / "auJzb1D-fag.mp4"
+        video_path.write_bytes(b"video-bytes")
+
+        await TranscriptActionWorkflow._cleanup_download_artifacts(
+            video_path, temp_root
+        )
+
+        # Guard against a vacuous pass: both primitives must really have run.
+        assert calls == {"unlink": 1, "rmtree": 1}
+        assert seen["unlink"] != loop_thread
+        assert seen["rmtree"] != loop_thread
+
+    async def test_cleanup_does_not_block_event_loop(self, monkeypatch, tmp_path):
+        started = threading.Event()
+        release = threading.Event()
+
+        def blocking_rmtree(path, *args, **kwargs):
+            started.set()
+            # Fail instead of hanging CI if the loop never gets to resume.
+            assert release.wait(timeout=10), "event loop blocked during cleanup"
+
+        monkeypatch.setattr(shutil, "rmtree", blocking_rmtree)
+
+        temp_root = tmp_path / "gemini_video_abc"
+        temp_root.mkdir()
+
+        cleanup = asyncio.create_task(
+            TranscriptActionWorkflow._cleanup_download_artifacts(None, temp_root)
+        )
+
+        for _ in range(500):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+
+        # Reaching here while rmtree is still parked proves the loop kept
+        # running concurrently with the deletion.
+        assert started.is_set(), "cleanup never started"
+        assert not cleanup.done()
+
+        release.set()
+        await asyncio.wait_for(cleanup, timeout=10)
+
+    async def test_cleanup_removes_artifacts(self, tmp_path):
+        temp_root = tmp_path / "gemini_video_abc"
+        temp_root.mkdir()
+        video_path = temp_root / "auJzb1D-fag.mp4"
+        video_path.write_bytes(b"video-bytes")
+        fragment = temp_root / "auJzb1D-fag.f140.m4a"
+        fragment.write_bytes(b"audio-bytes")
+
+        await TranscriptActionWorkflow._cleanup_download_artifacts(
+            video_path, temp_root
+        )
+
+        assert not video_path.exists()
+        assert not fragment.exists()
+        assert not temp_root.exists()
+
+    async def test_cleanup_survives_missing_paths(self, tmp_path):
+        # Mirrors the pre-existing guards: absent artifacts are not an error.
+        await TranscriptActionWorkflow._cleanup_download_artifacts(
+            tmp_path / "gone.mp4", tmp_path / "gone_dir"
+        )
+        await TranscriptActionWorkflow._cleanup_download_artifacts(None, None)
+
+    async def test_cleanup_completes_when_task_cancelled(self, monkeypatch, tmp_path):
+        # The replaced inline code was synchronous and therefore uncancellable,
+        # so cleanup always ran. The shielded await must preserve that.
+        started = threading.Event()
+        finished = threading.Event()
+        real_rmtree = shutil.rmtree
+
+        def slow_rmtree(path, *args, **kwargs):
+            started.set()
+            time.sleep(0.3)
+            real_rmtree(path, *args, **kwargs)
+            finished.set()
+
+        monkeypatch.setattr(shutil, "rmtree", slow_rmtree)
+
+        temp_root = tmp_path / "gemini_video_abc"
+        temp_root.mkdir()
+        (temp_root / "auJzb1D-fag.mp4").write_bytes(b"video-bytes")
+
+        task = asyncio.create_task(
+            TranscriptActionWorkflow._cleanup_download_artifacts(None, temp_root)
+        )
+
+        for _ in range(500):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert started.is_set(), "cleanup never started"
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert finished.wait(timeout=10), "shielded cleanup did not finish"
+        assert not temp_root.exists()
+
+        # Let the shielded inner task settle before the loop closes.
+        await asyncio.sleep(0.1)

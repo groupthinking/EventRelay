@@ -849,13 +849,7 @@ class TranscriptActionWorkflow:
                 if file_result.error:
                     errors.append(file_result.error)
             finally:
-                if video_path.exists():
-                    try:
-                        video_path.unlink()
-                    except OSError:
-                        pass
-                if temp_root and temp_root.exists():
-                    shutil.rmtree(temp_root, ignore_errors=True)
+                await self._cleanup_download_artifacts(video_path, temp_root)
 
         error_message = errors[0] if errors else "Gemini transcription failed"
         logger.warning("Gemini transcription fallback failed: %s", error_message)
@@ -866,6 +860,38 @@ class TranscriptActionWorkflow:
             "source": "gemini_video_failed",
             "error": error_message,
         }
+
+    @staticmethod
+    async def _cleanup_download_artifacts(
+        video_path: Path | None,
+        temp_root: Path | None,
+    ) -> None:
+        """Remove downloaded video artifacts without blocking the event loop.
+
+        The Gemini file fallback downloads a whole video into a temporary tree.
+        Because the format chain may fall back to separate video/audio streams,
+        that tree can hold the merged output plus unmerged ``.fNNN`` fragments,
+        so the removal is unbounded disk work. It therefore runs in a worker
+        thread using the same ``to_thread`` idiom as ``_download_video_file``.
+
+        The await is shielded because this runs from a ``finally`` block. The
+        previous inline implementation was synchronous and so uncancellable,
+        which meant cleanup always completed; an unshielded await would let a
+        cancellation delivered during the ``finally`` skip cleanup and leak the
+        tree. Shielding preserves that "always cleans up" property while still
+        yielding the loop, and still re-raises ``CancelledError`` to the caller.
+        """
+
+        def _cleanup() -> None:
+            if video_path is not None and video_path.exists():
+                try:
+                    video_path.unlink()
+                except OSError:
+                    pass
+            if temp_root is not None and temp_root.exists():
+                shutil.rmtree(temp_root, ignore_errors=True)
+
+        await asyncio.shield(asyncio.to_thread(_cleanup))
 
     async def _record_metric(
         self,
