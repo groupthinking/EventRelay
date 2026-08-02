@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import sys
+import threading
 import types as _types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -1115,3 +1117,91 @@ class TestGoogleCloudAIEstimateCost:
         provider = _make_provider()
         cost = provider.estimate_cost(0.0, [AnalysisType.LABEL_DETECTION])
         assert cost == pytest.approx(0.0)
+
+
+# ===========================================================================
+# Local image reads must not block the event loop
+# ===========================================================================
+
+
+class _ThreadRecordingOpen:
+    """Wrap ``builtins.open`` and record which thread opened a target path.
+
+    Off-loop execution is asserted by *thread identity* rather than elapsed
+    wall-clock time, which is flaky on loaded CI runners. Only calls for the
+    target path are recorded so unrelated ``open`` traffic (logging, coverage)
+    cannot contaminate the result.
+    """
+
+    def __init__(self, target):
+        self._real_open = builtins.open
+        self._target = str(target)
+        self.threads: list[int] = []
+
+    def __call__(self, file, *args, **kwargs):
+        if str(file) == self._target:
+            self.threads.append(threading.get_ident())
+        return self._real_open(file, *args, **kwargs)
+
+
+class TestGoogleCloudImageReadOffEventLoop:
+    def _vision_modules(self):
+        mock_image_instance = MagicMock()
+        mock_image_instance.source = MagicMock()
+        mock_image_cls = MagicMock(return_value=mock_image_instance)
+        mock_feature_type = MagicMock()
+        mock_feature_type.LABEL_DETECTION = "LABEL_DETECTION"
+        mock_feature_cls = MagicMock()
+        mock_feature_cls.Type = mock_feature_type
+        mock_vision = MagicMock()
+        mock_vision.Image = mock_image_cls
+        mock_vision.Feature = mock_feature_cls
+        return mock_vision
+
+    def _patched_modules(self, mock_vision):
+        return patch.dict("sys.modules", {
+            "google": _types.ModuleType("google"),
+            "google.cloud": _types.ModuleType("google.cloud"),
+            "google.cloud.vision": mock_vision,
+        })
+
+    def _client(self):
+        client = AsyncMock()
+        client.annotate_image = AsyncMock(return_value=_make_vision_response())
+        return client
+
+    async def test_local_file_read_runs_on_worker_thread(self, tmp_path):
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        img_file = tmp_path / "frame.jpg"
+        img_file.write_bytes(b"\x89PNG\r\n")
+        mock_vision = self._vision_modules()
+        recorder = _ThreadRecordingOpen(img_file)
+        loop_thread = threading.get_ident()
+
+        with self._patched_modules(mock_vision), patch("builtins.open", recorder):
+            await provider.analyze_image(str(img_file), [AnalysisType.LABEL_DETECTION])
+
+        assert mock_vision.Image.return_value.content == b"\x89PNG\r\n"
+        assert recorder.threads, "expected the provider to open the local image file"
+        assert loop_thread not in recorder.threads, (
+            "local image bytes were read on the event loop thread; the read must "
+            "be offloaded to a worker thread"
+        )
+
+    async def test_http_url_performs_no_disk_read(self, tmp_path):
+        """The URI branch must remain untouched: Vision fetches it directly."""
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        decoy = tmp_path / "unused.jpg"
+        decoy.write_bytes(b"\x00")
+        mock_vision = self._vision_modules()
+        recorder = _ThreadRecordingOpen(decoy)
+
+        with self._patched_modules(mock_vision), patch("builtins.open", recorder):
+            await provider.analyze_image(
+                "https://example.com/img.jpg", [AnalysisType.LABEL_DETECTION]
+            )
+
+        assert recorder.threads == []
+        assert mock_vision.Image.return_value.source.image_uri == "https://example.com/img.jpg"

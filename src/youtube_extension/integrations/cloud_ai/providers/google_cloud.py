@@ -31,6 +31,12 @@ from ..exceptions import (
 logger = logging.getLogger(__name__)
 
 
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's bytes. Module-level so it can run in a worker thread."""
+    with open(path, 'rb') as handle:
+        return handle.read()
+
+
 class GoogleCloudAI(BaseCloudAI):
     """Google Cloud Video Intelligence and Vision API integration."""
 
@@ -181,9 +187,8 @@ class GoogleCloudAI(BaseCloudAI):
             if image_url.startswith(('http://', 'https://')):
                 image.source.image_uri = image_url
             else:
-                # For local files
-                with open(image_url, 'rb') as image_file:
-                    image.content = image_file.read()
+                # Local file - read off the event loop
+                image.content = await asyncio.to_thread(_read_file_bytes, image_url)
 
             # Prepare features
             features = self._prepare_vision_features(analysis_types)
