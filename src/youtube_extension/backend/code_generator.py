@@ -10,16 +10,101 @@ Attempts AI-powered generation via Gemini first; falls back to
 template-based generation that still produces unique, video-specific output.
 """
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger(__name__)
+
+
+#: One scaffolding step. ``(path, None)`` creates a directory; ``(path, text)``
+#: writes a file. Steps are applied in list order.
+WritePlan = list[tuple[Path, Optional[str]]]
+
+
+def _apply_write_plan(plan: WritePlan) -> None:
+    """Apply an ordered scaffolding plan on the calling thread.
+
+    This is the only place the generators touch the filesystem. It is written
+    as a plain synchronous function so callers can hand the whole batch to
+    ``asyncio.to_thread`` in a single hop, rather than paying a hop per file.
+
+    Steps are applied strictly in order, so a directory step always lands
+    before the file steps that depend on it and the on-disk result matches
+    what the equivalent inline sequence produced.
+
+    No exception is suppressed. A failing step raises exactly the error the
+    equivalent inline call would have raised, on the same step, leaving the
+    preceding steps applied -- identical to the previous behaviour.
+    """
+    for path, content in plan:
+        if content is None:
+            path.mkdir(exist_ok=True)
+        else:
+            with open(path, "w") as handle:
+                handle.write(content)
+
+
+async def _run_to_completion(coro) -> tuple[Any, bool]:
+    """Run *coro* as a task that outlives cancellation of the awaiting frame.
+
+    ``asyncio.to_thread`` cannot stop a worker thread that has already started.
+    Returning from the ``await`` while that thread is still writing would leave
+    a live writer touching a directory no caller owns. Shielding the task and
+    draining it keeps the filesystem quiescent before cancellation propagates.
+    Mirrors ``_run_sync_rpc`` in ``services/cloud/cloud_tasks_queue.py``.
+
+    Returns ``(result, cancelled)``. When *cancelled* is true the caller MUST
+    re-raise ``CancelledError`` after releasing whatever it owns; ``result`` is
+    then whatever the task produced, or ``None`` if it failed.
+    """
+    task = asyncio.ensure_future(coro)
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:
+            if not cancelled:
+                raise
+    if cancelled:
+        result = None
+        with contextlib.suppress(Exception):
+            result = task.result()
+        return result, True
+    return task.result(), False
+
+
+async def _discard_project_dir(project_path: Path) -> None:
+    """Remove a scaffolding directory that no caller will ever receive.
+
+    ``generate_project`` creates the directory, so it owns it until it hands
+    the path back. If the request is cancelled first, nothing downstream can
+    ever learn the path, so it is removed here. Removal itself is drained to
+    completion for the same reason the writes are.
+
+    ``shutil.rmtree(..., ignore_errors=True)`` only swallows ``OSError``, so
+    the broader guard is deliberate: cleanup must never mask the cancellation
+    it is running underneath.
+    """
+
+    def _remove() -> None:
+        try:
+            shutil.rmtree(project_path, ignore_errors=True)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"Could not discard {project_path}: {exc}")
+
+    with contextlib.suppress(Exception):
+        await _run_to_completion(asyncio.to_thread(_remove))
 
 
 def _extract_video_id(video_url: str) -> Optional[str]:
@@ -149,31 +234,53 @@ class ProjectCodeGenerator:
             if build_plan:
                 video_analysis["build_plan"] = build_plan
 
-            # Create temporary project directory
-            temp_dir = tempfile.mkdtemp(prefix="uvai_project_")
+            # Create temporary project directory. Draining the worker means a
+            # cancelled request can still learn the path it must clean up.
+            temp_dir, cancelled = await _run_to_completion(
+                asyncio.to_thread(tempfile.mkdtemp, prefix="uvai_project_")
+            )
+            if cancelled:
+                if temp_dir is not None:
+                    await _discard_project_dir(Path(temp_dir))
+                raise asyncio.CancelledError
             project_path = Path(temp_dir)
 
-            # Generate project structure based on type
-            if project_type == "web":
-                result = await self._generate_web_project(project_path, video_analysis, technologies, features)
-            elif project_type == "api":
-                result = await self._generate_api_project(project_path, video_analysis, technologies, features)
-            elif project_type == "mobile":
-                result = await self._generate_mobile_project(project_path, video_analysis, technologies, features)
-            else:
-                result = await self._generate_web_project(project_path, video_analysis, technologies, features)
+            # From here the path is known, so every exit that does not hand it
+            # back is responsible for removing it.
+            try:
+                # Generate project structure based on type
+                if project_type == "api":
+                    generation = self._generate_api_project(project_path, video_analysis, technologies, features)
+                elif project_type == "mobile":
+                    generation = self._generate_mobile_project(project_path, video_analysis, technologies, features)
+                else:
+                    generation = self._generate_web_project(project_path, video_analysis, technologies, features)
 
-            result["project_path"] = str(project_path)
-            result["project_type"] = project_type
-            result["technologies"] = technologies
-            result["features"] = features
-            # Include the structured BuildPlan artifact in the result so that
-            # callers (e.g. API endpoints and tests) can inspect it.
-            if build_plan is not None:
-                result["build_plan"] = build_plan
+                # Scaffolding is atomic with respect to cancellation, as it was
+                # before the writes moved off the loop. Draining first guarantees
+                # no worker is still writing when the directory is removed.
+                result, cancelled = await _run_to_completion(generation)
+                if cancelled:
+                    await _discard_project_dir(project_path)
+                    raise asyncio.CancelledError
 
-            logger.info(f"✅ Project generated successfully at {project_path}")
-            return result
+                result["project_path"] = str(project_path)
+                result["project_type"] = project_type
+                result["technologies"] = technologies
+                result["features"] = features
+                # Include the structured BuildPlan artifact in the result so that
+                # callers (e.g. API endpoints and tests) can inspect it.
+                if build_plan is not None:
+                    result["build_plan"] = build_plan
+
+                logger.info(f"✅ Project generated successfully at {project_path}")
+                return result
+            except Exception:
+                # A failed generation never returns the path, so nothing
+                # downstream can clean it up. The writers are already drained
+                # by ``_run_to_completion``, so removal cannot race one.
+                await _discard_project_dir(project_path)
+                raise
 
         except Exception as e:
             logger.error(f"❌ Project generation failed: {e}")
@@ -234,25 +341,13 @@ class ProjectCodeGenerator:
             package_json["dependencies"]["tailwindcss"] = "^3.3.0"
             package_json["devDependencies"] = {"autoprefixer": "^10.4.14", "postcss": "^8.4.24"}
 
-        # Write package.json
-        with open(project_path / "package.json", "w") as f:
-            json.dump(package_json, f, indent=2)
-
-        # Create src directory
         src_dir = project_path / "src"
-        src_dir.mkdir(exist_ok=True)
-
-        # Create public directory
         public_dir = project_path / "public"
-        public_dir.mkdir(exist_ok=True)
 
-        # Generate index.html
-        index_html = self._generate_index_html(title)
-        with open(public_dir / "index.html", "w") as f:
-            f.write(index_html)
-
-        # Generate main App component
+        # Build every artifact in memory first. This is pure string work and
+        # stays on the event loop; only the disk I/O below is offloaded.
         technologies = extracted_info.get("technologies", [])
+        index_html = self._generate_index_html(title)
         app_component = self._generate_react_app_component(
             title,
             technologies,
@@ -261,23 +356,23 @@ class ProjectCodeGenerator:
             summary,
             key_concepts
         )
-        with open(src_dir / "App.js", "w") as f:
-            f.write(app_component)
-
-        # Generate index.js
         index_js = self._generate_react_index_js()
-        with open(src_dir / "index.js", "w") as f:
-            f.write(index_js)
-
-        # Generate CSS
         app_css = self._generate_app_css(features)
-        with open(src_dir / "App.css", "w") as f:
-            f.write(app_css)
-
-        # Generate README
         readme = self._generate_readme(title, "React", video_analysis)
-        with open(project_path / "README.md", "w") as f:
-            f.write(readme)
+
+        # ``json.dumps`` produces exactly the bytes ``json.dump`` would have
+        # written for the same arguments; neither appends a trailing newline.
+        plan: WritePlan = [
+            (project_path / "package.json", json.dumps(package_json, indent=2)),
+            (src_dir, None),
+            (public_dir, None),
+            (public_dir / "index.html", index_html),
+            (src_dir / "App.js", app_component),
+            (src_dir / "index.js", index_js),
+            (src_dir / "App.css", app_css),
+            (project_path / "README.md", readme),
+        ]
+        await asyncio.to_thread(_apply_write_plan, plan)
 
         return {
             "framework": "react",
@@ -313,25 +408,25 @@ class ProjectCodeGenerator:
             summary,
             key_concepts
         )
-        with open(project_path / "index.html", "w") as f:
-            f.write(index_html)
 
         # Generate main.js — NOW uses video-specific content
         main_js = self._generate_vanilla_main_js(
             title, tutorial_steps, features, key_concepts, fingerprint
         )
-        with open(project_path / "main.js", "w") as f:
-            f.write(main_js)
 
         # Generate styles.css — NOW uses video-derived accent color
         styles_css = self._generate_vanilla_styles_css(title, features, fingerprint)
-        with open(project_path / "styles.css", "w") as f:
-            f.write(styles_css)
 
         # Generate README
         readme = self._generate_readme(title, "Vanilla JavaScript", video_analysis)
-        with open(project_path / "README.md", "w") as f:
-            f.write(readme)
+
+        plan: WritePlan = [
+            (project_path / "index.html", index_html),
+            (project_path / "main.js", main_js),
+            (project_path / "styles.css", styles_css),
+            (project_path / "README.md", readme),
+        ]
+        await asyncio.to_thread(_apply_write_plan, plan)
 
         return {
             "framework": "vanilla",
@@ -369,18 +464,19 @@ class ProjectCodeGenerator:
             requirements.append("sqlalchemy==2.0.23")
         if "authentication" in features:
             requirements.append("python-jose[cryptography]==3.3.0")
-        with open(project_path / "requirements.txt", "w") as f:
-            f.write("\n".join(requirements))
 
         # Generate main.py
         main_py = self._generate_fastapi_main(title, features)
-        with open(project_path / "main.py", "w") as f:
-            f.write(main_py)
 
         # Generate README
         readme = self._generate_readme(title, "Python FastAPI", video_analysis)
-        with open(project_path / "README.md", "w") as f:
-            f.write(readme)
+
+        plan: WritePlan = [
+            (project_path / "requirements.txt", "\n".join(requirements)),
+            (project_path / "main.py", main_py),
+            (project_path / "README.md", readme),
+        ]
+        await asyncio.to_thread(_apply_write_plan, plan)
 
         return {
             "framework": "fastapi",
