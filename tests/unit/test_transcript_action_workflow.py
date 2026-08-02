@@ -1261,14 +1261,23 @@ class TestCleanupDownloadArtifactsOffEventLoop:
             TranscriptActionWorkflow._cleanup_download_artifacts(None, temp_root)
         )
 
-        for _ in range(500):
-            if started.is_set():
-                break
+        # Poll against a wall-clock deadline rather than a fixed iteration
+        # count: a loaded CI box may take a while to hand the cleanup closure a
+        # worker thread, and a fixed budget would fail for scheduling reasons
+        # rather than for the behaviour under test. The polling itself is the
+        # assertion -- each completed tick is one turn of the event loop taken
+        # while rmtree is parked -- so this cannot be replaced by a blocking
+        # wait without destroying what the test proves.
+        deadline = time.monotonic() + 30.0
+        ticks = 0
+        while not started.is_set():
+            assert time.monotonic() < deadline, "cleanup never started"
             await asyncio.sleep(0.01)
+            ticks += 1
 
         # Reaching here while rmtree is still parked proves the loop kept
         # running concurrently with the deletion.
-        assert started.is_set(), "cleanup never started"
+        assert ticks >= 1, "event loop never yielded while cleanup was running"
         assert not cleanup.done()
 
         release.set()
