@@ -11,16 +11,54 @@ template-based generation that still produces unique, video-specific output.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional, TypeVar
 from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+
+
+async def _run_offloop(func: Callable[..., _T], /, *args: Any, **kwargs: Any) -> _T:
+    """Run a blocking callable off the loop without abandoning it on cancellation.
+
+    ``asyncio.to_thread`` cannot stop a worker thread that has already started,
+    so a cancellation delivered while the worker runs would return control to the
+    caller while the thread keeps mutating the scaffold on disk. Shield the worker
+    and wait for it to settle before re-raising ``CancelledError`` -- mirroring
+    ``_run_sync_rpc`` in ``services/cloud/cloud_tasks_queue.py`` -- so any
+    higher-level cleanup runs against a quiescent filesystem, never a live writer.
+    """
+    task = asyncio.ensure_future(asyncio.to_thread(func, *args, **kwargs))
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:
+            if not cancelled:
+                raise
+    if cancelled:
+        # Surface the worker's own failure if it raised; otherwise honour the
+        # cancellation now that the thread has finished touching the disk.
+        with contextlib.suppress(Exception):
+            task.result()
+        raise asyncio.CancelledError
+    return task.result()
+
+
+def _safe_rmtree(path: Path) -> None:
+    """Best-effort removal of a scaffold tree, tolerating absence and races."""
+    shutil.rmtree(path, ignore_errors=True)
 
 
 #: One scaffolding step. ``(path, None)`` creates a directory; ``(path, text)``
@@ -179,32 +217,42 @@ class ProjectCodeGenerator:
                 video_analysis["build_plan"] = build_plan
 
             # Create temporary project directory
-            temp_dir = await asyncio.to_thread(
+            temp_dir = await _run_offloop(
                 tempfile.mkdtemp, prefix="uvai_project_"
             )
             project_path = Path(temp_dir)
 
-            # Generate project structure based on type
-            if project_type == "web":
-                result = await self._generate_web_project(project_path, video_analysis, technologies, features)
-            elif project_type == "api":
-                result = await self._generate_api_project(project_path, video_analysis, technologies, features)
-            elif project_type == "mobile":
-                result = await self._generate_mobile_project(project_path, video_analysis, technologies, features)
-            else:
-                result = await self._generate_web_project(project_path, video_analysis, technologies, features)
+            # Once the scaffold directory exists it is owned by nobody until we
+            # return its path. If generation is cancelled or fails, that path
+            # never reaches a caller, so a half-written ``uvai_project_*`` tree
+            # would leak. The write hops are shielded (see ``_run_offloop``), so
+            # by the time cleanup runs the filesystem is settled and rmtree does
+            # not race a live writer.
+            try:
+                # Generate project structure based on type
+                if project_type == "web":
+                    result = await self._generate_web_project(project_path, video_analysis, technologies, features)
+                elif project_type == "api":
+                    result = await self._generate_api_project(project_path, video_analysis, technologies, features)
+                elif project_type == "mobile":
+                    result = await self._generate_mobile_project(project_path, video_analysis, technologies, features)
+                else:
+                    result = await self._generate_web_project(project_path, video_analysis, technologies, features)
 
-            result["project_path"] = str(project_path)
-            result["project_type"] = project_type
-            result["technologies"] = technologies
-            result["features"] = features
-            # Include the structured BuildPlan artifact in the result so that
-            # callers (e.g. API endpoints and tests) can inspect it.
-            if build_plan is not None:
-                result["build_plan"] = build_plan
+                result["project_path"] = str(project_path)
+                result["project_type"] = project_type
+                result["technologies"] = technologies
+                result["features"] = features
+                # Include the structured BuildPlan artifact in the result so that
+                # callers (e.g. API endpoints and tests) can inspect it.
+                if build_plan is not None:
+                    result["build_plan"] = build_plan
 
-            logger.info(f"✅ Project generated successfully at {project_path}")
-            return result
+                logger.info(f"✅ Project generated successfully at {project_path}")
+                return result
+            except (Exception, asyncio.CancelledError):
+                await _run_offloop(_safe_rmtree, project_path)
+                raise
 
         except Exception as e:
             logger.error(f"❌ Project generation failed: {e}")
@@ -296,7 +344,7 @@ class ProjectCodeGenerator:
             (src_dir / "App.css", app_css),
             (project_path / "README.md", readme),
         ]
-        await asyncio.to_thread(_apply_write_plan, plan)
+        await _run_offloop(_apply_write_plan, plan)
 
         return {
             "framework": "react",
@@ -350,7 +398,7 @@ class ProjectCodeGenerator:
             (project_path / "styles.css", styles_css),
             (project_path / "README.md", readme),
         ]
-        await asyncio.to_thread(_apply_write_plan, plan)
+        await _run_offloop(_apply_write_plan, plan)
 
         return {
             "framework": "vanilla",
@@ -400,7 +448,7 @@ class ProjectCodeGenerator:
             (project_path / "main.py", main_py),
             (project_path / "README.md", readme),
         ]
-        await asyncio.to_thread(_apply_write_plan, plan)
+        await _run_offloop(_apply_write_plan, plan)
 
         return {
             "framework": "fastapi",

@@ -6,6 +6,7 @@ import asyncio
 import json
 import tempfile
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from youtube_extension.backend.code_generator import (
     _apply_write_plan,
     _build_title,
     _extract_video_id,
+    _run_offloop,
     get_code_generator,
 )
 
@@ -978,3 +980,127 @@ class TestApplyWritePlan:
         payload = json.dumps({"name": "x", "version": "1.0.0"}, indent=2)
         _apply_write_plan([(target, payload)])
         assert target.read_bytes() == payload.encode()
+
+
+class TestRunOffloop:
+    """``_run_offloop`` must not abandon a worker thread on cancellation.
+
+    ``asyncio.to_thread`` cannot interrupt a thread that has already started, so
+    the helper shields the worker and waits for it to settle before propagating
+    the cancellation — otherwise a caller's cleanup would race a live writer.
+    """
+
+    async def test_returns_worker_result_on_happy_path(self):
+        assert await _run_offloop(lambda a, b: a + b, 2, 3) == 5
+
+    async def test_propagates_worker_exception(self):
+        def _boom():
+            raise ValueError("worker failed")
+
+        with pytest.raises(ValueError, match="worker failed"):
+            await _run_offloop(_boom)
+
+    async def test_cancellation_waits_for_worker_to_finish(self):
+        started = threading.Event()
+        finished = threading.Event()
+
+        def _slow():
+            started.set()
+            # Simulate a blocking write already in flight on the worker thread.
+            time.sleep(0.2)
+            finished.set()
+
+        task = asyncio.ensure_future(_run_offloop(_slow))
+        # Let the worker actually start before we cancel.
+        while not started.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # The worker must have run to completion, not been abandoned mid-flight.
+        assert finished.is_set(), (
+            "cancellation abandoned the worker before it finished"
+        )
+
+
+class TestScaffoldingCancellationSafety:
+    """A cancelled or failed generation must not leak its scaffold directory.
+
+    Before the write hops were offloaded there was no cancellation point once
+    scaffolding began, so the directory always either fully materialised (and
+    its path was returned) or was never created. Offloading introduced ``await``
+    points; ``generate_project`` therefore has to clean up a directory whose
+    path it will never hand back.
+    """
+
+    async def test_cancelled_generation_removes_orphan_scaffold(
+        self, monkeypatch, tmp_path
+    ):
+        import youtube_extension.backend.code_generator as cg_module
+
+        project_dir = tmp_path / "uvai_project_cancel"
+        monkeypatch.setattr(
+            cg_module.tempfile, "mkdtemp", _tempdir_factory(project_dir)
+        )
+
+        started = threading.Event()
+        release = threading.Event()
+        real_apply = cg_module._apply_write_plan
+
+        def _blocking_apply(plan):
+            # Park the worker mid-scaffold so we can cancel while it "writes".
+            started.set()
+            release.wait(5)
+            real_apply(plan)
+
+        monkeypatch.setattr(cg_module, "_apply_write_plan", _blocking_apply)
+
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        task = asyncio.ensure_future(
+            gen.generate_project(
+                _build_video_analysis("T", "auJzb1D-fag", "S", []),
+                {"project_type": "web", "technologies": ["react"]},
+            )
+        )
+
+        while not started.is_set():
+            await asyncio.sleep(0.01)
+        task.cancel()
+        # Cancellation is now in flight; let the shielded worker finish so the
+        # filesystem is settled before cleanup runs.
+        release.set()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert not project_dir.exists(), (
+            "cancelled generation leaked its scaffold directory"
+        )
+
+    async def test_failed_generation_removes_orphan_scaffold(
+        self, monkeypatch, tmp_path
+    ):
+        import youtube_extension.backend.code_generator as cg_module
+
+        project_dir = tmp_path / "uvai_project_fail"
+        monkeypatch.setattr(
+            cg_module.tempfile, "mkdtemp", _tempdir_factory(project_dir)
+        )
+
+        def _exploding_apply(plan):
+            raise RuntimeError("disk exploded")
+
+        monkeypatch.setattr(cg_module, "_apply_write_plan", _exploding_apply)
+
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        with pytest.raises(RuntimeError, match="disk exploded"):
+            await gen.generate_project(
+                _build_video_analysis("T", "auJzb1D-fag", "S", []),
+                {"project_type": "web", "technologies": ["react"]},
+            )
+
+        assert not project_dir.exists(), (
+            "failed generation leaked its scaffold directory"
+        )
