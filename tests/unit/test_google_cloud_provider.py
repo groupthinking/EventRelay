@@ -1247,7 +1247,14 @@ class TestGoogleCloudImageReadOffEventLoop:
         mock_vision = self._vision_modules()
 
         with self._patched_modules(mock_vision):
-            with pytest.raises(CloudAIError):
+            with pytest.raises(CloudAIError) as exc_info:
                 await provider.analyze_image(
                     str(missing), [AnalysisType.LABEL_DETECTION]
                 )
+
+        # The provider re-raises without ``from e``, so the original error is
+        # carried on ``__context__`` (implicit chaining), not ``__cause__``.
+        assert isinstance(exc_info.value.__context__, FileNotFoundError), (
+            "offloading must preserve the underlying I/O error in the exception chain"
+        )
+        assert "No such file or directory" in str(exc_info.value)
