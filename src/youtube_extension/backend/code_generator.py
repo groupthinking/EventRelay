@@ -11,10 +11,12 @@ template-based generation that still produces unique, video-specific output.
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
 import os
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Any, Optional
@@ -49,6 +51,60 @@ def _apply_write_plan(plan: WritePlan) -> None:
         else:
             with open(path, "w") as handle:
                 handle.write(content)
+
+
+async def _run_to_completion(coro) -> tuple[Any, bool]:
+    """Run *coro* as a task that outlives cancellation of the awaiting frame.
+
+    ``asyncio.to_thread`` cannot stop a worker thread that has already started.
+    Returning from the ``await`` while that thread is still writing would leave
+    a live writer touching a directory no caller owns. Shielding the task and
+    draining it keeps the filesystem quiescent before cancellation propagates.
+    Mirrors ``_run_sync_rpc`` in ``services/cloud/cloud_tasks_queue.py``.
+
+    Returns ``(result, cancelled)``. When *cancelled* is true the caller MUST
+    re-raise ``CancelledError`` after releasing whatever it owns; ``result`` is
+    then whatever the task produced, or ``None`` if it failed.
+    """
+    task = asyncio.ensure_future(coro)
+    cancelled = False
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            cancelled = True
+        except Exception:
+            if not cancelled:
+                raise
+    if cancelled:
+        result = None
+        with contextlib.suppress(Exception):
+            result = task.result()
+        return result, True
+    return task.result(), False
+
+
+async def _discard_project_dir(project_path: Path) -> None:
+    """Remove a scaffolding directory that no caller will ever receive.
+
+    ``generate_project`` creates the directory, so it owns it until it hands
+    the path back. If the request is cancelled first, nothing downstream can
+    ever learn the path, so it is removed here. Removal itself is drained to
+    completion for the same reason the writes are.
+
+    ``shutil.rmtree(..., ignore_errors=True)`` only swallows ``OSError``, so
+    the broader guard is deliberate: cleanup must never mask the cancellation
+    it is running underneath.
+    """
+
+    def _remove() -> None:
+        try:
+            shutil.rmtree(project_path, ignore_errors=True)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning(f"Could not discard {project_path}: {exc}")
+
+    with contextlib.suppress(Exception):
+        await _run_to_completion(asyncio.to_thread(_remove))
 
 
 def _extract_video_id(video_url: str) -> Optional[str]:
@@ -178,21 +234,32 @@ class ProjectCodeGenerator:
             if build_plan:
                 video_analysis["build_plan"] = build_plan
 
-            # Create temporary project directory
-            temp_dir = await asyncio.to_thread(
-                tempfile.mkdtemp, prefix="uvai_project_"
+            # Create temporary project directory. Draining the worker means a
+            # cancelled request can still learn the path it must clean up.
+            temp_dir, cancelled = await _run_to_completion(
+                asyncio.to_thread(tempfile.mkdtemp, prefix="uvai_project_")
             )
+            if cancelled:
+                if temp_dir is not None:
+                    await _discard_project_dir(Path(temp_dir))
+                raise asyncio.CancelledError
             project_path = Path(temp_dir)
 
             # Generate project structure based on type
-            if project_type == "web":
-                result = await self._generate_web_project(project_path, video_analysis, technologies, features)
-            elif project_type == "api":
-                result = await self._generate_api_project(project_path, video_analysis, technologies, features)
+            if project_type == "api":
+                generation = self._generate_api_project(project_path, video_analysis, technologies, features)
             elif project_type == "mobile":
-                result = await self._generate_mobile_project(project_path, video_analysis, technologies, features)
+                generation = self._generate_mobile_project(project_path, video_analysis, technologies, features)
             else:
-                result = await self._generate_web_project(project_path, video_analysis, technologies, features)
+                generation = self._generate_web_project(project_path, video_analysis, technologies, features)
+
+            # Scaffolding is atomic with respect to cancellation, as it was
+            # before the writes moved off the loop. Draining first guarantees
+            # no worker is still writing when the directory is removed.
+            result, cancelled = await _run_to_completion(generation)
+            if cancelled:
+                await _discard_project_dir(project_path)
+                raise asyncio.CancelledError
 
             result["project_path"] = str(project_path)
             result["project_type"] = project_type

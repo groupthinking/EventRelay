@@ -978,3 +978,111 @@ class TestApplyWritePlan:
         payload = json.dumps({"name": "x", "version": "1.0.0"}, indent=2)
         _apply_write_plan([(target, payload)])
         assert target.read_bytes() == payload.encode()
+
+
+class TestCancellationSafety:
+    """Cancelling a scaffolding request must not strand a directory.
+
+    Moving the writes onto worker threads introduced suspension points that the
+    inline sequence did not have, so cancellation can now land mid-scaffold.
+    A worker thread cannot be cancelled once it has started, so the request has
+    to drain it before removing the directory it alone knows about.
+    """
+
+    @staticmethod
+    def _analysis_and_config():
+        return (
+            {
+                "title": "T",
+                "description": "d",
+                "key_concepts": [],
+                "technologies": ["react"],
+            },
+            {"project_type": "web", "technologies": ["react"], "features": []},
+        )
+
+    async def _cancel_mid_scaffold(self, monkeypatch, tmp_path):
+        """Cancel while a real worker thread is inside the write hop."""
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+        from youtube_extension.backend import code_generator as cg
+
+        started = threading.Event()
+        release = threading.Event()
+        finished = threading.Event()
+        real_apply = cg._apply_write_plan
+
+        def blocking_apply(plan):
+            started.set()
+            assert release.wait(timeout=10), "probe deadlocked"
+            real_apply(plan)
+            finished.set()
+
+        monkeypatch.setattr(cg, "_apply_write_plan", blocking_apply)
+
+        analysis, config = self._analysis_and_config()
+        task = asyncio.create_task(
+            ProjectCodeGenerator(use_ai_generation=False).generate_project(
+                analysis, config
+            )
+        )
+        for _ in range(500):
+            if started.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert started.is_set(), "never reached the write hop"
+
+        task.cancel()
+        for _ in range(5):
+            await asyncio.sleep(0)
+        release.set()
+        return task, finished
+
+    async def test_cancellation_removes_the_project_directory(
+        self, monkeypatch, tmp_path
+    ):
+        task, _ = await self._cancel_mid_scaffold(monkeypatch, tmp_path)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert list(tmp_path.glob("uvai_project_*")) == []
+
+    async def test_cancellation_drains_the_writer_before_unwinding(
+        self, monkeypatch, tmp_path
+    ):
+        """The directory is only safe to remove once no thread is writing."""
+        task, finished = await self._cancel_mid_scaffold(monkeypatch, tmp_path)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert finished.is_set(), "unwound while a worker was still writing"
+
+    async def test_cancellation_is_reported_as_cancellation(
+        self, monkeypatch, tmp_path
+    ):
+        """CancelledError must never be downgraded to a normal failure."""
+        task, _ = await self._cancel_mid_scaffold(monkeypatch, tmp_path)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        assert task.cancelled()
+
+    async def test_uncancelled_web_request_still_returns_a_project(
+        self, monkeypatch, tmp_path
+    ):
+        """Guards the dispatch: an explicit 'web' type behaves like the default."""
+        monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+        analysis, config = self._analysis_and_config()
+        generator = ProjectCodeGenerator(use_ai_generation=False)
+
+        explicit = await generator.generate_project(analysis, dict(config))
+        defaulted = await generator.generate_project(
+            analysis, {**config, "project_type": "unrecognised-type"}
+        )
+
+        def tree(result):
+            root = Path(result["project_path"])
+            return sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+
+        assert explicit["project_type"] == "web"
+        assert Path(explicit["project_path"]).is_dir()
+        assert tree(explicit) == tree(defaulted) != []
