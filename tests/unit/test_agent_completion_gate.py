@@ -1231,6 +1231,49 @@ class CompletionGateTests(unittest.TestCase):
             ],
         )
 
+    def test_invalid_payload_surfaces_collection_errors_from_early_returns(self):
+        """Early structural rejections must surface diagnostics too.
+
+        Regression for review r3707649888: the collector's ``collection_errors``
+        were only attached by the final validation block, so a payload that
+        failed one of the early ``invalid_payload`` returns (missing
+        ``policy.applicable`` or a non-dict ``policy``) was still stranded on a
+        bare verdict despite carrying diagnostics.
+        """
+
+        # Missing policy.applicable (the exact case from the review).
+        result = _evaluate(
+            {"policy": {}, "collection_errors": ["missing_linked_issue"]}
+        )
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertIn("policy.applicable", result["details"]["invalid_fields"])
+        self.assertEqual(
+            result["details"]["collection_errors"], ["missing_linked_issue"]
+        )
+
+        # Non-dict policy.
+        result = _evaluate(
+            {"policy": [], "collection_errors": ["invalid_agent_lock_manifest"]}
+        )
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertIn("policy", result["details"]["invalid_fields"])
+        self.assertEqual(
+            result["details"]["collection_errors"],
+            ["invalid_agent_lock_manifest"],
+        )
+
+    def test_non_dict_payload_has_no_collection_errors(self):
+        # A non-dict payload has nowhere to read collection_errors from; the
+        # shared builder must still return an empty details object, unchanged.
+        for payload in ([], "nope", 7, None):
+            with self.subTest(payload=payload):
+                result = _evaluate(payload)
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertEqual(result["reasons"], ["invalid_payload"])
+                self.assertEqual(result["details"], {})
+
     def test_invalid_payload_omits_collection_errors_when_there_are_none(self):
         payload = _valid_payload()
         payload["policy"]["agent_login"] = None

@@ -19,29 +19,41 @@ def _collection_errors(payload: Any) -> List[str]:
     return [str(error) for error in raw if str(error).strip()]
 
 
+def _invalid_payload(payload: Any, invalid_fields: List[str]) -> Dict[str, Any]:
+    """Build a fail-closed ``invalid_payload`` verdict.
+
+    Every malformed-payload exit routes through here so the collector's own
+    diagnostics (``collection_errors``) are surfaced consistently. Previously
+    only the final validation block attached them, so payloads that failed one
+    of the early structural checks (non-dict ``policy``, missing
+    ``policy.applicable``) were stranded on a bare ``invalid_payload`` even when
+    the collector had recorded exactly why the fields were missing.
+    """
+
+    details: Dict[str, Any] = {}
+    if invalid_fields:
+        details["invalid_fields"] = sorted(set(invalid_fields))
+    surfaced_errors = _collection_errors(payload)
+    if surfaced_errors:
+        details["collection_errors"] = surfaced_errors
+    return {
+        "verdict": "blocked",
+        "reasons": ["invalid_payload"],
+        "details": details,
+    }
+
+
 def evaluate(payload: Any) -> Dict[str, Any]:
     """Evaluate agent execution evidence and return a fail-closed verdict."""
 
     if not isinstance(payload, dict):
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {},
-        }
+        return _invalid_payload(payload, [])
 
     policy = payload.get("policy")
     if not isinstance(policy, dict):
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": ["policy"]},
-        }
+        return _invalid_payload(payload, ["policy"])
     if "applicable" not in policy or type(policy["applicable"]) is not bool:
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": ["policy.applicable"]},
-        }
+        return _invalid_payload(payload, ["policy.applicable"])
     if policy.get("applicable") is False:
         return {"verdict": "not_applicable", "reasons": [], "details": {}}
 
@@ -255,19 +267,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             if type(evidence.get(field)) is not bool:
                 invalid_fields.append("evidence." + field)
     if invalid_fields:
-        # A malformed payload is still fail-closed, but the collector already
-        # knows *why* the fields are missing. Surfacing those errors here keeps
-        # the verdict identical while telling the author what to fix, instead of
-        # stranding them on a bare "invalid_payload".
-        details = {"invalid_fields": sorted(set(invalid_fields))}
-        surfaced_errors = _collection_errors(payload)
-        if surfaced_errors:
-            details["collection_errors"] = surfaced_errors
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": details,
-        }
+        return _invalid_payload(payload, invalid_fields)
 
     reasons = []
     identity_projection = {
