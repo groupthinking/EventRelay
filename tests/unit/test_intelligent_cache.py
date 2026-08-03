@@ -1841,3 +1841,285 @@ class TestRedisCacheLayerUpdateAvgAccessTime:
         layer._update_avg_access_time(20.0)
         # EMA: 0.1 * 20 + 0.9 * 10 = 11.0
         assert layer.stats.avg_access_time_ms == pytest.approx(11.0, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Removal paths release entry bookkeeping
+# ---------------------------------------------------------------------------
+
+
+def _expire_now(layer: InMemoryCacheLayer, key: str) -> None:
+    """Backdate a resident entry's expiry so the next ``get()`` expires it.
+
+    Deterministic stand-in for sleeping past a real TTL; the lazy-expiry branch
+    only compares ``expires_at`` against the wall clock, so this exercises the
+    identical code path without adding seconds to the suite.
+    """
+    layer.cache[key].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+
+class TestEvictionReleasesAccessHistory:
+    """``delete()`` already drops a key's access history (see
+    ``test_delete_cleans_access_patterns``). ``_evict_if_needed`` must do the
+    same: an evicted key leaves no cache entry behind, so nothing else will ever
+    reclaim its history."""
+
+    async def test_evicted_key_history_is_released(self):
+        layer = InMemoryCacheLayer("evict_one", max_size=1, max_size_bytes=1024 * 1024)
+        await layer.set("first", "value")
+        await layer.get("first")
+        assert "first" in layer.access_patterns
+
+        # Inserting a second key evicts "first" (max_size=1).
+        await layer.set("second", "value")
+
+        assert "first" not in layer.cache
+        assert "first" not in layer.access_patterns, (
+            "history for an evicted key was retained; nothing will ever "
+            "reclaim it because the cache entry is already gone"
+        )
+
+    async def test_eviction_churn_leaves_no_orphaned_histories(self):
+        """The accumulating case: many keys cycle through a small cache. Every
+        key that is evicted must take its history with it, so the number of
+        tracked histories stays proportional to the number of resident keys."""
+        layer = InMemoryCacheLayer("churn", max_size=5, max_size_bytes=1024 * 1024)
+
+        for i in range(200):
+            key = f"k{i}"
+            await layer.set(key, "value")
+            await layer.get(key)
+
+        orphans = set(layer.access_patterns) - set(layer.cache)
+        assert not orphans, (
+            f"{len(orphans)} evicted keys still have access history retained "
+            f"while only {len(layer.cache)} entries are resident; this memory "
+            "is invisible to stats.total_size_bytes so the max_size_bytes "
+            "budget can never reclaim it"
+        )
+
+    async def test_resident_keys_keep_their_history(self):
+        """Releasing evicted histories must not disturb keys still in the
+        cache — the fix must be a narrow cleanup, not a blanket clear."""
+        layer = InMemoryCacheLayer("keep", max_size=3, max_size_bytes=1024 * 1024)
+
+        for i in range(10):
+            await layer.set(f"k{i}", "value")
+            await layer.get(f"k{i}")
+
+        for key in layer.cache:
+            assert layer.access_patterns.get(key), (
+                f"resident key {key!r} lost its access history; adaptive TTL "
+                "would fall back to the base value for a live key"
+            )
+
+
+class TestExpiryReleasesEntryBookkeeping:
+    """Lazy expiry in ``get()`` is the only place expired entries are ever
+    removed — there is no background sweeper — so it must release exactly what
+    ``delete()`` releases. Dropping the entry alone left the counters and the
+    access history describing an entry that no longer exists."""
+
+    async def test_expired_key_history_is_released(self):
+        layer = InMemoryCacheLayer(
+            "expiry_hist", max_size=100, max_size_bytes=1024 * 1024
+        )
+        await layer.set("k", "value", ttl=60)
+
+        # History only accrues on a hit, so read the key while it is still
+        # live — otherwise there would be nothing to orphan.
+        await layer.get("k")
+        assert layer.access_patterns["k"], "precondition: history was recorded"
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        assert "k" not in layer.access_patterns, (
+            "access history survived the entry it describes; with no sweeper "
+            "and no cache entry left, nothing can ever reclaim it"
+        )
+
+    async def test_expired_key_releases_size_accounting(self):
+        """``total_size_bytes`` is not merely reported — ``_evict_if_needed``
+        budgets against it, so bytes left behind by expiry permanently reduce
+        the layer's usable capacity."""
+        layer = InMemoryCacheLayer(
+            "expiry_bytes", max_size=100, max_size_bytes=1024 * 1024
+        )
+        await layer.set("k", "x" * 500, ttl=60)
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        assert layer.stats.total_size_bytes == 0, (
+            f"cache holds {len(layer.cache)} entries but still reports "
+            f"{layer.stats.total_size_bytes} bytes in use; these phantom bytes "
+            "are charged against max_size_bytes forever"
+        )
+
+    async def test_expired_key_releases_entry_count(self):
+        layer = InMemoryCacheLayer(
+            "expiry_count", max_size=100, max_size_bytes=1024 * 1024
+        )
+        await layer.set("k", "value", ttl=60)
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        assert (
+            layer.stats.total_entries == 0
+        ), f"cache is empty but reports {layer.stats.total_entries} entries"
+
+    async def test_reused_key_does_not_inherit_expired_history(self):
+        """A key that expires and is later written again is a *new* entry. If
+        the dead entry's timestamps survive, ``_calculate_adaptive_ttl`` reads
+        them as the new entry's access frequency and over-extends its TTL."""
+        layer = InMemoryCacheLayer("reuse", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value", ttl=60)
+        for _ in range(5):
+            await layer.get("k")
+        assert len(layer.access_patterns["k"]) == 5
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        # Same key, brand-new entry.
+        await layer.set("k", "fresh", ttl=60)
+
+        assert len(layer.access_patterns.get("k", [])) == 0, (
+            "a freshly written entry inherited its expired predecessor's "
+            "access timestamps, so it is treated as an established hot key "
+            "from the moment it is created"
+        )
+
+
+class TestExpiredBytesDoNotConsumeCapacity:
+    """The user-visible consequence of the accounting leak: because
+    ``_evict_if_needed`` evicts while ``total_size_bytes`` exceeds the budget,
+    bytes that expiry never released push live entries out of the cache."""
+
+    async def test_capacity_survives_expiry_churn(self):
+        payload = "x" * 900
+
+        async def fill_and_count(with_expiry_churn: bool) -> int:
+            layer = InMemoryCacheLayer("cap", max_size=10_000, max_size_bytes=100_000)
+            if with_expiry_churn:
+                for i in range(50):
+                    await layer.set(f"gone{i}", payload, ttl=60)
+                    _expire_now(layer, f"gone{i}")
+                    await layer.get(f"gone{i}")
+            for i in range(200):
+                await layer.set(f"live{i}", payload)
+            return sum(1 for key in layer.cache if key.startswith("live"))
+
+        baseline = await fill_and_count(with_expiry_churn=False)
+        after_churn = await fill_and_count(with_expiry_churn=True)
+
+        # Control: eviction is still doing its job in both runs, so this is a
+        # test of correct accounting and not of a disabled size limit.
+        assert baseline < 200, "precondition: the byte budget must force eviction"
+
+        assert after_churn == baseline, (
+            f"a layer that has seen expiry churn holds only {after_churn} live "
+            f"entries where a fresh layer of the same size holds {baseline}; "
+            "the expired entries' bytes are still charged against the budget"
+        )
+
+
+# ----------------------------------------------------------------------------
+# set() replacing an already-expired key
+# ----------------------------------------------------------------------------
+
+
+class TestResetOfExpiredKeyStartsCleanHistory:
+    """``set()`` is a fourth way an entry stops existing.
+
+    ``delete()``, eviction and lazy expiry all free the slot, so they route
+    through ``_release_entry``. ``set()`` instead *reuses* the slot, which is
+    why it needs its own handling: if the resident entry has already expired,
+    the value being installed is a brand-new entry that happens to share a key,
+    and it must not inherit the dead entry's access history.
+
+    The distinction matters because ``access_patterns`` is the frequency signal
+    behind adaptive TTL -- inherited timestamps make a cold key look hot.
+    """
+
+    async def test_reset_after_expiry_drops_dead_history(self):
+        layer = InMemoryCacheLayer("reset_hist", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        for _ in range(5):
+            await layer.get("k")
+
+        # Precondition: the live entry really did accumulate history, so a
+        # later empty result is the fix and not an artefact of never recording.
+        assert (
+            len(layer.access_patterns["k"]) == 5
+        ), "precondition: reads on a live entry must record access timestamps"
+
+        _expire_now(layer, "k")
+        # Deliberately no get() and no delete() in between: this is the path
+        # where the caller overwrites a dead entry directly.
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        assert len(layer.access_patterns["k"]) == 0, (
+            "a value written over an expired entry inherited "
+            f"{len(layer.access_patterns['k'])} timestamps from its dead "
+            "predecessor; the successor is a new entry and starts cold"
+        )
+
+    async def test_reset_of_live_key_keeps_history(self):
+        """Control: re-writing a *live* key is a genuine update, not a reuse."""
+        layer = InMemoryCacheLayer("reset_live", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        for _ in range(5):
+            await layer.get("k")
+
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        assert len(layer.access_patterns["k"]) == 5, (
+            "overwriting a live key discarded its access history; only expired "
+            "entries should reset the frequency signal"
+        )
+
+    async def test_reset_after_expiry_keeps_entry_count_stable(self):
+        """The slot is reused, so the entry count must not move."""
+        layer = InMemoryCacheLayer("reset_count", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        _expire_now(layer, "k")
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        assert layer.stats.total_entries == 1, (
+            f"replacing an expired entry reported {layer.stats.total_entries} "
+            "entries for a single resident key"
+        )
+
+    async def test_adaptive_ttl_does_not_treat_reused_key_as_hot(self):
+        """End-to-end: the inherited history reached the TTL calculation."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
+
+        layer = InMemoryCacheLayer("reset_ttl", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        # 20 reads in a tight loop is the frequency profile that earns the
+        # hot-key TTL, so the inherited history is unambiguously load-bearing.
+        for _ in range(20):
+            await layer.get("k")
+        _expire_now(layer, "k")
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
+        system.layers = [layer]
+        system.adaptive_ttl_enabled = True
+        system.cache_warming_enabled = False
+        system.auto_invalidation_enabled = False
+        system.performance_history = []
+        system.optimization_suggestions = []
+
+        ttl = system._calculate_adaptive_ttl("k")
+
+        assert ttl == 3600, (
+            f"a key with no accesses since it was rewritten was given a {ttl}s "
+            "TTL instead of the 3600s base; it inherited its expired "
+            "predecessor's access timestamps and was scored as a hot key"
+        )
