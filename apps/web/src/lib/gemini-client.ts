@@ -1,4 +1,5 @@
 import 'server-only';
+import { formatApiError } from '@/lib/error-handling';
 
 /**
  * Shared Gemini/Google AI client factory.
@@ -97,7 +98,7 @@ export function getGeminiRoutingLabel(): string {
  * Map provider errors to stable codes for API responses and logs.
  */
 export function classifyGeminiError(error: unknown): ClassifiedGeminiError {
-  const message = error instanceof Error ? error.message : String(error);
+  const message = formatApiError(error).message;
 
   if (message.includes('BILLING_DISABLED')) {
     return {

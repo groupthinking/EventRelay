@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { formatApiError } from '@/lib/error-handling';
 import { runActionAgent } from '@/lib/action-agent';
 import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
 import { hasGeminiKey } from '@/lib/gemini-client';
@@ -56,7 +57,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   } catch (error) {
     console.error('Action agent error:', error);
-    const message = error instanceof Error ? error.message : String(error);
+    const message = formatApiError(error).message;
 
     // Only the agent's own validation/config guards are client errors (400).
     // Match exact phrases so an upstream provider error that merely mentions

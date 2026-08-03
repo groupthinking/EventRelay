@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { formatApiError } from '@/lib/error-handling';
 import { backendHeaders } from '@/lib/pipeline-backend';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -39,7 +40,7 @@ export async function GET(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: formatApiError(error).message },
       { status: 502 },
     );
   }
