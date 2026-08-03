@@ -5,7 +5,18 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+
+def _collection_errors(payload: Any) -> List[str]:
+    """Return the non-empty collection errors recorded by evidence collection."""
+
+    if not isinstance(payload, dict):
+        return []
+    raw = payload.get("collection_errors")
+    if not isinstance(raw, list):
+        return []
+    return [str(error) for error in raw if str(error).strip()]
 
 
 def evaluate(payload: Any) -> Dict[str, Any]:
@@ -244,10 +255,18 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             if type(evidence.get(field)) is not bool:
                 invalid_fields.append("evidence." + field)
     if invalid_fields:
+        # A malformed payload is still fail-closed, but the collector already
+        # knows *why* the fields are missing. Surfacing those errors here keeps
+        # the verdict identical while telling the author what to fix, instead of
+        # stranding them on a bare "invalid_payload".
+        details = {"invalid_fields": sorted(set(invalid_fields))}
+        surfaced_errors = _collection_errors(payload)
+        if surfaced_errors:
+            details["collection_errors"] = surfaced_errors
         return {
             "verdict": "blocked",
             "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": sorted(set(invalid_fields))},
+            "details": details,
         }
 
     reasons = []
@@ -257,11 +276,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         "run_id": str(policy.get("run_id") or "").strip() or None,
     }
     details = {"identity_projection": identity_projection}
-    collection_errors = [
-        str(error)
-        for error in (payload.get("collection_errors") or [])
-        if str(error).strip()
-    ]
+    collection_errors = _collection_errors(payload)
     if collection_errors:
         reasons.append("evidence_collection_failed")
         details["collection_errors"] = collection_errors
