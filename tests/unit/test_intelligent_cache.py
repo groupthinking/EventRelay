@@ -2123,3 +2123,120 @@ class TestResetOfExpiredKeyStartsCleanHistory:
             "TTL instead of the 3600s base; it inherited its expired "
             "predecessor's access timestamps and was scored as a hot key"
         )
+
+
+# ---------------------------------------------------------------------------
+# InMemoryCacheLayer — access-history retention is bounded
+# ---------------------------------------------------------------------------
+
+
+class TestAccessHistoryRetentionIsBounded:
+    """A key that is read repeatedly must not accumulate one timestamp per hit
+    forever. Before this was bounded, ``access_patterns[key]`` was a plain list
+    appended to on every cache hit and never trimmed, so a hot key's history
+    grew without limit for as long as the key stayed resident."""
+
+    async def test_hot_key_history_stays_within_window(self):
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("hot", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("hot", "value")
+
+        hits = ACCESS_HISTORY_WINDOW * 20
+        for _ in range(hits):
+            await layer.get("hot")
+
+        # Precondition: the key is still resident, so nothing released its
+        # history behind our back and the count below is the retention policy.
+        assert "hot" in layer.cache, "key was evicted; this is not a retention test"
+
+        retained = len(layer.access_patterns["hot"])
+        assert retained <= ACCESS_HISTORY_WINDOW, (
+            f"history for a single resident key grew to {retained} entries "
+            f"after {hits} hits; expected it to stay within "
+            f"ACCESS_HISTORY_WINDOW={ACCESS_HISTORY_WINDOW}"
+        )
+
+    async def test_window_retains_the_most_recent_timestamps(self):
+        """Bounding must drop the oldest samples, not the newest, so the
+        retained window still describes current behaviour."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("recent", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+
+        for _ in range(ACCESS_HISTORY_WINDOW):
+            await layer.get("k")
+        boundary = time.time()
+        for _ in range(ACCESS_HISTORY_WINDOW):
+            await layer.get("k")
+
+        retained = list(layer.access_patterns["k"])
+        assert retained == sorted(retained), "retained timestamps lost their ordering"
+        assert all(ts >= boundary for ts in retained), (
+            "history retained samples recorded before the most recent "
+            f"{ACCESS_HISTORY_WINDOW} hits; the window is dropping the wrong end"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Adaptive TTL still consumes the bounded history
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveTtlOverBoundedHistory:
+    """``_calculate_adaptive_ttl`` reads ``accesses[0]``, ``accesses[-1]`` and
+    ``len(accesses)``. Those must keep working over the bounded container, and
+    a saturated window must still classify a hot key as high-frequency."""
+
+    def _make_system(self, layer):
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
+
+        system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
+        system.layers = [layer]
+        system.adaptive_ttl_enabled = True
+        system.cache_warming_enabled = False
+        system.auto_invalidation_enabled = False
+        system.performance_history = []
+        system.optimization_suggestions = []
+        return system
+
+    async def test_saturated_window_still_yields_high_frequency_ttl(self):
+        """The window holds only the tail of a burst, but that tail is itself a
+        tight burst, so the frequency estimate must still read as hot."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("ttl", max_size=10, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+        # Far more hits than the window holds, all in a tight burst.
+        for _ in range(ACCESS_HISTORY_WINDOW * 5):
+            await layer.get("k")
+
+        system = self._make_system(layer)
+        ttl = system._calculate_adaptive_ttl("k")
+        assert ttl == 3600 * 4, (
+            f"a saturated access window produced a {ttl}s TTL; a key read "
+            f"{ACCESS_HISTORY_WINDOW * 5} times in a burst should still be "
+            "classified as high-frequency"
+        )
+
+    async def test_indexing_and_len_work_over_bounded_history(self):
+        """Guards the three container operations _calculate_adaptive_ttl uses.
+        A container that bounded retention but broke indexing would silently
+        send every key back to the base TTL."""
+        layer = InMemoryCacheLayer("idx", max_size=10, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+        for _ in range(5):
+            await layer.get("k")
+
+        accesses = layer.access_patterns["k"]
+        assert len(accesses) == 5, "len() over the history container is wrong"
+        assert accesses[0] <= accesses[-1], "first/last indexing is not ordered"
