@@ -149,7 +149,7 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
                 entry = self.cache[key]
 
                 # Check expiration
-                if entry.expires_at and datetime.now(timezone.utc) > entry.expires_at:
+                if self._is_expired(entry):
                     # Lazy expiry on read is the only place expired entries are
                     # ever removed -- there is no background sweeper -- so this
                     # branch has to release everything delete() releases.
@@ -204,6 +204,11 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
                 # Update existing or add new
                 if key in self.cache:
                     old_entry = self.cache[key]
+                    if self._is_expired(old_entry):
+                        # Replacing an entry that has already died is a fresh
+                        # insert, not a re-write of a hot key: the successor
+                        # must not inherit the dead entry's access history.
+                        self.access_patterns.pop(key, None)
                     self.stats.total_size_bytes -= old_entry.size_bytes
                 else:
                     self.stats.total_entries += 1
@@ -218,6 +223,17 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
             logger.error(f"Failed to set L1 cache entry {key}: {e}")
             return False
 
+    @staticmethod
+    def _is_expired(entry: CacheEntry) -> bool:
+        """Whether ``entry`` has passed its TTL.
+
+        Both the lazy-expiry branch in ``get()`` and the replacement branch in
+        ``set()`` have to agree on what "dead" means. Expressing the predicate
+        once keeps them from drifting -- a disagreement here would resurrect
+        exactly the bookkeeping inconsistency this helper set exists to close.
+        """
+        return bool(entry.expires_at and datetime.now(timezone.utc) > entry.expires_at)
+
     def _release_entry(self, key: str, entry: CacheEntry) -> None:
         """Drop an entry and every piece of bookkeeping that tracks it.
 
@@ -227,6 +243,10 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
         forgot all three counters, so an entry's footprint outlived the entry
         itself. Routing every removal through one helper makes that class of
         omission structural rather than a thing each new path has to remember.
+
+        ``set()`` replacing an already-expired key is a fourth way an entry
+        stops existing, but it reuses the slot instead of freeing it, so it
+        drops only ``access_patterns`` rather than calling this helper.
 
         ``total_size_bytes`` in particular is not just a reported number:
         ``_evict_if_needed()`` budgets against it, so bytes that are never
