@@ -19,29 +19,39 @@ def _collection_errors(payload: Any) -> List[str]:
     return [str(error) for error in raw if str(error).strip()]
 
 
+def _invalid_payload(payload: Any, invalid_fields: List[str]) -> Dict[str, Any]:
+    """Build a fail-closed ``invalid_payload`` verdict with collector diagnostics.
+
+    Every ``invalid_payload`` response funnels through here — including the early
+    structural returns — so the collector's own ``collection_errors`` are
+    surfaced consistently instead of stranding the author on a bare
+    ``invalid_payload`` for some malformed shapes but not others.
+    """
+
+    details: Dict[str, Any] = {}
+    if invalid_fields:
+        details["invalid_fields"] = sorted(set(invalid_fields))
+    surfaced_errors = _collection_errors(payload)
+    if surfaced_errors:
+        details["collection_errors"] = surfaced_errors
+    return {
+        "verdict": "blocked",
+        "reasons": ["invalid_payload"],
+        "details": details,
+    }
+
+
 def evaluate(payload: Any) -> Dict[str, Any]:
     """Evaluate agent execution evidence and return a fail-closed verdict."""
 
     if not isinstance(payload, dict):
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {},
-        }
+        return _invalid_payload(payload, [])
 
     policy = payload.get("policy")
     if not isinstance(policy, dict):
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": ["policy"]},
-        }
+        return _invalid_payload(payload, ["policy"])
     if "applicable" not in policy or type(policy["applicable"]) is not bool:
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": ["policy.applicable"]},
-        }
+        return _invalid_payload(payload, ["policy.applicable"])
     if policy.get("applicable") is False:
         return {"verdict": "not_applicable", "reasons": [], "details": {}}
 
@@ -256,18 +266,10 @@ def evaluate(payload: Any) -> Dict[str, Any]:
                 invalid_fields.append("evidence." + field)
     if invalid_fields:
         # A malformed payload is still fail-closed, but the collector already
-        # knows *why* the fields are missing. Surfacing those errors here keeps
-        # the verdict identical while telling the author what to fix, instead of
+        # knows *why* the fields are missing. Surfacing those errors keeps the
+        # verdict identical while telling the author what to fix, instead of
         # stranding them on a bare "invalid_payload".
-        details = {"invalid_fields": sorted(set(invalid_fields))}
-        surfaced_errors = _collection_errors(payload)
-        if surfaced_errors:
-            details["collection_errors"] = surfaced_errors
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": details,
-        }
+        return _invalid_payload(payload, invalid_fields)
 
     reasons = []
     identity_projection = {

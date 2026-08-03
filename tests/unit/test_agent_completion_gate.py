@@ -1264,6 +1264,44 @@ class CompletionGateTests(unittest.TestCase):
 
         self.assertEqual(result["details"]["collection_errors"], ["stale_head"])
 
+    def test_early_structural_invalid_payload_still_surfaces_collection_errors(self):
+        """Early structural returns must not discard collector diagnostics.
+
+        Before every invalid_payload response funnelled through one builder, a
+        payload that failed the ``policy.applicable`` structural check returned a
+        bare verdict and dropped its ``collection_errors`` — leaving the author
+        just as blind as the bug this PR set out to fix. Reproduces the reviewer
+        example ``{"policy": {}, "collection_errors": ["missing_linked_issue"]}``.
+        """
+
+        cases = (
+            ({"policy": {}}, "policy.applicable"),
+            ({"policy": "not-a-dict"}, "policy"),
+        )
+        for base, expected_field in cases:
+            with self.subTest(invalid_field=expected_field):
+                payload = dict(base)
+                payload["collection_errors"] = ["missing_linked_issue"]
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertEqual(result["reasons"], ["invalid_payload"])
+                self.assertIn(
+                    expected_field, result["details"]["invalid_fields"]
+                )
+                self.assertEqual(
+                    result["details"]["collection_errors"],
+                    ["missing_linked_issue"],
+                )
+
+    def test_non_dict_payload_has_no_collection_errors_to_surface(self):
+        result = _evaluate([])
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertEqual(result["details"], {})
+
 
 class CompletionGateWorkflowTests(unittest.TestCase):
     def _workflow(self):
