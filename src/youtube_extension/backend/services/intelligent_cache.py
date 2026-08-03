@@ -150,7 +150,10 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
 
                 # Check expiration
                 if entry.expires_at and datetime.now(timezone.utc) > entry.expires_at:
-                    del self.cache[key]
+                    # Lazy expiry on read is the only place expired entries are
+                    # ever removed -- there is no background sweeper -- so this
+                    # branch has to release everything delete() releases.
+                    self._release_entry(key, entry)
                     self.stats.miss_count += 1
                     return None
 
@@ -215,18 +218,33 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
             logger.error(f"Failed to set L1 cache entry {key}: {e}")
             return False
 
+    def _release_entry(self, key: str, entry: CacheEntry) -> None:
+        """Drop an entry and every piece of bookkeeping that tracks it.
+
+        Three paths remove entries -- ``delete()``, ``_evict_if_needed()`` and
+        the lazy-expiry branch in ``get()`` -- and each one previously repeated
+        this teardown by hand. Eviction forgot ``access_patterns`` and expiry
+        forgot all three counters, so an entry's footprint outlived the entry
+        itself. Routing every removal through one helper makes that class of
+        omission structural rather than a thing each new path has to remember.
+
+        ``total_size_bytes`` in particular is not just a reported number:
+        ``_evict_if_needed()`` budgets against it, so bytes that are never
+        released permanently shrink the layer's usable capacity.
+
+        Callers must already hold ``self._lock``.
+        """
+        del self.cache[key]
+        self.stats.total_entries -= 1
+        self.stats.total_size_bytes -= entry.size_bytes
+        self.access_patterns.pop(key, None)
+
     async def delete(self, key: str) -> bool:
         """Delete value from in-memory cache"""
         with self._lock:
             if key in self.cache:
                 entry = self.cache[key]
-                del self.cache[key]
-                self.stats.total_entries -= 1
-                self.stats.total_size_bytes -= entry.size_bytes
-
-                # Clean access patterns
-                if key in self.access_patterns:
-                    del self.access_patterns[key]
+                self._release_entry(key, entry)
 
                 logger.debug(f"L1 Cache DELETE: {key}")
                 return True
@@ -254,10 +272,8 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
             # Remove oldest entry (LRU)
             oldest_key = next(iter(self.cache))
             entry = self.cache[oldest_key]
-            del self.cache[oldest_key]
+            self._release_entry(oldest_key, entry)
 
-            self.stats.total_entries -= 1
-            self.stats.total_size_bytes -= entry.size_bytes
             self.stats.eviction_count += 1
 
             logger.debug(f"L1 Cache EVICTED: {oldest_key}")
