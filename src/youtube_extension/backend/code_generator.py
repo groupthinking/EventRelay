@@ -463,7 +463,10 @@ class ProjectCodeGenerator:
         if "database" in features:
             requirements.append("sqlalchemy==2.0.23")
         if "authentication" in features:
+            # The generated main.py imports passlib.context; omitting it here
+            # produced a project that fails at import time.
             requirements.append("python-jose[cryptography]==3.3.0")
+            requirements.append("passlib[bcrypt]==1.7.4")
 
         # Generate main.py
         main_py = self._generate_fastapi_main(title, features)
@@ -1096,42 +1099,153 @@ body {{
     # ─── FastAPI generator ──────────────────────────────────────────
 
     def _generate_fastapi_main(self, title: str, features: list[str]) -> str:
-        """Generate main.py for FastAPI projects"""
+        """Generate main.py for FastAPI projects.
+
+        Design rule for this template: emit only behaviour the generator can
+        genuinely implement. Anything that depends on knowledge the generator
+        does not have -- a user store, a database schema -- is emitted as an
+        endpoint that fails with HTTP 501 rather than one that returns a
+        convincing 200. A stub that answers successfully makes a non-functional
+        service pass a smoke test, which is worse than no endpoint at all.
+        """
         auth_imports = ""
         auth_code = ""
+        scaffolding_endpoints: list[str] = []
 
         if "authentication" in features:
+            scaffolding_endpoints.append("POST /auth/login")
             auth_imports = '''
-import os
-import secrets
-from datetime import datetime, timedelta
 from jose import JWTError, jwt
 from passlib.context import CryptContext'''
             auth_code = '''
-# Authentication setup
-SECRET_KEY = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
+# ─── Authentication ─────────────────────────────────────────────────────────
+# Token minting and verification below are real implementations. The login
+# route is not: only you know how your users are stored and verified, so it
+# fails with 501 instead of returning a token-shaped response that would let a
+# caller believe authentication works.
+
+SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+
+def _require_secret_key() -> str:
+    """Return the signing key, or fail closed if it was never configured.
+
+    Deliberately not defaulted to a generated value: a per-process random
+    secret silently invalidates every token on restart and rejects tokens
+    minted by sibling workers, which presents as intermittent logouts rather
+    than as the misconfiguration it is.
+    """
+    if not SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY is not set. Refusing to sign or verify tokens without "
+            "a configured signing key."
+        )
+    return SECRET_KEY
+
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Mint a signed JWT carrying `data` plus an expiry claim."""
+    key = _require_secret_key()
+    payload = data.copy()
+    payload["exp"] = datetime.now(timezone.utc) + (
+        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
+    return jwt.encode(payload, key, algorithm=ALGORITHM)
+
+
+def decode_access_token(token: str) -> dict:
+    """Verify a JWT minted by `create_access_token` and return its claims."""
+    key = _require_secret_key()
+    try:
+        return jwt.decode(token, key, algorithms=[ALGORITHM])
+    except JWTError as exc:
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
+
+
 @app.post("/auth/login")
 async def login():
-    """Placeholder login endpoint"""
-    return {"message": "Login endpoint - implement authentication logic"}'''
+    """Scaffolding only -- not implemented.
+
+    To implement: look the user up, verify the password with
+    `pwd_context.verify`, then return `create_access_token({"sub": user_id})`.
+    """
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Not implemented. POST /auth/login is generated scaffolding: verify "
+            "credentials against your user store, then return "
+            "create_access_token(...)."
+        ),
+    )'''
 
         database_code = ""
         if "database" in features:
+            scaffolding_endpoints.append("GET /api/data")
             database_code = '''
+# ─── Database ───────────────────────────────────────────────────────────────
+# Not implemented: the generator has no connection string, schema, or model for
+# your data. Replace the 501 below once you have wired up a real query.
+
 @app.get("/api/data")
 async def get_data():
-    """Placeholder data endpoint"""
-    return {"data": "Connect to your database here"}'''
+    """Scaffolding only -- not implemented."""
+    raise HTTPException(
+        status_code=501,
+        detail=(
+            "Not implemented. GET /api/data is generated scaffolding: connect "
+            "to your database and return real rows."
+        ),
+    )'''
 
-        return f'''from fastapi import FastAPI, HTTPException
+        # HTTPException is only referenced by the scaffolding routes; importing
+        # it unconditionally would leave generated projects with a dead import.
+        fastapi_import = (
+            "from fastapi import FastAPI, HTTPException"
+            if scaffolding_endpoints
+            else "from fastapi import FastAPI"
+        )
+        if "authentication" in features:
+            stdlib_imports = (
+                "import os\n"
+                "from datetime import datetime, timedelta, timezone\n"
+                "from typing import List, Optional"
+            )
+        else:
+            stdlib_imports = (
+                "from datetime import datetime, timezone\n"
+                "from typing import List, Optional"
+            )
+        scaffolding_literal = (
+            "[\n    "
+            + ",\n    ".join(f'"{route}"' for route in scaffolding_endpoints)
+            + ",\n]"
+            if scaffolding_endpoints
+            else "[]"
+        )
+
+        return f'''"""{title}
+
+Generated by UVAI from a YouTube tutorial.
+
+Routes named in ``UNIMPLEMENTED_ENDPOINTS`` are scaffolding: they respond with
+HTTP 501 until you implement them. Everything else in this file is a working
+implementation. A clean startup is not evidence that the scaffolded routes
+work -- by design, they cannot pass a smoke test while they remain stubs.
+"""
+
+{stdlib_imports}
+
+{fastapi_import}
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List, Optional{auth_imports}
+from pydantic import BaseModel{auth_imports}
+
+#: Routes that exist but are not implemented. Kept as data so the service can
+#: report its own gaps rather than leaving callers to discover them at runtime.
+UNIMPLEMENTED_ENDPOINTS: List[str] = {scaffolding_literal}
 
 app = FastAPI(
     title="{title}",
@@ -1157,32 +1271,45 @@ class MessageResponse(BaseModel):
     message: str
     status: str
 
+#: Process-local message store. This is a real implementation, not a stub, but
+#: it is deliberately not persistent: it empties on restart and is not shared
+#: between workers. Swap it for your datastore before relying on it.
+_MESSAGES: List[MessageResponse] = []
+
 @app.get("/")
 async def root():
-    """Root endpoint"""
+    """Service index, including the routes that are not implemented yet."""
     return {{
         "message": "Welcome to {title}",
         "description": "This API was generated by UVAI from a YouTube tutorial",
-        "endpoints": ["/docs", "/api/messages", "/api/health"]
+        "endpoints": ["/docs", "/api/health", "/api/messages"],
+        "unimplemented_endpoints": UNIMPLEMENTED_ENDPOINTS
     }}
 
 @app.get("/api/health")
 async def health_check():
-    """Health check endpoint"""
-    return {{"status": "healthy", "timestamp": "2024-01-01T00:00:00Z"}}
+    """Liveness probe.
+
+    The timestamp is evaluated per request. A constant here would make the
+    probe indistinguishable from a served cache or a wedged process, which
+    defeats the only thing a health route exists to support.
+    """
+    return {{
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }}
 
 @app.get("/api/messages", response_model=List[MessageResponse])
 async def get_messages():
-    """Get all messages"""
-    return [
-        {{"message": "Hello from your UVAI generated API!", "status": "active"}},
-        {{"message": "This API was created from a YouTube tutorial", "status": "active"}}
-    ]
+    """Return every message currently held in the in-memory store."""
+    return _MESSAGES
 
-@app.post("/api/messages", response_model=MessageResponse)
+@app.post("/api/messages", response_model=MessageResponse, status_code=201)
 async def create_message(message: Message):
-    """Create a new message"""
-    return {{"message": f"Received: {{message.text}}", "status": "created"}}
+    """Append a message to the in-memory store and echo the stored record."""
+    record = MessageResponse(message=message.text, status="created")
+    _MESSAGES.append(record)
+    return record
 {auth_code}
 {database_code}
 
