@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { backendHeaders } from '@/lib/pipeline-backend';
-import { formatApiError } from '@/lib/error-handling';
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';

@@ -9,7 +9,6 @@ import {
   stripJsonCodeFence,
   toGatewayModelId,
 } from '@/lib/vercel-ai-gateway';
-import { formatApiError } from '@/lib/error-handling';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;

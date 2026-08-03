@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSearchIndex, resolveSearchIndexName } from '@/lib/upstash-search';
 import type { SearchDocument } from '@/lib/upstash-search';
-import { formatApiError } from '@/lib/error-handling';
 
 const MAX_LIMIT = 25;
 const DEFAULT_LIMIT = 5;
