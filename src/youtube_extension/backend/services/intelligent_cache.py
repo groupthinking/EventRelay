@@ -22,7 +22,7 @@ import logging
 import statistics
 import threading
 import time
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, deque
 from dataclasses import asdict, dataclass
 
 # pickle removed for security
@@ -55,6 +55,16 @@ def _resolve_tag_write_limit(max_connections: int) -> int:
     its own pool. Always at least 1 so tag writes can still make progress.
     """
     return max(1, min(TAG_WRITE_CONCURRENCY, max_connections - TAG_WRITE_POOL_RESERVE))
+
+
+# Hit timestamps retained per key to drive _calculate_adaptive_ttl(). That
+# consumer reads only the first element, the last element and the length, so the
+# window only has to be long enough for the ratio between them to be a stable
+# frequency estimate rather than a two-sample artefact. Bounding it keeps L1's
+# footprint proportional to the number of resident keys instead of to the total
+# number of reads the process has ever served.
+ACCESS_HISTORY_WINDOW = 64
+
 
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder that handles datetime objects"""
@@ -138,7 +148,11 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
         super().__init__(name, max_size)
         self.max_size_bytes = max_size_bytes
         self.cache: OrderedDict[str, CacheEntry] = OrderedDict()
-        self.access_patterns = defaultdict(list)  # Track access patterns for intelligent TTL
+        # Bounded per key: see ACCESS_HISTORY_WINDOW. Entries are released when
+        # the key leaves the cache, via delete() or _evict_if_needed().
+        self.access_patterns = defaultdict(
+            lambda: deque(maxlen=ACCESS_HISTORY_WINDOW)
+        )  # Track access patterns for intelligent TTL
 
     async def get(self, key: str) -> Optional[Any]:
         """Get value from in-memory cache"""
@@ -255,6 +269,11 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
             oldest_key = next(iter(self.cache))
             entry = self.cache[oldest_key]
             del self.cache[oldest_key]
+
+            # Release the hit history too. delete() already does this; without
+            # it here an evicted key's history would be retained forever, with
+            # no cache entry left to ever trigger its cleanup.
+            self.access_patterns.pop(oldest_key, None)
 
             self.stats.total_entries -= 1
             self.stats.total_size_bytes -= entry.size_bytes

@@ -1841,3 +1841,167 @@ class TestRedisCacheLayerUpdateAvgAccessTime:
         layer._update_avg_access_time(20.0)
         # EMA: 0.1 * 20 + 0.9 * 10 = 11.0
         assert layer.stats.avg_access_time_ms == pytest.approx(11.0, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# InMemoryCacheLayer — access-history retention is bounded
+# ---------------------------------------------------------------------------
+
+
+class TestAccessHistoryRetentionIsBounded:
+    """A key that is read repeatedly must not accumulate one timestamp per hit
+    forever. Before this was bounded, ``access_patterns[key]`` was a plain list
+    appended to on every cache hit and never trimmed, so a hot key's history
+    grew without limit for the lifetime of the process."""
+
+    async def test_hot_key_history_stays_within_window(self):
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("hot", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("hot", "value")
+
+        hits = ACCESS_HISTORY_WINDOW * 20
+        for _ in range(hits):
+            await layer.get("hot")
+
+        retained = len(layer.access_patterns["hot"])
+        assert retained <= ACCESS_HISTORY_WINDOW, (
+            f"history for a single key grew to {retained} entries after {hits} "
+            f"hits; expected it to stay within ACCESS_HISTORY_WINDOW="
+            f"{ACCESS_HISTORY_WINDOW}"
+        )
+
+    async def test_window_retains_the_most_recent_timestamps(self):
+        """Bounding must drop the oldest samples, not the newest, so the
+        retained window still describes current behaviour."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("recent", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+
+        for _ in range(ACCESS_HISTORY_WINDOW):
+            await layer.get("k")
+        boundary = time.time()
+        for _ in range(ACCESS_HISTORY_WINDOW):
+            await layer.get("k")
+
+        retained = list(layer.access_patterns["k"])
+        assert retained == sorted(retained), "retained timestamps lost their ordering"
+        assert all(ts >= boundary for ts in retained), (
+            "history retained samples recorded before the most recent "
+            f"{ACCESS_HISTORY_WINDOW} hits; the window is dropping the wrong end"
+        )
+
+
+# ---------------------------------------------------------------------------
+# InMemoryCacheLayer — eviction releases access history
+# ---------------------------------------------------------------------------
+
+
+class TestEvictionReleasesAccessHistory:
+    """``delete()`` already drops a key's access history (see
+    ``test_delete_cleans_access_patterns``). ``_evict_if_needed`` must do the
+    same: an evicted key leaves no cache entry behind, so nothing else will ever
+    reclaim its history."""
+
+    async def test_evicted_key_history_is_released(self):
+        layer = InMemoryCacheLayer("evict_one", max_size=1, max_size_bytes=1024 * 1024)
+        await layer.set("first", "value")
+        await layer.get("first")
+        assert "first" in layer.access_patterns
+
+        # Inserting a second key evicts "first" (max_size=1).
+        await layer.set("second", "value")
+
+        assert "first" not in layer.cache
+        assert "first" not in layer.access_patterns, (
+            "history for an evicted key was retained; nothing will ever "
+            "reclaim it because the cache entry is already gone"
+        )
+
+    async def test_eviction_churn_leaves_no_orphaned_histories(self):
+        """The accumulating case: many keys cycle through a small cache. Every
+        key that is evicted must take its history with it, so the number of
+        tracked histories stays proportional to the number of resident keys."""
+        layer = InMemoryCacheLayer("churn", max_size=5, max_size_bytes=1024 * 1024)
+
+        for i in range(200):
+            key = f"k{i}"
+            await layer.set(key, "value")
+            await layer.get(key)
+
+        orphans = set(layer.access_patterns) - set(layer.cache)
+        assert not orphans, (
+            f"{len(orphans)} evicted keys still have access history retained "
+            f"while only {len(layer.cache)} entries are resident; this memory "
+            "is invisible to stats.total_size_bytes so the max_size_bytes "
+            "budget can never reclaim it"
+        )
+
+    async def test_resident_keys_keep_their_history(self):
+        """Releasing evicted histories must not disturb keys still in the
+        cache — the fix must be a narrow cleanup, not a blanket clear."""
+        layer = InMemoryCacheLayer("keep", max_size=3, max_size_bytes=1024 * 1024)
+
+        for i in range(10):
+            await layer.set(f"k{i}", "value")
+            await layer.get(f"k{i}")
+
+        for key in layer.cache:
+            assert layer.access_patterns.get(key), (
+                f"resident key {key!r} lost its access history; adaptive TTL "
+                "would fall back to the base value for a live key"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Adaptive TTL still consumes the bounded history
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveTtlOverBoundedHistory:
+    """``_calculate_adaptive_ttl`` reads ``accesses[0]``, ``accesses[-1]`` and
+    ``len(accesses)``. Those must keep working over the bounded container, and
+    a saturated window must still classify a hot key as high-frequency."""
+
+    def _make_system(self, layer):
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
+
+        system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
+        system.layers = [layer]
+        system.adaptive_ttl_enabled = True
+        system.cache_warming_enabled = False
+        system.auto_invalidation_enabled = False
+        system.performance_history = []
+        system.optimization_suggestions = []
+        return system
+
+    async def test_saturated_window_still_yields_high_frequency_ttl(self):
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("ttl", max_size=10, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+        # Far more hits than the window holds, all in a tight burst.
+        for _ in range(ACCESS_HISTORY_WINDOW * 5):
+            await layer.get("k")
+
+        system = self._make_system(layer)
+        assert system._calculate_adaptive_ttl("k") == 3600 * 4
+
+    async def test_indexing_and_len_work_over_bounded_history(self):
+        layer = InMemoryCacheLayer("idx", max_size=10, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+        for _ in range(5):
+            await layer.get("k")
+
+        accesses = layer.access_patterns["k"]
+        assert len(accesses) == 5
+        assert accesses[0] <= accesses[-1]
