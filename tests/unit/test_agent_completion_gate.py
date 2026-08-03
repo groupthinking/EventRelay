@@ -1264,6 +1264,54 @@ class CompletionGateTests(unittest.TestCase):
 
         self.assertEqual(result["details"]["collection_errors"], ["stale_head"])
 
+    def test_early_invalid_payload_paths_still_surface_collection_errors(self):
+        """Collector diagnostics must survive the *early* ``invalid_payload``
+        returns, not only the late field-validation path.
+
+        Regression for the reviewer's example: a payload whose ``policy`` is
+        malformed short-circuits before field validation, so it previously
+        returned a bare ``invalid_payload`` and discarded the
+        ``collection_errors`` the collector had already recorded. Every
+        invalid-payload response now routes through ``_invalid_payload`` and
+        carries those diagnostics consistently.
+        """
+
+        cases = (
+            # policy is not a dict -> earliest invalid_fields return
+            ({"policy": "nope"}, "policy"),
+            # policy is a dict but missing `applicable` -> the exact example
+            # from the review thread
+            ({"policy": {}}, "policy.applicable"),
+        )
+        for base, expected_field in cases:
+            with self.subTest(invalid_field=expected_field):
+                payload = dict(base)
+                payload["collection_errors"] = ["missing_linked_issue"]
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertEqual(result["reasons"], ["invalid_payload"])
+                self.assertIn(
+                    expected_field, result["details"]["invalid_fields"]
+                )
+                self.assertEqual(
+                    result["details"]["collection_errors"],
+                    ["missing_linked_issue"],
+                )
+
+    def test_non_dict_payload_reports_no_collection_errors(self):
+        """A payload that is not even a dict has no diagnostics to surface and
+        must keep returning an empty ``details`` (unchanged behaviour)."""
+
+        for payload in ([], "nope", 7, None):
+            with self.subTest(payload=payload):
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertEqual(result["reasons"], ["invalid_payload"])
+                self.assertEqual(result["details"], {})
+
 
 class CompletionGateWorkflowTests(unittest.TestCase):
     def _workflow(self):
