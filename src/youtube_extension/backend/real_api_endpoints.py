@@ -85,6 +85,38 @@ def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
     return processed_videos
 
 
+def _read_video_analysis_sync(cache_path: Path) -> Optional[dict[str, Any]]:
+    """Read and parse a single cached video analysis.
+
+    This performs blocking filesystem work (``open()`` and a full
+    ``json.load()`` of the analysis payload) and is therefore intended to be
+    executed in a worker thread via :func:`asyncio.to_thread` rather than
+    directly on the event loop.
+
+    Opening directly and treating :class:`FileNotFoundError` as the miss
+    replaces a separate ``Path.exists()`` probe. That is one syscall instead of
+    two, and it closes the window in which the entry could be removed between
+    the check and the open. Every other ``OSError`` still propagates, so a
+    directory or an unreadable entry keeps surfacing as a 500 rather than being
+    silently reported as a missing video.
+
+    Deliberately does *not* apply the processor's cache TTL. This endpoint has
+    always served a cached analysis regardless of age, whereas
+    ``RealVideoProcessor._read_cache_file`` treats anything older than
+    ``_CACHE_TTL_SECONDS`` as a miss; reusing it here would turn every analysis
+    over 24 hours old into a 404.
+
+    Returns the parsed payload, or ``None`` when no cache entry exists.
+    """
+    try:
+        handle = open(cache_path, encoding="utf-8")
+    except FileNotFoundError:
+        return None
+
+    with handle as f:
+        return json.load(f)
+
+
 # Pydantic models for API requests/responses
 class VideoProcessingRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL or ID")
@@ -268,14 +300,19 @@ def setup_real_api_endpoints(app: FastAPI):
             processor = get_real_video_processor()
             cache_path = processor._get_cache_path(video_id)
 
-            if not cache_path.exists():
+            # Reading an entry opens and JSON-parses a file whose size is set
+            # by the stored analysis payload, so the parse cost scales with the
+            # video rather than being bounded. Run it in a worker thread so a
+            # large analysis cannot stall the event loop for every other
+            # in-flight request. Building the path stays here: it is pure
+            # string arithmetic and touches no filesystem.
+            video_data = await asyncio.to_thread(_read_video_analysis_sync, cache_path)
+
+            if video_data is None:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Video analysis not found: {video_id}"
                 )
-
-            with open(cache_path, encoding='utf-8') as f:
-                video_data = json.load(f)
 
             return video_data
 
