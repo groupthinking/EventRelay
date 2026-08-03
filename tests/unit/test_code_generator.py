@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
+import sys
 import tempfile
 import threading
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -1217,3 +1221,165 @@ class TestFailedGenerationCleanup:
 
         assert Path(result["project_path"]).is_dir()
         assert len(list(tmp_path.glob("uvai_project_*"))) == 1
+
+
+def _load_generated_app(source: str, tmp_path: Path, module_name: str):
+    """Import a generated ``main.py`` and hand back its module.
+
+    The generated file is executed rather than merely inspected: the defect in
+    #1257 was behavioural (a constant health timestamp, endpoints that answered
+    200 without doing anything), and only running the app can prove it is gone.
+    """
+    main_py = tmp_path / "main.py"
+    main_py.write_text(source, encoding="utf-8")
+
+    spec = importlib.util.spec_from_file_location(module_name, main_py)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
+    return module
+
+
+@pytest.fixture
+def generated_app(tmp_path, request):
+    """Build, import and serve a generated FastAPI project."""
+    created: list[str] = []
+
+    def _factory(features: list[str]):
+        generator = ProjectCodeGenerator(use_ai_generation=False)
+        source = generator._generate_fastapi_main("Generated API", features)
+        module_name = (
+            f"uvai_generated_main_{abs(hash((request.node.nodeid, tuple(features))))}"
+        )
+        target = tmp_path / module_name
+        target.mkdir()
+        module = _load_generated_app(source, target, module_name)
+        created.append(module_name)
+        return source, module
+
+    yield _factory
+
+    for name in created:
+        sys.modules.pop(name, None)
+
+
+class TestGeneratedFastAPIBehaviour:
+    """Execute the generated FastAPI app instead of trusting its shape.
+
+    Regression cover for #1257: the template shipped a hardcoded health
+    timestamp and placeholder endpoints that returned 200, so a generated
+    project passed a naive smoke test while being non-functional.
+    """
+
+    def test_health_timestamp_is_evaluated_per_request(self, generated_app):
+        from fastapi.testclient import TestClient
+
+        source, module = generated_app([])
+        assert "2024-01-01T00:00:00Z" not in source
+
+        with TestClient(module.app) as client:
+            first = client.get("/api/health")
+            time.sleep(0.01)
+            second = client.get("/api/health")
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["status"] == "healthy"
+
+        first_ts = first.json()["timestamp"]
+        second_ts = second.json()["timestamp"]
+        assert first_ts != second_ts, "health timestamp is constant across calls"
+
+        parsed = datetime.fromisoformat(first_ts)
+        assert parsed.tzinfo is not None, "timestamp must be timezone-aware"
+        assert abs((datetime.now(timezone.utc) - parsed).total_seconds()) < 60
+
+    def test_unimplemented_endpoints_fail_loudly(self, generated_app):
+        from fastapi.testclient import TestClient
+
+        _, module = generated_app(["authentication", "database"])
+
+        with TestClient(module.app) as client:
+            assert client.post("/auth/login").status_code == 501
+            assert client.get("/api/data").status_code == 501
+            index = client.get("/").json()
+
+        assert index["unimplemented_endpoints"] == ["POST /auth/login", "GET /api/data"]
+
+    def test_index_reports_no_gaps_without_optional_features(self, generated_app):
+        from fastapi.testclient import TestClient
+
+        _, module = generated_app([])
+
+        with TestClient(module.app) as client:
+            index = client.get("/").json()
+
+        assert index["unimplemented_endpoints"] == []
+        assert "/api/health" in index["endpoints"]
+
+    def test_messages_round_trip_through_a_real_store(self, generated_app):
+        from fastapi.testclient import TestClient
+
+        _, module = generated_app([])
+
+        with TestClient(module.app) as client:
+            assert client.get("/api/messages").json() == []
+
+            created = client.post("/api/messages", json={"text": "hello"})
+            assert created.status_code == 201
+            assert created.json() == {"message": "hello", "status": "created"}
+
+            assert client.get("/api/messages").json() == [
+                {"message": "hello", "status": "created"}
+            ]
+
+    def test_token_helpers_are_real_implementations(self, generated_app, monkeypatch):
+        _, module = generated_app(["authentication"])
+        monkeypatch.setattr(module, "SECRET_KEY", "unit-test-secret")
+
+        token = module.create_access_token({"sub": "user-1"})
+        assert module.decode_access_token(token)["sub"] == "user-1"
+
+        with pytest.raises(Exception) as excinfo:
+            module.decode_access_token("not-a-jwt")
+        assert getattr(excinfo.value, "status_code", None) == 401
+
+    def test_signing_fails_closed_without_a_secret_key(
+        self, generated_app, monkeypatch
+    ):
+        """A random per-process default would silently break tokens on restart."""
+        source, module = generated_app(["authentication"])
+        assert "secrets.token_urlsafe" not in source
+
+        monkeypatch.setattr(module, "SECRET_KEY", None)
+        with pytest.raises(RuntimeError, match="SECRET_KEY"):
+            module.create_access_token({"sub": "user-1"})
+
+    def test_auth_projects_declare_their_password_hashing_dependency(
+        self, monkeypatch, tmp_path
+    ):
+        """The generated main.py imports passlib, so it must be pinned."""
+        project_dir = tmp_path / "api_auth_reqs"
+        project_dir.mkdir()
+        monkeypatch.setattr(tempfile, "mkdtemp", lambda prefix: str(project_dir))
+
+        gen = ProjectCodeGenerator(use_ai_generation=False)
+        video_analysis = {
+            "extracted_info": {
+                "title": "Auth API",
+                "technologies": ["python"],
+                "features": ["authentication"],
+                "project_type": "api",
+            },
+            "success": True,
+        }
+        asyncio.run(gen.generate_project(video_analysis, {"type": "api"}))
+
+        requirements = (project_dir / "requirements.txt").read_text()
+        assert "passlib" in requirements
+        assert "python-jose" in requirements
