@@ -47,31 +47,40 @@ def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
 
     for cache_file in cache_dir.glob("*_processed.json"):
         try:
-            with open(cache_file, encoding='utf-8') as f:
+            with open(cache_file, encoding="utf-8") as f:
                 video_data = json.load(f)
 
-            processed_videos.append({
-                "id": video_data.get('video_id'),
-                "video_url": video_data.get('video_url'),
-                "title": video_data.get('metadata', {}).get('title', 'Unknown'),
-                "channel": video_data.get('metadata', {}).get('channel_title', 'Unknown'),
-                "duration": video_data.get('metadata', {}).get('duration', 'Unknown'),
-                "processed_at": video_data.get('timestamp'),
-                "has_transcript": video_data.get('transcript', {}).get('has_transcript', False),
-                "ai_analysis_success": video_data.get('ai_analysis', {}).get('success', False),
-                "total_cost": video_data.get('cost_breakdown', {}).get('total_cost', 0.0),
-                "analysis": video_data.get('ai_analysis', {}),
-                "createdAt": video_data.get('timestamp'),
-                "updatedAt": video_data.get('timestamp')
-            })
+            processed_videos.append(
+                {
+                    "id": video_data.get("video_id"),
+                    "video_url": video_data.get("video_url"),
+                    "title": video_data.get("metadata", {}).get("title", "Unknown"),
+                    "channel": video_data.get("metadata", {}).get(
+                        "channel_title", "Unknown"
+                    ),
+                    "duration": video_data.get("metadata", {}).get(
+                        "duration", "Unknown"
+                    ),
+                    "processed_at": video_data.get("timestamp"),
+                    "has_transcript": video_data.get("transcript", {}).get(
+                        "has_transcript", False
+                    ),
+                    "ai_analysis_success": video_data.get("ai_analysis", {}).get(
+                        "success", False
+                    ),
+                    "total_cost": video_data.get("cost_breakdown", {}).get(
+                        "total_cost", 0.0
+                    ),
+                    "analysis": video_data.get("ai_analysis", {}),
+                    "createdAt": video_data.get("timestamp"),
+                    "updatedAt": video_data.get("timestamp"),
+                }
+            )
         except Exception as e:
             logger.warning(f"Error loading cached video {cache_file}: {e}")
 
     # Sort by processing timestamp
-    processed_videos.sort(
-        key=lambda x: x.get('processed_at', ''),
-        reverse=True
-    )
+    processed_videos.sort(key=lambda x: x.get("processed_at", ""), reverse=True)
 
     return processed_videos
 
