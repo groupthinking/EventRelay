@@ -14,6 +14,8 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from youtube_extension.utils.blocking_io import run_blocking
+
 from ..base import (
     AnalysisType,
     BaseCloudAI,
@@ -188,7 +190,7 @@ class GoogleCloudAI(BaseCloudAI):
                 image.source.image_uri = image_url
             else:
                 # Local file - read off the event loop
-                image.content = await asyncio.to_thread(_read_file_bytes, image_url)
+                image.content = await run_blocking(_read_file_bytes, image_url)
 
             # Prepare features
             features = self._prepare_vision_features(analysis_types)

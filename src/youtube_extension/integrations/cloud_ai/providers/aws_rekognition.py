@@ -16,6 +16,8 @@ import os
 from datetime import datetime
 from typing import Any
 
+from youtube_extension.utils.blocking_io import run_blocking
+
 from ..base import (
     AnalysisType,
     BaseCloudAI,
@@ -484,7 +486,7 @@ class AWSRekognition(BaseCloudAI):
                 return {'Bytes': response.content}
         else:
             # Local file - read off the event loop
-            return {'Bytes': await asyncio.to_thread(_read_file_bytes, image_url)}
+            return {'Bytes': await run_blocking(_read_file_bytes, image_url)}
 
     def _process_video_results(self, results: dict[str, Any], video_id: str,
                              analysis_types: list[AnalysisType],

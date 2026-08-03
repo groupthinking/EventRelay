@@ -13,6 +13,8 @@ import logging
 from datetime import datetime
 from typing import Any, Optional
 
+from youtube_extension.utils.blocking_io import run_blocking
+
 from ..base import (
     AnalysisType,
     BaseCloudAI,
@@ -259,7 +261,7 @@ class AzureVision(BaseCloudAI):
             return None
         else:
             # Local file - read off the event loop
-            return await asyncio.to_thread(_read_file_bytes, image_url)
+            return await run_blocking(_read_file_bytes, image_url)
 
     async def _await_ocr_call(self, deadline: float, func: Any, *args: Any, **kwargs: Any) -> Any:
         """Run a blocking Azure SDK call in a worker thread, bounded by a
