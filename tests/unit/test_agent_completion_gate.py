@@ -1196,6 +1196,74 @@ class CompletionGateTests(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(json.loads(output.getvalue())["verdict"], "ready")
 
+    def test_invalid_payload_surfaces_the_underlying_collection_errors(self):
+        """A malformed payload must still explain *why* the fields are missing.
+
+        Reproduces the production failure that blocked ~47 open PRs: branches
+        matching the agent heuristic (``claude/*``, ``codex/*``, ...) are marked
+        applicable, but with no AgentTask issue the collector emits
+        ``agent_login``/``run_id`` as null. The gate correctly blocks, yet
+        previously reported a bare ``invalid_payload`` and discarded the
+        ``collection_errors`` that name the actual remediation.
+        """
+
+        payload = _valid_payload()
+        payload["policy"]["agent_login"] = None
+        payload["policy"]["run_id"] = None
+        payload["collection_errors"] = [
+            "missing_linked_issue",
+            "missing_agent_run_id",
+            "missing_agent_login",
+        ]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertIn("policy.agent_login", result["details"]["invalid_fields"])
+        self.assertIn("policy.run_id", result["details"]["invalid_fields"])
+        self.assertEqual(
+            result["details"]["collection_errors"],
+            [
+                "missing_linked_issue",
+                "missing_agent_run_id",
+                "missing_agent_login",
+            ],
+        )
+
+    def test_invalid_payload_omits_collection_errors_when_there_are_none(self):
+        payload = _valid_payload()
+        payload["policy"]["agent_login"] = None
+        payload["collection_errors"] = []
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["verdict"], "blocked")
+        self.assertEqual(result["reasons"], ["invalid_payload"])
+        self.assertNotIn("collection_errors", result["details"])
+
+    def test_invalid_payload_tolerates_unusable_collection_errors(self):
+        for unusable in (None, "missing_agent_login", {"a": 1}, 7):
+            with self.subTest(collection_errors=unusable):
+                payload = _valid_payload()
+                payload["policy"]["agent_login"] = None
+                payload["collection_errors"] = unusable
+
+                result = _evaluate(payload)
+
+                self.assertEqual(result["verdict"], "blocked")
+                self.assertEqual(result["reasons"], ["invalid_payload"])
+                self.assertNotIn("collection_errors", result["details"])
+
+    def test_invalid_payload_drops_blank_collection_errors(self):
+        payload = _valid_payload()
+        payload["policy"]["run_id"] = None
+        payload["collection_errors"] = ["", "   ", "stale_head"]
+
+        result = _evaluate(payload)
+
+        self.assertEqual(result["details"]["collection_errors"], ["stale_head"])
+
 
 class CompletionGateWorkflowTests(unittest.TestCase):
     def _workflow(self):
