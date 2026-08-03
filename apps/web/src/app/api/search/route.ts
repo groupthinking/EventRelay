@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSearchIndex, resolveSearchIndexName } from '@/lib/upstash-search';
 import type { SearchDocument } from '@/lib/upstash-search';
+import { formatApiError } from '@/lib/error-handling';
 
 const MAX_LIMIT = 25;
 const DEFAULT_LIMIT = 5;
@@ -43,8 +44,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Upstash search error:', error);
+    // SECURITY: Prevent information disclosure by masking the raw error message
     return NextResponse.json(
-      { error: 'search_failed', detail: error instanceof Error ? error.message : String(error) },
+      { error: 'search_failed', detail: formatApiError(error).message },
       { status: 502 },
     );
   }
@@ -107,8 +109,9 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error) {
     console.error('Upstash upsert error:', error);
+    // SECURITY: Prevent information disclosure by masking the raw error message
     return NextResponse.json(
-      { error: 'upsert_failed', detail: error instanceof Error ? error.message : String(error) },
+      { error: 'upsert_failed', detail: formatApiError(error).message },
       { status: 502 },
     );
   }

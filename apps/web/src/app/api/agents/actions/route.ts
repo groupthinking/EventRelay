@@ -66,8 +66,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       message.startsWith('No AI API key configured') ||
       message.includes('transcript is too short');
 
+    // SECURITY: Use formatApiError to prevent leaking stack traces or internal
+    // specifics to the client, while preserving the public message string.
+    const { formatApiError } = await import('@/lib/error-handling');
+    const safeError = formatApiError(error).message;
+
     return NextResponse.json(
-      { success: false, error: message, actions: [] },
+      { success: false, error: safeError, actions: [] },
       { status: isClientError ? 400 : 502 },
     );
   }

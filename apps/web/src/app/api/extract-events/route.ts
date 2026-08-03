@@ -9,6 +9,7 @@ import {
   stripJsonCodeFence,
   toGatewayModelId,
 } from '@/lib/vercel-ai-gateway';
+import { formatApiError } from '@/lib/error-handling';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -255,7 +256,8 @@ Respond with ONLY valid JSON matching the required structure.`;
     return NextResponse.json({ success: true, provider, data: parsed });
   } catch (error) {
     console.error('Event extraction error:', error);
-    const message = error instanceof Error ? error.message : String(error);
+    // SECURITY: Prevent information disclosure by masking the raw error message
+    const message = formatApiError(error).message;
 
     return NextResponse.json({
       success: false,
