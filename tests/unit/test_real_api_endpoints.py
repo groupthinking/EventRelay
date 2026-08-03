@@ -845,17 +845,39 @@ class TestSearchVideosEndpoint:
 # ===========================================================================
 
 
+class _ThreadRecordingPath:
+    """Path-like proxy that records the thread performing the per-file read.
+
+    ``open()`` resolves a non-``str`` argument through ``__fspath__``, so this
+    captures the calling thread at the exact moment the blocking read starts —
+    rather than inferring it from the enclosing directory scan.
+    """
+
+    def __init__(self, real_path: Path, read_thread_ids: list[int]) -> None:
+        self._real = real_path
+        self._read_thread_ids = read_thread_ids
+
+    def __fspath__(self) -> str:
+        self._read_thread_ids.append(threading.get_ident())
+        return str(self._real)
+
+    def __str__(self) -> str:
+        return str(self._real)
+
+
 class _ThreadRecordingCacheDir:
     """Stand-in for ``processor.cache_dir`` that records the scanning thread.
 
     Delegates to a real :class:`~pathlib.Path` so the endpoint keeps its normal
     behaviour, while capturing which thread performed each blocking filesystem
-    operation.
+    operation — both the directory-level ``exists()``/``glob()`` and the
+    per-entry ``open()``.
     """
 
     def __init__(self, real_dir: Path) -> None:
         self._real = real_dir
         self.scan_thread_ids: list[int] = []
+        self.read_thread_ids: list[int] = []
 
     def exists(self) -> bool:
         self.scan_thread_ids.append(threading.get_ident())
@@ -863,7 +885,10 @@ class _ThreadRecordingCacheDir:
 
     def glob(self, pattern: str):
         self.scan_thread_ids.append(threading.get_ident())
-        return list(self._real.glob(pattern))
+        return [
+            _ThreadRecordingPath(p, self.read_thread_ids)
+            for p in self._real.glob(pattern)
+        ]
 
 
 class TestVideosListOffloadsBlockingIO:
@@ -912,11 +937,18 @@ class TestVideosListOffloadsBlockingIO:
         assert recording_dir.scan_thread_ids, "cache directory was never scanned"
 
         loop_thread_id = loop_thread_ids[0]
-        assert all(
-            tid != loop_thread_id for tid in recording_dir.scan_thread_ids
-        ), (
+        assert all(tid != loop_thread_id for tid in recording_dir.scan_thread_ids), (
             "blocking cache scan ran on the event loop thread "
             f"({loop_thread_id}); observed {recording_dir.scan_thread_ids}"
+        )
+
+        # The directory scan and the per-entry read are separate blocking
+        # operations; assert the reads moved off-loop too rather than inferring
+        # it from the helper extraction.
+        assert recording_dir.read_thread_ids, "no cache entry was ever read"
+        assert all(tid != loop_thread_id for tid in recording_dir.read_thread_ids), (
+            "blocking cache entry read ran on the event loop thread "
+            f"({loop_thread_id}); observed {recording_dir.read_thread_ids}"
         )
 
     async def test_event_loop_stays_responsive_during_cache_scan(
@@ -975,11 +1007,13 @@ class TestVideosListOffloadsBlockingIO:
         # A responsive loop ticks ~30x during a 0.30s scan. Assert a very
         # conservative fraction of that to stay robust on loaded CI runners,
         # while still failing outright when the loop is fully blocked.
-        assert heartbeats >= 5, (
-            f"event loop was starved during the cache scan (ticks={heartbeats})"
-        )
+        assert (
+            heartbeats >= 5
+        ), f"event loop was starved during the cache scan (ticks={heartbeats})"
 
-    def test_offloaded_scan_returns_same_payload(self, client, mock_processor, tmp_cache):
+    def test_offloaded_scan_returns_same_payload(
+        self, client, mock_processor, tmp_cache
+    ):
         """Offloading must not change the response contract."""
         tmp_cache.mkdir(parents=True, exist_ok=True)
         _write_cache_file(tmp_cache, "auJzb1D-fag")
