@@ -20,11 +20,16 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
 import sys
+import threading
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -43,6 +48,7 @@ from youtube_extension.backend.real_api_endpoints import (  # noqa: E402
     VideoAnalysisResponse,
     VideoProcessingRequest,
     VideoValidationRequest,
+    _collect_processed_videos_sync,
     init_real_api_services,
     setup_real_api_endpoints,
 )
@@ -832,3 +838,190 @@ class TestSearchVideosEndpoint:
         response = client.post("/api/v2/search-videos?query=unusual+query")
         assert response.json()["total_results"] == 0
         assert response.json()["results"] == []
+
+
+# ===========================================================================
+# GET /api/v2/videos/list - blocking I/O offload (performance regression)
+# ===========================================================================
+
+
+class _ThreadRecordingCacheDir:
+    """Stand-in for ``processor.cache_dir`` that records the scanning thread.
+
+    Delegates to a real :class:`~pathlib.Path` so the endpoint keeps its normal
+    behaviour, while capturing which thread performed each blocking filesystem
+    operation.
+    """
+
+    def __init__(self, real_dir: Path) -> None:
+        self._real = real_dir
+        self.scan_thread_ids: list[int] = []
+
+    def exists(self) -> bool:
+        self.scan_thread_ids.append(threading.get_ident())
+        return self._real.exists()
+
+    def glob(self, pattern: str):
+        self.scan_thread_ids.append(threading.get_ident())
+        return list(self._real.glob(pattern))
+
+
+class TestVideosListOffloadsBlockingIO:
+    """The cache scan must not run on the event loop thread."""
+
+    def test_cache_scan_runs_off_the_event_loop_thread(
+        self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        recording_dir = _ThreadRecordingCacheDir(tmp_cache)
+        mock_processor.cache_dir = recording_dir
+
+        # get_real_video_processor() is invoked by the handler *on the event
+        # loop thread*, immediately before the scan is dispatched. Recording it
+        # here gives us the loop's thread id without assuming the test itself
+        # runs on that loop.
+        loop_thread_ids: list[int] = []
+
+        def _record_loop_thread():
+            loop_thread_ids.append(threading.get_ident())
+            return mock_processor
+
+        with (
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                side_effect=_record_loop_thread,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+        ):
+            with TestClient(api_app, raise_server_exceptions=False) as c:
+                response = c.get("/api/v2/videos/list")
+
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+
+        assert loop_thread_ids, "handler never resolved the processor"
+        assert recording_dir.scan_thread_ids, "cache directory was never scanned"
+
+        loop_thread_id = loop_thread_ids[0]
+        assert all(
+            tid != loop_thread_id for tid in recording_dir.scan_thread_ids
+        ), (
+            "blocking cache scan ran on the event loop thread "
+            f"({loop_thread_id}); observed {recording_dir.scan_thread_ids}"
+        )
+
+    async def test_event_loop_stays_responsive_during_cache_scan(
+        self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
+    ):
+        """A slow scan must not starve other tasks on the loop."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+
+        scan_duration = 0.30
+
+        class _SlowCacheDir:
+            def exists(self) -> bool:
+                return True
+
+            def glob(self, pattern: str):
+                time.sleep(scan_duration)
+                return []
+
+        mock_processor.cache_dir = _SlowCacheDir()
+
+        heartbeats = 0
+
+        async def _heartbeat():
+            nonlocal heartbeats
+            while True:
+                await asyncio.sleep(0.01)
+                heartbeats += 1
+
+        with (
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                return_value=mock_processor,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+        ):
+            transport = httpx.ASGITransport(app=api_app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as ac:
+                ticker = asyncio.create_task(_heartbeat())
+                try:
+                    response = await ac.get("/api/v2/videos/list")
+                finally:
+                    ticker.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await ticker
+
+        assert response.status_code == 200
+        # A responsive loop ticks ~30x during a 0.30s scan. Assert a very
+        # conservative fraction of that to stay robust on loaded CI runners,
+        # while still failing outright when the loop is fully blocked.
+        assert heartbeats >= 5, (
+            f"event loop was starved during the cache scan (ticks={heartbeats})"
+        )
+
+    def test_offloaded_scan_returns_same_payload(self, client, mock_processor, tmp_cache):
+        """Offloading must not change the response contract."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        response = client.get("/api/v2/videos/list")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload == _collect_processed_videos_sync(tmp_cache)
+
+
+class TestCollectProcessedVideosSync:
+    """Direct coverage of the extracted blocking helper."""
+
+    def test_missing_directory_returns_empty_list(self, tmp_path):
+        assert _collect_processed_videos_sync(tmp_path / "absent") == []
+
+    def test_empty_directory_returns_empty_list(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        assert _collect_processed_videos_sync(tmp_cache) == []
+
+    def test_corrupt_entry_is_skipped_without_failing_the_scan(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        (tmp_cache / "bad_processed.json").write_text("{invalid json", encoding="utf-8")
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        result = _collect_processed_videos_sync(tmp_cache)
+
+        assert [v["id"] for v in result] == ["auJzb1D-fag"]
+
+    def test_results_are_sorted_by_timestamp_descending(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "vid_a", {"timestamp": "2026-01-01T00:00:00Z"})
+        _write_cache_file(tmp_cache, "vid_b", {"timestamp": "2026-06-01T00:00:00Z"})
+
+        result = _collect_processed_videos_sync(tmp_cache)
+
+        assert [v["id"] for v in result] == ["vid_b", "vid_a"]
+
+    def test_non_matching_files_are_ignored(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        (tmp_cache / "notes.txt").write_text("ignore me", encoding="utf-8")
+        (tmp_cache / "other.json").write_text("{}", encoding="utf-8")
+
+        assert _collect_processed_videos_sync(tmp_cache) == []

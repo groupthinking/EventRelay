@@ -7,10 +7,12 @@ FastAPI endpoints that integrate real YouTube Data API, AI processing,
 and cost monitoring instead of mock data.
 """
 
+import asyncio
 import json
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
@@ -25,6 +27,54 @@ from .services.real_youtube_api import get_youtube_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+
+def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
+    """Scan the processing cache directory and parse every cached result.
+
+    This performs blocking filesystem work (directory stat, glob, and one
+    ``open()``/``json.load()`` per cache entry) and is therefore intended to be
+    executed in a worker thread via :func:`asyncio.to_thread` rather than
+    directly on the event loop.
+
+    Malformed or unreadable entries are skipped individually so that a single
+    corrupt file cannot fail the whole listing.
+    """
+    processed_videos: list[dict[str, Any]] = []
+
+    if not cache_dir.exists():
+        return processed_videos
+
+    for cache_file in cache_dir.glob("*_processed.json"):
+        try:
+            with open(cache_file, encoding='utf-8') as f:
+                video_data = json.load(f)
+
+            processed_videos.append({
+                "id": video_data.get('video_id'),
+                "video_url": video_data.get('video_url'),
+                "title": video_data.get('metadata', {}).get('title', 'Unknown'),
+                "channel": video_data.get('metadata', {}).get('channel_title', 'Unknown'),
+                "duration": video_data.get('metadata', {}).get('duration', 'Unknown'),
+                "processed_at": video_data.get('timestamp'),
+                "has_transcript": video_data.get('transcript', {}).get('has_transcript', False),
+                "ai_analysis_success": video_data.get('ai_analysis', {}).get('success', False),
+                "total_cost": video_data.get('cost_breakdown', {}).get('total_cost', 0.0),
+                "analysis": video_data.get('ai_analysis', {}),
+                "createdAt": video_data.get('timestamp'),
+                "updatedAt": video_data.get('timestamp')
+            })
+        except Exception as e:
+            logger.warning(f"Error loading cached video {cache_file}: {e}")
+
+    # Sort by processing timestamp
+    processed_videos.sort(
+        key=lambda x: x.get('processed_at', ''),
+        reverse=True
+    )
+
+    return processed_videos
+
 
 # Pydantic models for API requests/responses
 class VideoProcessingRequest(BaseModel):
@@ -188,40 +238,13 @@ def setup_real_api_endpoints(app: FastAPI):
         try:
             processor = get_real_video_processor()
 
-            # Get cached processed videos
-            cache_dir = processor.cache_dir
-            processed_videos = []
-
-            if cache_dir.exists():
-                for cache_file in cache_dir.glob("*_processed.json"):
-                    try:
-                        with open(cache_file, encoding='utf-8') as f:
-                            video_data = json.load(f)
-
-                        processed_videos.append({
-                            "id": video_data.get('video_id'),
-                            "video_url": video_data.get('video_url'),
-                            "title": video_data.get('metadata', {}).get('title', 'Unknown'),
-                            "channel": video_data.get('metadata', {}).get('channel_title', 'Unknown'),
-                            "duration": video_data.get('metadata', {}).get('duration', 'Unknown'),
-                            "processed_at": video_data.get('timestamp'),
-                            "has_transcript": video_data.get('transcript', {}).get('has_transcript', False),
-                            "ai_analysis_success": video_data.get('ai_analysis', {}).get('success', False),
-                            "total_cost": video_data.get('cost_breakdown', {}).get('total_cost', 0.0),
-                            "analysis": video_data.get('ai_analysis', {}),
-                            "createdAt": video_data.get('timestamp'),
-                            "updatedAt": video_data.get('timestamp')
-                        })
-                    except Exception as e:
-                        logger.warning(f"Error loading cached video {cache_file}: {e}")
-
-            # Sort by processing timestamp
-            processed_videos.sort(
-                key=lambda x: x.get('processed_at', ''),
-                reverse=True
+            # The cache scan stats a directory, globs it, and reads/parses one
+            # JSON file per cached video. That is unbounded blocking I/O which
+            # would otherwise stall the event loop for every concurrent request,
+            # so it runs in a worker thread.
+            return await asyncio.to_thread(
+                _collect_processed_videos_sync, processor.cache_dir
             )
-
-            return processed_videos
 
         except Exception as e:
             logger.error(f"Error getting processed videos list: {e}")
