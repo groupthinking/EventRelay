@@ -28,7 +28,7 @@ Live status matrix for the 5 ready PRs (real CI / review / mergeable), oldest-fi
 | 1281 | sentinel bot | fix(security): route API errors through formatter | ❌ truth-gate `invalid_payload` (+ Vercel false-red) | none | diagnosed; systemic gate blocker, not PR-fixable | `HALTED(ci_failing_systemic)` |
 | 1285 | groupthinking | fix(ci): surface collection errors behind `invalid_payload` | ✅ green | ✅ CodeRabbit **approved** | verified green + reviewed | `HALTED(awaiting_merge_approval)` |
 | 1288 | groupthinking | perf: scan processed-video cache off the event loop | ✅ green | ✅ CodeRabbit review completed | verified green + reviewed | `HALTED(awaiting_merge_approval)` |
-| 1289 | groupthinking | fix(codegen): real health timestamp + fail-closed scaffolding | ✅ green | Copilot requested | superseded — see below | `DEFERRED(superseded)` |
+| 1289 | groupthinking | fix(codegen): real health timestamp + fail-closed scaffolding | ✅ green | truth-gate passed | verified real diff vs `origin/main`; merge-ready | `HALTED(awaiting_merge_approval)` |
 
 Legend: **truth-gate** = `agent-completion/truth-gate/pr-<n>` GitHub Actions check;
 **false-red** = a "Canceled from the Vercel Dashboard" commit status that is red while
@@ -56,24 +56,32 @@ change only — it keeps `verdict`/`reasons` byte-identical and merely adds the 
 unblock them. It is still worth merging (it is green, reviewed, and improves every future
 `invalid_payload` report), but it is not the unblock.
 
-## Finding 2 — #1289 is superseded (already merged as #1257)
+## Finding 2 — #1289 is merge-ready (CORRECTED — it is NOT superseded)
 
-`#1289`'s head SHA `a15e4bd` is **identical to current `main` HEAD**
-(`a15e4bd fix(codegen): ... (#1257)`). Its body says `Closes #1257`, and #1257 is already
-merged. The PR therefore has no diff to merge against `main`. **Recommend: close #1289**
-(the work already shipped via #1257). No code action needed.
+> **Correction.** An earlier version of this doc called #1289 "superseded, recommend
+> close." That was an error: it compared #1289's head to the local workspace tip
+> (`a15e4bd`, which happened to be #1289's own head) instead of to `origin/main`.
+> Verified against `origin/main` (`94b517c`):
+> - `origin/main:src/youtube_extension/backend/code_generator.py:1172` **still emits the
+>   constant `"2024-01-01T00:00:00Z"`** health timestamp — the exact defect #1289 fixes.
+> - `a15e4bd` is **not an ancestor of `origin/main`** — the fix is genuinely absent from main.
+> - `mergeable_state: clean`; all checks green (CodeRabbit skipped-by-label, Vercel
+>   deployed, `agent-completion/truth-gate/pr-1289` = `not_applicable: all rules passed`).
+
+`#1289` is therefore a legitimate, green, conflict-free PR that re-lands the #1257 codegen
+fix which `main` still lacks. **Recommend: MERGE #1289** (not close). It is `HALTED` only on
+the human Publish Gate — it carries no `automerge` label and `main` is protected, so this
+routine does not merge it autonomously.
 
 ## Staged next commands (human gate — not executed)
 
 ```bash
-# 1. Merge the two green, reviewed PRs (protected branch → human click required):
+# 1. Merge the three green, reviewed PRs (protected branch → human click required):
 gh pr merge 1285 --squash --repo groupthinking/eventrelay   # CodeRabbit-approved, truth-gate passed
 gh pr merge 1288 --squash --repo groupthinking/eventrelay   # green, review completed
+gh pr merge 1289 --squash --repo groupthinking/eventrelay   # green + clean; re-lands #1257 codegen fix main still lacks
 
-# 2. Close the superseded no-op:
-gh pr close 1289 --repo groupthinking/eventrelay --comment "Superseded — content already merged as #1257 (head == main HEAD)."
-
-# 3. Unblock #1280/#1281 (architectural — pick one, then re-run the gate):
+# 2. Unblock #1280/#1281 (architectural — pick one, then re-run the gate):
 #    A) link each PR to an AgentTask issue, OR
 #    B) adjust the truth-gate applicability heuristic (scripts/ci/agent_completion_gate.py)
 ```
@@ -88,7 +96,11 @@ are ready for the publish pipeline until marked ready-for-review by their author
 ## Loop determination
 
 **No more autonomous work remains.** Every open PR is in a terminal state: 65
-`DEFERRED(draft)`, 1 `DEFERRED(superseded)`, 2 `HALTED(awaiting_merge_approval)` (green,
-one human click each), 2 `HALTED(ci_failing_systemic)` (architectural, human decision).
-There is no action that advances any PR to `MERGED` without human sign-off, so the
-remediation loop halts here rather than spinning.
+`DEFERRED(draft)`, 3 `HALTED(awaiting_merge_approval)` (#1285, #1288, #1289 — green, one
+human click each), 2 `HALTED(ci_failing_systemic)` (#1280, #1281 — architectural, human
+decision). There is no action that advances any PR to `MERGED` without human sign-off, so
+the remediation loop halts here rather than spinning.
+
+_Update (webhook `pull_request.review_requested` on #1289): re-verified #1289 against
+`origin/main` and corrected Finding 2 — it is merge-ready, not superseded. State unchanged
+otherwise; still human-gated on merge._
