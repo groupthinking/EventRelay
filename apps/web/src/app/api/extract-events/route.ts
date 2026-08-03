@@ -257,12 +257,10 @@ Respond with ONLY valid JSON matching the required structure.`;
   } catch (error) {
     console.error('Event extraction error:', error);
     // SECURITY: Prevent information disclosure by masking the raw error message
-    const message = formatApiError(error).message;
-
     return NextResponse.json({
       success: false,
-      error: message,
+      error: 'Internal server error',
       data: { events: [], actions: [], summary: '', topics: [] },
-    });
+    }, { status: 500 });
   }
 }
