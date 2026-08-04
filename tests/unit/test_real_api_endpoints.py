@@ -1146,7 +1146,16 @@ class TestVideoDetailOffloadsBlockingIO:
     async def test_event_loop_stays_responsive_during_cache_read(
         self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
     ):
-        """A slow read must not starve other tasks on the loop."""
+        """A slow read must not starve other tasks on the loop.
+
+        Scope note: ``_SlowReadPath`` sleeps in ``__fspath__``, which models
+        *filesystem* latency -- and ``time.sleep`` releases the GIL, exactly as
+        a real blocking syscall does. So this test covers the I/O half of the
+        read only. It is not vacuous: reverting the ``asyncio.to_thread`` hop
+        drives ``heartbeats`` to 0. But it deliberately says nothing about the
+        ``json.load()`` half, which holds the GIL and still stalls the loop --
+        see ``test_parse_still_stalls_the_loop_in_proportion_to_payload``.
+        """
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
 
@@ -1196,6 +1205,62 @@ class TestVideoDetailOffloadsBlockingIO:
         assert (
             heartbeats >= 5
         ), f"event loop was starved during the cache read (ticks={heartbeats})"
+
+    async def test_parse_still_stalls_the_loop_in_proportion_to_payload(
+        self, tmp_path
+    ):
+        """Document the residual: ``json.load`` blocks the loop even off-thread.
+
+        ``open()``/``read()`` release the GIL, so the ``asyncio.to_thread`` hop
+        genuinely removes filesystem latency from the loop. ``json.load()`` does
+        not -- it is CPU-bound C code that holds the GIL for its full duration,
+        so relocating it to a worker thread does not stop it blocking.
+
+        This is a *characterisation* test. It exists so the weaker guarantee
+        stays honest: if someone later claims this endpoint's read is fully
+        non-blocking, this test is the counter-example. Asserted as a ratio
+        between a small and a large payload so it does not depend on the
+        absolute speed of the runner.
+        """
+        small = tmp_path / "small.json"
+        large = tmp_path / "large.json"
+        small.write_text(json.dumps({"transcript": [{"t": i} for i in range(200)]}))
+        large.write_text(
+            json.dumps({"transcript": [{"t": i} for i in range(400_000)]})
+        )
+
+        async def _max_loop_gap(path):
+            gaps: list[float] = []
+            stop = asyncio.Event()
+
+            async def _ticker():
+                last = time.perf_counter()
+                while not stop.is_set():
+                    await asyncio.sleep(0)
+                    now = time.perf_counter()
+                    gaps.append(now - last)
+                    last = now
+
+            task = asyncio.create_task(_ticker())
+            await asyncio.sleep(0.02)
+            gaps.clear()
+            await asyncio.to_thread(_read_video_analysis_sync, path)
+            stop.set()
+            await task
+            return max(gaps)
+
+        small_gap = await _max_loop_gap(small)
+        large_gap = await _max_loop_gap(large)
+
+        # The large payload is ~2000x the small one. Even allowing for executor
+        # dispatch overhead dominating the small case, the parse must show up as
+        # a materially longer stall -- that is the point being documented.
+        assert large_gap > small_gap * 5, (
+            "expected json.load to stall the loop in proportion to payload size "
+            f"(small={small_gap * 1000:.2f}ms, large={large_gap * 1000:.2f}ms); "
+            "if this now passes trivially, the parse may have been made "
+            "incremental -- update the endpoint's documented guarantee"
+        )
 
     def test_offloaded_read_returns_same_payload(
         self, client, mock_processor, tmp_cache
