@@ -1313,14 +1313,16 @@ class TestFixBuildErrorsConcurrency:
         gen.router.generate = AsyncMock(return_value="const fixed = true;")
 
         write_started = threading.Event()
+        may_finish = threading.Event()
         real_write = Path.write_text
 
         def _slow_write(self, *args, **kwargs):
             if self == target:
                 write_started.set()
-                # Hold the worker thread open long enough for the test to
-                # cancel while this write is genuinely mid-flight.
-                threading.Event().wait(0.3)
+                # Block until the test explicitly releases us. A fixed sleep
+                # would let this write complete early on a slow runner and the
+                # test would pass without ever opening the race window.
+                may_finish.wait(5)
             return real_write(self, *args, **kwargs)
 
         monkeypatch.setattr(Path, "write_text", _slow_write)
@@ -1334,8 +1336,18 @@ class TestFixBuildErrorsConcurrency:
         assert write_started.is_set()
         task.cancel()
 
-        with pytest.raises(asyncio.CancelledError):
-            await task
+        # Release the worker only after the cancellation has been delivered.
+        # With the drain the coroutine is parked on the write and observes it
+        # complete; without it the coroutine has already unwound and the file
+        # is still unwritten when the assertion below runs.
+        releaser = threading.Timer(0.2, may_finish.set)
+        releaser.start()
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            releaser.cancel()
+            may_finish.set()
 
         # Cancellation propagated only after the write was drained, so the file
         # is whole. Without the drain this still holds the pre-fix contents.
