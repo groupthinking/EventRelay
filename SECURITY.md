@@ -37,6 +37,12 @@ If email is unavailable, open a private security advisory via the GitHub reposit
 - Use feature flags when integrating new agents to avoid exposing experimental endpoints in production.
 - Monitor dependencies with `scripts/check_credentials.py` and container scans in your CI pipeline.
 
+### Accepted npm Audit Residuals
+
+- `GHSA-mh99-v99m-4gvg` (`brace-expansion` unbounded expansion OOM) may continue to appear in `npm audit` for legacy 1.x/2.x lines because the advisory database only records `<=5.0.7`.
+- EventRelay pins non-vulnerable floors for those lines (`1.1.17+` and `2.1.3+`) via root `overrides`, and current lockfile resolutions are `1.1.18` and `2.1.4`.
+- A major jump to `brace-expansion@5` for every transitive consumer is not currently a safe drop-in change for these dependency lines, so this residual is an accepted, documented false-positive until upstream advisory metadata is corrected.
+
 ### Container Security Scanning
 
 The project uses [Trivy](https://github.com/aquasecurity/trivy) for automated container vulnerability scanning in CI/CD:
