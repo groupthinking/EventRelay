@@ -145,6 +145,8 @@ function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisR
     architectureCode: '',
     ingestScript: '',
     e22Snippets: [],
+    // F3: keep backend plan surface (not only task_board → actions).
+    project_scaffold: transcriptAction.project_scaffold ?? null,
   };
 }
 
@@ -706,6 +708,8 @@ async function* generateAgentEvents(
       transcript: analysis.transcript,
       architectureCode: analysis.architectureCode,
       workflow,
+      // F3: plumb TranscriptActionAgent scaffold into dashboard insights.
+      project_scaffold: analysis.project_scaffold ?? null,
     },
     timestamp: new Date().toISOString(),
   });
