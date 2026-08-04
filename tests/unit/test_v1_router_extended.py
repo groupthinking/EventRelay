@@ -2180,10 +2180,16 @@ class TestAdditionalErrorPaths:
         assert resp.status_code == 500
 
     def test_performance_report_error(self, client):
-        """record_metric raises → 500."""
+        """record_metrics raises → 500.
+
+        The report endpoint ingests the whole payload in one batched
+        ``record_metrics`` call, so the failure has to be injected there;
+        patching the singular ``record_metric`` is inert and the request
+        would succeed with a 200.
+        """
         with patch.object(
             router_module.performance_monitor,
-            "record_metric",
+            "record_metrics",
             new_callable=AsyncMock,
             side_effect=RuntimeError("monitor error"),
         ):

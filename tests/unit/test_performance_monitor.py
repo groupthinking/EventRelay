@@ -1191,6 +1191,20 @@ class TestRecordMetricsBatch:
         return _wrapped
 
     @staticmethod
+    def _impl_module():
+        """The module whose globals ``PerformanceMonitor`` methods actually read.
+
+        This file's preamble deliberately re-imports the performance monitor,
+        and CI runs with ``PYTHONPATH=src`` so the package can also resolve
+        under a second name. Either can leave the module-level ``perf_mod``
+        alias bound to a *different* module object than the one the class was
+        defined in, at which point ``monkeypatch.setattr(perf_mod, ...)``
+        silently no-ops and the real ``psutil`` runs instead of the fake.
+        Resolving from the class is correct under every import identity.
+        """
+        return sys.modules[PerformanceMonitor.__module__]
+
+    @staticmethod
     def _samples(n):
         return [
             {
@@ -1339,10 +1353,11 @@ class TestRecordMetricsBatch:
                 num_threads=lambda: 8,
             ),
         )
-        monkeypatch.setattr(perf_mod, "psutil", fake_psutil)
+        monkeypatch.setattr(self._impl_module(), "psutil", fake_psutil)
 
+        monitor.metrics_buffer.clear()
         calls: list[int] = []
-        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+        with patch.object(self._impl_module().sqlite3, "connect", self._counting_connect(calls)):
             await monitor._monitor_system_resources()
 
         assert len(calls) == 1, (
@@ -1369,8 +1384,9 @@ class TestRecordMetricsBatch:
             ),
             Process=_no_process,
         )
-        monkeypatch.setattr(perf_mod, "psutil", fake_psutil)
+        monkeypatch.setattr(self._impl_module(), "psutil", fake_psutil)
 
+        monitor.metrics_buffer.clear()
         await monitor._monitor_system_resources()
 
         # The four system-level metrics still land even though the process
