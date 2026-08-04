@@ -368,31 +368,7 @@ class PerformanceMonitor:
 
     async def _store_metric(self, metric: PerformanceMetric):
         """Store metric in database"""
-
-        def _write() -> None:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            cursor.execute('''
-                INSERT INTO performance_metrics
-                (component, metric_name, value, unit, tags, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                metric.component,
-                metric.metric_name,
-                metric.value,
-                metric.unit,
-                json.dumps(metric.tags),
-                metric.timestamp.isoformat()
-            ))
-
-            conn.commit()
-            conn.close()
-
-        try:
-            await asyncio.to_thread(_write)
-        except Exception as e:
-            logger.error(f"Failed to store metric in database: {e}")
+        await self._store_metrics([metric])
 
     async def _check_alert_thresholds(self, metric: PerformanceMetric):
         """Check if metric exceeds alert thresholds"""
