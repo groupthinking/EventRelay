@@ -1332,7 +1332,15 @@ class TestEnqueueBatchConcurrency:
         ]
 
     async def test_batch_enqueues_concurrently(self):
-        """Wall time must be far below the serial sum of RPC latencies."""
+        """Wall time must be far below the serial sum of RPC latencies.
+
+        The fan-out bound is pinned to ``count`` for this timing-only test so the
+        assertion measures *that* the batch fans out, independent of the host's
+        CPU count. Left unpinned, ``_ENQUEUE_MAX_CONCURRENCY`` floors at 2 on a
+        single-CPU runner, making 8x50 ms take four waves (200 ms) and tripping
+        the ``< serial_floor / 2`` (200 ms) bound. The derived value itself is
+        exercised by ``test_batch_bounds_in_flight_concurrency`` below.
+        """
         count, delay = 8, 0.05
         mock_tv2 = _routing_tasks_v2()
         svc = _initialized_service(mock_tv2)
@@ -1348,6 +1356,7 @@ class TestEnqueueBatchConcurrency:
         with (
             patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
             patch.object(m, "tasks_v2", mock_tv2),
+            patch.object(m, "_ENQUEUE_MAX_CONCURRENCY", count),
         ):
             started = time.perf_counter()
             ids = await svc.enqueue_batch(self._video_tasks(count))
