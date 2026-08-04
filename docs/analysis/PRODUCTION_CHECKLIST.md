@@ -1,19 +1,20 @@
 # EventRelay Production Checklist
 
 **Assessment Date:** 2025-12-03  
+**Last Re-verified:** 2026-08-04 (security/dependency findings re-checked against code)  
 **Target Environment:** Cloud (GCP Cloud Run)
 
 ---
 
 ## 🚦 Go/No-Go Decision Matrix
 
-### Overall Status: **🔴 NO-GO** (Until P0 items resolved)
+### Overall Status: **🟡 CONDITIONAL** (security blockers cleared; operational readiness items remain)
 
 | Category | Status | Blockers |
 |----------|--------|----------|
-| Security | 🔴 NO-GO | 3 critical items |
-| Dependencies | 🔴 NO-GO | 31 npm vulnerabilities |
-| Testing | 🟡 CONDITIONAL | Fragmented but functional |
+| Security | 🟢 GO | SEC-001..005 resolved (see SECURITY_REPORT.md Resolution Status) |
+| Dependencies | 🟢 GO | Vulnerable `devalue` chain removed; `next` pinned `^16.2.11` |
+| Testing | 🟡 CONDITIONAL | Coverage enforced (`fail_under = 88.1833`); E2E/perf gaps remain |
 | CI/CD | 🟢 GO | Pipelines present |
 | Observability | 🟢 GO | Logging configured |
 | Configuration | 🟡 CONDITIONAL | Needs cleanup |
@@ -26,11 +27,11 @@
 
 ### Critical (Must Pass)
 
-- [ ] **SEC-001:** Pickle vulnerability fixed in `intelligent_cache.py`
-- [ ] **SEC-002:** `npm audit --audit-level=high` returns 0 vulnerabilities
-- [ ] **SEC-003:** No `dangerouslySetInnerHTML` with dynamic content
-- [ ] **SEC-004:** Subprocess input audit completed
-- [ ] **SEC-005:** `.env` file gitignored (verified ✅)
+- [x] **SEC-001:** Pickle vulnerability fixed in `intelligent_cache.py`
+- [x] **SEC-002:** `npm audit --audit-level=high` returns 0 vulnerabilities
+- [x] **SEC-003:** No `dangerouslySetInnerHTML` with dynamic content
+- [x] **SEC-004:** Subprocess input audit completed
+- [x] **SEC-005:** `.env` file gitignored (verified ✅)
 
 ### Required (Should Pass)
 
@@ -135,7 +136,7 @@
 ### Unit Tests
 
 - [x] Unit tests present (~60 files)
-- [ ] Coverage meets threshold (>80%)
+- [x] Coverage meets threshold (>80%) — enforced at `fail_under = 88.1833` in `pyproject.toml`
 - [ ] Critical paths covered
 - [ ] Edge cases tested
 
@@ -237,16 +238,21 @@
 
 ## 🎯 Production Readiness Score
 
+*Re-scored 2026-08-04 after verifying the security and dependency findings are
+resolved and coverage is enforced in CI. Operational areas (staging, load
+testing, runbooks, alerting) were not re-assessed and keep their original
+scores.*
+
 | Area | Weight | Score | Weighted |
 |------|--------|-------|----------|
-| Security | 30% | 40/100 | 12 |
-| Testing | 20% | 60/100 | 12 |
+| Security | 30% | 85/100 | 25.5 |
+| Testing | 20% | 70/100 | 14 |
 | CI/CD | 15% | 80/100 | 12 |
 | Observability | 15% | 70/100 | 10.5 |
 | Documentation | 10% | 50/100 | 5 |
 | Infrastructure | 10% | 60/100 | 6 |
 
-**Total Score: 57.5/100** - **NOT READY FOR PRODUCTION**
+**Total Score: 73/100** - **CONDITIONAL** (was 57.5/100 🔴 NO-GO in the 2025-12-03 assessment)
 
 ### Required for Launch: **75/100**
 
@@ -254,12 +260,10 @@
 
 ## 🚀 Path to Production
 
-1. **Week 1:** Fix critical security issues → +20 points
-2. **Week 2:** Resolve npm vulnerabilities → +10 points
-3. **Week 3:** Consolidate tests, add coverage → +5 points
-4. **Week 4:** Documentation and monitoring → +5 points
-
-**Projected Score After Remediation:** 97.5/100 - **READY FOR PRODUCTION**
+1. ~~Fix critical security issues~~ ✅ Done (SEC-001..005 resolved)
+2. ~~Resolve npm vulnerabilities~~ ✅ Done (`devalue` chain removed, `next` ≥16.2.11)
+3. Load testing and baseline performance metrics
+4. Staging validation, runbooks, and alerting → clears the 75-point launch bar
 
 ---
 

@@ -6,6 +6,26 @@
 
 ---
 
+## ✅ Resolution Status (re-verified against code, 2026-08-04)
+
+The findings below are preserved as originally written for the historical
+record. Re-verification against the current codebase shows all of them
+resolved:
+
+| Finding | Status | Evidence |
+|---------|--------|----------|
+| SEC-001 (pickle) | ✅ RESOLVED | `src/youtube_extension/backend/services/intelligent_cache.py` uses JSON serialization (`# pickle removed for security`); no `import pickle` remains under `src/youtube_extension/` |
+| SEC-002 (npm vulns) | ✅ RESOLVED | Vulnerable `devalue` chain no longer in `package-lock.json`; `next` pinned `^16.2.11` via root `overrides` (resolves 16.2.12, past the 15.6.0-canary.0–16.1.4 vulnerable range) |
+| SEC-003 (dangerouslySetInnerHTML) | ✅ RESOLVED | The old `frontend/` directory (incl. `LearningFusion.tsx`) was removed in the `apps/web` migration; zero `dangerouslySetInnerHTML` usages in `apps/` or `src/` |
+| SEC-004 (subprocess) | ✅ RESOLVED | Subprocess calls use list-form args (no `shell=True`) with explicit SECURITY comments (e.g. `cli.py`, `enhanced_video_processor.py`) |
+| SEC-005 (os.system in external lib) | ✅ RESOLVED | `video_representations_extractor-1.14.0/` no longer exists in the repository |
+| Stripe placeholder defaults | ✅ RESOLVED 2026-08-04 | `ai_code_generator.py` env generators default to empty strings, never placeholder-looking secrets |
+
+Coverage enforcement is also now real: `[tool.coverage.report] fail_under =
+88.1833` in `pyproject.toml`, enforced by `.github/workflows/coverage.yml`.
+
+---
+
 ## 🔴 CRITICAL Vulnerabilities
 
 ### SEC-001: Insecure Deserialization (Pickle)
@@ -243,11 +263,11 @@ os.system(f'onnxsim {f} {f} && open {f}')
 
 ### Pre-Production Security Gate
 
-- [ ] **SEC-001:** Pickle vulnerability fixed
-- [ ] **SEC-002:** npm audit shows 0 high/critical vulnerabilities
-- [ ] **SEC-003:** dangerouslySetInnerHTML removed or sanitized
-- [ ] **SEC-004:** Subprocess input validation audit complete
-- [ ] **SEC-005:** External library vulnerability isolated
+- [x] **SEC-001:** Pickle vulnerability fixed
+- [x] **SEC-002:** npm audit shows 0 high/critical vulnerabilities
+- [x] **SEC-003:** dangerouslySetInnerHTML removed or sanitized
+- [x] **SEC-004:** Subprocess input validation audit complete
+- [x] **SEC-005:** External library vulnerability isolated
 
 ### Ongoing Security Hygiene
 

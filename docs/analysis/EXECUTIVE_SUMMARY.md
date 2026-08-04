@@ -8,6 +8,17 @@
 
 ## 🎯 Overall Assessment: **YELLOW** - Requires Remediation Before Production
 
+> **⚠️ Superseded (2026-08-04):** The security findings in this 2025-12-03
+> analysis have since been resolved and re-verified against the current
+> codebase — pickle deserialization removed (JSON-based
+> `intelligent_cache.py`), the `frontend/` directory (and its
+> `dangerouslySetInnerHTML` usage) replaced by `apps/web`, subprocess calls
+> hardened to list-form args, and the npm vulnerability chain eliminated
+> (`devalue` gone, `next` pinned `^16.2.11`). See the Resolution Status
+> tables in [SECURITY_REPORT.md](./SECURITY_REPORT.md) and
+> [REMEDIATION_PLAN.md](./REMEDIATION_PLAN.md). The assessment below is
+> retained as a historical snapshot.
+
 The EventRelay codebase shows strong architectural vision but requires targeted security fixes and code consolidation before production deployment.
 
 ### Key Metrics
