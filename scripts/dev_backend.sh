@@ -15,6 +15,25 @@ if [[ -f .venv/bin/activate ]]; then
   source .venv/bin/activate
 fi
 
+# The FastAPI app loads a root .env at startup (backend/main.py). Mirror that here
+# for the two auth vars so a key configured only in .env is honored BEFORE the
+# fail-open default below. Without this, EVENTRELAY_API_KEY set only in .env is
+# invisible to the check, we export ALLOW_UNAUTHENTICATED=1, and — because that
+# opt-in takes precedence in the middleware — the backend silently runs OPEN.
+if [[ -f .env ]]; then
+  for _var in EVENTRELAY_API_KEY ALLOW_UNAUTHENTICATED; do
+    [[ -n "${!_var:-}" ]] && continue
+    _line="$(grep -E "^[[:space:]]*(export[[:space:]]+)?${_var}=" .env | tail -n1 || true)"
+    [[ -z "$_line" ]] && continue
+    _val="${_line#*=}"
+    _val="${_val%$'\r'}"           # strip trailing CR from CRLF files
+    _val="${_val#\"}"; _val="${_val%\"}"   # strip surrounding double quotes
+    _val="${_val#\'}"; _val="${_val%\'}"   # strip surrounding single quotes
+    [[ -n "$_val" ]] && export "${_var}=${_val}"
+  done
+  unset _var _line _val
+fi
+
 if [[ -z "${EVENTRELAY_API_KEY:-}" && -z "${ALLOW_UNAUTHENTICATED:-}" ]]; then
   export ALLOW_UNAUTHENTICATED=1
   echo "dev_backend: ALLOW_UNAUTHENTICATED=1 (local fail-open; set EVENTRELAY_API_KEY to require X-API-Key)"

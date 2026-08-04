@@ -205,7 +205,11 @@ def _auth_mode() -> str:
         "on",
     }:
         return "open_dev"
-    if (os.getenv("EVENTRELAY_API_KEY") or "").strip():
+    # Mirror APIKeyAuthMiddleware, which treats ANY non-empty EVENTRELAY_API_KEY
+    # (whitespace included) as configured. Do not .strip() here: a whitespace-only
+    # key makes the middleware require that key on protected routes, so reporting
+    # "fail_closed" would contradict actual request handling.
+    if os.getenv("EVENTRELAY_API_KEY"):
         return "api_key"
     return "fail_closed"
 
