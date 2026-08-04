@@ -100,7 +100,7 @@ jobs:
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - name: Validate required secrets
         env:
@@ -144,7 +144,7 @@ jobs:
       fail-fast: false
       max-parallel: 4
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/setup-python@v7
         with:
@@ -200,7 +200,7 @@ jobs:
       delivered: ${{ steps.aggregate.outputs.delivered }}
       blocked: ${{ steps.aggregate.outputs.blocked }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: actions/download-artifact@v7
         with:
