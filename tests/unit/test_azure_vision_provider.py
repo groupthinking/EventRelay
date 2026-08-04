@@ -1251,7 +1251,8 @@ class _ThreadRecordingOpen:
 
 
 class TestAzureVisionImageReadOffEventLoop:
-    async def test_local_file_read_runs_on_worker_thread(self, tmp_path):
+    async def test_local_file_read_runs_on_worker_thread(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         img_file = tmp_path / "frame.jpg"
         img_file.write_bytes(b"\xff\xd8\xff\xe0")
@@ -1281,8 +1282,9 @@ class TestAzureVisionImageReadOffEventLoop:
         assert result is None
         assert recorder.threads == []
 
-    async def test_missing_file_still_raises_file_not_found(self, tmp_path):
+    async def test_missing_file_still_raises_file_not_found(self, tmp_path, monkeypatch):
         """Offloading must not swallow or re-wrap I/O errors."""
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         with pytest.raises(FileNotFoundError):
             await provider._prepare_image_input(str(tmp_path / "does-not-exist.jpg"))
