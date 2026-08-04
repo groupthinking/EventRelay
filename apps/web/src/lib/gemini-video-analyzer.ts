@@ -48,6 +48,8 @@ export interface VideoAnalysisResult {
     code: string;
     language: string;
   }[];
+  /** Optional TranscriptActionAgent project scaffold (backend path). */
+  project_scaffold?: unknown;
 }
 
 /**

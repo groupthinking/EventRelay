@@ -4,7 +4,14 @@ import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import InteractiveTranscript, { type TranscriptSegment } from '@/components/InteractiveTranscript';
+import {
+  buildScaffoldPackage,
+  downloadScaffoldPackage,
+  summarizeProjectScaffold,
+  type ActionCardLike,
+} from '@/lib/action-surface';
 import { hasRichDashboardInsights, isThinDashboardAnalysis } from '@/lib/dashboard-analysis';
+import { useActionAgentStore } from '@/store/action-agent-store';
 import type { SearchResult, Video } from '@/store/dashboard-types';
 
 const TranscriptViewer = dynamic(() => import('@/components/TranscriptViewer'), {
@@ -186,8 +193,199 @@ export function ActionsPanel({
   video: Video;
   onExtractEvents?: (videoId: string) => void;
 }) {
+  const transcript = (video.transcript || '').trim();
+  const hasTranscript = transcript.length > 40;
+  const { lifecycle, isRunning, runFromTranscript, reset } = useActionAgentStore();
+  const fulfilled = lifecycle.actions || [];
+  const plannedActions = video.insights?.actions || [];
+  const projectScaffold = video.insights?.project_scaffold;
+  const scaffoldPreview = summarizeProjectScaffold(projectScaffold);
+
+  const exportScaffold = () => {
+    // Prefer tool-fulfilled titles; fall back to planned analysis actions.
+    const fromTools: ActionCardLike[] = fulfilled
+      .filter((a) => typeof a.input?.title === 'string' || a.tool)
+      .map((a) => ({
+        title:
+          typeof a.input?.title === 'string'
+            ? a.input.title
+            : a.tool.replace(/_/g, ' '),
+        description:
+          a.result ||
+          (typeof a.input?.description === 'string' ? a.input.description : ''),
+        category: a.tool,
+      }));
+    const fromPlan: ActionCardLike[] = plannedActions.map((a) => ({
+      title: a.title,
+      description: a.description,
+      category: a.category,
+      estimatedMinutes: a.estimatedMinutes,
+    }));
+    const actions = fromTools.length > 0 ? fromTools : fromPlan;
+    const pkg = buildScaffoldPackage({
+      projectName: video.title || 'eventrelay-project',
+      actions,
+      projectScaffold,
+    });
+    downloadScaffoldPackage(pkg);
+  };
+
+  const canExport =
+    fulfilled.length > 0 || plannedActions.length > 0 || projectScaffold != null;
+
   return (
     <div className="space-y-4">
+      {/* F12: Act on findings via /api/agents/actions */}
+      <section
+        className="rounded-xl border p-4 space-y-3"
+        style={{ borderColor: 'rgba(129,140,248,0.25)', background: 'rgba(129,140,248,0.06)' }}
+      >
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#a5b4fc' }}>
+              Act on findings
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(248,245,253,0.55)' }}>
+              Canonical action surface (F3): run tools via{' '}
+              <code className="text-[10px]">/api/agents/actions</code>, then export a scaffold package.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {fulfilled.length > 0 && (
+              <button
+                type="button"
+                onClick={() => reset()}
+                className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded"
+                style={{ color: 'rgba(248,245,253,0.5)', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                Clear
+              </button>
+            )}
+            <button
+              type="button"
+              disabled={!hasTranscript || isRunning}
+              onClick={() => runFromTranscript(transcript, video.title)}
+              className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded disabled:opacity-40"
+              style={{
+                background: 'rgba(129,140,248,0.2)',
+                color: '#c7d2fe',
+                border: '1px solid rgba(129,140,248,0.4)',
+              }}
+            >
+              {isRunning ? 'Acting…' : 'Act on findings'}
+            </button>
+          </div>
+        </div>
+
+        {!hasTranscript && (
+          <p className="text-xs" style={{ color: 'rgba(248,245,253,0.4)' }}>
+            Need a transcript on this video before the action agent can run.
+          </p>
+        )}
+
+        {lifecycle.phase !== 'idle' && (
+          <p className="text-[11px] font-mono" style={{ color: 'rgba(165,180,252,0.8)' }}>
+            Phase: {lifecycle.phase}
+            {lifecycle.provider ? ` · ${lifecycle.provider}` : ''}
+            {lifecycle.error ? ` · ${lifecycle.error}` : ''}
+          </p>
+        )}
+
+        {fulfilled.length > 0 && (
+          <ul className="space-y-2">
+            {fulfilled.map((action, i) => (
+              <li
+                key={`${action.tool}-${i}`}
+                className="rounded-lg border px-3 py-2"
+                style={{
+                  borderColor:
+                    action.status === 'failed' || action.isError
+                      ? 'rgba(248,113,113,0.35)'
+                      : 'rgba(52,211,153,0.25)',
+                  background: 'rgba(0,0,0,0.2)',
+                }}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold" style={{ color: '#f8f5fd' }}>
+                    {action.tool}
+                  </span>
+                  <span
+                    className="text-[10px] font-mono uppercase"
+                    style={{
+                      color:
+                        action.status === 'failed' || action.isError ? '#fca5a5' : '#6ee7b7',
+                    }}
+                  >
+                    {action.status}
+                  </span>
+                </div>
+                {action.result && (
+                  <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(172,170,177,0.9)' }}>
+                    {action.result}
+                  </p>
+                )}
+                {typeof action.input?.title === 'string' && (
+                  <p className="mt-0.5 text-[11px]" style={{ color: 'rgba(248,245,253,0.45)' }}>
+                    {action.input.title}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* F3: Plan surface — TranscriptActionAgent project_scaffold + package export */}
+      <section
+        className="rounded-xl border p-4 space-y-3"
+        style={{ borderColor: 'rgba(52,211,153,0.2)', background: 'rgba(52,211,153,0.05)' }}
+      >
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6ee7b7' }}>
+              Project scaffold
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(248,245,253,0.55)' }}>
+              Plan from analysis (<code className="text-[10px]">project_scaffold</code>) plus deterministic
+              package files (README, tasks.json) for offline handoff.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!canExport}
+            onClick={exportScaffold}
+            className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 rounded disabled:opacity-40"
+            style={{
+              background: 'rgba(52,211,153,0.15)',
+              color: '#a7f3d0',
+              border: '1px solid rgba(52,211,153,0.35)',
+            }}
+          >
+            Export package
+          </button>
+        </div>
+
+        {scaffoldPreview.length > 0 ? (
+          <ul className="space-y-1.5">
+            {scaffoldPreview.map((line) => (
+              <li
+                key={line}
+                className="text-xs leading-relaxed rounded-lg px-3 py-2"
+                style={{ background: 'rgba(0,0,0,0.2)', color: 'rgba(248,245,253,0.75)' }}
+              >
+                {line}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs" style={{ color: 'rgba(248,245,253,0.4)' }}>
+            {plannedActions.length > 0
+              ? `${plannedActions.length} planned action(s) from analysis — export builds tasks.json without a Gemini scaffold blob.`
+              : 'Re-analyze with the backend transcript-action path to populate project_scaffold, or Act on findings then export.'}
+          </p>
+        )}
+      </section>
+
       <Suspense fallback={<PanelLoading label="Loading events…" />}>
         <EventList
           events={video.events || []}
