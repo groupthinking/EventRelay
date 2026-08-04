@@ -1351,6 +1351,9 @@ class TestConnectionPoolInitialize:
             _mod.HAS_POSTGRESQL = orig
 
 
+_DBOPT = "youtube_extension.backend.services.database_optimizer"
+
+
 # ===========================================================================
 # Event-loop offloading of blocking SQLite I/O
 #
@@ -1368,14 +1371,36 @@ class TestConnectionPoolInitialize:
 class _RecordingCursor:
     """DB-API cursor stub that records which thread ran the query."""
 
-    def __init__(self, sink: dict, delay: float) -> None:
+    def __init__(self, sink: dict, delay: float, fail: bool = False, owner=None) -> None:
         self._sink = sink
         self._delay = delay
+        self._fail = fail
+        self._owner = owner
 
     def execute(self, query, params=None):  # noqa: ARG002
+        lock = self._sink.setdefault("lock", threading.Lock())
         self._sink.setdefault("execute_tids", []).append(threading.get_ident())
-        if self._delay:
-            time.sleep(self._delay)
+        if self._fail:
+            raise RuntimeError("boom")
+        owner = self._owner
+        if owner is not None:
+            with owner._lock:
+                owner._inflight += 1
+        with lock:
+            inflight = self._sink.get("inflight", 0) + 1
+            self._sink["inflight"] = inflight
+            self._sink["max_inflight"] = max(
+                self._sink.get("max_inflight", 0), inflight
+            )
+        try:
+            if self._delay:
+                time.sleep(self._delay)
+        finally:
+            with lock:
+                self._sink["inflight"] -= 1
+            if owner is not None:
+                with owner._lock:
+                    owner._inflight -= 1
         return self
 
     def fetchall(self):
@@ -1385,17 +1410,25 @@ class _RecordingCursor:
 class _RecordingConnection:
     """Minimal DB-API connection stub (has .execute, so no .fetch/asyncpg)."""
 
-    def __init__(self, sink: dict, delay: float = 0.0) -> None:
+    def __init__(self, sink: dict, delay: float = 0.0, fail: bool = False) -> None:
         self._sink = sink
         self._delay = delay
+        self._fail = fail
+        self._lock = threading.Lock()
+        self._inflight = 0
 
     def cursor(self):
-        return _RecordingCursor(self._sink, self._delay)
+        return _RecordingCursor(self._sink, self._delay, self._fail, owner=self)
 
     def execute(self, query, params=None):  # pragma: no cover - branch selector
         return self.cursor().execute(query, params)
 
     def close(self):
+        # Only this connection's own in-flight work matters: closing connection
+        # A while connection B is busy is perfectly legal.
+        with self._lock:
+            if self._inflight > 0:
+                self._sink["close_overlapped_query"] = True
         self._sink.setdefault("close_tids", []).append(threading.get_ident())
 
 
@@ -1527,12 +1560,21 @@ class TestBatchQueriesActuallyOverlap:
         pool.release_connection = AsyncMock()
         optimizer = QueryOptimizer(pool)
 
-        queries = [{"query": f"SELECT {i}", "use_cache": False} for i in range(count)]
+        queries = [(f"SELECT {i}", ()) for i in range(count)]
         started = time.perf_counter()
-        results = await optimizer.execute_batch_queries(queries)
+        with (
+            patch(f"{_DBOPT}.cache_get", AsyncMock(return_value=None)),
+            patch(f"{_DBOPT}.cache_set", AsyncMock()),
+        ):
+            results = await optimizer.execute_batch_queries(queries)
         elapsed = time.perf_counter() - started
 
         assert len(results) == count
+        assert sink["execute_tids"], "no query ever executed"
+        assert sink.get("max_inflight", 0) > 1, (
+            "never more than one query in flight at a time — the batch "
+            "serialised despite gather()"
+        )
         serial_floor = delay * count
         assert elapsed < serial_floor / 2, (
             f"batch took {elapsed:.3f}s against a serial floor of "
@@ -1549,9 +1591,63 @@ class TestBatchQueriesActuallyOverlap:
         pool.release_connection = AsyncMock()
         optimizer = QueryOptimizer(pool)
 
-        queries = [{"query": f"SELECT {i}", "use_cache": False} for i in range(4)]
-        await optimizer.execute_batch_queries(queries)
+        queries = [(f"SELECT {i}", ()) for i in range(4)]
+        with (
+            patch(f"{_DBOPT}.cache_get", AsyncMock(return_value=None)),
+            patch(f"{_DBOPT}.cache_set", AsyncMock()),
+        ):
+            await optimizer.execute_batch_queries(queries)
 
         assert len(set(sink["execute_tids"])) > 1, (
             "every query ran on the same thread — they were serialised"
+        )
+
+
+class TestBatchCancellationDoesNotCloseConnectionMidQuery:
+    """A cancelled query must not have its connection closed under it.
+
+    ``execute_batch_queries`` cancels in-flight siblings when one query fails.
+    A worker thread cannot be cancelled, so the offloaded ``cursor.execute()``
+    keeps running; if ``execute_query``'s ``finally`` releases (and therefore
+    closes) the connection straight away, two threads touch one sqlite3
+    connection at once. ``check_same_thread=False`` disables the *check*, not
+    the requirement, so this is real corruption risk — and it only became
+    reachable once the query was offloaded.
+    """
+
+    @pytest.mark.asyncio
+    async def test_close_never_overlaps_an_in_flight_query(self) -> None:
+        sink: dict = {}
+        # First query fails immediately; second is slow and will be cancelled.
+        conns = [
+            _RecordingConnection(sink, fail=True),
+            _RecordingConnection(sink, delay=0.20),
+        ]
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(side_effect=conns)
+
+        async def _release(conn):
+            # Mirror DatabaseConnectionPool.release_connection: close off-loop.
+            await asyncio.to_thread(conn.close)
+
+        pool.release_connection = AsyncMock(side_effect=_release)
+        optimizer = QueryOptimizer(pool)
+
+        with (
+            patch(f"{_DBOPT}.cache_get", AsyncMock(return_value=None)),
+            patch(f"{_DBOPT}.cache_set", AsyncMock()),
+            contextlib.suppress(RuntimeError),
+        ):
+            await optimizer.execute_batch_queries(
+                [("SELECT 0", ()), ("SELECT 1", ())]
+            )
+
+        # Give any improperly-detached worker thread time to finish so the
+        # overlap flag is definitely observable either way.
+        await asyncio.sleep(0.35)
+
+        assert sink.get("close_overlapped_query") is not True, (
+            "connection.close() ran while a worker thread was still executing "
+            "a query on that same connection — the cancellation path must "
+            "drain the offloaded query before releasing the connection"
         )

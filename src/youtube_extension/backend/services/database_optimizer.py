@@ -18,6 +18,7 @@ Key Features:
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -379,6 +380,7 @@ class QueryOptimizer:
 
         # Execute query
         connection = None
+        sync_worker: asyncio.Future[Any] | None = None
         try:
             connection = await self.connection_pool.get_connection()
 
@@ -403,7 +405,18 @@ class QueryOptimizer:
                         cursor.execute(query)
                     return cursor.fetchall()
 
-                result = await asyncio.to_thread(_run_sync_query)
+                # Run the blocking work as a *task* and await it shielded. A
+                # worker thread cannot be cancelled: if this coroutine is
+                # cancelled (execute_batch_queries does exactly that when a
+                # sibling query fails) a bare `await asyncio.to_thread(...)`
+                # would unwind here while the thread keeps using `connection`,
+                # and the `finally` below would then close that connection on a
+                # second thread. The shield keeps the worker running and the
+                # drain in `finally` waits for it before any release/close.
+                sync_worker = asyncio.ensure_future(
+                    asyncio.to_thread(_run_sync_query)
+                )
+                result = await asyncio.shield(sync_worker)
             else:
                 raise Exception(f"Unsupported connection type: {type(connection)}")
 
@@ -443,6 +456,20 @@ class QueryOptimizer:
             raise
 
         finally:
+            # A cancellation may have unwound the await above while the worker
+            # thread is still running _run_sync_query against `connection`.
+            # Drain it before releasing: release_connection() closes the
+            # connection on *another* thread, and check_same_thread=False
+            # disables sqlite3's same-thread *check*, not the underlying
+            # requirement that operations on one connection never overlap.
+            # Each shielded await can itself be cancelled, so loop until the
+            # worker has genuinely finished (it always does — it is bounded by
+            # the query, not by us).
+            if sync_worker is not None:
+                while not sync_worker.done():
+                    with contextlib.suppress(BaseException):
+                        await asyncio.shield(sync_worker)
+
             if connection:
                 await self.connection_pool.release_connection(connection)
 
