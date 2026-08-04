@@ -2870,9 +2870,14 @@ for (const [name, previous, current, count, applicable, expected] of rows) {
         self.assertEqual(len(applicable_functions), 2)
         self.assertEqual(applicable_functions[0], applicable_functions[1])
         applicable_assertions = r"""
-const issue = (number, labels) => ({
+const CONTRACT = [
+  '### Agent Login', '', '`google-labs-jules[bot]`', '',
+  '### Agent Run ID', '', '`run-42`'
+].join('\n');
+const issue = (number, labels, body) => ({
   number,
-  labels: {nodes: labels.map(name => ({name}))}
+  labels: {nodes: labels.map(name => ({name}))},
+  body: body || ''
 });
 const base = {
   user: {login: 'maintainer'},
@@ -2883,7 +2888,11 @@ const base = {
 const rows = [
   ['human', base, null, false],
   ['PR label', {...base, labels: [{name: 'agent-task'}]}, null, true],
-  ['issue label', base, issue(1, ['mcp/agent']), true],
+  // A bare agent label on the linked issue is a topic tag applied by label
+  // automation, not a dispatch. It only asserts agent work when the issue
+  // actually declares the contract the gate goes on to require (#1130).
+  ['issue label without contract', base, issue(1, ['mcp/agent']), false],
+  ['issue label with contract', base, issue(1, ['mcp/agent'], CONTRACT), true],
   ['branch', {...base, head: {ref: 'codex/fix'}}, null, true],
   ['manifest', {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, true],
   ['known agent', {...base, user: {login: 'google-labs-jules[bot]'}}, null, true],
@@ -2891,7 +2900,7 @@ const rows = [
     ...base,
     user: {login: 'dependabot[bot]'},
     labels: [{name: 'agent-task'}]
-  }, issue(1, ['agent-task']), false]
+  }, issue(1, ['agent-task'], CONTRACT), false]
 ];
 for (const [name, pull, selected, expected] of rows) {
   const actual = agentTaskApplicable(pull, selected);
@@ -2965,8 +2974,13 @@ for (const [name, pull, issues, expectedNumber, expectedErrors] of rows) {
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
         combined_assertions = r"""
-const first = {number: 1, labels: {nodes: []}};
-const second = {number: 2, labels: {nodes: [{name: 'agent-task'}]}};
+const first = {number: 1, labels: {nodes: []}, body: ''};
+const second = {
+  number: 2,
+  labels: {nodes: [{name: 'agent-task'}]},
+  body: '### Agent Login\n\n`google-labs-jules[bot]`\n\n' +
+    '### Agent Run ID\n\n`run-42`'
+};
 const multi = {
   user: {login: 'maintainer'},
   head: {ref: 'feature/ordinary'},
@@ -3357,6 +3371,172 @@ for (const [body, expected] of rows) {
         self.assertIn("explicitlyNonBehavioral", workflow)
         self.assertIn("!explicitlyNonBehavioral", workflow)
         self.assertIn("VADE-RECOMMENDATION", workflow)
+
+    def test_agent_applicability_requires_provenance_or_declared_contract(self):
+        """A bare `agent-task` label on a linked issue is not a dispatch.
+
+        Label automation applies `agent-task` and `mcp/agent` as topic tags to
+        issues that were never created from the agent task template. Before
+        this guard the gate unioned pull request labels with linked issue
+        labels, so any pull request closing such an issue was judged an agent
+        completion and then measured against a contract the issue had never
+        declared -- producing a permanent ``blocked``/``invalid_payload``
+        verdict that no author could satisfy (#1130).
+        """
+
+        workflow = self._workflow()
+        applicable = _javascript_functions(
+            workflow,
+            "function agentTaskApplicable(",
+        )
+        self.assertEqual(len(applicable), 2)
+
+        assertions = r"""
+const CONTRACT = [
+  '### Agent Login',
+  '',
+  '`google-labs-jules[bot]`',
+  '',
+  '### Agent Run ID',
+  '',
+  '`run-42`'
+].join('\n');
+const human = {
+  user: {login: 'groupthinking'},
+  head: {ref: 'feature/thing'},
+  labels: [],
+  body: 'Fixes #7'
+};
+const rows = [
+  // The regression this guard exists for: a human pull request closing an
+  // issue that automation mislabelled `agent-task` without a contract.
+  ['mislabelled linked issue', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'fix/agentic-workflow-noop-terminal-state-1091'},
+    labels: [{name: 'documentation'}, {name: 'ci/cd'}],
+    body: 'Fixes #1091'
+  }, {
+    number: 1091,
+    labels: [{name: 'agent-task'}, {name: 'bug'}],
+    body: '## Summary\nSomething broke.\n'
+  }, false],
+  // A genuine issue-side dispatch is still gated.
+  ['declared contract', human, {
+    number: 7, labels: [{name: 'agent-task'}], body: CONTRACT
+  }, true],
+  ['contract via graphql label nodes', human, {
+    number: 7, labels: {nodes: [{name: 'agent-task'}]}, body: CONTRACT
+  }, true],
+  // Only the two contract labels arm the issue side. The generic `agent`
+  // label is never recognised by the snapshot job or the collector, so an
+  // issue carrying it (even with contract headings) must not arm the gate:
+  // it would be permanently blocked as linked_issue_not_agent_task with no
+  // snapshot to satisfy.
+  ['generic agent label on issue', human, {
+    number: 7, labels: [{name: 'agent'}], body: CONTRACT
+  }, false],
+  // Unfilled issue form fields render as the placeholder, not a contract.
+  ['no response placeholder', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}],
+    body: '### Agent Login\n\n_No response_\n\n' +
+      '### Agent Run ID\n\n_No response_\n'
+  }, false],
+  ['half declared contract', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}],
+    body: '### Agent Login\n\n`jules`\n'
+  }, false],
+  ['unlabelled issue with contract', human, {
+    number: 7, labels: [{name: 'bug'}], body: CONTRACT
+  }, false],
+  // Pull request provenance stands alone: an agent producing work against a
+  // contract-less issue is still applicable, and therefore still blocked.
+  ['known agent author', {
+    user: {login: 'google-labs-jules[bot]'},
+    head: {ref: 'feature/thing'}, labels: [], body: ''
+  }, {number: 7, labels: [{name: 'agent-task'}], body: '## Summary\n'}, true],
+  ['agent branch prefix', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'jules/thing'}, labels: [], body: ''
+  }, null, true],
+  ['agent label on the pull request', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'feature/thing'},
+    labels: [{name: 'agent'}], body: ''
+  }, null, true],
+  ['lock manifest in the pull request body', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'feature/thing'},
+    labels: [],
+    body: '<!-- agent-lock-manifest {"run_id":"1"} -->'
+  }, null, true],
+  // Dependabot is excluded regardless of every other signal.
+  ['dependabot', {
+    user: {login: 'dependabot[bot]'},
+    head: {ref: 'jules/bump'},
+    labels: [{name: 'agent-task'}], body: ''
+  }, {number: 7, labels: [{name: 'agent-task'}], body: CONTRACT}, false],
+  ['plain human pull request', human, {
+    number: 7, labels: [{name: 'bug'}], body: ''
+  }, false],
+  ['no linked issue', human, null, false]
+];
+for (const [name, pull, issue, expected] of rows) {
+  const actual = agentTaskApplicable(pull, issue);
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", applicable[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_agent_applicability_copies_stay_identical(self):
+        """The scheduled sweep and the per-pull-request collector must agree.
+
+        Both jobs publish to the same commit status context, so divergent
+        applicability logic would let one job block what the other skips. The
+        contract check is nested inside ``agentTaskApplicable`` so the
+        function stays self-contained for the ``node -e`` extraction harness
+        above.
+        """
+
+        workflow = self._workflow()
+        copies = _javascript_functions(workflow, "function agentTaskApplicable(")
+        self.assertEqual(len(copies), 2)
+        self.assertEqual(copies[0], copies[1])
+        self.assertIn("function declaresAgentContract(", copies[0])
+
+    def test_mislabelled_agent_task_is_reported_rather_than_blocked(self):
+        """The mislabel is surfaced as an annotation, never as a gate reason.
+
+        ``agent_completion_gate.evaluate`` short-circuits to
+        ``not_applicable`` before it reads ``collection_errors``, so a
+        diagnostic pushed there would be silently discarded. It is emitted
+        with ``core.notice`` instead, and it is keyed on the missing contract
+        itself rather than on inapplicability, so pull requests that are
+        inapplicable for unrelated reasons (Dependabot's unconditional
+        exclusion) never receive a notice falsely claiming a declared
+        contract is missing.
+        """
+
+        workflow = self._workflow()
+
+        self.assertIn("mislabelled_agent_task", workflow)
+        self.assertNotIn(
+            "collectionErrors.push('mislabelled_agent_task')",
+            workflow,
+        )
+        notice = workflow[workflow.index("mislabelled_agent_task") - 600:]
+        self.assertIn("core.notice(", notice[:800])
+        self.assertIn("!contractDeclared", notice[:800])
+        self.assertNotIn("!applicable", notice[:800])
 
     def test_workflow_does_not_approve_or_merge(self):
         workflow = self._workflow()
