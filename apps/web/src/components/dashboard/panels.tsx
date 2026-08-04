@@ -4,6 +4,12 @@ import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import InteractiveTranscript, { type TranscriptSegment } from '@/components/InteractiveTranscript';
+import {
+  buildScaffoldPackage,
+  downloadScaffoldPackage,
+  summarizeProjectScaffold,
+  type ActionCardLike,
+} from '@/lib/action-surface';
 import { hasRichDashboardInsights, isThinDashboardAnalysis } from '@/lib/dashboard-analysis';
 import { useActionAgentStore } from '@/store/action-agent-store';
 import type { SearchResult, Video } from '@/store/dashboard-types';
@@ -191,6 +197,41 @@ export function ActionsPanel({
   const hasTranscript = transcript.length > 40;
   const { lifecycle, isRunning, runFromTranscript, reset } = useActionAgentStore();
   const fulfilled = lifecycle.actions || [];
+  const plannedActions = video.insights?.actions || [];
+  const projectScaffold = video.insights?.project_scaffold;
+  const scaffoldPreview = summarizeProjectScaffold(projectScaffold);
+
+  const exportScaffold = () => {
+    // Prefer tool-fulfilled titles; fall back to planned analysis actions.
+    const fromTools: ActionCardLike[] = fulfilled
+      .filter((a) => typeof a.input?.title === 'string' || a.tool)
+      .map((a) => ({
+        title:
+          typeof a.input?.title === 'string'
+            ? a.input.title
+            : a.tool.replace(/_/g, ' '),
+        description:
+          a.result ||
+          (typeof a.input?.description === 'string' ? a.input.description : ''),
+        category: a.tool,
+      }));
+    const fromPlan: ActionCardLike[] = plannedActions.map((a) => ({
+      title: a.title,
+      description: a.description,
+      category: a.category,
+      estimatedMinutes: a.estimatedMinutes,
+    }));
+    const actions = fromTools.length > 0 ? fromTools : fromPlan;
+    const pkg = buildScaffoldPackage({
+      projectName: video.title || 'eventrelay-project',
+      actions,
+      projectScaffold,
+    });
+    downloadScaffoldPackage(pkg);
+  };
+
+  const canExport =
+    fulfilled.length > 0 || plannedActions.length > 0 || projectScaffold != null;
 
   return (
     <div className="space-y-4">
@@ -205,7 +246,8 @@ export function ActionsPanel({
               Act on findings
             </h3>
             <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(248,245,253,0.55)' }}>
-              Run the transcription-driven action agent (tasks, resources, follow-ups, optional backend dispatch).
+              Canonical action surface (F3): run tools via{' '}
+              <code className="text-[10px]">/api/agents/actions</code>, then export a scaffold package.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -290,6 +332,57 @@ export function ActionsPanel({
               </li>
             ))}
           </ul>
+        )}
+      </section>
+
+      {/* F3: Plan surface — TranscriptActionAgent project_scaffold + package export */}
+      <section
+        className="rounded-xl border p-4 space-y-3"
+        style={{ borderColor: 'rgba(52,211,153,0.2)', background: 'rgba(52,211,153,0.05)' }}
+      >
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#6ee7b7' }}>
+              Project scaffold
+            </h3>
+            <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(248,245,253,0.55)' }}>
+              Plan from analysis (<code className="text-[10px]">project_scaffold</code>) plus deterministic
+              package files (README, tasks.json) for offline handoff.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={!canExport}
+            onClick={exportScaffold}
+            className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50 rounded disabled:opacity-40"
+            style={{
+              background: 'rgba(52,211,153,0.15)',
+              color: '#a7f3d0',
+              border: '1px solid rgba(52,211,153,0.35)',
+            }}
+          >
+            Export package
+          </button>
+        </div>
+
+        {scaffoldPreview.length > 0 ? (
+          <ul className="space-y-1.5">
+            {scaffoldPreview.map((line) => (
+              <li
+                key={line}
+                className="text-xs leading-relaxed rounded-lg px-3 py-2"
+                style={{ background: 'rgba(0,0,0,0.2)', color: 'rgba(248,245,253,0.75)' }}
+              >
+                {line}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs" style={{ color: 'rgba(248,245,253,0.4)' }}>
+            {plannedActions.length > 0
+              ? `${plannedActions.length} planned action(s) from analysis — export builds tasks.json without a Gemini scaffold blob.`
+              : 'Re-analyze with the backend transcript-action path to populate project_scaffold, or Act on findings then export.'}
+          </p>
         )}
       </section>
 
