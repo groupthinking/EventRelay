@@ -196,11 +196,45 @@ except Exception as e:
     logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
 
 
+def _auth_mode() -> str:
+    """Report how APIKeyAuthMiddleware will treat non-public routes (F6)."""
+    if os.getenv("ALLOW_UNAUTHENTICATED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return "open_dev"
+    if (os.getenv("EVENTRELAY_API_KEY") or "").strip():
+        return "api_key"
+    return "fail_closed"
+
+
+def _video_dep_status() -> dict[str, bool]:
+    """Whether optional full-video-path packages import cleanly (F7)."""
+    status: dict[str, bool] = {}
+    for name in ("yt_dlp", "youtube_transcript_api"):
+        try:
+            __import__(name)
+            status[name] = True
+        except ImportError:
+            status[name] = False
+    return status
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "uvai-youtube-extension"}
+    """Health check endpoint with local full-pipeline readiness hints."""
+    video_deps = _video_dep_status()
+    return {
+        "status": "healthy",
+        "service": "uvai-youtube-extension",
+        # fail_closed → non-public routes 503 until EVENTRELAY_API_KEY or ALLOW_UNAUTHENTICATED=1
+        "auth_mode": _auth_mode(),
+        "video_deps": video_deps,
+        "video_path_ready": all(video_deps.values()),
+    }
 
 
 async def ensure_api_cost_ready() -> None:
