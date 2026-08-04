@@ -118,7 +118,7 @@ def _read_video_analysis_sync(cache_path: Path) -> Any:
     case that cannot be predicted from inside the handler.
 
     Removing the residual parse stall needs a different fix (streaming/incremental
-    parse, a size cap, or a process pool) and is tracked separately.
+    parse, a size cap, or a process pool) and is tracked in issue #1306.
 
     Opening directly and treating :class:`FileNotFoundError` as the miss
     replaces a separate ``Path.exists()`` probe. That is one syscall instead of
