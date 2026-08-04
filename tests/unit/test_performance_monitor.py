@@ -1144,3 +1144,254 @@ class TestSqliteDoesNotBlockEventLoop:
 
         with patch.object(perf_mod.sqlite3, "connect", _boom):
             await monitor._store_metric(metric)  # must not raise
+
+
+# ===========================================================================
+# PerformanceMonitor — record_metrics / _store_metrics (batched writes)
+# ===========================================================================
+
+
+class TestRecordMetricsBatch:
+    """The batch path must be a drop-in for N serial record_metric calls.
+
+    Everything observable -- rows persisted, buffer contents, fast-access
+    collections, alerts -- has to match. The only difference permitted is the
+    number of database connections, which is the entire point.
+    """
+
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return self._quiesced(tmp_path / "perf.db")
+
+    @staticmethod
+    def _quiesced(db_path):
+        """Build a monitor with its background task stopped.
+
+        ``__init__`` calls ``start_monitoring()`` whenever an event loop is
+        running, which every async test provides. That task records real
+        system metrics into the same buffer these tests assert on, so it has
+        to be cancelled before the buffer means anything.
+        """
+        mon = PerformanceMonitor(db_path=str(db_path))
+        mon.monitoring_enabled = False
+        if mon.monitoring_task is not None:
+            mon.monitoring_task.cancel()
+            mon.monitoring_task = None
+        return mon
+
+    @staticmethod
+    def _counting_connect(counter):
+        """Wrap sqlite3.connect so we can count how many times it is called."""
+        real_connect = sqlite3.connect
+
+        def _wrapped(*args, **kwargs):
+            counter.append(1)
+            return real_connect(*args, **kwargs)
+
+        return _wrapped
+
+    @staticmethod
+    def _impl_module():
+        """The module whose globals ``PerformanceMonitor`` methods actually read.
+
+        This file's preamble deliberately re-imports the performance monitor,
+        and CI runs with ``PYTHONPATH=src`` so the package can also resolve
+        under a second name. Either can leave the module-level ``perf_mod``
+        alias bound to a *different* module object than the one the class was
+        defined in, at which point ``monkeypatch.setattr(perf_mod, ...)``
+        silently no-ops and the real ``psutil`` runs instead of the fake.
+        Resolving from the class is correct under every import identity.
+        """
+        return sys.modules[PerformanceMonitor.__module__]
+
+    @staticmethod
+    def _samples(n):
+        return [
+            {
+                "component": "system",
+                "metric_name": f"metric_{i}",
+                "value": float(i),
+                "unit": "ms",
+            }
+            for i in range(n)
+        ]
+
+    async def test_batch_opens_exactly_one_connection(self, monitor):
+        """Seven metrics must cost one connection, not seven.
+
+        This is the regression guard for the whole change. The background
+        monitor records seven metrics every thirty seconds forever, so a
+        per-metric connection is ~20k connections and commit fsyncs a day.
+        """
+        calls: list[int] = []
+        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+            await monitor.record_metrics(self._samples(7))
+
+        assert len(calls) == 1, f"expected 1 connection for the batch, got {len(calls)}"
+
+    async def test_serial_path_still_opens_one_connection_per_metric(self, monitor):
+        """Pins the old behaviour so the comparison above is meaningful.
+
+        record_metric is left untouched by this change -- ~15 callers record a
+        single metric and gain nothing from batching -- so it should still
+        connect once per call.
+        """
+        calls: list[int] = []
+        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+            for sample in self._samples(7):
+                await monitor.record_metric(
+                    sample["component"], sample["metric_name"], sample["value"]
+                )
+
+        assert len(calls) == 7
+
+    async def test_batch_persists_every_row_with_correct_values(self, monitor):
+        await monitor.record_metrics([
+            {"component": "system", "metric_name": "cpu_usage_percent",
+             "value": 42.5, "unit": "%"},
+            {"component": "process", "metric_name": "threads_count",
+             "value": 8.0, "unit": "count"},
+            {"component": "frontend", "metric_name": "bundle_load_time",
+             "value": 1500.0, "unit": "ms", "tags": {"page": "home"}},
+        ])
+
+        conn = sqlite3.connect(monitor.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT component, metric_name, value, unit, tags "
+                "FROM performance_metrics ORDER BY metric_name"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert len(rows) == 3
+        by_name = {r[1]: r for r in rows}
+        assert by_name["cpu_usage_percent"][0] == "system"
+        assert by_name["cpu_usage_percent"][2] == 42.5
+        assert by_name["cpu_usage_percent"][3] == "%"
+        assert by_name["threads_count"][0] == "process"
+        assert by_name["threads_count"][2] == 8.0
+        assert by_name["bundle_load_time"][2] == 1500.0
+        assert '"page": "home"' in by_name["bundle_load_time"][4]
+
+    async def test_batch_matches_serial_buffer_and_collections(self, tmp_path):
+        """Same inputs through both paths must leave identical in-memory state."""
+        samples = [
+            {"component": "video", "metric_name": "video_processing_time",
+             "value": 1200.0, "unit": "ms"},
+            {"component": "db", "metric_name": "database_query_time",
+             "value": 35.0, "unit": "ms"},
+            {"component": "api", "metric_name": "api_response_time",
+             "value": 250.0, "unit": "ms"},
+            {"component": "system", "metric_name": "cpu_usage_percent",
+             "value": 10.0, "unit": "%"},
+        ]
+
+        serial = self._quiesced(tmp_path / "serial.db")
+        for s in samples:
+            await serial.record_metric(
+                s["component"], s["metric_name"], s["value"], s["unit"]
+            )
+
+        batched = self._quiesced(tmp_path / "batched.db")
+        await batched.record_metrics(samples)
+
+        assert list(batched.video_processing_times) == list(serial.video_processing_times)
+        assert list(batched.database_query_times) == list(serial.database_query_times)
+        assert list(batched.api_response_times) == list(serial.api_response_times)
+
+        assert len(batched.metrics_buffer) == len(serial.metrics_buffer)
+        for got, want in zip(batched.metrics_buffer, serial.metrics_buffer):
+            assert (got.component, got.metric_name, got.value, got.unit) == (
+                want.component, want.metric_name, want.value, want.unit
+            )
+
+    async def test_empty_batch_does_no_database_work(self, monitor):
+        calls: list[int] = []
+        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+            await monitor.record_metrics([])
+
+        assert calls == []
+        assert len(monitor.metrics_buffer) == 0
+
+    async def test_batch_evaluates_thresholds_for_every_metric(self, monitor):
+        """A breach in one metric must not mask a breach in another."""
+        await monitor.record_metrics([
+            {"component": "system", "metric_name": "cpu_usage_percent",
+             "value": 99.0, "unit": "%"},
+            {"component": "system", "metric_name": "memory_usage_percent",
+             "value": 95.0, "unit": "%"},
+        ])
+
+        assert len(monitor.active_alerts) == 2
+
+    async def test_batch_swallows_database_errors(self, monitor):
+        """Metric recording is best-effort; a dead disk must not fail callers."""
+        def _boom(*_args, **_kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        with patch.object(perf_mod.sqlite3, "connect", _boom):
+            await monitor.record_metrics(self._samples(3))  # must not raise
+
+    async def test_system_resource_cycle_uses_a_single_connection(
+        self, monitor, monkeypatch
+    ):
+        """End-to-end proof for the background loop's 30-second cycle."""
+        import types
+
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=lambda interval=None: 45.0,
+            virtual_memory=lambda: types.SimpleNamespace(
+                percent=60.0, available=3 * 1024**3
+            ),
+            disk_usage=lambda path: types.SimpleNamespace(
+                used=60 * 1024**3, total=100 * 1024**3
+            ),
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=200 * 1024**2),
+                cpu_percent=lambda: 10.0,
+                num_threads=lambda: 8,
+            ),
+        )
+        monkeypatch.setattr(self._impl_module(), "psutil", fake_psutil)
+
+        monitor.metrics_buffer.clear()
+        calls: list[int] = []
+        with patch.object(self._impl_module().sqlite3, "connect", self._counting_connect(calls)):
+            await monitor._monitor_system_resources()
+
+        assert len(calls) == 1, (
+            f"one monitoring cycle should be one write, got {len(calls)}"
+        )
+        assert len(monitor.metrics_buffer) == 7
+
+    async def test_system_resource_cycle_survives_process_metrics_failure(
+        self, monitor, monkeypatch
+    ):
+        """Process metrics are optional; losing them must not lose the rest."""
+        import types
+
+        def _no_process():
+            raise RuntimeError("process introspection unavailable")
+
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=lambda interval=None: 45.0,
+            virtual_memory=lambda: types.SimpleNamespace(
+                percent=60.0, available=3 * 1024**3
+            ),
+            disk_usage=lambda path: types.SimpleNamespace(
+                used=60 * 1024**3, total=100 * 1024**3
+            ),
+            Process=_no_process,
+        )
+        monkeypatch.setattr(self._impl_module(), "psutil", fake_psutil)
+
+        monitor.metrics_buffer.clear()
+        await monitor._monitor_system_resources()
+
+        # The four system-level metrics still land even though the process
+        # block raised partway through.
+        assert len(monitor.metrics_buffer) == 4
+        names = {m.metric_name for m in monitor.metrics_buffer}
+        assert "cpu_usage_percent" in names
+        assert "disk_usage_percent" in names

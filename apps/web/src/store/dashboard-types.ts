@@ -49,6 +49,12 @@ export interface Video {
     actions: Action[];
     sentiment: string;
     topics: string[];
+    /**
+     * Gemini project scaffold from backend TranscriptActionAgent
+     * (repository_structure, core_modules, integration_points).
+     * Canonical plan surface for F3; paired with Act on findings tools.
+     */
+    project_scaffold?: unknown;
   };
 }
 

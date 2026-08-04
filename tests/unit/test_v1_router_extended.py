@@ -668,6 +668,18 @@ class TestPerformanceEndpoints:
         assert resp.status_code == 200
 
     def test_performance_report(self, client):
+        """Report ingest batches every sample into one ``record_metrics`` call.
+
+        Patches the plural ``record_metrics`` because that is what the endpoint
+        calls. Patching the singular ``record_metric`` here would be inert and
+        let the request perform a live in-process SQLite write, so the test
+        would still pass while silently losing its isolation.
+
+        The await-count assertion is the point: it pins the batching contract
+        this endpoint exists to provide. A regression back to one write per
+        metric would keep the 200 and the count, and only this assertion would
+        catch it.
+        """
         payload = {
             "metrics": {
                 "lcp": {"current": 1200, "unit": "ms"},
@@ -675,13 +687,20 @@ class TestPerformanceEndpoints:
             }
         }
         with patch.object(
-            router_module.performance_monitor, "record_metric", new_callable=AsyncMock
-        ):
+            router_module.performance_monitor, "record_metrics", new_callable=AsyncMock
+        ) as mock_record:
             resp = client.post("/api/v1/performance/report", json=payload)
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
         assert data["metrics_recorded"] == 2
+
+        # Exactly one write for the whole report, carrying both samples.
+        assert mock_record.await_count == 1
+        (samples,) = mock_record.await_args.args
+        assert [s["metric_name"] for s in samples] == ["lcp", "fid"]
+        assert [s["value"] for s in samples] == [1200.0, 30.0]
+        assert {s["component"] for s in samples} == {"frontend"}
 
     def test_performance_report_empty(self, client):
         resp = client.post("/api/v1/performance/report", json={})
@@ -2180,10 +2199,16 @@ class TestAdditionalErrorPaths:
         assert resp.status_code == 500
 
     def test_performance_report_error(self, client):
-        """record_metric raises → 500."""
+        """record_metrics raises → 500.
+
+        The report endpoint ingests the whole payload in one batched
+        ``record_metrics`` call, so the failure has to be injected there;
+        patching the singular ``record_metric`` is inert and the request
+        would succeed with a 200.
+        """
         with patch.object(
             router_module.performance_monitor,
-            "record_metric",
+            "record_metrics",
             new_callable=AsyncMock,
             side_effect=RuntimeError("monitor error"),
         ):
