@@ -22,7 +22,7 @@ import logging
 import statistics
 import threading
 import time
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, deque
 from dataclasses import asdict, dataclass
 
 # pickle removed for security
@@ -30,6 +30,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import redis.asyncio as redis
+
+from youtube_extension.core.env_config import positive_int_env
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,7 +41,9 @@ logger = logging.getLogger(__name__)
 # redis-py's async connection pool defaults to max_connections=20 and each
 # in-flight command holds one connection, so an unbounded fan-out over a large
 # tag list could exhaust the pool.
-TAG_WRITE_CONCURRENCY = 8
+# Overridable so operators can tune tag-write fan-out against their own Redis
+# deployment without an application release; invalid values log and use the default.
+TAG_WRITE_CONCURRENCY = positive_int_env("TAG_WRITE_CONCURRENCY", 8)
 
 # Connections deliberately left free for everything that is not a tag write:
 # the SET/SETEX and HSET issued by the same set() call, plus concurrent get()
@@ -55,6 +59,16 @@ def _resolve_tag_write_limit(max_connections: int) -> int:
     its own pool. Always at least 1 so tag writes can still make progress.
     """
     return max(1, min(TAG_WRITE_CONCURRENCY, max_connections - TAG_WRITE_POOL_RESERVE))
+
+
+# Hit timestamps retained per key to drive _calculate_adaptive_ttl(). That
+# consumer reads only the first element, the last element and the length, so the
+# window only has to be long enough for the ratio between them to be a stable
+# frequency estimate rather than a two-sample artefact. Bounding it keeps L1's
+# footprint proportional to the number of resident keys instead of to the total
+# number of reads the process has ever served.
+ACCESS_HISTORY_WINDOW = 64
+
 
 class DateTimeEncoder(json.JSONEncoder):
     """JSON encoder that handles datetime objects"""
@@ -138,7 +152,11 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
         super().__init__(name, max_size)
         self.max_size_bytes = max_size_bytes
         self.cache: OrderedDict[str, CacheEntry] = OrderedDict()
-        self.access_patterns = defaultdict(list)  # Track access patterns for intelligent TTL
+        # Bounded per key: see ACCESS_HISTORY_WINDOW. The whole entry is dropped
+        # when the key leaves the cache, via _release_entry().
+        self.access_patterns = defaultdict(
+            lambda: deque(maxlen=ACCESS_HISTORY_WINDOW)
+        )  # Track access patterns for intelligent TTL
 
     async def get(self, key: str) -> Optional[Any]:
         """Get value from in-memory cache"""
@@ -149,8 +167,11 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
                 entry = self.cache[key]
 
                 # Check expiration
-                if entry.expires_at and datetime.now(timezone.utc) > entry.expires_at:
-                    del self.cache[key]
+                if self._is_expired(entry):
+                    # Lazy expiry on read is the only place expired entries are
+                    # ever removed -- there is no background sweeper -- so this
+                    # branch has to release everything delete() releases.
+                    self._release_entry(key, entry)
                     self.stats.miss_count += 1
                     return None
 
@@ -201,6 +222,11 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
                 # Update existing or add new
                 if key in self.cache:
                     old_entry = self.cache[key]
+                    if self._is_expired(old_entry):
+                        # Replacing an entry that has already died is a fresh
+                        # insert, not a re-write of a hot key: the successor
+                        # must not inherit the dead entry's access history.
+                        self.access_patterns.pop(key, None)
                     self.stats.total_size_bytes -= old_entry.size_bytes
                 else:
                     self.stats.total_entries += 1
@@ -215,18 +241,48 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
             logger.error(f"Failed to set L1 cache entry {key}: {e}")
             return False
 
+    @staticmethod
+    def _is_expired(entry: CacheEntry) -> bool:
+        """Whether ``entry`` has passed its TTL.
+
+        Both the lazy-expiry branch in ``get()`` and the replacement branch in
+        ``set()`` have to agree on what "dead" means. Expressing the predicate
+        once keeps them from drifting -- a disagreement here would resurrect
+        exactly the bookkeeping inconsistency this helper set exists to close.
+        """
+        return bool(entry.expires_at and datetime.now(timezone.utc) > entry.expires_at)
+
+    def _release_entry(self, key: str, entry: CacheEntry) -> None:
+        """Drop an entry and every piece of bookkeeping that tracks it.
+
+        Three paths remove entries -- ``delete()``, ``_evict_if_needed()`` and
+        the lazy-expiry branch in ``get()`` -- and each one previously repeated
+        this teardown by hand. Eviction forgot ``access_patterns`` and expiry
+        forgot all three counters, so an entry's footprint outlived the entry
+        itself. Routing every removal through one helper makes that class of
+        omission structural rather than a thing each new path has to remember.
+
+        ``set()`` replacing an already-expired key is a fourth way an entry
+        stops existing, but it reuses the slot instead of freeing it, so it
+        drops only ``access_patterns`` rather than calling this helper.
+
+        ``total_size_bytes`` in particular is not just a reported number:
+        ``_evict_if_needed()`` budgets against it, so bytes that are never
+        released permanently shrink the layer's usable capacity.
+
+        Callers must already hold ``self._lock``.
+        """
+        del self.cache[key]
+        self.stats.total_entries -= 1
+        self.stats.total_size_bytes -= entry.size_bytes
+        self.access_patterns.pop(key, None)
+
     async def delete(self, key: str) -> bool:
         """Delete value from in-memory cache"""
         with self._lock:
             if key in self.cache:
                 entry = self.cache[key]
-                del self.cache[key]
-                self.stats.total_entries -= 1
-                self.stats.total_size_bytes -= entry.size_bytes
-
-                # Clean access patterns
-                if key in self.access_patterns:
-                    del self.access_patterns[key]
+                self._release_entry(key, entry)
 
                 logger.debug(f"L1 Cache DELETE: {key}")
                 return True
@@ -254,10 +310,8 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
             # Remove oldest entry (LRU)
             oldest_key = next(iter(self.cache))
             entry = self.cache[oldest_key]
-            del self.cache[oldest_key]
+            self._release_entry(oldest_key, entry)
 
-            self.stats.total_entries -= 1
-            self.stats.total_size_bytes -= entry.size_bytes
             self.stats.eviction_count += 1
 
             logger.debug(f"L1 Cache EVICTED: {oldest_key}")
@@ -286,7 +340,12 @@ class RedisCacheLayer(IntelligentCacheLayer):
         self._tag_write_semaphore_loop: Optional[asyncio.AbstractEventLoop] = None
 
     def _get_tag_write_semaphore(self) -> asyncio.Semaphore:
-        """Semaphore shared by every ``set()`` call on this layer.
+        """Semaphore shared by every tag fan-out on this layer.
+
+        Two paths acquire it: ``set()``, which issues one ``sadd`` per tag, and
+        ``invalidate_by_tags()``, which issues an ``smembers``/``delete`` pair
+        per tag. Both draw from the same budget, so a ``set()`` storm and an
+        invalidation storm cannot each claim ``_tag_write_limit`` connections.
 
         The limiter has to be per-instance rather than per-call: all callers
         share ``self.redis_pool``, so a per-call semaphore would let N
@@ -310,11 +369,12 @@ class RedisCacheLayer(IntelligentCacheLayer):
         ``redis.asyncio`` pool caches connections whose transports are bound to
         the loop that opened them, so a ``RedisCacheLayer`` is already
         event-loop-affine through ``self.redis_pool`` -- and that affinity
-        applies equally to ``get()``, ``delete()``, ``clear()`` and
-        ``invalidate_by_tags()``, none of which this limiter touches. Enforcing
-        a loop-ownership contract is a layer-wide concern tracked in #1162;
-        guarding only this one path would give a misleading partial guarantee.
-        Use one layer per event loop.
+        applies equally to ``get()``, ``delete()`` and ``clear()``, none of
+        which this limiter touches -- and to the two paths that do acquire it,
+        since bounding fan-out is not the same guarantee as owning a loop.
+        Enforcing a loop-ownership contract is a layer-wide concern tracked in
+        #1162; guarding only these paths would give a misleading partial
+        guarantee. Use one layer per event loop.
         """
         loop = asyncio.get_running_loop()
 
@@ -504,19 +564,51 @@ class RedisCacheLayer(IntelligentCacheLayer):
 
         try:
             async with redis.Redis(connection_pool=self.redis_pool) as conn:
-                total_deleted = 0
+                semaphore = self._get_tag_write_semaphore()
 
-                for tag in tags:
-                    # Get all keys with this tag
-                    keys = await conn.smembers(f"uvai:tag:{tag}")
+                async def _invalidate_tag(tag: str) -> int:
+                    # One permit is held for the whole smembers->delete pair
+                    # rather than re-acquired per command. This bounds the
+                    # number of tag invalidations in progress at once to the
+                    # permit count and keeps each tag's causally-ordered pair
+                    # (delete operates on the members smembers just returned) as
+                    # one indivisible unit of scheduled work. It also bounds how
+                    # many tags can sit half-invalidated if a delete fails.
+                    #
+                    # It does NOT lower peak pool-connection usage: redis.asyncio
+                    # checks a connection out only for the duration of each
+                    # command and returns it to the pool between the two awaits,
+                    # so acquiring the permit per command would cap in-flight
+                    # commands at the same limit. The reason to hold across the
+                    # pair is scheduling determinism and avoiding permit churn,
+                    # not preventing a doubling of held connections.
+                    async with semaphore:
+                        keys = await conn.smembers(f"uvai:tag:{tag}")
 
-                    if keys:
+                        if not keys:
+                            return 0
+
                         # Delete cache entries
                         cache_keys = [f"uvai:cache:{key.decode()}" if isinstance(key, bytes) else f"uvai:cache:{key}" for key in keys]
                         stat_keys = [f"uvai:stats:{key.decode()}" if isinstance(key, bytes) else f"uvai:stats:{key}" for key in keys]
 
-                        deleted = await conn.delete(*(cache_keys + stat_keys + [f"uvai:tag:{tag}"]))
-                        total_deleted += deleted
+                        return await conn.delete(*(cache_keys + stat_keys + [f"uvai:tag:{tag}"]))
+
+                # return_exceptions=True so that one failing tag cannot leave
+                # sibling tasks still in flight once this method returns, which
+                # would let them touch conn after the enclosing async with has
+                # closed it. The first failure is re-raised below so the
+                # existing handler still reports 0.
+                results = await asyncio.gather(
+                    *(_invalidate_tag(tag) for tag in tags),
+                    return_exceptions=True,
+                )
+
+                total_deleted = 0
+                for result in results:
+                    if isinstance(result, BaseException):
+                        raise result
+                    total_deleted += result
 
                 logger.info(f"L2 Redis TAG INVALIDATION: {total_deleted} entries for tags {tags}")
                 return total_deleted

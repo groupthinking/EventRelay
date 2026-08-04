@@ -32,6 +32,12 @@ from ..media_paths import resolve_local_media_path
 logger = logging.getLogger(__name__)
 
 
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's bytes. Module-level so it can run in a worker thread."""
+    with open(path, 'rb') as handle:
+        return handle.read()
+
+
 class GoogleCloudAI(BaseCloudAI):
     """Google Cloud Video Intelligence and Vision API integration."""
 
@@ -183,11 +189,14 @@ class GoogleCloudAI(BaseCloudAI):
                 image.source.image_uri = image_url
             else:
                 # Local file. The path is caller-supplied, so validate it
-                # against CLOUD_AI_MEDIA_ROOT before opening anything.
+                # against CLOUD_AI_MEDIA_ROOT before opening anything; read the
+                # resolved path off the event loop.
                 safe_path = resolve_local_media_path(
                     image_url, provider=self.provider.value
                 )
-                image.content = safe_path.read_bytes()
+                image.content = await asyncio.to_thread(
+                    _read_file_bytes, str(safe_path)
+                )
 
             # Prepare features
             features = self._prepare_vision_features(analysis_types)
