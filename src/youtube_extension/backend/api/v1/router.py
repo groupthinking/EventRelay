@@ -1177,12 +1177,20 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
         metrics: dict[str, Any] = (
             report.get("metrics", {}) if isinstance(report, dict) else {}
         )
+        # Collect first, then write once. A report carries every web-vital the
+        # page gathered, and recording them one at a time cost one SQLite
+        # connection and one commit fsync each while the client waited.
+        samples: list[dict[str, Any]] = []
         for name, stats in metrics.items():
             value = stats.get("current") if isinstance(stats, dict) else None
             if isinstance(value, (int, float)):
-                await performance_monitor.record_metric(
-                    "frontend", name, float(value), unit=str(stats.get("unit", "ms"))
-                )
+                samples.append({
+                    "component": "frontend",
+                    "metric_name": name,
+                    "value": float(value),
+                    "unit": str(stats.get("unit", "ms")),
+                })
+        await performance_monitor.record_metrics(samples)
         return {"status": "ok", "metrics_recorded": len(metrics)}
     except Exception as e:
         logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
@@ -1855,6 +1863,10 @@ async def extract_events(request: EventExtractRequest):
     _CHUNK_SIZE = 24_000
     _CHUNK_OVERLAP = 500
     _MAX_EVENTS = 50
+    # Chunks are extracted in bounded windows rather than one at a time.  Each
+    # chunk is an independent, *billed* Gemini round-trip, so the window is kept
+    # small and the _MAX_EVENTS budget is re-checked between windows.
+    _EXTRACT_CONCURRENCY = 4
 
     def _build_chunks(text: str) -> list[str]:
         if len(text) <= _CHUNK_SIZE:
@@ -1928,14 +1940,28 @@ async def extract_events(request: EventExtractRequest):
         return chunk_events
 
     try:
-        for chunk in transcript_chunks:
+        for window_start in range(0, len(transcript_chunks), _EXTRACT_CONCURRENCY):
             if len(events) >= _MAX_EVENTS:
                 break
-            chunk_events = await _extract_chunk(chunk)
-            for ev in chunk_events:
-                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
-                    seen_titles.add(ev.title)
-                    events.append(ev)
+            window = transcript_chunks[
+                window_start : window_start + _EXTRACT_CONCURRENCY
+            ]
+            # asyncio.gather preserves input order, so results are merged in the
+            # same chunk order the serial loop used -- dedup and the _MAX_EVENTS
+            # cut-off therefore select exactly the same events.  _extract_chunk
+            # isolates every ordinary Exception (it catches Exception and returns
+            # []), so return_exceptions=False cannot abort a sibling chunk on a
+            # normal provider failure.  A BaseException such as CancelledError can
+            # still propagate -- that is intended: request cancellation should tear
+            # the whole fan-out down rather than be swallowed into a result value.
+            window_results = await asyncio.gather(
+                *(_extract_chunk(chunk) for chunk in window)
+            )
+            for chunk_events in window_results:
+                for ev in chunk_events:
+                    if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                        seen_titles.add(ev.title)
+                        events.append(ev)
     except Exception as exc:
         logger.warning(f"Chunked extraction failed: {exc}")
 

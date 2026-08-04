@@ -103,6 +103,12 @@ def test_focused_coverage_controller_can_read_authoritative_runs() -> None:
     assert "requires a separate approved GitHub App canary" in source
 
 
+def test_ci_investigator_workflow_removed() -> None:
+    """CI Investigator was retired (noise-only output); sources must stay gone."""
+    assert not (ROOT / ".github/workflows/eventrelay-ci-investigator.md").exists()
+    assert not (ROOT / ".github/workflows/eventrelay-ci-investigator.lock.yml").exists()
+
+
 def test_live_smoke_modules_are_excluded_before_import(monkeypatch) -> None:
     monkeypatch.delenv("RUN_LIVE_E2E", raising=False)
     monkeypatch.delenv("RUN_LIVE_DEPLOY", raising=False)
@@ -163,8 +169,6 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     step_scripts = [step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]]
     combined = "\n".join(step_scripts)
     assert "gh extension install github/gh-aw --pin v0.82.14" in combined
-    # eventrelay-ci-investigator was removed (07b8a2e); validation must not
-    # compile or diff a workflow whose source and lock files no longer exist.
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
