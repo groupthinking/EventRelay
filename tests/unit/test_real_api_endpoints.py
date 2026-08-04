@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 # initialised at import time via init_real_api_services())
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.real_api_endpoints import (  # noqa: E402
+    _CACHE_MISS,
     BatchProcessingRequest,
     VideoAnalysisResponse,
     VideoProcessingRequest,
@@ -1213,8 +1214,10 @@ class TestVideoDetailOffloadsBlockingIO:
 class TestReadVideoAnalysisSync:
     """Direct coverage of the extracted blocking helper."""
 
-    def test_missing_file_returns_none(self, tmp_path):
-        assert _read_video_analysis_sync(tmp_path / "absent_processed.json") is None
+    def test_missing_file_returns_the_miss_sentinel(self, tmp_path):
+        assert (
+            _read_video_analysis_sync(tmp_path / "absent_processed.json") is _CACHE_MISS
+        )
 
     def test_existing_file_returns_parsed_payload(self, tmp_cache):
         tmp_cache.mkdir(parents=True, exist_ok=True)
@@ -1226,11 +1229,50 @@ class TestReadVideoAnalysisSync:
         assert result["video_id"] == "auJzb1D-fag"
         assert result == json.loads(cache_file.read_text(encoding="utf-8"))
 
+    def test_null_content_is_a_payload_not_a_miss(self, tmp_cache):
+        """A stored JSON ``null`` parses to ``None`` but is *not* a cache miss.
+
+        Returning a bare ``None`` for absence would conflate the two and turn
+        such an entry into a 404. The sentinel keeps them distinguishable.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "nullish_processed.json"
+        cache_file.write_text("null", encoding="utf-8")
+
+        result = _read_video_analysis_sync(cache_file)
+
+        assert result is None
+        assert result is not _CACHE_MISS
+
+    def test_falsy_payloads_are_not_misses(self, tmp_cache):
+        """Neither is any other falsy JSON value the helper can legally parse."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+
+        for index, raw in enumerate(("{}", "[]", '""', "0", "false")):
+            cache_file = tmp_cache / f"falsy{index}_processed.json"
+            cache_file.write_text(raw, encoding="utf-8")
+
+            assert _read_video_analysis_sync(cache_file) is not _CACHE_MISS, raw
+
+    def test_embedded_null_byte_in_path_is_a_miss(self, tmp_cache):
+        """A path the OS cannot even name is a miss, not a fault.
+
+        ``Path.exists()`` swallows the ``ValueError`` that an embedded null
+        byte provokes and reports the entry as absent, so the pre-change
+        handler answered 404. A bare ``open()`` lets that ``ValueError``
+        escape, which would turn the same request into a 500.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        poisoned = Path(f"{tmp_cache}/\x00_processed.json")
+
+        assert _read_video_analysis_sync(poisoned) is _CACHE_MISS
+
     def test_corrupt_entry_raises_rather_than_reporting_a_miss(self, tmp_cache):
         """A damaged entry must surface as a 500, never as a 404.
 
-        Only ``FileNotFoundError`` means "no such analysis"; anything else is a
-        real fault and has to keep propagating.
+        Only "the path names no readable entry" -- ``FileNotFoundError`` or a
+        path the OS rejects outright -- means "no such analysis"; anything
+        else is a real fault and has to keep propagating.
         """
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = tmp_cache / "bad_processed.json"
@@ -1283,6 +1325,90 @@ class TestVideoDetailIgnoresProcessorCacheTtl:
         cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
         self._age_file(cache_file, 48 * 60 * 60)
         mock_processor._get_cache_path.return_value = cache_file
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.json()["video_id"] == "auJzb1D-fag"
+
+
+# ===========================================================================
+# Cache-miss sentinel: absence vs. a stored ``null``
+# ===========================================================================
+
+
+class TestVideoDetailDistinguishesNullFromMissing:
+    """A stored JSON ``null`` is a payload; only absence is a 404.
+
+    The helper runs in a worker thread and hands its result back to the
+    handler, so the value it uses to signal "no entry" must be one that
+    ``json.load`` can never itself produce. ``None`` fails that test, and
+    using it regressed a ``null`` entry from 200 to 404.
+    """
+
+    def test_null_content_entry_is_served_as_200(
+        self, client, mock_processor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "auJzb1D-fag_processed.json"
+        cache_file.write_text("null", encoding="utf-8")
+        mock_processor._get_cache_path.return_value = cache_file
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.json() is None
+
+    def test_absent_entry_is_still_a_404(self, client, mock_processor, tmp_cache):
+        """The control: the sentinel must not swallow genuine misses."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        mock_processor._get_cache_path.return_value = (
+            tmp_cache / "auJzb1D-fag_processed.json"
+        )
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 404
+
+
+# ============================================================================
+# Malformed identifiers stay on the 404 path
+# ============================================================================
+
+
+class TestVideoDetailRejectsMalformedIdentifiers:
+    """A ``video_id`` the filesystem cannot name is a 404, not a 500.
+
+    Dropping the ``Path.exists()`` probe removed an implicit guard: that call
+    catches ``ValueError`` as well as ``OSError``, so an identifier carrying an
+    embedded null byte was reported as absent. A bare ``open()`` raises
+    instead, which escalated the same request from 404 to 500.
+    """
+
+    def test_null_byte_identifier_is_a_404_not_a_500(
+        self, client, mock_processor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        # Real path-building semantics, mirroring ``_get_cache_path``: a fixed
+        # return value would never carry the null byte into the open() call.
+        mock_processor._get_cache_path.side_effect = lambda vid: Path(
+            f"{tmp_cache}/{vid}_processed.json"
+        )
+
+        response = client.get("/api/v2/videos/%00")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_wellformed_identifier_still_reaches_the_payload(
+        self, client, mock_processor, tmp_cache
+    ):
+        """The control: the widened miss rule must not swallow real reads."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+        mock_processor._get_cache_path.side_effect = lambda vid: Path(
+            f"{tmp_cache}/{vid}_processed.json"
+        )
 
         response = client.get("/api/v2/videos/auJzb1D-fag")
 

@@ -13,7 +13,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Final, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -27,6 +27,11 @@ from .services.real_youtube_api import get_youtube_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Distinguishes "no cache entry" from an entry that parses to ``None`` -- which is
+# what a file holding the JSON literal ``null`` yields. A plain ``None`` return
+# conflates the two and turns a stored ``null`` analysis into a 404.
+_CACHE_MISS: Final = object()
 
 
 def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
@@ -85,7 +90,7 @@ def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
     return processed_videos
 
 
-def _read_video_analysis_sync(cache_path: Path) -> Optional[dict[str, Any]]:
+def _read_video_analysis_sync(cache_path: Path) -> Any:
     """Read and parse a single cached video analysis.
 
     This performs blocking filesystem work (``open()`` and a full
@@ -100,18 +105,25 @@ def _read_video_analysis_sync(cache_path: Path) -> Optional[dict[str, Any]]:
     directory or an unreadable entry keeps surfacing as a 500 rather than being
     silently reported as a missing video.
 
+    :class:`ValueError` is also treated as a miss. ``Path.exists()`` swallows it
+    and reports the entry as absent, so a ``video_id`` carrying an embedded null
+    byte used to yield a 404; letting the bare ``open()`` raise would turn that
+    malformed-identifier case into a 500.
+
     Deliberately does *not* apply the processor's cache TTL. This endpoint has
     always served a cached analysis regardless of age, whereas
-    ``RealVideoProcessor._read_cache_file`` treats anything older than
-    ``_CACHE_TTL_SECONDS`` as a miss; reusing it here would turn every analysis
-    over 24 hours old into a 404.
+    ``RealVideoProcessor._read_cache_file`` in ``services/real_video_processor.py``
+    treats anything older than ``_CACHE_TTL_SECONDS`` (24 hours) as a miss;
+    reusing it here would turn every analysis over a day old into a 404.
 
-    Returns the parsed payload, or ``None`` when no cache entry exists.
+    Returns the parsed JSON payload, which may legitimately be ``None`` when the
+    entry holds the literal ``null``. Absence is reported as the distinct
+    :data:`_CACHE_MISS` sentinel so the two cannot be confused.
     """
     try:
         handle = open(cache_path, encoding="utf-8")
-    except FileNotFoundError:
-        return None
+    except (FileNotFoundError, ValueError):
+        return _CACHE_MISS
 
     with handle as f:
         return json.load(f)
@@ -308,7 +320,10 @@ def setup_real_api_endpoints(app: FastAPI):
             # string arithmetic and touches no filesystem.
             video_data = await asyncio.to_thread(_read_video_analysis_sync, cache_path)
 
-            if video_data is None:
+            # Identity check against the sentinel, not a truthiness or ``is None``
+            # test: an entry holding the JSON literal ``null`` parses to ``None``
+            # and has always been served as a 200, so it must not 404 here.
+            if video_data is _CACHE_MISS:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Video analysis not found: {video_id}"
