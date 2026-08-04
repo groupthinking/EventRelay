@@ -117,9 +117,10 @@ def resolve_local_media_path(candidate: str, provider: str | None = None) -> Pat
     root = get_media_root()
     if root is None:
         raise UnsafeMediaPathError(
-            "Local media reads are disabled. Use an s3:// or https:// source, "
-            f"or set {MEDIA_ROOT_ENV_VAR} to the directory local media may be "
-            "read from.",
+            "Local media reads are disabled. Provide a remote source instead "
+            "(https:// works for every provider; s3:// only for AWS "
+            f"Rekognition), or set {MEDIA_ROOT_ENV_VAR} to the directory local "
+            "media may be read from.",
             provider=provider,
             requested_path=candidate,
         )
