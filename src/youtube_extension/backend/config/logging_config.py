@@ -14,6 +14,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from youtube_extension.utils.logsafe import _UNSAFE_LOG_CHARS
+
 
 class StructuredFormatter(logging.Formatter):
     """
@@ -36,10 +38,18 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, 'request_id'):
             record.correlation_id = record.request_id
 
-        # Format the base message
+        # Format the base message (includes any exc_info traceback appended
+        # by the base formatter).
         formatted_message = super().format(record)
 
-        return formatted_message
+        # CWE-117: neutralize CR/LF and other line separators in the FINAL
+        # rendered record — so an exc_info traceback or a structured ``extra``
+        # field carrying attacker-controlled text (e.g. a URL inside an
+        # exception message) cannot forge or corrupt log lines even when the
+        # value was not passed through ``_safe_log`` at the call site. This
+        # collapses each record to a single line, matching the ``logsafe``
+        # drop behavior.
+        return formatted_message.translate(_UNSAFE_LOG_CHARS)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""

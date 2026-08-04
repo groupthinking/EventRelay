@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from youtube_extension.utils.logsafe import safe_log as _safe_log
 from youtube_extension.utils.proxy import get_proxy_url
 
 DEPLOYMENT_TARGET_ALIASES: dict[str, str] = {
@@ -87,7 +88,7 @@ class VideoProcessingService:
             return processor
 
         except Exception as e:
-            logger.error(f"Error initializing video processor: {e}")
+            logger.error(f"Error initializing video processor: {_safe_log(e)}")
             return None
 
     async def process_video_for_markdown(self, video_url: str, force_regenerate: bool = False) -> dict[str, Any]:
@@ -102,13 +103,13 @@ class VideoProcessingService:
             Dict containing processing results and metadata
         """
         try:
-            logger.info(f"Processing video for markdown: {video_url}")
+            logger.info(f"Processing video for markdown: {_safe_log(video_url)}")
 
             # Check cache first unless force regenerate
             if not force_regenerate:
                 cached_result = self.cache_service.get_cached_result(video_url)
                 if cached_result:
-                    logger.info(f"Returning cached result for {cached_result['video_id']}")
+                    logger.info(f"Returning cached result for {_safe_log(cached_result['video_id'])}")
 
                     # Process cached content
                     content = cached_result['markdown_content']
@@ -145,7 +146,7 @@ class VideoProcessingService:
                     if fallback_result:
                         return fallback_result
 
-                logger.warning(f"Video processing failed for {video_url}")
+                logger.warning(f"Video processing failed for {_safe_log(video_url)}")
                 raise ValueError("Video processing failed")
 
             # Process successful result
@@ -167,7 +168,7 @@ class VideoProcessingService:
             }
 
         except Exception as e:
-            logger.error(f"Error in video processing service: {e}")
+            logger.error(f"Error in video processing service: {_safe_log(e)}")
 
             # Try fallback on error
             if self.use_langextract_fallback:
@@ -189,7 +190,7 @@ class VideoProcessingService:
             Dict containing processing results
         """
         try:
-            logger.info(f"Basic video processing: {video_url}")
+            logger.info(f"Basic video processing: {_safe_log(video_url)}")
             options = options or {}
 
             processor = self.get_video_processor()
@@ -205,7 +206,7 @@ class VideoProcessingService:
                         logger.info("Returning processor-level cached result")
                         return self._normalize_result(video_url, cached)
             except Exception as cache_err:
-                logger.debug(f"Cache lookup skipped due to error: {cache_err}")
+                logger.debug(f"Cache lookup skipped due to error: {_safe_log(cache_err)}")
 
             # Run processing
             start_time = time.time()
@@ -219,14 +220,14 @@ class VideoProcessingService:
             return normalized
 
         except asyncio.TimeoutError as e:
-            logger.error(f"Timeout during video processing: {e}")
+            logger.error(f"Timeout during video processing: {_safe_log(e)}")
             # Re-raise to allow API layer to map to 408
             raise
         except ValueError:
             # Bubble up ValueError for API layer to map to 400
             raise
         except Exception as e:
-            logger.error(f"Error in basic video processing: {e}")
+            logger.error(f"Error in basic video processing: {_safe_log(e)}")
             raise
 
     def _normalize_result(self, video_url: str, result: dict[str, Any]) -> dict[str, Any]:
@@ -332,7 +333,7 @@ class VideoProcessingService:
         start_time = time.time()
 
         try:
-            logger.info(f"Processing video to software: {video_url}")
+            logger.info(f"Processing video to software: {_safe_log(video_url)}")
 
             # Import required components
             try:
@@ -342,7 +343,7 @@ class VideoProcessingService:
                 )
                 pipeline_available = True
             except ImportError as e:
-                logger.error(f"Software generation pipeline not available: {e}")
+                logger.error(f"Software generation pipeline not available: {_safe_log(e)}")
                 pipeline_available = False
 
             if not pipeline_available:
@@ -457,7 +458,7 @@ class VideoProcessingService:
 
         except Exception as e:
             processing_time = time.time() - start_time
-            logger.error(f"Video-to-software processing failed: {e}")
+            logger.error(f"Video-to-software processing failed: {_safe_log(e)}")
             raise e
 
     async def _try_langextract_fallback(self, video_url: str) -> Optional[dict[str, Any]]:
@@ -490,7 +491,7 @@ class VideoProcessingService:
             )
             if not Path(server_path).is_file():
                 logger.warning(
-                    f"LangExtract MCP server not found at {server_path}; "
+                    f"LangExtract MCP server not found at {_safe_log(server_path)}; "
                     "set LANGEXTRACT_MCP_SERVER to override"
                 )
                 return None
@@ -517,14 +518,14 @@ class VideoProcessingService:
                 return None
 
             if proc.returncode != 0:
-                logger.warning(f"LangExtract MCP call failed: {stderr.decode()[:200]}")
+                logger.warning(f"LangExtract MCP call failed: {_safe_log(stderr.decode()[:200])}")
                 return None
 
             out = stdout.decode().strip().splitlines()[-1]
             res = _json.loads(out).get("result", {})
 
             if "error" in res:
-                logger.warning(f"LangExtract error: {res['error']}")
+                logger.warning(f"LangExtract error: {_safe_log(res['error'])}")
                 return None
 
             text = res.get("text", "")
@@ -543,7 +544,7 @@ class VideoProcessingService:
             }
 
         except Exception as e:
-            logger.warning(f"LangExtract fallback exception: {e}")
+            logger.warning(f"LangExtract fallback exception: {_safe_log(e)}")
             return None
 
     async def cleanup(self):
@@ -555,4 +556,4 @@ class VideoProcessingService:
                     await close_coro()
                     logger.info("✅ Processor session closed")
         except Exception as e:
-            logger.warning(f"Processor cleanup warning: {e}")
+            logger.warning(f"Processor cleanup warning: {_safe_log(e)}")
