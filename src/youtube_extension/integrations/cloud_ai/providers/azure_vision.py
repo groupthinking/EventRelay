@@ -26,6 +26,7 @@ from ..exceptions import (
     ConfigurationError,
     RateLimitError,
 )
+from ..media_paths import resolve_local_media_path
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +195,11 @@ class AzureVision(BaseCloudAI):
                 results, image_url, analysis_types, processing_time
             )
 
+        except CloudAIError:
+            # Typed errors (e.g. UnsafeMediaPathError from the local-path guard)
+            # already carry provider and error_code; re-wrapping them would
+            # flatten them into a generic CloudAIError and lose that type.
+            raise
         except Exception as e:
             raise CloudAIError(
                 f"Azure AI Vision image analysis failed: {e}",
@@ -258,8 +264,11 @@ class AzureVision(BaseCloudAI):
             # For URL input, Azure can analyze directly
             return None
         else:
-            # Local file - read off the event loop
-            return await asyncio.to_thread(_read_file_bytes, image_url)
+            # Local file. The path is caller-supplied, so validate it against
+            # CLOUD_AI_MEDIA_ROOT before opening anything; the read then uses
+            # the resolved path rather than the raw string, off the event loop.
+            safe_path = resolve_local_media_path(image_url, provider=self.provider.value)
+            return await asyncio.to_thread(_read_file_bytes, str(safe_path))
 
     async def _await_ocr_call(self, deadline: float, func: Any, *args: Any, **kwargs: Any) -> Any:
         """Run a blocking Azure SDK call in a worker thread, bounded by a
