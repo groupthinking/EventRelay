@@ -62,7 +62,6 @@ jobs:
       - name: Compile and validate workflows
         run: |
           gh aw compile \
-            eventrelay-ci-investigator \
             canonical-pr-remediator \
             focused-coverage-controller \
             --validate \
@@ -71,7 +70,6 @@ jobs:
       - name: Run actionlint, zizmor, and poutine checks
         run: |
           gh aw compile \
-            eventrelay-ci-investigator \
             canonical-pr-remediator \
             focused-coverage-controller \
             --actionlint \
@@ -82,6 +80,5 @@ jobs:
       - name: Verify compiled lock files are committed
         run: |
           git diff --exit-code -- \
-            .github/workflows/eventrelay-ci-investigator.lock.yml \
             .github/workflows/canonical-pr-remediator.lock.yml \
             .github/workflows/focused-coverage-controller.lock.yml
