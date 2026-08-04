@@ -1322,11 +1322,11 @@ def _video_id_of(request) -> str:
 class TestEnqueueBatchConcurrency:
     """enqueue_batch must fan out concurrently under a bounded limit."""
 
-    def _video_tasks(self, count: int) -> list[VideoProcessingTask]:
+    def _video_tasks(self, count: int, prefix: str = "vid") -> list[VideoProcessingTask]:
         return [
             VideoProcessingTask(
-                video_id=f"vid-{i}",
-                video_url=f"https://youtube.com/watch?v=vid-{i}",
+                video_id=f"{prefix}-{i}",
+                video_url=f"https://youtube.com/watch?v={prefix}-{i}",
             )
             for i in range(count)
         ]
@@ -1404,6 +1404,54 @@ class TestEnqueueBatchConcurrency:
         assert peak > 1, "expected concurrent fan-out, observed a serial drain"
         assert peak <= m._ENQUEUE_MAX_CONCURRENCY, (
             f"observed {peak} concurrent RPCs, limit is {m._ENQUEUE_MAX_CONCURRENCY}"
+        )
+
+    async def test_overlapping_batches_share_the_bound(self):
+        """Concurrent batches on one service must not exceed the bound together.
+
+        The batch endpoint drives the process-wide singleton, so two in-flight
+        requests would each get their own limiter if the semaphore were built
+        per call -- admitting 2x the bound against the shared thread pool and
+        recreating the starvation the bound exists to prevent.
+        """
+        per_batch = 12
+        mock_tv2 = _routing_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        lock = threading.Lock()
+        in_flight = 0
+        peak = 0
+
+        def create_task(request=None, **_kwargs):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{_video_id_of(request)}"
+            return response
+
+        svc.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            first, second = await asyncio.gather(
+                svc.enqueue_batch(self._video_tasks(per_batch, prefix="a")),
+                svc.enqueue_batch(self._video_tasks(per_batch, prefix="b")),
+            )
+
+        assert len(first) == per_batch
+        assert len(second) == per_batch
+        assert peak > 1, "expected concurrent fan-out, observed a serial drain"
+        assert peak <= m._ENQUEUE_MAX_CONCURRENCY, (
+            f"two overlapping batches reached {peak} concurrent RPCs, but the "
+            f"limit is {m._ENQUEUE_MAX_CONCURRENCY}; the limiter is not shared "
+            f"across calls"
         )
 
     async def test_ids_follow_input_order_despite_completion_order(self):
