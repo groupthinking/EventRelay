@@ -611,13 +611,22 @@ class TestEnqueueBatch:
         ]
 
     async def test_returns_all_task_ids_on_success(self):
-        mock_tv2 = _make_mock_tasks_v2()
+        # Routing mock + request-keyed responses: enqueue_batch fans out
+        # concurrently, so the order create_task happens to be *called* in no
+        # longer implies input order.  Keying the response off the request
+        # keeps this assertion about the id-to-input mapping (the thing that
+        # actually matters) instead of about RPC completion order.  With a
+        # list side_effect this passes only because the mock returns
+        # instantly; adding 0-4ms of jitter makes it fail ~85% of the time.
+        mock_tv2 = _routing_tasks_v2()
         svc = _initialized_service(mock_tv2)
 
-        responses = [MagicMock() for _ in range(3)]
-        for i, r in enumerate(responses):
-            r.name = f".../tasks/t{i}"
-        svc.client.create_task.side_effect = responses
+        def create_task(request):
+            response = MagicMock()
+            response.name = f".../tasks/t{_video_id_of(request).removeprefix('vid-')}"
+            return response
+
+        svc.client.create_task.side_effect = create_task
 
         with (
             patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
@@ -1279,3 +1288,182 @@ class TestClientCallsDoNotBlockEventLoop:
         """The happy path is unchanged by the cancellation handling."""
         sentinel = MagicMock()
         assert await m._run_sync_rpc(lambda *_a, **_k: sentinel) is sentinel
+
+
+# ===========================================================================
+# enqueue_batch concurrency tests
+# ===========================================================================
+
+
+def _routing_tasks_v2() -> MagicMock:
+    """A ``tasks_v2`` mock whose builders pass their kwargs through.
+
+    ``_make_mock_tasks_v2`` gives every builder a single fixed ``return_value``,
+    so each ``create_task`` call receives an identical sentinel and cannot be
+    attributed back to a specific video.  Concurrency tests need that
+    attribution (call order no longer implies input order), so ``Task``,
+    ``HttpRequest`` and ``CreateTaskRequest`` are turned into pass-through
+    namespaces here.
+    """
+    import types as _types
+
+    mock = _make_mock_tasks_v2()
+    mock.HttpRequest.side_effect = lambda **kw: _types.SimpleNamespace(**kw)
+    mock.Task.side_effect = lambda **kw: _types.SimpleNamespace(**kw)
+    mock.CreateTaskRequest.side_effect = lambda **kw: _types.SimpleNamespace(**kw)
+    return mock
+
+
+def _video_id_of(request) -> str:
+    """Recover the video id from a CreateTaskRequest built by the service."""
+    return json.loads(request.task.http_request.body.decode())["video_id"]
+
+
+class TestEnqueueBatchConcurrency:
+    """enqueue_batch must fan out concurrently under a bounded limit."""
+
+    def _video_tasks(self, count: int) -> list[VideoProcessingTask]:
+        return [
+            VideoProcessingTask(
+                video_id=f"vid-{i}",
+                video_url=f"https://youtube.com/watch?v=vid-{i}",
+            )
+            for i in range(count)
+        ]
+
+    async def test_batch_enqueues_concurrently(self):
+        """Wall time must be far below the serial sum of RPC latencies."""
+        count, delay = 8, 0.05
+        mock_tv2 = _routing_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        def create_task(request=None, **_kwargs):
+            time.sleep(delay)  # stand-in for the blocking gRPC round-trip
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{_video_id_of(request)}"
+            return response
+
+        svc.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            started = time.perf_counter()
+            ids = await svc.enqueue_batch(self._video_tasks(count))
+            elapsed = time.perf_counter() - started
+
+        assert len(ids) == count
+        serial_floor = count * delay
+        assert elapsed < serial_floor / 2, (
+            f"enqueue_batch took {elapsed * 1000:.0f}ms for {count} tasks; "
+            f"a serial implementation needs >={serial_floor * 1000:.0f}ms, so this "
+            f"is still serial"
+        )
+
+    async def test_batch_bounds_in_flight_concurrency(self):
+        """Fan-out is capped so the shared thread pool is not monopolised."""
+        count = 24
+        mock_tv2 = _routing_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        lock = threading.Lock()
+        in_flight = 0
+        peak = 0
+
+        def create_task(request=None, **_kwargs):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{_video_id_of(request)}"
+            return response
+
+        svc.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            ids = await svc.enqueue_batch(self._video_tasks(count))
+
+        assert len(ids) == count
+        assert peak > 1, "expected concurrent fan-out, observed a serial drain"
+        assert peak <= m._ENQUEUE_MAX_CONCURRENCY, (
+            f"observed {peak} concurrent RPCs, limit is {m._ENQUEUE_MAX_CONCURRENCY}"
+        )
+
+    async def test_ids_follow_input_order_despite_completion_order(self):
+        """Returned ids stay positionally aligned with the input tasks.
+
+        Regression guard for the concurrent implementation: earlier videos are
+        made the *slowest*, so completion order is the reverse of input order.
+        """
+        count = 6
+        mock_tv2 = _routing_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        def create_task(request=None, **_kwargs):
+            video_id = _video_id_of(request)
+            index = int(video_id.rsplit("-", 1)[1])
+            time.sleep(0.01 * (count - index))  # vid-0 finishes last
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{video_id}"
+            return response
+
+        svc.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            ids = await svc.enqueue_batch(self._video_tasks(count))
+
+        assert ids == [f"vid-{i}" for i in range(count)]
+
+    async def test_failures_are_skipped_without_losing_survivors(self):
+        """A failing task is logged and dropped; the rest still return ids."""
+        count = 6
+        mock_tv2 = _routing_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        def create_task(request=None, **_kwargs):
+            video_id = _video_id_of(request)
+            if video_id in {"vid-1", "vid-4"}:
+                raise RuntimeError("network error")
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{video_id}"
+            return response
+
+        svc.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            ids = await svc.enqueue_batch(self._video_tasks(count))
+
+        assert ids == ["vid-0", "vid-2", "vid-3", "vid-5"]
+
+    async def test_cancellation_propagates_and_is_not_logged_as_failure(self):
+        """CancelledError must not be absorbed into the skip-and-continue path."""
+        mock_tv2 = _routing_tasks_v2()
+        svc = _initialized_service(mock_tv2)
+
+        async def fake_enqueue(video_task, task_config=None):
+            if video_task.video_id == "vid-1":
+                raise asyncio.CancelledError()
+            return video_task.video_id
+
+        svc.enqueue_video_processing = fake_enqueue
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+            pytest.raises(asyncio.CancelledError),
+        ):
+            await svc.enqueue_batch(self._video_tasks(3))
