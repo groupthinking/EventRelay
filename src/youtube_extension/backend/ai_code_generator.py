@@ -8,6 +8,7 @@ based on video analysis. Produces monetizable products, not templates.
 """
 
 import ast
+import asyncio
 import json
 import logging
 import os
@@ -17,6 +18,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on concurrent AI auto-fix calls. Each fix is an independent
+# multi-second LLM round-trip, so some fan-out is a large win, but an unbounded
+# one would hit provider rate limits on projects with many failing files.
+_MAX_CONCURRENT_FIXES = 4
 
 # Add project root for knowledge_base import
 # Add scripts directory for knowledge_base import
@@ -1260,15 +1266,21 @@ jobs:
         self,
         project_path: Path,
         errors: list[str],
-        suggested_fixes: list[str]
+        suggested_fixes: list[str],
+        max_concurrency: Optional[int] = None
     ) -> dict[str, Any]:
         """
         Use AI to fix build errors in generated code.
+
+        Files are fixed concurrently, bounded by *max_concurrency*, because each
+        one is independent and dominated by a network round-trip to the LLM.
 
         Args:
             project_path: Path to the project
             errors: List of build error messages
             suggested_fixes: List of suggested resolutions from skill database
+            max_concurrency: Max files fixed in parallel. Defaults to
+                _MAX_CONCURRENT_FIXES; values below 1 are clamped to 1.
 
         Returns:
             Dict with fixed files and status
@@ -1293,14 +1305,37 @@ jobs:
             # Try common problem files
             error_files = {"src/app/page.tsx", "src/components/Button.tsx"}
 
-        fixed_files = []
-        for rel_path in error_files:
-            file_path = project_path / rel_path
-            if not file_path.exists():
-                continue
+        # Each error file is independent: its own read, its own AI call and its
+        # own write. self.router.generate() is a multi-second network round-trip,
+        # so running them one after another made wall-clock cost scale linearly
+        # with the number of failing files. Bound the fan-out so we do not trip
+        # provider rate limits.
+        limit = (
+            _MAX_CONCURRENT_FIXES
+            if max_concurrency is None
+            else max(1, max_concurrency)
+        )
+        semaphore = asyncio.Semaphore(limit)
 
-            # Read current file content
-            current_content = file_path.read_text()
+        async def _fix_one(rel_path: str) -> Optional[str]:
+            """Fix one file; return its path on success, otherwise None."""
+            file_path = project_path / rel_path
+
+            def _read_source() -> Optional[str]:
+                # Path.exists()/read_text() are blocking syscalls - keep them
+                # off the event loop.
+                if not file_path.exists():
+                    return None
+                return file_path.read_text()
+
+            try:
+                current_content = await asyncio.to_thread(_read_source)
+            except OSError as e:
+                logger.warning(f"⚠️ Failed to read {rel_path}: {e}")
+                return None
+
+            if current_content is None:
+                return None
 
             # Build fix prompt
             fix_prompt = f"""You are a TypeScript/Next.js expert. Fix the following code that has build errors.
@@ -1328,7 +1363,7 @@ Return ONLY the fixed code, no explanations. Ensure:
 
                 if not response_text:
                     logger.warning(f"⚠️ LLM router returned no text for {rel_path}, skipping")
-                    continue
+                    return None
 
                 fixed_code = response_text.strip()
 
@@ -1346,12 +1381,25 @@ Return ONLY the fixed code, no explanations. Ensure:
                             break
 
                 # Write fixed content
-                file_path.write_text(fixed_code)
-                fixed_files.append(rel_path)
+                await asyncio.to_thread(file_path.write_text, fixed_code)
                 logger.info(f"✅ Fixed: {rel_path}")
+                return rel_path
 
             except Exception as e:
                 logger.warning(f"⚠️ Failed to fix {rel_path}: {e}")
+                return None
+
+        async def _fix_guarded(rel_path: str) -> Optional[str]:
+            async with semaphore:
+                return await _fix_one(rel_path)
+
+        # error_files is a set, so the previous sequential loop reported results
+        # in arbitrary order; sort for a stable, assertable ordering.
+        ordered_paths = sorted(error_files)
+        results = await asyncio.gather(
+            *(_fix_guarded(rel_path) for rel_path in ordered_paths)
+        )
+        fixed_files = [rel_path for rel_path in results if rel_path]
 
         return {
             "success": len(fixed_files) > 0,
