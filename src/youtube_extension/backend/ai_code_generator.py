@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import sys
+import weakref
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -23,6 +24,41 @@ logger = logging.getLogger(__name__)
 # multi-second LLM round-trip, so some fan-out is a large win, but an unbounded
 # one would hit provider rate limits on projects with many failing files.
 _MAX_CONCURRENT_FIXES = 4
+
+# The fix budget is *process-wide*, not per-invocation.  get_deployment_manager()
+# builds a fresh DeploymentManager -- and therefore a fresh AICodeGenerator --
+# for every pipeline run, so a semaphore owned by one call would let N concurrent
+# deployments issue N * limit LLM calls and defeat the rate-limit protection this
+# bound exists to provide.  Sharing one semaphore per (event loop, limit) caps
+# total in-flight fixes at `limit` no matter how many generators exist.
+#
+# Keyed by the running loop because asyncio primitives bind to the first loop
+# that awaits them; a module-level singleton would raise once a second loop
+# (e.g. the next test case) tried to use it.  WeakKeyDictionary so finished
+# loops do not leak.
+_FIX_SEMAPHORES: "weakref.WeakKeyDictionary[Any, dict[int, asyncio.Semaphore]]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _shared_fix_semaphore(limit: int) -> asyncio.Semaphore:
+    """Return the process-wide fix semaphore for `limit` on the running loop."""
+    loop = asyncio.get_running_loop()
+    try:
+        by_limit = _FIX_SEMAPHORES.get(loop)
+        if by_limit is None:
+            by_limit = {}
+            _FIX_SEMAPHORES[loop] = by_limit
+    except TypeError:
+        # Some loop implementations are not weak-referenceable. Fall back to an
+        # unshared semaphore: the per-invocation bound still holds.
+        return asyncio.Semaphore(limit)
+
+    semaphore = by_limit.get(limit)
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(limit)
+        by_limit[limit] = semaphore
+    return semaphore
 
 # Add project root for knowledge_base import
 # Add scripts directory for knowledge_base import
@@ -1273,14 +1309,17 @@ jobs:
         Use AI to fix build errors in generated code.
 
         Files are fixed concurrently, bounded by *max_concurrency*, because each
-        one is independent and dominated by a network round-trip to the LLM.
+        one is independent and dominated by a network round-trip to the LLM. The
+        bound is shared process-wide, so concurrent deployments cannot multiply
+        it (see _shared_fix_semaphore).
 
         Args:
             project_path: Path to the project
             errors: List of build error messages
             suggested_fixes: List of suggested resolutions from skill database
-            max_concurrency: Max files fixed in parallel. Defaults to
-                _MAX_CONCURRENT_FIXES; values below 1 are clamped to 1.
+            max_concurrency: Max files fixed in parallel, across *all* in-flight
+                calls in this process. Defaults to _MAX_CONCURRENT_FIXES; values
+                below 1 are clamped to 1.
 
         Returns:
             Dict with fixed files and status
@@ -1315,7 +1354,7 @@ jobs:
             if max_concurrency is None
             else max(1, max_concurrency)
         )
-        semaphore = asyncio.Semaphore(limit)
+        semaphore = _shared_fix_semaphore(limit)
 
         async def _fix_one(rel_path: str) -> Optional[str]:
             """Fix one file; return its path on success, otherwise None."""
@@ -1330,7 +1369,12 @@ jobs:
 
             try:
                 current_content = await asyncio.to_thread(_read_source)
-            except OSError as e:
+            except (OSError, UnicodeError) as e:
+                # UnicodeDecodeError (a ValueError, *not* an OSError) is raised by
+                # read_text() on a non-UTF-8 source. Letting it escape _fix_one
+                # would propagate through gather(return_exceptions=False) and throw
+                # away every sibling file's successful fix, so it is handled here
+                # as just another per-file read failure.
                 logger.warning(f"⚠️ Failed to read {rel_path}: {e}")
                 return None
 

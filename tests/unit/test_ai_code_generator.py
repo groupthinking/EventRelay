@@ -1232,6 +1232,67 @@ class TestFixBuildErrorsConcurrency:
 
         assert result["fixed_files"] == sorted(rel_paths)
 
+    async def test_undecodable_source_does_not_abort_siblings(self, tmp_path):
+        """A non-UTF-8 source must be skipped, not blow up the whole fan-out.
+
+        Path.read_text() raises UnicodeDecodeError -- a ValueError subclass, *not*
+        an OSError -- on undecodable bytes. Because the files are gathered with
+        the default return_exceptions=False, letting that escape _fix_one would
+        propagate out of gather and discard every sibling's successful fix.
+        """
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 3)
+        # Invalid UTF-8: a lone continuation byte cannot start a sequence.
+        (tmp_path / "src/app/page1.tsx").write_bytes(b"const x = '\xff\xfe';")
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        result = await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        assert result["fixed_files"] == ["src/app/page0.tsx", "src/app/page2.tsx"]
+        assert result["success"] is True
+
+    async def test_concurrent_invocations_share_the_fix_budget(self, tmp_path):
+        """The concurrency bound is process-wide, not per-invocation.
+
+        get_deployment_manager() builds a fresh DeploymentManager -- and so a
+        fresh AICodeGenerator -- per pipeline run. A semaphore owned by a single
+        call would therefore let N concurrent deployments issue N * limit LLM
+        calls, defeating the rate-limit protection the bound exists to provide.
+        """
+        record = {"max_inflight": 0}
+        shared = {"inflight": 0}
+
+        async def _generate(prompt, **kwargs):
+            shared["inflight"] += 1
+            record["max_inflight"] = max(record["max_inflight"], shared["inflight"])
+            try:
+                await asyncio.sleep(0.05)
+                return "const fixed = true;"
+            finally:
+                shared["inflight"] -= 1
+
+        projects = []
+        for n in range(3):
+            root = tmp_path / f"proj{n}"
+            root.mkdir()
+            rel_paths = self._make_files(root, 4)
+            gen = _make_gen_with_mock_client(root)
+            gen.router.generate = AsyncMock(side_effect=_generate)
+            projects.append((gen, root, rel_paths))
+
+        results = await asyncio.gather(
+            *(
+                gen.fix_build_errors(root, self._errors_for(rel_paths), [])
+                for gen, root, rel_paths in projects
+            )
+        )
+
+        # All 12 files across all 3 generators still get fixed...
+        assert [len(r["fixed_files"]) for r in results] == [4, 4, 4]
+        # ...but the three independent generators never exceed one shared budget.
+        assert record["max_inflight"] > 1
+        assert record["max_inflight"] <= 4
+
 
 # ===========================================================================
 # AICodeGenerator._generate_turborepo_monorepo
