@@ -1232,6 +1232,77 @@ class TestFixBuildErrorsConcurrency:
 
         assert result["fixed_files"] == sorted(rel_paths)
 
+    async def test_undecodable_file_does_not_abort_siblings(
+        self, tmp_path, monkeypatch
+    ):
+        """A non-UTF-8 source raises UnicodeDecodeError (a UnicodeError, not an
+        OSError) on read. It must be caught as a per-file read failure, not
+        allowed to escape _fix_one and cancel the siblings via
+        gather(return_exceptions=False)."""
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 3)
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        real_read = Path.read_text
+
+        def _maybe_undecodable(self, *args, **kwargs):
+            if self.as_posix().endswith("src/app/page1.tsx"):
+                raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+            return real_read(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _maybe_undecodable)
+
+        result = await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        # The undecodable file is skipped; the other two are still fixed.
+        assert result["fixed_files"] == ["src/app/page0.tsx", "src/app/page2.tsx"]
+        assert result["success"] is True
+
+    async def test_cancellation_drains_inflight_write(self, tmp_path, monkeypatch):
+        """A write already running in a worker thread cannot be interrupted, so
+        cancellation must drain it before propagating — otherwise fix_build_errors
+        returns CancelledError while a write is still live and a caller's cleanup
+        or retry races it."""
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel = self._make_files(tmp_path, 1)[0]
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        write_started = threading.Event()
+        may_finish = threading.Event()
+        real_write = Path.write_text
+
+        def _blocking_write(self, data, *args, **kwargs):
+            write_started.set()
+            may_finish.wait(5)
+            return real_write(self, data, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", _blocking_write)
+
+        task = asyncio.ensure_future(
+            gen.fix_build_errors(tmp_path, self._errors_for([rel]), [])
+        )
+
+        # Wait until the write is actually in progress inside the worker thread.
+        for _ in range(100):
+            if write_started.is_set():
+                break
+            await asyncio.sleep(0.05)
+        assert write_started.is_set()
+
+        task.cancel()
+        await asyncio.sleep(0.1)
+
+        # The in-flight write is still blocked, so the drain must keep the task
+        # pending. Buggy code abandons the write and finishes immediately.
+        assert not task.done(), "cancellation abandoned an in-flight write"
+
+        may_finish.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # The drained write landed rather than being orphaned mid-flight.
+        assert (tmp_path / rel).read_text() == "const fixed = true;"
+
 
 # ===========================================================================
 # AICodeGenerator._generate_turborepo_monorepo

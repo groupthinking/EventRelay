@@ -9,6 +9,7 @@ based on video analysis. Produces monetizable products, not templates.
 
 import ast
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -1330,7 +1331,11 @@ jobs:
 
             try:
                 current_content = await asyncio.to_thread(_read_source)
-            except OSError as e:
+            except (OSError, UnicodeError) as e:
+                # read_text() raises UnicodeDecodeError (a UnicodeError, *not* an
+                # OSError) for a file that is not valid in the default encoding.
+                # Treat it as a per-file read failure so it cannot escape
+                # _fix_one and cancel the sibling fixes via gather().
                 logger.warning(f"⚠️ Failed to read {rel_path}: {e}")
                 return None
 
@@ -1380,8 +1385,20 @@ Return ONLY the fixed code, no explanations. Ensure:
                                 fixed_code = block
                             break
 
-                # Write fixed content
-                await asyncio.to_thread(file_path.write_text, fixed_code)
+                # Write fixed content. asyncio.to_thread runs write_text in a
+                # worker thread that a cancellation cannot interrupt once it has
+                # begun. Shield the write and, if we are cancelled mid-write,
+                # drain it before propagating CancelledError so a caller's
+                # cleanup or retry cannot race a still-running write.
+                write_task = asyncio.ensure_future(
+                    asyncio.to_thread(file_path.write_text, fixed_code)
+                )
+                try:
+                    await asyncio.shield(write_task)
+                except asyncio.CancelledError:
+                    with contextlib.suppress(Exception):
+                        await write_task
+                    raise
                 logger.info(f"✅ Fixed: {rel_path}")
                 return rel_path
 
