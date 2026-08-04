@@ -1177,12 +1177,20 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
         metrics: dict[str, Any] = (
             report.get("metrics", {}) if isinstance(report, dict) else {}
         )
+        # Collect first, then write once. A report carries every web-vital the
+        # page gathered, and recording them one at a time cost one SQLite
+        # connection and one commit fsync each while the client waited.
+        samples: list[dict[str, Any]] = []
         for name, stats in metrics.items():
             value = stats.get("current") if isinstance(stats, dict) else None
             if isinstance(value, (int, float)):
-                await performance_monitor.record_metric(
-                    "frontend", name, float(value), unit=str(stats.get("unit", "ms"))
-                )
+                samples.append({
+                    "component": "frontend",
+                    "metric_name": name,
+                    "value": float(value),
+                    "unit": str(stats.get("unit", "ms")),
+                })
+        await performance_monitor.record_metrics(samples)
         return {"status": "ok", "metrics_recorded": len(metrics)}
     except Exception as e:
         logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
