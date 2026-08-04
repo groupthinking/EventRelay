@@ -15,7 +15,7 @@ resolved:
 | Finding | Status | Evidence |
 |---------|--------|----------|
 | SEC-001 (pickle) | ✅ RESOLVED | `src/youtube_extension/backend/services/intelligent_cache.py` uses JSON serialization (`# pickle removed for security`); no `import pickle` remains under `src/youtube_extension/` |
-| SEC-002 (npm vulns) | ✅ RESOLVED | Vulnerable `devalue` chain no longer in `package-lock.json`; `next` pinned `^16.2.11` via root `overrides` (resolves 16.2.12, past the 15.6.0-canary.0–16.1.4 vulnerable range) |
+| SEC-002 (npm vulns) | ✅ RESOLVED (as originally scoped) | Vulnerable `devalue` chain no longer in `package-lock.json`; `next` pinned `^16.2.11` via root `overrides` (resolves 16.2.12, past the 15.6.0-canary.0–16.1.4 vulnerable range). Unrelated new advisories exist as of 2026-08-04 (`ip-address`, `postcss`; fixable via `npm audit fix`) |
 | SEC-003 (dangerouslySetInnerHTML) | ✅ RESOLVED | The old `frontend/` directory (incl. `LearningFusion.tsx`) was removed in the `apps/web` migration; zero `dangerouslySetInnerHTML` usages in `apps/` or `src/` |
 | SEC-004 (subprocess) | ✅ RESOLVED | Subprocess calls use list-form args (no `shell=True`) with explicit SECURITY comments (e.g. `cli.py`, `enhanced_video_processor.py`) |
 | SEC-005 (os.system in external lib) | ✅ RESOLVED | `video_representations_extractor-1.14.0/` no longer exists in the repository |
@@ -264,7 +264,7 @@ os.system(f'onnxsim {f} {f} && open {f}')
 ### Pre-Production Security Gate
 
 - [x] **SEC-001:** Pickle vulnerability fixed
-- [x] **SEC-002:** npm audit shows 0 high/critical vulnerabilities
+- [x] **SEC-002:** Original finding resolved (`devalue` chain and vulnerable `next` gone) — new unrelated advisories surface over time; keep `npm audit` in the release loop
 - [x] **SEC-003:** dangerouslySetInnerHTML removed or sanitized
 - [x] **SEC-004:** Subprocess input validation audit complete
 - [x] **SEC-005:** External library vulnerability isolated

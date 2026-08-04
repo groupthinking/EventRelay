@@ -7,7 +7,9 @@
 > `@ai-sdk/provider-utils`), and `next` is pinned to `^16.2.11` via the root
 > `package.json` `overrides` (resolves 16.2.12), past the vulnerable
 > 15.6.0-canary.0–16.1.4 range. This report is retained for the historical
-> record only.
+> record only. (Separately, `npm audit` as of 2026-08-04 reports 4 new
+> unrelated advisories — 2 high in `ip-address`, 2 moderate in `postcss` —
+> all fixable via `npm audit fix`.)
 
 **Date**: 2026-02-08
 **After Cleanup**: Post repository cleanup

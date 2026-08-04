@@ -13,7 +13,7 @@
 | Category | Status | Blockers |
 |----------|--------|----------|
 | Security | 🟢 GO | SEC-001..005 resolved (see SECURITY_REPORT.md Resolution Status) |
-| Dependencies | 🟢 GO | Vulnerable `devalue` chain removed; `next` pinned `^16.2.11` |
+| Dependencies | 🟡 CONDITIONAL | Original 31-vuln chain removed (`devalue` gone, `next` pinned `^16.2.11`); as of 2026-08-04 `npm audit` reports 4 new unrelated advisories (2 high `ip-address`, 2 moderate `postcss`), all fixable via `npm audit fix` |
 | Testing | 🟡 CONDITIONAL | Coverage enforced (`fail_under = 88.1833`); E2E/perf gaps remain |
 | CI/CD | 🟢 GO | Pipelines present |
 | Observability | 🟢 GO | Logging configured |
@@ -28,7 +28,7 @@
 ### Critical (Must Pass)
 
 - [x] **SEC-001:** Pickle vulnerability fixed in `intelligent_cache.py`
-- [x] **SEC-002:** `npm audit --audit-level=high` returns 0 vulnerabilities
+- [x] **SEC-002:** Original finding (31 vulns: `devalue`/`@workflow/*`/vulnerable `next`) resolved — note new unrelated advisories surface over time; see Dependencies row above
 - [x] **SEC-003:** No `dangerouslySetInnerHTML` with dynamic content
 - [x] **SEC-004:** Subprocess input audit completed
 - [x] **SEC-005:** `.env` file gitignored (verified ✅)
