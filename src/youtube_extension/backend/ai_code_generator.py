@@ -9,6 +9,7 @@ based on video analysis. Produces monetizable products, not templates.
 
 import ast
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -1424,8 +1425,24 @@ Return ONLY the fixed code, no explanations. Ensure:
                                 fixed_code = block
                             break
 
-                # Write fixed content
-                await asyncio.to_thread(file_path.write_text, fixed_code)
+                # Write fixed content. asyncio.to_thread cannot interrupt the
+                # worker thread once write_text has started, so a plain
+                # `await asyncio.to_thread(...)` that gets cancelled -- which
+                # gather() does to every sibling as soon as one task raises --
+                # would return control to the caller while the thread is still
+                # writing. The caller would then see a "failed" repair and could
+                # start cleanup on a file being truncated and rewritten
+                # underneath it. Shield the write so cancellation doesn't detach
+                # it, then drain it before propagating.
+                write = asyncio.create_task(
+                    asyncio.to_thread(file_path.write_text, fixed_code)
+                )
+                try:
+                    await asyncio.shield(write)
+                except asyncio.CancelledError:
+                    with contextlib.suppress(Exception):
+                        await write
+                    raise
                 logger.info(f"✅ Fixed: {rel_path}")
                 return rel_path
 

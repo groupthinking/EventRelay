@@ -1293,6 +1293,55 @@ class TestFixBuildErrorsConcurrency:
         assert record["max_inflight"] > 1
         assert record["max_inflight"] <= 4
 
+    async def test_cancellation_drains_the_in_flight_write(
+        self, tmp_path, monkeypatch
+    ):
+        """A cancelled fix must not abandon a half-written file.
+
+        asyncio.to_thread hands work to a worker thread and has no way to
+        interrupt it. Cancelling a bare `await asyncio.to_thread(write_text, ...)`
+        therefore returns control to the caller immediately while the thread is
+        still truncating and rewriting the file -- and gather() cancels every
+        sibling the moment one task raises, so this is reachable in normal
+        operation, not just on Ctrl-C. The caller would see a failed repair and
+        could begin cleanup on a file that is actively being written.
+        """
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 1)
+        target = tmp_path / rel_paths[0]
+        original = target.read_text()
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        write_started = threading.Event()
+        real_write = Path.write_text
+
+        def _slow_write(self, *args, **kwargs):
+            if self == target:
+                write_started.set()
+                # Hold the worker thread open long enough for the test to
+                # cancel while this write is genuinely mid-flight.
+                threading.Event().wait(0.3)
+            return real_write(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", _slow_write)
+
+        task = asyncio.create_task(
+            gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+        )
+        # Wait for the worker thread to actually enter write_text before
+        # cancelling, so the race window is open rather than assumed.
+        await asyncio.to_thread(write_started.wait, 5)
+        assert write_started.is_set()
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # Cancellation propagated only after the write was drained, so the file
+        # is whole. Without the drain this still holds the pre-fix contents.
+        assert target.read_text() == "const fixed = true;"
+        assert target.read_text() != original
+
 
 # ===========================================================================
 # AICodeGenerator._generate_turborepo_monorepo
