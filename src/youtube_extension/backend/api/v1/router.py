@@ -1855,6 +1855,10 @@ async def extract_events(request: EventExtractRequest):
     _CHUNK_SIZE = 24_000
     _CHUNK_OVERLAP = 500
     _MAX_EVENTS = 50
+    # Chunks are extracted in bounded windows rather than one at a time.  Each
+    # chunk is an independent, *billed* Gemini round-trip, so the window is kept
+    # small and the _MAX_EVENTS budget is re-checked between windows.
+    _EXTRACT_CONCURRENCY = 4
 
     def _build_chunks(text: str) -> list[str]:
         if len(text) <= _CHUNK_SIZE:
@@ -1928,14 +1932,25 @@ async def extract_events(request: EventExtractRequest):
         return chunk_events
 
     try:
-        for chunk in transcript_chunks:
+        for window_start in range(0, len(transcript_chunks), _EXTRACT_CONCURRENCY):
             if len(events) >= _MAX_EVENTS:
                 break
-            chunk_events = await _extract_chunk(chunk)
-            for ev in chunk_events:
-                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
-                    seen_titles.add(ev.title)
-                    events.append(ev)
+            window = transcript_chunks[
+                window_start : window_start + _EXTRACT_CONCURRENCY
+            ]
+            # asyncio.gather preserves input order, so results are merged in the
+            # same chunk order the serial loop used -- dedup and the _MAX_EVENTS
+            # cut-off therefore select exactly the same events.  _extract_chunk
+            # never raises (it catches Exception and returns []), so the default
+            # return_exceptions=False cannot abort a sibling chunk.
+            window_results = await asyncio.gather(
+                *(_extract_chunk(chunk) for chunk in window)
+            )
+            for chunk_events in window_results:
+                for ev in chunk_events:
+                    if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                        seen_titles.add(ev.title)
+                        events.append(ev)
     except Exception as exc:
         logger.warning(f"Chunked extraction failed: {exc}")
 
