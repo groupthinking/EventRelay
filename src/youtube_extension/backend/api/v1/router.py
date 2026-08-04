@@ -1941,8 +1941,11 @@ async def extract_events(request: EventExtractRequest):
             # asyncio.gather preserves input order, so results are merged in the
             # same chunk order the serial loop used -- dedup and the _MAX_EVENTS
             # cut-off therefore select exactly the same events.  _extract_chunk
-            # never raises (it catches Exception and returns []), so the default
-            # return_exceptions=False cannot abort a sibling chunk.
+            # isolates every ordinary Exception (it catches Exception and returns
+            # []), so return_exceptions=False cannot abort a sibling chunk on a
+            # normal provider failure.  A BaseException such as CancelledError can
+            # still propagate -- that is intended: request cancellation should tear
+            # the whole fan-out down rather than be swallowed into a result value.
             window_results = await asyncio.gather(
                 *(_extract_chunk(chunk) for chunk in window)
             )
