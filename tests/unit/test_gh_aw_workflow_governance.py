@@ -163,6 +163,8 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     step_scripts = [step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]]
     combined = "\n".join(step_scripts)
     assert "gh extension install github/gh-aw --pin v0.82.14" in combined
-    assert "eventrelay-ci-investigator" in combined
+    # eventrelay-ci-investigator was removed (07b8a2e); validation must not
+    # compile or diff a workflow whose source and lock files no longer exist.
+    assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
