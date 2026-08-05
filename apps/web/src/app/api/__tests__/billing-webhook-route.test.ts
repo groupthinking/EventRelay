@@ -30,7 +30,7 @@ afterEach(() => {
   resetKaizenTracesForTests();
 });
 
-function webhookRequest(body: string) {
+function webhookRequest(body: string): NextRequest {
   return new NextRequest('http://localhost/api/billing/webhook', {
     method: 'POST',
     headers: { 'stripe-signature': 't=1,v1=deadbeef' },
@@ -88,5 +88,39 @@ describe('POST /api/billing/webhook error leakage', () => {
 
     expect(JSON.stringify(consoleError.mock.calls)).toContain('10.0.3.14:6379');
     expect(getKaizenTraces('billing').some((t) => t.observation === handlerMessage)).toBe(true);
+  });
+});
+
+// The two pre-flight rejections short-circuit before Stripe is ever called, so
+// they never carried leaked text — but they are part of the same error contract
+// and must return a stable `code` like every other branch.
+describe('POST /api/billing/webhook error-code contract', () => {
+  it('returns webhook_not_configured with a matching code', async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+
+    const res = await POST(webhookRequest('{"id":"evt_3"}'));
+
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({
+      error: 'webhook_not_configured',
+      code: 'webhook_not_configured',
+    });
+    expect(constructEvent).not.toHaveBeenCalled();
+  });
+
+  it('returns missing_signature with a matching code', async () => {
+    const req = new NextRequest('http://localhost/api/billing/webhook', {
+      method: 'POST',
+      body: '{"id":"evt_4"}',
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: 'missing_signature',
+      code: 'missing_signature',
+    });
+    expect(constructEvent).not.toHaveBeenCalled();
   });
 });

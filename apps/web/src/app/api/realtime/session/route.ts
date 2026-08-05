@@ -54,7 +54,13 @@ const realtimeSession = {
  * The upstream status is deliberately NOT mirrored — it is itself a signal
  * about the server's OpenAI account state.
  */
-function upstreamFailure(stage: string, status: number, body: string, error: string, code: string) {
+function upstreamFailure(
+  stage: string,
+  status: number,
+  body: string,
+  error: string,
+  code: string,
+): Response {
   console.error(`[realtime] ${stage} failed`, JSON.stringify({ status, body }));
 
   return Response.json({ error, code }, { status: 502 });
@@ -68,7 +74,12 @@ function upstreamFailure(stage: string, status: number, body: string, error: str
  * an Error from our own transport, not upstream text, so it is safe to log —
  * and the caller gets the same fixed 502 as a non-OK upstream response.
  */
-function upstreamUnreachable(stage: string, cause: unknown, error: string, code: string) {
+function upstreamUnreachable(
+  stage: string,
+  cause: unknown,
+  error: string,
+  code: string,
+): Response {
   console.error(`[realtime] ${stage} request failed`, cause);
 
   return Response.json({ error, code }, { status: 502 });
@@ -102,7 +113,10 @@ export async function GET() {
 
   if (!headers) {
     return Response.json(
-      { error: 'OPENAI_API_KEY is not configured on the server.' },
+      {
+        error: 'OPENAI_API_KEY is not configured on the server.',
+        code: 'realtime_not_configured',
+      },
       { status: 500 },
     );
   }
@@ -158,7 +172,7 @@ export async function POST(request: Request) {
   const offerSdp = await request.text();
   if (!offerSdp.trim() || !offerSdp.includes('v=0')) {
     return Response.json(
-      { error: 'A valid WebRTC SDP offer is required.' },
+      { error: 'A valid WebRTC SDP offer is required.', code: 'invalid_sdp_offer' },
       { status: 400 },
     );
   }
@@ -167,7 +181,10 @@ export async function POST(request: Request) {
 
   if (!headers) {
     return Response.json(
-      { error: 'OPENAI_API_KEY is not configured on the server.' },
+      {
+        error: 'OPENAI_API_KEY is not configured on the server.',
+        code: 'realtime_not_configured',
+      },
       { status: 500 },
     );
   }

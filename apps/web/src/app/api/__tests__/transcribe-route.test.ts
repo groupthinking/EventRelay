@@ -11,7 +11,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function transcribeRequest(body: string) {
+function transcribeRequest(body: string): Request {
   return new Request('http://localhost/api/transcribe', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

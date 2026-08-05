@@ -9,12 +9,18 @@ export const runtime = 'nodejs';
 export async function POST(req: NextRequest) {
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!secret) {
-    return NextResponse.json({ error: 'webhook_not_configured' }, { status: 503 });
+    return NextResponse.json(
+      { error: 'webhook_not_configured', code: 'webhook_not_configured' },
+      { status: 503 },
+    );
   }
 
   const signature = req.headers.get('stripe-signature');
   if (!signature) {
-    return NextResponse.json({ error: 'missing_signature' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'missing_signature', code: 'missing_signature' },
+      { status: 400 },
+    );
   }
 
   let event: Stripe.Event;

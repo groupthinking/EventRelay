@@ -83,4 +83,16 @@ describe('POST /api/billing/renew', () => {
     expect(JSON.stringify(consoleError.mock.calls)).toContain('sk_live_****ABCD');
     expect(getKaizenTraces('billing').some((t) => t.observation === stripeMessage)).toBe(true);
   });
+
+  it('rejects a malformed body with a matching code', async () => {
+    const req = new NextRequest('http://localhost/api/billing/renew', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{not json',
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_json', code: 'invalid_json' });
+  });
 });

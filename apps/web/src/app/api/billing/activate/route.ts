@@ -24,11 +24,14 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_json', code: 'invalid_json' }, { status: 400 });
   }
 
   if (!body.sessionId?.trim()) {
-    return NextResponse.json({ error: 'session_id_required' }, { status: 400 });
+    return NextResponse.json(
+      { error: 'session_id_required', code: 'session_id_required' },
+      { status: 400 },
+    );
   }
 
   const sessionId = body.sessionId.trim();
@@ -49,7 +52,7 @@ export async function POST(req: NextRequest) {
 
     if (!entitlement || entitlement.plan !== 'pro') {
       return NextResponse.json(
-        { error: 'not_eligible', sessionId },
+        { error: 'not_eligible', code: 'not_eligible', sessionId },
         { status: 402 },
       );
     }

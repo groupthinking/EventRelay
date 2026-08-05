@@ -39,6 +39,17 @@ describe('/api/realtime/session', () => {
 
     expect(res.status).toBe(500);
     expect(body.error).toMatch(/OPENAI_API_KEY/);
+    expect(body.code).toBe('realtime_not_configured');
+  });
+
+  it('returns 500 with a matching code when POST finds no OpenAI key', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const res = await POST(sdpRequest('v=0\no=- 1 1 IN IP4 127.0.0.1'));
+    const body = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(body.code).toBe('realtime_not_configured');
   });
 
   it('mints a browser client secret with the GA Realtime session shape', async () => {
@@ -80,6 +91,7 @@ describe('/api/realtime/session', () => {
 
     expect(res.status).toBe(400);
     expect(body.error).toMatch(/SDP offer/);
+    expect(body.code).toBe('invalid_sdp_offer');
   });
 
   it('keeps the server-side SDP exchange available as a fallback', async () => {

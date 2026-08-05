@@ -33,8 +33,24 @@ describe('POST /api/billing/checkout', () => {
     const res = await POST(req);
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error).toBe('turnstile_verification_failed');
+    // `error` stays verbatim for client compatibility; `code` is the stable key.
+    expect(body).toEqual({
+      error: 'turnstile_verification_failed',
+      code: 'turnstile_rejected',
+    });
     expect(createProCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed body with a matching code', async () => {
+    const req = new NextRequest('http://localhost/api/billing/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{not json',
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_json', code: 'invalid_json' });
   });
 
   it('creates Stripe session on valid Turnstile token', async () => {

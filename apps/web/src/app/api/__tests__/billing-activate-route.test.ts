@@ -16,13 +16,14 @@ vi.mock('@/lib/billing/subscription-events', () => ({
 }));
 
 import { getCheckoutSession } from '@/lib/billing/stripe-checkout';
+import { activateFromCheckoutSession } from '@/lib/billing/subscription-events';
 
 afterEach(() => {
   vi.restoreAllMocks();
   resetKaizenTracesForTests();
 });
 
-function activateRequest(sessionId: string) {
+function activateRequest(sessionId: string): NextRequest {
   return new NextRequest('http://localhost/api/billing/activate', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -62,6 +63,36 @@ describe('POST /api/billing/activate error leakage', () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
-    expect(await res.json()).toEqual({ error: 'invalid_json' });
+    expect(await res.json()).toEqual({ error: 'invalid_json', code: 'invalid_json' });
+  });
+});
+
+// Every error branch must carry a stable machine-readable `code`, not only the
+// two that were sanitized for CWE-209 — otherwise a client cannot branch on the
+// contract this route declares.
+describe('POST /api/billing/activate error-code contract', () => {
+  it('returns session_id_required with a matching code', async () => {
+    const res = await POST(activateRequest('   '));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: 'session_id_required',
+      code: 'session_id_required',
+    });
+  });
+
+  it('returns not_eligible with a matching code', async () => {
+    vi.mocked(getCheckoutSession).mockResolvedValue({ id: 'cs_free' } as never);
+    vi.mocked(activateFromCheckoutSession).mockResolvedValue(null);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const res = await POST(activateRequest('cs_free'));
+
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({
+      error: 'not_eligible',
+      code: 'not_eligible',
+      sessionId: 'cs_free',
+    });
   });
 });
