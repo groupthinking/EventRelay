@@ -1001,11 +1001,18 @@ async def get_video_detail_v1(
 
 # Concurrency gate for the learning-log walk.
 #
-# ``asyncio.Semaphore`` binds itself to the first event loop that awaits it and
-# refuses to be reused from another one, so a single module-level instance would
-# break any process that runs more than one loop over its lifetime (every
-# ``asyncio.run`` in the test suite, for one). The gate is therefore created
-# per running loop and held weakly, so it disappears with the loop it belongs to.
+# A single module-level ``asyncio.Semaphore`` would be a latent landmine rather
+# than an obvious bug. ``Semaphore.acquire`` only reaches ``_get_loop()`` when it
+# has to wait -- the uncontended path decrements the counter and returns before
+# any loop is touched. So the semaphore stays unbound, and works fine across any
+# number of event loops, right up until the first time it is genuinely contended.
+# That acquisition pins it, and every later use from a different loop raises
+# ``RuntimeError: ... is bound to a different event loop``.
+#
+# The failure therefore cannot show up in low-concurrency tests; it waits for the
+# exact burst this gate exists to absorb. Building the gate per running loop and
+# holding it weakly removes the trap outright -- each loop gets its own semaphore,
+# which is collected along with the loop it belongs to.
 _LEARNING_LOG_MAX_CONCURRENCY = 4
 # Maps a running event loop -> the ``asyncio.Semaphore`` bound to that loop.
 _learning_log_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()

@@ -2751,9 +2751,12 @@ class TestLearningLogOffloading:
     def test_gate_is_rebuilt_for_each_event_loop(self):
         """A loop-bound `Semaphore` must not leak across event loops.
 
-        `asyncio.Semaphore` pins itself to the first loop that awaits it and
-        raises `RuntimeError` if reused elsewhere, so a single module-level
-        instance would break the second `asyncio.run` in any process.
+        `asyncio.Semaphore` does not bind on first use. `acquire` only calls
+        `_get_loop()` on the path where it must wait, so an uncontended
+        semaphore stays unbound and crosses loops happily. The first genuinely
+        contended acquisition pins it, and every later use from another loop
+        raises `RuntimeError`. A module-level instance would therefore pass
+        quiet tests and fail only under the burst this gate exists to absorb.
         """
         svc = self._service()
 
@@ -2790,3 +2793,70 @@ class TestLearningLogOffloading:
             "a fresh Semaphore per call would impose no bound at all"
         )
         assert svc.get_learning_log.call_count == 1
+
+    def test_gate_survives_a_contended_loop_then_a_fresh_loop(self):
+        """The real failure mode: contention binds a semaphore to its loop.
+
+        `test_gate_is_rebuilt_for_each_event_loop` asserts gate *identity*,
+        which is a proxy. This asserts the consequence. It saturates the gate
+        hard enough to force at least one waiter — the only path that reaches
+        `_LoopBoundMixin._get_loop()` and pins the semaphore — and then drives
+        the endpoint again on a brand-new loop. A module-level singleton raises
+        `RuntimeError: ... is bound to a different event loop` here.
+        """
+        import time
+
+        limit = router_module._LEARNING_LOG_MAX_CONCURRENCY
+        release = threading.Event()
+        in_flight = 0
+        peaked = threading.Event()
+        counter_lock = threading.Lock()
+
+        def _occupy():
+            nonlocal in_flight
+            with counter_lock:
+                in_flight += 1
+                if in_flight >= limit:
+                    peaked.set()
+            release.wait(timeout=5.0)
+            with counter_lock:
+                in_flight -= 1
+
+        async def _saturate():
+            svc = self._service(on_call=_occupy)
+            # limit + 2 callers guarantees at least one must *wait* on the gate.
+            tasks = [
+                asyncio.create_task(router_module.get_learning_log_v1(data_service=svc))
+                for _ in range(limit + 2)
+            ]
+            deadline = time.monotonic() + 5.0
+            while not peaked.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            # Let the surplus callers actually queue on the semaphore.
+            await asyncio.sleep(0.25)
+            release.set()
+            return await asyncio.gather(*tasks)
+
+        saturated = asyncio.run(_saturate())
+
+        # Anti-vacuity: the contended loop really did serve every caller.
+        assert peaked.is_set(), "the gate was never saturated; no waiter existed"
+        assert len(saturated) == limit + 2
+        assert all(r == [{"video_id": "vid-1", "title": "Video 1"}] for r in saturated)
+
+        # The actual assertion: a fresh loop must still work.
+        fresh_svc = self._service()
+
+        async def _after():
+            return await router_module.get_learning_log_v1(data_service=fresh_svc)
+
+        try:
+            result = asyncio.run(_after())
+        except RuntimeError as exc:  # pragma: no cover - the regression path
+            raise AssertionError(
+                "the gate leaked across event loops after being bound by "
+                f"contention: {exc}"
+            ) from exc
+
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+        assert fresh_svc.get_learning_log.call_count == 1
