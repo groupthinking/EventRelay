@@ -133,22 +133,24 @@ class RealVideoProcessor:
     def _count_cached_files(cache_dir: Path) -> int:
         """Count published cache entries under ``cache_dir``.
 
-        Blocking: performs a ``stat`` plus a full directory walk. Always run
-        this off the event loop. It is reached from the status endpoint, so an
-        inline walk stalls every concurrently-served request for as long as the
-        scan takes — which grows with the number of cached videos.
+        Blocking: performs a full directory walk. Always run this off the event
+        loop. It is reached from the status endpoint, so an inline walk stalls
+        every concurrently-served request for as long as the scan takes — which
+        grows with the number of cached videos.
 
-        The existence check and the walk run in a single thread hop rather than
-        two, mirroring ``_read_cache_file``. This is not atomic: the directory
-        can still be removed between the ``exists()`` check and the ``glob``
-        walk. That race is benign here — ``glob`` on a missing directory yields
-        nothing, so the count simply degrades to ``0`` instead of raising. The
+        ``glob`` already yields nothing for a missing directory, so no separate
+        existence check is needed (it would only add a redundant ``stat`` and
+        would not make the walk atomic). A genuine filesystem failure — e.g. a
+        permission error on a directory that does exist — is logged and
+        re-raised rather than being silently reported as an empty cache. The
         count is accumulated lazily rather than materializing the whole listing,
         since only the total is ever used.
         """
-        if not cache_dir.exists():
-            return 0
-        return sum(1 for _ in cache_dir.glob("*_processed.json"))
+        try:
+            return sum(1 for _ in cache_dir.glob("*_processed.json"))
+        except OSError:
+            logger.exception("Failed to count cached files in %s", cache_dir)
+            raise
 
     async def _load_from_cache(self, video_id: str) -> Optional[dict[str, Any]]:
         """Load processed result from cache if available"""
