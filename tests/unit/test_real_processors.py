@@ -12,8 +12,10 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1590,6 +1592,82 @@ class TestGetProcessingStatus:
 
         assert status["service_status"] == "error"
         assert "error" in status
+
+    async def test_cache_scan_runs_off_the_event_loop(self, tmp_path):
+        """The cache-directory scan must not run on the event loop thread.
+
+        ``get_processing_status`` is served by a live HTTP endpoint, so scanning
+        the cache directory inline stalls every concurrently-served request for
+        the duration of the walk.
+        """
+        proc = _make_video_processor(tmp_path)
+        (proc.cache_dir / "abc_processed.json").write_text("{}")
+
+        loop_thread = threading.get_ident()
+        scan_threads: list[int] = []
+        cache_dir = proc.cache_dir
+        real_glob = Path.glob
+
+        def recording_glob(self, pattern, *args, **kwargs):
+            # Only record the cache scan itself; a global patch would otherwise
+            # intercept unrelated Path.glob calls and validate the patch rather
+            # than production behavior.
+            if self == cache_dir and pattern == "*_processed.json":
+                scan_threads.append(threading.get_ident())
+            return real_glob(self, pattern, *args, **kwargs)
+
+        with patch("youtube_extension.backend.services.real_video_processor.cost_monitor") as cm:
+            cm.get_cost_dashboard = AsyncMock(return_value={})
+            with patch.object(Path, "glob", recording_glob):
+                status = await proc.get_processing_status()
+
+        # Guards against a vacuous pass: an unscanned directory would satisfy
+        # the membership assertion trivially.
+        assert scan_threads, "cache directory was never scanned"
+        assert loop_thread not in scan_threads
+        assert status["cache"]["cached_videos"] == 1
+
+    async def test_cache_scan_does_not_stall_the_event_loop(self, tmp_path):
+        """The loop keeps scheduling coroutines while the scan is in flight.
+
+        The scan blocks until a coroutine running *on the loop* releases it. If
+        the scan were inline that coroutine could never be scheduled, so the
+        gather would exceed its timeout instead of completing.
+        """
+        proc = _make_video_processor(tmp_path)
+        (proc.cache_dir / "abc_processed.json").write_text("{}")
+
+        scan_started = threading.Event()
+        may_finish = threading.Event()
+        cache_dir = proc.cache_dir
+        real_glob = Path.glob
+
+        def gated_glob(self, pattern, *args, **kwargs):
+            # Gate only the cache scan; a global patch would otherwise block on
+            # unrelated Path.glob calls and make the test assert the patch.
+            if self == cache_dir and pattern == "*_processed.json":
+                scan_started.set()
+                may_finish.wait(timeout=10)
+            return real_glob(self, pattern, *args, **kwargs)
+
+        async def release_once_scan_starts():
+            while not scan_started.is_set():
+                await asyncio.sleep(0.01)
+            may_finish.set()
+
+        with patch("youtube_extension.backend.services.real_video_processor.cost_monitor") as cm:
+            cm.get_cost_dashboard = AsyncMock(return_value={})
+            with patch.object(Path, "glob", gated_glob):
+                status, _ = await asyncio.wait_for(
+                    asyncio.gather(
+                        proc.get_processing_status(), release_once_scan_starts()
+                    ),
+                    timeout=5,
+                )
+
+        assert scan_started.is_set(), "cache directory was never scanned"
+        assert may_finish.is_set()
+        assert status["cache"]["cached_videos"] == 1
 
 
 class TestClose:

@@ -189,6 +189,10 @@ function applyStreamEvent(
           actions: Array.isArray(data.actions) ? (data.actions as Action[]) : [],
           sentiment: 'Neutral',
           topics: Array.isArray(data.topics) ? (data.topics as string[]) : [],
+          // F3: preserve TranscriptActionAgent project_scaffold from stream.
+          ...(data.project_scaffold != null
+            ? { project_scaffold: data.project_scaffold }
+            : {}),
         },
         ...(events.length > 0 ? { events } : {}),
         ...(transcript ? { transcript } : {}),
@@ -342,6 +346,10 @@ async function legacyAnalyze(url: string, id: string, ctx: StreamCtx & { getVide
         actions: result.result?.insights?.actions || [],
         sentiment: result.result?.insights?.sentiment || 'Neutral',
         topics: result.result?.insights?.topics || [],
+        // F3: /api/video already returns project_scaffold from transcript_action.
+        ...(result.result?.insights?.project_scaffold != null
+          ? { project_scaffold: result.result.insights.project_scaffold }
+          : {}),
       },
     });
     addActivity(`Analysis complete: ${videoTitle.substring(0, 30)}`, 'success');
@@ -575,6 +583,9 @@ export const useDashboardStore = create<DashboardState>()(
               actions: streamed?.insights?.actions ?? [],
               sentiment: 'Neutral',
               topics: streamed?.insights?.topics ?? ['partial-analysis'],
+              ...(streamed?.insights?.project_scaffold != null
+                ? { project_scaffold: streamed.insights.project_scaffold }
+                : {}),
             },
           });
           addActivity('Analysis enrichment unavailable — showing partial result', 'info');

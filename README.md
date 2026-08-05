@@ -58,9 +58,9 @@ AI-powered video transcript capture, structured event extraction, and agent exec
 git clone https://github.com/groupthinking/EventRelay.git
 cd EventRelay
 
-# Backend
+# Backend — include the youtube extra for full video path (yt-dlp + youtube-transcript-api)
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e .[dev]
+pip install -e ".[dev,youtube]"
 
 # Frontend
 npm install
@@ -68,17 +68,28 @@ npm install
 # API keys (add to shell profile or .env)
 export GEMINI_API_KEY="your-key"
 export OPENAI_API_KEY="your-key"
+
+# Local full pipeline auth (pick ONE):
+#   A) Dev escape hatch (never in production):
+export ALLOW_UNAUTHENTICATED=1
+#   B) Shared key (frontend Next also needs this for BACKEND_URL calls):
+# export EVENTRELAY_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+# Without either, non-public FastAPI routes return HTTP 503 (fail closed).
 ```
 
 ### Run
 
 ```bash
-# Terminal 1: Backend
-PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
+# Terminal 1: Backend (script sets ALLOW_UNAUTHENTICATED=1 if unset)
+./scripts/dev_backend.sh
+# Or manually:
+# ALLOW_UNAUTHENTICATED=1 PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
 
 # Terminal 2: Frontend
 cd apps/web && BACKEND_URL=http://localhost:8000 npx next dev --port 3000
 ```
+
+Check readiness: `curl -s localhost:8000/health` should show `"auth_mode":"open_dev"` (or `"api_key"`) and `"video_path_ready":true`.
 
 Open http://localhost:3000 — paste a YouTube URL and run the studio workflow. The older dashboard remains available at http://localhost:3000/dashboard.
 
