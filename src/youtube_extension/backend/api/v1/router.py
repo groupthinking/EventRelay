@@ -908,6 +908,24 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
 
 
 # Data Endpoints
+def _collect_videos_page(
+    data_service: DataService, limit: int, offset: int
+) -> tuple[int, list[dict[str, Any]]]:
+    """Gather the total video count and one page of summaries.
+
+    Both ``count_videos`` and ``get_videos_summary`` perform blocking
+    filesystem work, so they are grouped into this single synchronous helper
+    and dispatched to a worker thread by the caller with one
+    ``asyncio.to_thread`` hop. Using one hop rather than two keeps the count
+    and the page consistent with each other and avoids opening a second
+    cache-refresh window between the two reads.
+    """
+    total = data_service.count_videos()
+    if offset >= total:
+        return total, []
+    return total, data_service.get_videos_summary(limit=limit, offset=offset)
+
+
 @router.get(
     "/videos",
     response_model=dict[str, Any],
@@ -921,7 +939,9 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        total = data_service.count_videos()
+        total, paginated_videos = await asyncio.to_thread(
+            _collect_videos_page, data_service, limit, offset
+        )
         if offset >= total:
             return {
                 "videos": [],
@@ -930,7 +950,6 @@ async def list_videos_v1(
                 "offset": offset,
                 "has_more": False,
             }
-        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,

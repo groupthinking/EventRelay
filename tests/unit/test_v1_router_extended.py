@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -2398,3 +2399,109 @@ class TestTTLDictEvictionOrder:
         d["d"] = 4   # overflow -> evict b
         assert "b" not in d
         assert {"a", "c", "d"} <= set(d.keys())
+
+
+# ===========================================================================
+# Regression: /api/v1/videos must not block the event loop (#1379)
+# ===========================================================================
+
+
+class TestListVideosOffloading:
+    """`list_videos_v1` performs unbounded, uncached filesystem work.
+
+    These tests assert *where* that work runs, not merely that the endpoint
+    returns a payload — a status-code assertion passes just as happily when
+    the scan is executed inline on the event loop.
+    """
+
+    @staticmethod
+    def _service(on_count=None, on_summary=None):
+        svc = MagicMock()
+
+        def _count():
+            if on_count is not None:
+                on_count()
+            return 1
+
+        def _summary(limit=None, offset=0):
+            if on_summary is not None:
+                on_summary()
+            return [{"video_id": "vid-1", "title": "Video 1"}]
+
+        svc.count_videos.side_effect = _count
+        svc.get_videos_summary.side_effect = _summary
+        return svc
+
+    def test_filesystem_scan_runs_on_a_worker_thread(self):
+        seen: dict[str, int] = {}
+
+        svc = self._service(
+            on_count=lambda: seen.__setitem__("count", threading.get_ident()),
+            on_summary=lambda: seen.__setitem__("summary", threading.get_ident()),
+        )
+
+        async def _run():
+            seen["loop"] = threading.get_ident()
+            return await router_module.list_videos_v1(
+                limit=10, offset=0, data_service=svc
+            )
+
+        result = asyncio.run(_run())
+
+        # Anti-vacuity: the blocking work really executed and the endpoint
+        # really produced its normal payload. Without these, the thread-identity
+        # assertions below would pass trivially if the calls never happened.
+        assert "count" in seen, "count_videos was never invoked"
+        assert "summary" in seen, "get_videos_summary was never invoked"
+        assert result["total"] == 1
+        assert result["videos"] == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert seen["count"] != seen["loop"], (
+            "count_videos ran on the event loop thread; it must be offloaded"
+        )
+        assert seen["summary"] != seen["loop"], (
+            "get_videos_summary ran on the event loop thread; it must be offloaded"
+        )
+
+    def test_event_loop_stays_responsive_while_scan_is_in_flight(self):
+        release = threading.Event()
+        svc = self._service(on_count=lambda: release.wait(timeout=2.0))
+
+        async def _run():
+            ticks = 0
+            task = asyncio.create_task(
+                router_module.list_videos_v1(limit=10, offset=0, data_service=svc)
+            )
+            # While the scan is parked in a worker thread the loop must remain
+            # free to schedule unrelated coroutines.
+            for _ in range(20):
+                if task.done():
+                    break
+                ticks += 1
+                await asyncio.sleep(0.005)
+            release.set()
+            return ticks, await task
+
+        ticks, result = asyncio.run(_run())
+
+        assert result["total"] == 1  # anti-vacuity
+        assert ticks >= 3, (
+            f"event loop only advanced {ticks} time(s) while the scan was "
+            "running; the blocking work is starving the loop"
+        )
+
+    def test_offset_beyond_total_skips_the_page_read(self):
+        """The `offset >= total` short-circuit must survive the refactor."""
+        summary_calls = []
+        svc = self._service(on_summary=lambda: summary_calls.append(1))
+
+        result = asyncio.run(
+            router_module.list_videos_v1(limit=10, offset=100, data_service=svc)
+        )
+
+        assert result["videos"] == []
+        assert result["total"] == 1
+        assert result["has_more"] is False
+        assert summary_calls == [], (
+            "get_videos_summary should not be called when offset >= total"
+        )
