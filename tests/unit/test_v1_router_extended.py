@@ -2544,3 +2544,137 @@ class TestListVideosOffloading:
             "expected exactly one asyncio.to_thread hop dispatching "
             f"_collect_videos_page, got {dispatched}"
         )
+
+
+class TestLearningLogOffloading:
+    """`get_learning_log_v1` performs an unbounded, uncached filesystem walk.
+
+    `DataService.get_learning_log` issues its own `rglob` on every call — it does
+    not go through `_get_all_files_cached` — and then opens a metadata file per
+    entry. These tests assert *where* that work runs. A status-code assertion
+    passes just as happily when the walk is executed inline on the event loop,
+    which is exactly why the pre-existing tests for this endpoint stayed green
+    while production stalled.
+    """
+
+    @staticmethod
+    def _service(on_call=None):
+        svc = MagicMock()
+
+        def _log():
+            if on_call is not None:
+                on_call()
+            return [{"video_id": "vid-1", "title": "Video 1"}]
+
+        svc.get_learning_log.side_effect = _log
+        return svc
+
+    def test_walk_runs_on_a_worker_thread(self):
+        seen: dict[str, int] = {}
+
+        svc = self._service(
+            on_call=lambda: seen.__setitem__("walk", threading.get_ident())
+        )
+
+        async def _run():
+            seen["loop"] = threading.get_ident()
+            return await router_module.get_learning_log_v1(data_service=svc)
+
+        result = asyncio.run(_run())
+
+        # Anti-vacuity: the blocking work really executed and the endpoint really
+        # produced its normal payload. Without these, the thread-identity
+        # assertion below would pass trivially if the call never happened.
+        assert "walk" in seen, "get_learning_log was never invoked"
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert seen["walk"] != seen["loop"], (
+            "get_learning_log ran on the event loop thread; it must be offloaded"
+        )
+
+    def test_event_loop_stays_responsive_while_walk_is_in_flight(self):
+        """Ticks must complete *while* the walk is still running.
+
+        Counting ticks alone is not enough: a blocking call with a timeout
+        eventually returns, after which the loop is free and the ticks run
+        anyway. So each tick is timestamped and compared against the moment the
+        walk actually finished. If the walk runs inline it pins the loop, and
+        every tick necessarily lands *after* it -- giving zero qualifying ticks.
+        """
+        import time
+
+        release = threading.Event()
+        finished_at: dict[str, float] = {}
+
+        def _block():
+            release.wait(timeout=5.0)
+            finished_at["walk"] = time.monotonic()
+
+        svc = self._service(on_call=_block)
+
+        async def _run():
+            task = asyncio.create_task(
+                router_module.get_learning_log_v1(data_service=svc)
+            )
+            tick_times: list[float] = []
+            for _ in range(20):
+                await asyncio.sleep(0.005)
+                tick_times.append(time.monotonic())
+                if len(tick_times) >= 3:
+                    break
+            release.set()
+            return tick_times, await task
+
+        tick_times, result = asyncio.run(_run())
+
+        # Anti-vacuity: the endpoint still returned its real payload, and the
+        # blocking work really ran to completion.
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+        assert "walk" in finished_at, "get_learning_log never completed"
+
+        walk_end = finished_at["walk"]
+        concurrent = [t for t in tick_times if t < walk_end]
+        assert len(concurrent) >= 3, (
+            "event loop was blocked during the walk: only "
+            f"{len(concurrent)} of {len(tick_times)} tick(s) completed before "
+            "the walk finished"
+        )
+
+    def test_walk_uses_exactly_one_to_thread_hop(self):
+        svc = self._service()
+        real_to_thread = router_module.asyncio.to_thread
+        dispatched: list[str] = []
+
+        async def counting_to_thread(func, /, *args, **kwargs):
+            dispatched.append(getattr(func, "__name__", repr(func)))
+            return await real_to_thread(func, *args, **kwargs)
+
+        async def _run():
+            with patch.object(router_module.asyncio, "to_thread", counting_to_thread):
+                return await router_module.get_learning_log_v1(data_service=svc)
+
+        result = asyncio.run(_run())
+
+        # Anti-vacuity: the endpoint really ran and returned its payload.
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert len(dispatched) == 1, (
+            "expected exactly one asyncio.to_thread hop for the learning-log "
+            f"walk, got {len(dispatched)}: {dispatched}"
+        )
+
+    def test_error_contract_is_unchanged(self):
+        """A failure inside the worker thread must still surface as a 500."""
+        from fastapi import HTTPException as FastAPIHTTPException
+
+        svc = MagicMock()
+        svc.get_learning_log.side_effect = RuntimeError("scan exploded")
+
+        async def _run():
+            return await router_module.get_learning_log_v1(data_service=svc)
+
+        with pytest.raises(FastAPIHTTPException) as exc:
+            asyncio.run(_run())
+
+        assert exc.value.status_code == 500
+        assert exc.value.detail == "Internal server error"

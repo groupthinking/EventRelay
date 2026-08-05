@@ -1006,7 +1006,10 @@ async def get_video_detail_v1(
 async def get_learning_log_v1(data_service: DataService = Depends(get_data_service)):
     """Get learning log from enhanced analysis files"""
     try:
-        learning_log = data_service.get_learning_log()
+        # ``get_learning_log`` walks the enhanced-analysis tree and opens a
+        # metadata file per entry. That is unbounded blocking I/O, so it is
+        # dispatched to a worker thread rather than run on the event loop.
+        learning_log = await asyncio.to_thread(data_service.get_learning_log)
         return learning_log
     except Exception as e:
         logger.error(f"Error getting learning log: {e}", exc_info=True)
