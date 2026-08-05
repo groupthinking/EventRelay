@@ -21,7 +21,8 @@ export async function POST(req: NextRequest) {
       decision: turnstile.error ?? 'unknown',
     });
     // `turnstile.error` is always one of our own literals (`turnstile_not_configured`,
-    // `turnstile_token_missing`, `siteverify_http_<status>`, `turnstile_verification_failed`)
+    // `turnstile_token_missing`, `siteverify_http_<status>`, `turnstile_verification_failed`,
+    // `turnstile_verification_unavailable`)
     // — never Cloudflare response text — so it is safe to return. It is kept verbatim
     // for client compatibility; `code` is the stable machine-readable key, and the
     // fallback covers the `ok: false` shape that carries no `error`.
