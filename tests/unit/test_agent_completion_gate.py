@@ -2885,17 +2885,31 @@ const base = {
   labels: [],
   body: ''
 };
+const PLAIN = issue(1, [], '');
 const rows = [
   ['human', base, null, false],
-  ['PR label', {...base, labels: [{name: 'agent-task'}]}, null, true],
   // A bare agent label on the linked issue is a topic tag applied by label
   // automation, not a dispatch. It only asserts agent work when the issue
   // actually declares the contract the gate goes on to require (#1130).
   ['issue label without contract', base, issue(1, ['mcp/agent']), false],
   ['issue label with contract', base, issue(1, ['mcp/agent'], CONTRACT), true],
-  ['branch', {...base, head: {ref: 'codex/fix'}}, null, true],
-  ['manifest', {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, true],
-  ['known agent', {...base, user: {login: 'google-labs-jules[bot]'}}, null, true],
+  // Pull-side provenance identifies the producer; it does not supply a
+  // contract to score against. With no linked issue there is no intent
+  // snapshot, so `policy.agent_login`, `policy.run_id` and `issue.number`
+  // can never be populated and the verdict is permanently `invalid_payload`.
+  // Each of these arms the gate only once an issue exists to verify against.
+  ['PR label, no issue', {...base, labels: [{name: 'agent-task'}]}, null, false],
+  ['PR label + issue', {...base, labels: [{name: 'agent-task'}]}, PLAIN, true],
+  ['branch, no issue', {...base, head: {ref: 'codex/fix'}}, null, false],
+  ['branch + issue', {...base, head: {ref: 'codex/fix'}}, PLAIN, true],
+  ['manifest, no issue',
+    {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, false],
+  ['manifest + issue',
+    {...base, body: '<!-- agent-lock-manifest {bad} -->'}, PLAIN, true],
+  ['known agent, no issue',
+    {...base, user: {login: 'google-labs-jules[bot]'}}, null, false],
+  ['known agent + issue',
+    {...base, user: {login: 'google-labs-jules[bot]'}}, PLAIN, true],
   ['dependabot excluded', {
     ...base,
     user: {login: 'dependabot[bot]'},
@@ -3450,27 +3464,36 @@ const rows = [
   ['unlabelled issue with contract', human, {
     number: 7, labels: [{name: 'bug'}], body: CONTRACT
   }, false],
-  // Pull request provenance stands alone: an agent producing work against a
-  // contract-less issue is still applicable, and therefore still blocked.
+  // Pull request provenance applies against a linked issue -- an agent
+  // producing work against a contract-less issue is still applicable, and
+  // therefore still blocked.
   ['known agent author', {
     user: {login: 'google-labs-jules[bot]'},
     head: {ref: 'feature/thing'}, labels: [], body: ''
   }, {number: 7, labels: [{name: 'agent-task'}], body: '## Summary\n'}, true],
-  ['agent branch prefix', {
+  // ...but with no linked issue there is no intent snapshot and no declared
+  // run id or login, so the required payload fields are unsatisfiable and the
+  // gate would block permanently rather than ever reaching a verdict. These
+  // are `not_applicable`, not violations.
+  ['agent branch prefix, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'jules/thing'}, labels: [], body: ''
-  }, null, true],
-  ['agent label on the pull request', {
+  }, null, false],
+  ['agent branch prefix with issue', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'jules/thing'}, labels: [], body: ''
+  }, {number: 7, labels: [], body: ''}, true],
+  ['agent label on the pull request, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'feature/thing'},
     labels: [{name: 'agent'}], body: ''
-  }, null, true],
-  ['lock manifest in the pull request body', {
+  }, null, false],
+  ['lock manifest in the pull request body, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'feature/thing'},
     labels: [],
     body: '<!-- agent-lock-manifest {"run_id":"1"} -->'
-  }, null, true],
+  }, null, false],
   // Dependabot is excluded regardless of every other signal.
   ['dependabot', {
     user: {login: 'dependabot[bot]'},

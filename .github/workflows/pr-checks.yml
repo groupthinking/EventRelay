@@ -698,8 +698,31 @@ jobs:
               const issueDispatch =
                 carriesLabel(issueLabelSource, ['agenttask', 'mcpagent']) &&
                 declaresAgentContract(selectedIssue);
+              // Pull-side provenance says who produced the branch. It is not
+              // evidence that a dispatch contract exists to measure that
+              // branch against. The gate scores a pull request against the
+              // frozen intent snapshot on its linked issue, and that snapshot
+              // is only ever written by `snapshot-agent-task-intent`, which
+              // runs on `issues` events alone. With no linked issue there is
+              // no snapshot, no declared run id and no declared login, so
+              // `policy.agent_login`, `policy.run_id` and `issue.number` are
+              // all unsatisfiable and the verdict is permanently
+              // `invalid_payload` regardless of what the author does. A
+              // branch named `claude/...` is a naming convention, not a
+              // dispatch. Arming on it alone is what made this check red on
+              // pull requests that never had a contract to satisfy -- including
+              // #1368, which merged with this status failing.
+              //
+              // So provenance arms the gate only once a linked issue exists to
+              // verify against; with none, there is nothing to measure and the
+              // verdict is `not_applicable`. This does not create an escape
+              // hatch: a pull request that links a dispatched issue is still
+              // fully gated, and requiring a pull request to bind to a focused
+              // issue at all is separately owned by `Canonical issue and
+              // evidence`, which states a requirement an author can actually
+              // meet.
               return login !== 'dependabot[bot]' &&
-                (pullProvenance || issueDispatch);
+                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
             }
             function intentContractErrors(issue, comments, pullCreatedAt) {
               const errors = [];
@@ -2001,8 +2024,31 @@ jobs:
               const issueDispatch =
                 carriesLabel(issueLabelSource, ['agenttask', 'mcpagent']) &&
                 declaresAgentContract(selectedIssue);
+              // Pull-side provenance says who produced the branch. It is not
+              // evidence that a dispatch contract exists to measure that
+              // branch against. The gate scores a pull request against the
+              // frozen intent snapshot on its linked issue, and that snapshot
+              // is only ever written by `snapshot-agent-task-intent`, which
+              // runs on `issues` events alone. With no linked issue there is
+              // no snapshot, no declared run id and no declared login, so
+              // `policy.agent_login`, `policy.run_id` and `issue.number` are
+              // all unsatisfiable and the verdict is permanently
+              // `invalid_payload` regardless of what the author does. A
+              // branch named `claude/...` is a naming convention, not a
+              // dispatch. Arming on it alone is what made this check red on
+              // pull requests that never had a contract to satisfy -- including
+              // #1368, which merged with this status failing.
+              //
+              // So provenance arms the gate only once a linked issue exists to
+              // verify against; with none, there is nothing to measure and the
+              // verdict is `not_applicable`. This does not create an escape
+              // hatch: a pull request that links a dispatched issue is still
+              // fully gated, and requiring a pull request to bind to a focused
+              // issue at all is separately owned by `Canonical issue and
+              // evidence`, which states a requirement an author can actually
+              // meet.
               return login !== 'dependabot[bot]' &&
-                (pullProvenance || issueDispatch);
+                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
