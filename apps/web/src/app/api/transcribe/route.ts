@@ -14,8 +14,11 @@ export const maxDuration = 120;
  *   3. OpenAI Responses API with web search - with rate limit handling
  *   4. Direct audio STT via OpenAI Whisper
  *
- * Error responses are static and machine-readable; raw upstream provider text
- * is logged server-side only (it can carry account IDs and partial API keys):
+ * The JSON-parse and catch-all branches return static, machine-readable payloads
+ * (`code` + fixed `error`); raw upstream provider text is logged server-side only,
+ * since it can carry account IDs and partial API keys. The `!result.success`
+ * branches below return `fetchTranscript`'s own app-authored message verbatim —
+ * these are not upstream text, and they carry no `code`:
  *   - 400: Invalid input (missing URL, malformed JSON)
  *   - 429: Rate limited (implement backoff or upgrade service plan)
  *   - 500: Service unavailable (check API keys and billing)

@@ -25,8 +25,11 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const message = err instanceof Error ? err.message : 'invalid_payload';
     // Unauthenticated public route (PUBLIC_API_EXACT). Stripe signature errors
-    // describe the expected scheme/timestamp tolerance and can echo API key
-    // fragments, which would help an attacker forge a payload — log only.
+    // disclose verification internals — the tolerance window, the expected
+    // signature scheme, and which check failed — which an unauthenticated
+    // caller could use as an oracle to tune replay/timestamp attacks. The
+    // signing secret is never echoed, so this is disclosure, not forgery
+    // assistance; log server-side only.
     console.error('[billing] webhook signature verification failed:', message);
     kaizenObserve('billing', 'webhook_rejected', message, { fix: 'verify_stripe_signature' });
     return NextResponse.json(
