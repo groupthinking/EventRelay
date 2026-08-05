@@ -987,9 +987,18 @@ async def list_videos_v1(
 # ``RuntimeError: ... is bound to a different event loop``.
 #
 # The failure therefore cannot show up in low-concurrency tests; it waits for the
-# exact burst this gate exists to absorb. Building the gate per running loop and
-# holding it weakly removes the trap outright -- each loop gets its own semaphore,
-# which is collected along with the loop it belongs to.
+# exact burst this gate exists to absorb. Building the gate per running loop
+# removes the trap outright -- each loop gets its own semaphore.
+#
+# The weak keying bounds growth; it is not a guarantee of collection, and the
+# same fast-path asymmetry is why. ``WeakKeyDictionary`` holds its *values*
+# strongly, and the waiting path above stores the loop on the semaphore, so a
+# gate that has ever been contended keeps its own weak key reachable and is
+# never evicted on its own. Uncontended gates still fall out by themselves;
+# contended ones are reclaimed by ``_discard_closed_fs_walk_gates`` below. Under
+# the production deployment -- one Uvicorn worker, one long-lived loop -- this is
+# a single entry either way, so it only matters where loops are created
+# repeatedly, as they are in tests.
 #
 # The budget is deliberately shared by every endpoint that performs one of these
 # walks, rather than one gate per endpoint. The resource being protected is the
@@ -1004,12 +1013,24 @@ _fs_walk_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _fs_walk_gates_lock = threading.Lock()
 
 
+def _discard_closed_fs_walk_gates() -> None:
+    """Drop registry entries whose event loop has been closed.
+
+    Callers must hold ``_fs_walk_gates_lock``. Deletions are applied only after
+    the comprehension has finished, because a ``WeakKeyDictionary`` must not
+    change size while it is being iterated.
+    """
+    for closed in [loop for loop in _fs_walk_gates if loop.is_closed()]:
+        del _fs_walk_gates[closed]
+
+
 def _get_fs_walk_gate() -> asyncio.Semaphore:
     """Return the filesystem-walk concurrency gate bound to the running loop."""
     loop = asyncio.get_running_loop()
     with _fs_walk_gates_lock:
         gate = _fs_walk_gates.get(loop)
         if gate is None:
+            _discard_closed_fs_walk_gates()
             gate = asyncio.Semaphore(_FS_WALK_MAX_CONCURRENCY)
             _fs_walk_gates[loop] = gate
         return gate

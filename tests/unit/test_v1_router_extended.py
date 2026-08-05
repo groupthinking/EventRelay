@@ -3181,3 +3181,64 @@ class TestVideoDetailOffloading:
             f"cap of {limit}; a peak of {2 * limit} means each endpoint built "
             "its own gate and the shared executor is unprotected"
         )
+
+    def test_closed_loops_are_discarded_from_the_gate_registry(self):
+        """A contended gate pins its loop; the next gate build reclaims it.
+
+        ``_fs_walk_gates`` is a ``WeakKeyDictionary``, which reads as "entries
+        vanish with their loop". That holds only until a gate is contended: the
+        waiting path binds the semaphore to its loop, and because a weak-key
+        mapping holds its *values* strongly, the semaphore then keeps its own key
+        reachable. This asserts both halves -- that the retention is real, and
+        that ``_discard_closed_fs_walk_gates`` clears it.
+        """
+        import gc
+        import weakref
+
+        limit = router_module._FS_WALK_MAX_CONCURRENCY
+
+        async def _contend():
+            gate = router_module._get_fs_walk_gate()
+
+            async def _hold():
+                async with gate:
+                    await asyncio.sleep(0.01)
+
+            # limit + 1 holders guarantees at least one caller takes the waiting
+            # path, the only path that binds the semaphore to a loop.
+            await asyncio.gather(*(_hold() for _ in range(limit + 1)))
+            return gate
+
+        first_loop = asyncio.new_event_loop()
+        try:
+            gate = first_loop.run_until_complete(_contend())
+        finally:
+            first_loop.close()
+
+        # Anti-vacuity: without this the test would also pass on an unbound
+        # semaphore -- a registry that never needed pruning in the first place.
+        assert gate._loop is first_loop, (
+            "semaphore never bound to a loop, so the contended path did not run "
+            "and this test proves nothing about retention"
+        )
+
+        first_ref = weakref.ref(first_loop)
+        del gate, first_loop
+        gc.collect()
+
+        assert first_ref() is not None, (
+            "expected the closed loop to still be pinned by its contended "
+            "semaphore; if it is already collected the pruning below is untested"
+        )
+
+        second_loop = asyncio.new_event_loop()
+        try:
+            second_loop.run_until_complete(_contend())
+        finally:
+            second_loop.close()
+        gc.collect()
+
+        assert first_ref() is None, (
+            "a closed loop survived a later gate build; "
+            "_discard_closed_fs_walk_gates did not reclaim it"
+        )
