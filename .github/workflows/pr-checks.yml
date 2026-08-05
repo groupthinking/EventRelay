@@ -618,6 +618,43 @@ jobs:
                 return String(value || '').toLowerCase()
                   .replace(/[^a-z0-9 ]/g, '').trim();
               }
+              function carriesLabel(source, accepted) {
+                return (source || []).map(label =>
+                  typeof label === 'string' ? label : label.name
+                ).map(normaliseLabel).some(label =>
+                  accepted.includes(label)
+                );
+              }
+              function declaresAgentContract(issue) {
+                function section(body, headings) {
+                  const wanted = new Set(headings.map(normaliseLabel));
+                  const lines = String(body || '').split(/\r?\n/);
+                  const output = [];
+                  let collecting = false;
+                  for (const line of lines) {
+                    const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                    if (heading) {
+                      if (collecting) {
+                        break;
+                      }
+                      collecting = wanted.has(normaliseLabel(heading[1]));
+                      continue;
+                    }
+                    if (collecting) {
+                      output.push(line);
+                    }
+                  }
+                  return output.join('\n').trim();
+                }
+                function declared(headings) {
+                  const value = section(
+                    String((issue && issue.body) || ''), headings
+                  ).replace(/^\x60|\x60$/g, '').trim();
+                  return Boolean(value) && value !== '_No response_';
+                }
+                return declared(['agent run id', 'run id']) &&
+                  declared(['agent login']);
+              }
               const login = String(
                 pull && pull.user && pull.user.login || ''
               );
@@ -628,21 +665,6 @@ jobs:
                 'openai-codex[bot]',
                 'chatgpt-codex-connector[bot]'
               ]);
-              const labels = [
-                ...((pull && pull.labels) || []).map(label =>
-                  typeof label === 'string' ? label : label.name
-                ),
-                ...(selectedIssue && selectedIssue.labels
-                  ? Array.isArray(selectedIssue.labels)
-                    ? selectedIssue.labels
-                    : selectedIssue.labels.nodes || []
-                  : []).map(label =>
-                    typeof label === 'string' ? label : label.name
-                  )
-              ].map(normaliseLabel);
-              const agentLabel = labels.some(label =>
-                ['agent', 'agenttask', 'mcpagent'].includes(label)
-              );
               const agentBranch =
                 /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
                   String(pull && pull.head && pull.head.ref || '')
@@ -651,10 +673,56 @@ jobs:
                 /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
                   String(pull && pull.body || '')
                 );
-              return login !== 'dependabot[bot]' && (
-                knownAgents.has(login) || agentBranch || agentLabel ||
-                  manifestPresent
-              );
+              // Provenance asserted by the pull request itself. Each of these
+              // is a claim by the producing side that this is agent work.
+              const pullProvenance = knownAgents.has(login) || agentBranch ||
+                manifestPresent ||
+                carriesLabel((pull && pull.labels) || [],
+                  ['agent', 'agenttask', 'mcpagent']);
+              // Issue-side dispatch. Label automation also applies agent task
+              // labels as topic tags to issues that never declared a contract,
+              // so the bare label is not evidence of a dispatch: it only
+              // counts when the issue actually declares the run id and login
+              // the gate goes on to require. Treating the bare label as
+              // sufficient made the gate permanently unsatisfiable for human
+              // pull requests closing such issues, because the contract they
+              // were measured against had never been written (#1130). Only the
+              // two contract labels count here -- the generic `agent` label is
+              // never recognised by the snapshot job or the collector, so it
+              // stays a pull-request-side provenance signal only.
+              const issueLabelSource = selectedIssue && selectedIssue.labels
+                ? Array.isArray(selectedIssue.labels)
+                  ? selectedIssue.labels
+                  : selectedIssue.labels.nodes || []
+                : [];
+              const issueDispatch =
+                carriesLabel(issueLabelSource, ['agenttask', 'mcpagent']) &&
+                declaresAgentContract(selectedIssue);
+              // Pull-side provenance says who produced the branch. It is not
+              // evidence that a dispatch contract exists to measure that
+              // branch against. The gate scores a pull request against the
+              // frozen intent snapshot on its linked issue, and that snapshot
+              // is only ever written by `snapshot-agent-task-intent`, which
+              // runs on `issues` events alone. With no linked issue there is
+              // no snapshot, no declared run id and no declared login, so
+              // `policy.agent_login`, `policy.run_id` and `issue.number` are
+              // all unsatisfiable and the verdict is permanently
+              // `invalid_payload` regardless of what the author does. A
+              // branch named `claude/...` is a naming convention, not a
+              // dispatch. Arming on it alone is what made this check red on
+              // pull requests that never had a contract to satisfy -- including
+              // #1368, which merged with this status failing.
+              //
+              // So provenance arms the gate only once a linked issue exists to
+              // verify against; with none, there is nothing to measure and the
+              // verdict is `not_applicable`. This does not create an escape
+              // hatch: a pull request that links a dispatched issue is still
+              // fully gated, and requiring a pull request to bind to a focused
+              // issue at all is separately owned by `Canonical issue and
+              // evidence`, which states a requirement an author can actually
+              // meet.
+              return login !== 'dependabot[bot]' &&
+                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
             }
             function intentContractErrors(issue, comments, pullCreatedAt) {
               const errors = [];
@@ -1876,6 +1944,43 @@ jobs:
                 return String(value || '').toLowerCase()
                   .replace(/[^a-z0-9 ]/g, '').trim();
               }
+              function carriesLabel(source, accepted) {
+                return (source || []).map(label =>
+                  typeof label === 'string' ? label : label.name
+                ).map(normaliseLabel).some(label =>
+                  accepted.includes(label)
+                );
+              }
+              function declaresAgentContract(issue) {
+                function section(body, headings) {
+                  const wanted = new Set(headings.map(normaliseLabel));
+                  const lines = String(body || '').split(/\r?\n/);
+                  const output = [];
+                  let collecting = false;
+                  for (const line of lines) {
+                    const heading = line.match(/^#{2,6}\s+(.+?)\s*$/);
+                    if (heading) {
+                      if (collecting) {
+                        break;
+                      }
+                      collecting = wanted.has(normaliseLabel(heading[1]));
+                      continue;
+                    }
+                    if (collecting) {
+                      output.push(line);
+                    }
+                  }
+                  return output.join('\n').trim();
+                }
+                function declared(headings) {
+                  const value = section(
+                    String((issue && issue.body) || ''), headings
+                  ).replace(/^\x60|\x60$/g, '').trim();
+                  return Boolean(value) && value !== '_No response_';
+                }
+                return declared(['agent run id', 'run id']) &&
+                  declared(['agent login']);
+              }
               const login = String(
                 pull && pull.user && pull.user.login || ''
               );
@@ -1886,21 +1991,6 @@ jobs:
                 'openai-codex[bot]',
                 'chatgpt-codex-connector[bot]'
               ]);
-              const labels = [
-                ...((pull && pull.labels) || []).map(label =>
-                  typeof label === 'string' ? label : label.name
-                ),
-                ...(selectedIssue && selectedIssue.labels
-                  ? Array.isArray(selectedIssue.labels)
-                    ? selectedIssue.labels
-                    : selectedIssue.labels.nodes || []
-                  : []).map(label =>
-                    typeof label === 'string' ? label : label.name
-                  )
-              ].map(normaliseLabel);
-              const agentLabel = labels.some(label =>
-                ['agent', 'agenttask', 'mcpagent'].includes(label)
-              );
               const agentBranch =
                 /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
                   String(pull && pull.head && pull.head.ref || '')
@@ -1909,10 +1999,56 @@ jobs:
                 /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
                   String(pull && pull.body || '')
                 );
-              return login !== 'dependabot[bot]' && (
-                knownAgents.has(login) || agentBranch || agentLabel ||
-                  manifestPresent
-              );
+              // Provenance asserted by the pull request itself. Each of these
+              // is a claim by the producing side that this is agent work.
+              const pullProvenance = knownAgents.has(login) || agentBranch ||
+                manifestPresent ||
+                carriesLabel((pull && pull.labels) || [],
+                  ['agent', 'agenttask', 'mcpagent']);
+              // Issue-side dispatch. Label automation also applies agent task
+              // labels as topic tags to issues that never declared a contract,
+              // so the bare label is not evidence of a dispatch: it only
+              // counts when the issue actually declares the run id and login
+              // the gate goes on to require. Treating the bare label as
+              // sufficient made the gate permanently unsatisfiable for human
+              // pull requests closing such issues, because the contract they
+              // were measured against had never been written (#1130). Only the
+              // two contract labels count here -- the generic `agent` label is
+              // never recognised by the snapshot job or the collector, so it
+              // stays a pull-request-side provenance signal only.
+              const issueLabelSource = selectedIssue && selectedIssue.labels
+                ? Array.isArray(selectedIssue.labels)
+                  ? selectedIssue.labels
+                  : selectedIssue.labels.nodes || []
+                : [];
+              const issueDispatch =
+                carriesLabel(issueLabelSource, ['agenttask', 'mcpagent']) &&
+                declaresAgentContract(selectedIssue);
+              // Pull-side provenance says who produced the branch. It is not
+              // evidence that a dispatch contract exists to measure that
+              // branch against. The gate scores a pull request against the
+              // frozen intent snapshot on its linked issue, and that snapshot
+              // is only ever written by `snapshot-agent-task-intent`, which
+              // runs on `issues` events alone. With no linked issue there is
+              // no snapshot, no declared run id and no declared login, so
+              // `policy.agent_login`, `policy.run_id` and `issue.number` are
+              // all unsatisfiable and the verdict is permanently
+              // `invalid_payload` regardless of what the author does. A
+              // branch named `claude/...` is a naming convention, not a
+              // dispatch. Arming on it alone is what made this check red on
+              // pull requests that never had a contract to satisfy -- including
+              // #1368, which merged with this status failing.
+              //
+              // So provenance arms the gate only once a linked issue exists to
+              // verify against; with none, there is nothing to measure and the
+              // verdict is `not_applicable`. This does not create an escape
+              // hatch: a pull request that links a dispatched issue is still
+              // fully gated, and requiring a pull request to bind to a focused
+              // issue at all is separately owned by `Canonical issue and
+              // evidence`, which states a requirement an author can actually
+              // meet.
+              return login !== 'dependabot[bot]' &&
+                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);
@@ -2163,6 +2299,27 @@ jobs:
               .replace(/^\x60|\x60$/g, '').trim();
             const expectedAgentLogin = section(issueBody, ['agent login'])
               .replace(/^\x60|\x60$/g, '').trim();
+            // A linked issue carrying an agent task label without declaring a
+            // run id and login was never dispatched to an agent -- the label
+            // is topic noise. Surface the mislabel so it is visible and
+            // correctable (#1130). Keyed on the missing contract itself, not
+            // on inapplicability, so pull requests that are inapplicable for
+            // other reasons (for example Dependabot's unconditional
+            // exclusion) never receive a notice falsely claiming a declared
+            // contract is missing.
+            const contractDeclared = [expectedRunId, expectedAgentLogin]
+              .every(value => value && value !== '_No response_');
+            if (issue && !contractDeclared &&
+                ['agenttask', 'mcpagent'].some(label =>
+                  issueLabels.has(label))) {
+              core.notice(
+                'mislabelled_agent_task: issue #' + issue.number +
+                ' carries an agent task label but declares no Agent Run ID' +
+                ' / Agent Login. The label asserts an agent dispatch' +
+                ' contract; remove it from the issue if it was applied in' +
+                ' error.'
+              );
+            }
             if (applicable && !expectedRunId) {
               collectionErrors.push('missing_agent_run_id');
             } else if (applicable && String(manifest.run_id || '') !== expectedRunId) {
