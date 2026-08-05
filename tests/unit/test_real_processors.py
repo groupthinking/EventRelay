@@ -1605,10 +1605,15 @@ class TestGetProcessingStatus:
 
         loop_thread = threading.get_ident()
         scan_threads: list[int] = []
+        cache_dir = proc.cache_dir
         real_glob = Path.glob
 
         def recording_glob(self, pattern, *args, **kwargs):
-            scan_threads.append(threading.get_ident())
+            # Only record the cache scan itself; a global patch would otherwise
+            # intercept unrelated Path.glob calls and validate the patch rather
+            # than production behavior.
+            if self == cache_dir and pattern == "*_processed.json":
+                scan_threads.append(threading.get_ident())
             return real_glob(self, pattern, *args, **kwargs)
 
         with patch("youtube_extension.backend.services.real_video_processor.cost_monitor") as cm:
@@ -1634,11 +1639,15 @@ class TestGetProcessingStatus:
 
         scan_started = threading.Event()
         may_finish = threading.Event()
+        cache_dir = proc.cache_dir
         real_glob = Path.glob
 
         def gated_glob(self, pattern, *args, **kwargs):
-            scan_started.set()
-            may_finish.wait(timeout=10)
+            # Gate only the cache scan; a global patch would otherwise block on
+            # unrelated Path.glob calls and make the test assert the patch.
+            if self == cache_dir and pattern == "*_processed.json":
+                scan_started.set()
+                may_finish.wait(timeout=10)
             return real_glob(self, pattern, *args, **kwargs)
 
         async def release_once_scan_starts():
