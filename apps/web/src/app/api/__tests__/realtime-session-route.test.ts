@@ -169,3 +169,61 @@ describe('/api/realtime/session upstream error leakage', () => {
     expect(JSON.stringify(consoleError.mock.calls)).toContain('sk-proj-****ABCD');
   });
 });
+
+/**
+ * A rejected fetch (DNS, TLS, reset, timeout) throws before any upstream status
+ * exists. Without a catch it escapes to Next.js's own unstructured 500, which
+ * breaks the JSON error contract the client parses and logs nothing.
+ */
+describe('/api/realtime/session transport failures', () => {
+  it('returns the static 502 when the client-secret request never reaches OpenAI', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(new TypeError('fetch failed: getaddrinfo ENOTFOUND api.openai.com')),
+    );
+
+    const res = await GET();
+    const raw = await res.text();
+
+    expect(res.status).toBe(502);
+    expect(JSON.parse(raw)).toEqual({
+      error: 'OpenAI Realtime client secret creation failed.',
+      code: 'realtime_client_secret_failed',
+    });
+    expect(JSON.stringify(consoleError.mock.calls)).toContain('client_secret request failed');
+  });
+
+  it('returns the static 502 when the SDP exchange never reaches OpenAI', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('socket hang up')));
+
+    const res = await POST(sdpRequest('v=0\no=- 1 1 IN IP4 127.0.0.1'));
+    const raw = await res.text();
+
+    expect(res.status).toBe(502);
+    expect(JSON.parse(raw)).toEqual({
+      error: 'OpenAI Realtime session creation failed.',
+      code: 'realtime_session_failed',
+    });
+    expect(JSON.stringify(consoleError.mock.calls)).toContain('sdp_exchange request failed');
+  });
+
+  it('returns the static 502 when the upstream body cannot be read', async () => {
+    process.env.OPENAI_API_KEY = 'test-key';
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const truncated = new Response('', { status: 200 });
+    vi.spyOn(truncated, 'text').mockRejectedValue(new Error('terminated: aborted mid-body'));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(truncated));
+
+    const res = await GET();
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: 'OpenAI Realtime client secret creation failed.',
+      code: 'realtime_client_secret_failed',
+    });
+  });
+});
