@@ -25,6 +25,8 @@ from youtube_extension.services.agents.monitor import (
 )
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture(autouse=True)
 def _isolate_analyzer_storage(monkeypatch, tmp_path):
     """Monitoring tests must never persist state in ~/.eventrelay."""
@@ -35,6 +37,7 @@ def _isolate_analyzer_storage(monkeypatch, tmp_path):
     return analyzer
 
 
+>>>>>>> origin/main
 class TestMonitoring:
     """Test monitoring functions."""
 

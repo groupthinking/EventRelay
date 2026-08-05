@@ -5,6 +5,20 @@ Tests all adapters with real API calls (when tokens are available).
 """
 
 import asyncio
+<<<<<<< HEAD
+import pytest
+import os
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock, patch, AsyncMock
+
+from youtube_extension.services.deployment_manager import DeploymentManager, validate_deployment_environment
+from youtube_extension.backend.deploy.core import EnvironmentValidator, DeploymentError
+from youtube_extension.backend.deploy.vercel import VercelAdapter
+from youtube_extension.backend.deploy.netlify import NetlifyAdapter
+from youtube_extension.backend.deploy.fly import FlyAdapter
+from youtube_extension.backend.deploy import get_adapter_class, list_available_adapters, is_adapter_available
+=======
 import os
 from unittest.mock import AsyncMock, patch
 
@@ -24,6 +38,7 @@ from youtube_extension.services.deployment_manager import (
     validate_deployment_environment,
 )
 
+>>>>>>> origin/main
 
 @pytest.fixture
 def sample_project_config():
@@ -186,6 +201,16 @@ class TestDeploymentPipelineIntegration:
             assert result.startswith(f'uvai-{expected_prefix[5:]}'), f"Unexpected result: {result}"
             assert len(result) <= 30, f"App name too long: {result}"
 
+<<<<<<< HEAD
+    @pytest.mark.asyncio
+    async def test_deployment_manager_orchestration(self, sample_project_config, sample_env):
+        """Test deployment manager orchestration"""
+        manager = DeploymentManager()
+
+        # Test deployment with missing tokens (should be skipped gracefully)
+        result = await manager.deploy_project(
+            '/tmp/nonexistent',
+=======
         with patch(
             'youtube_extension.backend.deploy.fly.time.monotonic',
             return_value=12345.67,
@@ -208,6 +233,7 @@ class TestDeploymentPipelineIntegration:
         # a build or making a real deployment.
         result = await manager.deploy_project(
             str(tmp_path),
+>>>>>>> origin/main
             sample_project_config,
             {'target': 'vercel'}
         )
@@ -223,6 +249,37 @@ class TestDeploymentPipelineIntegration:
         assert 'GitHub token not configured' in result['errors']
 
     @pytest.mark.asyncio
+<<<<<<< HEAD
+    async def test_mixed_deployment_scenario(self, sample_project_config, sample_env):
+        """Test mixed deployment scenario with some tokens available"""
+        # Set fake tokens for testing
+        os.environ['VERCEL_TOKEN'] = 'fake_token_for_testing'
+        os.environ['GITHUB_TOKEN'] = 'fake_github_token'
+
+        try:
+            manager = DeploymentManager()
+
+            result = await manager.deploy_project(
+                '/tmp',
+                sample_project_config,
+                {'target': 'vercel'}
+            )
+
+            # Should have attempted both GitHub and Vercel deployments
+            assert 'github' in result['deployments']
+            assert 'vercel' in result['deployments']
+
+            # Vercel should have failed due to invalid token (but not crashed)
+            vercel_result = result['deployments']['vercel']
+            assert 'status' in vercel_result
+
+        finally:
+            # Clean up fake tokens
+            if 'VERCEL_TOKEN' in os.environ:
+                del os.environ['VERCEL_TOKEN']
+            if 'GITHUB_TOKEN' in os.environ:
+                del os.environ['GITHUB_TOKEN']
+=======
     async def test_mixed_deployment_scenario(
         self, sample_project_config, tmp_path
     ):
@@ -348,6 +405,7 @@ class TestDeploymentPipelineIntegration:
         ]
         deploy_github.assert_not_awaited()
         deploy_adapter.assert_not_awaited()
+>>>>>>> origin/main
 
     @pytest.mark.asyncio
     async def test_error_recovery_and_reporting(self, sample_project_config, sample_env):
@@ -436,7 +494,11 @@ class TestDeploymentPipelineIntegration:
 
     def test_adapter_registry_integrity(self):
         """Test that adapter registry is properly maintained"""
+<<<<<<< HEAD
+        from youtube_extension.backend.deploy import _adapters, _adapter_classes
+=======
         from youtube_extension.backend.deploy import _adapter_classes, _adapters
+>>>>>>> origin/main
 
         # Check legacy adapters
         assert 'vercel' in _adapters
@@ -449,7 +511,11 @@ class TestDeploymentPipelineIntegration:
         assert 'fly' in _adapter_classes
 
         # Verify class references are properly formatted
+<<<<<<< HEAD
+        for adapter_name, class_ref in _adapter_classes.items():
+=======
         for _adapter_name, class_ref in _adapter_classes.items():
+>>>>>>> origin/main
             assert ':' in class_ref
             module_path, class_name = class_ref.split(':')
             assert module_path.startswith('youtube_extension.backend.deploy.')

@@ -14,6 +14,11 @@ from __future__ import annotations
 
 import json
 import sys
+<<<<<<< HEAD
+import types
+import importlib
+=======
+>>>>>>> origin/main
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, call
 
@@ -27,7 +32,43 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
+<<<<<<< HEAD
+# Pre-stub heavy / unavailable packages before any module import
+# ---------------------------------------------------------------------------
+
+def _stub_module(name: str, **attrs):
+    """Ensure *name* is stubbed in sys.modules with the expected attributes."""
+    mod = sys.modules.get(name)
+    if mod is None:
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    for k, v in attrs.items():
+        setattr(mod, k, v)
+    return mod
+
+
+# google.genai
+_google = _stub_module("google")
+_google_genai = _stub_module("google.genai", Client=MagicMock())
+_google.genai = _google_genai
+
+# openai
+_openai_mod = _stub_module("openai", AsyncOpenAI=MagicMock())
+
+# anthropic
+_anthropic_mod = _stub_module("anthropic", AsyncAnthropic=MagicMock())
+
+# dotenv
+_stub_module("dotenv", load_dotenv=lambda *args, **kwargs: None)
+
+# pytubefix (used by some transitive imports)
+_stub_module("pytubefix")
+
+# ---------------------------------------------------------------------------
+# Import modules under test *after* stubs are in place
+=======
 # Import modules under test
+>>>>>>> origin/main
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.services.real_ai_processor import (  # noqa: E402
     AIProcessingRequest,
@@ -109,6 +150,8 @@ def _make_ai_analysis(success: bool = True) -> dict:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
+<<<<<<< HEAD
+=======
 def _isolate_ai_provider_bindings(monkeypatch):
     """Keep provider doubles local even when another test imported first.
 
@@ -135,6 +178,7 @@ def _isolate_ai_provider_bindings(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+>>>>>>> origin/main
 def _reset_ai_processor_singleton():
     """Ensure the module-level singleton is reset between tests."""
     import youtube_extension.backend.services.real_ai_processor as _mod

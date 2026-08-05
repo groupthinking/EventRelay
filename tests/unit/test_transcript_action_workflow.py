@@ -24,6 +24,8 @@ from youtube_extension.services.workflows.transcript_action_workflow import (
 )
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture(autouse=True)
 def _isolate_skill_builder(monkeypatch, tmp_path) -> None:
     """Workflow unit tests must not use the process user's persistent skills."""
@@ -40,6 +42,7 @@ def _isolate_skill_builder(monkeypatch, tmp_path) -> None:
     )
 
 
+>>>>>>> origin/main
 class _UnexpectedYouTubeService:
     async def __aenter__(self):
         raise AssertionError("YouTube service should not be entered for playlist URLs")

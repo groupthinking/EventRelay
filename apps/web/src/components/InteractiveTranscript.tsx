@@ -166,6 +166,14 @@ export default function InteractiveTranscript({
   );
 
   const filteredSegments = useMemo(() => {
+<<<<<<< HEAD
+    return segments.filter((seg) => {
+      const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
+      const matchesSearch =
+        !searchQuery ||
+        seg.text.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesSpeaker && matchesSearch;
+=======
     // ⚡ Bolt: Hoisting search string normalization out of the loop
     // Expected impact: Removes N toLowerCase() allocations per keystroke update, saving ~15-20ms per render on long transcripts.
     const lowerSearchQuery = searchQuery ? searchQuery.toLowerCase() : '';
@@ -179,6 +187,7 @@ export default function InteractiveTranscript({
         !searchQuery ||
         (seg.text ? seg.text.toLowerCase().includes(lowerSearchQuery) : false);
       return matchesSearch;
+>>>>>>> origin/main
     });
   }, [segments, filterSpeaker, searchQuery]);
 

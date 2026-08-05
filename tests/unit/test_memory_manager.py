@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import gc
 import sys
+<<<<<<< HEAD
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+=======
 import threading
 import time
 import types
@@ -11,6 +16,7 @@ import weakref
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
+>>>>>>> origin/main
 
 # Remove any mock installed by test_index_analysis.py so we get real psutil
 sys.modules.pop('psutil', None)
@@ -32,6 +38,8 @@ from youtube_extension.backend.services.memory_manager import (
 )
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture(autouse=True)
 def _deterministic_process_metrics(monkeypatch):
     """Keep unit tests independent of the runner's PID namespace."""
@@ -62,6 +70,7 @@ def _deterministic_process_metrics(monkeypatch):
     monkeypatch.setattr(module, "psutil", fake_psutil)
 
 
+>>>>>>> origin/main
 # ===========================================================================
 # MemorySnapshot dataclass
 # ===========================================================================
@@ -715,6 +724,10 @@ class TestMemoryProfilerTracking:
 
 # ===========================================================================
 # MemoryManager._take_system_snapshot (lines around 337-362)
+<<<<<<< HEAD
+# gc.get_stats() returns dicts, so we patch it to return ints to exercise the code
+=======
+>>>>>>> origin/main
 # ===========================================================================
 
 
@@ -737,6 +750,12 @@ class TestTakeSystemSnapshot:
         manager = _mod.MemoryManager()
         orig_psutil = _mod.psutil
         _mod.psutil = fake
+<<<<<<< HEAD
+        # gc.get_stats() returns a list of dicts — patch to return [0,0,0] so sum() works
+        try:
+            with patch('youtube_extension.backend.services.memory_manager.gc') as mock_gc:
+                mock_gc.get_stats.return_value = [0, 0, 0]  # summable ints
+=======
         try:
             with patch('youtube_extension.backend.services.memory_manager.gc') as mock_gc:
                 mock_gc.get_stats.return_value = [
@@ -744,6 +763,7 @@ class TestTakeSystemSnapshot:
                     {"collections": 3},
                     {"collections": 5},
                 ]
+>>>>>>> origin/main
                 mock_gc.get_objects.return_value = []
                 snap = manager._take_system_snapshot()
         finally:
@@ -763,10 +783,13 @@ class TestTakeSystemSnapshot:
         snap, _ = self._get_patched_snapshot(percent=75.0)
         assert snap.percent == 75.0
 
+<<<<<<< HEAD
+=======
     def test_snapshot_sums_gc_collections(self):
         snap, _ = self._get_patched_snapshot()
         assert snap.gc_collections == 10
 
+>>>>>>> origin/main
     def test_snapshot_vms_computed_correctly(self):
         vms_bytes = 300 * 1024 * 1024
         snap, _ = self._get_patched_snapshot(vms_bytes=vms_bytes)
@@ -1102,9 +1125,14 @@ class TestCleanupResourcePools:
             "bad", lambda: object(), bad_cleanup, max_size=5
         )
         pool.pool.append(object())
+<<<<<<< HEAD
+        # Should not raise
+        manager._cleanup_resource_pools()
+=======
         # Failed closes are removed from reuse but never counted as successful.
         assert pool.cleanup_idle_resources(force=True) == 0
         manager.close()
+>>>>>>> origin/main
 
 
 # ===========================================================================
@@ -1250,6 +1278,13 @@ class TestStartStopMonitoring:
         assert task1 is task2
         manager.stop_monitoring()
 
+<<<<<<< HEAD
+    def test_stop_monitoring_clears_flag(self):
+        manager = MemoryManager()
+        manager.start_monitoring()
+        manager.stop_monitoring()
+        assert manager.monitoring_enabled is False
+=======
     def test_concurrent_starts_create_one_monitor(self, monkeypatch):
         import youtube_extension.backend.services.memory_manager as module
 
@@ -1299,6 +1334,7 @@ class TestStartStopMonitoring:
         manager.start_monitoring()
         assert manager.monitoring_task is stopping_task
         stopping_task.start.assert_not_called()
+>>>>>>> origin/main
 
 
 # ===========================================================================
@@ -1370,6 +1406,8 @@ class TestConvenienceFunctions:
 
 
 class TestResourcePoolEdgeCases:
+<<<<<<< HEAD
+=======
     def test_close_stops_cleanup_worker(self):
         pool = ResourcePool("closable", lambda: object(), lambda r: None)
         task = pool.cleanup_task
@@ -1397,6 +1435,7 @@ class TestResourcePoolEdgeCases:
         assert last_ref() is None
         assert not any(task.is_alive() for task in tasks)
 
+>>>>>>> origin/main
     def test_reuses_released_resource(self):
         created = []
         def create_fn():

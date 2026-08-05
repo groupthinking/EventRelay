@@ -7,6 +7,9 @@ Provides project root detection and path resolution utilities.
 Compatible with UVAI configuration.path_utils interface.
 """
 
+<<<<<<< HEAD
+from pathlib import Path
+=======
 import os
 from pathlib import Path
 from typing import Union
@@ -64,6 +67,7 @@ def select_readable_file(preferred: PathLike, fallback: PathLike) -> Path:
     if candidate.is_file() and os.access(candidate, os.R_OK):
         return candidate
     return Path(fallback)
+>>>>>>> origin/main
 
 
 def get_project_root() -> Path:

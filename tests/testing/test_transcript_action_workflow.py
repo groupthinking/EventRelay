@@ -2,6 +2,13 @@ from types import SimpleNamespace
 
 import pytest
 
+<<<<<<< HEAD
+from youtube_extension.services.workflows.transcript_action_workflow import TranscriptActionWorkflow
+from src.shared.youtube import RobustYouTubeMetadata
+from youtube_extension.services.ai.speech_to_text_service import SpeechToTextResult
+from youtube_extension.services.agents.adapters.agent_orchestrator import OrchestrationResult
+from youtube_extension.services.agents.dto import AgentResult
+=======
 from src.shared.youtube import RobustYouTubeMetadata
 from youtube_extension.services.agents.adapters.agent_orchestrator import OrchestrationResult
 from youtube_extension.services.agents.dto import AgentResult
@@ -27,6 +34,7 @@ def _isolate_skill_builder(monkeypatch, tmp_path):
         "youtube_extension.services.workflows.transcript_action_workflow.get_skill_builder",
         lambda: skill_builder,
     )
+>>>>>>> origin/main
 
 
 class _StubYouTubeService:

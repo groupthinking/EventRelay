@@ -2,11 +2,98 @@
 
 from __future__ import annotations
 
+<<<<<<< HEAD
+import sys
+import types
+from pathlib import Path
+=======
+>>>>>>> origin/main
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+<<<<<<< HEAD
+# ---------------------------------------------------------------------------
+# Add src to path first so module resolution works.
+# ---------------------------------------------------------------------------
+_SRC = Path(__file__).resolve().parents[2] / "src"
+sys.path.insert(0, str(_SRC))
+
+# ---------------------------------------------------------------------------
+# Stub optional heavy dependencies BEFORE importing the service module so
+# that the try/except import guards fire with the stub modules and all three
+# AVAILABLE flags are set to False (the stubs lack the real classes).
+# ---------------------------------------------------------------------------
+
+# Stub google.api_core
+_api_core = types.ModuleType("google.api_core")
+_api_core.exceptions = types.ModuleType("google.api_core.exceptions")  # type: ignore[attr-defined]
+sys.modules.setdefault("google.api_core", _api_core)
+sys.modules.setdefault("google.api_core.exceptions", _api_core.exceptions)  # type: ignore[attr-defined]
+
+# Stub google.cloud namespace
+_gcloud = sys.modules.get("google.cloud") or types.ModuleType("google.cloud")
+sys.modules.setdefault("google.cloud", _gcloud)
+
+# Stub google.cloud.speech_v2
+_speech = types.ModuleType("google.cloud.speech_v2")
+sys.modules.setdefault("google.cloud.speech_v2", _speech)
+
+# Stub google.cloud.storage
+_storage_stub = types.ModuleType("google.cloud.storage")
+sys.modules.setdefault("google.cloud.storage", _storage_stub)
+
+# Stub yt_dlp
+_ytdlp = types.ModuleType("yt_dlp")
+sys.modules.setdefault("yt_dlp", _ytdlp)
+
+# Stub google parent package so attribute lookups don't fail
+_google = sys.modules.get("google") or types.ModuleType("google")
+_google.cloud = _gcloud  # type: ignore[attr-defined]
+_google.api_core = _api_core  # type: ignore[attr-defined]
+sys.modules.setdefault("google", _google)
+
+# ---------------------------------------------------------------------------
+# Stub the youtube_extension.services parent packages so importing the leaf
+# module does not trigger the full services/__init__.py import chain (which
+# pulls in deployment_manager -> broken native extensions).
+# ---------------------------------------------------------------------------
+
+def _stub_package(name: str, path: str | None = None) -> types.ModuleType:
+    if name not in sys.modules:
+        m = types.ModuleType(name)
+        m.__path__ = [path or ""]  # type: ignore[assignment]
+        m.__package__ = name
+        sys.modules[name] = m
+    return sys.modules[name]
+
+
+_stub_package("youtube_extension")
+_stub_package(
+    "youtube_extension.services",
+    str(_SRC / "youtube_extension" / "services"),
+)
+_stub_package(
+    "youtube_extension.services.ai",
+    str(_SRC / "youtube_extension" / "services" / "ai"),
+)
+
+# Ensure the module itself is freshly imported (no cached version from a prior run)
+sys.modules.pop("youtube_extension.services.ai.speech_to_text_service", None)
+
+# Now import the leaf module directly by its file path to avoid any __init__ chain.
+import importlib.util as _ilu
+
+_spec = _ilu.spec_from_file_location(
+    "youtube_extension.services.ai.speech_to_text_service",
+    _SRC / "youtube_extension" / "services" / "ai" / "speech_to_text_service.py",
+)
+_stt_mod = _ilu.module_from_spec(_spec)  # type: ignore[arg-type]
+sys.modules["youtube_extension.services.ai.speech_to_text_service"] = _stt_mod
+_spec.loader.exec_module(_stt_mod)  # type: ignore[union-attr]
+=======
 import youtube_extension.services.ai.speech_to_text_service as _stt_mod
+>>>>>>> origin/main
 
 SPEECH_AVAILABLE = _stt_mod.SPEECH_AVAILABLE
 STORAGE_AVAILABLE = _stt_mod.STORAGE_AVAILABLE

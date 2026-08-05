@@ -1086,6 +1086,8 @@ class TestAPICostMonitorInMemory:
 from youtube_extension.processors.strategies import EnhancedStrategy
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture(autouse=True)
 def _disable_external_strategy_clients(monkeypatch):
     """These heuristic tests do not exercise Google or Gemini client setup."""
@@ -1095,6 +1097,7 @@ def _disable_external_strategy_clients(monkeypatch):
     monkeypatch.setattr(strategies, "HAS_AI_DEPS", False)
 
 
+>>>>>>> origin/main
 class TestEnhancedStrategyExtractKeyPoints:
     def test_returns_list(self):
         enh = EnhancedStrategy()

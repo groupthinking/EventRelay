@@ -14,12 +14,18 @@ Key Responsibilities:
 """
 
 import asyncio
+<<<<<<< HEAD
+import logging
+import os
+from abc import ABC, abstractmethod
+=======
 import ipaddress
 import logging
 import os
 import socket
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+>>>>>>> origin/main
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Optional
@@ -54,6 +60,21 @@ except ImportError:
 # Configure logging
 logger = logging.getLogger(__name__)
 
+<<<<<<< HEAD
+
+def _summarize_request(request: dict[str, Any]) -> dict[str, Any]:
+    """Build a non-sensitive summary of a request for history/logging.
+
+    The raw request may carry API keys, tokens, prompts, or PII. Persisting it
+    verbatim would leak those into context history (which is serialized and
+    logged), so we record only structural metadata, never values.
+    """
+    try:
+        keys = sorted(str(k) for k in request.keys())
+    except AttributeError:
+        keys = []
+    return {"keys": keys, "key_count": len(keys)}
+=======
 _SUMMARY_KEY_ALLOWLIST = frozenset(
     {
         "error",
@@ -160,6 +181,7 @@ async def _is_public_https_base_url(base_url: str) -> bool:
         return False
 
     return bool(resolved) and all(_is_global_dns_result(result) for result in resolved)
+>>>>>>> origin/main
 
 
 class ProtocolType(Enum):
@@ -327,6 +349,33 @@ class MCPProtocolBridge:
 
             # Send request through adapter
             response = await self.adapters[protocol_type].send_request(request, context)
+<<<<<<< HEAD
+
+            # Update context with response. Store only a non-sensitive summary of
+            # the request — the raw dict may contain API keys/tokens/PII.
+            context.add_history_entry("protocol_request", {
+                "protocol": protocol_type.value,
+                "request_summary": _summarize_request(request),
+                "response": response,
+                "success": True
+            })
+
+            stats["success"] += 1
+            return response
+
+        except Exception as e:
+            # Update context with error
+            context.add_history_entry("protocol_request", {
+                "protocol": protocol_type.value,
+                "request_summary": _summarize_request(request),
+                "error": str(e),
+                "success": False
+            })
+
+            stats["failure"] += 1
+            logger.error(f"Protocol request failed for {protocol_type.value}: {e}")
+            raise
+=======
         except Exception as exc:
             stats["failure"] += 1
             _record_history_safely(
@@ -358,6 +407,7 @@ class MCPProtocolBridge:
                 },
             )
             return response
+>>>>>>> origin/main
 
         finally:
             stats["in_flight"] -= 1
@@ -406,6 +456,9 @@ class MCPProtocolBridge:
 
         logger.info(f"Routing request to protocol: {selected_protocol.value}")
 
+<<<<<<< HEAD
+        return await self.send_protocol_request(selected_protocol, request, context)
+=======
         adapter_request = dict(request)
         adapter_request.pop("required_capabilities", None)
         return await self.send_protocol_request(
@@ -413,6 +466,7 @@ class MCPProtocolBridge:
             adapter_request,
             context,
         )
+>>>>>>> origin/main
 
     async def _select_protocol(
         self,
@@ -468,6 +522,11 @@ class MCPProtocolBridge:
             capable_protocols = []
             for protocol in candidates:
                 try:
+<<<<<<< HEAD
+                    capabilities = set(await self.adapters[protocol].get_capabilities())
+                except Exception as e:
+                    logger.warning(f"Could not get capabilities for {protocol.value}: {e}")
+=======
                     discovered = await asyncio.wait_for(
                         self.adapters[protocol].get_capabilities(),
                         timeout=_CAPABILITY_DISCOVERY_TIMEOUT_SECONDS,
@@ -479,6 +538,7 @@ class MCPProtocolBridge:
                         protocol.value,
                         type(exc).__name__,
                     )
+>>>>>>> origin/main
                     continue
                 if required_capabilities <= capabilities:
                     capable_protocols.append(protocol)
@@ -608,6 +668,14 @@ class OpenAIAdapter(ProtocolAdapter):
             )
             return False
 
+<<<<<<< HEAD
+        # Reject non-HTTPS or hostless base URLs. An attacker-influenced config
+        # could otherwise point requests at internal targets such as the cloud
+        # metadata endpoint (http://169.254.169.254) or file:// URIs (SSRF).
+        parsed = urlparse(base_url)
+        if parsed.scheme != "https" or not parsed.netloc:
+            logger.error("Unsafe OpenAI base_url rejected (must be HTTPS with a host)")
+=======
         # DNS validation alone is vulnerable to rebinding between validation
         # and the SDK connection. Trust only the official endpoint or an exact
         # operator-managed allowlist entry, then retain the public-IP check as
@@ -622,6 +690,7 @@ class OpenAIAdapter(ProtocolAdapter):
             logger.error(
                 "Unsafe OpenAI base_url rejected (must be HTTPS and publicly routable)"
             )
+>>>>>>> origin/main
             return False
         self.base_url = base_url
 

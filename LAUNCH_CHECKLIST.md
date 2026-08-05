@@ -153,8 +153,12 @@ Vercel has none by default, so `/api/agents/dispatch` returns 503.
 
 1. `npm install && npm run build` — frontend builds (verified in CI).
 2. Backend: install in a clean venv (`python -m venv .venv && . .venv/bin/activate
+<<<<<<< HEAD
+   && pip install -e .[dev,youtube]`), then `uvicorn src.youtube_extension.main:app`.
+=======
    && pip install -e .[dev,youtube]`), then
    `PYTHONPATH=src uvicorn youtube_extension.main:app`.
+>>>>>>> origin/main
 3. In test mode: sign in with Google → open `/pricing` → checkout with a Stripe
    **test card** (`4242 4242 4242 4242`) → confirm the webhook flips you to Pro
    and Pro chat / agent dispatch unlock.

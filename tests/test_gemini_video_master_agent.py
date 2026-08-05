@@ -8,6 +8,8 @@ import pytest
 from agents import gemini_video_master_agent as master
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture(autouse=True)
 def _isolate_gemini_sdk_client(monkeypatch):
     """Keep unit tests from constructing the SDK's real HTTP transport."""
@@ -19,6 +21,7 @@ def _isolate_gemini_sdk_client(monkeypatch):
         )
 
 
+>>>>>>> origin/main
 def test_task_delegation_uses_current_gemini_models(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)

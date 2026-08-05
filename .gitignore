@@ -113,7 +113,15 @@ workflow_results/
 .poc-venv/
 .poc-runtime.db
 .venv_prod_verify/
+<<<<<<< HEAD
 .vscode/
+=======
+# Shared editor config is versioned by exception; everything else in
+# .vscode/ (mcp.json, IDE-fork state) stays local.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+>>>>>>> origin/main
 .webassets-cache
 .yarn/
 Desktop.ini
@@ -201,6 +209,8 @@ docs/gemini_reference/
 data/audit/*.jsonl
 # TypeScript incremental build cache
 *.tsbuildinfo
+<<<<<<< HEAD
+=======
 
 # Stray developer scratch artifacts that must never be committed at the repo root.
 # (PR diff dumps, one-off rewrite/commit helper scripts, ad-hoc import probes.)
@@ -211,3 +221,4 @@ data/audit/*.jsonl
 /test_*.py
 # Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
 /.verification-gate-pass
+>>>>>>> origin/main

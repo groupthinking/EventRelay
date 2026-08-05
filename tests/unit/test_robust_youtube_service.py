@@ -150,6 +150,8 @@ def _make_service(api_key: str = "FAKE_KEY") -> RobustYouTubeService:
     return svc
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture
 def isolated_http_client():
     """Provide an inert session for tests that exercise session orchestration."""
@@ -160,6 +162,7 @@ def isolated_http_client():
         yield session
 
 
+>>>>>>> origin/main
 # ---------------------------------------------------------------------------
 # RobustYouTubeMetadata dataclass
 # ---------------------------------------------------------------------------
@@ -282,7 +285,11 @@ class TestContextManager:
         # Should not raise
         await svc.__aexit__(None, None, None)
 
+<<<<<<< HEAD
+    async def test_as_context_manager(self):
+=======
     async def test_as_context_manager(self, isolated_http_client):
+>>>>>>> origin/main
         with patch.object(
             RobustYouTubeService,
             "_get_metadata_youtube_api",
@@ -1260,7 +1267,11 @@ class TestGetTranscript:
         assert result["text"] == ""
         assert "error" in result
 
+<<<<<<< HEAD
+    async def test_creates_session_if_none_for_innertube(self):
+=======
     async def test_creates_session_if_none_for_innertube(self, isolated_http_client):
+>>>>>>> origin/main
         """get_transcript creates a session when self.session is None."""
         svc = RobustYouTubeService(api_key="KEY")
         svc.session = None
@@ -1278,7 +1289,11 @@ class TestGetTranscript:
             result = await svc.get_transcript(VIDEO_ID)
 
         assert result["source"] == "innertube_android"
+<<<<<<< HEAD
+        assert svc.session is not None
+=======
         assert svc.session is isolated_http_client
+>>>>>>> origin/main
 
     async def test_transcript_api_list_transcripts_also_fails(self):
         """Both instance fetch and list_transcripts fail -> falls through to innertube."""
@@ -1330,7 +1345,11 @@ class TestGetTranscript:
 
 
 class TestConvenienceFunctions:
+<<<<<<< HEAD
+    async def test_get_video_metadata_robust(self):
+=======
     async def test_get_video_metadata_robust(self, isolated_http_client):
+>>>>>>> origin/main
         expected = MagicMock(spec=RobustYouTubeMetadata)
         with patch.object(
             RobustYouTubeService,
@@ -1341,7 +1360,11 @@ class TestConvenienceFunctions:
             result = await get_video_metadata_robust(VIDEO_URL, api_key="KEY")
         assert result is expected
 
+<<<<<<< HEAD
+    async def test_get_video_transcript_robust(self):
+=======
     async def test_get_video_transcript_robust(self, isolated_http_client):
+>>>>>>> origin/main
         expected = {
             "text": "hello",
             "source": "youtube_transcript_api",
@@ -1358,11 +1381,19 @@ class TestConvenienceFunctions:
             result = await get_video_transcript_robust(VIDEO_ID, api_key="KEY", language="en")
         assert result is expected
 
+<<<<<<< HEAD
+    async def test_get_video_metadata_robust_no_api_key(self):
+        """Should work without an api_key (uses env var fallback)."""
+        expected = MagicMock(spec=RobustYouTubeMetadata)
+        with (
+            patch.dict("os.environ", {}, clear=False),
+=======
     async def test_get_video_metadata_robust_no_api_key(self, isolated_http_client):
         """Should work without an api_key (uses env var fallback)."""
         expected = MagicMock(spec=RobustYouTubeMetadata)
         with (
             patch.dict("os.environ", {}, clear=True),
+>>>>>>> origin/main
             patch.object(
                 RobustYouTubeService,
                 "get_video_metadata",

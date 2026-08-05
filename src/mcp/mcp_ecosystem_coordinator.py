@@ -17,8 +17,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+<<<<<<< HEAD
+=======
 from utils.path_utils import select_writable_dir
 
+>>>>>>> origin/main
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -179,6 +182,9 @@ class MCPEcosystemCoordinator:
     """
 
     def __init__(self, config_path: str = None):
+<<<<<<< HEAD
+        self.config_path = config_path or "/Users/garvey/UVAI/10_MCP_ECOSYSTEM"
+=======
         if config_path:
             self.config_path = config_path
         else:
@@ -191,6 +197,7 @@ class MCPEcosystemCoordinator:
                     Path.cwd() / "mcp_ecosystem",
                 )
             )
+>>>>>>> origin/main
         self.coordination_config = self._load_coordination_config()
 
         # MCP node registry

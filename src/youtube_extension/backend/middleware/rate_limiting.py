@@ -177,7 +177,11 @@ def create_rate_limit_middleware(
 
 
 # Optional: Redis-backed rate limiter for production
+<<<<<<< HEAD
 try:
+=======
+try:  # pragma: no cover
+>>>>>>> origin/main
     import redis
 
     class RedisRateLimiter:
@@ -205,6 +209,10 @@ try:
             # Using INCR and EXPIRE commands with sliding window
             pass
 
+<<<<<<< HEAD
 except ImportError:
+=======
+except ImportError:  # pragma: no cover
+>>>>>>> origin/main
     logger.info("Redis not available, using in-memory rate limiter")
     RedisRateLimiter = None

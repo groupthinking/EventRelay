@@ -740,6 +740,12 @@ class TestExecuteTaskWithServer:
 
 
 class TestExecuteOnServer:
+<<<<<<< HEAD
+    async def test_raises_not_implemented_error(self):
+        from youtube_extension.services.mcp.registry import MCPServerRegistry
+        from youtube_extension.services.mcp.types import MCPCapability, MCPTask
+
+=======
     @patch("aiohttp.ClientSession.post")
     async def test_execute_on_server_success(self, mock_post):
         from youtube_extension.services.mcp.registry import MCPServerRegistry
@@ -812,6 +818,7 @@ class TestExecuteOnServer:
         aenter_mock.return_value = mock_response
         mock_post.return_value.__aenter__ = aenter_mock
 
+>>>>>>> origin/main
         registry = MCPServerRegistry()
         registry.register_server(
             "srv", "Srv", "http://localhost:9000", [MCPCapability.AI_INFERENCE]
@@ -824,7 +831,11 @@ class TestExecuteOnServer:
             requirements=[MCPCapability.AI_INFERENCE],
         )
 
+<<<<<<< HEAD
+        with pytest.raises(NotImplementedError):
+=======
         with pytest.raises(aiohttp.ClientResponseError):
+>>>>>>> origin/main
             await orch._execute_on_server("srv", task)
 
     async def test_raises_value_error_for_unknown_server(self):

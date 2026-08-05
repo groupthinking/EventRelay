@@ -19,8 +19,11 @@ from functools import wraps
 from pathlib import Path
 from typing import Any
 
+<<<<<<< HEAD
+=======
 from utils.path_utils import select_readable_file, select_writable_dir
 
+>>>>>>> origin/main
 # MCP integration imports
 try:
     import mcp
@@ -204,6 +207,12 @@ class MCPConfig:
     """Configuration management for MCP video processor"""
 
     def __init__(self, config_path: str = None):
+<<<<<<< HEAD
+        self.config_path = (
+            config_path
+            or "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/MCP/mcp_detailed_config.json"
+        )
+=======
         if config_path:
             self.config_path = config_path
         else:
@@ -216,6 +225,7 @@ class MCPConfig:
                     Path.cwd() / "mcp_detailed_config.json",
                 )
             )
+>>>>>>> origin/main
         self.config = self._load_config()
 
     def _load_config(self) -> dict[str, Any]:
@@ -1165,6 +1175,10 @@ class MCPVideoProcessor:
     ) -> dict[str, Any]:
         """Save results with MCP metadata and analytics"""
 
+<<<<<<< HEAD
+        # Create enhanced results directory
+        results_dir = Path("/Users/garvey/UVAI/10_MCP_ECOSYSTEM/mcp_results")
+=======
         # Create enhanced results directory. Select a base that is genuinely
         # writable (the legacy path only if it exists and is writable), so the
         # category_dir creation below cannot raise PermissionError.
@@ -1172,6 +1186,7 @@ class MCPVideoProcessor:
             "/Users/garvey/UVAI/10_MCP_ECOSYSTEM/mcp_results",
             Path.cwd() / "mcp_results",
         )
+>>>>>>> origin/main
         category_dir = results_dir / content["category"]
         category_dir.mkdir(parents=True, exist_ok=True)
 

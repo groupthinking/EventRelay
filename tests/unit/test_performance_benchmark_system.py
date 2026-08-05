@@ -1011,6 +1011,8 @@ class TestConvenienceFunctions:
 class TestRunComprehensiveBenchmark:
     """Cover the main orchestration method."""
 
+<<<<<<< HEAD
+=======
     @pytest.fixture(autouse=True)
     def _isolate_component_benchmarks(self, monkeypatch):
         """Keep orchestration tests deterministic and provider-free."""
@@ -1042,6 +1044,7 @@ class TestRunComprehensiveBenchmark:
                 _safe_component(summary),
             )
 
+>>>>>>> origin/main
     def _make_psutil_fake(self):
         import types
         return types.SimpleNamespace(
@@ -1147,6 +1150,8 @@ class TestRunComprehensiveBenchmark:
 
 class TestBenchmarkVideoProcessing:
 
+<<<<<<< HEAD
+=======
     @pytest.fixture(autouse=True)
     def _provider_free_processor(self, monkeypatch):
         import youtube_extension.backend.services.performance_benchmark_system as _mod
@@ -1163,6 +1168,7 @@ class TestBenchmarkVideoProcessing:
 
         monkeypatch.setattr(_mod, "VideoProcessor", _FailingProcessor)
 
+>>>>>>> origin/main
     def _make_psutil_fake(self):
         import types
         return types.SimpleNamespace(
@@ -1175,7 +1181,11 @@ class TestBenchmarkVideoProcessing:
         import types
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
+<<<<<<< HEAD
+        # VideoProcessor.process_video raises RuntimeError (the fallback stub)
+=======
         # The class fixture supplies a deterministic provider-free failure.
+>>>>>>> origin/main
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_video_processing(iterations=1)
         assert isinstance(result, dict)

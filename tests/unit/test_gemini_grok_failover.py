@@ -31,6 +31,8 @@ _VIDEO_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
 _PROMPT = "Analyze this video and extract key events"
 
 
+<<<<<<< HEAD
+=======
 @pytest.fixture(autouse=True)
 def _isolate_service_state(monkeypatch):
     """Avoid real transports and class-level API-key leakage between tests."""
@@ -44,6 +46,7 @@ def _isolate_service_state(monkeypatch):
     monkeypatch.setattr(GeminiVideoService, "API_KEYS", [])
 
 
+>>>>>>> origin/main
 def _make_service(grok_key: str | None = _GROK_KEY) -> GeminiVideoService:
     """Instantiate GeminiVideoService with test keys."""
     with patch.dict(

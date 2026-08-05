@@ -10,7 +10,10 @@ workflow; this README is the index.
 |----------|------|---------|---------|
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
+<<<<<<< HEAD
+=======
 | gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+>>>>>>> origin/main
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
@@ -25,7 +28,11 @@ workflow; this README is the index.
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
 | Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
+<<<<<<< HEAD
+| Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
+=======
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
+>>>>>>> origin/main
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
@@ -70,6 +77,8 @@ Generates pytest coverage and uploads lcov to Qlty.
   <https://qlty.sh>, then add it under **Settings → Secrets and variables →
   Actions**.
 - Coverage HTML and lcov are stored as artifacts for 30 days.
+<<<<<<< HEAD
+=======
 - The test step is authoritative (`--cov-fail-under=90`, no `continue-on-error`,
   no `|| true`) so failures cannot report green.
 
@@ -119,6 +128,7 @@ record, so any artifact can be linked back to its originating run.
 - A video is `delivered` only when every stage — including the terminal SENTINEL
   QA stage — reports success. The deliverables artifact upload is conditioned on
   that status, so a blocked run publishes evidence but never deliverables.
+>>>>>>> origin/main
 
 ### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
 
@@ -171,8 +181,11 @@ A full audit of this directory was performed (see
 
 
 | Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Creates the independent, head-bound `Agent completion enforcement` Check from protected default-branch code. |
+<<<<<<< HEAD
+=======
 | PR Governance | `pr-governance.yml` | `pull_request_target` (opened/edited/reopened/synchronize/ready_for_review) | Validates that every ready PR links exactly one real open canonical issue and contains non-empty delivery evidence sections; fails on competing PRs. |
 | Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Non-destructive daily report of ready PRs missing a canonical issue, issues with competing implementation PRs, and stale unattached branches. |
+>>>>>>> origin/main
 
 ## Agent-completion enforcement
 

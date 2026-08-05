@@ -7,6 +7,25 @@ on:
         description: 'Comma-separated categories to process (e.g. tech,science,education,news)'
         required: false
         default: 'tech,science,education,news'
+<<<<<<< HEAD
+      videos_per_category:
+        description: 'Number of videos to process per category'
+        required: false
+        default: '25'
+      dry_run:
+        description: 'Dry run (skip actual processing, only list videos)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  prepare:
+    name: Prepare video batches
+=======
         type: string
       videos_per_category:
         description: 'Number of videos to process per category'
@@ -96,12 +115,32 @@ concurrency:
 jobs:
   prepare:
     name: Preflight and batch plan
+>>>>>>> origin/main
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@v7
 
+<<<<<<< HEAD
+      - name: Build category matrix
+        id: build-matrix
+        run: |
+          IFS=',' read -ra CATS <<< "${{ github.event.inputs.categories }}"
+          json='{"include":['
+          first=true
+          for cat in "${CATS[@]}"; do
+            cat=$(echo "$cat" | xargs)
+            if [ "$first" = true ]; then
+              first=false
+            else
+              json+=','
+            fi
+            json+="{\"category\":\"$cat\"}"
+          done
+          json+=']}'
+          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+=======
       - name: Validate required secrets
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
@@ -133,12 +172,16 @@ jobs:
           MAX_VIDEOS_PER_RUN: ${{ inputs.max_videos_per_run }}
           MAX_MODEL_CALLS: ${{ inputs.max_model_calls }}
         run: python scripts/ci/autonomous_video_plan.py
+>>>>>>> origin/main
 
   process:
     name: Process ${{ matrix.category }} videos
     needs: prepare
     runs-on: ubuntu-latest
+<<<<<<< HEAD
+=======
     timeout-minutes: 60
+>>>>>>> origin/main
     strategy:
       matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
       fail-fast: false
@@ -155,11 +198,77 @@ jobs:
         run: pip install -e .[youtube,ml] 2>/dev/null || pip install yt-dlp requests
 
       - name: Process ${{ matrix.category }} videos
+<<<<<<< HEAD
+=======
         id: process
+>>>>>>> origin/main
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CATEGORY: ${{ matrix.category }}
+<<<<<<< HEAD
+          VIDEOS_PER_CATEGORY: ${{ github.event.inputs.videos_per_category }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          python - <<'EOF'
+          import os, json, sys
+
+          category = os.environ["CATEGORY"]
+          count = int(os.environ.get("VIDEOS_PER_CATEGORY", "25"))
+          dry_run = os.environ.get("DRY_RUN", "false").lower() == "true"
+
+          print(f"[{category}] Starting batch — {count} videos (dry_run={dry_run})")
+
+          # Attempt to use the YouTube search API to discover videos
+          api_key = os.environ.get("YOUTUBE_API_KEY", "")
+          videos = []
+          if api_key:
+              try:
+                  import urllib.request, urllib.parse
+                  params = urllib.parse.urlencode({
+                      "part": "id,snippet",
+                      "q": category,
+                      "type": "video",
+                      "maxResults": min(count, 50),
+                      "key": api_key,
+                  })
+                  url = f"https://www.googleapis.com/youtube/v3/search?{params}"
+                  with urllib.request.urlopen(url, timeout=30) as resp:
+                      data = json.loads(resp.read())
+                  videos = [item["id"]["videoId"] for item in data.get("items", [])]
+                  print(f"[{category}] Discovered {len(videos)} videos via YouTube API")
+              except Exception as exc:
+                  print(f"[{category}] YouTube API lookup failed: {exc}", file=sys.stderr)
+          else:
+              print(f"[{category}] YOUTUBE_API_KEY not set — skipping API lookup")
+
+          if dry_run:
+              print(f"[{category}] DRY RUN — would process: {videos}")
+              sys.exit(0)
+
+          # Process each video
+          processed, failed = 0, 0
+          for vid in videos[:count]:
+              try:
+                  print(f"[{category}] Processing video {vid} ...")
+                  # Real processing hook — extend with actual processor when available
+                  processed += 1
+              except Exception as exc:
+                  print(f"[{category}] Failed {vid}: {exc}", file=sys.stderr)
+                  failed += 1
+
+          print(f"[{category}] Done — processed={processed} failed={failed}")
+          EOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: video-processing-${{ matrix.category }}
+          path: |
+            youtube_processed_videos/
+          retention-days: 7
+=======
           VIDEOS_PER_CATEGORY: ${{ inputs.videos_per_category }}
           PIPELINE_MODE: ${{ inputs.pipeline_mode }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -188,6 +297,7 @@ jobs:
             pipeline_output/${{ matrix.category }}/videos/
             youtube_processed_videos/
           retention-days: 30
+>>>>>>> origin/main
           if-no-files-found: ignore
 
   summary:
@@ -195,6 +305,19 @@ jobs:
     needs: process
     if: always()
     runs-on: ubuntu-latest
+<<<<<<< HEAD
+    steps:
+      - name: Print summary
+        run: |
+          echo "## Autonomous Video Processing Complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Input | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Categories | ${{ github.event.inputs.categories }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Videos per category | ${{ github.event.inputs.videos_per_category }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Dry run | ${{ github.event.inputs.dry_run }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Triggered by | ${{ github.actor }} |" >> "$GITHUB_STEP_SUMMARY"
+=======
     outputs:
       final_status: ${{ steps.aggregate.outputs.final_status }}
       delivered: ${{ steps.aggregate.outputs.delivered }}
@@ -223,3 +346,4 @@ jobs:
           PIPELINE_MODE: ${{ inputs.pipeline_mode }}
           DRY_RUN: ${{ inputs.dry_run }}
         run: python scripts/ci/autonomous_video_summary.py
+>>>>>>> origin/main

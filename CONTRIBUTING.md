@@ -14,8 +14,13 @@ We welcome contributions to EventRelay! Please follow these guidelines to ensure
     ```
 3.  **Start the services**:
     ```bash
+<<<<<<< HEAD
+    # Terminal 1 — backend
+    uvicorn src.youtube_extension.main:app --reload --port 8000
+=======
     # Terminal 1 — backend (PYTHONPATH=src is required; see CLAUDE.md)
     PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
+>>>>>>> origin/main
     # Terminal 2 — frontend
     turbo run dev
     ```

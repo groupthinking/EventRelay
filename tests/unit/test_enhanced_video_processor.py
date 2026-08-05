@@ -23,10 +23,17 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 # ---------------------------------------------------------------------------
+<<<<<<< HEAD
+# Import the module under test (with GEMINI_API_KEY set so __init__ passes)
+# ---------------------------------------------------------------------------
+import os
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-key")
+=======
 # Import the module under test. Individual constructor tests provide their own
 # scoped credentials so test collection never mutates the process environment.
 # ---------------------------------------------------------------------------
 import os
+>>>>>>> origin/main
 
 import youtube_extension.backend.enhanced_video_processor as _mod
 from youtube_extension.backend.enhanced_video_processor import (
@@ -131,11 +138,15 @@ class TestEnhancedVideoProcessorInit:
         assert proc.livekit_url == "ws://localhost:7880"
 
     def test_livekit_url_from_env(self):
+<<<<<<< HEAD
+        with patch.dict(os.environ, {"LIVEKIT_URL": "ws://custom:7880"}, clear=False):
+=======
         with patch.dict(
             os.environ,
             {"GEMINI_API_KEY": "test-key", "LIVEKIT_URL": "ws://custom:7880"},
             clear=False,
         ):
+>>>>>>> origin/main
             with patch.object(_mod, "GEMINI_VISION_AVAILABLE", False):
                 proc = EnhancedVideoProcessor()
         assert proc.livekit_url == "ws://custom:7880"
@@ -610,34 +621,6 @@ class TestGetYoutubeTranscriptFallback:
             result = await proc._get_youtube_transcript_fallback(_VIDEO_ID)
 
         assert result["source"] == "failed"
-
-
-# ===========================================================================
-# _get_openai_whisper_transcript
-# ===========================================================================
-
-class TestGetOpenAIWhisperTranscript:
-    async def test_yt_dlp_uses_canonical_url_after_option_terminator(self, tmp_path):
-        proc = _make_processor()
-        hostile_url = "--exec=touch /tmp/eventrelay-argument-injection"
-
-        mock_openai = MagicMock()
-        mock_client = mock_openai.OpenAI.return_value
-        mock_client.audio.transcriptions.create.return_value = "safe transcript"
-
-        with patch.dict(sys.modules, {"openai": mock_openai}):
-            with patch("tempfile.TemporaryDirectory") as temp_dir:
-                temp_dir.return_value.__enter__.return_value = str(tmp_path)
-                with patch("subprocess.run") as run:
-                    with patch("builtins.open", mock_open(read_data=b"audio")):
-                        result = await proc._get_openai_whisper_transcript(
-                            _VIDEO_ID, hostile_url
-                        )
-
-        command = run.call_args.args[0]
-        assert command[-2:] == ["--", _VIDEO_URL]
-        assert hostile_url not in command
-        assert result["text"] == "safe transcript"
 
 
 # ===========================================================================

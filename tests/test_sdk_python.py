@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+<<<<<<< HEAD
+=======
 from unittest.mock import MagicMock
+>>>>>>> origin/main
 
 import pytest
 
@@ -66,6 +69,8 @@ def _mock_transport(responses: dict[tuple[str, str], dict]) -> httpx.MockTranspo
     return httpx.MockTransport(handler)
 
 
+<<<<<<< HEAD
+=======
 def _unconnected_client(**kwargs) -> EventRelayClient:
     """Build a configuration-only client without creating a real transport."""
     return EventRelayClient(
@@ -74,6 +79,7 @@ def _unconnected_client(**kwargs) -> EventRelayClient:
     )
 
 
+>>>>>>> origin/main
 # ---------------------------------------------------------------------------
 # Type model tests
 # ---------------------------------------------------------------------------
@@ -429,6 +435,25 @@ class TestEventRelayClient:
         )
 
     def test_client_default_base_url(self) -> None:
+<<<<<<< HEAD
+        client = EventRelayClient()
+        assert "uvai.io" in client._base_url
+
+    def test_client_custom_base_url(self) -> None:
+        client = EventRelayClient(base_url="http://localhost:9000")
+        assert client._base_url == "http://localhost:9000"
+
+    def test_client_strips_trailing_slash(self) -> None:
+        client = EventRelayClient(base_url="http://localhost:8000/")
+        assert not client._base_url.endswith("/")
+
+    def test_client_api_key_in_headers(self) -> None:
+        client = EventRelayClient(api_key="secret-key")
+        assert client._headers()["X-API-Key"] == "secret-key"
+
+    def test_client_no_api_key_header_absent(self) -> None:
+        client = EventRelayClient(api_key="")
+=======
         client = _unconnected_client()
         assert "uvai.io" in client._base_url
 
@@ -446,6 +471,7 @@ class TestEventRelayClient:
 
     def test_client_no_api_key_header_absent(self) -> None:
         client = _unconnected_client(api_key="")
+>>>>>>> origin/main
         assert "X-API-Key" not in client._headers()
 
     def test_videos_process(self) -> None:
