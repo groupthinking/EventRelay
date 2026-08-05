@@ -90,6 +90,13 @@ export async function POST(req: NextRequest) {
     return res;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'activation_failed';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Unauthenticated public route (PUBLIC_API_EXACT) — keep Stripe SDK text,
+    // which can echo account identifiers and partial API keys, server-side.
+    console.error('[billing] activation failed:', message);
+    kaizenObserve('billing', 'activate_error', message, { fix: 'inspect_stripe_checkout_session' });
+    return NextResponse.json(
+      { error: 'activation_failed', code: 'activation_failed' },
+      { status: 500 },
+    );
   }
 }

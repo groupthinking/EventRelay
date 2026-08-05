@@ -56,4 +56,31 @@ describe('POST /api/billing/renew', () => {
     expect(traces.some((t) => t.stage === 'renewal_start')).toBe(true);
     expect(traces.some((t) => t.stage === 'renewal_session')).toBe(true);
   });
+
+  // This route is on PUBLIC_API_EXACT — unauthenticated, so any internet caller
+  // can trigger this branch and read the response.
+  it('never returns raw Stripe SDK error text', async () => {
+    const stripeMessage = "Invalid API Key provided: sk_live_****ABCD (account acct_1QLive)";
+    vi.mocked(createProCheckoutSession).mockRejectedValue(new Error(stripeMessage));
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const req = new NextRequest('http://localhost/api/billing/renew', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ annual: false }),
+    });
+    const res = await POST(req);
+    const raw = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(JSON.parse(raw)).toEqual({ error: 'renewal_failed', code: 'renewal_failed' });
+    for (const token of ['sk_live', 'acct_1QLive', 'Invalid API Key']) {
+      expect(raw).not.toContain(token);
+    }
+
+    // Raw detail is retained for operators only.
+    expect(JSON.stringify(consoleError.mock.calls)).toContain('sk_live_****ABCD');
+    expect(getKaizenTraces('billing').some((t) => t.observation === stripeMessage)).toBe(true);
+  });
 });

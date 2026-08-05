@@ -34,7 +34,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'checkout_failed';
+    // This route is on the unauthenticated public allowlist (PUBLIC_API_EXACT),
+    // so anything returned here is readable by any internet caller. Stripe SDK
+    // messages can contain price/account identifiers and partial API keys, so
+    // the raw text stays server-side only.
+    console.error('[billing] checkout failed:', message);
     kaizenObserve('billing', 'checkout_error', message, { fix: 'verify_stripe_env' });
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'checkout_failed', code: 'checkout_failed' },
+      { status: 500 },
+    );
   }
 }

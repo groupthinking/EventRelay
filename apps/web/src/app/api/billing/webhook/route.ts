@@ -24,8 +24,15 @@ export async function POST(req: NextRequest) {
     event = stripe.webhooks.constructEvent(raw, signature, secret);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'invalid_payload';
+    // Unauthenticated public route (PUBLIC_API_EXACT). Stripe signature errors
+    // describe the expected scheme/timestamp tolerance and can echo API key
+    // fragments, which would help an attacker forge a payload — log only.
+    console.error('[billing] webhook signature verification failed:', message);
     kaizenObserve('billing', 'webhook_rejected', message, { fix: 'verify_stripe_signature' });
-    return NextResponse.json({ error: message }, { status: 400 });
+    return NextResponse.json(
+      { error: 'invalid_payload', code: 'invalid_payload' },
+      { status: 400 },
+    );
   }
 
   kaizenObserve('billing', 'webhook_received', `Stripe event ${event.type}`);
@@ -49,7 +56,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'webhook_handler_failed';
+    // Unauthenticated public route (PUBLIC_API_EXACT) — handler failures can
+    // surface Stripe SDK and datastore internals, so keep them server-side.
+    console.error('[billing] webhook handler failed:', message);
     kaizenObserve('billing', 'webhook_error', message, { fix: 'inspect_handler' });
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'webhook_handler_failed', code: 'webhook_handler_failed' },
+      { status: 500 },
+    );
   }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { fetchTranscript } from '@/lib/transcription-service';
-import { parseJsonSafely, formatApiError } from '@/lib/error-handling';
+import { parseJsonSafely } from '@/lib/error-handling';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -14,7 +14,8 @@ export const maxDuration = 120;
  *   3. OpenAI Responses API with web search - with rate limit handling
  *   4. Direct audio STT via OpenAI Whisper
  *
- * Error responses provide actionable details:
+ * Error responses are static and machine-readable; raw upstream provider text
+ * is logged server-side only (it can carry account IDs and partial API keys):
  *   - 400: Invalid input (missing URL, malformed JSON)
  *   - 429: Rate limited (implement backoff or upgrade service plan)
  *   - 500: Service unavailable (check API keys and billing)
@@ -27,12 +28,12 @@ export async function POST(request: Request) {
     try {
       body = await parseJsonSafely(request);
     } catch (parseError) {
-      const error = formatApiError(parseError, 'Invalid JSON in request body');
+      console.error('Transcription route JSON parse error:', parseError);
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
-          details: error.details,
+          error: 'Invalid JSON in request body',
+          code: 'invalid_json',
           transcript: '',
         },
         { status: 400 }
@@ -102,14 +103,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json(result);
   } catch (error) {
+    // Failures here can carry upstream provider text (OpenAI/Gemini/backend),
+    // which may include account identifiers, quota state or partial API keys.
+    // Log it server-side and return a fixed, static payload.
     console.error('Transcription route error:', error);
-    const formatted = formatApiError(error);
 
     return NextResponse.json(
       {
         success: false,
-        error: formatted.message,
-        details: formatted.details,
+        error: 'Transcription failed',
+        code: 'transcription_failed',
         transcript: '',
       },
       { status: 500 }

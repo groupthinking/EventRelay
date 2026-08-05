@@ -46,6 +46,20 @@ const realtimeSession = {
   tool_choice: 'auto',
 };
 
+/**
+ * OpenAI error bodies routinely echo org/project identifiers, quota state and,
+ * on a 401, a partial API key (`Incorrect API key provided: sk-proj-****ABCD`).
+ * None of that may reach the browser, so the upstream body is logged
+ * server-side only and the caller gets a fixed 502 with a static message.
+ * The upstream status is deliberately NOT mirrored — it is itself a signal
+ * about the server's OpenAI account state.
+ */
+function upstreamFailure(stage: string, status: number, body: string, error: string, code: string) {
+  console.error(`[realtime] ${stage} failed`, JSON.stringify({ status, body }));
+
+  return Response.json({ error, code }, { status: 502 });
+}
+
 function getOpenAiHeaders(contentType?: string) {
   const apiKey = process.env.OPENAI_API_KEY;
 
@@ -95,12 +109,12 @@ export async function GET() {
   const contentType = upstream.headers.get('content-type') || 'application/json';
 
   if (!upstream.ok) {
-    return Response.json(
-      {
-        error: 'OpenAI Realtime client secret creation failed.',
-        details: body,
-      },
-      { status: upstream.status },
+    return upstreamFailure(
+      'client_secret',
+      upstream.status,
+      body,
+      'OpenAI Realtime client secret creation failed.',
+      'realtime_client_secret_failed',
     );
   }
 
@@ -144,12 +158,12 @@ export async function POST(request: Request) {
   const body = await upstream.text();
 
   if (!upstream.ok) {
-    return Response.json(
-      {
-        error: 'OpenAI Realtime session creation failed.',
-        details: body,
-      },
-      { status: upstream.status },
+    return upstreamFailure(
+      'sdp_exchange',
+      upstream.status,
+      body,
+      'OpenAI Realtime session creation failed.',
+      'realtime_session_failed',
     );
   }
 
