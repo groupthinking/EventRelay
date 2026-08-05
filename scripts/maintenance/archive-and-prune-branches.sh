@@ -36,10 +36,13 @@
 #
 #   KEEP-OPEN-PR    28  open PR -- never touched by this script
 #   REVIEW-SHARED   29  real shared ancestry, no open PR -- NOT deleted here
-#   CLOSE-MERGED     2  tip is an ancestor of main -- nothing to lose
+#   CLOSE-MERGED     1  tip is an ancestor of main -- nothing to lose
 #   CLOSE-ORPHANED 275  no common ancestor with main -- no rebase recovers them
 #
-# Only CLOSE-MERGED and CLOSE-ORPHANED are pruned: 277 branches.
+# Only CLOSE-MERGED and CLOSE-ORPHANED are pruned: 276 branches.
+#
+# (An earlier draft of this header read "2 / 277". It was written before the
+# `main` row was dropped from the CSV -- see the protected-ref note below.)
 #
 # RECOVERY
 # --------
