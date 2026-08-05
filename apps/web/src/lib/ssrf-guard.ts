@@ -12,6 +12,7 @@ import 'server-only';
  * Host header. This is a strong, low-cost first line of defense.
  */
 import * as dns from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
 import * as net from 'node:net';
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal']);
@@ -118,7 +119,23 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
     if (ipIsPrivate(host)) throw new Error('Blocked private IP literal');
     return u;
   }
-  const resolved = await dns.lookup(host, { all: true });
+  // Every other throw here is an app-authored literal, but `dns.lookup` rejects
+  // with Node resolver text that embeds the caller's own hostname — e.g.
+  // `getaddrinfo ENOTFOUND evil.internal.corp`. `fetchTranscript` interpolates
+  // that message into `Rejected audioUrl: ${guardErr.message}`, which the
+  // transcribe route returns verbatim, so the reject reason would reach the
+  // client. Beyond disclosing system error text, distinguishing ENOTFOUND from
+  // EAI_AGAIN from 'Host resolves to a private address' turns this guard into a
+  // DNS oracle for probing internal names from the server's network position —
+  // the reconnaissance the guard exists to block. Collapse every resolver
+  // failure into the same app-authored literal a zero-result lookup produces.
+  let resolved: LookupAddress[];
+  try {
+    resolved = await dns.lookup(host, { all: true });
+  } catch (err) {
+    console.error('[ssrf-guard] DNS lookup failed:', err);
+    throw new Error('Host does not resolve');
+  }
   if (resolved.length === 0) throw new Error('Host does not resolve');
   for (const r of resolved) {
     if (ipIsPrivate(r.address)) throw new Error('Host resolves to a private address');
