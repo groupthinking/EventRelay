@@ -2678,3 +2678,115 @@ class TestLearningLogOffloading:
 
         assert exc.value.status_code == 500
         assert exc.value.detail == "Internal server error"
+
+    def test_concurrent_walks_are_capped_by_the_gate(self):
+        """The walk is uncached, so concurrency must be bounded.
+
+        Offloading alone moves the stall off the event loop but lets any burst
+        of requests occupy every worker in the shared default executor, which
+        starves unrelated `to_thread` callers. This asserts the cap is real:
+        more callers than the limit must never produce more simultaneous walks
+        than the limit.
+        """
+        import time
+
+        limit = router_module._LEARNING_LOG_MAX_CONCURRENCY
+        callers = limit + 3
+
+        state = {"in_flight": 0, "peak": 0}
+        counter_lock = threading.Lock()
+        release = threading.Event()
+
+        def _occupy():
+            with counter_lock:
+                state["in_flight"] += 1
+                state["peak"] = max(state["peak"], state["in_flight"])
+            release.wait(timeout=5.0)
+            with counter_lock:
+                state["in_flight"] -= 1
+
+        svc = self._service(on_call=_occupy)
+
+        async def _run():
+            tasks = [
+                asyncio.create_task(router_module.get_learning_log_v1(data_service=svc))
+                for _ in range(callers)
+            ]
+
+            # Wait for the first wave to reach the worker threads.
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                with counter_lock:
+                    if state["in_flight"] >= limit:
+                        break
+                await asyncio.sleep(0.01)
+
+            # Give any unbounded overflow a chance to appear before releasing;
+            # without the gate all `callers` walks would be in flight by now.
+            await asyncio.sleep(0.25)
+            with counter_lock:
+                observed_peak = state["peak"]
+
+            release.set()
+            return observed_peak, await asyncio.gather(*tasks)
+
+        peak, results = asyncio.run(_run())
+
+        # Anti-vacuity: every caller really ran and got the payload back.
+        assert len(results) == callers
+        assert all(r == [{"video_id": "vid-1", "title": "Video 1"}] for r in results)
+        assert svc.get_learning_log.call_count == callers
+
+        # The gate held: never more than `limit` walks at once...
+        assert peak <= limit, (
+            f"{peak} concurrent walks observed with a cap of {limit}; the "
+            "concurrency gate is not bounding the shared executor"
+        )
+        # ...and it did not over-restrict into effective serialisation.
+        assert peak == limit, (
+            f"expected the cap of {limit} to be reached with {callers} "
+            f"concurrent callers, only saw {peak}"
+        )
+
+    def test_gate_is_rebuilt_for_each_event_loop(self):
+        """A loop-bound `Semaphore` must not leak across event loops.
+
+        `asyncio.Semaphore` pins itself to the first loop that awaits it and
+        raises `RuntimeError` if reused elsewhere, so a single module-level
+        instance would break the second `asyncio.run` in any process.
+        """
+        svc = self._service()
+
+        async def _run():
+            gate = router_module._get_learning_log_gate()
+            result = await router_module.get_learning_log_v1(data_service=svc)
+            return gate, result
+
+        first_gate, first_result = asyncio.run(_run())
+        second_gate, second_result = asyncio.run(_run())
+
+        # Anti-vacuity: both calls actually completed through the gate.
+        assert first_result == [{"video_id": "vid-1", "title": "Video 1"}]
+        assert second_result == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert first_gate is not second_gate, (
+            "the same Semaphore was reused across two event loops; it would "
+            "raise RuntimeError once the first loop is closed"
+        )
+
+    def test_gate_is_shared_within_one_event_loop(self):
+        """Within a single loop every request must contend for the same gate."""
+        svc = self._service()
+
+        async def _run():
+            a = router_module._get_learning_log_gate()
+            await router_module.get_learning_log_v1(data_service=svc)
+            b = router_module._get_learning_log_gate()
+            return a, b
+
+        first, second = asyncio.run(_run())
+
+        assert first is second, (
+            "a fresh Semaphore per call would impose no bound at all"
+        )
+        assert svc.get_learning_log.call_count == 1
