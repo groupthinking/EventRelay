@@ -14,7 +14,7 @@ model: gpt-5.4
 network:
   allowed:
     - defaults
-    - "awmg-mcpg"
+    - "AWMGMCPG"
 
 tools:
   github:
