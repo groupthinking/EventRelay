@@ -10,8 +10,10 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import threading
 import time
 import uuid as _uuid
+import weakref
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -997,6 +999,37 @@ async def get_video_detail_v1(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Concurrency gate for the learning-log walk.
+#
+# A single module-level ``asyncio.Semaphore`` would be a latent landmine rather
+# than an obvious bug. ``Semaphore.acquire`` only reaches ``_get_loop()`` when it
+# has to wait -- the uncontended path decrements the counter and returns before
+# any loop is touched. So the semaphore stays unbound, and works fine across any
+# number of event loops, right up until the first time it is genuinely contended.
+# That acquisition pins it, and every later use from a different loop raises
+# ``RuntimeError: ... is bound to a different event loop``.
+#
+# The failure therefore cannot show up in low-concurrency tests; it waits for the
+# exact burst this gate exists to absorb. Building the gate per running loop and
+# holding it weakly removes the trap outright -- each loop gets its own semaphore,
+# which is collected along with the loop it belongs to.
+_LEARNING_LOG_MAX_CONCURRENCY = 4
+# Maps a running event loop -> the ``asyncio.Semaphore`` bound to that loop.
+_learning_log_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_learning_log_gates_lock = threading.Lock()
+
+
+def _get_learning_log_gate() -> asyncio.Semaphore:
+    """Return the learning-log concurrency gate bound to the running loop."""
+    loop = asyncio.get_running_loop()
+    with _learning_log_gates_lock:
+        gate = _learning_log_gates.get(loop)
+        if gate is None:
+            gate = asyncio.Semaphore(_LEARNING_LOG_MAX_CONCURRENCY)
+            _learning_log_gates[loop] = gate
+        return gate
+
+
 @router.get(
     "/learning-log",
     response_model=list[dict[str, Any]],
@@ -1006,7 +1039,17 @@ async def get_video_detail_v1(
 async def get_learning_log_v1(data_service: DataService = Depends(get_data_service)):
     """Get learning log from enhanced analysis files"""
     try:
-        learning_log = data_service.get_learning_log()
+        # ``get_learning_log`` walks the enhanced-analysis tree and opens a
+        # metadata file per entry. That is unbounded blocking I/O, so it is
+        # dispatched to a worker thread rather than run on the event loop.
+        #
+        # The walk is also uncached, so every concurrent request starts its own.
+        # Without a bound those walks would be free to occupy every worker in
+        # the shared default executor and starve unrelated ``to_thread``
+        # callers. The gate caps how many walks may be in flight; requests over
+        # the cap wait here on the event loop, holding no worker thread.
+        async with _get_learning_log_gate():
+            learning_log = await asyncio.to_thread(data_service.get_learning_log)
         return learning_log
     except Exception as e:
         logger.error(f"Error getting learning log: {e}", exc_info=True)

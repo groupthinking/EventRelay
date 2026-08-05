@@ -2544,3 +2544,319 @@ class TestListVideosOffloading:
             "expected exactly one asyncio.to_thread hop dispatching "
             f"_collect_videos_page, got {dispatched}"
         )
+
+
+class TestLearningLogOffloading:
+    """`get_learning_log_v1` performs an unbounded, uncached filesystem walk.
+
+    `DataService.get_learning_log` issues its own `rglob` on every call — it does
+    not go through `_get_all_files_cached` — and then opens a metadata file per
+    entry. These tests assert *where* that work runs. A status-code assertion
+    passes just as happily when the walk is executed inline on the event loop,
+    which is exactly why the pre-existing tests for this endpoint stayed green
+    while production stalled.
+    """
+
+    @staticmethod
+    def _service(on_call=None):
+        svc = MagicMock()
+
+        def _log():
+            if on_call is not None:
+                on_call()
+            return [{"video_id": "vid-1", "title": "Video 1"}]
+
+        svc.get_learning_log.side_effect = _log
+        return svc
+
+    def test_walk_runs_on_a_worker_thread(self):
+        seen: dict[str, int] = {}
+
+        svc = self._service(
+            on_call=lambda: seen.__setitem__("walk", threading.get_ident())
+        )
+
+        async def _run():
+            seen["loop"] = threading.get_ident()
+            return await router_module.get_learning_log_v1(data_service=svc)
+
+        result = asyncio.run(_run())
+
+        # Anti-vacuity: the blocking work really executed and the endpoint really
+        # produced its normal payload. Without these, the thread-identity
+        # assertion below would pass trivially if the call never happened.
+        assert "walk" in seen, "get_learning_log was never invoked"
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert seen["walk"] != seen["loop"], (
+            "get_learning_log ran on the event loop thread; it must be offloaded"
+        )
+
+    def test_event_loop_stays_responsive_while_walk_is_in_flight(self):
+        """Ticks must complete *while* the walk is still running.
+
+        Counting ticks alone is not enough: a blocking call with a timeout
+        eventually returns, after which the loop is free and the ticks run
+        anyway. So each tick is timestamped and compared against the moment the
+        walk actually finished. If the walk runs inline it pins the loop, and
+        every tick necessarily lands *after* it -- giving zero qualifying ticks.
+        """
+        import time
+
+        release = threading.Event()
+        finished_at: dict[str, float] = {}
+
+        def _block():
+            release.wait(timeout=5.0)
+            finished_at["walk"] = time.monotonic()
+
+        svc = self._service(on_call=_block)
+
+        async def _run():
+            task = asyncio.create_task(
+                router_module.get_learning_log_v1(data_service=svc)
+            )
+            tick_times: list[float] = []
+            for _ in range(20):
+                await asyncio.sleep(0.005)
+                tick_times.append(time.monotonic())
+                if len(tick_times) >= 3:
+                    break
+            release.set()
+            return tick_times, await task
+
+        tick_times, result = asyncio.run(_run())
+
+        # Anti-vacuity: the endpoint still returned its real payload, and the
+        # blocking work really ran to completion.
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+        assert "walk" in finished_at, "get_learning_log never completed"
+
+        walk_end = finished_at["walk"]
+        concurrent = [t for t in tick_times if t < walk_end]
+        assert len(concurrent) >= 3, (
+            "event loop was blocked during the walk: only "
+            f"{len(concurrent)} of {len(tick_times)} tick(s) completed before "
+            "the walk finished"
+        )
+
+    def test_walk_uses_exactly_one_to_thread_hop(self):
+        svc = self._service()
+        real_to_thread = router_module.asyncio.to_thread
+        dispatched: list[str] = []
+
+        async def counting_to_thread(func, /, *args, **kwargs):
+            dispatched.append(getattr(func, "__name__", repr(func)))
+            return await real_to_thread(func, *args, **kwargs)
+
+        async def _run():
+            with patch.object(router_module.asyncio, "to_thread", counting_to_thread):
+                return await router_module.get_learning_log_v1(data_service=svc)
+
+        result = asyncio.run(_run())
+
+        # Anti-vacuity: the endpoint really ran and returned its payload.
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert len(dispatched) == 1, (
+            "expected exactly one asyncio.to_thread hop for the learning-log "
+            f"walk, got {len(dispatched)}: {dispatched}"
+        )
+
+    def test_error_contract_is_unchanged(self):
+        """A failure inside the worker thread must still surface as a 500."""
+        from fastapi import HTTPException as FastAPIHTTPException
+
+        svc = MagicMock()
+        svc.get_learning_log.side_effect = RuntimeError("scan exploded")
+
+        async def _run():
+            return await router_module.get_learning_log_v1(data_service=svc)
+
+        with pytest.raises(FastAPIHTTPException) as exc:
+            asyncio.run(_run())
+
+        assert exc.value.status_code == 500
+        assert exc.value.detail == "Internal server error"
+
+    def test_concurrent_walks_are_capped_by_the_gate(self):
+        """The walk is uncached, so concurrency must be bounded.
+
+        Offloading alone moves the stall off the event loop but lets any burst
+        of requests occupy every worker in the shared default executor, which
+        starves unrelated `to_thread` callers. This asserts the cap is real:
+        more callers than the limit must never produce more simultaneous walks
+        than the limit.
+        """
+        import time
+
+        limit = router_module._LEARNING_LOG_MAX_CONCURRENCY
+        callers = limit + 3
+
+        state = {"in_flight": 0, "peak": 0}
+        counter_lock = threading.Lock()
+        release = threading.Event()
+
+        def _occupy():
+            with counter_lock:
+                state["in_flight"] += 1
+                state["peak"] = max(state["peak"], state["in_flight"])
+            release.wait(timeout=5.0)
+            with counter_lock:
+                state["in_flight"] -= 1
+
+        svc = self._service(on_call=_occupy)
+
+        async def _run():
+            tasks = [
+                asyncio.create_task(router_module.get_learning_log_v1(data_service=svc))
+                for _ in range(callers)
+            ]
+
+            # Wait for the first wave to reach the worker threads.
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                with counter_lock:
+                    if state["in_flight"] >= limit:
+                        break
+                await asyncio.sleep(0.01)
+
+            # Give any unbounded overflow a chance to appear before releasing;
+            # without the gate all `callers` walks would be in flight by now.
+            await asyncio.sleep(0.25)
+            with counter_lock:
+                observed_peak = state["peak"]
+
+            release.set()
+            return observed_peak, await asyncio.gather(*tasks)
+
+        peak, results = asyncio.run(_run())
+
+        # Anti-vacuity: every caller really ran and got the payload back.
+        assert len(results) == callers
+        assert all(r == [{"video_id": "vid-1", "title": "Video 1"}] for r in results)
+        assert svc.get_learning_log.call_count == callers
+
+        # The gate held: never more than `limit` walks at once...
+        assert peak <= limit, (
+            f"{peak} concurrent walks observed with a cap of {limit}; the "
+            "concurrency gate is not bounding the shared executor"
+        )
+        # ...and it did not over-restrict into effective serialisation.
+        assert peak == limit, (
+            f"expected the cap of {limit} to be reached with {callers} "
+            f"concurrent callers, only saw {peak}"
+        )
+
+    def test_gate_is_rebuilt_for_each_event_loop(self):
+        """A loop-bound `Semaphore` must not leak across event loops.
+
+        `asyncio.Semaphore` does not bind on first use. `acquire` only calls
+        `_get_loop()` on the path where it must wait, so an uncontended
+        semaphore stays unbound and crosses loops happily. The first genuinely
+        contended acquisition pins it, and every later use from another loop
+        raises `RuntimeError`. A module-level instance would therefore pass
+        quiet tests and fail only under the burst this gate exists to absorb.
+        """
+        svc = self._service()
+
+        async def _run():
+            gate = router_module._get_learning_log_gate()
+            result = await router_module.get_learning_log_v1(data_service=svc)
+            return gate, result
+
+        first_gate, first_result = asyncio.run(_run())
+        second_gate, second_result = asyncio.run(_run())
+
+        # Anti-vacuity: both calls actually completed through the gate.
+        assert first_result == [{"video_id": "vid-1", "title": "Video 1"}]
+        assert second_result == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert first_gate is not second_gate, (
+            "the same Semaphore was reused across two event loops; it would "
+            "raise RuntimeError once the first loop is closed"
+        )
+
+    def test_gate_is_shared_within_one_event_loop(self):
+        """Within a single loop every request must contend for the same gate."""
+        svc = self._service()
+
+        async def _run():
+            a = router_module._get_learning_log_gate()
+            await router_module.get_learning_log_v1(data_service=svc)
+            b = router_module._get_learning_log_gate()
+            return a, b
+
+        first, second = asyncio.run(_run())
+
+        assert first is second, (
+            "a fresh Semaphore per call would impose no bound at all"
+        )
+        assert svc.get_learning_log.call_count == 1
+
+    def test_gate_survives_a_contended_loop_then_a_fresh_loop(self):
+        """The real failure mode: contention binds a semaphore to its loop.
+
+        `test_gate_is_rebuilt_for_each_event_loop` asserts gate *identity*,
+        which is a proxy. This asserts the consequence. It saturates the gate
+        hard enough to force at least one waiter — the only path that reaches
+        `_LoopBoundMixin._get_loop()` and pins the semaphore — and then drives
+        the endpoint again on a brand-new loop. A module-level singleton raises
+        `RuntimeError: ... is bound to a different event loop` here.
+        """
+        import time
+
+        limit = router_module._LEARNING_LOG_MAX_CONCURRENCY
+        release = threading.Event()
+        in_flight = 0
+        peaked = threading.Event()
+        counter_lock = threading.Lock()
+
+        def _occupy():
+            nonlocal in_flight
+            with counter_lock:
+                in_flight += 1
+                if in_flight >= limit:
+                    peaked.set()
+            release.wait(timeout=5.0)
+            with counter_lock:
+                in_flight -= 1
+
+        async def _saturate():
+            svc = self._service(on_call=_occupy)
+            # limit + 2 callers guarantees at least one must *wait* on the gate.
+            tasks = [
+                asyncio.create_task(router_module.get_learning_log_v1(data_service=svc))
+                for _ in range(limit + 2)
+            ]
+            deadline = time.monotonic() + 5.0
+            while not peaked.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+            # Let the surplus callers actually queue on the semaphore.
+            await asyncio.sleep(0.25)
+            release.set()
+            return await asyncio.gather(*tasks)
+
+        saturated = asyncio.run(_saturate())
+
+        # Anti-vacuity: the contended loop really did serve every caller.
+        assert peaked.is_set(), "the gate was never saturated; no waiter existed"
+        assert len(saturated) == limit + 2
+        assert all(r == [{"video_id": "vid-1", "title": "Video 1"}] for r in saturated)
+
+        # The actual assertion: a fresh loop must still work.
+        fresh_svc = self._service()
+
+        async def _after():
+            return await router_module.get_learning_log_v1(data_service=fresh_svc)
+
+        try:
+            result = asyncio.run(_after())
+        except RuntimeError as exc:  # pragma: no cover - the regression path
+            raise AssertionError(
+                "the gate leaked across event loops after being bound by "
+                f"contention: {exc}"
+            ) from exc
+
+        assert result == [{"video_id": "vid-1", "title": "Video 1"}]
+        assert fresh_svc.get_learning_log.call_count == 1
