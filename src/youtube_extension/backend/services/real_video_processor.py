@@ -138,10 +138,13 @@ class RealVideoProcessor:
         inline walk stalls every concurrently-served request for as long as the
         scan takes — which grows with the number of cached videos.
 
-        The existence check and the walk stay in a single call so the directory
-        cannot disappear between them, mirroring ``_read_cache_file``. The count
-        is accumulated lazily rather than materializing the whole listing, since
-        only the total is ever used.
+        The existence check and the walk run in a single thread hop rather than
+        two, mirroring ``_read_cache_file``. This is not atomic: the directory
+        can still be removed between the ``exists()`` check and the ``glob``
+        walk. That race is benign here — ``glob`` on a missing directory yields
+        nothing, so the count simply degrades to ``0`` instead of raising. The
+        count is accumulated lazily rather than materializing the whole listing,
+        since only the total is ever used.
         """
         if not cache_dir.exists():
             return 0
