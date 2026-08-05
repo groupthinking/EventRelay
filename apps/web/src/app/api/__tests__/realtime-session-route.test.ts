@@ -4,7 +4,7 @@ import { GET, POST } from '@/app/api/realtime/session/route';
 const ORIGINAL_OPENAI_KEY = process.env.OPENAI_API_KEY;
 const ORIGINAL_SAFETY_IDENTIFIER = process.env.OPENAI_SAFETY_IDENTIFIER;
 
-function sdpRequest(body: string) {
+function sdpRequest(body: string): Request {
   return new Request('http://localhost/api/realtime/session', {
     method: 'POST',
     headers: { 'content-type': 'application/sdp' },
@@ -12,7 +12,11 @@ function sdpRequest(body: string) {
   });
 }
 
-function upstreamResponse(body: unknown, status = 200, headers: HeadersInit = { 'content-type': 'application/json' }) {
+function upstreamResponse(
+  body: unknown,
+  status = 200,
+  headers: HeadersInit = { 'content-type': 'application/json' },
+): Response {
   return new Response(typeof body === 'string' ? body : JSON.stringify(body), {
     status,
     headers,

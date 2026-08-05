@@ -85,7 +85,7 @@ function upstreamUnreachable(
   return Response.json({ error, code }, { status: 502 });
 }
 
-function getOpenAiHeaders(contentType?: string) {
+function getOpenAiHeaders(contentType?: string): Record<string, string> | null {
   const apiKey = process.env.OPENAI_API_KEY;
 
   if (!apiKey) {

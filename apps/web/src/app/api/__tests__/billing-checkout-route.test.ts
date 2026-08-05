@@ -41,6 +41,24 @@ describe('POST /api/billing/checkout', () => {
     expect(createProCheckoutSession).not.toHaveBeenCalled();
   });
 
+  // `TurnstileVerifyResult.error` is optional, so an `ok: false` result carrying
+  // no reason must still produce a usable pair rather than `{ error: undefined }`.
+  it('falls back to a stable error and code when Turnstile reports no reason', async () => {
+    vi.mocked(verifyTurnstileToken).mockResolvedValue({ ok: false });
+    const req = new NextRequest('http://localhost/api/billing/checkout', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ annual: false, turnstileToken: 'bad' }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({
+      error: 'turnstile_rejected',
+      code: 'turnstile_rejected',
+    });
+  });
+
   it('rejects a malformed body with a matching code', async () => {
     const req = new NextRequest('http://localhost/api/billing/checkout', {
       method: 'POST',
