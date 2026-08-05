@@ -2505,3 +2505,42 @@ class TestListVideosOffloading:
         assert summary_calls == [], (
             "get_videos_summary should not be called when offset >= total"
         )
+
+    def test_page_read_uses_exactly_one_to_thread_hop(self):
+        """Pin the *number* of hops, not merely that offloading happens.
+
+        The three tests above all pass for a two-hop implementation that awaits
+        ``asyncio.to_thread`` separately for ``count_videos`` and
+        ``get_videos_summary``. That variant costs an extra thread hand-off per
+        request and widens the window in which the underlying TTL cache can be
+        refreshed between the two reads, so the single grouped hop is the
+        behaviour worth protecting.
+
+        The real ``asyncio.to_thread`` is wrapped rather than replaced so the
+        work still runs on a worker thread and the endpoint keeps its normal
+        semantics.
+        """
+        svc = self._service()
+        real_to_thread = router_module.asyncio.to_thread
+        dispatched: list[str] = []
+
+        async def counting_to_thread(func, /, *args, **kwargs):
+            dispatched.append(getattr(func, "__name__", repr(func)))
+            return await real_to_thread(func, *args, **kwargs)
+
+        async def _run():
+            with patch.object(router_module.asyncio, "to_thread", counting_to_thread):
+                return await router_module.list_videos_v1(
+                    limit=50, offset=0, data_service=svc
+                )
+
+        result = asyncio.run(_run())
+
+        # Anti-vacuity: the endpoint really ran and returned its page.
+        assert result["total"] == 1
+        assert result["videos"] == [{"video_id": "vid-1", "title": "Video 1"}]
+
+        assert dispatched == ["_collect_videos_page"], (
+            "expected exactly one asyncio.to_thread hop dispatching "
+            f"_collect_videos_page, got {dispatched}"
+        )

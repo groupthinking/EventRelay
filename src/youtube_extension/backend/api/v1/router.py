@@ -910,20 +910,29 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
 # Data Endpoints
 def _collect_videos_page(
     data_service: DataService, limit: int, offset: int
-) -> tuple[int, list[dict[str, Any]]]:
+) -> tuple[int, list[dict[str, Any]], bool]:
     """Gather the total video count and one page of summaries.
 
     Both ``count_videos`` and ``get_videos_summary`` perform blocking
     filesystem work, so they are grouped into this single synchronous helper
     and dispatched to a worker thread by the caller with one
-    ``asyncio.to_thread`` hop. Using one hop rather than two keeps the count
-    and the page consistent with each other and avoids opening a second
-    cache-refresh window between the two reads.
+    ``asyncio.to_thread`` hop instead of two.
+
+    One hop is *not* an atomic snapshot. ``DataService`` backs both reads with
+    a TTL cache that holds no lock and exposes no snapshot object shared
+    between them, so the entry can still expire -- or be refreshed by another
+    worker -- in between. Grouping the calls narrows that window to a single
+    thread hand-off rather than eliminating it; callers must still treat the
+    count and the page as independently observed values.
+
+    Returns ``(total, page, past_end)``. ``page`` is empty when ``offset`` is
+    past the end, and ``past_end`` reports that condition so the caller does
+    not re-derive the bounds check.
     """
     total = data_service.count_videos()
     if offset >= total:
-        return total, []
-    return total, data_service.get_videos_summary(limit=limit, offset=offset)
+        return total, [], True
+    return total, data_service.get_videos_summary(limit=limit, offset=offset), False
 
 
 @router.get(
@@ -939,10 +948,10 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        total, paginated_videos = await asyncio.to_thread(
+        total, paginated_videos, past_end = await asyncio.to_thread(
             _collect_videos_page, data_service, limit, offset
         )
-        if offset >= total:
+        if past_end:
             return {
                 "videos": [],
                 "total": total,
