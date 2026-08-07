@@ -20,6 +20,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from youtube_extension.backend.config.logging_config import (  # noqa: E402
+    _JSON_CORE_FIELDS,
+    _JSON_UNSERIALIZABLE_RECORD,
     _UNSAFE_LOG_CHARS,
     StructuredFormatter,
     sanitize_log_record,
@@ -429,3 +431,41 @@ def test_benign_json_record_has_no_serialization_error_field():
     parsed = json.loads(buf.getvalue())
     assert "serialization_error" not in parsed
     assert parsed["correlation_id"] == "req-42"
+
+
+def test_oversized_int_enrichment_does_not_lose_the_record():
+    # A scalar-type filter is not enough. `int` is a scalar, but CPython caps
+    # int->str conversion at 4300 digits, so a large `correlation_id` fails the
+    # *fallback* serialization too and the record is lost anyway. The fallback
+    # therefore keeps only the fields the formatter builds itself.
+    logger, buf = _make_json_logger("json-serialization-bigint")
+    logger.info("payload survives", extra={"request_id": 10**4400})
+
+    rendered = buf.getvalue()
+    assert rendered.strip(), "record was lost to the int/str conversion limit"
+
+    parsed = json.loads(rendered)
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "payload survives"
+    assert "serialization_error" in parsed
+    # The value that caused the failure must not be carried into the fallback.
+    assert "correlation_id" not in parsed
+
+
+def test_fallback_drops_only_caller_supplied_enrichments():
+    # The core fields are what make a degraded record still useful for routing
+    # and triage, so pin that they all survive rather than just `level`.
+    logger, buf = _make_json_logger("json-serialization-core-fields")
+    logger.info("still triageable", extra={"request_id": _ExplodingStr()})
+
+    parsed = json.loads(buf.getvalue())
+    for field in _JSON_CORE_FIELDS:
+        assert field in parsed, f"core field {field!r} missing from fallback"
+    assert "correlation_id" not in parsed
+
+
+def test_last_resort_record_cannot_itself_fail_to_serialize():
+    # Tier 3 is what makes the guarantee unconditional rather than "covers the
+    # failures we thought of", so assert it is valid JSON and self-describing.
+    parsed = json.loads(_JSON_UNSERIALIZABLE_RECORD)
+    assert parsed["serialization_error"]

@@ -62,6 +62,31 @@ _UNSAFE_LOG_CHARS = {
 }
 
 
+# The fields ``StructuredFormatter._format_json`` builds itself, as opposed to
+# the optional enrichments a call site supplies via ``extra``. Only these are
+# retained when the full payload cannot be serialized: they are derived from
+# the LogRecord rather than from caller input, so they cannot carry the value
+# that caused the failure. See #1452.
+_JSON_CORE_FIELDS = (
+    "timestamp",
+    "service",
+    "version",
+    "level",
+    "logger",
+    "message",
+    "module",
+    "line",
+    "function",
+    "process",
+)
+
+# Last-resort record. A constant, so emitting it cannot itself fail — which is
+# what makes "a record is never lost to a serialization error" unconditional.
+_JSON_UNSERIALIZABLE_RECORD = (
+    '{"serialization_error": "log record could not be serialized"}'
+)
+
+
 def sanitize_log_record(rendered: str) -> str:
     """Neutralize line/record separators in a fully-rendered log record.
 
@@ -133,9 +158,11 @@ class StructuredFormatter(logging.Formatter):
         non-ASCII ``\\uXXXX``. The record therefore stays a single physical
         line, which is the same guarantee the line-oriented path provides.
 
-        A record is never lost to a serialization error: if the payload cannot
-        be serialized at all, the scalar fields are emitted with a
-        ``serialization_error`` field naming the cause (see #1452).
+        A record is never lost to a serialization error. If the full payload
+        cannot be serialized, it degrades to ``_JSON_CORE_FIELDS`` plus a
+        ``serialization_error`` field naming the cause, and finally to a
+        constant record. The guarantee is unconditional, not limited to the
+        failure modes anticipated here (see #1452).
         """
         payload: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
@@ -165,24 +192,30 @@ class StructuredFormatter(logging.Formatter):
         # structurally *before* `default` is consulted, and a value whose
         # `__str__` raises propagates out of `default` itself. Either one would
         # be swallowed by `Handler.handleError` and cost us the whole record, so
-        # fall back to the scalar fields — which cannot fail to serialize — and
-        # report the loss instead of hiding it.
+        # degrade in tiers instead, and report the loss rather than hide it.
         try:
             return json.dumps(payload, ensure_ascii=True, default=str)
         except Exception as exc:  # noqa: BLE001 - never lose a record
-            safe = {
-                key: value
-                for key, value in payload.items()
-                if isinstance(value, (str, int, float, bool, type(None)))
-            }
             try:
                 detail = f"{type(exc).__name__}: {exc}"
             except Exception:  # noqa: BLE001 - the exception's own __str__ raised
                 detail = type(exc).__name__
+
+            # Tier 2: the fields this formatter builds itself. Filtering the
+            # payload by scalar type is NOT enough — an `int` is a scalar and
+            # still fails above CPython's 4300-digit int/str conversion limit,
+            # so a large `correlation_id` would reproduce the same failure here
+            # and lose the record anyway. The optional enrichments are the only
+            # caller-supplied values in the payload, so drop them outright.
+            safe = {name: payload[name] for name in _JSON_CORE_FIELDS if name in payload}
             safe["serialization_error"] = detail
-            # No `default=`: `safe` holds only natively-encodable scalars, so
-            # this call cannot raise and the guarantee above is unconditional.
-            return json.dumps(safe, ensure_ascii=True)
+            try:
+                return json.dumps(safe, ensure_ascii=True)
+            except Exception:  # noqa: BLE001 - a core field was also poisoned
+                # Tier 3: a constant. It cannot fail to serialize, so the
+                # "never lost" guarantee holds unconditionally rather than
+                # only for the failures anticipated above.
+                return _JSON_UNSERIALIZABLE_RECORD
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
