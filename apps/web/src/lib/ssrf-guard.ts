@@ -12,9 +12,40 @@ import 'server-only';
  * Host header. This is a strong, low-cost first line of defense.
  */
 import * as dns from 'node:dns/promises';
+import type { LookupAddress } from 'node:dns';
 import * as net from 'node:net';
 
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal']);
+
+/**
+ * The single message every rejection reports to its caller.
+ *
+ * Callers of this guard sit behind unauthenticated routes and have historically
+ * interpolated `err.message` straight into an HTTP response. A message that
+ * varies by cause is therefore a DNS oracle: an attacker who can distinguish
+ * "does not resolve" from "resolves to a private address" can enumerate
+ * internal hostnames one guess at a time, without credentials and without ever
+ * completing a fetch. Keeping one constant here makes every rejection
+ * indistinguishable from outside (CWE-209).
+ */
+export const SSRF_REJECTION_MESSAGE = 'URL rejected: not a permitted public http(s) target';
+
+/**
+ * Rejection carrying a uniform public `message` and a specific `reason`.
+ *
+ * `reason` is for server-side logs only — it names the host, the resolved
+ * address, or the resolver errno, all of which are exactly what the uniform
+ * message exists to withhold. Never return it to a caller.
+ */
+export class SsrfGuardError extends Error {
+  readonly reason: string;
+
+  constructor(reason: string) {
+    super(SSRF_REJECTION_MESSAGE);
+    this.name = 'SsrfGuardError';
+    this.reason = reason;
+  }
+}
 
 /**
  * True for non-public IP ranges:
@@ -105,23 +136,39 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
   try {
     u = new URL(input);
   } catch {
-    throw new Error('Invalid URL');
+    throw new SsrfGuardError(`Not a parseable URL: ${input}`);
   }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') {
-    throw new Error(`Blocked URL scheme: ${u.protocol}`);
+    throw new SsrfGuardError(`Blocked URL scheme: ${u.protocol}`);
   }
   const host = u.hostname.toLowerCase().replace(/\.$/, '');
   if (BLOCKED_HOSTNAMES.has(host) || host.endsWith('.internal') || host.endsWith('.local')) {
-    throw new Error('Blocked host');
+    throw new SsrfGuardError(`Blocked host: ${host}`);
   }
   if (net.isIP(host)) {
-    if (ipIsPrivate(host)) throw new Error('Blocked private IP literal');
+    if (ipIsPrivate(host)) throw new SsrfGuardError(`Blocked private IP literal: ${host}`);
     return u;
   }
-  const resolved = await dns.lookup(host, { all: true });
-  if (resolved.length === 0) throw new Error('Host does not resolve');
+
+  // `dns.lookup` rejects with ENOTFOUND/EAI_AGAIN rather than resolving empty,
+  // so an uncaught rejection would propagate the resolver's own message
+  // (`getaddrinfo ENOTFOUND <host>`) to the caller — leaking both the hostname
+  // and the resolver's verdict. Catching it here is what makes a
+  // non-existent host indistinguishable from a private one.
+  let resolved: LookupAddress[];
+  try {
+    resolved = await dns.lookup(host, { all: true });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    throw new SsrfGuardError(`DNS lookup failed for ${host}: ${detail}`);
+  }
+  if (resolved.length === 0) {
+    throw new SsrfGuardError(`DNS lookup returned no addresses for ${host}`);
+  }
   for (const r of resolved) {
-    if (ipIsPrivate(r.address)) throw new Error('Host resolves to a private address');
+    if (ipIsPrivate(r.address)) {
+      throw new SsrfGuardError(`Host ${host} resolves to private address ${r.address}`);
+    }
   }
   return u;
 }

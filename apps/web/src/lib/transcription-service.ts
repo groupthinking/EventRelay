@@ -5,7 +5,7 @@ import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-met
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
-import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
+import { assertPublicHttpUrl, SsrfGuardError, SSRF_REJECTION_MESSAGE } from '@/lib/ssrf-guard';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -273,9 +273,16 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
       try {
         await assertPublicHttpUrl(audioUrl);
       } catch (guardErr) {
+        // The specific cause names the host, its resolved address, or the
+        // resolver errno. That belongs in the logs, not in a response body on
+        // an unauthenticated route — see SSRF_REJECTION_MESSAGE.
+        console.error(
+          '[transcription] audioUrl rejected by SSRF guard:',
+          guardErr instanceof SsrfGuardError ? guardErr.reason : guardErr
+        );
         return {
           success: false,
-          error: `Rejected audioUrl: ${guardErr instanceof Error ? guardErr.message : 'blocked'}`,
+          error: `Rejected audioUrl: ${SSRF_REJECTION_MESSAGE}`,
           transcript: '',
         };
       }
