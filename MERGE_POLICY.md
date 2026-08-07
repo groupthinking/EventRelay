@@ -161,8 +161,10 @@ was written to remove.
 A check red on everything has zero signal and actively hides real failures.
 `agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
-ignore it. `.github/workflows/agent-completion-enforcement.yml` even documents
-this failure mode in its own comments while its sibling did exactly that.
+ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
+this failure mode in its own comments while its sibling did exactly that. Both
+have since been removed as unsatisfiable; the rule above is what should have
+caught them first.
 
 Demotion is not forgiveness. It is refusing to let a broken gate keep
 laundering itself as enforcement.
