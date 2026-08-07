@@ -132,6 +132,10 @@ class StructuredFormatter(logging.Formatter):
         the C0 controls as ``\\n``/``\\r``/``\\uXXXX``, and NEL, LS and PS as
         non-ASCII ``\\uXXXX``. The record therefore stays a single physical
         line, which is the same guarantee the line-oriented path provides.
+
+        A record is never lost to a serialization error: if the payload cannot
+        be serialized at all, the scalar fields are emitted with a
+        ``serialization_error`` field naming the cause (see #1452).
         """
         payload: dict[str, Any] = {
             "timestamp": self.formatTime(record, self.datefmt),
@@ -156,10 +160,29 @@ class StructuredFormatter(logging.Formatter):
             if hasattr(record, attribute):
                 payload[attribute] = getattr(record, attribute)
 
-        # `default=str` keeps a non-serializable `extra` value from raising
-        # inside the logging path, where an exception would be swallowed and
-        # the record lost entirely.
-        return json.dumps(payload, ensure_ascii=True, default=str)
+        # `default=str` handles values `json` cannot natively encode, but it is
+        # not sufficient on its own: a circular container is rejected
+        # structurally *before* `default` is consulted, and a value whose
+        # `__str__` raises propagates out of `default` itself. Either one would
+        # be swallowed by `Handler.handleError` and cost us the whole record, so
+        # fall back to the scalar fields — which cannot fail to serialize — and
+        # report the loss instead of hiding it.
+        try:
+            return json.dumps(payload, ensure_ascii=True, default=str)
+        except Exception as exc:  # noqa: BLE001 - never lose a record
+            safe = {
+                key: value
+                for key, value in payload.items()
+                if isinstance(value, (str, int, float, bool, type(None)))
+            }
+            try:
+                detail = f"{type(exc).__name__}: {exc}"
+            except Exception:  # noqa: BLE001 - the exception's own __str__ raised
+                detail = type(exc).__name__
+            safe["serialization_error"] = detail
+            # No `default=`: `safe` holds only natively-encodable scalars, so
+            # this call cannot raise and the guarantee above is unconditional.
+            return json.dumps(safe, ensure_ascii=True)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""

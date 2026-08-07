@@ -340,3 +340,92 @@ def test_setup_logging_wires_json_output_to_the_formatter(
     ]
     assert formatters, "expected StructuredFormatter on the root logger"
     assert all(f.json_output is enable_json for f in formatters)
+
+
+# ---------------------------------------------------------------------------
+# #1452: `default=str` does not deliver the guarantee its comment states.
+#
+# `default` is consulted only for values `json` cannot natively encode, and it
+# is called unguarded. Two inputs therefore still lose the record entirely --
+# the exact outcome the comment said was prevented. Both arrive through the
+# optional-enrichment loop, which is what made them reachable at all.
+# ---------------------------------------------------------------------------
+
+
+class _ExplodingStr:
+    """An `extra` value whose `__str__` raises.
+
+    `default=str` *is* consulted here, and the exception propagates straight
+    out of it -- so a narrow `except (TypeError, ValueError, RecursionError)`
+    would not catch this. That is why the guard is `except Exception`.
+    """
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def _circular_container() -> dict:
+    """`json.dumps` rejects this structurally, *before* reaching `default`."""
+    circular: dict = {}
+    circular["self"] = circular
+    return circular
+
+
+@pytest.mark.parametrize(
+    ("label", "poison"),
+    [
+        ("circular", _circular_container()),
+        ("exploding-str", _ExplodingStr()),
+    ],
+)
+def test_unserializable_enrichment_does_not_lose_the_record(label, poison):
+    logger, buf = _make_json_logger(f"json-serialization-{label}")
+    logger.info("payload survives", extra={"request_id": poison})
+
+    # The record must reach the sink at all -- pre-fix, `logging` swallowed the
+    # raise via Handler.handleError and dropped it.
+    rendered = buf.getvalue()
+    assert rendered.strip(), "record was lost to a serialization error"
+
+    parsed = json.loads(rendered)
+    # The fields a downstream consumer routes or alerts on stay authoritative.
+    assert parsed["level"] == "INFO"
+    assert parsed["logger"] == f"json-serialization-{label}"
+    assert parsed["message"] == "payload survives"
+    # And the loss is reported rather than hidden.
+    assert "serialization_error" in parsed
+
+
+def test_serialization_failure_is_contained_to_its_own_record():
+    # The measured pre-fix symptom was "2 of 3 records reaching the sink".
+    # Neighbouring records must be unaffected in both directions.
+    logger, buf = _make_json_logger("json-serialization-neighbours")
+    logger.info("before")
+    logger.info("poisoned", extra={"request_id": _ExplodingStr()})
+    logger.info("after")
+
+    messages = [json.loads(line)["message"] for line in buf.getvalue().splitlines()]
+    assert messages == ["before", "poisoned", "after"]
+
+
+def test_serialization_fallback_still_emits_one_physical_line():
+    # The fallback path must keep the separator guarantee the main path has,
+    # or a poisoned record could split a log line downstream.
+    logger, buf = _make_json_logger("json-serialization-oneline")
+    logger.info("a\nb\r\nc", extra={"request_id": _ExplodingStr()})
+
+    rendered = buf.getvalue()
+    assert len(rendered.splitlines()) == 1
+    assert rendered.isascii()
+    assert json.loads(rendered)["message"] == "a\nb\r\nc"
+
+
+def test_benign_json_record_has_no_serialization_error_field():
+    # The guard must be inert on the normal path -- no field, no behaviour
+    # change, for every record that serializes cleanly.
+    logger, buf = _make_json_logger("json-serialization-benign")
+    logger.info("nothing wrong here", extra={"request_id": "req-42"})
+
+    parsed = json.loads(buf.getvalue())
+    assert "serialization_error" not in parsed
+    assert parsed["correlation_id"] == "req-42"
