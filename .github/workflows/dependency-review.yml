@@ -1,8 +1,8 @@
 name: 🔍 Dependency Review
 
 on:
+  # No base-branch filter — see the note in ci.yml.
   pull_request:
-    branches: [ main, develop ]
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:

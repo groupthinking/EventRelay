@@ -6,8 +6,8 @@ on:
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
+  # No base-branch filter — see the note in ci.yml.
   pull_request:
-    branches: [main, develop]
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
