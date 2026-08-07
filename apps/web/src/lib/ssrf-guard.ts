@@ -115,8 +115,16 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
   if (BLOCKED_HOSTNAMES.has(host) || host.endsWith('.internal') || host.endsWith('.local')) {
     throw new Error('Blocked host');
   }
-  if (net.isIP(host)) {
-    if (ipIsPrivate(host)) throw new Error('Blocked private IP literal');
+  // `URL.hostname` keeps the brackets on an IPv6 literal — `http://[::1]/`
+  // yields `[::1]` — and `net.isIP` does not accept that spelling. Without
+  // stripping them, every IPv6 literal skipped this branch and was handed to
+  // `dns.lookup` instead, so `ipIsPrivate` never saw it. That failed closed
+  // only by accident (the resolver errors on a bracketed name, which the DNS
+  // branch below turns into a rejection); it also rejected *public* IPv6
+  // literals, which this guard is meant to allow.
+  const literal = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+  if (net.isIP(literal)) {
+    if (ipIsPrivate(literal)) throw new Error('Blocked private IP literal');
     return u;
   }
   // Every other throw here is an app-authored literal, but `dns.lookup` rejects
