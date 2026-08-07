@@ -719,8 +719,15 @@ jobs:
               // hatch: a pull request that links a dispatched issue is still
               // fully gated, and requiring a pull request to bind to a focused
               // issue at all is separately owned by `Canonical issue and
-              // evidence`, which states a requirement an author can actually
-              // meet.
+              // evidence`.
+              //
+              // That hand-off holds for human and agent authors, who can write
+              // the contract. It did not hold for `dependabot[bot]`, whose body
+              // is template-generated: deferring here sent it to a sibling gate
+              // it could not clear either, which relocated the constraint
+              // rather than removing it. `pr-governance.yml` now reports
+              // `not_applicable` for the same author set, so the deferral
+              // resolves. See #1419.
               return login !== 'dependabot[bot]' &&
                 (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
             }
@@ -2045,8 +2052,15 @@ jobs:
               // hatch: a pull request that links a dispatched issue is still
               // fully gated, and requiring a pull request to bind to a focused
               // issue at all is separately owned by `Canonical issue and
-              // evidence`, which states a requirement an author can actually
-              // meet.
+              // evidence`.
+              //
+              // That hand-off holds for human and agent authors, who can write
+              // the contract. It did not hold for `dependabot[bot]`, whose body
+              // is template-generated: deferring here sent it to a sibling gate
+              // it could not clear either, which relocated the constraint
+              // rather than removing it. `pr-governance.yml` now reports
+              // `not_applicable` for the same author set, so the deferral
+              // resolves. See #1419.
               return login !== 'dependabot[bot]' &&
                 (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
             }
