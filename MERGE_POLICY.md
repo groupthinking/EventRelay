@@ -62,8 +62,41 @@ follows `.github/pull_request_template.md`.
 checks. These work — keep them.*
 
 ### 2. Required checks green on the head commit
-`CI`, `Coverage`, `CodeQL`, `Security`, `Secret Scan`, `Dependency Review`.
-E2E passing or repository-skipped.
+
+Branch protection matches **check-run names** (a job's `name:`, or its job id),
+not workflow names. v1 listed workflow names — `CI`, `Coverage`, `Security`,
+`Secret Scan`, `Dependency Review` — none of which can be selected as a
+required check. Only `CodeQL` happens to match. Configuring branch protection
+from that list is impossible, which is why nobody ever did (MG-2).
+
+The real contexts, as observed on live pull requests:
+
+| Surface | Check-run names |
+| --- | --- |
+| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test` |
+| Static analysis | `CodeQL` |
+| Security | `Security Scan - python`, `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy` |
+| Secrets | `gitleaks (working tree)` |
+| Dependencies | `dependency-review` |
+| Binding | `PR Governance`, `Canonical issue and evidence` |
+
+Required for every pull request: `validate`, `guards`, `lint-python`,
+`lint-frontend`, `build`, `test`, `CodeQL`, `gitleaks (working tree)`,
+`dependency-review`, `PR Governance`, `Canonical issue and evidence`.
+
+**Conditionally required — never require these unconditionally:**
+
+- `Generate and Upload Coverage` — does not run on documentation-only changes.
+  A required check that never reports leaves the pull request *permanently
+  pending*, which blocks harder than failing. Required only when the diff
+  touches `src/**`, `apps/**`, or `tests/**`.
+- `E2E Pipeline Tests` — passing or repository-skipped.
+- `Security Scan - javascript` — only when the diff touches JS/TS.
+
+Before adding any check to branch protection, confirm the exact string appears
+in GitHub's required-checks picker, and confirm it reports on a
+documentation-only pull request. If it does not report, it belongs in the
+conditional list.
 
 These re-run automatically on push, which is correct: they attest to the code,
 and the code changed. **No other evidence resets on push** — see gate 3.
