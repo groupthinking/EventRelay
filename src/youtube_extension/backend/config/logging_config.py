@@ -169,18 +169,28 @@ class StructuredFormatter(logging.Formatter):
         # entirely. Only the optional enrichments can carry such a value, so the
         # fallback keeps every scalar field — including `level`, which routing
         # and alerting depend on — and reports what went wrong in-band.
+        # `exception` and `stack_info` are already rendered to `str` above, so
+        # they survive the fallback too.
+        #
+        # SCOPE, stated precisely because the bug this fixes was a comment
+        # claiming more than its code enforced: this guards the *serialization*
+        # boundary only. `payload` is built above it, so a raise from
+        # ``getMessage()`` (bad %-args), ``formatTime``, ``formatException`` or
+        # ``formatStack`` is still fatal to the record — those are pre-existing
+        # and shared with the line-oriented path, which has the same exposure.
         try:
             return json.dumps(payload, ensure_ascii=True, default=str)
-        except Exception as exc:  # noqa: BLE001 - never lose a record
+        except Exception as exc:  # noqa: BLE001 - no serialization error may cost a record
             safe = {
                 key: value
                 for key, value in payload.items()
                 if isinstance(value, (str, int, float, bool, type(None)))
             }
             # Rendering `exc` calls its own ``__str__``, which is exactly the
-            # thing that can raise here — so the description is built
-            # defensively. Asserting "never lose a record" is only worth doing
-            # if the fallback itself cannot become the thing that loses it.
+            # thing that can raise here — a value whose ``__str__`` raises an
+            # exception that itself raises from ``__str__``. Reachable, and
+            # covered by a test. A fallback that can become the thing that
+            # loses the record is not a fallback.
             try:
                 detail = f"{type(exc).__name__}: {exc}"
             except Exception:  # noqa: BLE001 - the reporter must not raise

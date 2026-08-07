@@ -442,3 +442,51 @@ def test_serializable_enrichments_still_reach_the_json_record():
 
     assert parsed["correlation_id"] == "req-123"
     assert "serialization_error" not in parsed
+
+
+class _ExplodingError(Exception):
+    """An exception whose own ``__str__`` raises."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("the error's own __str__ exploded")
+
+
+class _NestedExplodingStr:
+    """`__str__` raises an exception that itself raises when rendered.
+
+    This is what makes the inner guard in `_format_json` live code rather than
+    defensive decoration: building `f"{type(exc).__name__}: {exc}"` calls the
+    raised exception's `__str__`, which raises again.
+    """
+
+    def __str__(self) -> str:
+        raise _ExplodingError()
+
+
+def test_exception_whose_str_also_raises_does_not_lose_the_record():
+    logger, buf = _make_json_logger("json-loss-nested")
+    logger.info("still emitted", extra={"request_id": _NestedExplodingStr()})
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert len(lines) == 1, "the nested-raise path dropped the record"
+
+    parsed = json.loads(lines[0])
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "still emitted"
+    # The type name is still reportable even when rendering the value is not.
+    assert parsed["serialization_error"] == "_ExplodingError"
+
+
+def test_rendered_traceback_survives_the_serialization_fallback():
+    # `exception` is rendered to `str` before the guarded dump, so a failing
+    # enrichment must not cost us the traceback. Asserted because I claimed the
+    # opposite in review and was wrong.
+    logger, buf = _make_json_logger("json-loss-traceback")
+    try:
+        raise ValueError("the real cause")
+    except ValueError:
+        logger.error("failed", exc_info=True, extra={"request_id": _ExplodingStr()})
+
+    parsed = json.loads(buf.getvalue())
+    assert "serialization_error" in parsed  # the fallback did fire
+    assert "the real cause" in parsed["exception"]  # ...and kept the traceback
