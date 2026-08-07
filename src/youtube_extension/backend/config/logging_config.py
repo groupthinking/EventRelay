@@ -10,6 +10,7 @@ Provides consistent log formatting, multiple handlers, and performance monitorin
 import json
 import logging
 import logging.config
+import math
 import os
 import sys
 from datetime import datetime
@@ -74,6 +75,57 @@ def sanitize_log_record(rendered: str) -> str:
     rendered JSON record safe — see the module comment and ``#1429``.
     """
     return rendered.translate(_UNSAFE_LOG_CHARS)
+
+
+# Last-resort record for the serialization fallback. A module-level constant,
+# so emitting it cannot itself fail — which is what lets the guarantee below be
+# stated without a qualifier.
+_JSON_UNSERIALIZABLE_RECORD = (
+    '{"serialization_error": "log record could not be serialized"}'
+)
+
+
+def _describe_exception(exc: BaseException) -> str:
+    """Name an exception without trusting its ``__str__``.
+
+    Used only by the serialization fallback, which exists precisely because a
+    hostile ``__str__`` can raise. Interpolating ``exc`` there unguarded
+    reintroduces that failure *inside the handler for it* — measured on
+    ``8517bf8`` at 2 of 3 records reaching the sink. The class name is a plain
+    attribute and is always renderable, so it is the safe floor.
+    """
+    try:
+        return f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - the fallback must not need a fallback
+        return type(exc).__name__
+
+
+def _is_json_safe_scalar(value: object) -> bool:
+    """Is this a value ``json`` emits directly, with no ``default`` and no NaN?
+
+    The filter for the serialization fallback. That fallback's dump carries no
+    ``default=`` — anything reaching ``default`` there would reinstate the
+    raising-``__str__`` hole it exists to close — so this filter is the only
+    thing standing between it and a second, fatal raise. It is exact about two
+    things:
+
+    ``type(value) is``, never ``isinstance``. ``isinstance`` consults
+    ``value.__class__``, which an object can forge with a property returning
+    ``str``. Such a value passes an ``isinstance`` filter, reaches the dump,
+    and costs the record the fallback exists to save — measured on ``8517bf8``
+    at 2 of 3 records reaching the sink. ``json`` dispatches on the real
+    runtime type, which cannot be forged, so matching on it is what makes this
+    filter agree with the encoder rather than merely resemble it.
+
+    Non-finite floats are excluded. ``json`` renders them as the JavaScript
+    literals ``NaN``/``Infinity``, which are not valid JSON: a strict parser
+    rejects the record, so keeping the field loses the record downstream
+    instead of at the sink.
+    """
+    value_type = type(value)
+    if value_type is float:
+        return math.isfinite(value)
+    return value_type in (str, int, bool, type(None))
 
 
 class StructuredFormatter(logging.Formatter):
@@ -164,16 +216,37 @@ class StructuredFormatter(logging.Formatter):
         # the record. The fallback below re-serializes with only the natively
         # encodable fields, so a bad enrichment costs its own value rather than
         # the whole record.
+        # `allow_nan=False` on the *primary* dump is what routes a non-finite
+        # enrichment here rather than emitting `NaN`/`Infinity` — JavaScript
+        # literals that are not valid JSON, so a strict parser rejects the whole
+        # record. Losing it at the sink, where the fallback can degrade it into
+        # something parseable, beats losing it downstream where nothing can.
         try:
-            return json.dumps(payload, ensure_ascii=True, default=str)
+            return json.dumps(payload, ensure_ascii=True, default=str, allow_nan=False)
         except Exception as exc:  # noqa: BLE001 - never lose a record
+            # Three things make this retry unable to fail the way the first
+            # attempt did, and each closes a hole the retry shipped with:
+            #
+            #   * `_is_json_safe_scalar` matches the exact runtime type, so a
+            #     forged `__class__` cannot smuggle a raising `__str__` past it;
+            #   * `_describe_exception` renders `exc` without trusting its own
+            #     `__str__`;
+            #   * no `default=`, so nothing on this path can reach `str()` at
+            #     all — the filter has already excluded everything that would.
+            #
+            # `allow_nan=False` is belt-and-braces over the float check: it
+            # turns any non-finite that somehow survives into a raise caught
+            # below rather than a record no strict parser will accept.
             safe: dict[str, Any] = {
                 key: value
                 for key, value in payload.items()
-                if isinstance(value, (str, int, float, bool, type(None)))
+                if _is_json_safe_scalar(value)
             }
-            safe["serialization_error"] = f"{type(exc).__name__}: {exc}"
-            return json.dumps(safe, ensure_ascii=True, default=str)
+            safe["serialization_error"] = _describe_exception(exc)
+            try:
+                return json.dumps(safe, ensure_ascii=True, allow_nan=False)
+            except Exception:  # noqa: BLE001 - a constant is the floor
+                return _JSON_UNSERIALIZABLE_RECORD
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""

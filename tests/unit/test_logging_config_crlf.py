@@ -381,6 +381,121 @@ def test_serialization_fallback_still_escapes_attacker_content():
     assert parsed["message"] == _FORGERY
 
 
+# ---------------------------------------------------------------------------
+# #1452, second pass: the *fallback* shipped with the same class of hole it was
+# written to close — a step that can itself raise, inside the handler that
+# exists because raising is the failure mode.
+#
+# Three of them, each measured against `8517bf8` (the merged #1491) before
+# being fixed, using the same healthy → poisoned → healthy probe as above:
+#
+#   1. `isinstance(value, str)` consults `value.__class__`, which a property
+#      can forge. The value passes the filter, reaches a `json.dumps` that
+#      still had `default=str`, and its raising `__str__` kills the record.
+#      Measured: 2 of 3.
+#   2. `f"...{exc}"` renders the caught exception unguarded. An exception whose
+#      own `__str__` raises kills the record. Measured: 2 of 3.
+#   3. A non-finite float serializes to the bare literal `NaN`, which is not
+#      valid JSON. The record reaches the sink and is then rejected by any
+#      strict parser — lost downstream instead of at the sink.
+#
+# Every test below fails on `8517bf8`.
+# ---------------------------------------------------------------------------
+
+
+class _ForgedClass:
+    """`isinstance(v, str)` is True; `str(v)` raises. Exact-type checks see through it."""
+
+    @property
+    def __class__(self):  # noqa: ANN204 - forging the type is the point
+        return str
+
+    def __str__(self) -> str:
+        raise RuntimeError("forged str() exploded")
+
+
+class _UnrenderableExc(Exception):
+    """An exception that cannot be interpolated — `f"{exc}"` raises on it."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("exc.__str__ exploded")
+
+
+class _RaisesUnrenderable:
+    def __str__(self) -> str:
+        raise _UnrenderableExc()
+
+
+def test_forged_class_cannot_smuggle_a_raising_str_into_the_fallback():
+    records = _emit_three("json-forged-class", _ForgedClass())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    # The #1429 guarantee still holds on the degraded record.
+    assert poisoned["level"] == "INFO"
+    assert "correlation_id" not in poisoned
+    assert "serialization_error" in poisoned
+
+
+def test_unrenderable_exception_does_not_cost_the_record():
+    records = _emit_three("json-unrenderable-exc", _RaisesUnrenderable())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    assert "correlation_id" not in poisoned
+    # Degraded to the bare class name rather than "Name: message" — the class
+    # name is an attribute, so naming the exception cannot itself raise.
+    assert poisoned["serialization_error"] == "_UnrenderableExc"
+
+
+@pytest.mark.parametrize("poison", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_enrichment_still_yields_strictly_valid_json(poison):
+    logger, buf = _make_json_logger("json-non-finite")
+    logger.info("timing", extra={"request_id": poison})
+    line = buf.getvalue().strip()
+
+    # `json.loads` accepts `NaN`/`Infinity` by default, so asserting it parses
+    # would pass against the bug. `parse_constant` fires on exactly those
+    # literals, which is what a strict downstream parser rejects.
+    def _reject(literal: str) -> None:
+        raise AssertionError(f"non-finite literal reached the sink: {literal}")
+
+    parsed = json.loads(line, parse_constant=_reject)
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "timing"
+    assert "correlation_id" not in parsed
+    assert parsed["serialization_error"].startswith("ValueError:")
+
+
+def test_fallback_of_last_resort_is_emitted_rather_than_nothing():
+    # The floor: if even the degraded dump fails, a constant is emitted. Drive
+    # it directly, since no `extra` value can defeat the scalar filter — that
+    # is the point of the filter, and the reason this needs a direct probe.
+    formatter = StructuredFormatter(datefmt="%Y-%m-%d %H:%M:%S", json_output=True)
+    record = logging.LogRecord(
+        "json-floor", logging.INFO, __file__, 1, "floored", None, None
+    )
+    formatter.format(record)  # populates service_name / version
+
+    original_dumps = json.dumps
+
+    def _always_raises(*args, **kwargs):
+        raise RuntimeError("even the degraded dump failed")
+
+    json.dumps = _always_raises
+    try:
+        rendered = formatter.format(record)
+    finally:
+        json.dumps = original_dumps
+
+    assert json.loads(rendered) == {
+        "serialization_error": "log record could not be serialized"
+    }
+
+
 @pytest.fixture
 def _restore_root_logging():
     """`setup_logging` calls dictConfig, which mutates global logging state."""
