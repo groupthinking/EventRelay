@@ -9,6 +9,12 @@ permissions:
   contents: read
   pull-requests: write
 
+# See the note in ci.yml. This workflow is `pull_request`-only, so every run
+# is superseded by the next push to the same PR.
+concurrency:
+  group: dependency-review-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dependency-review:
     runs-on: ubuntu-latest

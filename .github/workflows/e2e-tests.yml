@@ -12,6 +12,11 @@ permissions:
   issues: write
   deployments: read
 
+# See the note in ci.yml.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   # By default the E2E suite runs against production. To validate a PR's own
   # Vercel preview instead, two things are needed:

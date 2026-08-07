@@ -9,6 +9,12 @@ on:
 permissions:
   pull-requests: write
   issues: write
+# See the note in ci.yml. Keyed on the PR/issue number rather than
+# `github.ref`, which is the default branch for the `issues` event and would
+# collapse every issue into a single group.
+concurrency:
+  group: auto-label-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
 jobs:
   label:
     runs-on: ubuntu-latest

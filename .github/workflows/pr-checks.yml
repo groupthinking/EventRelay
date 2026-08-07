@@ -6,6 +6,13 @@ on:
 
 permissions: {}
 
+# See the note in ci.yml. Keyed on the PR number, not `github.ref`: on
+# `pull_request_target` the ref is the *base* branch, so every open PR would
+# share one group and cancel the others. Mirrors pr-governance.yml.
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest

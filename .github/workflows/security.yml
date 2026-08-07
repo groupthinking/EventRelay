@@ -15,6 +15,13 @@ permissions:
   security-events: write
   actions: read
 
+# See the note in ci.yml.
+concurrency:
+  group: security-scan-${{ github.ref }}
+  # PRs only — this workflow also uploads security results on main and on the
+  # weekly schedule.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   npm-audit:
     runs-on: ubuntu-latest

@@ -14,6 +14,13 @@ permissions:
   security-events: write
   actions: read
 
+# See the note in ci.yml.
+concurrency:
+  group: codeql-${{ github.ref }}
+  # PRs only. A cancelled run on main or on the weekly schedule uploads no
+  # SARIF, which would silently stale the security dashboard rather than fail.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     name: "Security Scan - ${{ matrix.language }}"

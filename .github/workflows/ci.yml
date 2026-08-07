@@ -13,6 +13,17 @@ permissions:
   contents: read
   actions: read
 
+# Supersede a PR's own older runs. Without this, every push to a branch left
+# its previous CI run queued, and a burst of PR activity saturated the Actions
+# concurrency limit with runs whose results nothing would ever read.
+# `github.ref` is `refs/pull/<n>/merge` on `pull_request`, so PRs never share a
+# group with each other or with main.
+concurrency:
+  group: ci-${{ github.ref }}
+  # PRs only. A push to main is the record of whether main is green; cancelling
+  # it would leave that question unanswered for the commit that landed.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   guards:
     # Fail fast on the class of breakage that shipped to main un-caught:
