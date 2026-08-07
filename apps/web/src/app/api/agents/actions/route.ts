@@ -56,18 +56,21 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
   } catch (error) {
     console.error('Action agent error:', error);
-    const message = error instanceof Error ? error.message : String(error);
+    const rawMessage = error instanceof Error ? error.message : String(error);
 
     // Only the agent's own validation/config guards are client errors (400).
     // Match exact phrases so an upstream provider error that merely mentions
     // "API key" (e.g. OpenAI's 401 "Incorrect API key provided") is correctly
     // surfaced as an upstream failure (502), not mislabeled as a bad request.
     const isClientError =
-      message.startsWith('No AI API key configured') ||
-      message.includes('transcript is too short');
+      rawMessage.startsWith('No AI API key configured') ||
+      rawMessage.includes('transcript is too short');
+
+    // SECURITY: Prevent leaking internal stack traces or error text on 5xx failures.
+    const safeError = isClientError ? rawMessage : 'Internal server error';
 
     return NextResponse.json(
-      { success: false, error: message, actions: [] },
+      { success: false, error: safeError, actions: [] },
       { status: isClientError ? 400 : 502 },
     );
   }

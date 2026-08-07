@@ -12,6 +12,8 @@ import hashlib
 import json
 import logging
 import os
+import tempfile
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -34,6 +36,9 @@ from .real_youtube_api import get_youtube_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Cached results older than this are treated as misses.
+_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 class RealVideoProcessor:
     """
@@ -70,6 +75,83 @@ class RealVideoProcessor:
         """Get cache file path for video"""
         return self.cache_dir / f"{video_id}_processed.json"
 
+    @staticmethod
+    def _read_cache_file(cache_path: Path) -> Optional[tuple[dict[str, Any], float]]:
+        """Read and parse a cache entry.
+
+        Blocking: performs ``open``/``fstat``/``json.load``. Always run this off
+        the event loop. Keeping the whole sequence in a single call also avoids a
+        stat/read race across separate thread hops.
+
+        The age is taken from ``fstat`` on the already-open descriptor rather than
+        from a separate ``stat`` on the path, so the timestamp always describes the
+        exact bytes being parsed even if the path is republished concurrently.
+
+        Returns ``(payload, cache_age_seconds)`` for a fresh entry, else ``None``.
+        """
+        try:
+            handle = open(cache_path, encoding='utf-8')
+        except FileNotFoundError:
+            return None
+
+        with handle as f:
+            cache_age = datetime.now().timestamp() - os.fstat(f.fileno()).st_mtime
+            # Deliberately the positive form, mirroring the original
+            # ``cache_age < 86400`` guard: a non-finite timestamp compares False
+            # here and falls through to a miss, exactly as it did before.
+            if cache_age < _CACHE_TTL_SECONDS:
+                return json.load(f), cache_age
+
+        return None
+
+    @staticmethod
+    def _write_cache_file(cache_path: Path, payload: dict[str, Any]) -> None:
+        """Serialize ``payload`` to ``cache_path``.
+
+        Blocking: performs ``open``/``json.dump``/``replace``. Always run off the
+        event loop.
+
+        Publishes atomically. Serializing straight into ``cache_path`` would
+        truncate it up front, so a concurrent reader could observe an empty or
+        half-written entry. Writing to a sibling temp file and ``os.replace``-ing
+        it into position means readers only ever see a complete entry; the temp
+        file shares the cache directory so the rename stays on one filesystem.
+        """
+        fd, tmp_name = tempfile.mkstemp(
+            dir=cache_path.parent, prefix=f'.{cache_path.name}.', suffix='.tmp'
+        )
+        try:
+            with os.fdopen(fd, 'w', encoding='utf-8') as f:
+                json.dump(payload, f, indent=2, ensure_ascii=False, default=str)
+            os.replace(tmp_name, cache_path)
+        except BaseException:
+            with suppress(OSError):
+                os.unlink(tmp_name)
+            raise
+
+    @staticmethod
+    def _count_cached_files(cache_dir: Path) -> int:
+        """Count published cache entries under ``cache_dir``.
+
+        Blocking: performs a full directory walk. Always run this off the event
+        loop. It is reached from the status endpoint, so an inline walk stalls
+        every concurrently-served request for as long as the scan takes — which
+        grows with the number of cached videos.
+
+        ``glob`` already yields nothing for a missing directory, so no separate
+        existence check is needed (it would only add a redundant ``stat`` and
+        would not make the walk atomic). A genuine filesystem failure — e.g. a
+        permission error on a directory that does exist — is logged and
+        re-raised rather than being silently reported as an empty cache. The
+        count is accumulated lazily rather than materializing the whole listing,
+        since only the total is ever used.
+        """
+        try:
+            return sum(1 for _ in cache_dir.glob("*_processed.json"))
+        except OSError:
+            logger.exception("Failed to count cached files in %s", cache_dir)
+            raise
+
     async def _load_from_cache(self, video_id: str) -> Optional[dict[str, Any]]:
         """Load processed result from cache if available"""
         if not self.enable_caching:
@@ -77,18 +159,16 @@ class RealVideoProcessor:
 
         try:
             cache_path = self._get_cache_path(video_id)
-            if cache_path.exists():
-                # Check if cache is recent (less than 24 hours old)
-                cache_age = datetime.now().timestamp() - cache_path.stat().st_mtime
-                if cache_age < 86400:  # 24 hours
-                    with open(cache_path, encoding='utf-8') as f:
-                        cached_result = json.load(f)
+            entry = await asyncio.to_thread(self._read_cache_file, cache_path)
+            if entry is None:
+                return None
 
-                    cached_result['cached'] = True
-                    cached_result['cache_age_hours'] = round(cache_age / 3600, 2)
+            cached_result, cache_age = entry
+            cached_result['cached'] = True
+            cached_result['cache_age_hours'] = round(cache_age / 3600, 2)
 
-                    logger.info(f"📁 Using cached result for {video_id} (age: {cached_result['cache_age_hours']}h)")
-                    return cached_result
+            logger.info(f"📁 Using cached result for {video_id} (age: {cached_result['cache_age_hours']}h)")
+            return cached_result
 
         except Exception as e:
             logger.warning(f"Error loading cache: {e}")
@@ -106,8 +186,7 @@ class RealVideoProcessor:
             # Remove cache-specific fields before saving
             clean_result = {k: v for k, v in result.items() if k not in ['cached', 'cache_age_hours']}
 
-            with open(cache_path, 'w', encoding='utf-8') as f:
-                json.dump(clean_result, f, indent=2, ensure_ascii=False, default=str)
+            await asyncio.to_thread(self._write_cache_file, cache_path, clean_result)
 
             logger.debug(f"💾 Saved result to cache: {cache_path}")
 
@@ -419,8 +498,10 @@ class RealVideoProcessor:
         try:
             cost_dashboard = await cost_monitor.get_cost_dashboard()
 
-            # Count cached files
-            cached_files = len(list(self.cache_dir.glob("*_processed.json"))) if self.cache_dir.exists() else 0
+            # Count cached files (off the event loop; the walk is unbounded)
+            cached_files = await asyncio.to_thread(
+                self._count_cached_files, self.cache_dir
+            )
 
             return {
                 'service_status': 'operational',
