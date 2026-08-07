@@ -28,7 +28,12 @@ permissions:
 # to main into one group, and GitHub cancels the *pending* run in a group, so a
 # burst of merges would silently drop the middle commits' verdicts.
 concurrency:
-  group: dependabot-auto-merge-${{ github.event.pull_request.number || github.sha }}
+  # check_suite is the exception to the github.sha fallback used elsewhere:
+  # on that event GITHUB_SHA is the default branch tip, identical for every
+  # PR, so github.sha alone would collapse all concurrent check-suite runs
+  # into one group and drop merge-gate verdicts. check_suite.head_sha is the
+  # PR head and keeps them isolated.
+  group: dependabot-auto-merge-${{ github.event.pull_request.number || github.event.check_suite.head_sha || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
