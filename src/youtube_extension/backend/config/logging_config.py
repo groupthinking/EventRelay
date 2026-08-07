@@ -80,14 +80,28 @@ def sanitize_log_record(rendered: str) -> str:
 def _is_json_safe_scalar(value: object) -> bool:
     """Is this a value ``json.dumps`` emits directly, under ``allow_nan=False``?
 
-    The filter for the serialization fallback (#1452). Deliberately excludes
-    non-finite floats: ``json`` renders them as the JavaScript literals
-    ``NaN``/``Infinity``, which are not valid JSON, so a strict downstream
-    parser would reject the whole record.
+    The filter for the serialization fallback (#1452). The fallback's own dump
+    has no ``default=``, deliberately — anything reaching ``default`` there
+    would reinstate the raising-``__str__`` hole — so this filter is the only
+    thing standing between it and a second, fatal raise. It is exact about two
+    things:
+
+    ``type(value) is``, never ``isinstance``. ``isinstance`` consults
+    ``value.__class__``, which an object can forge with a property returning
+    ``str``. Such a value passes an ``isinstance`` filter, reaches the
+    ``default``-less dump, raises ``TypeError``, and costs the record the
+    fallback exists to save. ``json`` itself dispatches on the real runtime
+    type, which cannot be forged, so matching on it is what makes this filter
+    agree with the encoder. Credit to #1471 for catching this.
+
+    Non-finite floats are excluded: ``json`` renders them as the JavaScript
+    literals ``NaN``/``Infinity``, which are not valid JSON, so a strict
+    downstream parser would reject the whole record.
     """
-    if isinstance(value, float):
+    value_type = type(value)
+    if value_type is float:
         return math.isfinite(value)
-    return isinstance(value, (str, bool, int, type(None)))
+    return value_type in (str, bool, int, type(None))
 
 
 def _describe_exception(exc: BaseException) -> str:

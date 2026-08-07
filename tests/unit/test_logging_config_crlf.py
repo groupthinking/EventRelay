@@ -386,6 +386,45 @@ def test_benign_enrichments_still_reach_the_json_record():
     assert "serialization_error" not in parsed
 
 
+class _ForgedClassStr:
+    """A value that lies about its type *and* raises from `__str__`.
+
+    `isinstance(x, str)` consults `x.__class__`, which this forges. It
+    therefore passes an `isinstance`-based scalar filter, reaches the
+    fallback's `default`-less `json.dumps`, and raises `TypeError` — losing the
+    record the fallback exists to save. `json` dispatches on the real runtime
+    type, so `type(value) is` agrees with the encoder and `isinstance` does not.
+    """
+
+    @property
+    def __class__(self):  # type: ignore[override]
+        return str
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def test_fallback_filter_is_not_fooled_by_a_forged_class():
+    # Pins `type(value) is ...` over `isinstance(...)` in _is_json_safe_scalar.
+    # With the isinstance form this value is retained and the record is dropped.
+    logger, buf = _make_json_logger("json-forged-class")
+    logger.info("before")
+    logger.info("survives a liar", extra={"request_id": _ForgedClassStr()})
+    logger.info("after")
+
+    messages = [
+        json.loads(line)["message"]
+        for line in buf.getvalue().splitlines()
+        if line.strip()
+    ]
+    assert messages == ["before", "survives a liar", "after"]
+
+    parsed = json.loads(buf.getvalue().splitlines()[1])
+    assert parsed["level"] == "INFO"
+    assert "correlation_id" not in parsed
+    assert parsed["serialization_error"].startswith("RuntimeError")
+
+
 @pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
 def test_non_finite_enrichment_does_not_produce_invalid_json(value):
     # Python's json emits the JavaScript literals NaN/Infinity for these, which
