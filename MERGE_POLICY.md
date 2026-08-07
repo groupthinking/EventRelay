@@ -82,7 +82,21 @@ The real contexts, as observed on live pull requests:
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
 `lint-frontend`, `build`, `test`, `CodeQL`, `gitleaks (working tree)`,
-`dependency-review`, `PR Governance`, `Canonical issue and evidence`.
+`dependency-review`, `PR Governance`, `Canonical issue and evidence`,
+`Security Scan - python`, `Security Scan - javascript`, `bandit`,
+`python-safety`, `npm-audit`, `trivy`.
+
+All six security contexts were verified to report `success` on a
+documentation-only pull request (#1408, head `27b2ecf`), so none of them can
+strand a change permanently pending. They are required unconditionally: v1
+listed `Security` among its required six, and dropping every security scan out
+of the required set would be a weakening introduced by the rewrite that set out
+to make this gate precise.
+
+> **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
+> `trivy` reports `success`, `Trivy` reports `neutral`. Selecting the
+> capitalised one requires a check that never passes. This is exactly the trap
+> the confirmation rule below exists to catch.
 
 **Conditionally required — never require these unconditionally:**
 
@@ -91,7 +105,6 @@ Required for every pull request: `validate`, `guards`, `lint-python`,
   pending*, which blocks harder than failing. Required only when the diff
   touches `src/**`, `apps/**`, or `tests/**`.
 - `E2E Pipeline Tests` — passing or repository-skipped.
-- `Security Scan - javascript` — only when the diff touches JS/TS.
 
 Before adding any check to branch protection, confirm the exact string appears
 in GitHub's required-checks picker, and confirm it reports on a
