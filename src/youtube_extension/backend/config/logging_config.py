@@ -22,7 +22,8 @@ from pathlib import Path
 #
 # The set is the union of every separator ``str.splitlines()`` recognizes as a
 # line boundary (LF, CR, VT, FF, FS, GS, RS, NEL, LS, PS) plus ESC (terminal
-# control sequences). Each is escaped to a JSON-valid ``\uXXXX`` sequence — not
+# control sequences) and NUL (which can truncate a record inside a C-based log
+# shipper). Each is escaped to a JSON-valid ``\uXXXX`` sequence — not
 # a Python ``\v``/``\x1b`` shorthand — so the neutralized record stays valid
 # JSON when ``enable_json_logging`` is on, while remaining a single physical
 # line for line-oriented sinks.
@@ -33,6 +34,7 @@ from pathlib import Path
 # and the original text can be recovered by reversing the table.
 _UNSAFE_LOG_CHARS = {
     ord("\\"): "\\\\",
+    ord("\x00"): "\\u0000",  # NUL — can truncate a record in a C-based log shipper
     ord("\n"): "\\u000a",
     ord("\r"): "\\u000d",
     ord("\v"): "\\u000b",  # VT / 0x0B

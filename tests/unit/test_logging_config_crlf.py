@@ -120,6 +120,20 @@ def test_all_splitlines_boundaries_are_escaped():
     assert cleaned.splitlines() == [cleaned]  # collapses to a single line
 
 
+def test_nul_byte_is_neutralized():
+    # A NUL is not a splitlines() boundary, so line-oriented checks miss it, but
+    # it can truncate a record inside a C-based log shipper. It must be escaped
+    # to a JSON-valid sequence rather than reaching the sink raw.
+    assert ord("\x00") in _UNSAFE_LOG_CHARS
+    logger, buf = _make_logger("crlf-nul")
+    logger.info("user said: %s", "before\x00after")
+    out = buf.getvalue()
+
+    assert "\x00" not in out  # no raw NUL survives to the sink
+    assert "before\\u0000after" in out  # escaped, and content preserved
+    assert json.loads(f'"{sanitize_log_record(chr(0))}"') == "\x00"  # reversible
+
+
 def test_json_logging_output_stays_parseable():
     # With enable_json_logging=True the record is interpolated into a JSON
     # string; the escapes must be JSON-valid so an attacker cannot corrupt or

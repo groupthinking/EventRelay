@@ -1382,4 +1382,8 @@ class TestGeneratedFastAPIBehaviour:
 
         requirements = (project_dir / "requirements.txt").read_text()
         assert "passlib" in requirements
-        assert "python-jose" in requirements
+        # PyJWT, not python-jose: the latter depends on ecdsa, whose
+        # GHSA-wj6h-64fc-37mp has no patched release, so every generated
+        # project inherited an unfixable advisory.
+        assert "pyjwt" in requirements
+        assert "python-jose" not in requirements
