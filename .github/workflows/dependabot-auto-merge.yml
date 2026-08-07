@@ -15,6 +15,10 @@ permissions:
   contents: write
   pull-requests: write
   statuses: read
+  # Required by the merge job's check-run readiness scan. Commit statuses and
+  # check runs are separate surfaces with separate scopes; without this the
+  # `checks.listForRef` call 403s.
+  checks: read
 
 jobs:
   approve:
@@ -116,33 +120,52 @@ jobs:
                 continue;
               }
 
-              const metadata = await github.request(
-                'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: pullRequest.number,
-                  mediaType: { previews: ['dorian'] },
-                }
-              );
+              // Dependabot records the update metadata as a YAML block in the
+              // commit message; the pulls REST API carries no dependency
+              // metadata at all. The previous lookup here read
+              // `dependency.update_type` off `GET /pulls/{n}` behind a
+              // `dorian` preview -- fields that do not exist on that schema
+              // (and a preview that gated draft PRs, not Dependabot data). So
+              // `updateType` was always undefined, every PR hit the
+              // "could not determine update type" branch, and this job merged
+              // nothing it was meant to merge.
+              const { data: headCommit } = await github.rest.repos.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pullRequest.head.sha,
+              });
 
-              const updateType =
-                metadata.data?.dependency?.update_type ??
-                metadata.data?.update_type ??
-                metadata.data?.dependency_update_type;
+              const updateTypes = [
+                ...(headCommit.commit?.message ?? '').matchAll(
+                  /^\s*update-type:\s*(\S+)\s*$/gm,
+                ),
+              ].map(match => match[1]);
 
-              if (!updateType) {
+              // Absent for indirect/transitive bumps, where Dependabot emits
+              // dependency-name/version/type and no update-type. Skipping is
+              // the conservative read: never merge a bump whose semver impact
+              // we cannot establish.
+              if (updateTypes.length === 0) {
                 core.info(
                   `Could not determine update type for PR #${pullRequest.number}; skipping.`
                 );
                 continue;
               }
 
-              if (updateType.includes('semver-major')) {
+              // Grouped updates carry one entry per dependency; a single major
+              // in the group disqualifies the whole PR.
+              if (updateTypes.some(type => type.includes('semver-major'))) {
                 core.info(`Skipping major update PR #${pullRequest.number}.`);
                 continue;
               }
 
+              // `getCombinedStatusForRef` reports only legacy commit statuses.
+              // Every GitHub Actions gate on this repo is a *check run*, which
+              // that endpoint does not see -- on a typical Dependabot head it
+              // returns `success` off two Vercel statuses alone while `test`,
+              // `build` and `guards` are still queued. Gating on it merged to
+              // a protected branch on a green that meant nothing. Require both
+              // surfaces, and require checks to have actually finished.
               const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -152,6 +175,44 @@ jobs:
               if (combined.state !== 'success') {
                 core.info(
                   `Skipping PR #${pullRequest.number} because combined status is ${combined.state}.`
+                );
+                continue;
+              }
+
+              const checkRuns = await github.paginate(
+                github.rest.checks.listForRef,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: pullRequest.head.sha,
+                  per_page: 100,
+                },
+              );
+
+              // This workflow's own jobs are check runs on the same head. They
+              // are still in progress while this step runs, so counting them
+              // would deadlock the gate against itself.
+              const SELF_JOBS = new Set(['approve', 'merge']);
+              const ACCEPTABLE = new Set(['success', 'skipped', 'neutral']);
+
+              const relevant = checkRuns.filter(run => !SELF_JOBS.has(run.name));
+              const unfinished = relevant.filter(run => run.status !== 'completed');
+              const failed = relevant.filter(
+                run => run.status === 'completed' && !ACCEPTABLE.has(run.conclusion),
+              );
+
+              if (unfinished.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; ${unfinished.length} check run(s) still running: ` +
+                    unfinished.map(run => run.name).join(', '),
+                );
+                continue;
+              }
+
+              if (failed.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; failing check run(s): ` +
+                    failed.map(run => `${run.name}=${run.conclusion}`).join(', '),
                 );
                 continue;
               }
