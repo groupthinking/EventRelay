@@ -309,6 +309,78 @@ def test_line_oriented_path_is_untouched_by_the_json_fix():
     assert buf.getvalue() == "INFO - all good video-123\n"
 
 
+# ---------------------------------------------------------------------------
+# #1452: `default=str` alone does not keep a record alive.
+#
+# `default` is consulted only for values `json` cannot natively encode, and it
+# is called unguarded. Two inputs defeat it, and both cost the *whole record*
+# because `logging` swallows the raise via `Handler.handleError`:
+#
+#   1. a circular container — rejected structurally before `default` is reached;
+#   2. a value whose `__str__` raises — the exception propagates out of `default`.
+#
+# Reachable through the `correlation_id` / `performance_ms` enrichment loop,
+# which #1439 introduced. Both tests fail on the pre-#1452 implementation.
+# ---------------------------------------------------------------------------
+
+
+class _ExplodingStr:
+    """An `extra` value whose `__str__` raises — walks straight through `default=str`."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def _emit_three(name: str, poison: object) -> list[dict]:
+    """Log healthy → poisoned → healthy, and return every record that survived."""
+    logger, buf = _make_json_logger(name)
+    logger.info("healthy one")
+    logger.info("poisoned", extra={"request_id": poison})
+    logger.info("after poison")
+    return [json.loads(line) for line in buf.getvalue().splitlines() if line.strip()]
+
+
+def test_circular_correlation_id_does_not_cost_the_record():
+    circular: dict = {}
+    circular["self"] = circular
+
+    records = _emit_three("json-circular", circular)
+
+    # Pre-fix this is 2 of 3 — the poisoned record never reaches the sink.
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    # The security property still holds: level is authoritative, not forged.
+    assert poisoned["level"] == "INFO"
+    # The bad value costs itself, and says why.
+    assert "correlation_id" not in poisoned
+    assert poisoned["serialization_error"].startswith("ValueError:")
+
+
+def test_exploding_str_correlation_id_does_not_cost_the_record():
+    records = _emit_three("json-exploding-str", _ExplodingStr())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    assert "correlation_id" not in poisoned
+    # A narrow `except (TypeError, ValueError, RecursionError)` would miss this.
+    assert poisoned["serialization_error"] == "RuntimeError: str() exploded"
+
+
+def test_serialization_fallback_still_escapes_attacker_content():
+    # The fallback must not become a hole in the #1429 fix: a forgery payload
+    # in `message` has to stay escaped on the degraded path too.
+    logger, buf = _make_json_logger("json-fallback-escaping")
+    logger.info(_FORGERY, extra={"request_id": _ExplodingStr()})
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["level"] == "INFO"
+    assert "forged" not in parsed
+    assert parsed["message"] == _FORGERY
+
+
 @pytest.fixture
 def _restore_root_logging():
     """`setup_logging` calls dictConfig, which mutates global logging state."""

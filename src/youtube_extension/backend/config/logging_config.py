@@ -156,10 +156,24 @@ class StructuredFormatter(logging.Formatter):
             if hasattr(record, attribute):
                 payload[attribute] = getattr(record, attribute)
 
-        # `default=str` keeps a non-serializable `extra` value from raising
-        # inside the logging path, where an exception would be swallowed and
-        # the record lost entirely.
-        return json.dumps(payload, ensure_ascii=True, default=str)
+        # `default=str` coerces values `json` cannot natively encode, but it is
+        # not sufficient on its own to keep a record alive: a circular container
+        # is rejected structurally *before* `default` is consulted, and a value
+        # whose `__str__` raises propagates straight out of `default`. Either
+        # way `logging` swallows the raise via `Handler.handleError` and drops
+        # the record. The fallback below re-serializes with only the natively
+        # encodable fields, so a bad enrichment costs its own value rather than
+        # the whole record.
+        try:
+            return json.dumps(payload, ensure_ascii=True, default=str)
+        except Exception as exc:  # noqa: BLE001 - never lose a record
+            safe: dict[str, Any] = {
+                key: value
+                for key, value in payload.items()
+                if isinstance(value, (str, int, float, bool, type(None)))
+            }
+            safe["serialization_error"] = f"{type(exc).__name__}: {exc}"
+            return json.dumps(safe, ensure_ascii=True, default=str)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
