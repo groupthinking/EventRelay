@@ -18,36 +18,6 @@ import * as net from 'node:net';
 const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal']);
 
 /**
- * The single message every rejection reports to its caller.
- *
- * Callers of this guard sit behind unauthenticated routes and have historically
- * interpolated `err.message` straight into an HTTP response. A message that
- * varies by cause is therefore a DNS oracle: an attacker who can distinguish
- * "does not resolve" from "resolves to a private address" can enumerate
- * internal hostnames one guess at a time, without credentials and without ever
- * completing a fetch. Keeping one constant here makes every rejection
- * indistinguishable from outside (CWE-209).
- */
-export const SSRF_REJECTION_MESSAGE = 'URL rejected: not a permitted public http(s) target';
-
-/**
- * Rejection carrying a uniform public `message` and a specific `reason`.
- *
- * `reason` is for server-side logs only — it names the host, the resolved
- * address, or the resolver errno, all of which are exactly what the uniform
- * message exists to withhold. Never return it to a caller.
- */
-export class SsrfGuardError extends Error {
-  readonly reason: string;
-
-  constructor(reason: string) {
-    super(SSRF_REJECTION_MESSAGE);
-    this.name = 'SsrfGuardError';
-    this.reason = reason;
-  }
-}
-
-/**
  * True for non-public IP ranges:
  * IPv4 — 10/8, 172.16/12, 192.168/16 (RFC1918), 127/8 (loopback),
  *        169.254/16 (link-local), 100.64/10 (CGNAT, RFC6598),
@@ -136,25 +106,25 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
   try {
     u = new URL(input);
   } catch {
-    throw new SsrfGuardError(`Not a parseable URL: ${input}`);
+    throw new Error('Invalid URL');
   }
   if (u.protocol !== 'https:' && u.protocol !== 'http:') {
-    throw new SsrfGuardError(`Blocked URL scheme: ${u.protocol}`);
+    throw new Error(`Blocked URL scheme: ${u.protocol}`);
   }
   const host = u.hostname.toLowerCase().replace(/\.$/, '');
   if (BLOCKED_HOSTNAMES.has(host) || host.endsWith('.internal') || host.endsWith('.local')) {
-    throw new SsrfGuardError(`Blocked host: ${host}`);
+    throw new Error('Blocked host');
   }
   if (net.isIP(host)) {
-    if (ipIsPrivate(host)) throw new SsrfGuardError(`Blocked private IP literal: ${host}`);
+    if (ipIsPrivate(host)) throw new Error('Blocked private IP literal');
     return u;
   }
-
-  // `dns.lookup` rejects with ENOTFOUND/EAI_AGAIN rather than resolving empty,
-  // so an uncaught rejection would propagate the resolver's own message
-  // (`getaddrinfo ENOTFOUND evil.internal.corp`) to the caller — leaking both
-  // the hostname and the resolver's verdict. Catching it here is what makes a
-  // non-existent host indistinguishable from a private one.
+  // Every other throw here is an app-authored literal, but `dns.lookup` rejects
+  // with Node resolver text that embeds the caller's own hostname — e.g.
+  // `getaddrinfo ENOTFOUND evil.internal.corp`. `fetchTranscript` interpolates
+  // that message into `Rejected audioUrl: ${guardErr.message}`, which the
+  // transcribe route returns verbatim, so the reject reason would reach the
+  // client.
   //
   // Beyond disclosing system error text, ANY difference between these outcomes
   // is a DNS oracle. "Does not resolve" versus "resolves to a private address"
@@ -162,31 +132,27 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
   // guessed internal name EXISTS and points at internal infrastructure. That is
   // precisely the reconnaissance this guard exists to block, so all four
   // outcomes — resolver rejection, transient failure, zero results, and a
-  // private result — must be indistinguishable to the caller. The specific
-  // cause survives in `SsrfGuardError.reason` for operators.
+  // private result — must be indistinguishable to the caller. The real reason
+  // is logged for operators instead.
   //
-  // #1381 collapsed these four onto one literal but deliberately left the
-  // scheme/blocklist/IP-literal branches distinguishable, on the reasoning that
-  // each call site would sanitize. `SsrfGuardError` supersedes that carve-out:
-  // every branch now reports the same message from the guard itself, so a call
-  // site cannot reintroduce the oracle by forwarding `err.message`.
+  // The IP-literal branch above keeps its own message deliberately: the caller
+  // supplied the address, so telling them it is private reveals nothing they
+  // did not already know, and no name is confirmed or denied.
+  const NOT_PUBLIC = 'Host does not resolve to a public address';
   let resolved: LookupAddress[];
   try {
     resolved = await dns.lookup(host, { all: true });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : String(err);
     console.error('[ssrf-guard] DNS lookup failed:', err);
-    throw new SsrfGuardError(`DNS lookup failed for ${host}: ${detail}`);
+    throw new Error(NOT_PUBLIC);
   }
-  if (resolved.length === 0) {
-    throw new SsrfGuardError(`DNS lookup returned no addresses for ${host}`);
-  }
+  if (resolved.length === 0) throw new Error(NOT_PUBLIC);
   for (const r of resolved) {
     if (ipIsPrivate(r.address)) {
       console.error(
         `[ssrf-guard] host resolved to a non-public address: ${host} -> ${r.address}`,
       );
-      throw new SsrfGuardError(`Host ${host} resolves to private address ${r.address}`);
+      throw new Error(NOT_PUBLIC);
     }
   }
   return u;

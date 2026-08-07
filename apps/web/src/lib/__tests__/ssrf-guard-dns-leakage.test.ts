@@ -5,7 +5,7 @@ vi.mock('node:dns/promises', () => ({
 }));
 
 import * as dns from 'node:dns/promises';
-import { assertPublicHttpUrl, SSRF_REJECTION_MESSAGE } from '@/lib/ssrf-guard';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -32,7 +32,7 @@ describe('assertPublicHttpUrl DNS failure leakage', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(assertPublicHttpUrl(`https://${PROBED_HOST}/clip.mp3`)).rejects.toThrow(
-      SSRF_REJECTION_MESSAGE,
+      'Host does not resolve to a public address',
     );
 
     const thrown = await assertPublicHttpUrl(`https://${PROBED_HOST}/clip.mp3`).catch(
@@ -63,7 +63,7 @@ describe('assertPublicHttpUrl DNS failure leakage', () => {
       (e: unknown) => (e as Error).message,
     );
 
-    expect(transient).toBe(SSRF_REJECTION_MESSAGE);
+    expect(transient).toBe('Host does not resolve to a public address');
     expect(transient).toBe(empty);
   });
 
@@ -77,7 +77,7 @@ describe('assertPublicHttpUrl DNS failure leakage', () => {
       (e: unknown) => (e as Error).message,
     );
 
-    expect(message).toBe(SSRF_REJECTION_MESSAGE);
+    expect(message).toBe('Host does not resolve to a public address');
     // The resolved private address must not ride out on the rejection…
     expect(message).not.toContain('10.0.3.14');
     expect(message).not.toContain('private');

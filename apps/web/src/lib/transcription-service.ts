@@ -273,23 +273,17 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
       try {
         await assertPublicHttpUrl(audioUrl);
       } catch (guardErr) {
-        // Forwarding the guard's cause told the caller WHICH rule fired —
-        // `Blocked host` confirms a hostname-blocklist match, while a
-        // resolution failure confirms only that DNS gave nothing public. That
-        // difference is a policy oracle, and it sharpens as BLOCKED_HOSTNAMES
-        // grows. The guard now reports one uniform message for every rejection
-        // (see SSRF_REJECTION_MESSAGE), so the cause cannot leak through here
-        // even by accident; the specific reason names the host, its resolved
-        // address, or the resolver errno, and belongs only in the log.
-        // Logged as the error object, not `guardErr.reason`: an `instanceof`
-        // check against the imported class silently degrades wherever the
-        // module identity differs (test mocks, dual-package/ESM-CJS interop),
-        // and `SsrfGuardError` carries `reason` as an own enumerable property,
-        // so the object form reaches operators either way.
+        // The guard throws five distinguishable messages — `Invalid URL`,
+        // `Blocked URL scheme: <protocol>`, `Blocked host`, `Blocked private IP
+        // literal`, and `Host does not resolve to a public address`. Forwarding
+        // them told the caller WHICH rule fired: `Blocked host` confirms a
+        // hostname-blocklist match, while the resolution message confirms only
+        // that DNS gave nothing public. That difference is a policy oracle, and
+        // it sharpens as BLOCKED_HOSTNAMES grows. One fixed message for every
+        // rejection; the real reason goes to the log.
         console.error('[transcription] audioUrl rejected by SSRF guard:', guardErr);
         return {
           success: false,
-          // Constant, and pinned by transcription-error-disclosure.test.ts.
           error: 'Rejected audioUrl',
           transcript: '',
         };
