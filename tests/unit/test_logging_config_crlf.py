@@ -360,6 +360,40 @@ def test_unserializable_enrichment_does_not_cost_the_record(poison, expected_err
     assert parsed["serialization_error"].startswith(expected_error)
 
 
+class _ForgedClassStr:
+    """An `extra` value that lies about its type *and* raises from `__str__`.
+
+    `isinstance(x, str)` consults `x.__class__`, so this passes a scalar filter
+    written with `isinstance`. `json.dumps` uses the real runtime type, so the
+    fallback's own dump then raises `TypeError` with no `default` to catch it --
+    losing the record the fallback exists to save.
+    """
+
+    @property
+    def __class__(self):  # type: ignore[override]
+        return str
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def test_fallback_filter_is_not_fooled_by_a_forged_class():
+    # Pins `type(value) in {...}` over `isinstance(...)`. With the isinstance
+    # form this value is retained, the fallback's `json.dumps` raises TypeError,
+    # and the record is dropped -- the exact failure the fallback prevents.
+    logger, buf = _make_json_logger("json-forged-class")
+    logger.info("survives a liar", extra={"request_id": _ForgedClassStr()})
+
+    rendered = buf.getvalue()
+    assert rendered.strip(), "the record was dropped entirely"
+    parsed = json.loads(rendered)
+
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "survives a liar"
+    assert "correlation_id" not in parsed
+    assert parsed["serialization_error"].startswith("RuntimeError")
+
+
 def test_a_poisoned_record_does_not_break_the_stream():
     # The blast radius that matters: `handleError` drops only the offending
     # record, so a regression here is invisible unless you count what arrives.

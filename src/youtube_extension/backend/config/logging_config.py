@@ -167,6 +167,15 @@ class StructuredFormatter(logging.Formatter):
         # scalars are retained, which is every field above except the optional
         # `performance_ms` / `correlation_id` enrichments -- the two the call
         # site controls, and so the only ones that can carry the poison.
+        #
+        # `type(value) in ...`, not `isinstance`: `isinstance` consults
+        # `value.__class__`, which an object can forge as a property returning
+        # `str`. Such a value passes the filter, reaches a `json.dumps` with no
+        # `default` to fall back on, and raises `TypeError` -- losing the record
+        # the fallback exists to save. Exact runtime types cannot be forged, so
+        # this enforces the invariant the comment claims rather than asserting
+        # it. Adding `default=str` here instead would reinstate the raising
+        # `__str__` hole; nothing may reach `default` on this path.
         try:
             return json.dumps(payload, ensure_ascii=True, default=str)
         except Exception as exc:  # noqa: BLE001 - never lose a record
@@ -177,7 +186,7 @@ class StructuredFormatter(logging.Formatter):
             safe = {
                 key: value
                 for key, value in payload.items()
-                if isinstance(value, (str, int, float, bool, type(None)))
+                if type(value) in {str, int, float, bool, type(None)}
             }
             safe["serialization_error"] = detail
             return json.dumps(safe, ensure_ascii=True)
