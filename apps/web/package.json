@@ -1,5 +1,5 @@
 {
-  "name": "building-production-ai-infrastructure-platform",
+  "name": "eventrelay-web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -37,7 +37,7 @@
     "lucide-react": "^1.25.0",
     "next": "^16.2.11",
     "next-auth": "^4.24.15",
-    "openai": "^6.48.0",
+    "openai": "^7.3.0",
     "react": "^19",
     "react-dom": "^19",
     "server-only": "^0.0.1",

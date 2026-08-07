@@ -3,15 +3,23 @@ import type { Redis } from '@upstash/redis';
 import { getToken } from 'next-auth/jwt';
 import {
   needsAuthentication,
+  resolveAuthGateMode,
   safeCallbackPath,
   shouldSkipRateLimit,
 } from '@/lib/auth-paths';
 
 /**
- * Frontend proxy (Next.js 16 middleware): rate limiting (always) + login gating
- * (only when NEXTAUTH_SECRET is configured, so the app keeps working until OAuth
- * is set up — safe rollout). When enabled, /dashboard and non-public /api/* require
- * a valid NextAuth session. Server-to-server loopback calls carrying a matching
+ * Frontend proxy (Next.js 16 middleware): rate limiting (always) + login gating.
+ *
+ * Login gating activates when NEXTAUTH_SECRET is configured. When it is *not*
+ * configured the behaviour depends on the environment (see resolveAuthGateMode):
+ * outside production the gate is simply off (safe rollout / local dev), but in
+ * production the request fails closed with 503 instead of being served
+ * anonymously (issue #1058). Set AUTH_ALLOW_UNAUTHENTICATED=1 to deliberately
+ * run a public production deployment.
+ *
+ * When enforcing, /dashboard and non-public /api/* require a valid NextAuth
+ * session. Server-to-server loopback calls carrying a matching
  * `x-eventrelay-internal` header (INTERNAL_REQUEST_TOKEN) bypass both.
  *
  * Path policy lives in `@/lib/auth-paths` so unit tests can cover it offline.
@@ -35,7 +43,22 @@ const AI_ROUTE_PREFIXES = [
 // Login gating (activate-when-configured) + server-to-server bypass.
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
 const AUTH_SECRET = process.env.NEXTAUTH_SECRET;
-const AUTH_ENABLED = !!AUTH_SECRET;
+const AUTH_GATE_MODE = resolveAuthGateMode({
+  secret: AUTH_SECRET,
+  nodeEnv: process.env.NODE_ENV,
+  allowUnauthenticated: process.env.AUTH_ALLOW_UNAUTHENTICATED,
+});
+const AUTH_ENABLED = AUTH_GATE_MODE === 'enforce';
+
+if (AUTH_GATE_MODE === 'misconfigured') {
+  // Logged once at module init rather than per request: this is a boot-time
+  // deployment fault, and per-request logging would flood the sink.
+  console.error(
+    '[auth] NEXTAUTH_SECRET is not set in production — sessions cannot be verified. ' +
+      'Protected routes will return 503 until it is configured. ' +
+      'Set AUTH_ALLOW_UNAUTHENTICATED=1 only if this deployment is intentionally public.',
+  );
+}
 
 type RateLimitResult = {
   allowed: boolean;
@@ -223,6 +246,25 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // Server-to-server loopback calls bypass both rate limiting and auth.
   if (INTERNAL_TOKEN && request.headers.get('x-eventrelay-internal') === INTERNAL_TOKEN) {
     return NextResponse.next();
+  }
+
+  // Fail closed: in production without NEXTAUTH_SECRET a session cannot be
+  // verified, so protected routes must not be served anonymously (issue #1058).
+  // 503 (not 401/redirect) is deliberate — sign-in also cannot succeed without
+  // the secret, so redirecting to /login would loop forever. Public paths stay
+  // reachable so an operator can still complete OAuth setup.
+  if (
+    AUTH_GATE_MODE === 'misconfigured' &&
+    request.method !== 'OPTIONS' &&
+    needsAuthentication(pathname)
+  ) {
+    const body = 'Authentication is not configured on this deployment.';
+    return pathname.startsWith('/api/')
+      ? NextResponse.json({ error: body }, { status: 503 })
+      : new NextResponse(body, {
+          status: 503,
+          headers: { 'content-type': 'text/plain; charset=utf-8' },
+        });
   }
 
   // Login gating — enforced only when NEXTAUTH_SECRET is set; CORS preflight is exempt.

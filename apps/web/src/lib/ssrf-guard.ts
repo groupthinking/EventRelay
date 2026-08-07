@@ -152,14 +152,30 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
 
   // `dns.lookup` rejects with ENOTFOUND/EAI_AGAIN rather than resolving empty,
   // so an uncaught rejection would propagate the resolver's own message
-  // (`getaddrinfo ENOTFOUND <host>`) to the caller — leaking both the hostname
-  // and the resolver's verdict. Catching it here is what makes a
+  // (`getaddrinfo ENOTFOUND evil.internal.corp`) to the caller — leaking both
+  // the hostname and the resolver's verdict. Catching it here is what makes a
   // non-existent host indistinguishable from a private one.
+  //
+  // Beyond disclosing system error text, ANY difference between these outcomes
+  // is a DNS oracle. "Does not resolve" versus "resolves to a private address"
+  // is the sharpest one: it answers, for an unauthenticated caller, whether a
+  // guessed internal name EXISTS and points at internal infrastructure. That is
+  // precisely the reconnaissance this guard exists to block, so all four
+  // outcomes — resolver rejection, transient failure, zero results, and a
+  // private result — must be indistinguishable to the caller. The specific
+  // cause survives in `SsrfGuardError.reason` for operators.
+  //
+  // #1381 collapsed these four onto one literal but deliberately left the
+  // scheme/blocklist/IP-literal branches distinguishable, on the reasoning that
+  // each call site would sanitize. `SsrfGuardError` supersedes that carve-out:
+  // every branch now reports the same message from the guard itself, so a call
+  // site cannot reintroduce the oracle by forwarding `err.message`.
   let resolved: LookupAddress[];
   try {
     resolved = await dns.lookup(host, { all: true });
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err);
+    console.error('[ssrf-guard] DNS lookup failed:', err);
     throw new SsrfGuardError(`DNS lookup failed for ${host}: ${detail}`);
   }
   if (resolved.length === 0) {
@@ -167,6 +183,9 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
   }
   for (const r of resolved) {
     if (ipIsPrivate(r.address)) {
+      console.error(
+        `[ssrf-guard] host resolved to a non-public address: ${host} -> ${r.address}`,
+      );
       throw new SsrfGuardError(`Host ${host} resolves to private address ${r.address}`);
     }
   }
