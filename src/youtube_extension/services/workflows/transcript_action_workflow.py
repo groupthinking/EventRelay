@@ -849,13 +849,7 @@ class TranscriptActionWorkflow:
                 if file_result.error:
                     errors.append(file_result.error)
             finally:
-                if video_path.exists():
-                    try:
-                        video_path.unlink()
-                    except OSError:
-                        pass
-                if temp_root and temp_root.exists():
-                    shutil.rmtree(temp_root, ignore_errors=True)
+                await self._cleanup_download_artifacts(video_path, temp_root)
 
         error_message = errors[0] if errors else "Gemini transcription failed"
         logger.warning("Gemini transcription fallback failed: %s", error_message)
@@ -866,6 +860,70 @@ class TranscriptActionWorkflow:
             "source": "gemini_video_failed",
             "error": error_message,
         }
+
+    @staticmethod
+    async def _cleanup_download_artifacts(
+        video_path: Path | None,
+        temp_root: Path | None,
+    ) -> None:
+        """Remove downloaded video artifacts without blocking the event loop.
+
+        The Gemini file fallback downloads a whole video into a temporary tree.
+        Because the format chain may fall back to separate video/audio streams,
+        that tree can hold the merged output plus unmerged ``.fNNN`` fragments,
+        so the removal is unbounded disk work. It therefore runs in a worker
+        thread using the same ``to_thread`` idiom as ``_download_video_file``.
+
+        The await is shielded because this runs from a ``finally`` block. The
+        previous inline implementation was synchronous and so uncancellable,
+        which meant cleanup ran to completion once entered; an unshielded await
+        would let a cancellation delivered during the ``finally`` skip cleanup
+        and leak the tree. Shielding preserves that property while still
+        yielding the loop, and still re-raises ``CancelledError`` to the caller.
+
+        The bound is process lifetime, not an absolute guarantee: cleanup
+        continues unless the process exits. A ``SIGKILL``, a hard crash, or
+        interpreter shutdown before the worker thread finishes still leaves the
+        tree behind, and nothing in this helper can prevent that.
+
+        ``CancelledError`` is deliberately allowed to propagate rather than
+        being suppressed in favour of any exception already in flight. Python
+        chains the in-flight exception onto it as ``__context__``, so no
+        diagnostic information is lost, whereas swallowing it would report a
+        cancelled task as ``cancelled() is False`` and defeat
+        ``asyncio.timeout``. The caller in ``_extract_transcript`` catches
+        ``Exception``, so a suppressed cancellation would be downgraded to a
+        per-source error and the pipeline would keep issuing network calls
+        after the request was abandoned.
+        """
+
+        def _cleanup() -> None:
+            # Both branches are total. This runs from a ``finally``, so raising
+            # here would replace whatever exception is already propagating.
+            #
+            # Note the absence of ``exists()`` probes: ``exists()`` performs a
+            # stat and can itself raise, which is exactly the masking this must
+            # avoid. ``unlink`` already raises ``FileNotFoundError`` for absent
+            # paths and ``rmtree`` tolerates them.
+            #
+            # The guards catch ``Exception``, not ``OSError``, because neither
+            # call is OSError-total. A path holding a NUL byte makes ``unlink``
+            # raise ``ValueError: embedded null character``, and makes
+            # ``rmtree`` raise the same from its internal ``lstat`` despite
+            # ``ignore_errors=True`` -- that flag only suppresses ``OSError``.
+            # ``CancelledError`` is a ``BaseException``, so it still propagates.
+            if video_path is not None:
+                try:
+                    video_path.unlink()
+                except Exception:  # noqa: BLE001 - must not mask in-flight error
+                    logger.debug("Cleanup failed for %s", video_path, exc_info=True)
+            if temp_root is not None:
+                try:
+                    shutil.rmtree(temp_root, ignore_errors=True)
+                except Exception:  # noqa: BLE001 - must not mask in-flight error
+                    logger.debug("Cleanup failed for %s", temp_root, exc_info=True)
+
+        await asyncio.shield(asyncio.to_thread(_cleanup))
 
     async def _record_metric(
         self,

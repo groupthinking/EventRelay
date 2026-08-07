@@ -5,32 +5,54 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
+
+
+def _collection_errors(payload: Any) -> List[str]:
+    """Return the non-empty collection errors recorded by evidence collection."""
+
+    if not isinstance(payload, dict):
+        return []
+    raw = payload.get("collection_errors")
+    if not isinstance(raw, list):
+        return []
+    return [str(error) for error in raw if str(error).strip()]
+
+
+def _invalid_payload(payload: Any, invalid_fields: List[str]) -> Dict[str, Any]:
+    """Build a fail-closed ``invalid_payload`` verdict with collector diagnostics.
+
+    Every ``invalid_payload`` return routes through here so the collector's own
+    ``collection_errors`` are surfaced consistently — not only on the late
+    field-validation path. ``verdict`` and ``reasons`` stay byte-identical for
+    every input; the helper only enriches ``details``, keeping the gate
+    fail-closed while telling the author what to fix.
+    """
+
+    details: Dict[str, Any] = {}
+    if invalid_fields:
+        details["invalid_fields"] = sorted(set(invalid_fields))
+    surfaced_errors = _collection_errors(payload)
+    if surfaced_errors:
+        details["collection_errors"] = surfaced_errors
+    return {
+        "verdict": "blocked",
+        "reasons": ["invalid_payload"],
+        "details": details,
+    }
 
 
 def evaluate(payload: Any) -> Dict[str, Any]:
     """Evaluate agent execution evidence and return a fail-closed verdict."""
 
     if not isinstance(payload, dict):
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {},
-        }
+        return _invalid_payload(payload, [])
 
     policy = payload.get("policy")
     if not isinstance(policy, dict):
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": ["policy"]},
-        }
+        return _invalid_payload(payload, ["policy"])
     if "applicable" not in policy or type(policy["applicable"]) is not bool:
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": ["policy.applicable"]},
-        }
+        return _invalid_payload(payload, ["policy.applicable"])
     if policy.get("applicable") is False:
         return {"verdict": "not_applicable", "reasons": [], "details": {}}
 
@@ -244,11 +266,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
             if type(evidence.get(field)) is not bool:
                 invalid_fields.append("evidence." + field)
     if invalid_fields:
-        return {
-            "verdict": "blocked",
-            "reasons": ["invalid_payload"],
-            "details": {"invalid_fields": sorted(set(invalid_fields))},
-        }
+        return _invalid_payload(payload, invalid_fields)
 
     reasons = []
     identity_projection = {
@@ -257,11 +275,7 @@ def evaluate(payload: Any) -> Dict[str, Any]:
         "run_id": str(policy.get("run_id") or "").strip() or None,
     }
     details = {"identity_projection": identity_projection}
-    collection_errors = [
-        str(error)
-        for error in (payload.get("collection_errors") or [])
-        if str(error).strip()
-    ]
+    collection_errors = _collection_errors(payload)
     if collection_errors:
         reasons.append("evidence_collection_failed")
         details["collection_errors"] = collection_errors

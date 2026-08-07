@@ -3,6 +3,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -378,6 +381,98 @@ class TestShutdown:
         sc._singletons["plain"] = PlainSvc()
         # Must not raise
         await sc.shutdown()
+        assert sc._singletons == {}
+
+
+class TestShutdownConcurrency:
+    """Shutdown runs inside the SIGTERM grace window, so teardown is concurrent."""
+
+    async def test_services_are_torn_down_concurrently(self):
+        sc = _bare_container()
+        in_flight = 0
+        peak = 0
+
+        class SlowSvc:
+            async def cleanup(self):
+                nonlocal in_flight, peak
+                in_flight += 1
+                peak = max(peak, in_flight)
+                try:
+                    await asyncio.sleep(0.05)
+                finally:
+                    in_flight -= 1
+
+        for i in range(6):
+            sc._singletons[f"svc{i}"] = SlowSvc()
+
+        started = time.perf_counter()
+        await sc.shutdown()
+        elapsed = time.perf_counter() - started
+
+        assert peak == 6, f"expected all 6 teardowns in flight together, saw {peak}"
+        # Serial teardown would take >= 6 * 50ms = 300ms.
+        assert elapsed < 0.20, f"teardown appears serial ({elapsed * 1000:.0f}ms)"
+
+    async def test_aliased_service_is_torn_down_once(self):
+        """Skill-dependency aliases share an instance; it must not be cleaned twice."""
+        sc = _bare_container()
+        shared = MagicMock()
+        shared.cleanup = AsyncMock()
+
+        sc._singletons["hybrid_processor_service"] = shared
+        sc._singletons["gemini_service"] = shared  # alias -> same object
+
+        await sc.shutdown()
+
+        shared.cleanup.assert_called_once()
+
+    async def test_distinct_services_are_each_torn_down(self):
+        """Deduplication is by identity, not by equality."""
+        sc = _bare_container()
+        first, second = MagicMock(), MagicMock()
+        first.cleanup = AsyncMock()
+        second.cleanup = AsyncMock()
+
+        sc._singletons["a"] = first
+        sc._singletons["b"] = second
+
+        await sc.shutdown()
+
+        first.cleanup.assert_called_once()
+        second.cleanup.assert_called_once()
+
+    async def test_synchronous_cleanup_is_supported(self, caplog):
+        """A non-async cleanup() must run without an 'await NoneType' error."""
+        sc = _bare_container()
+        calls = []
+
+        class SyncSvc:
+            def cleanup(self):
+                calls.append("cleanup")
+
+        sc._singletons["sync"] = SyncSvc()
+
+        with caplog.at_level(logging.WARNING):
+            await sc.shutdown()
+
+        assert calls == ["cleanup"]
+        assert not [r for r in caplog.records if "Error during" in r.message], (
+            "synchronous cleanup should not be reported as a shutdown error"
+        )
+
+    async def test_one_failure_does_not_block_other_services(self):
+        sc = _bare_container()
+        healthy = MagicMock()
+        healthy.cleanup = AsyncMock()
+        broken = MagicMock()
+        broken.cleanup = AsyncMock(side_effect=RuntimeError("boom"))
+
+        sc._singletons["broken"] = broken
+        sc._singletons["healthy"] = healthy
+
+        await sc.shutdown()
+
+        healthy.cleanup.assert_called_once()
         assert sc._singletons == {}
 
 
