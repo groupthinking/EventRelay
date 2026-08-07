@@ -721,8 +721,20 @@ jobs:
               // issue at all is separately owned by `Canonical issue and
               // evidence`, which states a requirement an author can actually
               // meet.
+              //
+              // "Exists to verify against" means the issue declares the
+              // contract, not merely that an issue is linked. Testing only for
+              // presence left the same defect one level down: a `claude/...`
+              // branch closing an ordinary issue armed the gate, which then
+              // demanded `policy.agent_login` and `policy.run_id` that no
+              // intent snapshot had ever written, so the verdict was
+              // permanently `invalid_payload` (#1401). `declaresAgentContract`
+              // is the same predicate `issueDispatch` already relies on, so
+              // both arms of this disjunction now require the thing the gate
+              // goes on to measure.
               return login !== 'dependabot[bot]' &&
-                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
+                (issueDispatch ||
+                  (pullProvenance && declaresAgentContract(selectedIssue)));
             }
             function intentContractErrors(issue, comments, pullCreatedAt) {
               const errors = [];
@@ -2047,8 +2059,20 @@ jobs:
               // issue at all is separately owned by `Canonical issue and
               // evidence`, which states a requirement an author can actually
               // meet.
+              //
+              // "Exists to verify against" means the issue declares the
+              // contract, not merely that an issue is linked. Testing only for
+              // presence left the same defect one level down: a `claude/...`
+              // branch closing an ordinary issue armed the gate, which then
+              // demanded `policy.agent_login` and `policy.run_id` that no
+              // intent snapshot had ever written, so the verdict was
+              // permanently `invalid_payload` (#1401). `declaresAgentContract`
+              // is the same predicate `issueDispatch` already relies on, so
+              // both arms of this disjunction now require the thing the gate
+              // goes on to measure.
               return login !== 'dependabot[bot]' &&
-                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
+                (issueDispatch ||
+                  (pullProvenance && declaresAgentContract(selectedIssue)));
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);

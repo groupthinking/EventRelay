@@ -2894,22 +2894,43 @@ const rows = [
   ['issue label without contract', base, issue(1, ['mcp/agent']), false],
   ['issue label with contract', base, issue(1, ['mcp/agent'], CONTRACT), true],
   // Pull-side provenance identifies the producer; it does not supply a
-  // contract to score against. With no linked issue there is no intent
-  // snapshot, so `policy.agent_login`, `policy.run_id` and `issue.number`
-  // can never be populated and the verdict is permanently `invalid_payload`.
-  // Each of these arms the gate only once an issue exists to verify against.
+  // contract to score against. That contract lives only in the intent
+  // snapshot `snapshot-agent-task-intent` writes for a dispatched issue, so
+  // without one `policy.agent_login`, `policy.run_id` and `issue.number` can
+  // never be populated and the verdict is permanently `invalid_payload`.
+  //
+  // So each of these arms the gate only once a linked issue *declares the
+  // contract*. A merely-present issue is not enough: an ordinary issue has no
+  // snapshot either, and arming on it reproduced the same unsatisfiable gate
+  // one level down (#1401). Both directions are pinned for every provenance
+  // signal — plain issue must not arm, contract issue must.
   ['PR label, no issue', {...base, labels: [{name: 'agent-task'}]}, null, false],
-  ['PR label + issue', {...base, labels: [{name: 'agent-task'}]}, PLAIN, true],
+  ['PR label + plain issue',
+    {...base, labels: [{name: 'agent-task'}]}, PLAIN, false],
+  ['PR label + contract issue',
+    {...base, labels: [{name: 'agent-task'}]}, issue(1, [], CONTRACT), true],
   ['branch, no issue', {...base, head: {ref: 'codex/fix'}}, null, false],
-  ['branch + issue', {...base, head: {ref: 'codex/fix'}}, PLAIN, true],
+  ['branch + plain issue', {...base, head: {ref: 'codex/fix'}}, PLAIN, false],
+  ['branch + contract issue',
+    {...base, head: {ref: 'codex/fix'}}, issue(1, [], CONTRACT), true],
   ['manifest, no issue',
     {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, false],
-  ['manifest + issue',
-    {...base, body: '<!-- agent-lock-manifest {bad} -->'}, PLAIN, true],
+  ['manifest + plain issue',
+    {...base, body: '<!-- agent-lock-manifest {bad} -->'}, PLAIN, false],
+  ['manifest + contract issue',
+    {...base, body: '<!-- agent-lock-manifest {bad} -->'},
+    issue(1, [], CONTRACT), true],
   ['known agent, no issue',
     {...base, user: {login: 'google-labs-jules[bot]'}}, null, false],
-  ['known agent + issue',
-    {...base, user: {login: 'google-labs-jules[bot]'}}, PLAIN, true],
+  ['known agent + plain issue',
+    {...base, user: {login: 'google-labs-jules[bot]'}}, PLAIN, false],
+  ['known agent + contract issue',
+    {...base, user: {login: 'google-labs-jules[bot]'}},
+    issue(1, [], CONTRACT), true],
+  // The exact shape that was red on #1400: an agent-prefixed branch closing an
+  // ordinary issue. This must resolve `not_applicable`, not `invalid_payload`.
+  ['claude branch + ordinary issue',
+    {...base, head: {ref: 'claude/clever-heisenberg-8k227t'}}, PLAIN, false],
   ['dependabot excluded', {
     ...base,
     user: {login: 'dependabot[bot]'},
@@ -3464,25 +3485,34 @@ const rows = [
   ['unlabelled issue with contract', human, {
     number: 7, labels: [{name: 'bug'}], body: CONTRACT
   }, false],
-  // Pull request provenance applies against a linked issue -- an agent
-  // producing work against a contract-less issue is still applicable, and
-  // therefore still blocked.
-  ['known agent author', {
+  // Pull request provenance applies only against an issue that declares the
+  // contract. A known agent closing a contract-less issue has nothing to be
+  // measured against -- the snapshot job never wrote one -- so arming here
+  // produced a permanent invalid_payload rather than an enforcement (#1401).
+  ['known agent author, contract-less issue', {
     user: {login: 'google-labs-jules[bot]'},
     head: {ref: 'feature/thing'}, labels: [], body: ''
-  }, {number: 7, labels: [{name: 'agent-task'}], body: '## Summary\n'}, true],
-  // ...but with no linked issue there is no intent snapshot and no declared
-  // run id or login, so the required payload fields are unsatisfiable and the
-  // gate would block permanently rather than ever reaching a verdict. These
-  // are `not_applicable`, not violations.
+  }, {number: 7, labels: [{name: 'agent-task'}], body: '## Summary\n'}, false],
+  ['known agent author, declared contract', {
+    user: {login: 'google-labs-jules[bot]'},
+    head: {ref: 'feature/thing'}, labels: [], body: ''
+  }, {number: 7, labels: [{name: 'agent-task'}], body: CONTRACT}, true],
+  // Likewise with no linked issue at all: no intent snapshot, no declared run
+  // id or login, so the required payload fields are unsatisfiable and the gate
+  // would block permanently rather than ever reaching a verdict. These are
+  // `not_applicable`, not violations.
   ['agent branch prefix, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'jules/thing'}, labels: [], body: ''
   }, null, false],
-  ['agent branch prefix with issue', {
+  ['agent branch prefix, contract-less issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'jules/thing'}, labels: [], body: ''
-  }, {number: 7, labels: [], body: ''}, true],
+  }, {number: 7, labels: [], body: ''}, false],
+  ['agent branch prefix, declared contract', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'jules/thing'}, labels: [], body: ''
+  }, {number: 7, labels: [], body: CONTRACT}, true],
   ['agent label on the pull request, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'feature/thing'},
