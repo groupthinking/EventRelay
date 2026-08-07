@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -72,20 +73,71 @@ def _get_transcript_proxy_config() -> GenericProxyConfig | None:
     return GenericProxyConfig(http_url=url, https_url=url)
 
 
-def _redact_proxy_credentials(text: str) -> str:
-    """Strip user:pass credentials of the configured proxy URL from text."""
-    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
-    if not url or url not in text:
-        return text
+# Matches the ``user[:password]@`` userinfo segment of any URL. Kept byte-identical
+# to the canonical copy in ``src/youtube_extension/utils/proxy.py``; see that module
+# for the full rationale. In short: the classes exclude the authority delimiters
+# (whitespace, "/", "?", "#") so paths and query strings containing "@" are never
+# mistaken for credentials, but they permit a literal "@" so an unencoded one in
+# the password is consumed whole rather than leaving the tail behind.
+_USERINFO_RE = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
+    r"(?P<user>[^\s/:?#]*)"
+    r"(?::(?P<password>[^\s/?#]*))?"
+    r"@"
+)
+
+_REDACTED = "***"
+_UNPRINTABLE = "<unprintable error>"
+_REDACTION_FAILED = "<redaction failed>"
+
+
+def _redact_proxy_credentials(text: Any) -> str:
+    """Strip URL userinfo (``user:pass@``) from ``text``.
+
+    Two passes: exact replacement of the configured ``WEBSHARE_PROXY_URL`` (which
+    preserves the host, so operators can still tell which proxy was in play),
+    then a generic ``scheme://user:pass@`` sweep that catches credentials never
+    matching the env value verbatim -- a normalised or percent-encoded form
+    echoed back by yt-dlp, a ``CalledProcessError`` repr of the argv, or a
+    different proxy variable such as ``HTTPS_PROXY``.
+
+    Never raises: every caller here is an exception handler, where a failure
+    would mask the original error.
+    """
+    if isinstance(text, str):
+        candidate = text
+    else:
+        try:
+            candidate = str(text)
+        except Exception:  # noqa: BLE001 - a hostile __str__ must not propagate
+            return _UNPRINTABLE
+
     try:
-        parsed = urllib.parse.urlparse(url)
-        netloc = parsed.hostname or ""
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-        redacted = parsed._replace(netloc=netloc).geturl()
-    except (ValueError, AttributeError):
-        redacted = "<proxy-url>"
-    return text.replace(url, redacted)
+        return _redact(candidate)
+    except Exception:  # noqa: BLE001 - never return text we cannot vouch for
+        return _REDACTION_FAILED
+
+
+def _redact(text: str) -> str:
+    """Run the two redaction passes over an already-stringified ``text``."""
+    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+    if url and url in text:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            redacted = parsed._replace(netloc=netloc).geturl()
+        except (ValueError, AttributeError):
+            redacted = "<proxy-url>"
+        text = text.replace(url, redacted)
+
+    def _mask(match: re.Match[str]) -> str:
+        if match.group("password") is None:
+            return f"{match.group('scheme')}{_REDACTED}@"
+        return f"{match.group('scheme')}{_REDACTED}:{_REDACTED}@"
+
+    return _USERINFO_RE.sub(_mask, text)
 
 class YouTubeErrorType(Enum):
     """YouTube API specific error types"""

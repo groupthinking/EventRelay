@@ -24,7 +24,8 @@ from typing import Any
 #
 # The set is the union of every separator ``str.splitlines()`` recognizes as a
 # line boundary (LF, CR, VT, FF, FS, GS, RS, NEL, LS, PS) plus ESC (terminal
-# control sequences). Each is escaped to a ``\uXXXX`` sequence — not a Python
+# control sequences) and NUL (which can truncate a record inside a C-based log
+# shipper). Each is escaped to a ``\uXXXX`` sequence — not a Python
 # ``\v``/``\x1b`` shorthand — so the neutralized record remains a single
 # physical line for line-oriented sinks.
 #
@@ -46,6 +47,7 @@ from typing import Any
 # and the original text can be recovered by reversing the table.
 _UNSAFE_LOG_CHARS = {
     ord("\\"): "\\\\",
+    ord("\x00"): "\\u0000",  # NUL — can truncate a record in a C-based log shipper
     ord("\n"): "\\u000a",
     ord("\r"): "\\u000d",
     ord("\v"): "\\u000b",  # VT / 0x0B
