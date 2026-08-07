@@ -58,10 +58,14 @@ jobs:
             // Dependabot composes its body from a fixed template (release
             // notes, changelog, commit list). It cannot emit the five required
             // headings or a `Closes #<issue>` reference, so the contract below
-            // is not a bar it fails -- it is one it has no way to clear. The
-            // sibling truth gate already defers for the same reason
-            // (`pr-checks.yml`, `login !== 'dependabot[bot]'`); this keeps the
-            // two consistent instead of relocating the constraint.
+            // is not a bar it fails -- it is one it has no way to clear.
+            //
+            // The sibling `agent-completion/truth-gate` used to carry the same
+            // escape and defer the issue-binding requirement here, on the
+            // stated ground that this check "states a requirement an author can
+            // actually meet" -- which was false for Dependabot, and relocated
+            // the constraint rather than removing it. That gate was retired in
+            // #1431, so this is now the only place the exemption lives.
             //
             // `neutral`, not `success`: the contract is not applicable here,
             // and reporting it as satisfied would be the same false signal this
