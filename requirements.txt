@@ -29,7 +29,9 @@ aiosqlite>=0.19.0
 alembic>=1.12.0
 
 # Security & Auth
-python-jose[cryptography]>=3.3.0
+# python-jose removed: never imported here (only inside a code_generator.py
+# string template, which emits its own requirements.txt). It pulled in ecdsa,
+# whose GHSA-wj6h-64fc-37mp has no patched release.
 passlib[bcrypt]>=1.7.4
 
 # Configuration
