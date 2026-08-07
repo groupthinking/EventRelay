@@ -35,7 +35,11 @@ describe('assertPublicHttpUrl IPv6 range boundaries', () => {
     try {
       await assertPublicHttpUrl(url);
     } catch (err) {
-      return err as Error;
+      // `catch` binds as `unknown`; narrow rather than assert, so a non-Error
+      // throw surfaces as itself instead of being mistyped as an Error and
+      // failing later on a missing `.message`.
+      if (err instanceof Error) return err;
+      throw err;
     }
     throw new Error(`${url} was expected to be rejected, but was allowed`);
   };
@@ -65,8 +69,11 @@ describe('assertPublicHttpUrl IPv6 range boundaries', () => {
   });
 
   describe('100::/64 discard', () => {
-    it('rejects [100::] (first address in the range)', async () => {
-      const err = await rejectionOf('http://[100::]/');
+    it.each([
+      ['100::', 'first address in the range'],
+      ['100:0:0:0:ffff:ffff:ffff:ffff', 'last address in the range'],
+    ])('rejects [%s] (%s)', async (address) => {
+      const err = await rejectionOf(`http://[${address}]/`);
 
       expect(err.message).toBe('Blocked private IP literal');
     });
