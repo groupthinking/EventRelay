@@ -172,7 +172,16 @@ class StructuredFormatter(logging.Formatter):
                 for key, value in payload.items()
                 if isinstance(value, (str, int, float, bool, type(None)))
             }
-            safe["serialization_error"] = f"{type(exc).__name__}: {exc}"
+            # Rendering `exc` can raise too — the exception may itself carry a
+            # `__str__` that raises or returns a non-str, which would lose the
+            # record from inside the very handler meant to save it. The class
+            # name is a plain attribute and is always safe.
+            try:
+                reason = f"{type(exc).__name__}: {exc}"
+            except Exception:  # noqa: BLE001 - the class name alone still tells us why
+                reason = type(exc).__name__
+            safe["serialization_error"] = reason
+            # `safe` now holds only natively encodable scalars, so this cannot raise.
             return json.dumps(safe, ensure_ascii=True, default=str)
 
     def formatException(self, ei) -> str:

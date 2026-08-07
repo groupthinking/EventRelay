@@ -369,6 +369,48 @@ def test_exploding_str_correlation_id_does_not_cost_the_record():
     assert poisoned["serialization_error"] == "RuntimeError: str() exploded"
 
 
+class _EvilExc(Exception):
+    """An exception that cannot be rendered — `f"{exc}"` raises on it."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("exc.__str__ exploded")
+
+
+class _NonStrExc(Exception):
+    """An exception whose `__str__` returns a non-str, so `str()` raises TypeError."""
+
+    def __str__(self):  # noqa: ANN204 - returning a non-str is the point
+        return 42
+
+
+class _RaisesEvil:
+    def __str__(self) -> str:
+        raise _EvilExc()
+
+
+class _RaisesNonStr:
+    def __str__(self) -> str:
+        raise _NonStrExc()
+
+
+@pytest.mark.parametrize(
+    ("poison", "expected"),
+    [(_RaisesEvil(), "_EvilExc"), (_RaisesNonStr(), "_NonStrExc")],
+)
+def test_unrenderable_exception_does_not_cost_the_record(poison, expected):
+    # The fallback stringifies the caught exception. If *that* raises, the
+    # record dies inside the handler meant to save it — the same overclaim
+    # #1452 was filed about, one level down. The class name is always safe.
+    records = _emit_three("json-unrenderable-exc", poison)
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    # Degraded to the bare class name rather than "Name: message".
+    assert poisoned["serialization_error"] == expected
+
+
 def test_serialization_fallback_still_escapes_attacker_content():
     # The fallback must not become a hole in the #1429 fix: a forgery payload
     # in `message` has to stay escaped on the degraded path too.
