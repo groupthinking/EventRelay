@@ -3,8 +3,9 @@ name: "CodeQL Analysis"
 on:
   push:
     branches: [ "main" ]
+  # No base-branch filter — see the note in ci.yml. CodeQL is a security gate;
+  # a stacked PR must not be able to skip it by targeting a non-main base.
   pull_request:
-    branches: [ "main" ]
   schedule:
     - cron: '0 6 * * 1'
 

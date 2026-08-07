@@ -2,7 +2,12 @@ name: Branch Cleanup
 
 # Manual, gated branch pruning driven by the branch-cleanup assessment.
 # Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
-# the `contents: write` and `workflows: write` rights needed to delete/restore refs.
+# the `contents: write` rights needed to tag and delete refs.
+#
+# NOTE: `workflows` is not a GitHub Actions permission scope and cannot be
+# granted to GITHUB_TOKEN here — see the `permissions:` block below. Restoring a
+# branch whose tree contains `.github/workflows/` files therefore needs a PAT
+# with the `workflow` scope, or a local push.
 #
 # Triggers:
 #   1. workflow_dispatch (from default branch): Actions UI, pick batch + dry_run.
@@ -43,7 +48,6 @@ on:
 permissions:
   contents: write
   pull-requests: read
-  workflows: write
 
 jobs:
   cleanup:

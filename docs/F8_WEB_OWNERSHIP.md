@@ -21,5 +21,5 @@ Root `vercel.json` already permanent-redirects `v0-uvai.vercel.app` and `event-r
 
 ## Optional hygiene (not blocking)
 
-- Rename `apps/web` package from `building-production-ai-infrastructure-platform` to a clearer name.
+- ~~Rename `apps/web` package~~ **done (F8a):** `eventrelay-web` (was `building-production-ai-infrastructure-platform`).
 - Point `groupthinking/uvai.io` README at EventRelay if that remote is retained for history.

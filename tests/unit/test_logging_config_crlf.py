@@ -23,6 +23,7 @@ from youtube_extension.backend.config.logging_config import (  # noqa: E402
     _UNSAFE_LOG_CHARS,
     StructuredFormatter,
     sanitize_log_record,
+    setup_logging,
 )
 
 pytestmark = [pytest.mark.unit, pytest.mark.security]
@@ -120,6 +121,20 @@ def test_all_splitlines_boundaries_are_escaped():
     assert cleaned.splitlines() == [cleaned]  # collapses to a single line
 
 
+def test_nul_byte_is_neutralized():
+    # A NUL is not a splitlines() boundary, so line-oriented checks miss it, but
+    # it can truncate a record inside a C-based log shipper. It must be escaped
+    # to a JSON-valid sequence rather than reaching the sink raw.
+    assert ord("\x00") in _UNSAFE_LOG_CHARS
+    logger, buf = _make_logger("crlf-nul")
+    logger.info("user said: %s", "before\x00after")
+    out = buf.getvalue()
+
+    assert "\x00" not in out  # no raw NUL survives to the sink
+    assert "before\\u0000after" in out  # escaped, and content preserved
+    assert json.loads(f'"{sanitize_log_record(chr(0))}"') == "\x00"  # reversible
+
+
 def test_json_logging_output_stays_parseable():
     # With enable_json_logging=True the record is interpolated into a JSON
     # string; the escapes must be JSON-valid so an attacker cannot corrupt or
@@ -165,3 +180,163 @@ def test_sanitize_log_record_escapes_each_separator_to_json_unicode():
     # The escaped blob is a JSON-valid string body that decodes losslessly back
     # to the original characters (raw has no backslash, so no ambiguity).
     assert json.loads(f'"{cleaned}"') == raw
+
+
+# ---------------------------------------------------------------------------
+# CWE-117 field forgery in JSON records (#1429)
+#
+# The tests above cover separators. None of them types a `"`, which is why
+# they all passed against the vulnerable code: `_UNSAFE_LOG_CHARS`
+# deliberately omits the double-quote, so interpolating a message into the
+# JSON *template* let attacker content close a field and open new ones.
+# `test_json_logging_output_stays_parseable` came closest -- it already
+# asserts `parsed["level"] == "INFO"` -- and would have caught this had its
+# payload contained a quote.
+#
+# The fix is ordering: build a dict, then `json.dumps`, so escaping happens
+# per value before any structural quote exists.
+# ---------------------------------------------------------------------------
+
+# The exact payload from #1429: no newline, no backslash, only a quote.
+_FORGERY = 'benign", "level": "DEBUG", "forged": "yes'
+
+
+def _make_json_logger(name: str) -> tuple[logging.Logger, io.StringIO]:
+    buf = io.StringIO()
+    handler = logging.StreamHandler(buf)
+    handler.setFormatter(
+        StructuredFormatter(datefmt="%Y-%m-%d %H:%M:%S", json_output=True)
+    )
+    logger = logging.getLogger(name)
+    logger.handlers[:] = [handler]
+    logger.setLevel(logging.DEBUG)
+    logger.propagate = False
+    return logger, buf
+
+
+def test_quote_in_message_cannot_forge_a_json_field():
+    logger, buf = _make_json_logger("json-forgery")
+    logger.info(_FORGERY)
+    parsed = json.loads(buf.getvalue())
+
+    # Emitted at INFO; it must not parse as DEBUG.
+    assert parsed["level"] == "INFO"
+    # No field the format never defined.
+    assert "forged" not in parsed
+    # And the payload survives intact as a *value*.
+    assert parsed["message"] == _FORGERY
+
+
+def test_quote_in_lazy_args_cannot_forge_a_json_field():
+    # %-interpolation happens inside getMessage(), so args are an equally
+    # attacker-reachable path into `message`.
+    logger, buf = _make_json_logger("json-forgery-args")
+    logger.info("user=%s", _FORGERY)
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["level"] == "INFO"
+    assert "forged" not in parsed
+    assert parsed["message"] == f"user={_FORGERY}"
+
+
+def test_quote_in_traceback_cannot_forge_a_json_field():
+    logger, buf = _make_json_logger("json-forgery-exc")
+    try:
+        raise ValueError(_FORGERY)
+    except ValueError:
+        logger.error("operation failed", exc_info=True)
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["level"] == "ERROR"
+    assert "forged" not in parsed
+    # The traceback is carried as its own value, not spliced into the record.
+    assert _FORGERY in parsed["exception"]
+
+
+def test_backslash_cannot_smuggle_a_quote_out_of_a_value():
+    # A trailing backslash before the quote is the classic way to defeat a
+    # naive escaper that handles `"` but not `\`.
+    logger, buf = _make_json_logger("json-forgery-backslash")
+    logger.info('trailing\\", "level": "DEBUG')
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["level"] == "INFO"
+
+
+def test_json_record_stays_a_single_physical_line():
+    # The separator guarantee the line-oriented path provides must survive the
+    # move to json.dumps -- including NEL/LS/PS, which depend on ensure_ascii.
+    logger, buf = _make_json_logger("json-separators")
+    nasty = "".join(chr(c) for c in _UNSAFE_LOG_CHARS if c != ord("\\"))
+    logger.info(nasty)
+    out = buf.getvalue()
+
+    assert out.count("\n") == 1  # only the handler's terminator
+    assert out.isascii()  # NEL / U+2028 / U+2029 escaped, not emitted raw
+    assert json.loads(out)["message"] == nasty  # lossless round-trip
+
+
+def test_benign_json_record_is_valid_and_faithful():
+    # Guards the regression the naive fix caused: adding `"` to the escape
+    # table destroyed the JSON skeleton even for harmless messages.
+    logger, buf = _make_json_logger("json-benign")
+    logger.warning("all good %s", "video-123")
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["message"] == "all good video-123"
+    assert parsed["level"] == "WARNING"
+    assert parsed["logger"] == "json-benign"
+    assert parsed["service"] == "youtube-extension-api"
+    assert isinstance(parsed["line"], int)
+
+
+def test_json_metadata_is_authoritative_under_attack():
+    # Every field a downstream consumer routes or alerts on must reflect what
+    # the logger emitted, not what the message claimed.
+    logger, buf = _make_json_logger("json-authority")
+    logger.critical('x", "logger": "innocent", "timestamp": "1970-01-01 00:00:00')
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["level"] == "CRITICAL"
+    assert parsed["logger"] == "json-authority"
+    assert not parsed["timestamp"].startswith("1970")
+
+
+def test_line_oriented_path_is_untouched_by_the_json_fix():
+    # json_output defaults to False, so the existing formatter contract holds.
+    logger, buf = _make_logger("json-default-off")
+    logger.info("all good %s", "video-123")
+    assert buf.getvalue() == "INFO - all good video-123\n"
+
+
+@pytest.fixture
+def _restore_root_logging():
+    """`setup_logging` calls dictConfig, which mutates global logging state."""
+    root = logging.getLogger()
+    saved_handlers, saved_level = root.handlers[:], root.level
+    yield
+    root.handlers[:] = saved_handlers
+    root.setLevel(saved_level)
+
+
+@pytest.mark.parametrize("enable_json", [True, False])
+def test_setup_logging_wires_json_output_to_the_formatter(
+    tmp_path, _restore_root_logging, enable_json
+):
+    # The formatter is only safe on the JSON path if `setup_logging` actually
+    # selects it. Dropping `"json_output": enable_json_logging` from the
+    # dictConfig would silently restore #1429 while every formatter-level test
+    # above kept passing, so pin the wiring itself.
+    setup_logging(
+        log_level="INFO",
+        log_file=str(tmp_path / "wiring.log"),
+        enable_json_logging=enable_json,
+    )
+
+    formatters = [
+        handler.formatter
+        for handler in logging.getLogger().handlers
+        if isinstance(handler.formatter, StructuredFormatter)
+    ]
+    assert formatters, "expected StructuredFormatter on the root logger"
+    assert all(f.json_output is enable_json for f in formatters)

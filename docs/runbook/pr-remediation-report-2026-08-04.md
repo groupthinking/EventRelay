@@ -5,6 +5,16 @@
 **Scope:** `groupthinking/eventrelay`, all open PRs, oldest-first
 **Parameters as invoked:** `auto_merge_policy: label:automerge`, `merge_method: <unfilled>`, `non_github_hosts: []`
 
+> **Historical as of 2026-08-04. Superseded in part — do not action the gate
+> recommendations below.** `agent-completion/truth-gate` and `Agent completion
+> enforcement` were retired outright in #1434 (closing #1432), together with
+> `agent-completion-enforcement.yml`, `agent_completion_gate.py`, and
+> `.github/agent-lock/trusted-publishers.json`. The deadlock this report measures
+> was structural, not a payload bug: `PR Governance` requires a linked issue, that
+> issue arms the truth gate, and the armed gate then demands an intent snapshot only
+> dispatch-originated work can have. The observations below remain an accurate
+> record of the queue on the run date; the remedies do not.
+
 ---
 
 ## Definition of Done — outcome
@@ -121,10 +131,12 @@ prime candidates for a human to promote and merge. All are drafts, so step 1 for
 2. **`main` is itself red** (`dependency-review` via the unfixable ecdsa/GHSA-wj6h-64fc-37mp
    advisory, and a `gitleaks` false-positive on a package hash). #1156 fixes both at the root —
    merging it first would clear inherited red checks across the whole queue.
-3. **The trusted-publication check (`Agent Lock trusted publication`) is not being published**,
-   so `Agent completion enforcement` fails repo-wide. This has been overridden manually on
-   prior merges (#1108/#1103/#1098). Either restore the publishing App or drop the gate from
-   required checks.
+3. **The trusted-publication check (`Agent Lock trusted publication`) was not being published**,
+   so `Agent completion enforcement` failed repo-wide. This had been overridden manually on
+   prior merges (#1108/#1103/#1098). *Resolved by removal:* #1434 retired the gate rather than
+   restoring the publishing App. All three allowlists in `trusted-publishers.json` were empty,
+   and the file's own note recorded that an empty allowlist blocks rather than downgrading to
+   `not_applicable` — so there was no provisioned trust path to restore.
 4. **3 PRs are red only on Vercel** with "Canceled from the Vercel Dashboard" (#1122, #1129) or
    a deploy failure (#1003, #1043-class) — manual/infra cancellations, not code. Re-run the
    Vercel deployment to clear.

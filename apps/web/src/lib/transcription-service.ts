@@ -5,7 +5,7 @@ import { fetchYouTubeMetadata, formatMetadataAsContext } from '@/lib/youtube-met
 import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
-import { assertPublicHttpUrl, SsrfGuardError, SSRF_REJECTION_MESSAGE } from '@/lib/ssrf-guard';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -273,25 +273,35 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
       try {
         await assertPublicHttpUrl(audioUrl);
       } catch (guardErr) {
-        // The specific cause names the host, its resolved address, or the
-        // resolver errno. That belongs in the logs, not in a response body on
-        // an unauthenticated route — see SSRF_REJECTION_MESSAGE.
-        console.error(
-          '[transcription] audioUrl rejected by SSRF guard:',
-          guardErr instanceof SsrfGuardError ? guardErr.reason : guardErr
-        );
+        // The guard throws five distinguishable messages — `Invalid URL`,
+        // `Blocked URL scheme: <protocol>`, `Blocked host`, `Blocked private IP
+        // literal`, and `Host does not resolve to a public address`. Forwarding
+        // them told the caller WHICH rule fired: `Blocked host` confirms a
+        // hostname-blocklist match, while the resolution message confirms only
+        // that DNS gave nothing public. That difference is a policy oracle, and
+        // it sharpens as BLOCKED_HOSTNAMES grows. One fixed message for every
+        // rejection; the real reason goes to the log.
+        console.error('[transcription] audioUrl rejected by SSRF guard:', guardErr);
         return {
           success: false,
-          error: `Rejected audioUrl: ${SSRF_REJECTION_MESSAGE}`,
+          error: 'Rejected audioUrl',
           transcript: '',
         };
       }
 
       const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
       if (!audioResponse.ok) {
+        // The status belongs to a caller-supplied `audioUrl`. Echoing it turns
+        // this route into a probe: the caller learns 401 vs 403 vs 404 vs 500
+        // for any host the SSRF guard admits, which is a cross-origin read the
+        // browser same-origin policy would otherwise deny them. Log it, and
+        // report only that the fetch failed.
+        console.error(
+          `[transcription] audioUrl fetch failed with status ${audioResponse.status}`,
+        );
         return {
           success: false,
-          error: `Failed to fetch audio: ${audioResponse.status}`,
+          error: 'Could not retrieve the audio file',
           transcript: '',
         };
       }
@@ -363,13 +373,23 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
   }
 
-  // No strategy succeeded
+  // No strategy succeeded.
+  //
+  // Which provider keys this deployment holds is server configuration, not
+  // caller-facing detail: branching the client message on `hasKeys` told any
+  // caller whether OPENAI_API_KEY/GEMINI_API_KEY were set, and named the
+  // variables and the hosting platform. Both outcomes now report the same
+  // string; the distinction survives in the operator log, which is the only
+  // place it was ever actionable.
   const hasKeys = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
+  console.error(
+    hasKeys
+      ? '[transcription] all strategies failed with provider keys configured'
+      : '[transcription] all strategies failed: no OPENAI_API_KEY or GEMINI_API_KEY configured',
+  );
   return {
     success: false,
-    error: hasKeys
-      ? 'Could not transcribe video — all strategies failed'
-      : 'No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY in Vercel environment variables.',
+    error: 'Could not transcribe video — all strategies failed',
     transcript: '',
   };
 }
