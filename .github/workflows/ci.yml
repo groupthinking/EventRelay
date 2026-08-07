@@ -97,6 +97,29 @@ jobs:
         continue-on-error: true
         run: cd apps/web && npm run lint
 
+  # Required for apps/web unit tests (see #1449). The Python `test` job only
+  # runs pytest; without this job, ~300 frontend tests including CWE-209 /
+  # Stripe-leak regressions never gate merges.
+  test-frontend:
+    name: test-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm install --legacy-peer-deps
+      - name: Unit tests (apps/web)
+        # Hermetic: do not inject ambient AI/billing keys (see #1230).
+        env:
+          OPENAI_API_KEY: ""
+          AI_GATEWAY_API_KEY: ""
+          VERCEL_AI_GATEWAY_API_KEY: ""
+          STRIPE_SECRET_KEY: ""
+          STRIPE_WEBHOOK_SECRET: ""
+        run: cd apps/web && npx vitest run --reporter=default
+
   test:
     runs-on: ubuntu-latest
     steps:
