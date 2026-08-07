@@ -646,14 +646,47 @@ jobs:
                   }
                   return output.join('\n').trim();
                 }
+                const body = String((issue && issue.body) || '');
                 function declared(headings) {
-                  const value = section(
-                    String((issue && issue.body) || ''), headings
-                  ).replace(/^\x60|\x60$/g, '').trim();
+                  const value = section(body, headings)
+                    .replace(/^\x60|\x60$/g, '').trim();
                   return Boolean(value) && value !== '_No response_';
                 }
+                function checked(headings) {
+                  const value = section(body, headings).trim();
+                  return value.split(/\r?\n/).some(line =>
+                    /^\s*[-*]\s*\[[xX]\]/.test(line)
+                  ) || /^(?:yes|true)$/i.test(value);
+                }
+                // This must mirror the `complete` predicate in
+                // `snapshot-agent-task-intent`. That job refuses to write a
+                // snapshot (`incomplete_agent_task_contract`) unless every
+                // one of these holds, and a gate armed with no snapshot is
+                // permanently `invalid_payload`. Checking only run id and
+                // login armed the gate on issues the snapshot job rejects --
+                // the same unsatisfiable shape this rule exists to prevent,
+                // one level down.
+                const unrestrictedRequested =
+                  checked(['unrestricted scope', 'scope unrestricted']);
+                const labelSource = issue && issue.labels
+                  ? Array.isArray(issue.labels)
+                    ? issue.labels
+                    : issue.labels.nodes || []
+                  : [];
+                if (unrestrictedRequested &&
+                    !carriesLabel(labelSource,
+                      ['scopeunrestrictedapproved'])) {
+                  return false;
+                }
                 return declared(['agent run id', 'run id']) &&
-                  declared(['agent login']);
+                  declared(['agent login']) &&
+                  declared(['objective', 'description']) &&
+                  declared(['acceptance criteria', 'acceptance tests']) &&
+                  (declared(['declared file scope', 'file scope', 'scope']) ||
+                    unrestrictedRequested) &&
+                  /-\s*\[[xX]\]/.test(
+                    section(body, ['pre-dispatch confirmation'])
+                  );
               }
               const login = String(
                 pull && pull.user && pull.user.login || ''
@@ -1956,14 +1989,47 @@ jobs:
                   }
                   return output.join('\n').trim();
                 }
+                const body = String((issue && issue.body) || '');
                 function declared(headings) {
-                  const value = section(
-                    String((issue && issue.body) || ''), headings
-                  ).replace(/^\x60|\x60$/g, '').trim();
+                  const value = section(body, headings)
+                    .replace(/^\x60|\x60$/g, '').trim();
                   return Boolean(value) && value !== '_No response_';
                 }
+                function checked(headings) {
+                  const value = section(body, headings).trim();
+                  return value.split(/\r?\n/).some(line =>
+                    /^\s*[-*]\s*\[[xX]\]/.test(line)
+                  ) || /^(?:yes|true)$/i.test(value);
+                }
+                // This must mirror the `complete` predicate in
+                // `snapshot-agent-task-intent`. That job refuses to write a
+                // snapshot (`incomplete_agent_task_contract`) unless every
+                // one of these holds, and a gate armed with no snapshot is
+                // permanently `invalid_payload`. Checking only run id and
+                // login armed the gate on issues the snapshot job rejects --
+                // the same unsatisfiable shape this rule exists to prevent,
+                // one level down.
+                const unrestrictedRequested =
+                  checked(['unrestricted scope', 'scope unrestricted']);
+                const labelSource = issue && issue.labels
+                  ? Array.isArray(issue.labels)
+                    ? issue.labels
+                    : issue.labels.nodes || []
+                  : [];
+                if (unrestrictedRequested &&
+                    !carriesLabel(labelSource,
+                      ['scopeunrestrictedapproved'])) {
+                  return false;
+                }
                 return declared(['agent run id', 'run id']) &&
-                  declared(['agent login']);
+                  declared(['agent login']) &&
+                  declared(['objective', 'description']) &&
+                  declared(['acceptance criteria', 'acceptance tests']) &&
+                  (declared(['declared file scope', 'file scope', 'scope']) ||
+                    unrestrictedRequested) &&
+                  /-\s*\[[xX]\]/.test(
+                    section(body, ['pre-dispatch confirmation'])
+                  );
               }
               const login = String(
                 pull && pull.user && pull.user.login || ''

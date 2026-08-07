@@ -2870,7 +2870,20 @@ for (const [name, previous, current, count, applicable, expected] of rows) {
         self.assertEqual(len(applicable_functions), 2)
         self.assertEqual(applicable_functions[0], applicable_functions[1])
         applicable_assertions = r"""
+// A complete contract, matching what `snapshot-agent-task-intent` demands
+// before it will write a snapshot. Anything less produces no snapshot, so
+// arming on it would be permanently unsatisfiable.
 const CONTRACT = [
+  '### Agent Login', '', '`google-labs-jules[bot]`', '',
+  '### Agent Run ID', '', '`run-42`', '',
+  '### Objective', '', 'Fix the thing.', '',
+  '### Acceptance Criteria', '', '- It is fixed.', '',
+  '### Declared File Scope', '', '`src/thing.py`', '',
+  '### Pre-dispatch Confirmation', '', '- [x] Confirmed'
+].join('\n');
+// Login + run id only -- the old `declaresAgentContract` accepted this, but
+// the snapshot job rejects it as `incomplete_agent_task_contract`.
+const PARTIAL_CONTRACT = [
   '### Agent Login', '', '`google-labs-jules[bot]`', '',
   '### Agent Run ID', '', '`run-42`'
 ].join('\n');
@@ -2893,6 +2906,11 @@ const rows = [
   // actually declares the contract the gate goes on to require (#1130).
   ['issue label without contract', base, issue(1, ['mcp/agent']), false],
   ['issue label with contract', base, issue(1, ['mcp/agent'], CONTRACT), true],
+  // The contract must be the complete one the snapshot job requires; a
+  // login+run-id-only body yields no snapshot, so arming would be
+  // permanently unsatisfiable.
+  ['issue label with partial contract', base,
+    issue(1, ['mcp/agent'], PARTIAL_CONTRACT), false],
   // Pull-side provenance identifies the producer; it does not supply a
   // contract to score against, with or without a linked issue. The intent
   // snapshot the gate scores against is only ever written by
@@ -3000,11 +3018,17 @@ for (const [name, pull, issues, expectedNumber, expectedErrors] of rows) {
 
         combined_assertions = r"""
 const first = {number: 1, labels: {nodes: []}, body: ''};
+// A complete dispatch contract -- login and run id alone are rejected by
+// `snapshot-agent-task-intent`, so they would not arm the gate.
 const second = {
   number: 2,
   labels: {nodes: [{name: 'agent-task'}]},
   body: '### Agent Login\n\n`google-labs-jules[bot]`\n\n' +
-    '### Agent Run ID\n\n`run-42`'
+    '### Agent Run ID\n\n`run-42`\n\n' +
+    '### Objective\n\nFix the thing.\n\n' +
+    '### Acceptance Criteria\n\n- It is fixed.\n\n' +
+    '### Declared File Scope\n\n`src/thing.py`\n\n' +
+    '### Pre-dispatch Confirmation\n\n- [x] Confirmed'
 };
 const multi = {
   user: {login: 'maintainer'},
@@ -3425,7 +3449,37 @@ for (const [body, expected] of rows) {
         self.assertEqual(len(applicable), 2)
 
         assertions = r"""
+// A complete contract, matching what `snapshot-agent-task-intent` demands
+// before it will write a snapshot. Anything less produces no snapshot, so
+// arming on it would be permanently unsatisfiable.
 const CONTRACT = [
+  '### Agent Login',
+  '',
+  '`google-labs-jules[bot]`',
+  '',
+  '### Agent Run ID',
+  '',
+  '`run-42`',
+  '',
+  '### Objective',
+  '',
+  'Fix the thing.',
+  '',
+  '### Acceptance Criteria',
+  '',
+  '- It is fixed.',
+  '',
+  '### Declared File Scope',
+  '',
+  '`src/thing.py`',
+  '',
+  '### Pre-dispatch Confirmation',
+  '',
+  '- [x] Confirmed'
+].join('\n');
+// Login + run id only -- the old `declaresAgentContract` accepted this, but
+// the snapshot job rejects it as `incomplete_agent_task_contract`.
+const PARTIAL_CONTRACT = [
   '### Agent Login',
   '',
   '`google-labs-jules[bot]`',
@@ -3434,6 +3488,10 @@ const CONTRACT = [
   '',
   '`run-42`'
 ].join('\n');
+const UNRESTRICTED = CONTRACT.replace(
+  '### Declared File Scope\n\n`src/thing.py`',
+  '### Unrestricted Scope\n\n- [x] Requested'
+);
 const human = {
   user: {login: 'groupthinking'},
   head: {ref: 'feature/thing'},
@@ -3456,6 +3514,34 @@ const rows = [
   // A genuine issue-side dispatch is still gated.
   ['declared contract', human, {
     number: 7, labels: [{name: 'agent-task'}], body: CONTRACT
+  }, true],
+  // ...but the contract must be the *complete* one the snapshot job demands.
+  // A login+run-id-only body is rejected there as
+  // `incomplete_agent_task_contract`, so no snapshot is written and arming on
+  // it would be unsatisfiable in exactly the way this rule exists to prevent.
+  ['partial contract, login and run id only', human, {
+    number: 7, labels: [{name: 'agent-task'}], body: PARTIAL_CONTRACT
+  }, false],
+  ['missing acceptance criteria', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}],
+    body: CONTRACT.replace('### Acceptance Criteria\n\n- It is fixed.', '')
+  }, false],
+  ['unconfirmed pre-dispatch checkbox', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}],
+    body: CONTRACT.replace('- [x] Confirmed', '- [ ] Confirmed')
+  }, false],
+  // Unrestricted scope substitutes for a declared file scope, but only once a
+  // maintainer has applied scope-unrestricted-approved -- the same condition
+  // the snapshot job enforces before writing.
+  ['unrestricted scope, unapproved', human, {
+    number: 7, labels: [{name: 'agent-task'}], body: UNRESTRICTED
+  }, false],
+  ['unrestricted scope, approved', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}, {name: 'scope-unrestricted-approved'}],
+    body: UNRESTRICTED
   }, true],
   ['contract via graphql label nodes', human, {
     number: 7, labels: {nodes: [{name: 'agent-task'}]}, body: CONTRACT

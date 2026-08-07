@@ -38,7 +38,9 @@ If an agent has repository-write credentials that can create Actions workflows o
 The gate applies only when the PR's linked issue is a genuine dispatch — that is, when the issue both:
 
 - carries agent-task or mcp/agent (the generic agent label does not count, since neither the snapshot job nor the collector recognises it); and
-- declares an agent run id and an agent login in its body.
+- declares the **complete** dispatch contract in its body: agent login, agent run id, objective/description, acceptance criteria, either a declared file scope or an unrestricted-scope request carrying the scope-unrestricted-approved label, and a checked pre-dispatch confirmation.
+
+That list is deliberately identical to the `complete` predicate in `snapshot-agent-task-intent`. The two must stay in step: the snapshot job refuses to write a snapshot (`incomplete_agent_task_contract`) unless every element is present, and a gate armed with no snapshot is permanently `invalid_payload`. Requiring only the login and run id armed the gate on issues the snapshot job rejects — the same unsatisfiable shape described below, one level down.
 
 Dependabot is exempt. Everything else receives not_applicable.
 
