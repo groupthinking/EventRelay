@@ -3,8 +3,11 @@ name: CI
 on:
   push:
     branches: [main]
+  # No base-branch filter. A `branches:` allowlist here gates on the PR's *base*,
+  # so a PR stacked onto another PR's branch ran no CI at all (see #1440, which
+  # targets #1381's branch and has zero CI runs). Every PR gets the gate; the
+  # push trigger above stays scoped to main.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
