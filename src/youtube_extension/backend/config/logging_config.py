@@ -76,6 +76,25 @@ def sanitize_log_record(rendered: str) -> str:
     return rendered.translate(_UNSAFE_LOG_CHARS)
 
 
+def _describe_exception(exc: BaseException) -> str:
+    """Name an exception without trusting its ``__str__``.
+
+    Used only by ``StructuredFormatter._format_json``'s serialization
+    fallback. That fallback exists because a value whose ``__str__`` raises
+    costs the record — but the exception it catches is then *whatever that*
+    ``__str__`` *raised*, which is arbitrary and may itself raise on
+    ``str()``. Interpolating it directly would fail inside the handler for
+    the failure, losing the record for the same reason one level down.
+
+    The class name is the guaranteed-safe floor: an attribute lookup that
+    runs no user code.
+    """
+    try:
+        return f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - the fallback must not need a fallback
+        return type(exc).__name__
+
+
 class StructuredFormatter(logging.Formatter):
     """
     Custom formatter for structured logging with enhanced metadata.
@@ -172,7 +191,10 @@ class StructuredFormatter(logging.Formatter):
                 for key, value in payload.items()
                 if isinstance(value, (str, int, float, bool, type(None)))
             }
-            safe["serialization_error"] = f"{type(exc).__name__}: {exc}"
+            # Described via `_describe_exception`, not interpolated directly:
+            # `exc` is whatever the offending `__str__` raised, so `str(exc)`
+            # can raise in turn and cost the record here instead.
+            safe["serialization_error"] = _describe_exception(exc)
             return json.dumps(safe, ensure_ascii=True, default=str)
 
     def formatException(self, ei) -> str:

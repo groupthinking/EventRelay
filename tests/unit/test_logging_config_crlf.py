@@ -369,6 +369,55 @@ def test_exploding_str_correlation_id_does_not_cost_the_record():
     assert poisoned["serialization_error"] == "RuntimeError: str() exploded"
 
 
+def test_exploding_str_performance_ms_does_not_cost_the_record():
+    # `correlation_id` is covered above, but the enrichment loop reads *two*
+    # attributes and `performance_ms` is the other one. It arrives by a
+    # different route — set from `record.duration` in `format()`, or straight
+    # from `extra=` as here — so covering only `correlation_id` leaves half
+    # the reachable surface untested.
+    logger, buf = _make_json_logger("json-exploding-perf")
+    logger.info("healthy one")
+    logger.info("poisoned", extra={"performance_ms": _ExplodingStr()})
+    logger.info("after poison")
+    records = [json.loads(line) for line in buf.getvalue().splitlines() if line.strip()]
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    assert "performance_ms" not in poisoned
+
+
+def test_fallback_survives_an_exception_whose_own_str_raises():
+    """The fallback must not need a fallback.
+
+    `exc` here is not `json`'s own error — it is whatever the offending
+    `__str__` raised, so it is arbitrary caller code. If that exception also
+    raises on `str()`, interpolating it into `serialization_error` fails
+    *inside the handler for the failure*, and the record is lost for exactly
+    the reason the fallback exists to prevent. Measured at 2 of 3 records
+    reaching the sink before `_describe_exception`.
+    """
+
+    class _NastyError(Exception):
+        def __str__(self) -> str:
+            raise RuntimeError("even the error explodes")
+
+    class _RaisesNasty:
+        def __str__(self) -> str:
+            raise _NastyError()
+
+    records = _emit_three("json-nested-explosion", _RaisesNasty())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    assert "correlation_id" not in poisoned
+    # Degraded to the class name alone rather than lost entirely.
+    assert poisoned["serialization_error"] == "_NastyError"
+
+
 def test_serialization_fallback_still_escapes_attacker_content():
     # The fallback must not become a hole in the #1429 fix: a forgery payload
     # in `message` has to stay escaped on the degraded path too.
