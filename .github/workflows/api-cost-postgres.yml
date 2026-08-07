@@ -29,6 +29,16 @@ on:
 permissions:
   contents: read
 
+
+# Supersede superseded work instead of stacking it. Without this, every push
+# to a PR branch queued a brand-new full run alongside the ones it obsoleted;
+# with ~30 workflows and dozens of open PRs the Actions queue could not drain.
+# PR runs cancel their predecessors; push/schedule runs queue instead, so each
+# merged commit keeps its own verdict.
+concurrency:
+  group: api-cost-postgres-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
 jobs:
   migration-matrix:
     name: PostgreSQL migration matrix (${{ matrix.scenario }})
