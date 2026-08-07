@@ -28,7 +28,7 @@ concrete reason, verified against the actual repository tree.
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
-| `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
+| `pr-checks.yml` | KEEP | Validates PR title/description. Truth-gate jobs removed; see `MERGE_POLICY.md`. |
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
@@ -65,9 +65,8 @@ valid. Referenced paths were checked against the working tree:
 
 ## Agent completion enforcement
 
-| `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; stale/mutable evidence, untrusted label provenance, and custom roles all fail closed, and once the policy is provisioned a missing report fails closed too. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
 
-The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists. While those allowlists are empty the Check reports **neutral (advisory)** rather than blocking, so it does not train reviewers to ignore a permanently red gate; it becomes blocking once a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.
+The agent-lock trust policy and both agent-completion Checks were removed as unsatisfiable; `pr-governance.yml` is now the sole binding gate. See `MERGE_POLICY.md`.
 
 ## Repository governance workflows
 
