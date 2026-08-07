@@ -93,6 +93,23 @@ listed `Security` among its required six, and dropping every security scan out
 of the required set would be a weakening introduced by the rewrite that set out
 to make this gate precise.
 
+> **What these six actually gate.** They attest that each scan *ran* — not that
+> it found nothing. Every one of them reports `success` with findings present:
+>
+> | Check | Fails the job on | Why findings don't fail it |
+> | --- | --- | --- |
+> | `npm-audit` | `npm install` breaking | `continue-on-error: true` on the `npm audit` step |
+> | `python-safety` | `pip install safety` breaking | `\|\| true` *and* `continue-on-error: true` |
+> | `bandit` | `pip install bandit` breaking | `\|\| true` on the `bandit -r src` step |
+> | `trivy` | the `docker build` breaking | `exit-code: '0'` passed to `trivy-action` |
+> | `Security Scan - python`, `Security Scan - javascript` | CodeQL itself erroring | alerts route to the Security tab; blocking on them is code-scanning merge protection, which is not a required-check setting |
+>
+> So requiring these six catches a scanner that broke or stopped running, which
+> is a real regression this gate can detect. It does **not** mean "no
+> HIGH/CRITICAL finding can merge." Making findings block is a change to
+> `security.yml` and to code-scanning merge protection — not a branch-protection
+> edit, and not something adding a name to the list above achieves.
+
 > **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
 > `trivy` reports `success`, `Trivy` reports `neutral`. Selecting the
 > capitalised one requires a check that never passes. This is exactly the trap
