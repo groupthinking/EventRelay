@@ -131,14 +131,23 @@ const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 /**
  * Poll until the run is terminal or attempts are exhausted.
- * Default: 20 attempts × 1.5s ≈ 30s of wall time (workflow continues server-side).
+ * Default: 30 attempts × 2s ≈ 60s of wall time (workflow continues server-side).
+ *
+ * The cadence is chosen against the middleware rate limit, not just for UI
+ * responsiveness. Status reads are metered on the general budget
+ * (`UVAI_API_RATE_LIMIT_PER_MINUTE`, default 60/min) — see `isAiRoute` in
+ * `@/lib/auth-paths`, which exempts GET on `/api/workflows` from the much
+ * tighter AI budget. At 2s a run spends 30 req/min, leaving roughly half the
+ * general allowance for the rest of the page; the previous 1.5s cadence spent
+ * 40/min and left little margin. The wall-clock window doubles to 60s as a
+ * side effect, which better fits a transcript fetch plus an agent call.
  */
 export async function pollVideoToActions(
   runId: string,
   opts?: { attempts?: number; delayMs?: number; signal?: AbortSignal },
 ): Promise<VideoToActionsPoll> {
-  const attempts = opts?.attempts ?? 20;
-  const delayMs = opts?.delayMs ?? 1500;
+  const attempts = opts?.attempts ?? 30;
+  const delayMs = opts?.delayMs ?? 2000;
   let last: VideoToActionsPoll = {
     ok: false,
     status: 0,
