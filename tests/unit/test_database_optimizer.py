@@ -4,11 +4,15 @@ QueryOptimizer, and DatabaseHealthMonitor."""
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import sqlite3
 import sys
+import threading
+import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -1345,3 +1349,305 @@ class TestConnectionPoolInitialize:
             await pool.initialize()
         finally:
             _mod.HAS_POSTGRESQL = orig
+
+
+_DBOPT = "youtube_extension.backend.services.database_optimizer"
+
+
+# ===========================================================================
+# Event-loop offloading of blocking SQLite I/O
+#
+# The SQLite branch of DatabaseConnectionPool/QueryOptimizer used to run
+# sqlite3.connect(), cursor.execute()/fetchall() and connection.close()
+# directly on the event loop. That froze the loop for the whole duration of
+# every query and silently defeated execute_batch_queries' semaphore+gather
+# concurrency, because nothing underneath ever yielded.
+#
+# These tests assert on *thread identity* rather than wall-clock timings so
+# they stay deterministic on loaded CI hosts.
+# ===========================================================================
+
+
+class _RecordingCursor:
+    """DB-API cursor stub that records which thread ran the query."""
+
+    def __init__(self, sink: dict, delay: float, fail: bool = False, owner=None) -> None:
+        self._sink = sink
+        self._delay = delay
+        self._fail = fail
+        self._owner = owner
+
+    def execute(self, query, params=None):  # noqa: ARG002
+        lock = self._sink.setdefault("lock", threading.Lock())
+        self._sink.setdefault("execute_tids", []).append(threading.get_ident())
+        if self._fail:
+            raise RuntimeError("boom")
+        owner = self._owner
+        if owner is not None:
+            with owner._lock:
+                owner._inflight += 1
+        with lock:
+            inflight = self._sink.get("inflight", 0) + 1
+            self._sink["inflight"] = inflight
+            self._sink["max_inflight"] = max(
+                self._sink.get("max_inflight", 0), inflight
+            )
+        try:
+            if self._delay:
+                time.sleep(self._delay)
+        finally:
+            with lock:
+                self._sink["inflight"] -= 1
+            if owner is not None:
+                with owner._lock:
+                    owner._inflight -= 1
+        return self
+
+    def fetchall(self):
+        return [("row",)]
+
+
+class _RecordingConnection:
+    """Minimal DB-API connection stub (has .execute, so no .fetch/asyncpg)."""
+
+    def __init__(self, sink: dict, delay: float = 0.0, fail: bool = False) -> None:
+        self._sink = sink
+        self._delay = delay
+        self._fail = fail
+        self._lock = threading.Lock()
+        self._inflight = 0
+
+    def cursor(self):
+        return _RecordingCursor(self._sink, self._delay, self._fail, owner=self)
+
+    def execute(self, query, params=None):  # pragma: no cover - branch selector
+        return self.cursor().execute(query, params)
+
+    def close(self):
+        # Only this connection's own in-flight work matters: closing connection
+        # A while connection B is busy is perfectly legal.
+        with self._lock:
+            if self._inflight > 0:
+                self._sink["close_overlapped_query"] = True
+        self._sink.setdefault("close_tids", []).append(threading.get_ident())
+
+
+class TestSqliteQueryOffloadedToThread:
+    @pytest.mark.asyncio
+    async def test_cursor_work_runs_off_the_event_loop_thread(self) -> None:
+        """The query itself must not execute on the loop thread."""
+        sink: dict = {}
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(return_value=_RecordingConnection(sink))
+        pool.release_connection = AsyncMock()
+        optimizer = QueryOptimizer(pool)
+
+        loop_tid = threading.get_ident()
+        await optimizer.execute_query("SELECT 1", use_cache=False)
+
+        assert sink["execute_tids"], "query never executed"
+        assert loop_tid not in sink["execute_tids"], (
+            "cursor.execute ran on the event loop thread; it must be offloaded "
+            "via asyncio.to_thread so the loop stays responsive"
+        )
+
+    @pytest.mark.asyncio
+    async def test_event_loop_stays_responsive_during_query(self) -> None:
+        """A concurrent task must still get scheduled while a query runs."""
+        sink: dict = {}
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(
+            return_value=_RecordingConnection(sink, delay=0.25)
+        )
+        pool.release_connection = AsyncMock()
+        optimizer = QueryOptimizer(pool)
+
+        ticks = 0
+        stop = False
+
+        async def heartbeat() -> None:
+            nonlocal ticks
+            while not stop:
+                await asyncio.sleep(0.005)
+                ticks += 1
+
+        hb = asyncio.create_task(heartbeat())
+        await asyncio.sleep(0)  # let the heartbeat start
+        await optimizer.execute_query("SELECT 1", use_cache=False)
+        stop = True
+        hb.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await hb
+
+        assert ticks > 0, (
+            "the event loop got zero ticks during a 250ms query — it was "
+            "blocked for the entire query duration"
+        )
+
+
+class TestSqliteConnectionLifecycleOffloaded:
+    @pytest.mark.asyncio
+    async def test_connect_runs_off_the_event_loop_thread(self, tmp_path) -> None:
+        pool = DatabaseConnectionPool(f"sqlite:///{tmp_path / 'offload.db'}")
+        await pool.initialize()
+
+        seen: list[int] = []
+        real_connect = sqlite3.connect
+
+        def spy(*args, **kwargs):
+            seen.append(threading.get_ident())
+            return real_connect(*args, **kwargs)
+
+        with patch.object(sqlite3, "connect", spy):
+            conn = await pool.get_connection()
+
+        assert seen, "sqlite3.connect was never called"
+        assert threading.get_ident() not in seen, (
+            "sqlite3.connect ran on the event loop thread"
+        )
+        await pool.release_connection(conn)
+
+    @pytest.mark.asyncio
+    async def test_connection_is_usable_from_the_event_loop_thread(
+        self, tmp_path
+    ) -> None:
+        """Regression guard for check_same_thread=False.
+
+        The connection is created on a worker thread but
+        initialize_database_optimization() uses it directly from the loop
+        thread. Without check_same_thread=False sqlite3 raises
+        ProgrammingError on that first cross-thread use.
+        """
+        pool = DatabaseConnectionPool(f"sqlite:///{tmp_path / 'xthread.db'}")
+        await pool.initialize()
+        conn = await pool.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute("CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY)")
+            cur.execute("INSERT INTO t (id) VALUES (1)")
+            cur.execute("SELECT id FROM t")
+            assert cur.fetchall() == [(1,)]
+        finally:
+            await pool.release_connection(conn)
+
+    @pytest.mark.asyncio
+    async def test_close_runs_off_the_event_loop_thread(self) -> None:
+        sink: dict = {}
+        pool = DatabaseConnectionPool("sqlite:///:memory:")
+        await pool.release_connection(_RecordingConnection(sink))
+
+        assert sink["close_tids"], "connection.close() was never called"
+        assert threading.get_ident() not in sink["close_tids"], (
+            "connection.close() ran on the event loop thread"
+        )
+
+
+class TestBatchQueriesActuallyOverlap:
+    @pytest.mark.asyncio
+    async def test_batch_queries_are_not_serialised(self) -> None:
+        """execute_batch_queries documents concurrency; prove it is real.
+
+        With blocking cursor work the batch degenerates to N * delay because
+        nothing yields. Offloaded, the queries overlap across worker threads.
+        """
+        sink: dict = {}
+        delay = 0.10
+        count = 6
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(
+            side_effect=lambda: _RecordingConnection(sink, delay=delay)
+        )
+        pool.release_connection = AsyncMock()
+        optimizer = QueryOptimizer(pool)
+
+        queries = [(f"SELECT {i}", ()) for i in range(count)]
+        started = time.perf_counter()
+        with (
+            patch(f"{_DBOPT}.cache_get", AsyncMock(return_value=None)),
+            patch(f"{_DBOPT}.cache_set", AsyncMock()),
+        ):
+            results = await optimizer.execute_batch_queries(queries)
+        elapsed = time.perf_counter() - started
+
+        assert len(results) == count
+        assert sink["execute_tids"], "no query ever executed"
+        assert sink.get("max_inflight", 0) > 1, (
+            "never more than one query in flight at a time — the batch "
+            "serialised despite gather()"
+        )
+        serial_floor = delay * count
+        assert elapsed < serial_floor / 2, (
+            f"batch took {elapsed:.3f}s against a serial floor of "
+            f"{serial_floor:.3f}s — the queries did not overlap"
+        )
+
+    @pytest.mark.asyncio
+    async def test_batch_queries_use_distinct_threads(self) -> None:
+        sink: dict = {}
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(
+            side_effect=lambda: _RecordingConnection(sink, delay=0.05)
+        )
+        pool.release_connection = AsyncMock()
+        optimizer = QueryOptimizer(pool)
+
+        queries = [(f"SELECT {i}", ()) for i in range(4)]
+        with (
+            patch(f"{_DBOPT}.cache_get", AsyncMock(return_value=None)),
+            patch(f"{_DBOPT}.cache_set", AsyncMock()),
+        ):
+            await optimizer.execute_batch_queries(queries)
+
+        assert len(set(sink["execute_tids"])) > 1, (
+            "every query ran on the same thread — they were serialised"
+        )
+
+
+class TestBatchCancellationDoesNotCloseConnectionMidQuery:
+    """A cancelled query must not have its connection closed under it.
+
+    ``execute_batch_queries`` cancels in-flight siblings when one query fails.
+    A worker thread cannot be cancelled, so the offloaded ``cursor.execute()``
+    keeps running; if ``execute_query``'s ``finally`` releases (and therefore
+    closes) the connection straight away, two threads touch one sqlite3
+    connection at once. ``check_same_thread=False`` disables the *check*, not
+    the requirement, so this is real corruption risk — and it only became
+    reachable once the query was offloaded.
+    """
+
+    @pytest.mark.asyncio
+    async def test_close_never_overlaps_an_in_flight_query(self) -> None:
+        sink: dict = {}
+        # First query fails immediately; second is slow and will be cancelled.
+        conns = [
+            _RecordingConnection(sink, fail=True),
+            _RecordingConnection(sink, delay=0.20),
+        ]
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(side_effect=conns)
+
+        async def _release(conn):
+            # Mirror DatabaseConnectionPool.release_connection: close off-loop.
+            await asyncio.to_thread(conn.close)
+
+        pool.release_connection = AsyncMock(side_effect=_release)
+        optimizer = QueryOptimizer(pool)
+
+        with (
+            patch(f"{_DBOPT}.cache_get", AsyncMock(return_value=None)),
+            patch(f"{_DBOPT}.cache_set", AsyncMock()),
+            contextlib.suppress(RuntimeError),
+        ):
+            await optimizer.execute_batch_queries(
+                [("SELECT 0", ()), ("SELECT 1", ())]
+            )
+
+        # Give any improperly-detached worker thread time to finish so the
+        # overlap flag is definitely observable either way.
+        await asyncio.sleep(0.35)
+
+        assert sink.get("close_overlapped_query") is not True, (
+            "connection.close() ran while a worker thread was still executing "
+            "a query on that same connection — the cancellation path must "
+            "drain the offloaded query before releasing the connection"
+        )
