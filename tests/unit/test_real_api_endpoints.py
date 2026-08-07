@@ -46,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.real_api_endpoints import (  # noqa: E402
     _CACHE_MISS,
+    _VALIDATION_MAX_BYTES,
     BatchProcessingRequest,
     VideoAnalysisResponse,
     VideoProcessingRequest,
@@ -1150,11 +1151,11 @@ class TestVideoDetailOffloadsBlockingIO:
 
         Scope note: ``_SlowReadPath`` sleeps in ``__fspath__``, which models
         *filesystem* latency -- and ``time.sleep`` releases the GIL, exactly as
-        a real blocking syscall does. So this test covers the I/O half of the
-        read only. It is not vacuous: reverting the ``asyncio.to_thread`` hop
-        drives ``heartbeats`` to 0. But it deliberately says nothing about the
-        ``json.load()`` half, which holds the GIL and still stalls the loop --
-        see ``test_parse_still_stalls_the_loop_in_proportion_to_payload``.
+        a real blocking syscall does. It is not vacuous: reverting the
+        ``asyncio.to_thread`` hop drives ``heartbeats`` to 0. Since the helper
+        stopped parsing the payload, filesystem latency is essentially the
+        whole read; the size-proportional stall that used to remain is pinned
+        by ``test_read_stall_no_longer_scales_with_payload``.
         """
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
@@ -1206,30 +1207,32 @@ class TestVideoDetailOffloadsBlockingIO:
             heartbeats >= 5
         ), f"event loop was starved during the cache read (ticks={heartbeats})"
 
-    async def test_parse_still_stalls_the_loop_in_proportion_to_payload(
-        self, tmp_path
-    ):
-        """Document the residual: ``json.load`` blocks the loop even off-thread.
+    async def test_read_stall_no_longer_scales_with_payload(self, tmp_path):
+        """The read must not stall the loop in proportion to payload size.
 
-        ``open()``/``read()`` release the GIL, so the ``asyncio.to_thread`` hop
-        genuinely removes filesystem latency from the loop. ``json.load()`` does
-        not -- it is CPU-bound C code that holds the GIL for its full duration,
-        so relocating it to a worker thread does not stop it blocking.
+        Successor to ``test_parse_still_stalls_the_loop_in_proportion_to_
+        payload``, which characterised the residual left by the ``to_thread``
+        offload: ``json.load()`` held the GIL in the worker, so the loop still
+        stalled ~3 ms/MB of payload. The helper no longer parses entries above
+        the validation threshold -- it returns raw bytes, and ``read()``
+        releases the GIL -- so that proportional stall must be gone.
 
-        This is a *characterisation* test. It exists so the weaker guarantee
-        stays honest: if someone later claims this endpoint's read is fully
-        non-blocking, this test is the counter-example. Asserted as a ratio
-        between a small and a large payload so it does not depend on the
-        absolute speed of the runner.
+        Self-calibrating rather than absolute-time based: the baseline is the
+        same payload pushed through ``json.loads`` on a worker thread, which
+        is exactly the old behaviour. The helper's read must stall the loop
+        for a small fraction of what the parse does, whatever the runner's
+        speed. If this fails, size-proportional GIL-held work has crept back
+        into the read path and the documented bounded-stall guarantee in
+        ``_read_video_analysis_sync`` no longer holds.
         """
-        small = tmp_path / "small.json"
+        payload = json.dumps({"transcript": [{"t": i} for i in range(400_000)]})
         large = tmp_path / "large.json"
-        small.write_text(json.dumps({"transcript": [{"t": i} for i in range(200)]}))
-        large.write_text(
-            json.dumps({"transcript": [{"t": i} for i in range(400_000)]})
-        )
+        large.write_text(payload)
+        # The point of the threshold is that entries above it skip the
+        # validation parse; the fixture must actually exercise that path.
+        assert large.stat().st_size > _VALIDATION_MAX_BYTES
 
-        async def _max_loop_gap(path):
+        async def _max_loop_gap(work, arg):
             gaps: list[float] = []
             stop = asyncio.Event()
 
@@ -1244,28 +1247,35 @@ class TestVideoDetailOffloadsBlockingIO:
             task = asyncio.create_task(_ticker())
             await asyncio.sleep(0.02)
             gaps.clear()
-            await asyncio.to_thread(_read_video_analysis_sync, path)
+            await asyncio.to_thread(work, arg)
             stop.set()
             await task
             return max(gaps)
 
-        small_gap = await _max_loop_gap(small)
-        large_gap = await _max_loop_gap(large)
+        parse_gap = await _max_loop_gap(json.loads, payload)
+        # Take the best of a few runs for the read: a single scheduling hiccup
+        # on a loaded CI runner must not masquerade as a proportional stall.
+        read_gap = min(
+            [await _max_loop_gap(_read_video_analysis_sync, large) for _ in range(3)]
+        )
 
-        # The large payload is ~2000x the small one. Even allowing for executor
-        # dispatch overhead dominating the small case, the parse must show up as
-        # a materially longer stall -- that is the point being documented.
-        assert large_gap > small_gap * 5, (
-            "expected json.load to stall the loop in proportion to payload size "
-            f"(small={small_gap * 1000:.2f}ms, large={large_gap * 1000:.2f}ms); "
-            "if this now passes trivially, the parse may have been made "
-            "incremental -- update the endpoint's documented guarantee"
+        assert read_gap < parse_gap / 4, (
+            "expected the raw-bytes read to stall the loop far less than "
+            "parsing the same payload "
+            f"(read={read_gap * 1000:.2f}ms, parse={parse_gap * 1000:.2f}ms); "
+            "size-proportional GIL-held work appears to be back on the read "
+            "path -- re-narrow the guarantee documented in "
+            "_read_video_analysis_sync if that is intentional"
         )
 
     def test_offloaded_read_returns_same_payload(
         self, client, mock_processor, tmp_cache
     ):
-        """Offloading must not change the response contract."""
+        """Offloading must not change the response contract.
+
+        Stronger than semantic equality: the raw-passthrough response body is
+        the cache entry byte-for-byte, and it still declares itself as JSON.
+        """
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
         mock_processor._get_cache_path.return_value = cache_file
@@ -1273,7 +1283,9 @@ class TestVideoDetailOffloadsBlockingIO:
         response = client.get("/api/v2/videos/auJzb1D-fag")
 
         assert response.status_code == 200
-        assert response.json() == _read_video_analysis_sync(cache_file)
+        assert response.headers["content-type"].startswith("application/json")
+        assert response.content == cache_file.read_bytes()
+        assert response.json() == json.loads(cache_file.read_text(encoding="utf-8"))
 
 
 class TestReadVideoAnalysisSync:
@@ -1284,21 +1296,22 @@ class TestReadVideoAnalysisSync:
             _read_video_analysis_sync(tmp_path / "absent_processed.json") is _CACHE_MISS
         )
 
-    def test_existing_file_returns_parsed_payload(self, tmp_cache):
+    def test_existing_file_returns_raw_bytes_verbatim(self, tmp_cache):
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
 
         result = _read_video_analysis_sync(cache_file)
 
-        assert result is not None
-        assert result["video_id"] == "auJzb1D-fag"
-        assert result == json.loads(cache_file.read_text(encoding="utf-8"))
+        assert isinstance(result, bytes)
+        assert result == cache_file.read_bytes()
+        assert json.loads(result)["video_id"] == "auJzb1D-fag"
 
     def test_null_content_is_a_payload_not_a_miss(self, tmp_cache):
-        """A stored JSON ``null`` parses to ``None`` but is *not* a cache miss.
+        """A stored JSON ``null`` is a payload, *not* a cache miss.
 
-        Returning a bare ``None`` for absence would conflate the two and turn
-        such an entry into a 404. The sentinel keeps them distinguishable.
+        It comes back as the raw bytes ``b"null"`` and must be served as a
+        200. The sentinel keeps absence distinguishable from any content --
+        including the parsed-``None`` form the helper used to return.
         """
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = tmp_cache / "nullish_processed.json"
@@ -1306,11 +1319,11 @@ class TestReadVideoAnalysisSync:
 
         result = _read_video_analysis_sync(cache_file)
 
-        assert result is None
+        assert result == b"null"
         assert result is not _CACHE_MISS
 
     def test_falsy_payloads_are_not_misses(self, tmp_cache):
-        """Neither is any other falsy JSON value the helper can legally parse."""
+        """Neither is any other JSON value that parses to something falsy."""
         tmp_cache.mkdir(parents=True, exist_ok=True)
 
         for index, raw in enumerate(("{}", "[]", '""', "0", "false")):
@@ -1338,6 +1351,12 @@ class TestReadVideoAnalysisSync:
         Only "the path names no readable entry" -- ``FileNotFoundError`` or a
         path the OS rejects outright -- means "no such analysis"; anything
         else is a real fault and has to keep propagating.
+
+        This guarantee is now scoped to entries at or below
+        ``_VALIDATION_MAX_BYTES``; validating above the threshold would
+        reintroduce the unbounded GIL-held parse the raw-bytes read removed.
+        See ``test_oversized_corrupt_entry_is_returned_unvalidated`` for the
+        other side of that line.
         """
         tmp_cache.mkdir(parents=True, exist_ok=True)
         cache_file = tmp_cache / "bad_processed.json"
@@ -1345,6 +1364,34 @@ class TestReadVideoAnalysisSync:
 
         with pytest.raises(json.JSONDecodeError):
             _read_video_analysis_sync(cache_file)
+
+    def test_corrupt_entry_at_the_threshold_still_raises(self, tmp_cache):
+        """The validation boundary is inclusive: exactly-at-cap entries parse."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "boundary_processed.json"
+        blob = b"{invalid json" + b" " * (_VALIDATION_MAX_BYTES - len(b"{invalid json"))
+        assert len(blob) == _VALIDATION_MAX_BYTES
+        cache_file.write_bytes(blob)
+
+        with pytest.raises(json.JSONDecodeError):
+            _read_video_analysis_sync(cache_file)
+
+    def test_oversized_corrupt_entry_is_returned_unvalidated(self, tmp_cache):
+        """Entries above the validation threshold are served verbatim.
+
+        Validating them would mean a GIL-held parse proportional to payload
+        size -- exactly the unbounded loop stall this helper exists to avoid.
+        Integrity above the threshold is delegated to the writer, which
+        publishes entries atomically (temp file + ``os.replace``), so a torn
+        entry cannot be observed; only out-of-band corruption slips through,
+        and it reaches the client as-is rather than as a 500.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "huge_processed.json"
+        blob = b"{not json at all" + b"x" * _VALIDATION_MAX_BYTES
+        cache_file.write_bytes(blob)
+
+        assert _read_video_analysis_sync(cache_file) == blob
 
     def test_directory_path_raises_rather_than_reporting_a_miss(self, tmp_cache):
         """Opening a directory is an ``OSError`` but not a missing entry."""
@@ -1380,8 +1427,8 @@ class TestVideoDetailIgnoresProcessorCacheTtl:
 
         result = _read_video_analysis_sync(cache_file)
 
-        assert result is not None
-        assert result["video_id"] == "auJzb1D-fag"
+        assert result is not _CACHE_MISS
+        assert json.loads(result)["video_id"] == "auJzb1D-fag"
 
     def test_endpoint_serves_entry_older_than_processor_ttl(
         self, client, mock_processor, tmp_cache
