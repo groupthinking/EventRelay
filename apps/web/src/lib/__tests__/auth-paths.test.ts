@@ -3,6 +3,7 @@ import {
   isPublicApiPath,
   isProtectedPagePath,
   needsAuthentication,
+  resolveAuthGateMode,
   safeCallbackPath,
   shouldSkipRateLimit,
 } from '@/lib/auth-paths';
@@ -69,5 +70,44 @@ describe('auth path policy', () => {
     expect(shouldSkipRateLimit('/api/auth/csrf')).toBe(true);
     expect(shouldSkipRateLimit('/api/auth/callback/google')).toBe(true);
     expect(shouldSkipRateLimit('/api/chat')).toBe(false);
+  });
+});
+
+describe('login gate mode (issue #1058)', () => {
+  it('enforces whenever a secret is configured, in any environment', () => {
+    expect(resolveAuthGateMode({ secret: 's', nodeEnv: 'production' })).toBe('enforce');
+    expect(resolveAuthGateMode({ secret: 's', nodeEnv: 'development' })).toBe('enforce');
+    // An explicit opt-out must never downgrade a properly configured deployment.
+    expect(
+      resolveAuthGateMode({ secret: 's', nodeEnv: 'production', allowUnauthenticated: '1' }),
+    ).toBe('enforce');
+  });
+
+  it('fails closed in production when the secret is missing', () => {
+    expect(resolveAuthGateMode({ nodeEnv: 'production' })).toBe('misconfigured');
+    expect(resolveAuthGateMode({ secret: '', nodeEnv: 'production' })).toBe('misconfigured');
+    // Whitespace-only is not a usable secret.
+    expect(resolveAuthGateMode({ secret: '   ', nodeEnv: 'production' })).toBe('misconfigured');
+  });
+
+  it('keeps the gate off outside production so local dev is unaffected', () => {
+    expect(resolveAuthGateMode({ nodeEnv: 'development' })).toBe('disabled');
+    expect(resolveAuthGateMode({ nodeEnv: 'test' })).toBe('disabled');
+    expect(resolveAuthGateMode({})).toBe('disabled');
+  });
+
+  it('allows a deliberate public production deployment only via an explicit flag', () => {
+    for (const flag of ['1', 'true', 'TRUE', 'yes', 'on']) {
+      expect(resolveAuthGateMode({ nodeEnv: 'production', allowUnauthenticated: flag })).toBe(
+        'disabled',
+      );
+    }
+    // Anything that is not an affirmative value must still fail closed, so a
+    // typo (or an empty value from a CI secret) cannot silently open the app.
+    for (const flag of ['0', 'false', 'no', '', 'maybe', undefined]) {
+      expect(resolveAuthGateMode({ nodeEnv: 'production', allowUnauthenticated: flag })).toBe(
+        'misconfigured',
+      );
+    }
   });
 });

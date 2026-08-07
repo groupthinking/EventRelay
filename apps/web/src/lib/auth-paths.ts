@@ -77,3 +77,41 @@ export function safeCallbackPath(pathname: string, search = ''): string {
 export function shouldSkipRateLimit(pathname: string): boolean {
   return pathname === '/api/auth' || pathname.startsWith('/api/auth/');
 }
+
+/**
+ * How the login gate should behave for a given environment.
+ *
+ * - `enforce`      — NEXTAUTH_SECRET present; validate the session normally.
+ * - `misconfigured`— production with no secret: sessions *cannot* be validated,
+ *                    so protected routes must fail closed rather than be served
+ *                    to anonymous visitors.
+ * - `disabled`     — gate intentionally off (local dev, or an explicit opt-out).
+ */
+export type AuthGateMode = 'enforce' | 'misconfigured' | 'disabled';
+
+function isTruthyFlag(value: string | null | undefined): boolean {
+  if (!value) return false;
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
+}
+
+/**
+ * Resolve the login-gate mode.
+ *
+ * Historically this was `!!process.env.NEXTAUTH_SECRET`, which fails *open*: a
+ * single missing env var in production silently served /dashboard and every
+ * non-public /api/* route to anonymous visitors, with no error (issue #1058).
+ *
+ * The rollout convenience (app keeps working before OAuth is configured) is
+ * preserved for non-production, and remains available in production only as an
+ * explicit, auditable declaration via AUTH_ALLOW_UNAUTHENTICATED.
+ */
+export function resolveAuthGateMode(env: {
+  secret?: string | null;
+  nodeEnv?: string | null;
+  allowUnauthenticated?: string | null;
+}): AuthGateMode {
+  if (env.secret && env.secret.trim().length > 0) return 'enforce';
+  if (isTruthyFlag(env.allowUnauthenticated)) return 'disabled';
+  if (env.nodeEnv === 'production') return 'misconfigured';
+  return 'disabled';
+}

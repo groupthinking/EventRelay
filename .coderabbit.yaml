@@ -2,9 +2,12 @@
 #
 # Single source of truth for CodeRabbit. Settings that previously lived only in
 # the CodeRabbit dashboard (inheritance, auto_assign_reviewers, finishing
-# touches, knowledge base, issue enrichment, presidio) are version-controlled
-# here so every change is reviewable in a PR. `inheritance: true` still lets the
-# org-level config layer underneath this file.
+# touches, knowledge base, issue enrichment, presidio, auto-review label
+# gating) are version-controlled here so every change is reviewable in a PR.
+# `inheritance: true` still lets the org-level config layer underneath this
+# file — so any setting this file leaves unset can be silently overridden from
+# the dashboard. Prefer setting a value explicitly, even at its default, when
+# the default is the behaviour you actually want.
 language: en-US
 tone_instructions: >-
   Be assertive and direct. Focus on real bugs, security issues, and performance
@@ -26,6 +29,20 @@ reviews:
     drafts: false
     base_branches:
       - main
+    # No label gate. This is the schema default, set explicitly to override an
+    # inherited required-labels list from the dashboard/org config, which was
+    # deadlocking auto-review against `auto_apply_labels: true` below.
+    #
+    # The inherited gate required at least one of ~26 labels before a review
+    # would start — a set that includes `architecture-gap`, `ci-cd`,
+    # `pipeline-critical` and `placeholder-code`, i.e. labels CodeRabbit itself
+    # applies *as part of* a review. A PR opens unlabelled, so the gate skipped
+    # it ("Review skipped: excluded by label configuration"), and no label was
+    # ever applied to un-skip it. Labelling afterwards does not retro-trigger.
+    #
+    # Net effect: auto-review never fired on open, and every review in this repo
+    # had to be requested by hand with `@coderabbitai full review`.
+    labels: []
     # Skip work-in-progress PRs that are not opened as drafts.
     ignore_title_keywords:
       - WIP

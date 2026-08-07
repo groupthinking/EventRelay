@@ -64,7 +64,7 @@
     "ai": "^7.0.47",
     "chrome-devtools-mcp": "^1.6.0",
     "dotenv": "^17.4.2",
-    "openai": "^6.48.0",
+    "openai": "^7.3.0",
     "react": "^19",
     "react-dom": "^19",
     "tsx": "^4.23.1"

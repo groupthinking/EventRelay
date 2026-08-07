@@ -7,12 +7,14 @@ Structured logging configuration for production-grade monitoring and debugging.
 Provides consistent log formatting, multiple handlers, and performance monitoring.
 """
 
+import json
 import logging
 import logging.config
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 # Characters that can be abused to forge or corrupt log records (CWE-117 log
 # injection). Any of these in dynamic content — a log message, an ``exc_info``
@@ -22,10 +24,22 @@ from pathlib import Path
 #
 # The set is the union of every separator ``str.splitlines()`` recognizes as a
 # line boundary (LF, CR, VT, FF, FS, GS, RS, NEL, LS, PS) plus ESC (terminal
-# control sequences). Each is escaped to a JSON-valid ``\uXXXX`` sequence — not
-# a Python ``\v``/``\x1b`` shorthand — so the neutralized record stays valid
-# JSON when ``enable_json_logging`` is on, while remaining a single physical
-# line for line-oriented sinks.
+# control sequences) and NUL (which can truncate a record inside a C-based log
+# shipper). Each is escaped to a ``\uXXXX`` sequence — not a Python
+# ``\v``/``\x1b`` shorthand — so the neutralized record remains a single
+# physical line for line-oriented sinks.
+#
+# SCOPE: this table applies to the **line-oriented** formats only. It operates
+# on a fully-rendered record, where attacker content and the template's own
+# structural characters are already indistinguishable, so it can neutralize
+# separators but cannot defend JSON structure. It deliberately does NOT escape
+# ``"``: doing so here would corrupt the JSON skeleton rather than protect it.
+#
+# JSON records do not use this path at all. They are built field-by-field and
+# serialized with ``json.dumps`` (see ``StructuredFormatter._format_json``),
+# which escapes quotes, backslashes and every separator above *within values*,
+# so structure cannot be forged. See #1429 for the field-forgery bug that came
+# from applying this table to rendered JSON.
 #
 # Backslash is escaped FIRST (see ``sanitize_log_record``) so the encoding is
 # unambiguous and reversible: a real newline becomes a backslash-u-000a escape,
@@ -33,6 +47,7 @@ from pathlib import Path
 # and the original text can be recovered by reversing the table.
 _UNSAFE_LOG_CHARS = {
     ord("\\"): "\\\\",
+    ord("\x00"): "\\u0000",  # NUL — can truncate a record in a C-based log shipper
     ord("\n"): "\\u000a",
     ord("\r"): "\\u000d",
     ord("\v"): "\\u000b",  # VT / 0x0B
@@ -50,10 +65,13 @@ _UNSAFE_LOG_CHARS = {
 def sanitize_log_record(rendered: str) -> str:
     """Neutralize line/record separators in a fully-rendered log record.
 
-    Escapes CR/LF (and every other line separator, plus ESC) to JSON-valid
-    ``\\uXXXX`` sequences so attacker-controlled content cannot forge, corrupt,
-    or split downstream log lines — including JSON logs (CWE-117). Backslash is
-    escaped first, so the transform is unambiguous and reversible.
+    Escapes CR/LF (and every other line separator, plus ESC) to ``\\uXXXX``
+    sequences so attacker-controlled content cannot forge, corrupt, or split
+    downstream log lines (CWE-117). Backslash is escaped first, so the
+    transform is unambiguous and reversible.
+
+    This is for **line-oriented** records. It does not, and cannot, make a
+    rendered JSON record safe — see the module comment and ``#1429``.
     """
     return rendered.translate(_UNSAFE_LOG_CHARS)
 
@@ -61,7 +79,17 @@ def sanitize_log_record(rendered: str) -> str:
 class StructuredFormatter(logging.Formatter):
     """
     Custom formatter for structured logging with enhanced metadata.
+
+    When ``json_output`` is set, records are assembled as a dict and
+    serialized with ``json.dumps`` instead of being interpolated into a JSON
+    template. That ordering is the security property: escaping happens per
+    *value*, before the structural quotes exist, so a ``"`` in a message
+    cannot terminate a field, add one, or shadow an earlier one.
     """
+
+    def __init__(self, *args: Any, json_output: bool = False, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.json_output = json_output
 
     def format(self, record: logging.LogRecord) -> str:
         """Format log record with structured data"""
@@ -79,6 +107,9 @@ class StructuredFormatter(logging.Formatter):
         if hasattr(record, 'request_id'):
             record.correlation_id = record.request_id
 
+        if self.json_output:
+            return self._format_json(record)
+
         # Format the base message
         formatted_message = super().format(record)
 
@@ -87,6 +118,48 @@ class StructuredFormatter(logging.Formatter):
         # `extra` fields cannot forge, corrupt, or split downstream log lines
         # even when inline sanitization was not applied at the call site.
         return sanitize_log_record(formatted_message)
+
+    def _format_json(self, record: logging.LogRecord) -> str:
+        """Build the record as a dict and serialize it with ``json.dumps``.
+
+        CWE-117: every attacker-reachable value (`message`, the `exception`
+        traceback, `stack_info`) enters as a dict value, so ``json.dumps``
+        escapes it as string content. A ``"`` becomes ``\\"`` inside the value
+        and cannot reach the structural layer.
+
+        ``ensure_ascii=True`` (the default, stated here because the guarantee
+        depends on it) escapes every separator ``_UNSAFE_LOG_CHARS`` covers:
+        the C0 controls as ``\\n``/``\\r``/``\\uXXXX``, and NEL, LS and PS as
+        non-ASCII ``\\uXXXX``. The record therefore stays a single physical
+        line, which is the same guarantee the line-oriented path provides.
+        """
+        payload: dict[str, Any] = {
+            "timestamp": self.formatTime(record, self.datefmt),
+            "service": record.service_name,
+            "version": record.version,
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.filename,
+            "line": record.lineno,
+            "function": record.funcName,
+            "process": record.process,
+        }
+
+        if record.exc_info:
+            payload["exception"] = self.formatException(record.exc_info)
+        if record.stack_info:
+            payload["stack_info"] = self.formatStack(record.stack_info)
+
+        # Optional enrichments, only when the call site supplied them.
+        for attribute in ("performance_ms", "correlation_id"):
+            if hasattr(record, attribute):
+                payload[attribute] = getattr(record, attribute)
+
+        # `default=str` keeps a non-serializable `extra` value from raising
+        # inside the logging path, where an exception would be swallowed and
+        # the record lost entirely.
+        return json.dumps(payload, ensure_ascii=True, default=str)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
@@ -125,6 +198,11 @@ def setup_logging(
 
     simple_format = "%(asctime)s - %(levelname)s - %(message)s"
 
+    # Retained as the documented field schema, NOT as the rendering path.
+    # `StructuredFormatter._format_json` builds these fields as a dict and
+    # serializes them; interpolating attacker content into this template is
+    # exactly the field-forgery bug fixed in #1429. Keep the two in step when
+    # adding a field.
     json_format = (
         '{"timestamp": "%(asctime)s", "service": "%(service_name)s", '
         '"version": "%(version)s", "level": "%(levelname)s", '
@@ -147,7 +225,11 @@ def setup_logging(
             "structured": {
                 "()": StructuredFormatter,
                 "format": log_format,
-                "datefmt": "%Y-%m-%d %H:%M:%S"
+                "datefmt": "%Y-%m-%d %H:%M:%S",
+                # Selects dict-then-`json.dumps` assembly over interpolation
+                # into `json_format`. Without this the JSON template is filled
+                # by printf and a `"` in a message forges fields (#1429).
+                "json_output": enable_json_logging
             },
             "simple": {
                 "format": simple_format,
