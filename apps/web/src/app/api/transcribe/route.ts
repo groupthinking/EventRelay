@@ -19,11 +19,29 @@ export const maxDuration = 120;
  * carry raw upstream provider text (account IDs, quota state, partial API keys)
  * — that text is logged server-side only.
  *
- * The `!result.success` branches keep `fetchTranscript`'s own message in `error`:
- * every one of those values is an app-authored literal, a numeric HTTP status, or
- * our own SSRF-guard message, so none is upstream text. Preserving them verbatim
- * keeps the human-facing string contract intact while `code` carries the stable
- * key for programmatic handling.
+ * The `!result.success` branches keep `fetchTranscript`'s own message in `error`.
+ * That holds only while every value it can return is a fixed, app-authored
+ * literal — verified as of this change, all seven are. Three were not, and were
+ * corrected at the source in `transcription-service.ts` rather than masked here:
+ *   - the caller-supplied `audioUrl`'s HTTP status, which made this route a
+ *     cross-origin probe,
+ *   - a message that varied on whether provider API keys were configured, which
+ *     disclosed server configuration, and
+ *   - the SSRF guard's rejection reason, which named which guard rule fired and
+ *     so leaked hostname-blocklist policy.
+ * All three are logged server-side instead.
+ *
+ * Keep that invariant when adding a strategy: anything interpolated into a
+ * `fetchTranscript` error reaches the client verbatim through the branches
+ * below. `${}` in an error value is the thing to look for.
+ *
+ * What this deliberately does NOT claim: the *choice among* those literals is
+ * still informative. `Rejected audioUrl` versus `Could not retrieve the audio
+ * file` tells a caller whether their host cleared the SSRF guard — i.e. whether
+ * it resolves to a public address. That residue is inherent to a guard that
+ * refuses some inputs and attempts others, it is far coarser than naming the
+ * rule, and this route is session-gated (`apps/web/src/lib/auth-paths.ts`), so
+ * it is accepted rather than papered over.
  *   - 400: Invalid input (missing URL, malformed JSON) — `input_required` / `invalid_json`
  *   - 429: Rate limited (implement backoff or upgrade service plan) — `rate_limited`
  *   - 500: Service unavailable (check API keys and billing) — `billing_not_configured`
@@ -94,7 +112,9 @@ export async function POST(request: Request) {
             success: false,
             error: result.error,
             code: 'billing_not_configured',
-            details: 'Configure billing in Google Cloud and OpenAI console',
+            // No `details` here: the remediation text named this deployment's
+            // cloud and model vendors, and the PR that sanitized this route
+            // stated `details` was gone from it. `code` is what clients branch on.
             transcript: '',
           },
           { status: 500 }
