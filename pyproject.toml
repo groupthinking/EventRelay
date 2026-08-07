@@ -97,6 +97,10 @@ dev = [
     "ipykernel>=6.25.0",
     "notebook>=7.0.0",
     "locust==2.46.0",
+    # Test-time only. TestGeneratedFastAPIBehaviour executes the FastAPI app
+    # that code_generator emits, and that app imports jwt. EventRelay itself
+    # never imports it, so it does not belong in the runtime dependencies.
+    "pyjwt>=2.10.1",
 ]
 docs = [
     "mkdocs>=1.5.0",
