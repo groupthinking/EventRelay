@@ -156,10 +156,37 @@ class StructuredFormatter(logging.Formatter):
             if hasattr(record, attribute):
                 payload[attribute] = getattr(record, attribute)
 
-        # `default=str` keeps a non-serializable `extra` value from raising
-        # inside the logging path, where an exception would be swallowed and
-        # the record lost entirely.
-        return json.dumps(payload, ensure_ascii=True, default=str)
+        # `default=str` handles values `json` cannot natively encode, but it is
+        # not sufficient on its own to keep a record alive (#1452):
+        #
+        #   * a circular container is rejected structurally, *before* `default`
+        #     is ever consulted, so `default=str` cannot see it;
+        #   * a value whose ``__str__`` raises propagates that exception out of
+        #     `default` itself.
+        #
+        # Either way `json.dumps` raises inside the logging path, `logging`
+        # swallows it via ``Handler.handleError``, and the record is dropped
+        # entirely. Only the optional enrichments can carry such a value, so the
+        # fallback keeps every scalar field — including `level`, which routing
+        # and alerting depend on — and reports what went wrong in-band.
+        try:
+            return json.dumps(payload, ensure_ascii=True, default=str)
+        except Exception as exc:  # noqa: BLE001 - never lose a record
+            safe = {
+                key: value
+                for key, value in payload.items()
+                if isinstance(value, (str, int, float, bool, type(None)))
+            }
+            # Rendering `exc` calls its own ``__str__``, which is exactly the
+            # thing that can raise here — so the description is built
+            # defensively. Asserting "never lose a record" is only worth doing
+            # if the fallback itself cannot become the thing that loses it.
+            try:
+                detail = f"{type(exc).__name__}: {exc}"
+            except Exception:  # noqa: BLE001 - the reporter must not raise
+                detail = type(exc).__name__
+            safe["serialization_error"] = detail
+            return json.dumps(safe, ensure_ascii=True, default=str)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""

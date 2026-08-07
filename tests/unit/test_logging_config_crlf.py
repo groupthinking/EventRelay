@@ -340,3 +340,105 @@ def test_setup_logging_wires_json_output_to_the_formatter(
     ]
     assert formatters, "expected StructuredFormatter on the root logger"
     assert all(f.json_output is enable_json for f in formatters)
+
+
+# ---------------------------------------------------------------------------
+# Record loss on the JSON path (#1452)
+#
+# `_format_json` passed `default=str` to `json.dumps` and claimed that kept a
+# non-serializable `extra` value from costing us the record. It does not:
+#
+#   * a circular container is rejected structurally, before `default` is ever
+#     consulted -- so `default=str` never sees it;
+#   * a value whose `__str__` raises propagates that exception out of `default`.
+#
+# Either way `json.dumps` raises inside the logging path, `logging` swallows it
+# via `Handler.handleError`, and the record is dropped. These tests assert the
+# record survives *and* that `level` stays authoritative, since a record that
+# survives with the wrong level is no better for routing or alerting.
+#
+# Reachable only through the optional enrichments (`correlation_id`,
+# `performance_ms`); every live call site passes a scalar today.
+# ---------------------------------------------------------------------------
+
+
+class _ExplodingStr:
+    """An `extra` value whose ``__str__`` raises -- walks through `default=str`."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def _circular() -> dict:
+    circular: dict = {}
+    circular["self"] = circular
+    return circular
+
+
+@pytest.mark.parametrize(
+    ("label", "poison"),
+    [
+        # `default` is never consulted -- json.dumps rejects the cycle first.
+        ("circular", _circular()),
+        # `default` IS consulted, and str() raises straight back out of it.
+        ("exploding-str", _ExplodingStr()),
+    ],
+)
+def test_unserializable_enrichment_does_not_lose_the_record(label, poison):
+    logger, buf = _make_json_logger(f"json-loss-{label}")
+    logger.info("payload survives", extra={"request_id": poison})
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert len(lines) == 1, f"the record was dropped entirely ({label})"
+
+    parsed = json.loads(lines[0])
+    # The fields routing and alerting depend on must survive intact.
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "payload survives"
+    assert parsed["logger"] == f"json-loss-{label}"
+    # ...and the failure is reported in-band rather than silently swallowed.
+    assert "serialization_error" in parsed
+
+
+@pytest.mark.parametrize("poison", [_circular(), _ExplodingStr()])
+def test_neighbouring_records_are_unaffected(poison):
+    # The real cost of the bug was a gap in the log, so pin the sequence: a
+    # poisoned record must not take healthy ones down with it.
+    logger, buf = _make_json_logger("json-loss-sequence")
+    logger.info("before")
+    logger.info("poisoned", extra={"request_id": poison})
+    logger.info("after")
+
+    messages = [
+        json.loads(line)["message"]
+        for line in buf.getvalue().splitlines()
+        if line.strip()
+    ]
+    assert messages == ["before", "poisoned", "after"]
+
+
+def test_serialization_fallback_stays_a_single_parseable_line():
+    # The fallback must not regain the properties the main path guarantees:
+    # one physical line, pure ASCII, and no forged field from the message.
+    logger, buf = _make_json_logger("json-loss-shape")
+    logger.warning(
+        'nasty\r\n", "level": "DEBUG', extra={"request_id": _ExplodingStr()}
+    )
+    out = buf.getvalue()
+
+    assert out.count("\n") == 1  # only the handler's terminator
+    assert out.isascii()
+    parsed = json.loads(out)
+    assert parsed["level"] == "WARNING"  # not the forged DEBUG
+    assert parsed["message"] == 'nasty\r\n", "level": "DEBUG'
+
+
+def test_serializable_enrichments_still_reach_the_json_record():
+    # Guard the fallback's blast radius: it drops non-scalar fields, so prove
+    # the normal path is untouched and scalar enrichments still appear.
+    logger, buf = _make_json_logger("json-loss-happy")
+    logger.info("fine", extra={"request_id": "req-123"})
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["correlation_id"] == "req-123"
+    assert "serialization_error" not in parsed
