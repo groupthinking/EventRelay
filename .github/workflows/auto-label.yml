@@ -1,7 +1,9 @@
 name: Auto Label
 on:
   pull_request:
-    types: [opened, reopened, synchronized]
+    # `synchronize` is the GitHub activity type for "new commits pushed to the PR".
+    # It is NOT `synchronized` — unknown types are silently ignored, not rejected.
+    types: [opened, reopened, synchronize]
   issues:
     types: [opened, edited]
 permissions:
@@ -18,10 +20,13 @@ jobs:
 
             // --- Label pull requests by changed file paths ---
             if (context.eventName === 'pull_request') {
-              const { data: files } = await github.rest.pulls.listFiles({
+              // Paginate: listFiles returns only the first 30 files by default, so a
+              // large PR would otherwise be labelled from an arbitrary prefix of its diff.
+              const files = await github.paginate(github.rest.pulls.listFiles, {
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                pull_number: context.payload.pull_request.number
+                pull_number: context.payload.pull_request.number,
+                per_page: 100
               });
 
               for (const file of files) {
