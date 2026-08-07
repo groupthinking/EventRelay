@@ -22,8 +22,18 @@ const BLOCKED_HOSTNAMES = new Set(['localhost', 'metadata.google.internal']);
  * IPv4 — 10/8, 172.16/12, 192.168/16 (RFC1918), 127/8 (loopback),
  *        169.254/16 (link-local), 100.64/10 (CGNAT, RFC6598),
  *        0/8 (unspecified), >=224 (multicast/reserved).
- * IPv6 — ::1, :: , fe80::/10 (link-local), fc00::/7 (unique-local), and
- *        IPv4-mapped/compatible in ANY spelling (compressed or expanded).
+ * IPv6 — ::1, :: , fe80::/10 (link-local), fc00::/7 (unique-local),
+ *        fec0::/10 (site-local), 100::/64 (discard), and every form that
+ *        encodes an IPv4 destination: IPv4-mapped/compatible in ANY spelling
+ *        (compressed, expanded, or dotted), IPv4-translated (::ffff:0:0:0/96),
+ *        NAT64 (64:ff9b::/96) and 6to4 (2002::/16) — each decoded and
+ *        re-checked against the IPv4 rules above.
+ *
+ * The embedded-IPv4 forms matter because they are syntactically public: a
+ * NAT64- or 6to4-capable egress path translates them to the address they
+ * carry, so `64:ff9b::a9fe:a9fe` reaches 169.254.169.254. Anything not matched
+ * here is treated as genuine public IPv6, so a new transition prefix must be
+ * added explicitly rather than inheriting a safe default.
  */
 function ipIsPrivate(ip: string): boolean {
   if (net.isIPv4(ip)) {
@@ -46,13 +56,40 @@ function ipIsPrivate(ip: string): boolean {
     if (h.slice(0, 7).every((x) => x === 0) && h[7] === 1) return true; // ::1 loopback
     if ((h[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
     if ((h[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique-local
+    if ((h[0] & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
+    if (h[0] === 0x0100 && h[1] === 0 && h[2] === 0 && h[3] === 0) return true; // 100::/64 discard
+
+    // The low 32 bits as dotted IPv4, for the transition forms that carry one.
+    const lowV4 = () => `${h[6] >> 8}.${h[6] & 0xff}.${h[7] >> 8}.${h[7] & 0xff}`;
+
     // IPv4-mapped (::ffff:0:0/96) or compatible (::/96) in ANY spelling
     // (compressed, expanded, or dotted) — decode the low 32 bits and re-check.
     if (
       h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0 &&
       (h[5] === 0xffff || h[5] === 0)
     ) {
-      return ipIsPrivate(`${h[6] >> 8}.${h[6] & 0xff}.${h[7] >> 8}.${h[7] & 0xff}`);
+      return ipIsPrivate(lowV4());
+    }
+    // IPv4-translated, ::ffff:0:0:0/96 (RFC 6052) — note h[4], not h[5], holds
+    // the 0xffff, so the mapped/compatible test above does not cover it.
+    if (h[0] === 0 && h[1] === 0 && h[2] === 0 && h[3] === 0 && h[4] === 0xffff && h[5] === 0) {
+      return ipIsPrivate(lowV4());
+    }
+    // 64:ff9b::/96 — the well-known NAT64 prefix. A NAT64-capable egress path
+    // translates these to the embedded IPv4, so `64:ff9b::a9fe:a9fe` reaches
+    // 169.254.169.254. Match the exact /96 (h[2]..h[5] zero) before decoding:
+    // testing only h[0]/h[1] would be 64:ff9b::/32, a wider claim than the low
+    // 32 bits being an IPv4 address. Anything else in that /32 — e.g. the
+    // RFC 8215 local-use 64:ff9b:1::/48 — is local-use by definition, so block
+    // it outright rather than guess where its embedded IPv4 sits.
+    if (h[0] === 0x0064 && h[1] === 0xff9b) {
+      if (h[2] === 0 && h[3] === 0 && h[4] === 0 && h[5] === 0) return ipIsPrivate(lowV4());
+      return true;
+    }
+    // 2002::/16 — 6to4, which carries its IPv4 in the next 32 bits (h[1], h[2])
+    // rather than the low ones.
+    if (h[0] === 0x2002) {
+      return ipIsPrivate(`${h[1] >> 8}.${h[1] & 0xff}.${h[2] >> 8}.${h[2] & 0xff}`);
     }
     return false; // genuine public IPv6
   }

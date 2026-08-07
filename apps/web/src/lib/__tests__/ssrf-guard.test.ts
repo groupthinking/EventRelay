@@ -192,6 +192,51 @@ describe('assertPublicHttpUrl — the guard still guards', () => {
     expect(lookup).not.toHaveBeenCalled();
   });
 
+  it('rejects public IPv6 literals that encode a private IPv4 destination', async () => {
+    // Routing IPv6 literals into `ipIsPrivate` (the bracket fix above) exposed
+    // that its IPv6 branch ends in `return false` for anything it does not
+    // recognise. The transition prefixes below are *syntactically* public but
+    // carry an IPv4 destination in their bits, so a NAT64/6to4-capable egress
+    // path resolves them to the embedded address — 169.254.169.254 in each of
+    // these cases. Flagged by CodeRabbit on #1486.
+    //
+    // 0xa9fe = 169.254, so a9fe:a9fe is 169.254.169.254.
+    for (const url of [
+      'http://[64:ff9b::a9fe:a9fe]/', // well-known NAT64, /96
+      'http://[64:ff9b:1::1]/', // RFC 8215 local-use NAT64
+      'http://[2002:a9fe:a9fe::]/', // 6to4
+      'http://[::ffff:0:a9fe:a9fe]/', // IPv4-translated, ::ffff:0:0:0/96
+      'http://[fec0::1]/', // site-local
+      'http://[100::1]/', // discard-only
+      'http://[2002:0a00:0005::]/', // 6to4 carrying 10.0.0.5
+      'http://[64:ff9b::7f00:1]/', // NAT64 carrying 127.0.0.1
+    ]) {
+      const err = await rejectionOf(url);
+      expect(err.message, `${url} must be rejected`).toBe('Blocked private IP literal');
+    }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('still allows transition-prefix literals that encode a public IPv4', async () => {
+    // The controls. Without these, the test above would pass just as well if
+    // the guard blocked every NAT64 and 6to4 address outright — which would be
+    // over-blocking dressed up as a fix. 0x5db8d822 is 93.184.216.34.
+    for (const url of ['http://[64:ff9b::5db8:d822]/', 'http://[2002:5db8:d822::]/']) {
+      const parsed = await assertPublicHttpUrl(url);
+      expect(parsed.protocol).toBe('http:');
+    }
+    expect(lookup).not.toHaveBeenCalled();
+  });
+
+  it('applies the same transition-prefix checks to resolved addresses', async () => {
+    // `ipIsPrivate` guards both paths, so a hostname that *resolves* to a NAT64
+    // address must be refused too — otherwise the literal fix just moves the
+    // bypass one DNS lookup away.
+    lookup.mockResolvedValueOnce([{ address: '64:ff9b::a9fe:a9fe', family: 6 }]);
+    await rejectionOf('https://nat64.example.com/');
+    expect(loggedText()).toContain('64:ff9b::a9fe:a9fe');
+  });
+
   it('keeps the IP-literal rejection distinct from the DNS one, by design', async () => {
     // #1381 deliberately did NOT merge this branch into the DNS message: the
     // caller supplied the address, so naming it private reveals nothing they
