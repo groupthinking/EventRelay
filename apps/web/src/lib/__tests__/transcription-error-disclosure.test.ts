@@ -86,10 +86,10 @@ describe('fetchTranscript error disclosure', () => {
     );
 
     delete process.env.OPENAI_API_KEY;
-    const withoutKeys = await fetchTranscript({ url: 'https://youtu.be/dQw4w9WgXcQ' });
+    const withoutKeys = await fetchTranscript({ url: 'https://youtu.be/auJzb1D-fag' });
 
     process.env.OPENAI_API_KEY = 'sk-test-key';
-    const withKeys = await fetchTranscript({ url: 'https://youtu.be/dQw4w9WgXcQ' });
+    const withKeys = await fetchTranscript({ url: 'https://youtu.be/auJzb1D-fag' });
 
     expect(withoutKeys.success).toBe(false);
     expect(withKeys.success).toBe(false);
