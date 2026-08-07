@@ -1,11 +1,15 @@
 /**
- * Durable video → actions pipeline (Workflow DevKit).
+ * Durable video → actions pipeline (Workflow DevKit) — Product v1.
  *
  * Orchestrates existing EventRelay capabilities as retryable steps so a long
  * analysis does not die with a single serverless request timeout.
  *
  * Trigger: POST /api/workflows/video-to-actions  { url, videoTitle? }
+ * Status:  GET  /api/workflows/video-to-actions/:runId
  * Inspect: npx workflow web  (from apps/web)
+ *
+ * Steps call server libs directly (no self-HTTP loopback) so Vercel production
+ * does not depend on NEXTAUTH_URL / internal tokens for step execution.
  */
 
 import { FatalError } from 'workflow';
@@ -28,9 +32,14 @@ export async function videoToActionsWorkflow(
 ): Promise<VideoToActionsResult> {
   'use workflow';
 
-  console.log('[video-to-actions] start', { url: input.url });
+  const url = (input.url || '').trim();
+  if (!url || !/^https?:\/\//i.test(url)) {
+    throw new FatalError('url must be an http(s) URL');
+  }
 
-  const transcript = await transcribeStep(input.url);
+  console.log('[video-to-actions] start', { url });
+
+  const transcript = await transcribeStep(url);
   if (!transcript || transcript.trim().length < 40) {
     throw new FatalError('Transcript too short or unavailable for action extraction');
   }
@@ -43,7 +52,7 @@ export async function videoToActionsWorkflow(
   });
 
   return {
-    url: input.url,
+    url,
     transcriptChars: transcript.length,
     actionCount: agent.actions.length,
     provider: agent.provider,
@@ -60,35 +69,23 @@ async function transcribeStep(url: string): Promise<string> {
 
   console.log('[video-to-actions] step:transcribe', url);
 
-  // Prefer server-side transcription helper when available; fall back to local API.
-  try {
-    const { fetchTranscript } = await import('@/lib/transcription-service');
-    const result = await fetchTranscript({ url });
-    if (result?.transcript && typeof result.transcript === 'string') {
-      return result.transcript;
-    }
-  } catch (err) {
-    console.warn('[video-to-actions] transcription-service failed', err);
+  const { fetchTranscript } = await import('@/lib/transcription-service');
+  const result = await fetchTranscript({ url });
+
+  if (result?.success && result.transcript && typeof result.transcript === 'string') {
+    return result.transcript;
   }
 
-  const base =
-    process.env.NEXTAUTH_URL ||
-    process.env.VERCEL_URL?.replace(/^/, 'https://') ||
-    'http://127.0.0.1:3000';
-  const res = await fetch(`${base.replace(/\/$/, '')}/api/transcribe`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url }),
-  });
-  const body = (await res.json().catch(() => ({}))) as {
-    success?: boolean;
-    transcript?: string;
-    error?: string;
-  };
-  if (!res.ok || !body.transcript) {
-    throw new Error(body.error || `Transcribe failed (${res.status})`);
+  // Retryable when the service is flaky; Fatal when clearly unusable input/config.
+  const errMsg =
+    (result && typeof result.error === 'string' && result.error) ||
+    'Transcription returned no transcript';
+  if (
+    /invalid|required|rejected|too short|billing|not configured|No AI API/i.test(errMsg)
+  ) {
+    throw new FatalError(errMsg);
   }
-  return body.transcript;
+  throw new Error(errMsg);
 }
 
 async function runActionsStep(
@@ -114,9 +111,12 @@ async function runActionsStep(
       })),
     };
   } catch (err) {
-    // Surface as retryable unless it's clearly a config/client error.
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes('No AI API key') || msg.includes('too short')) {
+    if (
+      msg.includes('No AI API key') ||
+      msg.includes('too short') ||
+      /billing|not configured/i.test(msg)
+    ) {
       throw new FatalError(msg);
     }
     throw err;

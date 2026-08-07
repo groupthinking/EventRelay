@@ -31,6 +31,11 @@ import {
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
 import { kickoffStudioDeploy, pollStudioJob } from '@/lib/studio-deploy';
+import {
+  pollVideoToActions,
+  startVideoToActions,
+  type VideoToActionsResult,
+} from '@/lib/studio-workflow';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
@@ -373,6 +378,10 @@ export default function VideoWorkflowStudio() {
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const [deployLiveUrl, setDeployLiveUrl] = useState<string | null>(null);
   const [deployRepo, setDeployRepo] = useState<string | null>(null);
+  /** Durable WDK video→actions (Product v1) — separate from FastAPI pipeline jobs. */
+  const [actionsBusy, setActionsBusy] = useState(false);
+  const [workflowRunId, setWorkflowRunId] = useState<string | null>(null);
+  const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -495,6 +504,75 @@ export default function VideoWorkflowStudio() {
           : 'Planning draft only. Studio does not run the full agent pipeline; use Dashboard for live results.',
       );
     }, unsafe ? 250 : 100);
+  };
+
+  /**
+   * Act on findings — durable Workflow DevKit path (video → transcript → action agent).
+   * Survives reloads better than a single long request; poll by runId.
+   */
+  const handleActOnFindings = async () => {
+    if (actionsBusy) return;
+    const currentVideoUrl = videoUrlRef.current || videoUrl;
+    const currentVideoId = getYouTubeId(currentVideoUrl);
+    if (!currentVideoId) {
+      setActionMessage('Add a valid YouTube URL before acting on findings.');
+      return;
+    }
+
+    setActionsBusy(true);
+    setWorkflowActions(null);
+    setActionMessage('Starting durable video→actions workflow…');
+
+    try {
+      const started = await startVideoToActions({
+        url: currentVideoUrl,
+        videoTitle: selectedOutcomeLabel,
+      });
+      if (!started.ok || !started.runId) {
+        setActionMessage(
+          started.error
+            ? `Could not start durable workflow: ${started.error}`
+            : 'Could not start durable workflow. Check Workflow DevKit install and withWorkflow config.',
+        );
+        return;
+      }
+
+      setWorkflowRunId(started.runId);
+      setActionMessage(`Workflow ${started.runId} running — polling transcript + actions…`);
+
+      const polled = await pollVideoToActions(started.runId, {
+        attempts: 24,
+        delayMs: 2000,
+      });
+
+      if (polled.runStatus === 'completed' && polled.result) {
+        setWorkflowActions(polled.result);
+        const n = polled.result.actionCount;
+        setActionMessage(
+          n > 0
+            ? `Acted on findings: ${n} action${n === 1 ? '' : 's'} via ${polled.result.provider || 'agent'} (run ${started.runId}).`
+            : `Workflow finished with no tool actions (run ${started.runId}). Transcript ${polled.result.transcriptChars} chars.`,
+        );
+        return;
+      }
+
+      if (polled.runStatus === 'failed' || polled.runStatus === 'cancelled') {
+        setActionMessage(
+          `Workflow ${started.runId} ${polled.runStatus}${polled.error ? `: ${polled.error}` : ''}. Try Dashboard live analysis or re-run.`,
+        );
+        return;
+      }
+
+      setActionMessage(
+        `Workflow ${started.runId} still ${polled.runStatus || 'running'}. Re-check later or open Dashboard for SSE pipeline.`,
+      );
+    } catch (err) {
+      setActionMessage(
+        `Act on findings failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setActionsBusy(false);
+    }
   };
 
   const handleDeploy = async () => {
@@ -660,18 +738,63 @@ export default function VideoWorkflowStudio() {
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
               {' '}
-              <span className="font-semibold text-slate-950">Dashboard</span> runs the live agent pipeline (transcript, actions, agents).
+              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video→transcript→actions workflow.
+              {' '}
+              <span className="font-semibold text-slate-950">Dashboard</span> runs the live SSE agent pipeline.
               {' '}
               <span className="font-semibold text-slate-950">Prototype</span> is a design walkthrough — not connected to production APIs.
             </div>
-            <Link
-              href={dashboardHandoffUrl}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-            >
-              Open live analysis
-              <ChevronRight className="h-4 w-4" />
-            </Link>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleActOnFindings()}
+                disabled={actionsBusy || !hasVideo}
+                aria-busy={actionsBusy || undefined}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Layers className="h-4 w-4" aria-hidden="true" />
+                {actionsBusy ? 'Acting…' : 'Act on findings'}
+              </button>
+              <Link
+                href={dashboardHandoffUrl}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                Open live analysis
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
+          {workflowRunId ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-slate-500">
+                Durable run{' '}
+                <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">
+                  {workflowRunId}
+                </code>
+                {workflowActions
+                  ? ` · ${workflowActions.actionCount} action(s) · ${workflowActions.transcriptChars} transcript chars`
+                  : actionsBusy
+                    ? ' · running…'
+                    : null}
+              </p>
+              {workflowActions && workflowActions.actions.length > 0 ? (
+                <ul className="grid gap-1.5 sm:grid-cols-2">
+                  {workflowActions.actions.slice(0, 8).map((a, i) => (
+                    <li
+                      key={`${a.tool}-${i}`}
+                      className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-slate-700"
+                    >
+                      <span className="font-semibold text-violet-900">{a.tool}</span>
+                      <span className="text-slate-400"> · {a.status}</span>
+                      {a.result ? (
+                        <p className="mt-0.5 line-clamp-2 text-slate-600">{a.result}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <section className="space-y-5">

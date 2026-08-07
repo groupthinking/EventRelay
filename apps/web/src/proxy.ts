@@ -38,6 +38,7 @@ const AI_ROUTE_PREFIXES = [
   '/api/training',
   '/api/transcribe',
   '/api/video',
+  '/api/workflows',
 ];
 
 // Login gating (activate-when-configured) + server-to-server bypass.
