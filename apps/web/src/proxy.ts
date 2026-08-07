@@ -38,6 +38,7 @@ const AI_ROUTE_PREFIXES = [
   '/api/training',
   '/api/transcribe',
   '/api/video',
+  '/api/workflows',
 ];
 
 // Durable-workflow routes are a start (POST /api/workflows/...) plus a status
