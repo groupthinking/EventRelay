@@ -82,7 +82,42 @@ The real contexts, as observed on live pull requests:
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
 `lint-frontend`, `build`, `test`, `CodeQL`, `gitleaks (working tree)`,
-`dependency-review`, `PR Governance`, `Canonical issue and evidence`.
+`dependency-review`, `PR Governance`, `Canonical issue and evidence`,
+`Security Scan - python`, `Security Scan - javascript`, `bandit`,
+`python-safety`, `npm-audit`, `trivy`.
+
+All six were verified to report `success` on a documentation-only pull request
+(#1408 head `27b2ecf`, and again on #1410 head `7af6028`), so none of them can
+strand a change permanently pending. v1 listed `Security` among its required
+six, and dropping every security scan out of the required set would be a
+weakening introduced by the rewrite that set out to make this gate precise.
+
+> **What requiring these does and does not buy you.** Four of the six cannot
+> fail on findings, by construction, in `.github/workflows/security.yml`:
+>
+> | Job | Why it always reports `success` |
+> | --- | --- |
+> | `npm-audit` | `continue-on-error: true` |
+> | `python-safety` | `\|\| true` **and** `continue-on-error: true` |
+> | `bandit` | `\|\| true` |
+> | `trivy` | `exit-code: '0'` on both invocations |
+>
+> `Security Scan - python` and `Security Scan - javascript` are CodeQL matrix
+> jobs; they report that analysis completed and upload alerts to the Security
+> tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
+> not something the workflow decides.
+>
+> So gate 2 requires these checks to **run and complete** — which catches a scan
+> that crashed, timed out, or was silently dropped from the pipeline. It is
+> **not** vulnerability enforcement, and this policy should not be read as
+> claiming it is. Making findings actually block is a change to
+> `security.yml`, with its own diff and its own blast radius; see *What is
+> deliberately not here*.
+
+> **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
+> `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads
+> above. Selecting the capitalised one requires a check that never passes —
+> precisely the trap the confirmation rule below exists to catch.
 
 **Conditionally required — never require these unconditionally:**
 
@@ -91,7 +126,6 @@ Required for every pull request: `validate`, `guards`, `lint-python`,
   pending*, which blocks harder than failing. Required only when the diff
   touches `src/**`, `apps/**`, or `tests/**`.
 - `E2E Pipeline Tests` — passing or repository-skipped.
-- `Security Scan - javascript` — only when the diff touches JS/TS.
 
 Before adding any check to branch protection, confirm the exact string appears
 in GitHub's required-checks picker, and confirm it reports on a
@@ -161,8 +195,10 @@ was written to remove.
 A check red on everything has zero signal and actively hides real failures.
 `agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
-ignore it. `.github/workflows/agent-completion-enforcement.yml` even documents
-this failure mode in its own comments while its sibling did exactly that.
+ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
+this failure mode in its own comments while its sibling did exactly that. Both
+have since been removed as unsatisfiable; the rule above is what should have
+caught them first.
 
 Demotion is not forgiveness. It is refusing to let a broken gate keep
 laundering itself as enforcement.
@@ -178,6 +214,16 @@ laundering itself as enforcement.
 - **No evidence ledger requirement.** v1 mandated a receipt comment on #898 for
   every gate evaluation. Nothing consumed those receipts. Git history and
   check runs are the ledger.
+- **No change to what the security scans enforce.** Gate 2 requires the six
+  security checks to run and complete; four of them cannot fail on findings, as
+  documented there. Turning `npm-audit`, `python-safety`, `bandit`, and `trivy`
+  into blocking gates means removing their `continue-on-error` / `|| true` /
+  `exit-code: '0'` escapes in `security.yml`, which will fail pull requests on
+  the existing backlog of findings the moment it lands. That is a deliberate
+  decision about tolerance for known vulnerabilities, not a documentation fix,
+  so it is left to its own pull request. Requiring the checks first is still
+  worth doing: it makes a scan that crashes or quietly disappears from the
+  pipeline visible, which is the failure this policy can actually close.
 
 ## Review clock
 
