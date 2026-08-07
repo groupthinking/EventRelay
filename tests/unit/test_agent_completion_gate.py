@@ -3635,6 +3635,118 @@ for (const [name, pull, issue, expected] of rows) {
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
 
+    def test_snapshot_and_arming_predicates_agree_on_placeholders(self):
+        """The snapshot job and the gate must accept exactly the same fields.
+
+        `snapshot-agent-task-intent` decides whether to write an intent
+        snapshot; `agentTaskApplicable` decides whether to demand one. A field
+        either predicate reads differently opens a hole in one direction or the
+        other.
+
+        Issue forms render an unfilled field as ``_No response_``, and authors
+        routinely wrap values in backticks, so an unfilled field inside a code
+        span arrives as ``` `_No response_` ```. The gate's ``declared`` strips
+        outer backticks before the placeholder test; the snapshot job's
+        ``hasResponse`` originally did not, so it read that as a real answer.
+        The snapshot was written while the gate stayed ``not_applicable`` --
+        a malformed dispatch skipping the check entirely, the mirror image of
+        the permanent block fixed alongside it.
+        """
+
+        workflow = self._workflow()
+        has_response = _javascript_functions(workflow, "function hasResponse(")
+        self.assertEqual(len(has_response), 1)
+        applicable = _javascript_functions(
+            workflow,
+            "function agentTaskApplicable(",
+        )
+        self.assertEqual(len(applicable), 2)
+
+        assertions = r"""
+function declared(value) {
+  const v = String(value || '').replace(/^\x60|\x60$/g, '').trim();
+  return Boolean(v) && v !== '_No response_';
+}
+const rows = [
+  ['`_No response_`', false],
+  ['``', false],
+  ['_No response_', false],
+  ['', false],
+  ['   ', false],
+  ['`run-42`', true],
+  ['run-42', true]
+];
+for (const [value, expected] of rows) {
+  if (hasResponse(value) !== expected) {
+    throw new Error(
+      `snapshot hasResponse(${JSON.stringify(value)}) === ` +
+      `${hasResponse(value)}, expected ${expected}`
+    );
+  }
+  if (declared(value) !== hasResponse(value)) {
+    throw new Error(
+      `predicates disagree on ${JSON.stringify(value)}: ` +
+      `snapshot=${hasResponse(value)} gate=${declared(value)}`
+    );
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", has_response[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        # ...and end to end: a backticked placeholder must not arm the gate,
+        # matching the snapshot job's refusal to write for the same issue.
+        gate_assertions = r"""
+const FIELDS = [
+  ['### Agent Login', '`x[bot]`'],
+  ['### Agent Run ID', '`r-1`'],
+  ['### Objective', 'Do it.'],
+  ['### Acceptance Criteria', '- Done.'],
+  ['### Declared File Scope', '`src/a.py`'],
+  ['### Pre-dispatch Confirmation', '- [x] yes']
+];
+function body(overrides) {
+  return FIELDS.map(([heading, value]) =>
+    heading + '\n\n' + (overrides[heading] || value)
+  ).join('\n\n');
+}
+const pull = {
+  user: {login: 'someone'},
+  head: {ref: 'claude/x'},
+  labels: [],
+  body: ''
+};
+const issue = text => ({
+  number: 7, labels: [{name: 'agent-task'}], body: text
+});
+const rows = [
+  ['complete', body({}), true],
+  ['backticked placeholder login',
+    body({'### Agent Login': '`_No response_`'}), false],
+  ['empty backticks run id',
+    body({'### Agent Run ID': '``'}), false]
+];
+for (const [name, text, expected] of rows) {
+  const actual = agentTaskApplicable(pull, issue(text));
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        for copy in applicable:
+            completed = subprocess.run(
+                ["node", "-e", copy + gate_assertions],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+
     def test_agent_applicability_copies_stay_identical(self):
         """The scheduled sweep and the per-pull-request collector must agree.
 

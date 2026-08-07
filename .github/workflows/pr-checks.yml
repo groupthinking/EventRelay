@@ -196,8 +196,18 @@ jobs:
               }
               return output.join('\n').trim();
             }
+            // Strips outer backticks before the placeholder test, matching
+            // `declared` in `agentTaskApplicable`. Issue forms render an
+            // unfilled field as `_No response_`, and authors routinely wrap
+            // values in backticks, so a field left unfilled inside a code span
+            // arrives as '`_No response_`'. Without the strip that reads as a
+            // real answer here while the gate's predicate rejects it -- the
+            // snapshot would be written but the gate would never arm, letting
+            // a malformed dispatch skip the check entirely. Both predicates
+            // must agree on every input.
             function hasResponse(value) {
-              const response = String(value || '').trim();
+              const response = String(value || '')
+                .replace(/^\x60|\x60$/g, '').trim();
               return Boolean(response && response !== '_No response_');
             }
             function checkboxChecked(value) {
