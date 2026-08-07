@@ -35,6 +35,9 @@ def test_dependabot_workflow_uses_safe_triggers_and_permissions() -> None:
         "contents": "write",
         "pull-requests": "write",
         "statuses": "read",
+        # Without `checks: read` the merge job's checks.listForRef call 403s and
+        # the readiness gate below can never be evaluated.
+        "checks": "read",
     }
     # The auto-merge feature flag is controlled by a repository variable
     # (vars context), which — unlike env — is available in job-level `if`
@@ -93,6 +96,59 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
         and "semver-major" in step.get("with", {}).get("script", "")
         for step in merge_steps
     )
+
+
+def _merge_script() -> str:
+    merge_steps = _load_workflow()["jobs"]["merge"]["steps"]
+    scripts = [step.get("with", {}).get("script", "") for step in merge_steps]
+    script = "\n".join(scripts)
+    assert script.strip(), "Merge job should run a github-script step"
+    return script
+
+
+def test_merge_job_does_not_read_update_type_from_the_pull_request_resource() -> None:
+    """The pull request REST resource carries no dependency metadata.
+
+    `GET /repos/{owner}/{repo}/pulls/{pull_number}` returns no `dependency`,
+    `update_type` or `dependency_update_type` field, and there is no `dorian`
+    preview that adds one. Reading the update type from there yielded
+    `undefined` on every pull request, so the job hit its
+    "Could not determine update type" branch and skipped unconditionally —
+    it could never merge anything.
+    """
+    script = _merge_script()
+
+    assert "dorian" not in script
+    assert "mediaType" not in script
+    assert "previews" not in script
+    assert "dependency?.update_type" not in script
+    assert "dependency_update_type" not in script
+    # The update type must come from Dependabot's own commit-message block.
+    assert "listCommits" in script
+    assert "update-type" in script
+
+
+def test_merge_job_gates_on_check_runs_not_only_commit_statuses() -> None:
+    """Commit statuses are not evidence that CI passed on this repo.
+
+    Every check in MERGE_POLICY.md gate 2 (`build`, `test`, `lint-python`,
+    `CodeQL`, …) is a check run. The only *statuses* are Vercel's and
+    CodeRabbit's, so `getCombinedStatusForRef` reports `success` while CI is
+    still queued — observed live on #1433, whose combined status was green at
+    20:48 UTC while `build`/`test`/`lint-*` were queued. Gating on the combined
+    status alone would merge a Dependabot PR with unfinished or failing CI.
+    """
+    script = _merge_script()
+
+    assert "checks.listForRef" in script, (
+        "Merge readiness must consult the checks API, not just commit statuses"
+    )
+    # Unfinished checks must block, not be read as passing.
+    assert "status !== 'completed'" in script
+    # This workflow's own jobs are in flight while the gate runs; counting them
+    # would deadlock the check against itself.
+    assert "ownJobNames" in script
+    assert "'approve'" in script and "'merge'" in script
 
 
 def test_dependabot_ignores_eslint_v10() -> None:

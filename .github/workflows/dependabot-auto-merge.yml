@@ -15,6 +15,9 @@ permissions:
   contents: write
   pull-requests: write
   statuses: read
+  # Every gate in MERGE_POLICY.md is a check run, not a commit status, so the
+  # merge job has to read the checks API to see whether CI actually passed.
+  checks: read
 
 jobs:
   approve:
@@ -116,30 +119,100 @@ jobs:
                 continue;
               }
 
-              const metadata = await github.request(
-                'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: pullRequest.number,
-                  mediaType: { previews: ['dorian'] },
-                }
+              // Dependabot records what it did in an `updated-dependencies`
+              // block in its own commit message; that block is the only
+              // first-party source for the update type available here. The
+              // pull request REST resource has no `dependency`/`update_type`
+              // field, and no media-type preview adds one, so reading it from
+              // there always yielded undefined and this job skipped every PR
+              // it was ever handed.
+              const commits = await github.paginate(github.rest.pulls.listCommits, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: pullRequest.number,
+                per_page: 100,
+              });
+
+              const dependabotCommit = commits.find((commit) =>
+                /^\s*-\s*dependency-name:/m.test(commit.commit.message)
               );
 
-              const updateType =
-                metadata.data?.dependency?.update_type ??
-                metadata.data?.update_type ??
-                metadata.data?.dependency_update_type;
-
-              if (!updateType) {
+              if (!dependabotCommit) {
                 core.info(
-                  `Could not determine update type for PR #${pullRequest.number}; skipping.`
+                  `No Dependabot metadata block on PR #${pullRequest.number}; skipping.`
                 );
                 continue;
               }
 
-              if (updateType.includes('semver-major')) {
+              const message = dependabotCommit.commit.message;
+              const explicitUpdateType = message.match(/^\s*update-type:\s*(\S+)/m);
+
+              let isMajor;
+              if (explicitUpdateType) {
+                isMajor = explicitUpdateType[1].includes('semver-major');
+              } else {
+                // Dependabot omits `update-type` for some indirect bumps (e.g.
+                // #1433). Fall back to the major components in the title, but
+                // only when the block names exactly one dependency — a grouped
+                // update must never be classified from a single title.
+                const names = message.match(/^\s*-\s*dependency-name:/gm) ?? [];
+                const bump = pullRequest.title.match(
+                  /\bfrom\s+v?(\d+)\.\S*\s+to\s+v?(\d+)\./i
+                );
+
+                if (names.length !== 1 || !bump) {
+                  core.info(
+                    `Could not determine update type for PR #${pullRequest.number}; skipping.`
+                  );
+                  continue;
+                }
+
+                isMajor = bump[1] !== bump[2];
+              }
+
+              if (isMajor) {
                 core.info(`Skipping major update PR #${pullRequest.number}.`);
+                continue;
+              }
+
+              // Commit statuses alone are not evidence that CI passed: on this
+              // repo the only statuses are Vercel's and CodeRabbit's, so the
+              // combined state reads `success` while `build`, `test` and
+              // `lint-*` are still queued. Every check named in MERGE_POLICY.md
+              // gate 2 is a check run, so read those instead.
+              const checkRuns = await github.paginate(github.rest.checks.listForRef, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pullRequest.head.sha,
+                per_page: 100,
+              });
+
+              // This workflow's own jobs are still in flight while this step
+              // runs; counting them would deadlock the gate against itself.
+              const ownJobNames = new Set(['approve', 'merge']);
+              // `skipped`/`neutral` are how GitHub reports the conditionally
+              // required jobs of gate 2 (E2E, coverage on a docs-only diff).
+              // Gate 2 treats those as satisfied, not as blocking.
+              const passingConclusions = new Set(['success', 'skipped', 'neutral']);
+              const relevant = checkRuns.filter((run) => !ownJobNames.has(run.name));
+
+              const pending = relevant.filter((run) => run.status !== 'completed');
+              if (pending.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; ${pending.length} check(s) still running: ` +
+                    `${pending.map((run) => run.name).join(', ')}.`
+                );
+                continue;
+              }
+
+              const failed = relevant.filter(
+                (run) => !passingConclusions.has(run.conclusion)
+              );
+              if (failed.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; failing check(s): ` +
+                    `${failed.map((run) => `${run.name} (${run.conclusion})`).join(', ')}.`
+                );
                 continue;
               }
 
@@ -149,7 +222,9 @@ jobs:
                 ref: pullRequest.head.sha,
               });
 
-              if (combined.state !== 'success') {
+              // `pending` with zero statuses just means nothing posts statuses
+              // on this ref, which is not a failure.
+              if (combined.total_count > 0 && combined.state !== 'success') {
                 core.info(
                   `Skipping PR #${pullRequest.number} because combined status is ${combined.state}.`
                 );
