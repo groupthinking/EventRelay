@@ -472,6 +472,34 @@ def test_non_finite_enrichment_stays_strictly_valid_json(value):
     assert parsed["serialization_error"].startswith("ValueError:")
 
 
+def test_oversized_int_enrichment_does_not_cost_the_record():
+    # Since 3.11 (CVE-2020-10735) CPython caps int->str at
+    # `sys.get_int_max_str_digits()` digits. `json` stringifies ints itself, and
+    # the fallback dump has no `default` to catch it, so an over-cap int passes
+    # a type-only filter and then raises *inside the fallback* -- losing the
+    # record for the third time. Credit: found by a sibling review on #1497.
+    records = _emit_three("json-oversized-int", 10**5000)
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    assert "correlation_id" not in poisoned
+    assert poisoned["serialization_error"].startswith("ValueError:")
+
+
+def test_ordinary_large_int_enrichment_is_still_retained():
+    # The cap is 4300 digits; an int well under it must keep its value, so the
+    # guard cannot quietly become "drop anything big".
+    logger, buf = _make_json_logger("json-ordinary-int")
+    value = 2**62
+    logger.info("healthy", extra={"request_id": value})
+
+    parsed = _strict_loads(buf.getvalue().strip())
+    assert parsed["correlation_id"] == value
+    assert "serialization_error" not in parsed
+
+
 def test_finite_float_enrichment_is_still_retained():
     # The non-finite guard must not cost well-behaved floats their value.
     logger, buf = _make_json_logger("json-finite-float")

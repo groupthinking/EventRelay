@@ -92,10 +92,25 @@ def _is_json_safe_scalar(value: object) -> bool:
     Non-finite floats are excluded: ``json`` renders them as the JavaScript
     literals ``NaN``/``Infinity``, which are not valid JSON, so a strict
     downstream parser rejects the whole record.
+
+    Oversized ints are excluded: since 3.11 (CVE-2020-10735) CPython caps
+    ``int``->``str`` conversion at ``sys.get_int_max_str_digits()`` digits and
+    raises ``ValueError`` past it. ``json`` stringifies ints itself and has no
+    ``default`` to fall back to on this path, so an over-cap ``int`` would raise
+    *inside the fallback* and lose the record anyway. The guard is a real
+    ``str()`` rather than a ``bit_length`` estimate because CPython performs the
+    cap check before doing the conversion work, so it rejects cheaply and is
+    exact rather than approximate.
     """
     if type(value) is float:
         return math.isfinite(value)
-    return type(value) in {str, bool, int, type(None)}
+    if type(value) is int:
+        try:
+            str(value)
+        except ValueError:
+            return False
+        return True
+    return type(value) in {str, bool, type(None)}
 
 
 def _describe_exception(exc: BaseException) -> str:
