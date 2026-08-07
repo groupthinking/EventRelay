@@ -282,9 +282,17 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
 
       const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
       if (!audioResponse.ok) {
+        // The status belongs to a caller-supplied `audioUrl`. Echoing it turns
+        // this route into a probe: the caller learns 401 vs 403 vs 404 vs 500
+        // for any host the SSRF guard admits, which is a cross-origin read the
+        // browser same-origin policy would otherwise deny them. Log it, and
+        // report only that the fetch failed.
+        console.error(
+          `[transcription] audioUrl fetch failed with status ${audioResponse.status}`,
+        );
         return {
           success: false,
-          error: `Failed to fetch audio: ${audioResponse.status}`,
+          error: 'Could not retrieve the audio file',
           transcript: '',
         };
       }
@@ -356,13 +364,23 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
   }
 
-  // No strategy succeeded
+  // No strategy succeeded.
+  //
+  // Which provider keys this deployment holds is server configuration, not
+  // caller-facing detail: branching the client message on `hasKeys` told any
+  // caller whether OPENAI_API_KEY/GEMINI_API_KEY were set, and named the
+  // variables and the hosting platform. Both outcomes now report the same
+  // string; the distinction survives in the operator log, which is the only
+  // place it was ever actionable.
   const hasKeys = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
+  console.error(
+    hasKeys
+      ? '[transcription] all strategies failed with provider keys configured'
+      : '[transcription] all strategies failed: no OPENAI_API_KEY or GEMINI_API_KEY configured',
+  );
   return {
     success: false,
-    error: hasKeys
-      ? 'Could not transcribe video — all strategies failed'
-      : 'No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY in Vercel environment variables.',
+    error: 'Could not transcribe video — all strategies failed',
     transcript: '',
   };
 }

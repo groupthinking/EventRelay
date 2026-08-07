@@ -19,11 +19,17 @@ export const maxDuration = 120;
  * carry raw upstream provider text (account IDs, quota state, partial API keys)
  * — that text is logged server-side only.
  *
- * The `!result.success` branches keep `fetchTranscript`'s own message in `error`:
- * every one of those values is an app-authored literal, a numeric HTTP status, or
- * our own SSRF-guard message, so none is upstream text. Preserving them verbatim
- * keeps the human-facing string contract intact while `code` carries the stable
- * key for programmatic handling.
+ * The `!result.success` branches keep `fetchTranscript`'s own message in `error`.
+ * That is safe only because every one of those values is now a fixed,
+ * app-authored literal. Two of them were not, and were removed at the source in
+ * `transcription-service.ts` rather than masked here:
+ *   - the caller-supplied `audioUrl`'s HTTP status, which made this route a
+ *     cross-origin probe, and
+ *   - a message that varied on whether provider API keys were configured, which
+ *     disclosed server configuration.
+ * Both are logged server-side instead. Keep that invariant when adding a
+ * strategy: anything interpolated into a `fetchTranscript` error reaches the
+ * client verbatim through the branches below.
  *   - 400: Invalid input (missing URL, malformed JSON) — `input_required` / `invalid_json`
  *   - 429: Rate limited (implement backoff or upgrade service plan) — `rate_limited`
  *   - 500: Service unavailable (check API keys and billing) — `billing_not_configured`
@@ -94,7 +100,9 @@ export async function POST(request: Request) {
             success: false,
             error: result.error,
             code: 'billing_not_configured',
-            details: 'Configure billing in Google Cloud and OpenAI console',
+            // No `details` here: the remediation text named this deployment's
+            // cloud and model vendors, and the PR that sanitized this route
+            // stated `details` was gone from it. `code` is what clients branch on.
             transcript: '',
           },
           { status: 500 }
