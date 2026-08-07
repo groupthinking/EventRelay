@@ -32,7 +32,7 @@ describe('assertPublicHttpUrl DNS failure leakage', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await expect(assertPublicHttpUrl(`https://${PROBED_HOST}/clip.mp3`)).rejects.toThrow(
-      'Host does not resolve',
+      'Host does not resolve to a public address',
     );
 
     const thrown = await assertPublicHttpUrl(`https://${PROBED_HOST}/clip.mp3`).catch(
@@ -63,7 +63,7 @@ describe('assertPublicHttpUrl DNS failure leakage', () => {
       (e: unknown) => (e as Error).message,
     );
 
-    expect(transient).toBe('Host does not resolve');
+    expect(transient).toBe('Host does not resolve to a public address');
     expect(transient).toBe(empty);
   });
 
@@ -71,10 +71,47 @@ describe('assertPublicHttpUrl DNS failure leakage', () => {
     vi.mocked(dns.lookup).mockResolvedValue([
       { address: '10.0.3.14', family: 4 },
     ] as never);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await expect(assertPublicHttpUrl('https://public-looking.example/a.mp3')).rejects.toThrow(
-      'Host resolves to a private address',
+    const message = await assertPublicHttpUrl('https://public-looking.example/a.mp3').catch(
+      (e: unknown) => (e as Error).message,
     );
+
+    expect(message).toBe('Host does not resolve to a public address');
+    // The resolved private address must not ride out on the rejection…
+    expect(message).not.toContain('10.0.3.14');
+    expect(message).not.toContain('private');
+    // …but operators still get it.
+    expect(JSON.stringify(consoleError.mock.calls)).toContain('10.0.3.14');
+  });
+
+  /**
+   * The sharpest oracle of the set: a caller who can tell "this name does not
+   * exist" from "this name exists and points somewhere internal" can enumerate
+   * internal hostnames through an unauthenticated endpoint, which is the
+   * reconnaissance the guard exists to prevent. Every outcome that is not a
+   * public address must be one indistinguishable message.
+   */
+  it('does not reveal whether a probed internal name exists', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // A name that does not exist at all.
+    vi.mocked(dns.lookup).mockRejectedValue(
+      Object.assign(new Error(`getaddrinfo ENOTFOUND ${PROBED_HOST}`), { code: 'ENOTFOUND' }),
+    );
+    const absent = await assertPublicHttpUrl(`https://${PROBED_HOST}/a.mp3`).catch(
+      (e: unknown) => (e as Error).message,
+    );
+
+    // A name that DOES exist and points at internal infrastructure.
+    vi.mocked(dns.lookup).mockResolvedValue([
+      { address: '10.0.3.14', family: 4 },
+    ] as never);
+    const present = await assertPublicHttpUrl(`https://${PROBED_HOST}/a.mp3`).catch(
+      (e: unknown) => (e as Error).message,
+    );
+
+    expect(present).toBe(absent);
   });
 
   it('still allows a genuinely public host', async () => {

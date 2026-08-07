@@ -124,21 +124,36 @@ export async function assertPublicHttpUrl(input: string): Promise<URL> {
   // `getaddrinfo ENOTFOUND evil.internal.corp`. `fetchTranscript` interpolates
   // that message into `Rejected audioUrl: ${guardErr.message}`, which the
   // transcribe route returns verbatim, so the reject reason would reach the
-  // client. Beyond disclosing system error text, distinguishing ENOTFOUND from
-  // EAI_AGAIN from 'Host resolves to a private address' turns this guard into a
-  // DNS oracle for probing internal names from the server's network position —
-  // the reconnaissance the guard exists to block. Collapse every resolver
-  // failure into the same app-authored literal a zero-result lookup produces.
+  // client.
+  //
+  // Beyond disclosing system error text, ANY difference between these outcomes
+  // is a DNS oracle. "Does not resolve" versus "resolves to a private address"
+  // is the sharpest one: it answers, for an unauthenticated caller, whether a
+  // guessed internal name EXISTS and points at internal infrastructure. That is
+  // precisely the reconnaissance this guard exists to block, so all four
+  // outcomes — resolver rejection, transient failure, zero results, and a
+  // private result — must be indistinguishable to the caller. The real reason
+  // is logged for operators instead.
+  //
+  // The IP-literal branch above keeps its own message deliberately: the caller
+  // supplied the address, so telling them it is private reveals nothing they
+  // did not already know, and no name is confirmed or denied.
+  const NOT_PUBLIC = 'Host does not resolve to a public address';
   let resolved: LookupAddress[];
   try {
     resolved = await dns.lookup(host, { all: true });
   } catch (err) {
     console.error('[ssrf-guard] DNS lookup failed:', err);
-    throw new Error('Host does not resolve');
+    throw new Error(NOT_PUBLIC);
   }
-  if (resolved.length === 0) throw new Error('Host does not resolve');
+  if (resolved.length === 0) throw new Error(NOT_PUBLIC);
   for (const r of resolved) {
-    if (ipIsPrivate(r.address)) throw new Error('Host resolves to a private address');
+    if (ipIsPrivate(r.address)) {
+      console.error(
+        `[ssrf-guard] host resolved to a non-public address: ${host} -> ${r.address}`,
+      );
+      throw new Error(NOT_PUBLIC);
+    }
   }
   return u;
 }
