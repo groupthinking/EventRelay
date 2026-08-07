@@ -469,3 +469,25 @@ def test_last_resort_record_cannot_itself_fail_to_serialize():
     # failures we thought of", so assert it is valid JSON and self-describing.
     parsed = json.loads(_JSON_UNSERIALIZABLE_RECORD)
     assert parsed["serialization_error"]
+
+
+def test_last_resort_tier_is_reached_when_a_core_field_is_poisoned():
+    # Parsing the constant alone would still pass if the tier-3 `except` were
+    # deleted, so drive the real control path: poison a *core* field, which
+    # tier 2 retains by design, and assert the sink gets the constant record.
+    logger, buf = _make_json_logger("json-serialization-last-resort")
+
+    class _PoisonCoreField(logging.Filter):
+        def filter(self, record: logging.LogRecord) -> bool:
+            # `process` is in _JSON_CORE_FIELDS, so tier 2 cannot drop it.
+            record.process = 10**4400
+            return True
+
+    logger.addFilter(_PoisonCoreField())
+    logger.info("tier 3")
+
+    rendered = buf.getvalue()
+    assert rendered.strip(), "record was lost when both tiers failed"
+    assert rendered.strip() == _JSON_UNSERIALIZABLE_RECORD
+    assert len(rendered.splitlines()) == 1
+    assert json.loads(rendered)["serialization_error"]
