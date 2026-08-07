@@ -104,8 +104,13 @@ def _describe_exception(exc: BaseException) -> str:
     Used on the JSON serialization fallback path (#1452), where the entire
     point is that the record survives. ``str(exc)`` is itself hostile there:
     the exception can originate in a call site's own ``__str__``, so it may be
-    an instance of a class whose ``__str__`` raises too. The type name is a
-    plain attribute lookup and is always safe.
+    an instance of a class whose ``__str__`` raises too.
+
+    The bare type name is the fallback because it is an attribute lookup rather
+    than a dunder call, so no call-site code runs to produce it. That is not the
+    same as "cannot raise" — a hostile *metaclass* could still make ``__name__``
+    a raising property — but such a class cannot be reached from the enrichment
+    path this guards, which carries values, not exception classes.
     """
     try:
         return f"{type(exc).__name__}: {exc}"
