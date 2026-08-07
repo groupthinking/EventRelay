@@ -144,6 +144,12 @@ describe('assertPublicHttpUrl — the guard still guards', () => {
   it('rejects a private address hiding behind an IPv4-mapped IPv6 spelling', async () => {
     lookup.mockResolvedValueOnce([{ address: '0:0:0:0:0:ffff:7f00:1', family: 6 }]);
     const err = await rejectionOf('https://sneaky.example.com/');
+    // Pin that resolution is what rejected this, not a pre-DNS branch. The
+    // mirror of the `not.toHaveBeenCalled()` assertions below, and load-bearing
+    // for the same reason: this PR adds a new pre-DNS branch, so a future change
+    // that routed a hostname into it would leave this test throwing, passing,
+    // and no longer testing resolution at all.
+    expect(lookup).toHaveBeenCalledWith('sneaky.example.com', { all: true });
     expect(loggedText()).toContain('0:0:0:0:0:ffff:7f00:1');
     expect(err).toBeInstanceOf(Error);
   });
@@ -154,7 +160,22 @@ describe('assertPublicHttpUrl — the guard still guards', () => {
       { address: '10.0.0.5', family: 4 },
     ]);
     await rejectionOf('https://mixed.example.com/');
+    expect(lookup).toHaveBeenCalledWith('mixed.example.com', { all: true });
     expect(loggedText()).toContain('10.0.0.5');
+  });
+
+  it('rejects a private address in tail position among three answers', async () => {
+    // The two-address case above kills a `resolved[0]`-only scan. This one
+    // additionally kills a "check a prefix of the answers" bug, and is the only
+    // case here that exercises 172.16/12.
+    lookup.mockResolvedValueOnce([
+      { address: '93.184.216.34', family: 4 },
+      { address: '151.101.1.140', family: 4 },
+      { address: '172.16.31.9', family: 4 },
+    ]);
+    await rejectionOf('https://tail.example.com/');
+    expect(lookup).toHaveBeenCalledWith('tail.example.com', { all: true });
+    expect(loggedText()).toContain('172.16.31.9');
   });
 
   it('range-checks a bracketed IPv6 literal instead of resolving it', async () => {
@@ -234,6 +255,7 @@ describe('assertPublicHttpUrl — the guard still guards', () => {
     // bypass one DNS lookup away.
     lookup.mockResolvedValueOnce([{ address: '64:ff9b::a9fe:a9fe', family: 6 }]);
     await rejectionOf('https://nat64.example.com/');
+    expect(lookup).toHaveBeenCalledWith('nat64.example.com', { all: true });
     expect(loggedText()).toContain('64:ff9b::a9fe:a9fe');
   });
 
