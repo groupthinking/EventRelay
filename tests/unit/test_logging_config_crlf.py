@@ -309,6 +309,88 @@ def test_line_oriented_path_is_untouched_by_the_json_fix():
     assert buf.getvalue() == "INFO - all good video-123\n"
 
 
+class _ExplodingStr:
+    """An `extra` value whose `__str__` raises.
+
+    `json.dumps(default=str)` *does* consult `default` for this type, and the
+    exception then propagates out of `default` itself.
+    """
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def _circular_container() -> dict:
+    """A container `json.dumps` rejects structurally.
+
+    The cycle is detected *before* `default` is consulted, so `default=str`
+    never sees it. This is the case a narrow `except (TypeError, ...)` around
+    the dump would appear to cover and does not.
+    """
+    circular: dict = {}
+    circular["self"] = circular
+    return circular
+
+
+@pytest.mark.parametrize(
+    "poison, expected_error",
+    [
+        (_circular_container(), "ValueError"),
+        (_ExplodingStr(), "RuntimeError"),
+    ],
+    ids=["circular-container", "exploding-str"],
+)
+def test_unserializable_enrichment_does_not_cost_the_record(poison, expected_error):
+    # #1452: `default=str` alone loses the record for both of these. `logging`
+    # swallows the raise via `Handler.handleError`, so the failure is silent --
+    # the record simply never reaches the sink.
+    logger, buf = _make_json_logger(f"json-unserializable-{expected_error}")
+    logger.info("still emitted", extra={"request_id": poison})
+
+    rendered = buf.getvalue()
+    assert rendered.strip(), "the record was dropped entirely"
+    parsed = json.loads(rendered)
+
+    # The record survives with its authoritative metadata intact...
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "still emitted"
+    # ...the poisoned enrichment is dropped rather than taking the record with
+    # it, and the reason is recorded rather than silently swallowed.
+    assert "correlation_id" not in parsed
+    assert parsed["serialization_error"].startswith(expected_error)
+
+
+def test_a_poisoned_record_does_not_break_the_stream():
+    # The blast radius that matters: `handleError` drops only the offending
+    # record, so a regression here is invisible unless you count what arrives.
+    logger, buf = _make_json_logger("json-unserializable-stream")
+    logger.info("before")
+    logger.info("poisoned", extra={"request_id": _ExplodingStr()})
+    logger.info("after")
+
+    messages = [
+        json.loads(line)["message"]
+        for line in buf.getvalue().splitlines()
+        if line.strip()
+    ]
+    assert messages == ["before", "poisoned", "after"]
+
+
+def test_fallback_record_still_holds_the_cwe_117_property():
+    # The fallback must not become a hole in #1429: it re-serializes with
+    # `json.dumps`, so the forgery payload stays a value on this path too.
+    logger, buf = _make_json_logger("json-unserializable-forgery")
+    logger.info(_FORGERY, extra={"request_id": _ExplodingStr()})
+
+    rendered = buf.getvalue()
+    assert len(rendered.splitlines()) == 1, "fallback split the record"
+    parsed = json.loads(rendered)
+
+    assert parsed["level"] == "INFO"
+    assert "forged" not in parsed
+    assert parsed["message"] == _FORGERY
+
+
 @pytest.fixture
 def _restore_root_logging():
     """`setup_logging` calls dictConfig, which mutates global logging state."""
