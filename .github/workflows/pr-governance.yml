@@ -55,6 +55,37 @@ jobs:
               return;
             }
 
+            // Dependabot composes its body from a fixed template (release
+            // notes, changelog, commit list). It cannot emit the five required
+            // headings or a `Closes #<issue>` reference, so the contract below
+            // is not a bar it fails -- it is one it has no way to clear.
+            //
+            // The sibling `agent-completion/truth-gate` used to carry the same
+            // escape and defer the issue-binding requirement here, on the
+            // stated ground that this check "states a requirement an author can
+            // actually meet" -- which was false for Dependabot, and relocated
+            // the constraint rather than removing it. That gate was retired in
+            // #1431, so this is now the only place the exemption lives.
+            //
+            // `neutral`, not `success`: the contract is not applicable here,
+            // and reporting it as satisfied would be the same false signal this
+            // check exists to catch. Dependency PRs remain gated by
+            // `dependency-review`, `npm-audit`, `trivy`, `build` and `test`.
+            const AUTOMATED_DEPENDENCY_AUTHORS = new Set([
+              "dependabot[bot]"
+            ]);
+            const prAuthor = (pr.user && pr.user.login) || "";
+            if (AUTOMATED_DEPENDENCY_AUTHORS.has(prAuthor)) {
+              await publish(
+                "neutral",
+                "Governance not applicable to automated dependency PR",
+                `PR #${pr.number} is authored by ${prAuthor}, which cannot ` +
+                `author a canonical delivery contract. The Check is bound to ` +
+                `exact head ${pr.head.sha}.`
+              );
+              return;
+            }
+
             const body = pr.body || "";
 
             function getSectionContent(text, heading) {
