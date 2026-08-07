@@ -27,6 +27,15 @@ afterEach(() => {
  * Salvaged from #1428, whose CWE-209 fix was superseded by #1381 (feae3d3) but
  * whose detection cases were not carried over. Ported to the merged API, where
  * every DNS-path rejection is the single `NOT_PUBLIC` literal.
+ *
+ * Each case also asserts that `dns.lookup` was reached. Today a pre-DNS
+ * rejection throws a different literal (`Blocked host`, `Blocked private IP
+ * literal`), so it would fail the message assertion loudly — but if those
+ * literals were ever flattened into `NOT_PUBLIC` too, a hostname added to
+ * `BLOCKED_HOSTNAMES` would short-circuit before resolution and these tests
+ * would keep passing while no longer testing resolution at all. That is not a
+ * hypothetical refactor: #1428 unified all six rejection paths exactly that
+ * way. The call assertion is what keeps the test honest through it.
  */
 const NOT_PUBLIC = 'Host does not resolve to a public address';
 
@@ -42,6 +51,7 @@ describe('assertPublicHttpUrl resolution bypasses', () => {
     await expect(assertPublicHttpUrl('https://sneaky.example.com/a.mp3')).rejects.toThrow(
       NOT_PUBLIC,
     );
+    expect(dns.lookup).toHaveBeenCalledWith('sneaky.example.com', { all: true });
   });
 
   it('rejects when any resolved address is private, even if another is public', async () => {
@@ -56,6 +66,7 @@ describe('assertPublicHttpUrl resolution bypasses', () => {
     await expect(assertPublicHttpUrl('https://mixed.example.com/a.mp3')).rejects.toThrow(
       NOT_PUBLIC,
     );
+    expect(dns.lookup).toHaveBeenCalledWith('mixed.example.com', { all: true });
   });
 
   it('rejects a private address that appears after several public ones', async () => {
@@ -70,6 +81,7 @@ describe('assertPublicHttpUrl resolution bypasses', () => {
     await expect(assertPublicHttpUrl('https://tail.example.com/a.mp3')).rejects.toThrow(
       NOT_PUBLIC,
     );
+    expect(dns.lookup).toHaveBeenCalledWith('tail.example.com', { all: true });
   });
 
   it('still allows a host whose answers are all public', async () => {
@@ -83,5 +95,6 @@ describe('assertPublicHttpUrl resolution bypasses', () => {
     const url = await assertPublicHttpUrl('https://public.example.com/a.mp3');
 
     expect(url.hostname).toBe('public.example.com');
+    expect(dns.lookup).toHaveBeenCalledWith('public.example.com', { all: true });
   });
 });
