@@ -381,6 +381,107 @@ def test_serialization_fallback_still_escapes_attacker_content():
     assert parsed["message"] == _FORGERY
 
 
+# ---------------------------------------------------------------------------
+# #1452 follow-up: the fallback added above is not self-sufficient either.
+#
+# Three inputs still cost the record — or its validity — after that fix:
+#
+#   1. a value that forges `__class__`, defeating the `isinstance` retention
+#      filter and reaching a `json.dumps` whose `default=str` then raises;
+#   2. an exception whose own `__str__` raises, detonating the
+#      `f"{type(exc).__name__}: {exc}"` that builds `serialization_error`;
+#   3. a non-finite float, which serializes to the bare JavaScript literals
+#      `NaN`/`Infinity` — accepted by Python's lenient `json.loads`, rejected
+#      by every strict downstream parser.
+#
+# All three fail on the pre-follow-up implementation.
+# ---------------------------------------------------------------------------
+
+
+class _ForgedClass:
+    """Forges `__class__` as `str`, so an `isinstance` filter admits it."""
+
+    @property  # type: ignore[misc]
+    def __class__(self):  # type: ignore[override]
+        return str
+
+    def __str__(self) -> str:
+        raise RuntimeError("forged value exploded")
+
+
+class _ExplodingExc(Exception):
+    """An exception whose own `__str__` raises, as one from `__str__` may."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("exception str() exploded")
+
+
+class _RaisesExplodingExc:
+    def __str__(self) -> str:
+        raise _ExplodingExc()
+
+
+def _strict_loads(line: str) -> dict:
+    """Parse as a *strict* JSON consumer would — `NaN`/`Infinity` are errors."""
+
+    def _reject(constant: str):
+        raise ValueError(f"not valid JSON: {constant}")
+
+    return json.loads(line, parse_constant=_reject)
+
+
+def test_forged_class_value_does_not_cost_the_record():
+    # `isinstance` consults `__class__`, which this value forges as `str`; an
+    # `isinstance`-based filter keeps it, and the fallback dump then raises.
+    records = _emit_three("json-forged-class", _ForgedClass())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    assert "correlation_id" not in poisoned
+
+
+def test_exception_with_exploding_str_does_not_cost_the_record():
+    # The fallback must describe the failure without re-detonating it.
+    records = _emit_three("json-exploding-exc", _RaisesExplodingExc())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["message"] == "poisoned"
+    assert poisoned["level"] == "INFO"
+    # Degrades to the type name alone rather than losing the record.
+    assert poisoned["serialization_error"] == "_ExplodingExc"
+
+
+@pytest.mark.parametrize(
+    "value", [float("nan"), float("inf"), float("-inf")], ids=["nan", "inf", "-inf"]
+)
+def test_non_finite_enrichment_stays_strictly_valid_json(value):
+    logger, buf = _make_json_logger(f"json-non-finite-{value}")
+    logger.info("poisoned", extra={"performance_ms": value})
+
+    line = buf.getvalue().strip()
+    # Pre-fix this emits a bare `NaN` / `Infinity` literal and raises here.
+    parsed = _strict_loads(line)
+
+    assert parsed["message"] == "poisoned"
+    assert parsed["level"] == "INFO"
+    # The non-finite value costs itself, not the record.
+    assert "performance_ms" not in parsed
+    assert parsed["serialization_error"].startswith("ValueError:")
+
+
+def test_finite_float_enrichment_is_still_retained():
+    # The non-finite guard must not cost well-behaved floats their value.
+    logger, buf = _make_json_logger("json-finite-float")
+    logger.info("healthy", extra={"performance_ms": 12.5})
+
+    parsed = _strict_loads(buf.getvalue().strip())
+    assert parsed["performance_ms"] == 12.5
+    assert "serialization_error" not in parsed
+
+
 @pytest.fixture
 def _restore_root_logging():
     """`setup_logging` calls dictConfig, which mutates global logging state."""

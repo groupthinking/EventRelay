@@ -10,6 +10,7 @@ Provides consistent log formatting, multiple handlers, and performance monitorin
 import json
 import logging
 import logging.config
+import math
 import os
 import sys
 from datetime import datetime
@@ -74,6 +75,42 @@ def sanitize_log_record(rendered: str) -> str:
     rendered JSON record safe — see the module comment and ``#1429``.
     """
     return rendered.translate(_UNSAFE_LOG_CHARS)
+
+
+def _is_json_safe_scalar(value: object) -> bool:
+    """Is this a value ``json.dumps`` emits directly, under ``allow_nan=False``?
+
+    The retention filter for the serialization fallback (#1452). Two details
+    matter, and both are load-bearing:
+
+    ``type(value) in``, not ``isinstance``: ``isinstance`` consults
+    ``value.__class__``, which an object can forge as a property returning
+    ``str``. Such a value passes an ``isinstance`` filter, reaches the fallback
+    ``json.dumps``, and raises — losing the record the fallback exists to save.
+    Exact runtime types cannot be forged.
+
+    Non-finite floats are excluded: ``json`` renders them as the JavaScript
+    literals ``NaN``/``Infinity``, which are not valid JSON, so a strict
+    downstream parser rejects the whole record.
+    """
+    if type(value) is float:
+        return math.isfinite(value)
+    return type(value) in {str, bool, int, type(None)}
+
+
+def _describe_exception(exc: BaseException) -> str:
+    """Describe an exception without ever raising a second one.
+
+    Used on the JSON serialization fallback path (#1452), where the entire
+    point is that the record survives. ``str(exc)`` is itself hostile there:
+    the exception can originate in a call site's own ``__str__``, so it may be
+    an instance of a class whose ``__str__`` raises too. The type name is a
+    plain attribute lookup and is always safe.
+    """
+    try:
+        return f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - the type name alone still identifies it
+        return type(exc).__name__
 
 
 class StructuredFormatter(logging.Formatter):
@@ -162,18 +199,35 @@ class StructuredFormatter(logging.Formatter):
         # whose `__str__` raises propagates straight out of `default`. Either
         # way `logging` swallows the raise via `Handler.handleError` and drops
         # the record. The fallback below re-serializes with only the natively
-        # encodable fields, so a bad enrichment costs its own value rather than
+        # encodable scalars, so a bad enrichment costs its own value rather than
         # the whole record.
+        #
+        # `allow_nan=False` because Python's default emits the JavaScript
+        # literals `NaN`/`Infinity`, which are not valid JSON. A strict
+        # downstream parser rejects such a record — the same loss as dropping it
+        # here, only moved to the consumer where it is harder to diagnose.
+        # Raising instead routes it to the fallback, which drops the offending
+        # enrichment and keeps a record every parser accepts.
+        #
+        # SCOPE: this covers *serializing* the payload. Building it can still
+        # raise upstream of here — `record.getMessage()` on mismatched %-args is
+        # the reachable case — and that is out of scope because it fails the
+        # line-oriented path identically. This is not a "no record is ever lost"
+        # guarantee; it is "serialization never loses one".
         try:
-            return json.dumps(payload, ensure_ascii=True, default=str)
+            return json.dumps(payload, ensure_ascii=True, allow_nan=False, default=str)
         except Exception as exc:  # noqa: BLE001 - never lose a record
             safe: dict[str, Any] = {
                 key: value
                 for key, value in payload.items()
-                if isinstance(value, (str, int, float, bool, type(None)))
+                if _is_json_safe_scalar(value)
             }
-            safe["serialization_error"] = f"{type(exc).__name__}: {exc}"
-            return json.dumps(safe, ensure_ascii=True, default=str)
+            safe["serialization_error"] = _describe_exception(exc)
+            # Cannot raise: `_is_json_safe_scalar` admits only values the
+            # encoder emits directly, so there is nothing for `default` to be
+            # consulted for and nothing left for `allow_nan` to reject. Passing
+            # `default=str` here would reinstate the raising-`__str__` hole.
+            return json.dumps(safe, ensure_ascii=True, allow_nan=False)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
