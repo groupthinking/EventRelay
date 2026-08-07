@@ -35,14 +35,20 @@ If an agent has repository-write credentials that can create Actions workflows o
 
 ## Applicability
 
-The gate applies when any of these signals identify agent work:
+The gate applies only when the PR's linked issue is a genuine dispatch — that is, when the issue both:
 
-- a known agent bot authored the PR;
-- the branch starts with agent/, claude/, codex/, copilot/, or jules/;
-- the PR or linked issue has agent, agent-task, or mcp/agent;
-- the PR contains an agent-lock-manifest comment.
+- carries `agent-task` or `mcp/agent` — those exact label names, as they exist in this repository. Label matching lowercases and strips non-alphanumerics, so `mcp/agent` and `mcp-agent` both normalise to the same key, but only `mcp/agent` is a real label here. The generic `agent` label does **not** count: neither the snapshot job nor the collector recognises it, so arming on it would be unsatisfiable; and
+- declares the **complete** dispatch contract in its body: agent login, agent run id, objective/description, acceptance criteria, either a declared file scope or an unrestricted-scope request carrying the scope-unrestricted-approved label, and a checked pre-dispatch confirmation.
 
-Dependabot is exempt. Other human-authored PRs receive not_applicable.
+That list is deliberately identical to the `complete` predicate in `snapshot-agent-task-intent`. The two must stay in step: the snapshot job refuses to write a snapshot (`incomplete_agent_task_contract`) unless every element is present, and a gate armed with no snapshot is permanently `invalid_payload`. Requiring only the login and run id armed the gate on issues the snapshot job rejects — the same unsatisfiable shape described below, one level down.
+
+Dependabot is exempt. Everything else receives not_applicable.
+
+Pull-side provenance — a known agent bot author, a branch starting with agent/, claude/, codex/, copilot/, or jules/, an agent-lock-manifest comment, or an agent label on the PR — does **not** arm the gate, on its own or against a linked issue. It identifies who produced the branch; it does not supply a contract to score that branch against.
+
+That distinction is load-bearing. The gate scores a PR against the frozen intent snapshot on its linked issue, and that snapshot is written only by `snapshot-agent-task-intent`, which runs on `issues` events alone and only for issues that already declare a run id and login. An ordinary issue has no snapshot, so `policy.agent_login` and `policy.run_id` cannot be populated and the verdict is permanently `invalid_payload` — with no action available to the author. Because **PR Governance** separately requires exactly one `Closes #<issue>` reference, arming on provenance-plus-any-linked-issue put the two checks in direct contradiction: satisfying one guaranteed failing the other, and this gate was red on roughly every pull request, including merged ones (#1368, #1408).
+
+Requiring a declared dispatch is not an escape hatch: a PR that links a genuinely dispatched issue is still fully gated, and the requirement that a PR bind to a focused issue at all is separately owned by **Canonical issue and evidence**, which states a requirement an author can actually meet.
 
 ## Input schema
 

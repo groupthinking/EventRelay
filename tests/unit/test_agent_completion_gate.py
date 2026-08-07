@@ -2870,7 +2870,20 @@ for (const [name, previous, current, count, applicable, expected] of rows) {
         self.assertEqual(len(applicable_functions), 2)
         self.assertEqual(applicable_functions[0], applicable_functions[1])
         applicable_assertions = r"""
+// A complete contract, matching what `snapshot-agent-task-intent` demands
+// before it will write a snapshot. Anything less produces no snapshot, so
+// arming on it would be permanently unsatisfiable.
 const CONTRACT = [
+  '### Agent Login', '', '`google-labs-jules[bot]`', '',
+  '### Agent Run ID', '', '`run-42`', '',
+  '### Objective', '', 'Fix the thing.', '',
+  '### Acceptance Criteria', '', '- It is fixed.', '',
+  '### Declared File Scope', '', '`src/thing.py`', '',
+  '### Pre-dispatch Confirmation', '', '- [x] Confirmed'
+].join('\n');
+// Login + run id only -- the old `declaresAgentContract` accepted this, but
+// the snapshot job rejects it as `incomplete_agent_task_contract`.
+const PARTIAL_CONTRACT = [
   '### Agent Login', '', '`google-labs-jules[bot]`', '',
   '### Agent Run ID', '', '`run-42`'
 ].join('\n');
@@ -2893,23 +2906,39 @@ const rows = [
   // actually declares the contract the gate goes on to require (#1130).
   ['issue label without contract', base, issue(1, ['mcp/agent']), false],
   ['issue label with contract', base, issue(1, ['mcp/agent'], CONTRACT), true],
+  // The contract must be the complete one the snapshot job requires; a
+  // login+run-id-only body yields no snapshot, so arming would be
+  // permanently unsatisfiable.
+  ['issue label with partial contract', base,
+    issue(1, ['mcp/agent'], PARTIAL_CONTRACT), false],
   // Pull-side provenance identifies the producer; it does not supply a
-  // contract to score against. With no linked issue there is no intent
-  // snapshot, so `policy.agent_login`, `policy.run_id` and `issue.number`
-  // can never be populated and the verdict is permanently `invalid_payload`.
-  // Each of these arms the gate only once an issue exists to verify against.
+  // contract to score against, with or without a linked issue. The intent
+  // snapshot the gate scores against is only ever written by
+  // `snapshot-agent-task-intent`, which runs on `issues` events alone and
+  // only for issues that already declare a run id and login. A plain linked
+  // issue has no snapshot, so `policy.agent_login` and `policy.run_id` stay
+  // unsatisfiable and the verdict is permanently `invalid_payload`.
+  //
+  // Arming on provenance plus *any* linked issue therefore contradicted
+  // `PR Governance`, which requires exactly one `Closes #<issue>`: satisfying
+  // it guaranteed failing this gate. None of these arm it now.
   ['PR label, no issue', {...base, labels: [{name: 'agent-task'}]}, null, false],
-  ['PR label + issue', {...base, labels: [{name: 'agent-task'}]}, PLAIN, true],
+  ['PR label + plain issue',
+    {...base, labels: [{name: 'agent-task'}]}, PLAIN, false],
   ['branch, no issue', {...base, head: {ref: 'codex/fix'}}, null, false],
-  ['branch + issue', {...base, head: {ref: 'codex/fix'}}, PLAIN, true],
+  ['branch + plain issue', {...base, head: {ref: 'codex/fix'}}, PLAIN, false],
   ['manifest, no issue',
     {...base, body: '<!-- agent-lock-manifest {bad} -->'}, null, false],
-  ['manifest + issue',
-    {...base, body: '<!-- agent-lock-manifest {bad} -->'}, PLAIN, true],
+  ['manifest + plain issue',
+    {...base, body: '<!-- agent-lock-manifest {bad} -->'}, PLAIN, false],
   ['known agent, no issue',
     {...base, user: {login: 'google-labs-jules[bot]'}}, null, false],
-  ['known agent + issue',
-    {...base, user: {login: 'google-labs-jules[bot]'}}, PLAIN, true],
+  ['known agent + plain issue',
+    {...base, user: {login: 'google-labs-jules[bot]'}}, PLAIN, false],
+  // Provenance still arms the gate when the linked issue is a real dispatch.
+  ['known agent + dispatched issue',
+    {...base, user: {login: 'google-labs-jules[bot]'}},
+    issue(1, ['agent-task'], CONTRACT), true],
   ['dependabot excluded', {
     ...base,
     user: {login: 'dependabot[bot]'},
@@ -2989,11 +3018,17 @@ for (const [name, pull, issues, expectedNumber, expectedErrors] of rows) {
 
         combined_assertions = r"""
 const first = {number: 1, labels: {nodes: []}, body: ''};
+// A complete dispatch contract -- login and run id alone are rejected by
+// `snapshot-agent-task-intent`, so they would not arm the gate.
 const second = {
   number: 2,
   labels: {nodes: [{name: 'agent-task'}]},
   body: '### Agent Login\n\n`google-labs-jules[bot]`\n\n' +
-    '### Agent Run ID\n\n`run-42`'
+    '### Agent Run ID\n\n`run-42`\n\n' +
+    '### Objective\n\nFix the thing.\n\n' +
+    '### Acceptance Criteria\n\n- It is fixed.\n\n' +
+    '### Declared File Scope\n\n`src/thing.py`\n\n' +
+    '### Pre-dispatch Confirmation\n\n- [x] Confirmed'
 };
 const multi = {
   user: {login: 'maintainer'},
@@ -3386,16 +3421,24 @@ for (const [body, expected] of rows) {
         self.assertIn("!explicitlyNonBehavioral", workflow)
         self.assertIn("VADE-RECOMMENDATION", workflow)
 
-    def test_agent_applicability_requires_provenance_or_declared_contract(self):
-        """A bare `agent-task` label on a linked issue is not a dispatch.
+    def test_agent_applicability_requires_a_declared_dispatch_contract(self):
+        """Only a real issue-side dispatch arms the gate.
 
         Label automation applies `agent-task` and `mcp/agent` as topic tags to
-        issues that were never created from the agent task template. Before
-        this guard the gate unioned pull request labels with linked issue
-        labels, so any pull request closing such an issue was judged an agent
-        completion and then measured against a contract the issue had never
-        declared -- producing a permanent ``blocked``/``invalid_payload``
-        verdict that no author could satisfy (#1130).
+        issues that were never created from the agent task template, so a bare
+        label is not a dispatch: it counts only once the issue declares the run
+        id and login the gate goes on to require (#1130).
+
+        Pull-side provenance -- a known agent author, an `agent`/`claude`/
+        `codex`/`jules` branch prefix, a lock manifest, or an agent label --
+        does not arm the gate either, with or without a linked issue. It
+        identifies the producer; it does not supply a contract to score
+        against. Arming on provenance plus *any* linked issue contradicted
+        `PR Governance`, which requires exactly one ``Closes #<issue>``:
+        satisfying that check guaranteed failing this one, because an ordinary
+        issue has no intent snapshot and `policy.agent_login` / `policy.run_id`
+        are then unsatisfiable. That left the gate red on ~100% of pull
+        requests, merged ones included (#1368, #1408).
         """
 
         workflow = self._workflow()
@@ -3406,7 +3449,37 @@ for (const [body, expected] of rows) {
         self.assertEqual(len(applicable), 2)
 
         assertions = r"""
+// A complete contract, matching what `snapshot-agent-task-intent` demands
+// before it will write a snapshot. Anything less produces no snapshot, so
+// arming on it would be permanently unsatisfiable.
 const CONTRACT = [
+  '### Agent Login',
+  '',
+  '`google-labs-jules[bot]`',
+  '',
+  '### Agent Run ID',
+  '',
+  '`run-42`',
+  '',
+  '### Objective',
+  '',
+  'Fix the thing.',
+  '',
+  '### Acceptance Criteria',
+  '',
+  '- It is fixed.',
+  '',
+  '### Declared File Scope',
+  '',
+  '`src/thing.py`',
+  '',
+  '### Pre-dispatch Confirmation',
+  '',
+  '- [x] Confirmed'
+].join('\n');
+// Login + run id only -- the old `declaresAgentContract` accepted this, but
+// the snapshot job rejects it as `incomplete_agent_task_contract`.
+const PARTIAL_CONTRACT = [
   '### Agent Login',
   '',
   '`google-labs-jules[bot]`',
@@ -3415,6 +3488,10 @@ const CONTRACT = [
   '',
   '`run-42`'
 ].join('\n');
+const UNRESTRICTED = CONTRACT.replace(
+  '### Declared File Scope\n\n`src/thing.py`',
+  '### Unrestricted Scope\n\n- [x] Requested'
+);
 const human = {
   user: {login: 'groupthinking'},
   head: {ref: 'feature/thing'},
@@ -3437,6 +3514,34 @@ const rows = [
   // A genuine issue-side dispatch is still gated.
   ['declared contract', human, {
     number: 7, labels: [{name: 'agent-task'}], body: CONTRACT
+  }, true],
+  // ...but the contract must be the *complete* one the snapshot job demands.
+  // A login+run-id-only body is rejected there as
+  // `incomplete_agent_task_contract`, so no snapshot is written and arming on
+  // it would be unsatisfiable in exactly the way this rule exists to prevent.
+  ['partial contract, login and run id only', human, {
+    number: 7, labels: [{name: 'agent-task'}], body: PARTIAL_CONTRACT
+  }, false],
+  ['missing acceptance criteria', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}],
+    body: CONTRACT.replace('### Acceptance Criteria\n\n- It is fixed.', '')
+  }, false],
+  ['unconfirmed pre-dispatch checkbox', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}],
+    body: CONTRACT.replace('- [x] Confirmed', '- [ ] Confirmed')
+  }, false],
+  // Unrestricted scope substitutes for a declared file scope, but only once a
+  // maintainer has applied scope-unrestricted-approved -- the same condition
+  // the snapshot job enforces before writing.
+  ['unrestricted scope, unapproved', human, {
+    number: 7, labels: [{name: 'agent-task'}], body: UNRESTRICTED
+  }, false],
+  ['unrestricted scope, approved', human, {
+    number: 7,
+    labels: [{name: 'agent-task'}, {name: 'scope-unrestricted-approved'}],
+    body: UNRESTRICTED
   }, true],
   ['contract via graphql label nodes', human, {
     number: 7, labels: {nodes: [{name: 'agent-task'}]}, body: CONTRACT
@@ -3464,25 +3569,35 @@ const rows = [
   ['unlabelled issue with contract', human, {
     number: 7, labels: [{name: 'bug'}], body: CONTRACT
   }, false],
-  // Pull request provenance applies against a linked issue -- an agent
-  // producing work against a contract-less issue is still applicable, and
-  // therefore still blocked.
-  ['known agent author', {
+  // Pull request provenance does not arm the gate on its own, even against a
+  // linked issue. An agent producing work against a contract-less issue has
+  // no intent snapshot to be scored against, so arming here yielded a
+  // permanent `invalid_payload` that no author could clear: the snapshot is
+  // written only by `snapshot-agent-task-intent`, on `issues` events, for
+  // issues that already declare a run id and login. Because `PR Governance`
+  // separately requires exactly one `Closes #<issue>`, arming on
+  // provenance-plus-any-issue made the two checks mutually unsatisfiable and
+  // left this gate red on ~100% of pull requests, merged ones included
+  // (#1368, #1408).
+  ['known agent author, contract-less issue', {
     user: {login: 'google-labs-jules[bot]'},
     head: {ref: 'feature/thing'}, labels: [], body: ''
-  }, {number: 7, labels: [{name: 'agent-task'}], body: '## Summary\n'}, true],
-  // ...but with no linked issue there is no intent snapshot and no declared
-  // run id or login, so the required payload fields are unsatisfiable and the
-  // gate would block permanently rather than ever reaching a verdict. These
-  // are `not_applicable`, not violations.
+  }, {number: 7, labels: [{name: 'agent-task'}], body: '## Summary\n'}, false],
+  // With no linked issue there is likewise no snapshot and no declared run id
+  // or login. These are `not_applicable`, not violations.
   ['agent branch prefix, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'jules/thing'}, labels: [], body: ''
   }, null, false],
-  ['agent branch prefix with issue', {
+  ['agent branch prefix, contract-less issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'jules/thing'}, labels: [], body: ''
-  }, {number: 7, labels: [], body: ''}, true],
+  }, {number: 7, labels: [], body: ''}, false],
+  // A genuine dispatch still arms the gate for an agent-authored branch.
+  ['agent branch prefix, dispatched issue', {
+    user: {login: 'groupthinking'},
+    head: {ref: 'jules/thing'}, labels: [], body: ''
+  }, {number: 7, labels: [{name: 'agent-task'}], body: CONTRACT}, true],
   ['agent label on the pull request, no issue', {
     user: {login: 'groupthinking'},
     head: {ref: 'feature/thing'},
@@ -3519,6 +3634,118 @@ for (const [name, pull, issue, expected] of rows) {
             text=True,
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
+
+    def test_snapshot_and_arming_predicates_agree_on_placeholders(self):
+        """The snapshot job and the gate must accept exactly the same fields.
+
+        `snapshot-agent-task-intent` decides whether to write an intent
+        snapshot; `agentTaskApplicable` decides whether to demand one. A field
+        either predicate reads differently opens a hole in one direction or the
+        other.
+
+        Issue forms render an unfilled field as ``_No response_``, and authors
+        routinely wrap values in backticks, so an unfilled field inside a code
+        span arrives as ``` `_No response_` ```. The gate's ``declared`` strips
+        outer backticks before the placeholder test; the snapshot job's
+        ``hasResponse`` originally did not, so it read that as a real answer.
+        The snapshot was written while the gate stayed ``not_applicable`` --
+        a malformed dispatch skipping the check entirely, the mirror image of
+        the permanent block fixed alongside it.
+        """
+
+        workflow = self._workflow()
+        has_response = _javascript_functions(workflow, "function hasResponse(")
+        self.assertEqual(len(has_response), 1)
+        applicable = _javascript_functions(
+            workflow,
+            "function agentTaskApplicable(",
+        )
+        self.assertEqual(len(applicable), 2)
+
+        assertions = r"""
+function declared(value) {
+  const v = String(value || '').replace(/^\x60|\x60$/g, '').trim();
+  return Boolean(v) && v !== '_No response_';
+}
+const rows = [
+  ['`_No response_`', false],
+  ['``', false],
+  ['_No response_', false],
+  ['', false],
+  ['   ', false],
+  ['`run-42`', true],
+  ['run-42', true]
+];
+for (const [value, expected] of rows) {
+  if (hasResponse(value) !== expected) {
+    throw new Error(
+      `snapshot hasResponse(${JSON.stringify(value)}) === ` +
+      `${hasResponse(value)}, expected ${expected}`
+    );
+  }
+  if (declared(value) !== hasResponse(value)) {
+    throw new Error(
+      `predicates disagree on ${JSON.stringify(value)}: ` +
+      `snapshot=${hasResponse(value)} gate=${declared(value)}`
+    );
+  }
+}
+"""
+        completed = subprocess.run(
+            ["node", "-e", has_response[0] + assertions],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+
+        # ...and end to end: a backticked placeholder must not arm the gate,
+        # matching the snapshot job's refusal to write for the same issue.
+        gate_assertions = r"""
+const FIELDS = [
+  ['### Agent Login', '`x[bot]`'],
+  ['### Agent Run ID', '`r-1`'],
+  ['### Objective', 'Do it.'],
+  ['### Acceptance Criteria', '- Done.'],
+  ['### Declared File Scope', '`src/a.py`'],
+  ['### Pre-dispatch Confirmation', '- [x] yes']
+];
+function body(overrides) {
+  return FIELDS.map(([heading, value]) =>
+    heading + '\n\n' + (overrides[heading] || value)
+  ).join('\n\n');
+}
+const pull = {
+  user: {login: 'someone'},
+  head: {ref: 'claude/x'},
+  labels: [],
+  body: ''
+};
+const issue = text => ({
+  number: 7, labels: [{name: 'agent-task'}], body: text
+});
+const rows = [
+  ['complete', body({}), true],
+  ['backticked placeholder login',
+    body({'### Agent Login': '`_No response_`'}), false],
+  ['empty backticks run id',
+    body({'### Agent Run ID': '``'}), false]
+];
+for (const [name, text, expected] of rows) {
+  const actual = agentTaskApplicable(pull, issue(text));
+  if (actual !== expected) {
+    throw new Error(`${name}: ${actual} !== ${expected}`);
+  }
+}
+"""
+        for copy in applicable:
+            completed = subprocess.run(
+                ["node", "-e", copy + gate_assertions],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
 
     def test_agent_applicability_copies_stay_identical(self):
         """The scheduled sweep and the per-pull-request collector must agree.
