@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // `fetchTranscript`'s error string is returned to the caller verbatim by
 // `/api/transcribe`'s `!result.success` branches. That is only safe while every
-// value it can carry is a fixed, app-authored literal. These tests pin the two
-// values that were not: the caller-supplied `audioUrl`'s HTTP status, and a
-// message that varied on whether provider API keys were configured.
+// value it can carry is a fixed, app-authored literal. These tests pin the three
+// values that were not: the caller-supplied `audioUrl`'s HTTP status, a message
+// that varied on whether provider API keys were configured, and the SSRF guard's
+// rejection reason, which named which guard rule fired.
 
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/ssrf-guard', () => ({
@@ -25,8 +26,20 @@ vi.mock('@/lib/vercel-ai-gateway', () => ({
 }));
 
 import { fetchTranscript } from '@/lib/transcription-service';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 
 const AUDIO_URL = 'https://cdn.example.com/clip.mp3';
+
+// The real messages `assertPublicHttpUrl` throws, as of ssrf-guard.ts. Each
+// names a different guard rule; the point of the test below is that the caller
+// cannot tell them apart.
+const GUARD_REJECTIONS = [
+  'Invalid URL',
+  'Blocked URL scheme: file:',
+  'Blocked host',
+  'Blocked private IP literal',
+  'Host does not resolve to a public address',
+];
 
 let consoleError: ReturnType<typeof vi.spyOn>;
 const savedEnv = { ...process.env };
@@ -77,6 +90,32 @@ describe('fetchTranscript error disclosure', () => {
 
     // One distinguishable message per status would rebuild the oracle.
     expect(new Set(errors).size).toBe(1);
+  });
+
+  it('does not reveal which SSRF guard rule rejected the audioUrl', async () => {
+    process.env.OPENAI_API_KEY = 'sk-test-key';
+    const errors: string[] = [];
+
+    for (const message of GUARD_REJECTIONS) {
+      vi.mocked(assertPublicHttpUrl).mockRejectedValueOnce(new Error(message));
+      const result = await fetchTranscript({ audioUrl: AUDIO_URL });
+      errors.push(result.error ?? '');
+    }
+
+    // A blocklist match and a DNS rejection must be indistinguishable: the first
+    // confirms a hostname is on the server's blocklist, the second only that DNS
+    // returned nothing public. Distinguishing them is a policy oracle.
+    expect(new Set(errors).size).toBe(1);
+    expect(errors[0]).toBe('Rejected audioUrl');
+    // No guard rule name survives into the caller-visible payload.
+    for (const message of GUARD_REJECTIONS) {
+      expect(errors[0]).not.toContain(message);
+    }
+    // Operators still get the real reason.
+    expect(consoleError).toHaveBeenCalledWith(
+      '[transcription] audioUrl rejected by SSRF guard:',
+      expect.objectContaining({ message: 'Blocked host' }),
+    );
   });
 
   it('does not disclose whether provider API keys are configured', async () => {

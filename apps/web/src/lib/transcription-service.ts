@@ -273,9 +273,18 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
       try {
         await assertPublicHttpUrl(audioUrl);
       } catch (guardErr) {
+        // The guard throws five distinguishable messages — `Invalid URL`,
+        // `Blocked URL scheme: <protocol>`, `Blocked host`, `Blocked private IP
+        // literal`, and `Host does not resolve to a public address`. Forwarding
+        // them told the caller WHICH rule fired: `Blocked host` confirms a
+        // hostname-blocklist match, while the resolution message confirms only
+        // that DNS gave nothing public. That difference is a policy oracle, and
+        // it sharpens as BLOCKED_HOSTNAMES grows. One fixed message for every
+        // rejection; the real reason goes to the log.
+        console.error('[transcription] audioUrl rejected by SSRF guard:', guardErr);
         return {
           success: false,
-          error: `Rejected audioUrl: ${guardErr instanceof Error ? guardErr.message : 'blocked'}`,
+          error: 'Rejected audioUrl',
           transcript: '',
         };
       }

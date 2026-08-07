@@ -20,16 +20,28 @@ export const maxDuration = 120;
  * — that text is logged server-side only.
  *
  * The `!result.success` branches keep `fetchTranscript`'s own message in `error`.
- * That is safe only because every one of those values is now a fixed,
- * app-authored literal. Two of them were not, and were removed at the source in
- * `transcription-service.ts` rather than masked here:
+ * That holds only while every value it can return is a fixed, app-authored
+ * literal — verified as of this change, all seven are. Three were not, and were
+ * corrected at the source in `transcription-service.ts` rather than masked here:
  *   - the caller-supplied `audioUrl`'s HTTP status, which made this route a
- *     cross-origin probe, and
+ *     cross-origin probe,
  *   - a message that varied on whether provider API keys were configured, which
- *     disclosed server configuration.
- * Both are logged server-side instead. Keep that invariant when adding a
- * strategy: anything interpolated into a `fetchTranscript` error reaches the
- * client verbatim through the branches below.
+ *     disclosed server configuration, and
+ *   - the SSRF guard's rejection reason, which named which guard rule fired and
+ *     so leaked hostname-blocklist policy.
+ * All three are logged server-side instead.
+ *
+ * Keep that invariant when adding a strategy: anything interpolated into a
+ * `fetchTranscript` error reaches the client verbatim through the branches
+ * below. `${}` in an error value is the thing to look for.
+ *
+ * What this deliberately does NOT claim: the *choice among* those literals is
+ * still informative. `Rejected audioUrl` versus `Could not retrieve the audio
+ * file` tells a caller whether their host cleared the SSRF guard — i.e. whether
+ * it resolves to a public address. That residue is inherent to a guard that
+ * refuses some inputs and attempts others, it is far coarser than naming the
+ * rule, and this route is session-gated (`apps/web/src/lib/auth-paths.ts`), so
+ * it is accepted rather than papered over.
  *   - 400: Invalid input (missing URL, malformed JSON) — `input_required` / `invalid_json`
  *   - 429: Rate limited (implement backoff or upgrade service plan) — `rate_limited`
  *   - 500: Service unavailable (check API keys and billing) — `billing_not_configured`
