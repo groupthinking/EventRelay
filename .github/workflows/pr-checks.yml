@@ -658,27 +658,6 @@ jobs:
               const login = String(
                 pull && pull.user && pull.user.login || ''
               );
-              const knownAgents = new Set([
-                'google-labs-jules[bot]',
-                'github-copilot[bot]',
-                'copilot-swe-agent[bot]',
-                'openai-codex[bot]',
-                'chatgpt-codex-connector[bot]'
-              ]);
-              const agentBranch =
-                /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
-                  String(pull && pull.head && pull.head.ref || '')
-                );
-              const manifestPresent =
-                /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
-                  String(pull && pull.body || '')
-                );
-              // Provenance asserted by the pull request itself. Each of these
-              // is a claim by the producing side that this is agent work.
-              const pullProvenance = knownAgents.has(login) || agentBranch ||
-                manifestPresent ||
-                carriesLabel((pull && pull.labels) || [],
-                  ['agent', 'agenttask', 'mcpagent']);
               // Issue-side dispatch. Label automation also applies agent task
               // labels as topic tags to issues that never declared a contract,
               // so the bare label is not evidence of a dispatch: it only
@@ -698,31 +677,36 @@ jobs:
               const issueDispatch =
                 carriesLabel(issueLabelSource, ['agenttask', 'mcpagent']) &&
                 declaresAgentContract(selectedIssue);
-              // Pull-side provenance says who produced the branch. It is not
-              // evidence that a dispatch contract exists to measure that
-              // branch against. The gate scores a pull request against the
-              // frozen intent snapshot on its linked issue, and that snapshot
-              // is only ever written by `snapshot-agent-task-intent`, which
-              // runs on `issues` events alone. With no linked issue there is
-              // no snapshot, no declared run id and no declared login, so
-              // `policy.agent_login`, `policy.run_id` and `issue.number` are
-              // all unsatisfiable and the verdict is permanently
-              // `invalid_payload` regardless of what the author does. A
-              // branch named `claude/...` is a naming convention, not a
-              // dispatch. Arming on it alone is what made this check red on
-              // pull requests that never had a contract to satisfy -- including
-              // #1368, which merged with this status failing.
+              // Only an issue-side dispatch arms the gate. Pull-side
+              // provenance says who produced the branch; it is not evidence
+              // that a dispatch contract exists to measure that branch
+              // against. The gate scores a pull request against the frozen
+              // intent snapshot on its linked issue, and that snapshot is only
+              // ever written by `snapshot-agent-task-intent`, which runs on
+              // `issues` events alone, and only for issues labelled
+              // `agent-task`/`mcp-agent` that already declare a run id and
+              // login. Without that snapshot `policy.agent_login` and
+              // `policy.run_id` are unsatisfiable and the verdict is
+              // permanently `invalid_payload` regardless of what the author
+              // does. A branch named `claude/...` is a naming convention, not
+              // a dispatch.
               //
-              // So provenance arms the gate only once a linked issue exists to
-              // verify against; with none, there is nothing to measure and the
-              // verdict is `not_applicable`. This does not create an escape
-              // hatch: a pull request that links a dispatched issue is still
-              // fully gated, and requiring a pull request to bind to a focused
-              // issue at all is separately owned by `Canonical issue and
-              // evidence`, which states a requirement an author can actually
-              // meet.
-              return login !== 'dependabot[bot]' &&
-                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
+              // Arming on `pullProvenance && selectedIssue` -- provenance plus
+              // *any* linked issue -- put this check in direct contradiction
+              // with `PR Governance`, which requires exactly one
+              // `Closes #<issue>` reference. Satisfying one guaranteed failing
+              // the other: every well-formed agent pull request was armed
+              // against a contract that had never been written, so the gate
+              // was red on ~100% of pull requests, including merged ones
+              // (#1368, #1408). Requiring a real dispatch instead restores the
+              // #1130 reasoning to the arming rule that overrode it.
+              //
+              // This is not an escape hatch: a pull request that links a
+              // genuinely dispatched issue is still fully gated, and requiring
+              // a pull request to bind to a focused issue at all is separately
+              // owned by `Canonical issue and evidence`, which states a
+              // requirement an author can actually meet.
+              return login !== 'dependabot[bot]' && issueDispatch;
             }
             function intentContractErrors(issue, comments, pullCreatedAt) {
               const errors = [];
@@ -1984,27 +1968,6 @@ jobs:
               const login = String(
                 pull && pull.user && pull.user.login || ''
               );
-              const knownAgents = new Set([
-                'google-labs-jules[bot]',
-                'github-copilot[bot]',
-                'copilot-swe-agent[bot]',
-                'openai-codex[bot]',
-                'chatgpt-codex-connector[bot]'
-              ]);
-              const agentBranch =
-                /^(?:agent|claude|codex|copilot|jules)[/-]/i.test(
-                  String(pull && pull.head && pull.head.ref || '')
-                );
-              const manifestPresent =
-                /<!--\s*agent-lock-manifest\s*[\s\S]*?-->/i.test(
-                  String(pull && pull.body || '')
-                );
-              // Provenance asserted by the pull request itself. Each of these
-              // is a claim by the producing side that this is agent work.
-              const pullProvenance = knownAgents.has(login) || agentBranch ||
-                manifestPresent ||
-                carriesLabel((pull && pull.labels) || [],
-                  ['agent', 'agenttask', 'mcpagent']);
               // Issue-side dispatch. Label automation also applies agent task
               // labels as topic tags to issues that never declared a contract,
               // so the bare label is not evidence of a dispatch: it only
@@ -2024,31 +1987,36 @@ jobs:
               const issueDispatch =
                 carriesLabel(issueLabelSource, ['agenttask', 'mcpagent']) &&
                 declaresAgentContract(selectedIssue);
-              // Pull-side provenance says who produced the branch. It is not
-              // evidence that a dispatch contract exists to measure that
-              // branch against. The gate scores a pull request against the
-              // frozen intent snapshot on its linked issue, and that snapshot
-              // is only ever written by `snapshot-agent-task-intent`, which
-              // runs on `issues` events alone. With no linked issue there is
-              // no snapshot, no declared run id and no declared login, so
-              // `policy.agent_login`, `policy.run_id` and `issue.number` are
-              // all unsatisfiable and the verdict is permanently
-              // `invalid_payload` regardless of what the author does. A
-              // branch named `claude/...` is a naming convention, not a
-              // dispatch. Arming on it alone is what made this check red on
-              // pull requests that never had a contract to satisfy -- including
-              // #1368, which merged with this status failing.
+              // Only an issue-side dispatch arms the gate. Pull-side
+              // provenance says who produced the branch; it is not evidence
+              // that a dispatch contract exists to measure that branch
+              // against. The gate scores a pull request against the frozen
+              // intent snapshot on its linked issue, and that snapshot is only
+              // ever written by `snapshot-agent-task-intent`, which runs on
+              // `issues` events alone, and only for issues labelled
+              // `agent-task`/`mcp-agent` that already declare a run id and
+              // login. Without that snapshot `policy.agent_login` and
+              // `policy.run_id` are unsatisfiable and the verdict is
+              // permanently `invalid_payload` regardless of what the author
+              // does. A branch named `claude/...` is a naming convention, not
+              // a dispatch.
               //
-              // So provenance arms the gate only once a linked issue exists to
-              // verify against; with none, there is nothing to measure and the
-              // verdict is `not_applicable`. This does not create an escape
-              // hatch: a pull request that links a dispatched issue is still
-              // fully gated, and requiring a pull request to bind to a focused
-              // issue at all is separately owned by `Canonical issue and
-              // evidence`, which states a requirement an author can actually
-              // meet.
-              return login !== 'dependabot[bot]' &&
-                (issueDispatch || (pullProvenance && Boolean(selectedIssue)));
+              // Arming on `pullProvenance && selectedIssue` -- provenance plus
+              // *any* linked issue -- put this check in direct contradiction
+              // with `PR Governance`, which requires exactly one
+              // `Closes #<issue>` reference. Satisfying one guaranteed failing
+              // the other: every well-formed agent pull request was armed
+              // against a contract that had never been written, so the gate
+              // was red on ~100% of pull requests, including merged ones
+              // (#1368, #1408). Requiring a real dispatch instead restores the
+              // #1130 reasoning to the arming rule that overrode it.
+              //
+              // This is not an escape hatch: a pull request that links a
+              // genuinely dispatched issue is still fully gated, and requiring
+              // a pull request to bind to a focused issue at all is separately
+              // owned by `Canonical issue and evidence`, which states a
+              // requirement an author can actually meet.
+              return login !== 'dependabot[bot]' && issueDispatch;
             }
 
             const prNumber = Number(process.env.INPUT_PR_NUMBER || 0);

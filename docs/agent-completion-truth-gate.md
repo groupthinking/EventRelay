@@ -35,14 +35,18 @@ If an agent has repository-write credentials that can create Actions workflows o
 
 ## Applicability
 
-The gate applies when any of these signals identify agent work:
+The gate applies only when the PR's linked issue is a genuine dispatch — that is, when the issue both:
 
-- a known agent bot authored the PR;
-- the branch starts with agent/, claude/, codex/, copilot/, or jules/;
-- the PR or linked issue has agent, agent-task, or mcp/agent;
-- the PR contains an agent-lock-manifest comment.
+- carries agent-task or mcp/agent (the generic agent label does not count, since neither the snapshot job nor the collector recognises it); and
+- declares an agent run id and an agent login in its body.
 
-Dependabot is exempt. Other human-authored PRs receive not_applicable.
+Dependabot is exempt. Everything else receives not_applicable.
+
+Pull-side provenance — a known agent bot author, a branch starting with agent/, claude/, codex/, copilot/, or jules/, an agent-lock-manifest comment, or an agent label on the PR — does **not** arm the gate, on its own or against a linked issue. It identifies who produced the branch; it does not supply a contract to score that branch against.
+
+That distinction is load-bearing. The gate scores a PR against the frozen intent snapshot on its linked issue, and that snapshot is written only by `snapshot-agent-task-intent`, which runs on `issues` events alone and only for issues that already declare a run id and login. An ordinary issue has no snapshot, so `policy.agent_login` and `policy.run_id` cannot be populated and the verdict is permanently `invalid_payload` — with no action available to the author. Because **PR Governance** separately requires exactly one `Closes #<issue>` reference, arming on provenance-plus-any-linked-issue put the two checks in direct contradiction: satisfying one guaranteed failing the other, and this gate was red on roughly every pull request, including merged ones (#1368, #1408).
+
+Requiring a declared dispatch is not an escape hatch: a PR that links a genuinely dispatched issue is still fully gated, and the requirement that a PR bind to a focused issue at all is separately owned by **Canonical issue and evidence**, which states a requirement an author can actually meet.
 
 ## Input schema
 
