@@ -36,7 +36,7 @@ dependencies = [
     "slowapi>=0.1.8",
     "sentry-sdk>=1.39.0",
     "ddtrace>=2.1.0",
-    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-aiplatform>=1.133.0",
     "uvicorn[standard]>=0.24.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -140,7 +140,7 @@ ml = [
 ]
 # Google Cloud Platform services (Vertex AI, Firestore, Cloud Tasks, etc.)
 cloud = [
-    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-aiplatform>=1.133.0",
     "google-cloud-firestore>=2.13.0",
     "google-cloud-tasks>=2.14.0",
     "google-cloud-storage>=2.13.0",
