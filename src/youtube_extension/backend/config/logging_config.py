@@ -76,6 +76,21 @@ def sanitize_log_record(rendered: str) -> str:
     return rendered.translate(_UNSAFE_LOG_CHARS)
 
 
+def _describe_exception(exc: BaseException) -> str:
+    """Describe an exception without ever raising a second one.
+
+    Used on the JSON serialization fallback path (#1452), where the whole point
+    is that a record survives. ``str(exc)`` is itself attacker-adjacent there:
+    the exception can come from a call site's own ``__str__``, so it may be an
+    instance of a class whose ``__str__`` raises too. The type name is a plain
+    attribute lookup and is always safe.
+    """
+    try:
+        return f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - the type name alone still identifies it
+        return type(exc).__name__
+
+
 class StructuredFormatter(logging.Formatter):
     """
     Custom formatter for structured logging with enhanced metadata.
@@ -156,10 +171,32 @@ class StructuredFormatter(logging.Formatter):
             if hasattr(record, attribute):
                 payload[attribute] = getattr(record, attribute)
 
-        # `default=str` keeps a non-serializable `extra` value from raising
-        # inside the logging path, where an exception would be swallowed and
-        # the record lost entirely.
-        return json.dumps(payload, ensure_ascii=True, default=str)
+        # `default=str` handles the common case — an `extra` value of a type
+        # `json` cannot natively encode — but it is NOT sufficient on its own,
+        # and the fallback below is what actually delivers "never lose a
+        # record" (#1452). Two inputs defeat it:
+        #
+        #   * a circular container, which ``json.dumps`` rejects structurally
+        #     *before* ``default`` is ever consulted;
+        #   * a value whose ``__str__`` raises, where ``default`` is consulted
+        #     and the exception propagates straight back out of it.
+        #
+        # Either one raises inside ``Handler.emit``, where ``logging`` swallows
+        # it via ``handleError`` and drops the record entirely. Only the
+        # optional enrichments can carry such a value, so the fallback keeps
+        # every scalar field — including `level`, which downstream consumers
+        # route and alert on — and reports what was dropped.
+        try:
+            return json.dumps(payload, ensure_ascii=True, default=str)
+        except Exception as exc:  # noqa: BLE001 - a record is never worth losing
+            safe: dict[str, Any] = {
+                key: value
+                for key, value in payload.items()
+                if isinstance(value, (str, int, float, bool, type(None)))
+            }
+            safe["serialization_error"] = _describe_exception(exc)
+            # Cannot raise: every remaining value is a JSON-native scalar.
+            return json.dumps(safe, ensure_ascii=True)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""

@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from youtube_extension.backend.config.logging_config import (  # noqa: E402
     _UNSAFE_LOG_CHARS,
     StructuredFormatter,
+    _describe_exception,
     sanitize_log_record,
     setup_logging,
 )
@@ -307,6 +308,92 @@ def test_line_oriented_path_is_untouched_by_the_json_fix():
     logger, buf = _make_logger("json-default-off")
     logger.info("all good %s", "video-123")
     assert buf.getvalue() == "INFO - all good video-123\n"
+
+
+# --- #1452: a record must survive an unserializable enrichment -------------
+#
+# `default=str` alone does not deliver "never lose a record". Both payloads
+# below raise out of `json.dumps`, inside `Handler.emit`, where `logging`
+# swallows the exception via `handleError` and drops the record silently.
+# `correlation_id` is the reachable field: it is populated from
+# `record.request_id`, which middleware may set to a framework object.
+
+
+class _ExplodingStr:
+    """A value whose ``__str__`` raises — `default=str` propagates it."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def _circular_container() -> dict:
+    """`json.dumps` rejects this structurally, before `default` is consulted."""
+    circular: dict = {}
+    circular["self"] = circular
+    return circular
+
+
+@pytest.mark.parametrize(
+    ("label", "poison"),
+    [
+        ("circular", _circular_container()),
+        ("exploding-str", _ExplodingStr()),
+    ],
+)
+def test_unserializable_enrichment_does_not_cost_the_record(label, poison):
+    logger, buf = _make_json_logger(f"json-unserializable-{label}")
+    logger.info("healthy before")
+    logger.info("poisoned record", extra={"request_id": poison})
+    logger.info("healthy after")
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    # The pre-#1452 implementation emits 2 — the poisoned record is dropped.
+    assert len(lines) == 3
+
+    parsed = json.loads(lines[1])
+    # `level` stays authoritative, which is what downstream routing alerts on.
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "poisoned record"
+    # The unserializable enrichment is dropped, and says so rather than
+    # vanishing silently.
+    assert "correlation_id" not in parsed
+    assert "serialization_error" in parsed
+
+
+def test_serialization_fallback_keeps_the_record_a_single_json_line():
+    # The fallback must honour the same two guarantees as the happy path:
+    # one physical line, and no forged field from attacker content.
+    logger, buf = _make_json_logger("json-unserializable-forgery")
+    logger.info(_FORGERY, extra={"request_id": _ExplodingStr()})
+
+    rendered = buf.getvalue()
+    assert rendered.count("\n") == 1
+    parsed = json.loads(rendered)
+
+    assert parsed["level"] == "INFO"
+    assert "forged" not in parsed
+    assert parsed["message"] == _FORGERY
+
+
+def test_benign_enrichments_still_reach_the_json_record():
+    # The fallback must not fire on serializable values — a scalar
+    # `correlation_id` still rides through the normal path.
+    logger, buf = _make_json_logger("json-benign-enrichment")
+    logger.info("fine", extra={"request_id": "req-123"})
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["correlation_id"] == "req-123"
+    assert "serialization_error" not in parsed
+
+
+def test_describe_exception_survives_an_exception_that_cannot_be_stringified():
+    # The fallback formats the error it caught. If that exception's own
+    # __str__ raises, describing it must not re-raise and re-lose the record.
+    class _Unprintable(Exception):
+        def __str__(self) -> str:
+            raise RuntimeError("nested boom")
+
+    assert _describe_exception(_Unprintable()) == "_Unprintable"
 
 
 @pytest.fixture
