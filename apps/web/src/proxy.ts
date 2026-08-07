@@ -38,8 +38,15 @@ const AI_ROUTE_PREFIXES = [
   '/api/training',
   '/api/transcribe',
   '/api/video',
-  '/api/workflows',
 ];
+
+// Durable-workflow routes are a start (POST /api/workflows/...) plus a status
+// long-poll (GET /api/workflows/.../:runId). Only the start does real AI work;
+// the poll fires every ~1.5s (studio-workflow.ts) and must NOT draw from the
+// strict AI budget, or the client poller is 429'd mid-run and the UI hangs on
+// "still running" (PR #1507 review). So these are classified by method, not by
+// a blanket prefix: mutating start = AI budget, GET status poll = general.
+const WORKFLOW_ROUTE_PREFIX = '/api/workflows';
 
 // Login gating (activate-when-configured) + server-to-server bypass.
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
@@ -121,7 +128,11 @@ function getRedisClient(): Promise<Redis | null> {
   return redisClientPromise;
 }
 
-function isAiRoute(pathname: string): boolean {
+function isAiRoute(pathname: string, method: string): boolean {
+  if (pathname.startsWith(WORKFLOW_ROUTE_PREFIX)) {
+    // Only the mutating start is AI-heavy; GET status polls use the general budget.
+    return method === 'POST';
+  }
   return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
@@ -144,8 +155,8 @@ function getClientIp(request: NextRequest): string {
   return 'unknown';
 }
 
-function getRateLimit(pathname: string): number {
-  return isAiRoute(pathname) ? AI_LIMIT : GENERAL_LIMIT;
+function getRateLimit(pathname: string, method: string): number {
+  return isAiRoute(pathname, method) ? AI_LIMIT : GENERAL_LIMIT;
 }
 
 async function checkRedisLimit(redisClient: Redis, key: string, limit: number): Promise<RateLimitResult> {
@@ -188,9 +199,10 @@ function checkMemoryLimit(key: string, limit: number): RateLimitResult {
 
 async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const pathname = request.nextUrl.pathname;
-  const limit = getRateLimit(pathname);
+  const method = request.method;
+  const limit = getRateLimit(pathname, method);
   const clientIp = getClientIp(request);
-  const routeClass = isAiRoute(pathname) ? 'ai' : 'api';
+  const routeClass = isAiRoute(pathname, method) ? 'ai' : 'api';
   const key = `${routeClass}:${clientIp}`;
 
   const redisClient = await getRedisClient();
