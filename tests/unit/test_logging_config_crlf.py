@@ -386,6 +386,37 @@ def test_benign_enrichments_still_reach_the_json_record():
     assert "serialization_error" not in parsed
 
 
+@pytest.mark.parametrize("value", [float("inf"), float("-inf"), float("nan")])
+def test_non_finite_enrichment_does_not_produce_invalid_json(value):
+    # Python's json emits the JavaScript literals NaN/Infinity for these, which
+    # are not valid JSON — a strict downstream parser rejects the whole record,
+    # which is the same loss as dropping it, moved to the consumer. `json.loads`
+    # accepts them by default, so this asserts against a *strict* parse.
+    logger, buf = _make_json_logger(f"json-non-finite-{value}")
+    logger.info("measured", extra={"request_id": value})
+
+    rendered = buf.getvalue()
+
+    def _reject(constant: str) -> None:
+        raise AssertionError(f"non-JSON constant in record: {constant}")
+
+    parsed = json.loads(rendered, parse_constant=_reject)
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "measured"
+    assert "correlation_id" not in parsed
+    assert "serialization_error" in parsed
+
+
+def test_finite_float_enrichment_is_kept():
+    # The non-finite guard must not cost ordinary numeric enrichments.
+    logger, buf = _make_json_logger("json-finite-float")
+    logger.info("measured", extra={"request_id": 12.5})
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["correlation_id"] == 12.5
+    assert "serialization_error" not in parsed
+
+
 def test_describe_exception_survives_an_exception_that_cannot_be_stringified():
     # The fallback formats the error it caught. If that exception's own
     # __str__ raises, describing it must not re-raise and re-lose the record.

@@ -10,6 +10,7 @@ Provides consistent log formatting, multiple handlers, and performance monitorin
 import json
 import logging
 import logging.config
+import math
 import os
 import sys
 from datetime import datetime
@@ -74,6 +75,19 @@ def sanitize_log_record(rendered: str) -> str:
     rendered JSON record safe — see the module comment and ``#1429``.
     """
     return rendered.translate(_UNSAFE_LOG_CHARS)
+
+
+def _is_json_safe_scalar(value: object) -> bool:
+    """Is this a value ``json.dumps`` emits directly, under ``allow_nan=False``?
+
+    The filter for the serialization fallback (#1452). Deliberately excludes
+    non-finite floats: ``json`` renders them as the JavaScript literals
+    ``NaN``/``Infinity``, which are not valid JSON, so a strict downstream
+    parser would reject the whole record.
+    """
+    if isinstance(value, float):
+        return math.isfinite(value)
+    return isinstance(value, (str, bool, int, type(None)))
 
 
 def _describe_exception(exc: BaseException) -> str:
@@ -173,30 +187,50 @@ class StructuredFormatter(logging.Formatter):
 
         # `default=str` handles the common case — an `extra` value of a type
         # `json` cannot natively encode — but it is NOT sufficient on its own,
-        # and the fallback below is what actually delivers "never lose a
-        # record" (#1452). Two inputs defeat it:
+        # and the fallback below is what makes a payload always serializable
+        # (#1452). Three inputs defeat `default=str`:
         #
         #   * a circular container, which ``json.dumps`` rejects structurally
         #     *before* ``default`` is ever consulted;
         #   * a value whose ``__str__`` raises, where ``default`` is consulted
-        #     and the exception propagates straight back out of it.
+        #     and the exception propagates straight back out of it;
+        #   * a non-finite float, which ``default`` is never consulted for
+        #     either — see ``allow_nan=False`` below.
         #
-        # Either one raises inside ``Handler.emit``, where ``logging`` swallows
-        # it via ``handleError`` and drops the record entirely. Only the
-        # optional enrichments can carry such a value, so the fallback keeps
-        # every scalar field — including `level`, which downstream consumers
-        # route and alert on — and reports what was dropped.
+        # Each raises inside ``Handler.emit``, where ``logging`` swallows it via
+        # ``handleError`` and drops the record entirely. Only the optional
+        # enrichments can carry such a value, so the fallback keeps every
+        # JSON-safe scalar — including `level`, which downstream consumers route
+        # and alert on — and reports what was dropped.
+        #
+        # SCOPE: this covers *serializing* the payload. Building it can still
+        # raise upstream of here — ``record.getMessage()`` on mismatched
+        # ``%``-args is the reachable case — and that is out of scope because it
+        # fails the line-oriented path identically (``super().format()`` calls
+        # ``getMessage()`` too). This is not a "no record is ever lost"
+        # guarantee; it is a "serialization never loses one".
+        #
+        # ``allow_nan=False`` because Python's default emits the JavaScript
+        # literals ``NaN``/``Infinity``, which are not valid JSON. A strict
+        # downstream parser rejects the record — the same loss as dropping it
+        # here, just moved to the consumer where it is harder to see. Raising
+        # instead routes it to the fallback, which drops the offending
+        # enrichment and keeps a record every parser accepts.
         try:
-            return json.dumps(payload, ensure_ascii=True, default=str)
+            return json.dumps(
+                payload, ensure_ascii=True, allow_nan=False, default=str
+            )
         except Exception as exc:  # noqa: BLE001 - a record is never worth losing
             safe: dict[str, Any] = {
                 key: value
                 for key, value in payload.items()
-                if isinstance(value, (str, int, float, bool, type(None)))
+                if _is_json_safe_scalar(value)
             }
             safe["serialization_error"] = _describe_exception(exc)
-            # Cannot raise: every remaining value is a JSON-native scalar.
-            return json.dumps(safe, ensure_ascii=True)
+            # Cannot raise: `_is_json_safe_scalar` admits only values the
+            # encoder emits directly, and `allow_nan=False` has nothing left to
+            # reject because non-finite floats were filtered out above.
+            return json.dumps(safe, ensure_ascii=True, allow_nan=False)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
