@@ -57,8 +57,8 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
     workflow = _load_workflow()
     jobs = workflow["jobs"]
 
-    approve_job = jobs["approve"]
-    merge_job = jobs["merge"]
+    approve_job = jobs["dependabot-auto-merge-approve"]
+    merge_job = jobs["dependabot-auto-merge-merge"]
 
     assert "vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true'" in approve_job["if"]
     assert "dependabot[bot]" in approve_job["if"]
@@ -95,10 +95,14 @@ def test_dependabot_workflow_approves_and_merges_without_checkout() -> None:
         and "enablePullRequestAutoMerge" in step.get("with", {}).get("script", "")
         for step in approve_steps
     )
+    # This used to also assert the script contained "semver-major", which was
+    # true of the version that could never merge anything -- and stopped being
+    # true once deny-major became a patch/minor allowlist, even though the
+    # policy got *stricter*. The substring tracked wording, not behaviour. What
+    # the gate actually decides is covered by the behavioural tests below.
     assert any(
         "dependabot[bot]" in step.get("with", {}).get("script", "")
         and "pulls.merge" in step.get("with", {}).get("script", "")
-        and "semver-major" in step.get("with", {}).get("script", "")
         for step in merge_steps
     )
 
@@ -175,10 +179,42 @@ updated-dependencies:
 """
 
 
+# MERGE_POLICY.md gate 2, "Required for every pull request". `trivy` is
+# lowercase: the capitalised `Trivy` check run reports `neutral` forever.
+REQUIRED_CHECKS = [
+    "validate",
+    "guards",
+    "lint-python",
+    "lint-frontend",
+    "build",
+    "test",
+    "CodeQL",
+    "gitleaks (working tree)",
+    "dependency-review",
+    "PR Governance",
+    "Canonical issue and evidence",
+    "Security Scan - python",
+    "Security Scan - javascript",
+    "bandit",
+    "python-safety",
+    "npm-audit",
+    "trivy",
+]
+
+
 def _green(*names: str) -> list[dict]:
     return [
         {"name": name, "status": "completed", "conclusion": "success"} for name in names
     ]
+
+
+def _all_required_green(**overrides: dict) -> list[dict]:
+    """Every gate-2 check reporting success, with named ones overridden."""
+    runs = _green(*REQUIRED_CHECKS)
+    for run in runs:
+        if run["name"] in overrides:
+            run.update(overrides[run["name"]])
+    return runs
 
 
 def _run_merge_gate(tmp_path: Path, scenario: dict) -> dict:
@@ -188,7 +224,7 @@ def _run_merge_gate(tmp_path: Path, scenario: dict) -> dict:
         pytest.skip("node is required to execute the workflow's inline script")
 
     workflow = _load_workflow()
-    script = workflow["jobs"]["merge"]["steps"][0]["with"]["script"]
+    script = workflow["jobs"]["dependabot-auto-merge-merge"]["steps"][0]["with"]["script"]
 
     script_path = tmp_path / "merge_script.js"
     script_path.write_text(script)
@@ -215,7 +251,7 @@ def test_merge_gate_merges_a_green_patch_update(tmp_path: Path) -> None:
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
-            "checkRuns": _green("build", "test", "guards", "lint-python"),
+            "checkRuns": _all_required_green(),
         },
     )
 
@@ -231,11 +267,10 @@ def test_merge_gate_blocks_while_check_runs_are_unfinished(tmp_path: Path) -> No
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
-            "checkRuns": [
-                *_green("lint-python"),
-                {"name": "build", "status": "queued", "conclusion": None},
-                {"name": "test", "status": "in_progress", "conclusion": None},
-            ],
+            "checkRuns": _all_required_green(
+                build={"status": "queued", "conclusion": None},
+                test={"status": "in_progress", "conclusion": None},
+            ),
         },
     )
 
@@ -249,10 +284,7 @@ def test_merge_gate_blocks_on_a_failing_check_run(tmp_path: Path) -> None:
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
-            "checkRuns": [
-                *_green("build", "guards"),
-                {"name": "test", "status": "completed", "conclusion": "failure"},
-            ],
+            "checkRuns": _all_required_green(test={"conclusion": "failure"}),
         },
     )
 
@@ -270,16 +302,13 @@ def test_merge_gate_treats_skipped_and_neutral_as_satisfied(tmp_path: Path) -> N
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
             "checkRuns": [
-                *_green("build", "test"),
+                *_all_required_green(
+                    **{"PR Governance": {"conclusion": "neutral"}}
+                ),
                 {
                     "name": "E2E Pipeline Tests",
                     "status": "completed",
                     "conclusion": "skipped",
-                },
-                {
-                    "name": "PR Governance",
-                    "status": "completed",
-                    "conclusion": "neutral",
                 },
             ],
         },
@@ -298,9 +327,17 @@ def test_merge_gate_ignores_its_own_check_runs(tmp_path: Path) -> None:
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
             "checkRuns": [
-                *_green("build", "test"),
-                {"name": "approve", "status": "completed", "conclusion": "skipped"},
-                {"name": "merge", "status": "in_progress", "conclusion": None},
+                *_all_required_green(),
+                {
+                    "name": "dependabot-auto-merge-approve",
+                    "status": "completed",
+                    "conclusion": "skipped",
+                },
+                {
+                    "name": "dependabot-auto-merge-merge",
+                    "status": "in_progress",
+                    "conclusion": None,
+                },
             ],
         },
     )
@@ -316,7 +353,7 @@ def test_merge_gate_skips_updates_it_cannot_classify(tmp_path: Path) -> None:
         {
             "commitMessage": INDIRECT_COMMIT,
             "combinedState": "success",
-            "checkRuns": _green("build", "test"),
+            "checkRuns": _all_required_green(),
         },
     )
 
@@ -332,7 +369,7 @@ def test_merge_gate_blocks_a_group_containing_a_major(tmp_path: Path) -> None:
         {
             "commitMessage": GROUPED_WITH_MAJOR_COMMIT,
             "combinedState": "success",
-            "checkRuns": _green("build", "test"),
+            "checkRuns": _all_required_green(),
         },
     )
 
@@ -348,7 +385,7 @@ def test_merge_gate_still_respects_commit_statuses(tmp_path: Path) -> None:
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "failure",
-            "checkRuns": _green("build", "test"),
+            "checkRuns": _all_required_green(),
         },
     )
 
@@ -364,7 +401,7 @@ def test_merge_gate_skips_non_dependabot_and_draft_pull_requests(
         {
             "author": "groupthinking",
             "commitMessage": DIRECT_PATCH_COMMIT,
-            "checkRuns": _green("build", "test"),
+            "checkRuns": _all_required_green(),
         },
     )
     assert human["merged"] is False
@@ -374,7 +411,114 @@ def test_merge_gate_skips_non_dependabot_and_draft_pull_requests(
         {
             "draft": True,
             "commitMessage": DIRECT_PATCH_COMMIT,
-            "checkRuns": _green("build", "test"),
+            "checkRuns": _all_required_green(),
         },
     )
     assert draft["merged"] is False
+
+
+def test_merge_gate_blocks_when_required_checks_have_not_reported(
+    tmp_path: Path,
+) -> None:
+    """Absence is not success. This job fires on a *completed check suite* --
+    and the first suite to complete can be this workflow's own, at which point
+    the other workflows' check runs do not exist yet. A bare "nothing is
+    failing" test merges a PR that has had no CI run against it at all."""
+    outcome = _run_merge_gate(
+        tmp_path,
+        {
+            "commitMessage": DIRECT_PATCH_COMMIT,
+            "combinedState": "success",
+            "checkRuns": [],
+        },
+    )
+
+    assert outcome["merged"] is False
+    assert "not reported yet" in outcome["log"][-1]
+
+    partial = _run_merge_gate(
+        tmp_path,
+        {
+            "commitMessage": DIRECT_PATCH_COMMIT,
+            "combinedState": "success",
+            "checkRuns": _green("build", "test"),
+        },
+    )
+
+    assert partial["merged"] is False
+    assert "CodeQL" in partial["log"][-1]
+
+
+def test_merge_gate_allowlists_update_types_rather_than_denying_major(
+    tmp_path: Path,
+) -> None:
+    """Policy is patch/minor only, so an unrecognised value must fail closed.
+    A deny-major test lets anything it does not recognise through -- including
+    a value mangled by future parser drift."""
+    unknown_commit = DIRECT_PATCH_COMMIT.replace(
+        "version-update:semver-patch", "version-update:semver-unknown"
+    )
+    outcome = _run_merge_gate(
+        tmp_path,
+        {
+            "commitMessage": unknown_commit,
+            "combinedState": "success",
+            "checkRuns": _all_required_green(),
+        },
+    )
+
+    assert outcome["merged"] is False
+    assert "outside the patch/minor policy" in outcome["log"][-1]
+
+    # A quoted value is equally unrecognised, and equally must not merge.
+    quoted_commit = DIRECT_PATCH_COMMIT.replace(
+        "version-update:semver-patch", '"version-update:semver-patch"'
+    )
+    quoted = _run_merge_gate(
+        tmp_path,
+        {
+            "commitMessage": quoted_commit,
+            "combinedState": "success",
+            "checkRuns": _all_required_green(),
+        },
+    )
+
+    assert quoted["merged"] is False
+
+
+def test_merge_gate_does_not_swallow_an_unrelated_job_named_merge(
+    tmp_path: Path,
+) -> None:
+    """The self-exclusion is a name match, so this workflow's own jobs are
+    named `dependabot-auto-merge-*`. A failing `merge` job belonging to some
+    other workflow must still block."""
+    outcome = _run_merge_gate(
+        tmp_path,
+        {
+            "commitMessage": DIRECT_PATCH_COMMIT,
+            "combinedState": "success",
+            "checkRuns": [
+                *_all_required_green(),
+                {"name": "merge", "status": "completed", "conclusion": "failure"},
+            ],
+        },
+    )
+
+    assert outcome["merged"] is False
+    assert "merge=failure" in outcome["log"][-1]
+
+
+def test_merge_gate_accepts_a_minor_update(tmp_path: Path) -> None:
+    minor_commit = DIRECT_PATCH_COMMIT.replace(
+        "version-update:semver-patch", "version-update:semver-minor"
+    )
+    outcome = _run_merge_gate(
+        tmp_path,
+        {
+            "commitMessage": minor_commit,
+            "combinedState": "success",
+            "checkRuns": _all_required_green(),
+        },
+    )
+
+    assert outcome["merged"] is True, outcome["log"]
