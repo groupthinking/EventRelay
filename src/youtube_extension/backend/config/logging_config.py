@@ -14,6 +14,49 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Characters that can be abused to forge or corrupt log records (CWE-117 log
+# injection). Any of these in dynamic content — a log message, an ``exc_info``
+# traceback, ``str(exc)``, or a structured ``extra`` field — could otherwise
+# inject what looks like an independent log line, or (for JSON logs) break the
+# record so downstream parsers drop or corrupt it.
+#
+# The set is the union of every separator ``str.splitlines()`` recognizes as a
+# line boundary (LF, CR, VT, FF, FS, GS, RS, NEL, LS, PS) plus ESC (terminal
+# control sequences). Each is escaped to a JSON-valid ``\uXXXX`` sequence — not
+# a Python ``\v``/``\x1b`` shorthand — so the neutralized record stays valid
+# JSON when ``enable_json_logging`` is on, while remaining a single physical
+# line for line-oriented sinks.
+#
+# Backslash is escaped FIRST (see ``sanitize_log_record``) so the encoding is
+# unambiguous and reversible: a real newline becomes a backslash-u-000a escape,
+# while a literal backslash in the source is doubled, so the two never collide
+# and the original text can be recovered by reversing the table.
+_UNSAFE_LOG_CHARS = {
+    ord("\\"): "\\\\",
+    ord("\n"): "\\u000a",
+    ord("\r"): "\\u000d",
+    ord("\v"): "\\u000b",  # VT / 0x0B
+    ord("\f"): "\\u000c",  # FF / 0x0C
+    ord("\x1b"): "\\u001b",  # ESC — terminal control / escape sequences
+    ord("\x1c"): "\\u001c",  # FS — file separator
+    ord("\x1d"): "\\u001d",  # GS — group separator
+    ord("\x1e"): "\\u001e",  # RS — record separator
+    0x85: "\\u0085",  # NEL — Unicode next line
+    0x2028: "\\u2028",  # LINE SEPARATOR
+    0x2029: "\\u2029",  # PARAGRAPH SEPARATOR
+}
+
+
+def sanitize_log_record(rendered: str) -> str:
+    """Neutralize line/record separators in a fully-rendered log record.
+
+    Escapes CR/LF (and every other line separator, plus ESC) to JSON-valid
+    ``\\uXXXX`` sequences so attacker-controlled content cannot forge, corrupt,
+    or split downstream log lines — including JSON logs (CWE-117). Backslash is
+    escaped first, so the transform is unambiguous and reversible.
+    """
+    return rendered.translate(_UNSAFE_LOG_CHARS)
+
 
 class StructuredFormatter(logging.Formatter):
     """
@@ -39,7 +82,11 @@ class StructuredFormatter(logging.Formatter):
         # Format the base message
         formatted_message = super().format(record)
 
-        return formatted_message
+        # CWE-117: neutralize line/record separators in the FINAL rendered
+        # record so message text, exc_info tracebacks, and any structured
+        # `extra` fields cannot forge, corrupt, or split downstream log lines
+        # even when inline sanitization was not applied at the call site.
+        return sanitize_log_record(formatted_message)
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""
