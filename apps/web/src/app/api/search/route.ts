@@ -43,8 +43,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('Upstash search error:', error);
+    // SECURITY: Prevent information disclosure by masking the raw error message
     return NextResponse.json(
-      { error: 'search_failed', detail: error instanceof Error ? error.message : String(error) },
+      { error: 'search_failed', detail: 'Internal server error' },
       { status: 502 },
     );
   }
@@ -107,8 +108,9 @@ export async function PUT(req: NextRequest) {
     });
   } catch (error) {
     console.error('Upstash upsert error:', error);
+    // SECURITY: Prevent information disclosure by masking the raw error message
     return NextResponse.json(
-      { error: 'upsert_failed', detail: error instanceof Error ? error.message : String(error) },
+      { error: 'upsert_failed', detail: 'Internal server error' },
       { status: 502 },
     );
   }

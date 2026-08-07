@@ -36,7 +36,7 @@ dependencies = [
     "slowapi>=0.1.8",
     "sentry-sdk>=1.39.0",
     "ddtrace>=2.1.0",
-    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-aiplatform>=1.133.0",
     "uvicorn[standard]>=0.24.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -48,7 +48,13 @@ dependencies = [
     "sqlalchemy>=2.0.0",
     "psycopg[binary]>=3.2,<4",
     "aiosqlite>=0.19.0",
-    "python-jose[cryptography]>=3.3.0",
+    # NOTE: python-jose was removed here. It was never imported by this
+    # codebase -- the only "from jose import ..." occurrence is inside a string
+    # template in backend/code_generator.py, which writes its own
+    # requirements.txt for the project it generates. Declaring it dragged in
+    # ecdsa, whose GHSA-wj6h-64fc-37mp has no patched release. passlib below is
+    # the same template-only case but carries no advisory; it can be dropped
+    # too if generated-project deps are confirmed self-contained.
     "passlib[bcrypt]>=1.7.4",
     "python-decouple>=3.8",
     "structlog>=23.2.0",
@@ -91,6 +97,10 @@ dev = [
     "ipykernel>=6.25.0",
     "notebook>=7.0.0",
     "locust==2.46.0",
+    # Test-time only. TestGeneratedFastAPIBehaviour executes the FastAPI app
+    # that code_generator emits, and that app imports jwt. EventRelay itself
+    # never imports it, so it does not belong in the runtime dependencies.
+    "pyjwt>=2.10.1",
 ]
 docs = [
     "mkdocs>=1.5.0",
@@ -140,7 +150,7 @@ ml = [
 ]
 # Google Cloud Platform services (Vertex AI, Firestore, Cloud Tasks, etc.)
 cloud = [
-    "google-cloud-aiplatform>=1.38.0",
+    "google-cloud-aiplatform>=1.133.0",
     "google-cloud-firestore>=2.13.0",
     "google-cloud-tasks>=2.14.0",
     "google-cloud-storage>=2.13.0",

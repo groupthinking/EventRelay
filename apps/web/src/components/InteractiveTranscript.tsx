@@ -319,6 +319,7 @@ export default function InteractiveTranscript({
             <button
               type="button"
               onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
               className="text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded"
               style={{ color: 'rgba(248, 245, 253, 0.3)' }}
             >

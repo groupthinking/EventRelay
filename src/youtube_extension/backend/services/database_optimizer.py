@@ -18,6 +18,7 @@ Key Features:
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -186,7 +187,12 @@ class DatabaseConnectionPool:
             else:
                 # SQLite or other - prepare SQLite path
                 if self._sqlite_path and self._sqlite_path != ":memory:":
-                    os.makedirs(os.path.dirname(self._sqlite_path), exist_ok=True)
+                    # Filesystem metadata calls block; keep them off the loop.
+                    await asyncio.to_thread(
+                        os.makedirs,
+                        os.path.dirname(self._sqlite_path),
+                        exist_ok=True,
+                    )
                     logger.info(f"✅ SQLite database configured at {self._sqlite_path}")
                 else:
                     logger.info("✅ SQLite in-memory database configured")
@@ -203,8 +209,23 @@ class DatabaseConnectionPool:
             if self.pool:
                 connection = await self.pool.acquire()
             else:
-                # SQLite fallback (file or memory)
-                connection = sqlite3.connect(self._sqlite_path or ":memory:")
+                # SQLite fallback (file or memory). sqlite3.connect performs
+                # blocking filesystem work, so it runs on a worker thread.
+                #
+                # check_same_thread=False is required, not optional: the
+                # connection is created on a worker thread but is subsequently
+                # used from the event loop thread and from other worker threads
+                # (see QueryOptimizer.execute_query). Without it sqlite3 raises
+                # ProgrammingError on the first cross-thread use.
+                #
+                # This is safe because a connection is owned by exactly one
+                # caller between get_connection() and release_connection(), so
+                # it is never touched by two threads at the same time.
+                connection = await asyncio.to_thread(
+                    sqlite3.connect,
+                    self._sqlite_path or ":memory:",
+                    check_same_thread=False,
+                )
 
             connection_time = (time.time() - start_time) * 1000
 
@@ -229,7 +250,9 @@ class DatabaseConnectionPool:
             if self.pool and hasattr(self.pool, "release"):
                 await self.pool.release(connection)
             elif hasattr(connection, "close"):
-                connection.close()
+                # Closing a SQLite connection flushes and releases the file
+                # handle; keep that blocking work off the event loop.
+                await asyncio.to_thread(connection.close)
 
             with self._lock:
                 self.pool_stats["connections_in_use"] = max(
@@ -357,6 +380,7 @@ class QueryOptimizer:
 
         # Execute query
         connection = None
+        sync_worker: asyncio.Future[Any] | None = None
         try:
             connection = await self.connection_pool.get_connection()
 
@@ -367,13 +391,32 @@ class QueryOptimizer:
                 else:
                     result = await connection.fetch(query)
             elif hasattr(connection, "execute"):
-                # SQLite or other
-                cursor = connection.cursor()
-                if params:
-                    cursor.execute(query, params)
-                else:
-                    cursor.execute(query)
-                result = cursor.fetchall()
+                # SQLite or other DB-API connection. cursor.execute() and
+                # fetchall() are blocking calls that hold the GIL only while
+                # not waiting on I/O, so running them on a worker thread lets
+                # the event loop keep serving other work — and lets
+                # execute_batch_queries' gather actually overlap queries
+                # instead of running them back to back.
+                def _run_sync_query() -> Any:
+                    cursor = connection.cursor()
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
+                    return cursor.fetchall()
+
+                # Run the blocking work as a *task* and await it shielded. A
+                # worker thread cannot be cancelled: if this coroutine is
+                # cancelled (execute_batch_queries does exactly that when a
+                # sibling query fails) a bare `await asyncio.to_thread(...)`
+                # would unwind here while the thread keeps using `connection`,
+                # and the `finally` below would then close that connection on a
+                # second thread. The shield keeps the worker running and the
+                # drain in `finally` waits for it before any release/close.
+                sync_worker = asyncio.ensure_future(
+                    asyncio.to_thread(_run_sync_query)
+                )
+                result = await asyncio.shield(sync_worker)
             else:
                 raise Exception(f"Unsupported connection type: {type(connection)}")
 
@@ -413,6 +456,20 @@ class QueryOptimizer:
             raise
 
         finally:
+            # A cancellation may have unwound the await above while the worker
+            # thread is still running _run_sync_query against `connection`.
+            # Drain it before releasing: release_connection() closes the
+            # connection on *another* thread, and check_same_thread=False
+            # disables sqlite3's same-thread *check*, not the underlying
+            # requirement that operations on one connection never overlap.
+            # Each shielded await can itself be cancelled, so loop until the
+            # worker has genuinely finished (it always does — it is bounded by
+            # the query, not by us).
+            if sync_worker is not None:
+                while not sync_worker.done():
+                    with contextlib.suppress(BaseException):
+                        await asyncio.shield(sync_worker)
+
             if connection:
                 await self.connection_pool.release_connection(connection)
 
