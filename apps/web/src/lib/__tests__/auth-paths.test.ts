@@ -176,6 +176,19 @@ describe('AI route classification (rate-limit budget)', () => {
     expect(isAiRoute('/api/chat')).toBe(true);
   });
 
+  it('does not let the exemption leak to a route that merely shares the prefix', () => {
+    // The exemption is the widening in this change, so it requires a segment
+    // boundary. A future sibling surface like /api/workflows-admin is still
+    // AI-class on every method — otherwise adding a route whose name starts
+    // with an exempted prefix would silently hand it the looser budget.
+    expect(isAiRoute('/api/workflows-admin/secret', 'GET')).toBe(true);
+    expect(isAiRoute('/api/workflows-admin', 'GET')).toBe(true);
+    // ...while the real surface keeps its exemption, at the prefix itself and
+    // below it.
+    expect(isAiRoute('/api/workflows', 'GET')).toBe(false);
+    expect(isAiRoute('/api/workflows/video-to-actions/run_1', 'GET')).toBe(false);
+  });
+
   it('does not exempt GET on other AI routes', () => {
     // The exemption is deliberately per-prefix. A blanket GET carve-out would
     // open every model-backed route the moment one served work over GET.

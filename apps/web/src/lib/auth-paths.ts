@@ -127,6 +127,17 @@ export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
     pathname.startsWith(candidate),
   );
   if (!prefix) return false;
+
+  // The exemption requires a segment boundary, while class membership above
+  // keeps its original loose `startsWith`. The asymmetry is deliberate:
+  // tightening membership would move routes off the stricter budget, which is
+  // a widening this change has no business making. But the exemption *is* the
+  // widening, so it must not leak to a route that merely shares the string
+  // prefix — `/api/workflows-admin/...` is a different surface than
+  // `/api/workflows/...` and stays AI-class.
+  const onExemptRoute = pathname === prefix || pathname.startsWith(`${prefix}/`);
+  if (!onExemptRoute) return true;
+
   return !AI_ROUTE_METHOD_EXEMPT[prefix]?.has(method.toUpperCase());
 }
 
