@@ -38,8 +38,10 @@ export async function GET(
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
+    console.error('Job fetch error:', error);
+    // SECURITY: Prevent information disclosure by masking the raw error message
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : String(error) },
+      { error: 'Internal server error' },
       { status: 502 },
     );
   }

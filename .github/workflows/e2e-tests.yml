@@ -3,8 +3,8 @@ name: E2E Tests
 on:
   push:
     branches: [main]
+  # No base-branch filter — see the note in ci.yml.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read

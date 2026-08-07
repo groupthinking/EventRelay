@@ -12,7 +12,7 @@ concrete reason, verified against the actual repository tree.
 | `auto-assign.yml` | **FIX** | Replaced `gh issue edit` with the REST assignees endpoint. The CLI command used GraphQL `replaceActorsForAssignable`, which fails for this repository's GitHub App token when assigning the issue owner. |
 | `auto-label.yml` | KEEP | Labels PRs by changed file type; guarded with try/catch. |
 | `autonomous-video-processing.yml` | **FIX** | Was a discovery loop whose "processing" step incremented a counter and printed success, so every run reported videos as processed without doing any work. Inline heredoc extracted to `scripts/ci/autonomous_video_{plan,processing,summary}.py` (lintable + unit-tested); added `workflow_call`, secret preflight, guardrail caps, per-video correlation-ID manifests, 30-day evidence retention, and a QA-gated deliverables upload. See the "Multi-agent pipeline alignment" note below. |
-| `branch-cleanup.yml` | **FIX** | Added `workflows: write` permission (missing permission caused push of restored branch to fail with "refusing to allow a GitHub App to create or update workflow ... without `workflows` permission"). Also restored push-sentinel trigger for `claude/branch-cleanup-*` branches and the restore-branch step, and removed the incorrect NOTE claiming restoration of workflow-containing branches is impossible with this token. |
+| `branch-cleanup.yml` | **FIX** | Restored push-sentinel trigger for `claude/branch-cleanup-*` branches and the restore-branch step. **Correction (#1405):** an earlier revision added a `workflows: write` permission to answer "refusing to allow a GitHub App to create or update workflow ... without `workflows` permission". `workflows` is not a GitHub Actions permission scope, so that key granted nothing and made the file unparseable — 1,182 zero-duration failed runs, 100% of them, on every push to every branch including `main`. The key is removed. The NOTE it also deleted was correct: `GITHUB_TOKEN` cannot create or update files under `.github/workflows/`, and no `permissions:` key lifts that, so restoring a branch whose tree contains workflow files needs a PAT with the `workflow` scope or a local push. |
 | `bulk-issue-processor.yml` | KEEP | Manual bulk issue ops via `gh` + Python; dry-run default. |
 | `ci.yml` | **FIX** | Added blocking `apps/web` type-check and ESLint steps before the build so CI fails fast on TypeScript or lint regressions. |
 | `codeql-analysis.yml` | **FIX** | Removed the OWASP `dependency-check` job — pinned to unstable `@main` and pointed at dead paths (`frontend/node_modules`, `src/mcp-bridge.py`); produced no usable SARIF. Switched the Node cache from the dead `frontend/node_modules` path to the npm download cache (`~/.npm`), which is correct for this npm-workspaces repo. CodeQL analysis itself retained. Dependency coverage already lives in `dependency-review.yml` + `security.yml`. |
@@ -28,7 +28,7 @@ concrete reason, verified against the actual repository tree.
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
-| `pr-checks.yml` | KEEP | Validates PR title/description; fork-safe comment handling. |
+| `pr-checks.yml` | KEEP | Validates PR title/description. Truth-gate jobs removed; see `MERGE_POLICY.md`. |
 | `real-processing.yml` | KEEP | Manual single-video processing; well-formed. |
 | `secret-scan.yml` | KEEP | gitleaks on the working tree; action pinned to SHA, checksum-verified install. |
 | `security.yml` | KEEP | npm audit, safety, bandit, trivy; uploads SARIF. |
@@ -65,9 +65,8 @@ valid. Referenced paths were checked against the working tree:
 
 ## Agent completion enforcement
 
-| `agent-completion-enforcement.yml` | **ADD** | Protected-default-branch verifier that creates the independent **Agent completion enforcement** Check directly against the PR head SHA. It accepts only an exact-head machine-readable report from the configured dedicated GitHub App; stale/mutable evidence, untrusted label provenance, and custom roles all fail closed, and once the policy is provisioned a missing report fails closed too. The existing `agent-completion/truth-gate` status stays advisory and must not be made required. |
 
-The protected policy at `.github/agent-lock/trusted-publishers.json` starts with empty allowlists. While those allowlists are empty the Check reports **neutral (advisory)** rather than blocking, so it does not train reviewers to ignore a permanently red gate; it becomes blocking once a repository administrator provisions the dedicated App and trusted actor identities through protected review. The repository ruleset must then require **Agent completion enforcement**, one independent approval, and resolved conversations.
+The agent-lock trust policy and both agent-completion Checks were removed as unsatisfiable; `pr-governance.yml` is now the sole binding gate. See `MERGE_POLICY.md`.
 
 ## Repository governance workflows
 

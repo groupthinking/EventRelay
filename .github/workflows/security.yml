@@ -3,8 +3,9 @@ name: Security Scan
 on:
   push:
     branches: [main]
+  # No base-branch filter — see the note in ci.yml. A stacked PR must not be
+  # able to skip the security scan by targeting a branch other than main.
   pull_request:
-    branches: [main]
   schedule:
     - cron: '0 0 * * 0'  # Weekly on Sunday
 

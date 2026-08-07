@@ -7,6 +7,8 @@ Dependency injection container for managing service lifecycle and dependencies.
 Implements IoC (Inversion of Control) pattern for better testability and modularity.
 """
 
+import asyncio
+import inspect
 import logging
 import os
 from typing import Any, Callable, Optional, TypeVar
@@ -442,6 +444,34 @@ class ServiceContainer:
 
         return health_status
 
+    @staticmethod
+    async def _shutdown_service(name: str, service: Any) -> None:
+        """Run a single service's teardown hook.
+
+        Prefers ``cleanup()`` and falls back to ``close()``. Either hook may be
+        synchronous or a coroutine function, so the result is awaited only when
+        it is actually awaitable.
+        """
+        closer: Optional[Callable[[], Any]] = None
+        completion = ""
+
+        cleanup = getattr(service, "cleanup", None)
+        if callable(cleanup):
+            closer, completion = cleanup, "cleanup completed"
+        else:
+            close = getattr(service, "close", None)
+            if callable(close):
+                closer, completion = close, "closed"
+
+        if closer is None:
+            return
+
+        result = closer()
+        if inspect.isawaitable(result):
+            await result
+
+        logger.info(f"Service {completion}: {name}")
+
     async def shutdown(self):
         """
         Gracefully shutdown all services.
@@ -450,21 +480,31 @@ class ServiceContainer:
 
         shutdown_errors = []
 
+        # Skill-dependency aliases (e.g. ``gemini_service`` ->
+        # ``hybrid_processor_service``) resolve to the *same* instance, so the
+        # singleton map can hold one object under several names. Deduplicate by
+        # identity to avoid tearing the same service down more than once.
+        targets: list[tuple[str, Any]] = []
+        seen: set[int] = set()
         for name, service in self._singletons.items():
-            try:
-                # Call cleanup method if available
-                if hasattr(service, "cleanup"):
-                    if callable(service.cleanup):
-                        await service.cleanup()
-                        logger.info(f"Service cleanup completed: {name}")
-                elif hasattr(service, "close"):
-                    if callable(service.close):
-                        await service.close()
-                        logger.info(f"Service closed: {name}")
+            if id(service) in seen:
+                logger.debug(f"Skipping duplicate service alias: {name}")
+                continue
+            seen.add(id(service))
+            targets.append((name, service))
 
-            except Exception as e:
-                logger.warning(f"Error during {name} service shutdown: {e}")
-                shutdown_errors.append(f"{name}: {e}")
+        # Services are independent, so tear them down concurrently: shutdown runs
+        # inside the SIGTERM grace window, where serial teardown costs the sum of
+        # every close() round-trip instead of the slowest one.
+        results = await asyncio.gather(
+            *(self._shutdown_service(name, service) for name, service in targets),
+            return_exceptions=True,
+        )
+
+        for (name, _), result in zip(targets, results):
+            if isinstance(result, BaseException):
+                logger.warning(f"Error during {name} service shutdown: {result}")
+                shutdown_errors.append(f"{name}: {result}")
 
         # Clear service instances
         self._singletons.clear()

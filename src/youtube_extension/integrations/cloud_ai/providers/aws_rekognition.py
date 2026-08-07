@@ -29,6 +29,7 @@ from ..exceptions import (
     ConfigurationError,
     RateLimitError,
 )
+from ..media_paths import resolve_local_media_path
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,6 @@ def _read_file_bytes(path: str) -> bytes:
     """Read a file's bytes. Module-level so it can run in a worker thread."""
     with open(path, 'rb') as handle:
         return handle.read()
-
 
 
 class AWSRekognition(BaseCloudAI):
@@ -300,6 +300,11 @@ class AWSRekognition(BaseCloudAI):
                 results, image_url, analysis_types, processing_time
             )
 
+        except CloudAIError:
+            # Typed errors (e.g. UnsafeMediaPathError from the local-path guard)
+            # already carry provider and error_code; re-wrapping them would
+            # flatten them into a generic CloudAIError and lose that type.
+            raise
         except Exception as e:
             raise CloudAIError(
                 f"AWS Rekognition image analysis failed: {e}",
@@ -483,8 +488,12 @@ class AWSRekognition(BaseCloudAI):
                 response = await client.get(image_url)
                 return {'Bytes': response.content}
         else:
-            # Local file - read off the event loop
-            return {'Bytes': await asyncio.to_thread(_read_file_bytes, image_url)}
+            # Local file. The path is caller-supplied, so it is validated
+            # against CLOUD_AI_MEDIA_ROOT first (raises UnsafeMediaPathError on
+            # traversal or symlink escape); the read then uses the resolved
+            # path, off the event loop.
+            safe_path = resolve_local_media_path(image_url, provider=self.provider.value)
+            return {'Bytes': await asyncio.to_thread(_read_file_bytes, str(safe_path))}
 
     def _process_video_results(self, results: dict[str, Any], video_id: str,
                              analysis_types: list[AnalysisType],

@@ -30,6 +30,7 @@ import {
   type StudioPipelineCheck,
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
+import { kickoffStudioDeploy, pollStudioJob } from '@/lib/studio-deploy';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
@@ -366,6 +367,12 @@ export default function VideoWorkflowStudio() {
   const [saveCount, setSaveCount] = useState(0);
   const [actionMessage, setActionMessage] = useState('Build a result to unlock preview, export, deploy, and save.');
   const [runQuality, setRunQuality] = useState<StudioRunQuality>('idle');
+  /** Last pipeline kickoff from Run (job id reused by Deploy). */
+  const [lastPipelineCheck, setLastPipelineCheck] = useState<PipelineCheck | null>(null);
+  const [deployBusy, setDeployBusy] = useState(false);
+  const [deployJobId, setDeployJobId] = useState<string | null>(null);
+  const [deployLiveUrl, setDeployLiveUrl] = useState<string | null>(null);
+  const [deployRepo, setDeployRepo] = useState<string | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -464,6 +471,9 @@ export default function VideoWorkflowStudio() {
       }
     }
 
+    setLastPipelineCheck(pipelineCheck);
+    if (pipelineCheck?.jobId) setDeployJobId(pipelineCheck.jobId);
+
     const quality = studioRunQuality(pipelineCheck, unsafe, Boolean(currentVideoId));
 
     timerRef.current = setTimeout(() => {
@@ -485,6 +495,86 @@ export default function VideoWorkflowStudio() {
           : 'Planning draft only. Studio does not run the full agent pipeline; use Dashboard for live results.',
       );
     }, unsafe ? 250 : 100);
+  };
+
+  const handleDeploy = async () => {
+    if (deployBusy) return;
+    const currentVideoUrl = videoUrlRef.current || videoUrl;
+    const currentVideoId = getYouTubeId(currentVideoUrl);
+    if (!currentVideoId) {
+      setActionMessage('Add a valid YouTube URL before deploying.');
+      return;
+    }
+
+    setDeployBusy(true);
+    setActionMessage('Starting deploy handoff via /api/pipeline…');
+
+    try {
+      // Prefer reusing job from the last run when present.
+      let jobId = lastPipelineCheck?.jobId || deployJobId || undefined;
+
+      if (!jobId) {
+        const kick = await kickoffStudioDeploy({
+          url: currentVideoUrl,
+          projectType: selectedOutcome === 'app' ? 'web' : selectedOutcome,
+          outcome: selectedOutcome,
+          prompt: promptRef.current || prompt,
+        });
+        jobId = kick.jobId;
+        if (kick.jobId) setDeployJobId(kick.jobId);
+        if (kick.live_url) setDeployLiveUrl(kick.live_url);
+        if (kick.github_repo) setDeployRepo(kick.github_repo);
+
+        if (!kick.ok && !kick.jobId) {
+          setActionMessage(
+            kick.message
+              ? `Deploy handoff blocked: ${kick.message}. Export the package for manual Vercel deploy, or set BACKEND_URL.`
+              : 'Deploy handoff prepared offline. Set BACKEND_URL for automatic pipeline deployment, or use Export.',
+          );
+          return;
+        }
+
+        if (kick.live_url) {
+          setActionMessage(`Deploy live: ${kick.live_url}`);
+          return;
+        }
+
+        if (!jobId) {
+          setActionMessage(
+            kick.handoff
+              ? 'Backend accepted a planning handoff (no job id). Use Export for Vercel files, or open Dashboard for full pipeline.'
+              : 'Deploy kickoff returned no job id. Check BACKEND_URL and pipeline health.',
+          );
+          return;
+        }
+
+        setActionMessage(`Deploy job started (${jobId}). Polling status…`);
+      } else {
+        setActionMessage(`Polling existing job ${jobId}…`);
+      }
+
+      const polled = await pollStudioJob(jobId, { attempts: 6, delayMs: 1500 });
+      if (polled.live_url) setDeployLiveUrl(polled.live_url);
+      if (polled.github_repo) setDeployRepo(polled.github_repo);
+
+      if (polled.live_url) {
+        setActionMessage(`Deploy ready: ${polled.live_url}`);
+      } else if (polled.jobStatus === 'failed' || polled.jobStatus === 'error') {
+        setActionMessage(
+          `Deploy job ${jobId} failed${polled.message ? `: ${polled.message}` : ''}. Export package for manual handoff.`,
+        );
+      } else {
+        setActionMessage(
+          `Deploy job ${jobId} status: ${polled.jobStatus || 'pending'}. Open Dashboard for live analysis, or Export for offline Vercel handoff.`,
+        );
+      }
+    } catch (err) {
+      setActionMessage(
+        `Deploy request failed: ${err instanceof Error ? err.message : String(err)}. Export still works offline.`,
+      );
+    } finally {
+      setDeployBusy(false);
+    }
   };
 
   const handleResultAction = (action: ResultAction) => {
@@ -511,11 +601,12 @@ export default function VideoWorkflowStudio() {
       return;
     }
 
-    setActionMessage(
-      action === 'deploy'
-        ? 'Deploy handoff prepared. Connect the backend pipeline when BACKEND_URL is healthy for automatic deployment.'
-        : 'Preview is open with source notes, deliverables, and next steps.',
-    );
+    if (action === 'deploy') {
+      void handleDeploy();
+      return;
+    }
+
+    setActionMessage('Preview is open with source notes, deliverables, and next steps.');
   };
 
   return (
@@ -843,8 +934,50 @@ export default function VideoWorkflowStudio() {
                   {activeAction === 'deploy' && (
                     <div className="space-y-3">
                       <p className="leading-6">
-                        This is deployable as a Vercel handoff now. Automatic backend deployment is gated by the configured backend pipeline health.
+                        Deploy calls <code className="text-xs">POST /api/pipeline</code> with{' '}
+                        <code className="text-xs">deployment_target=vercel</code>
+                        {deployBusy ? ' (in progress…)' : '.'} If the backend is down, use Export for an offline handoff.
                       </p>
+                      {(deployJobId || deployLiveUrl || deployRepo) && (
+                        <div className="space-y-1 rounded-lg border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs leading-5 text-slate-700">
+                          {deployJobId && (
+                            <div>
+                              Job:{' '}
+                              <Link
+                                href={`/dashboard?video=${encodeURIComponent(videoUrl || '')}`}
+                                className="font-mono text-blue-700 underline"
+                              >
+                                {deployJobId}
+                              </Link>
+                            </div>
+                          )}
+                          {deployLiveUrl && (
+                            <div>
+                              Live:{' '}
+                              <a href={deployLiveUrl} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+                                {deployLiveUrl}
+                              </a>
+                            </div>
+                          )}
+                          {deployRepo && (
+                            <div>
+                              Repo:{' '}
+                              <a href={deployRepo} target="_blank" rel="noreferrer" className="text-blue-700 underline">
+                                {deployRepo}
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        disabled={deployBusy}
+                        onClick={() => void handleDeploy()}
+                        className="inline-flex items-center gap-2 rounded-lg bg-slate-950 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        <Rocket className="h-3.5 w-3.5" aria-hidden="true" />
+                        {deployBusy ? 'Deploying…' : 'Run deploy handoff'}
+                      </button>
                       <div className="grid gap-2">
                         {generatedPackage.nextSteps.map((step) => (
                           <div key={step} className="flex gap-2 rounded-lg bg-slate-50 p-2 text-xs leading-5">

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { clsx } from 'clsx';
+import { filterSegments, type TranscriptSegment } from '@/lib/transcript-search';
 
 /* ═══════════════════════════════════════════
    Interactive Transcript Player
@@ -10,14 +11,11 @@ import { clsx } from 'clsx';
    highlight-as-you-play
    ═══════════════════════════════════════════ */
 
-export interface TranscriptSegment {
-  id: string;
-  speaker: string;
-  speakerColor: string;
-  startTime: number; // seconds
-  endTime: number;
-  text: string;
-}
+// Segment shape and the search predicate live in `@/lib/transcript-search` so
+// they are unit-testable in vitest's `node` environment. Re-exported here to
+// keep `import { type TranscriptSegment } from '@/components/InteractiveTranscript'`
+// working for existing consumers.
+export type { TranscriptSegment } from '@/lib/transcript-search';
 
 interface InteractiveTranscriptProps {
   segments: TranscriptSegment[];
@@ -165,22 +163,12 @@ export default function InteractiveTranscript({
     [segments],
   );
 
-  const filteredSegments = useMemo(() => {
-    // ⚡ Bolt: Hoisting search string normalization out of the loop
-    // Expected impact: Removes N toLowerCase() allocations per keystroke update, saving ~15-20ms per render on long transcripts.
-    const lowerSearchQuery = searchQuery ? searchQuery.toLowerCase() : '';
-
-    return segments.filter((seg) => {
-      // ⚡ Bolt: Short-circuiting the speaker check avoids string manipulation entirely for non-matching rows.
-      const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
-      if (!matchesSpeaker) return false;
-
-      const matchesSearch =
-        !searchQuery ||
-        (seg.text ? seg.text.toLowerCase().includes(lowerSearchQuery) : false);
-      return matchesSearch;
-    });
-  }, [segments, filterSpeaker, searchQuery]);
+  const filteredSegments = useMemo(
+    // Normalization is hoisted out of the per-segment loop inside
+    // `filterSegments`; see `@/lib/transcript-search` and issue #908.
+    () => filterSegments(segments, { search: searchQuery, speaker: filterSpeaker }),
+    [segments, filterSpeaker, searchQuery],
+  );
 
   const activeSegmentId = useMemo(() => {
     // Optimization: Use binary search (O(log N)) instead of Array.find() (O(N))
@@ -331,6 +319,7 @@ export default function InteractiveTranscript({
             <button
               type="button"
               onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
               className="text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded"
               style={{ color: 'rgba(248, 245, 253, 0.3)' }}
             >
