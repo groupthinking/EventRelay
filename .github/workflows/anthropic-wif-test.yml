@@ -16,10 +16,15 @@ permissions:
 # Supersede superseded work instead of stacking it. Without this, every push
 # to a PR branch queued a brand-new full run alongside the ones it obsoleted;
 # with ~30 workflows and dozens of open PRs the Actions queue could not drain.
-# PR runs cancel their predecessors; push/schedule runs queue instead, so each
-# merged commit keeps its own verdict.
+#
+# PR runs are keyed by PR number and cancel their predecessors -- that is where
+# all the queue pressure comes from, since every `push:` trigger here is already
+# filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
+# land in singleton groups: keying them on github.ref would collide every merge
+# to main into one group, and GitHub cancels the *pending* run in a group, so a
+# burst of merges would silently drop the middle commits' verdicts.
 concurrency:
-  group: anthropic-wif-test-${{ github.event.pull_request.number || github.ref }}
+  group: anthropic-wif-test-${{ github.event.pull_request.number || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
