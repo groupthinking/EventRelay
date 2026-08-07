@@ -456,6 +456,55 @@ def test_finite_float_enrichment_is_kept():
     assert "serialization_error" not in parsed
 
 
+class _ExplodingError(Exception):
+    """An exception whose own `__str__` raises."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("the error's own __str__ exploded")
+
+
+class _NestedExplodingStr:
+    """`__str__` raises an exception that itself raises when rendered.
+
+    This is what makes `_describe_exception`'s inner guard live code rather
+    than defensive decoration: the fallback renders the exception it caught,
+    and here that render raises again.
+    """
+
+    def __str__(self) -> str:
+        raise _ExplodingError()
+
+
+def test_exception_whose_str_also_raises_does_not_lose_the_record():
+    # Credit to #1471/#1472 for exercising this end-to-end; the helper's own
+    # unit test above cannot show the path is reachable through the formatter.
+    logger, buf = _make_json_logger("json-nested-exploding")
+    logger.info("still emitted", extra={"request_id": _NestedExplodingStr()})
+
+    lines = [line for line in buf.getvalue().splitlines() if line.strip()]
+    assert len(lines) == 1, "the nested-raise path dropped the record"
+
+    parsed = json.loads(lines[0])
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "still emitted"
+    # The type name is still reportable even when rendering the value is not.
+    assert parsed["serialization_error"] == "_ExplodingError"
+
+
+def test_rendered_traceback_survives_the_serialization_fallback():
+    # `exception` is rendered to `str` before the guarded dump, so a failing
+    # enrichment must not also cost us the traceback.
+    logger, buf = _make_json_logger("json-fallback-traceback")
+    try:
+        raise ValueError("the real cause")
+    except ValueError:
+        logger.error("failed", exc_info=True, extra={"request_id": _ExplodingStr()})
+
+    parsed = json.loads(buf.getvalue())
+    assert "serialization_error" in parsed  # the fallback did fire
+    assert "the real cause" in parsed["exception"]  # ...and kept the traceback
+
+
 def test_describe_exception_survives_an_exception_that_cannot_be_stringified():
     # The fallback formats the error it caught. If that exception's own
     # __str__ raises, describing it must not re-raise and re-lose the record.
