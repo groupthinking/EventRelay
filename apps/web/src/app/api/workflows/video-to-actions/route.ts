@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { start } from 'workflow/api';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { videoToActionsWorkflow } from '@/workflows/video-to-actions';
 
 export const runtime = 'nodejs';
@@ -28,25 +29,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  // Reject obviously private/local targets at the edge (SSRF defense-in-depth;
-  // assertPublicHttpUrl still runs inside transcription when audioUrl is used).
+  // Reject private/local targets at the edge (SSRF defense-in-depth;
+  // assertPublicHttpUrl also runs inside transcription when audioUrl is used).
+  //
+  // Delegated to the shared guard rather than spelled out here. A hand-rolled
+  // hostname list covers only the names it enumerates: it misses every RFC1918
+  // literal (10/8, 172.16/12, 192.168/16), 169.254/16 — the cloud-metadata
+  // address — and CGNAT, and an `=== '::1'` comparison never matches because
+  // `URL.hostname` keeps the brackets (`http://[::1]/` yields `[::1]`), which is
+  // the bug #1486 fixed in the guard itself. `assertPublicHttpUrl` handles all
+  // of those plus the NAT64/6to4/IPv4-translated encodings.
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal')
-    ) {
-      return NextResponse.json(
-        { error: 'url host is not allowed' },
-        { status: 400 },
-      );
-    }
+    await assertPublicHttpUrl(url);
   } catch {
-    return NextResponse.json({ error: 'url is not a valid URL' }, { status: 400 });
+    // Deliberately bare: the guard's message distinguishes "does not resolve"
+    // from "resolves to a private address", which is the CWE-209 DNS oracle
+    // #1381 closed on /api/transcribe. The guard already logs the real cause.
+    return NextResponse.json(
+      { error: 'url host is not allowed' },
+      { status: 400 },
+    );
   }
 
   const videoTitle =
