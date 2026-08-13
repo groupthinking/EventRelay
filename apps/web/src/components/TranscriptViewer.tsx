@@ -3,6 +3,7 @@
 import { useState, useId, useMemo } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
+import { buildSearchConfig } from '@/lib/transcript-search';
 
 interface TranscriptViewerProps {
   transcript: string;
@@ -27,17 +28,9 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
 
   const displayParagraphs = expanded ? paragraphs : paragraphs.slice(0, 8);
 
-  // Precompute search regex and lowercase query to avoid recreating them for every paragraph
-  const searchConfig = useMemo(() => {
-    if (!searchQuery) return null;
-    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // ⚡ Bolt: Adding safety check before lowercasing search query to prevent null reference errors on edge cases.
-    // Capturing split regex (no global flag) so `.test()` lastIndex state can't desync.
-    return {
-      regex: new RegExp(`(${escaped})`, 'i'),
-      lower: searchQuery ? searchQuery.toLowerCase() : '',
-    };
-  }, [searchQuery]);
+  // Precompute the highlight regex and lowercased query once per query change
+  // rather than per paragraph. See `@/lib/transcript-search` (issue #908).
+  const searchConfig = useMemo(() => buildSearchConfig(searchQuery), [searchQuery]);
 
   const highlight = (text: string) => {
     if (!searchConfig) return text;

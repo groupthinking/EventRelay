@@ -129,6 +129,29 @@ class RealVideoProcessor:
                 os.unlink(tmp_name)
             raise
 
+    @staticmethod
+    def _count_cached_files(cache_dir: Path) -> int:
+        """Count published cache entries under ``cache_dir``.
+
+        Blocking: performs a full directory walk. Always run this off the event
+        loop. It is reached from the status endpoint, so an inline walk stalls
+        every concurrently-served request for as long as the scan takes — which
+        grows with the number of cached videos.
+
+        ``glob`` already yields nothing for a missing directory, so no separate
+        existence check is needed (it would only add a redundant ``stat`` and
+        would not make the walk atomic). A genuine filesystem failure — e.g. a
+        permission error on a directory that does exist — is logged and
+        re-raised rather than being silently reported as an empty cache. The
+        count is accumulated lazily rather than materializing the whole listing,
+        since only the total is ever used.
+        """
+        try:
+            return sum(1 for _ in cache_dir.glob("*_processed.json"))
+        except OSError:
+            logger.exception("Failed to count cached files in %s", cache_dir)
+            raise
+
     async def _load_from_cache(self, video_id: str) -> Optional[dict[str, Any]]:
         """Load processed result from cache if available"""
         if not self.enable_caching:
@@ -475,8 +498,10 @@ class RealVideoProcessor:
         try:
             cost_dashboard = await cost_monitor.get_cost_dashboard()
 
-            # Count cached files
-            cached_files = len(list(self.cache_dir.glob("*_processed.json"))) if self.cache_dir.exists() else 0
+            # Count cached files (off the event loop; the walk is unbounded)
+            cached_files = await asyncio.to_thread(
+                self._count_cached_files, self.cache_dir
+            )
 
             return {
                 'service_status': 'operational',

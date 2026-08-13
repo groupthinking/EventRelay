@@ -7,6 +7,15 @@ try {
   // Allow builds to continue when optional Sentry runtime peers are unavailable.
 }
 
+// Vercel Workflow DevKit — enables "use workflow" / "use step" compilation.
+// https://workflow-sdk.dev/docs/getting-started/next
+let withWorkflow = (config) => config;
+try {
+  ({ withWorkflow } = require('workflow/next'));
+} catch {
+  // Optional when workflow package is not installed in a partial install.
+}
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -99,4 +108,6 @@ const sentryWebpackPluginOptions = {
   disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
 };
 
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+module.exports = withWorkflow(
+  withSentryConfig(nextConfig, sentryWebpackPluginOptions),
+);

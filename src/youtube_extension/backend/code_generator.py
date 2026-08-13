@@ -463,9 +463,14 @@ class ProjectCodeGenerator:
         if "database" in features:
             requirements.append("sqlalchemy==2.0.23")
         if "authentication" in features:
-            # The generated main.py imports passlib.context; omitting it here
-            # produced a project that fails at import time.
-            requirements.append("python-jose[cryptography]==3.3.0")
+            # The generated main.py imports jwt and passlib.context; omitting
+            # either here produced a project that fails at import time.
+            #
+            # PyJWT rather than python-jose: python-jose depends on ecdsa,
+            # whose GHSA-wj6h-64fc-37mp has no patched release, so every
+            # generated project inherited an unfixable advisory. PyJWT is
+            # maintained and its encode/decode signatures are the same.
+            requirements.append("pyjwt>=2.10.1")
             requirements.append("passlib[bcrypt]==1.7.4")
 
         # Generate main.py
@@ -1115,7 +1120,8 @@ body {{
         if "authentication" in features:
             scaffolding_endpoints.append("POST /auth/login")
             auth_imports = '''
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 from passlib.context import CryptContext'''
             auth_code = '''
 # ─── Authentication ─────────────────────────────────────────────────────────
@@ -1162,7 +1168,7 @@ def decode_access_token(token: str) -> dict:
     key = _require_secret_key()
     try:
         return jwt.decode(token, key, algorithms=[ALGORITHM])
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise HTTPException(status_code=401, detail="Invalid or expired token") from exc
 
 

@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
+    return NextResponse.json({ error: 'invalid_json', code: 'invalid_json' }, { status: 400 });
   }
 
   const email = await resolveTrustedBillingEmail(req);
@@ -35,7 +35,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'renewal_failed';
+    // Unauthenticated public route (PUBLIC_API_EXACT) — keep Stripe SDK text,
+    // which can echo account identifiers and partial API keys, server-side.
+    console.error('[billing] renewal failed:', message);
     kaizenObserve('billing', 'renewal_error', message, { fix: 'verify_stripe_env' });
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'renewal_failed', code: 'renewal_failed' },
+      { status: 500 },
+    );
   }
 }
