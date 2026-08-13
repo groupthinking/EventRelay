@@ -49,6 +49,118 @@ function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v : undefined;
 }
 
+const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+
+/** Start durable Studio deploy (WDK C). Returns immediately with runId. */
+export interface StudioDeployStart {
+  ok: boolean;
+  status: number;
+  runId?: string;
+  message?: string;
+  error?: string;
+}
+
+export interface StudioDeployPoll {
+  ok: boolean;
+  status: number;
+  runId: string;
+  runStatus?: WorkflowRunStatus;
+  result?: {
+    kind?: string;
+    jobId?: string;
+    jobStatus?: string;
+    live_url?: string | null;
+    github_repo?: string | null;
+    message?: string;
+  };
+  error?: string;
+  message?: string;
+}
+
+/** Start durable Studio deploy (WDK C). */
+export async function startStudioDeploy(input: {
+  url: string;
+  projectType?: string;
+  outcome?: string;
+  signal?: AbortSignal;
+}): Promise<StudioDeployStart> {
+  const response = await fetch('/api/workflows/studio-deploy', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      url: input.url,
+      projectType: input.projectType,
+      outcome: input.outcome,
+    }),
+    signal: input.signal ?? AbortSignal.timeout(30_000),
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  return {
+    ok: Boolean(payload.ok) && response.ok && Boolean(str(payload.runId)),
+    status: response.status,
+    runId: str(payload.runId),
+    message: str(payload.message),
+    error: str(payload.error),
+  };
+}
+
+export async function getStudioDeployStatus(
+  runId: string,
+  opts?: { signal?: AbortSignal },
+): Promise<StudioDeployPoll> {
+  const response = await fetch(
+    `/api/workflows/studio-deploy/${encodeURIComponent(runId)}`,
+    { method: 'GET', signal: opts?.signal ?? AbortSignal.timeout(15_000) },
+  );
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const resultRaw =
+    payload.result && typeof payload.result === 'object'
+      ? (payload.result as Record<string, unknown>)
+      : undefined;
+  return {
+    ok: response.ok && !str(payload.error),
+    status: response.status,
+    runId: str(payload.runId) || runId,
+    runStatus: str(payload.runStatus) as WorkflowRunStatus | undefined,
+    result: resultRaw
+      ? {
+          kind: str(resultRaw.kind),
+          jobId: str(resultRaw.jobId),
+          jobStatus: str(resultRaw.jobStatus),
+          live_url: str(resultRaw.live_url) ?? null,
+          github_repo: str(resultRaw.github_repo) ?? null,
+          message: str(resultRaw.message),
+        }
+      : undefined,
+    error: str(payload.error),
+    message: str(payload.message),
+  };
+}
+
+export async function pollStudioDeploy(
+  runId: string,
+  opts?: { attempts?: number; delayMs?: number; signal?: AbortSignal },
+): Promise<StudioDeployPoll> {
+  const attempts = opts?.attempts ?? 24;
+  const delayMs = opts?.delayMs ?? 2000;
+  let last: StudioDeployPoll = { ok: false, status: 0, runId, message: 'No poll yet' };
+  for (let i = 0; i < attempts; i++) {
+    if (opts?.signal?.aborted) {
+      return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
+    }
+    last = await getStudioDeployStatus(runId, { signal: opts?.signal });
+    if (last.runStatus && TERMINAL.has(last.runStatus)) return last;
+    if (last.status === 404) return last;
+    await new Promise((r) => setTimeout(r, delayMs));
+  }
+  return {
+    ...last,
+    message:
+      last.message ||
+      `Still ${last.runStatus || 'running'} after ${attempts} polls — re-check runId ${runId}`,
+  };
+}
+
 /** Start durable video → actions. Returns immediately with runId. */
 export async function startVideoToActions(input: {
   url: string;
@@ -126,8 +238,6 @@ export async function getVideoToActionsStatus(
     message,
   };
 }
-
-const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 /**
  * Poll until the run is terminal or attempts are exhausted.

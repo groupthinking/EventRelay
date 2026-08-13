@@ -31,6 +31,7 @@ import {
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
 import { kickoffStudioDeploy, pollStudioJob } from '@/lib/studio-deploy';
+import { pollStudioDeploy, startStudioDeploy } from '@/lib/studio-workflow';
 import {
   pollVideoToActions,
   startVideoToActions,
@@ -585,10 +586,51 @@ export default function VideoWorkflowStudio() {
     }
 
     setDeployBusy(true);
-    setActionMessage('Starting deploy handoff via /api/pipeline…');
+    setActionMessage('Starting durable Studio deploy…');
 
     try {
-      // Prefer reusing job from the last run when present.
+      const started = await startStudioDeploy({
+        url: currentVideoUrl,
+        projectType: selectedOutcome === 'app' ? 'web' : selectedOutcome,
+        outcome: selectedOutcome,
+      });
+      if (started.ok && started.runId) {
+        setWorkflowRunId(started.runId);
+        setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
+        const polled = await pollStudioDeploy(started.runId, {
+          attempts: 24,
+          delayMs: 2000,
+        });
+        const live = polled.result?.live_url;
+        if (live) setDeployLiveUrl(live);
+        if (polled.result?.github_repo) setDeployRepo(polled.result.github_repo);
+        if (polled.result?.jobId) setDeployJobId(polled.result.jobId);
+
+        if (live) {
+          setActionMessage(`Deploy ready: ${live} (run ${started.runId})`);
+          return;
+        }
+        if (polled.result?.kind === 'handoff') {
+          setActionMessage(
+            polled.result.message ||
+              'Backend returned a planning handoff. Export the package or set BACKEND_URL.',
+          );
+          return;
+        }
+        if (polled.runStatus === 'failed' || polled.runStatus === 'cancelled') {
+          setActionMessage(
+            `Deploy workflow ${started.runId} ${polled.runStatus}${polled.error ? `: ${polled.error}` : ''}. Export for manual Vercel handoff.`,
+          );
+          return;
+        }
+        setActionMessage(
+          `Deploy workflow ${started.runId} still ${polled.runStatus || 'running'}${polled.result?.jobId ? ` (job ${polled.result.jobId})` : ''}. Open Dashboard or Export.`,
+        );
+        return;
+      }
+
+      // Fall back to the F5 /api/pipeline kickoff when WDK start is unavailable.
+      setActionMessage('Durable deploy unavailable — falling back to /api/pipeline…');
       let jobId = lastPipelineCheck?.jobId || deployJobId || undefined;
 
       if (!jobId) {

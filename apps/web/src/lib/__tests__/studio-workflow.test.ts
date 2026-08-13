@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getVideoToActionsStatus,
+  pollStudioDeploy,
   pollVideoToActions,
+  startStudioDeploy,
   startVideoToActions,
 } from '@/lib/studio-workflow';
 
@@ -108,5 +110,47 @@ describe('studio-workflow (WDK Product v1)', () => {
     const poll = await pollVideoToActions('wrun_2', { attempts: 5, delayMs: 1 });
     expect(poll.runStatus).toBe('completed');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('startStudioDeploy requires a runId', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_c',
+          message: 'started',
+        }),
+      }),
+    );
+    const started = await startStudioDeploy({
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    });
+    expect(started.ok).toBe(true);
+    expect(started.runId).toBe('wrun_c');
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/workflows/studio-deploy',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('pollStudioDeploy returns on handoff result', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        runId: 'wrun_c2',
+        runStatus: 'completed',
+        result: { kind: 'handoff', message: 'BACKEND_URL is not configured' },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_c2', { attempts: 3, delayMs: 1 });
+    expect(poll.runStatus).toBe('completed');
+    expect(poll.result?.kind).toBe('handoff');
+    expect(poll.result?.message).toMatch(/BACKEND_URL/);
   });
 });

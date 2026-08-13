@@ -50,12 +50,23 @@ npx workflow inspect runs
 
 `turbo.json` build outputs include `apps/web/src/app/.well-known/workflow/**` so cache hits keep workflow registration.
 
+## Product C — Studio deploy durable
+
+| Piece | Path |
+|-------|------|
+| Workflow | `apps/web/src/workflows/studio-deploy.ts` |
+| Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` (FastAPI `/api/v1/videos/process` + `/api/v1/jobs/:id`, no self-HTTP) |
+| Start | `POST /api/workflows/studio-deploy` `{ "url" }` → `{ runId, statusUrl }` |
+| Status | `GET /api/workflows/studio-deploy/:runId` |
+| Studio UI | Deploy action in `VideoWorkflowStudio` (falls back to F5 `/api/pipeline` if start() fails) |
+
+Auth: this route stays **session-gated** (unlike public Act on findings).
+
 ## Next product steps
 
-1. **C — Studio deploy durable:** kickoff + poll `/api/pipeline` jobs as WDK steps with automatic retry.  
-2. Stream step progress via `getWritable()` into Studio.  
-3. Human approval hooks (`createHook` / `resumeHook`) before deploy.  
-4. Optionally route Dashboard “act” through the same durable path.
+1. Stream step progress via `getWritable()` into Studio.  
+2. Human approval hooks (`createHook` / `resumeHook`) before deploy.  
+3. Optionally route Dashboard “act” through the same durable path.
 
 ## Relation to F-series
 
