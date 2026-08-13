@@ -7,9 +7,8 @@
  * Rebind those two call sites to `undici.fetch` from the same package as Agent.
  * Idempotent. Safe to skip if the package is absent.
  *
- * Lives under apps/web so Vercel (rootDirectory apps/web / turbo prune)
- * includes it. A root postinstall cannot see repo-root scripts/ on preview
- * (dpl_81NhhsSk95m78rT9uq8HjWBCcTSZ MODULE_NOT_FOUND).
+ * Lives under apps/web. Root .vercelignore must use `/scripts/` (anchored).
+ * An unanchored `scripts/` deletes this file after clone (dpl_81Nh / dpl_8y6i).
  */
 import fs from 'node:fs';
 import path from 'node:path';

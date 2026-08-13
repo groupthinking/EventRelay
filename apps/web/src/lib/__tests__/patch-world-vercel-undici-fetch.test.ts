@@ -9,6 +9,11 @@ import {
   resolveWorldVercelRoot,
 } from '../../../scripts/patch-world-vercel-undici-fetch.mjs';
 
+const VERCELIGNORE = fs.readFileSync(
+  path.resolve(import.meta.dirname, '../../../../../.vercelignore'),
+  'utf8',
+);
+
 const FIXTURE = `import { getDispatcher } from './http-client.js';
 export async function doRequest(request) {
   const response = await fetch(request, {
@@ -19,6 +24,14 @@ export async function doRequest(request) {
 `;
 
 describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
+  it('does not let .vercelignore delete apps/web/scripts', () => {
+    const patterns = VERCELIGNORE.split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'));
+    expect(patterns).not.toContain('scripts/');
+    expect(patterns).toContain('/scripts/');
+  });
+
   it('rewrites await fetch( to undici.fetch from the same module as Agent', () => {
     const { src, result } = patchSource(FIXTURE);
     expect(result).toBe('patched');
