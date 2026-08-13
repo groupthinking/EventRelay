@@ -53,6 +53,11 @@ const securityHeaders = [
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // #1538: webpack-bundling undici + @workflow/world-vercel produces two
+  // undici class copies. Agent.dispatch then throws #P even after the
+  // postinstall rewrite to undici.fetch (preview dpl_6g5ZcZwr still 500).
+  // Leave them as Node runtime requires so Agent and fetch share one module.
+  serverExternalPackages: ['undici', '@workflow/world-vercel'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },

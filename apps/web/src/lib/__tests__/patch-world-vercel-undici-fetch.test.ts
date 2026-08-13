@@ -24,6 +24,16 @@ export async function doRequest(request) {
 `;
 
 describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
+  it('externalizes undici and world-vercel so webpack cannot split them', () => {
+    const config = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../../../next.config.js'),
+      'utf8',
+    );
+    expect(config).toMatch(
+      /serverExternalPackages:\s*\[[^\]]*'undici'[^\]]*'@workflow\/world-vercel'/,
+    );
+  });
+
   it('does not let .vercelignore delete apps/web/scripts', () => {
     const patterns = VERCELIGNORE.split('\n')
       .map((line) => line.trim())
