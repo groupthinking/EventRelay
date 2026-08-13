@@ -7,6 +7,9 @@
 const PUBLIC_API_PREFIXES = [
   '/api/auth', // NextAuth sign-in / callback / csrf / session
   '/api/health', // ops probes (if present)
+  // Studio "Act on findings" (WDK B) — public page, durable start + poll.
+  // Sibling /api/workflows/* routes stay gated; this prefix is exact-segment.
+  '/api/workflows/video-to-actions',
 ] as const;
 
 /** Exact public API paths (prefix match would over-expose siblings). */

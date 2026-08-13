@@ -37,6 +37,20 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/pipeline/stream')).toBe(false);
   });
 
+  it('keeps Studio Act on findings (WDK video-to-actions) reachable without a session', () => {
+    // /studio is a public page. The durable start + poll endpoints must match
+    // that surface — otherwise Act on findings 401s with "Authentication
+    // required" and never returns a runId (2026-08-13 uvai.io smoke).
+    expect(isPublicApiPath('/api/workflows/video-to-actions')).toBe(true);
+    expect(isPublicApiPath('/api/workflows/video-to-actions/run_abc')).toBe(true);
+    expect(needsAuthentication('/api/workflows/video-to-actions')).toBe(false);
+    expect(needsAuthentication('/api/workflows/video-to-actions/run_abc')).toBe(false);
+    // Do not widen the whole /api/workflows tree or a prefix-sibling.
+    expect(isPublicApiPath('/api/workflows')).toBe(false);
+    expect(isPublicApiPath('/api/workflows/studio-deploy')).toBe(false);
+    expect(needsAuthentication('/api/workflows/studio-deploy')).toBe(true);
+  });
+
   it('still gates non-allowlisted billing routes', () => {
     // A sibling billing route with no explicit exemption stays protected —
     // guards against prefix-match over-exposure.
