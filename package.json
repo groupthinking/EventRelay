@@ -10,8 +10,7 @@
     "test": "turbo run test",
     "build:web": "cd apps/web && npm run build",
     "dev:web": "cd apps/web && npm run dev",
-    "install:all": "npm install",
-    "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs"
+    "install:all": "npm install"
   },
   "workspaces": [
     "apps/*"
