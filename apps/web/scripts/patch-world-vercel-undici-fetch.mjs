@@ -24,12 +24,17 @@ export function patchSource(src) {
     return { src, result: 'no-fetch-call' };
   }
   let next = src;
-  if (next.includes('await fetch(') && !next.includes('fetch as undiciFetch')) {
-    next = `import { fetch as undiciFetch } from 'undici';\n${next}`;
-    next = next.replaceAll('await fetch(', 'await undiciFetch(');
+  // Keep global/Next fetch. undici.fetch rejects Request objects
+  // ("Failed to parse URL from [object Request]") which getRun uses.
+  // dpl_BBme started (runId) but status poll 500'd after the rename.
+  if (next.includes('fetch as undiciFetch')) {
+    next = next.replace(
+      /^import \{ fetch as undiciFetch \} from 'undici';\n/m,
+      '',
+    );
+    next = next.replaceAll('await undiciFetch(', 'await fetch(');
   }
-  // Preview dpl_2kJ1Cfz still 500'd after the rewrite + serverExternalPackages
-  // (#dispatch on a foreign Dispatcher). Do not pass Agent across fetch.
+  // Do not pass Agent across fetch (#P / #dispatch).
   next = next
     .replace(/\s*dispatcher:\s*getDispatcher\([^)]*\),?/g, '')
     .replace(/^\s*dispatcher,\s*$/gm, '');

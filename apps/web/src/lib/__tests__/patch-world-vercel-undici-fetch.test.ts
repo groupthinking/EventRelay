@@ -42,12 +42,20 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(patterns).toContain('/scripts/');
   });
 
-  it('rewrites await fetch( to undici.fetch and drops dispatcher', () => {
+  it('keeps global fetch and drops dispatcher', () => {
     const { src, result } = patchSource(FIXTURE);
     expect(result).toBe('patched');
-    expect(src).toContain("import { fetch as undiciFetch } from 'undici';");
-    expect(src).toContain('await undiciFetch(request, {');
-    expect(src).not.toContain('await fetch(');
+    expect(src).toContain('await fetch(request, {');
+    expect(src).not.toContain('undiciFetch');
+    expect(src).not.toContain('dispatcher');
+  });
+
+  it('undoes a prior undiciFetch rename so Request objects still work', () => {
+    const renamed = `import { fetch as undiciFetch } from 'undici';\n${FIXTURE.replaceAll('await fetch(', 'await undiciFetch(')}`;
+    const { src, result } = patchSource(renamed);
+    expect(result).toBe('patched');
+    expect(src).toContain('await fetch(request, {');
+    expect(src).not.toContain('undiciFetch');
     expect(src).not.toContain('dispatcher');
   });
 
@@ -71,11 +79,12 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(patchFile(file)).toBe('patched');
     expect(patchFile(file)).toBe('already-patched');
     const written = fs.readFileSync(file, 'utf8');
-    expect(written).toContain('await undiciFetch(');
+    expect(written).toContain('await fetch(');
+    expect(written).not.toContain('dispatcher');
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it('installed @workflow/world-vercel call sites use undiciFetch', () => {
+  it('installed @workflow/world-vercel call sites drop dispatcher', () => {
     const results = patchInstalledWorldVercel();
     expect(results).not.toContain('not-installed');
     const pkgRoot = resolveWorldVercelRoot();
@@ -88,8 +97,9 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
       path.join(pkgRoot as string, 'dist', 'http-core.js'),
       'utf8',
     );
-    expect(utils).toContain('await undiciFetch(');
-    expect(httpCore).toContain('await undiciFetch(');
+    expect(utils).toContain('await fetch(');
+    expect(httpCore).toContain('await fetch(');
+    expect(utils).not.toContain('undiciFetch');
     expect(utils).not.toMatch(/dispatcher:\s*getDispatcher/);
     expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
   });
