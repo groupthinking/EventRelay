@@ -4,17 +4,30 @@
 # the CodeRabbit dashboard (inheritance, auto_assign_reviewers, finishing
 # touches, knowledge base, issue enrichment, presidio, auto-review label
 # gating) are version-controlled here so every change is reviewable in a PR.
-# `inheritance: true` still lets the org-level config layer underneath this
-# file — so any setting this file leaves unset can be silently overridden from
-# the dashboard. Prefer setting a value explicitly, even at its default, when
-# the default is the behaviour you actually want.
+#
+# Inheritance is OFF so that claim is actually true. With `inheritance: true`
+# the org/dashboard config layers *underneath* this file, and a key set to an
+# empty collection here does not read as "override the inherited value with
+# nothing" — it reads as unset, and the inherited value survives. That is not
+# hypothetical: #1425 set `reviews.auto_review.labels: []` to clear an
+# inherited required-labels gate, and afterwards PRs were still landing
+# "Review skipped: excluded by label configuration" (e.g. #1483, #1494) — a
+# message that can only come from a label gate that is still active. Turning
+# inheritance off is the only in-file lever that makes the empty list bind.
+#
+# Consequence: anything this file leaves unset now falls back to the CodeRabbit
+# *schema* default, not to the dashboard. Set values explicitly — even at their
+# default — when the default is the behaviour you actually want.
 language: en-US
 tone_instructions: >-
   Be assertive and direct. Focus on real bugs, security issues, and performance
   problems — not style nitpicks. Flag anything that could break in production.
   When you find an issue, explain why it matters and suggest a concrete fix.
 early_access: true
-inheritance: true
+# See the header: `true` lets the dashboard's required-labels gate outlive the
+# `reviews.auto_review.labels: []` override below. Do not flip this back without
+# first confirming the gate has been removed dashboard-side.
+inheritance: false
 reviews:
   profile: assertive
   request_changes_workflow: true
@@ -32,6 +45,8 @@ reviews:
     # No label gate. This is the schema default, set explicitly to override an
     # inherited required-labels list from the dashboard/org config, which was
     # deadlocking auto-review against `auto_apply_labels: true` below.
+    # This only takes effect because `inheritance: false` above — on its own
+    # (as shipped in #1425) the empty list read as unset and the gate survived.
     #
     # The inherited gate required at least one of ~26 labels before a review
     # would start — a set that includes `architecture-gap`, `ci-cd`,

@@ -10,11 +10,12 @@ Provides consistent log formatting, multiple handlers, and performance monitorin
 import json
 import logging
 import logging.config
+import math
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 # Characters that can be abused to forge or corrupt log records (CWE-117 log
 # injection). Any of these in dynamic content — a log message, an ``exc_info``
@@ -74,6 +75,83 @@ def sanitize_log_record(rendered: str) -> str:
     rendered JSON record safe — see the module comment and ``#1429``.
     """
     return rendered.translate(_UNSAFE_LOG_CHARS)
+
+
+# Last-resort record for the JSON serialization fallback. A module constant of
+# pre-validated JSON, so emitting it involves no encoding step that could fail.
+_JSON_UNSERIALIZABLE_RECORD = (
+    '{"serialization_error": "log record could not be serialized"}'
+)
+
+
+def _int_is_json_safe(value: int) -> bool:
+    """Can ``json`` render this int without tripping CPython's digit cap?
+
+    ``json`` renders ints via ``str``, and CPython 3.11+ refuses int-to-str
+    conversion beyond ``sys.get_int_max_str_digits()`` (4300 by default). An
+    oversized int is therefore *a scalar that still raises*, which is why a
+    plain type check is not sufficient on the fallback path.
+
+    ``bit_length`` is used rather than attempting the conversion, because the
+    conversion is the operation being guarded against. ``log10(2) ≈ 0.30103``,
+    rounded up so the estimate can never understate the digit count.
+    """
+    get_limit = getattr(sys, "get_int_max_str_digits", None)
+    if get_limit is None:  # Python < 3.11 has no cap.
+        return True
+    limit = int(get_limit())
+    if limit <= 0:  # 0 disables the cap.
+        return True
+    return value.bit_length() * 0.302 + 1 < limit
+
+
+def _is_json_safe_scalar(value: object) -> bool:
+    """Is this a value ``json.dumps`` emits directly, under ``allow_nan=False``?
+
+    The filter for the serialization fallback (#1452). The fallback's dump has
+    no ``default=`` — anything reaching ``default`` there would reinstate the
+    raising-``__str__`` hole — so this filter is the only thing standing
+    between it and a second, fatal raise. It is exact about three things:
+
+    ``type(value) is``, never ``isinstance``. ``isinstance`` consults
+    ``value.__class__``, which an object can forge with a property returning
+    ``str``. Such a value passes an ``isinstance`` filter, reaches the dump,
+    and raises — costing the record the fallback exists to save. ``json``
+    dispatches on the real runtime type, which cannot be forged, so matching on
+    it is what makes this filter agree with the encoder.
+
+    Non-finite floats are excluded: ``json`` renders them as the JavaScript
+    literals ``NaN``/``Infinity``, which are not valid JSON, so a strict
+    downstream parser rejects the whole record — the same loss as dropping it,
+    moved to the consumer where it is harder to see.
+
+    Oversized ints are excluded per ``_int_is_json_safe``.
+    """
+    value_type = type(value)
+    # `cast` rather than `isinstance` narrowing: the exact-type check above is
+    # the whole point of this filter, and `isinstance` is what it exists to
+    # avoid. The cast is sound precisely because `type(value) is` already
+    # established the runtime type.
+    if value_type is float:
+        return math.isfinite(cast(float, value))
+    if value_type is int:
+        return _int_is_json_safe(cast(int, value))
+    return value_type in (str, bool, type(None))
+
+
+def _describe_exception(exc: BaseException) -> str:
+    """Name an exception without trusting its ``__str__``.
+
+    Used only by the serialization fallback, which exists precisely because a
+    hostile ``__str__`` can raise. The exception caught there may *be* one
+    raised from a call site's own ``__str__``, so interpolating ``exc`` can
+    raise a second time — inside the handler for the first. The type name is a
+    plain attribute lookup and is always safe.
+    """
+    try:
+        return f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - the fallback must not need a fallback
+        return type(exc).__name__
 
 
 class StructuredFormatter(logging.Formatter):
@@ -156,10 +234,56 @@ class StructuredFormatter(logging.Formatter):
             if hasattr(record, attribute):
                 payload[attribute] = getattr(record, attribute)
 
-        # `default=str` keeps a non-serializable `extra` value from raising
-        # inside the logging path, where an exception would be swallowed and
-        # the record lost entirely.
-        return json.dumps(payload, ensure_ascii=True, default=str)
+        # `default=str` coerces values `json` cannot natively encode, but it is
+        # not sufficient on its own to keep a record alive: a circular container
+        # is rejected structurally *before* `default` is consulted, and a value
+        # whose `__str__` raises propagates straight out of `default`. Either
+        # way `logging` swallows the raise via `Handler.handleError` and drops
+        # the record. The fallback below re-serializes with only the natively
+        # encodable fields, so a bad enrichment costs its own value rather than
+        # the whole record.
+        #
+        # The fallback must not be able to raise, or it loses the record for the
+        # same reason one level down. Three inputs defeated the first version of
+        # it, each measured against a real handler rather than reasoned about:
+        #
+        #   * an exception whose own `__str__` raises — the fallback rendered
+        #     the caught exception directly, so describing the failure became
+        #     the failure. Now via `_describe_exception`.
+        #   * a value forging `__class__ = str` — passed the `isinstance`
+        #     filter, then raised in the dump. Now excluded by matching on the
+        #     real runtime type.
+        #   * an int past CPython's 4300-digit `int`->`str` cap — a scalar by
+        #     every type test, and still fatal. Now excluded by magnitude.
+        #
+        # `allow_nan=False` because Python's default emits the JavaScript
+        # literals `NaN`/`Infinity`, which are not valid JSON. Raising instead
+        # routes the record to the fallback, which drops the offending
+        # enrichment and keeps a record every parser accepts.
+        #
+        # SCOPE, stated precisely because the bug this fixes was a comment
+        # claiming more than its code enforced: this guards *serializing* the
+        # payload. Building it can still raise above here — `record.getMessage()`
+        # on mismatched %-args is the reachable case — and that is out of scope
+        # because it fails the line-oriented path identically.
+        try:
+            return json.dumps(payload, ensure_ascii=True, allow_nan=False, default=str)
+        except Exception as exc:  # noqa: BLE001 - never lose a record
+            safe: dict[str, Any] = {
+                key: value
+                for key, value in payload.items()
+                if _is_json_safe_scalar(value)
+            }
+            safe["serialization_error"] = _describe_exception(exc)
+            try:
+                return json.dumps(safe, ensure_ascii=True, allow_nan=False)
+            except Exception:  # noqa: BLE001 - the guarantee stays unconditional
+                # Not reachable through any input identified above: every value
+                # in `safe` is one the encoder emits directly. It is here so the
+                # guarantee is a property of the code rather than of the failure
+                # modes that happened to be anticipated — which is the exact
+                # gap #1452 was filed about.
+                return _JSON_UNSERIALIZABLE_RECORD
 
     def formatException(self, ei) -> str:
         """Format exception with enhanced stack trace"""

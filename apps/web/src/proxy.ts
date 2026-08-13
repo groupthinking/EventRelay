@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Redis } from '@upstash/redis';
 import { getToken } from 'next-auth/jwt';
 import {
+  isAiRoute,
   needsAuthentication,
   resolveAuthGateMode,
   safeCallbackPath,
@@ -28,17 +29,6 @@ import {
 const WINDOW_SECONDS = 60;
 const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
-
-const AI_ROUTE_PREFIXES = [
-  '/api/agents/dispatch',
-  '/api/chat',
-  '/api/extract-events',
-  '/api/pipeline',
-  '/api/realtime',
-  '/api/training',
-  '/api/transcribe',
-  '/api/video',
-];
 
 // Login gating (activate-when-configured) + server-to-server bypass.
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
@@ -120,10 +110,6 @@ function getRedisClient(): Promise<Redis | null> {
   return redisClientPromise;
 }
 
-function isAiRoute(pathname: string): boolean {
-  return AI_ROUTE_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-}
-
 function getClientIp(request: NextRequest): string {
   // Prefer x-real-ip: set by Vercel's edge network and not client-controllable.
   const realIp = request.headers.get('x-real-ip');
@@ -143,8 +129,8 @@ function getClientIp(request: NextRequest): string {
   return 'unknown';
 }
 
-function getRateLimit(pathname: string): number {
-  return isAiRoute(pathname) ? AI_LIMIT : GENERAL_LIMIT;
+function getRateLimit(pathname: string, method: string): number {
+  return isAiRoute(pathname, method) ? AI_LIMIT : GENERAL_LIMIT;
 }
 
 async function checkRedisLimit(redisClient: Redis, key: string, limit: number): Promise<RateLimitResult> {
@@ -187,9 +173,10 @@ function checkMemoryLimit(key: string, limit: number): RateLimitResult {
 
 async function checkRateLimit(request: NextRequest): Promise<RateLimitResult> {
   const pathname = request.nextUrl.pathname;
-  const limit = getRateLimit(pathname);
+  const method = request.method;
+  const limit = getRateLimit(pathname, method);
   const clientIp = getClientIp(request);
-  const routeClass = isAiRoute(pathname) ? 'ai' : 'api';
+  const routeClass = isAiRoute(pathname, method) ? 'ai' : 'api';
   const key = `${routeClass}:${clientIp}`;
 
   const redisClient = await getRedisClient();
