@@ -417,11 +417,14 @@ const getAgentSessionLogs: ActionTool = {
     properties: {
       agentType: {
         type: 'string',
-        description: 'Filter logs to a specific agent type, or omit for all agents',
+        description:
+          'Filter logs to a specific agent type. Pass an empty string for all agents.',
       },
       limit: { type: 'number', description: 'Maximum number of log entries to return (default 20)' },
     },
-    required: [],
+    // OpenAI strict tools require every properties key in required[]
+    // (prod wrun_01KZYCN3XJMP9ANBXEARCNM41F).
+    required: ['agentType', 'limit'],
     additionalProperties: false,
   },
   async execute(input, ctx) {
