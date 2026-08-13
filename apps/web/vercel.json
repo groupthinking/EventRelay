@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "installCommand": "cd ../.. && npm install --legacy-peer-deps",
+  "installCommand": "cd ../.. && npm install --legacy-peer-deps && node apps/web/scripts/patch-world-vercel-undici-fetch.mjs",
   "buildCommand": "npm run build",
   "outputDirectory": ".next"
 }
