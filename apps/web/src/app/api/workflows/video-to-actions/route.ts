@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { workflowStartErrorBody } from '@/lib/sentry-server-integrations';
+import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import { videoToActionsWorkflow } from '@/workflows/video-to-actions';
 
 export const runtime = 'nodejs';
@@ -54,7 +55,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     typeof body.videoTitle === 'string' ? body.videoTitle.slice(0, 200) : undefined;
 
   try {
-    const run = await start(videoToActionsWorkflow, [{ url, videoTitle }]);
+    const run = await withWorldVercelFetch(() =>
+      start(videoToActionsWorkflow, [{ url, videoTitle }]),
+    );
     return NextResponse.json({
       ok: true,
       runId: run.runId,
