@@ -64,11 +64,18 @@ export async function POST(request: Request): Promise<NextResponse> {
   } catch (err) {
     console.error('[api/workflows/video-to-actions]', err);
     const message = err instanceof Error ? err.message : String(err);
+    const cause =
+      err instanceof Error && err.cause instanceof Error ? err.cause.message : undefined;
+    const undiciPrivateField =
+      typeof cause === 'string' && cause.includes('private member');
     return NextResponse.json(
       {
         ok: false,
         error: message,
-        hint: 'Ensure next.config.js wraps with withWorkflow and `workflow` is installed.',
+        ...(cause ? { cause } : {}),
+        hint: undiciPrivateField
+          ? 'Sentry NodeFetch/undici instrumentation is wrapping fetch.dispatch; disable it (issue #1538).'
+          : 'Ensure next.config.js wraps with withWorkflow and `workflow` is installed.',
       },
       { status: 500 },
     );
