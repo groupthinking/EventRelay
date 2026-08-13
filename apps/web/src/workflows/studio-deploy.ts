@@ -18,7 +18,7 @@ export interface StudioDeployInput {
 
 export interface StudioDeployResult {
   url: string;
-  kind: 'live' | 'job' | 'handoff' | 'failed';
+  kind: 'live' | 'job' | 'handoff';
   jobId?: string;
   jobStatus?: string;
   live_url?: string | null;
@@ -37,6 +37,9 @@ export async function studioDeployWorkflow(
   }
 
   const kicked = await kickoffStep(url);
+  if (kicked.kind === 'failed') {
+    throw new FatalError(kicked.message || 'Backend refused the deploy kickoff');
+  }
   if (kicked.kind !== 'job' || !kicked.jobId) {
     return {
       url,
@@ -50,7 +53,7 @@ export async function studioDeployWorkflow(
 }
 
 async function kickoffStep(url: string): Promise<{
-  kind: 'job' | 'handoff';
+  kind: 'job' | 'handoff' | 'failed';
   jobId?: string;
   message?: string;
 }> {
@@ -61,7 +64,7 @@ async function kickoffStep(url: string): Promise<{
 }
 
 async function pollJobStep(jobId: string): Promise<{
-  kind: 'live' | 'job' | 'failed';
+  kind: 'live' | 'job';
   jobStatus?: string;
   live_url?: string | null;
   github_repo?: string | null;
@@ -81,6 +84,14 @@ async function pollJobStep(jobId: string): Promise<{
       live_url: status.live_url,
       github_repo: status.github_repo,
     };
+  }
+
+  if (!status.ok) {
+    const msg = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+    if (status.httpStatus && status.httpStatus >= 500) {
+      throw new Error(msg);
+    }
+    throw new FatalError(msg);
   }
 
   if (status.jobStatus === 'failed' || status.jobStatus === 'error') {

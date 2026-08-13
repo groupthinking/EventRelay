@@ -86,6 +86,7 @@ export async function startStudioDeploy(input: {
 }): Promise<StudioDeployStart> {
   const response = await fetch('/api/workflows/studio-deploy', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       url: input.url,
@@ -110,7 +111,11 @@ export async function getStudioDeployStatus(
 ): Promise<StudioDeployPoll> {
   const response = await fetch(
     `/api/workflows/studio-deploy/${encodeURIComponent(runId)}`,
-    { method: 'GET', signal: opts?.signal ?? AbortSignal.timeout(15_000) },
+    {
+      method: 'GET',
+      credentials: 'same-origin',
+      signal: opts?.signal ?? AbortSignal.timeout(15_000),
+    },
   );
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   const resultRaw =
@@ -151,7 +156,19 @@ export async function pollStudioDeploy(
     last = await getStudioDeployStatus(runId, { signal: opts?.signal });
     if (last.runStatus && TERMINAL.has(last.runStatus)) return last;
     if (last.status === 404) return last;
-    await new Promise((r) => setTimeout(r, delayMs));
+    if (i < attempts - 1) {
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, delayMs);
+        opts?.signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
   }
   return {
     ...last,

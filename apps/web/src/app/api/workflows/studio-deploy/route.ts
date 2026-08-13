@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { workflowStartErrorBody } from '@/lib/sentry-server-integrations';
+import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import { studioDeployWorkflow } from '@/workflows/studio-deploy';
 
@@ -30,19 +31,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal')
-    ) {
-      return NextResponse.json({ error: 'url host is not allowed' }, { status: 400 });
-    }
+    await assertPublicHttpUrl(url);
   } catch {
-    return NextResponse.json({ error: 'url is not a valid URL' }, { status: 400 });
+    return NextResponse.json({ error: 'url host is not allowed' }, { status: 400 });
   }
 
   const projectType =

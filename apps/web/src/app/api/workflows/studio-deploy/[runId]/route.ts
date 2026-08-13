@@ -24,27 +24,30 @@ export async function GET(
       );
     }
 
-    const runStatus = await run.status;
+    const [runStatus, workflowName, createdAt, startedAt, completedAt] =
+      await Promise.all([
+        run.status,
+        run.workflowName.catch(() => undefined),
+        run.createdAt.then((d) => d.toISOString()).catch(() => undefined),
+        run.startedAt.then((d) => d?.toISOString()).catch(() => undefined),
+        run.completedAt.then((d) => d?.toISOString()).catch(() => undefined),
+      ]);
+
     const payload: Record<string, unknown> = {
       ok: true,
       runId,
       runStatus,
-      workflowName: await run.workflowName.catch(() => undefined),
-      createdAt: await run.createdAt.then((d) => d.toISOString()).catch(() => undefined),
-      startedAt: await run.startedAt
-        .then((d) => d?.toISOString())
-        .catch(() => undefined),
-      completedAt: await run.completedAt
-        .then((d) => d?.toISOString())
-        .catch(() => undefined),
+      workflowName,
+      createdAt,
+      startedAt,
+      completedAt,
     };
 
     if (runStatus === 'completed' || runStatus === 'failed') {
       try {
         payload.result = await run.returnValue;
-      } catch (err) {
-        payload.error =
-          err instanceof Error ? err.message : 'Failed to read workflow return value';
+      } catch {
+        payload.error = 'Failed to read workflow return value';
       }
     }
 
@@ -59,12 +62,7 @@ export async function GET(
     }
     console.error('[api/workflows/studio-deploy/:runId]', err);
     return NextResponse.json(
-      {
-        ok: false,
-        runId,
-        error: message,
-        hint: 'Ensure the workflow package is installed and withWorkflow wraps next.config.',
-      },
+      { ok: false, runId, error: 'Failed to read workflow run' },
       { status: 500 },
     );
   }

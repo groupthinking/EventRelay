@@ -34,7 +34,7 @@ npm run dev
 # start
 curl -X POST http://localhost:3000/api/workflows/video-to-actions \
   -H 'Content-Type: application/json' \
-  --json '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+  --json '{"url":"https://www.youtube.com/watch?v=auJzb1D-fag"}'
 # poll (use runId from response)
 curl http://localhost:3000/api/workflows/video-to-actions/<runId>
 npx workflow web
@@ -56,11 +56,11 @@ npx workflow inspect runs
 |-------|------|
 | Workflow | `apps/web/src/workflows/studio-deploy.ts` |
 | Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` (FastAPI `/api/v1/videos/process` + `/api/v1/jobs/:id`, no self-HTTP) |
-| Start | `POST /api/workflows/studio-deploy` `{ "url" }` → `{ runId, statusUrl }` |
-| Status | `GET /api/workflows/studio-deploy/:runId` |
-| Studio UI | Deploy action in `VideoWorkflowStudio` (falls back to F5 `/api/pipeline` if start() fails) |
+| Start | `POST /api/workflows/studio-deploy` `{ "url", projectType?, outcome? }` → `{ runId, statusUrl }` |
+| Status | `GET /api/workflows/studio-deploy/:runId` → `{ runStatus, result? }` |
+| Studio UI | Deploy in `VideoWorkflowStudio`. **401 → /login**. Fallback to F5 `/api/pipeline` only when start() is 5xx/unavailable. |
 
-Auth: this route stays **session-gated** (unlike public Act on findings).
+Auth: this route stays **session-gated**. Studio now has a Sign in link. Never use `dQw4w9WgXcQ` as a fixture — use `auJzb1D-fag`.
 
 ## Next product steps
 

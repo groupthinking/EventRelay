@@ -27,7 +27,7 @@ describe('pipeline-async-job (WDK C)', () => {
       host: null,
       reason: 'BACKEND_URL is not configured',
     });
-    const kicked = await kickoffAsyncVideoJob('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    const kicked = await kickoffAsyncVideoJob('https://www.youtube.com/watch?v=auJzb1D-fag');
     expect(kicked.kind).toBe('handoff');
     expect(kicked.message).toMatch(/BACKEND_URL/);
   });
@@ -51,7 +51,7 @@ describe('pipeline-async-job (WDK C)', () => {
       }),
     );
 
-    const kicked = await kickoffAsyncVideoJob('https://www.youtube.com/watch?v=dQw4w9WgXcQ');
+    const kicked = await kickoffAsyncVideoJob('https://www.youtube.com/watch?v=auJzb1D-fag');
     expect(kicked).toEqual({
       kind: 'job',
       jobId: 'job_1',
@@ -83,5 +83,49 @@ describe('pipeline-async-job (WDK C)', () => {
   it('does not treat pending as terminal', () => {
     expect(isTerminalJobStatus('pending')).toBe(false);
     expect(isTerminalJobStatus('running')).toBe(false);
+  });
+
+  it('treats a backend HTTP error as failed, not a config handoff', async () => {
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.example',
+    });
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.example',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 503,
+        json: async () => ({ error: 'backend overloaded' }),
+      }),
+    );
+    const kicked = await kickoffAsyncVideoJob(
+      'https://www.youtube.com/watch?v=auJzb1D-fag',
+    );
+    expect(kicked.kind).toBe('failed');
+    expect(kicked.message).toMatch(/overloaded|503/);
+  });
+
+  it('marks a non-ok job status read as not ok', async () => {
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.example',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 404,
+        json: async () => ({ error: 'unknown job' }),
+      }),
+    );
+    const status = await fetchAsyncVideoJob('job_missing');
+    expect(status.ok).toBe(false);
+    expect(status.httpStatus).toBe(404);
+    expect(isTerminalJobStatus(status.jobStatus)).toBe(false);
   });
 });

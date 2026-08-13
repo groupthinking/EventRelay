@@ -28,7 +28,7 @@ describe('studio-workflow (WDK Product v1)', () => {
     );
 
     const result = await startVideoToActions({
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
       videoTitle: 'Demo',
     });
     expect(result.ok).toBe(true);
@@ -112,7 +112,7 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('startStudioDeploy requires a runId', async () => {
+  it('startStudioDeploy succeeds when the route returns a runId', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
@@ -126,7 +126,7 @@ describe('studio-workflow (WDK Product v1)', () => {
       }),
     );
     const started = await startStudioDeploy({
-      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
     });
     expect(started.ok).toBe(true);
     expect(started.runId).toBe('wrun_c');
@@ -152,5 +152,52 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(poll.runStatus).toBe('completed');
     expect(poll.result?.kind).toBe('handoff');
     expect(poll.result?.message).toMatch(/BACKEND_URL/);
+  });
+
+  it('startStudioDeploy is not ok when runId is missing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true }),
+      }),
+    );
+    const started = await startStudioDeploy({
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+    });
+    expect(started.ok).toBe(false);
+  });
+
+  it('pollStudioDeploy returns immediately on 404', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ error: 'Workflow run not found' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_missing', { attempts: 5, delayMs: 1 });
+    expect(poll.status).toBe(404);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('pollStudioDeploy stops when the abort signal fires', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockImplementation(async () => {
+      controller.abort();
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ ok: true, runId: 'wrun_c3', runStatus: 'running' }),
+      };
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_c3', {
+      attempts: 8,
+      delayMs: 20,
+      signal: controller.signal,
+    });
+    expect(poll.message).toMatch(/abort/i);
+    expect(fetchMock.mock.calls.length).toBeLessThan(8);
   });
 });

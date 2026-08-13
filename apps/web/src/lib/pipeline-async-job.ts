@@ -4,7 +4,7 @@ import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 
 export interface AsyncJobKickoff {
-  kind: 'job' | 'handoff';
+  kind: 'job' | 'handoff' | 'failed';
   jobId?: string;
   statusUrl?: string;
   message?: string;
@@ -12,6 +12,7 @@ export interface AsyncJobKickoff {
 
 export interface AsyncJobStatus {
   ok: boolean;
+  httpStatus?: number;
   jobStatus?: string;
   live_url?: string | null;
   github_repo?: string | null;
@@ -19,7 +20,9 @@ export interface AsyncJobStatus {
 }
 
 function str(v: unknown): string | undefined {
-  return typeof v === 'string' && v.trim() ? v : undefined;
+  if (typeof v !== 'string') return undefined;
+  const trimmed = v.trim();
+  return trimmed ? trimmed : undefined;
 }
 
 /**
@@ -59,11 +62,13 @@ export async function kickoffAsyncVideoJob(url: string): Promise<AsyncJobKickoff
   }
 
   return {
-    kind: 'handoff',
+    kind: 'failed',
     message:
       str(payload.error) ||
       str(payload.detail) ||
-      `Backend kickoff returned HTTP ${response.status}`,
+      (response.ok
+        ? 'Backend kickoff returned no job id'
+        : `Backend kickoff returned HTTP ${response.status}`),
   };
 }
 
@@ -90,6 +95,7 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
 
   return {
     ok: response.ok,
+    httpStatus: response.status,
     jobStatus: str(data.status) || str(payload.status),
     live_url: str(data.live_url) ?? str(payload.live_url) ?? null,
     github_repo: str(data.github_repo) ?? str(payload.github_repo) ?? null,
