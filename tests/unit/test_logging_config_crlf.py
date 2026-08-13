@@ -20,8 +20,10 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from youtube_extension.backend.config.logging_config import (  # noqa: E402
+    _JSON_UNSERIALIZABLE_RECORD,
     _UNSAFE_LOG_CHARS,
     StructuredFormatter,
+    _describe_exception,
     sanitize_log_record,
     setup_logging,
 )
@@ -379,6 +381,145 @@ def test_serialization_fallback_still_escapes_attacker_content():
     assert parsed["level"] == "INFO"
     assert "forged" not in parsed
     assert parsed["message"] == _FORGERY
+
+
+# ---------------------------------------------------------------------------
+# #1452 follow-up: the fallback itself could still lose the record.
+#
+# The first fix wrapped the dump but left the *recovery* path able to raise, so
+# it kept the guarantee only for the two inputs it was written against. Each
+# case below was measured against a real handler on the merged implementation
+# (#1491) and dropped the record — the same "comment claims more than the code
+# enforces" gap that #1452 was filed about, one level down.
+# ---------------------------------------------------------------------------
+
+
+class _NastyError(Exception):
+    """An exception whose own `__str__` raises."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("even the error explodes")
+
+
+class _RaisesNasty:
+    """`__str__` raises an exception that itself raises when rendered.
+
+    This is what makes `_describe_exception`'s inner guard live code rather
+    than defensive decoration: the fallback renders the exception it caught,
+    and here that render raises again.
+    """
+
+    def __str__(self) -> str:
+        raise _NastyError()
+
+
+class _ForgedClassStr:
+    """A value that lies about its type *and* raises from `__str__`.
+
+    `isinstance(x, str)` consults `x.__class__`, which this forges, so it
+    passes an `isinstance`-based scalar filter. `json` dispatches on the real
+    runtime type, so the value then raises inside the fallback's own dump —
+    losing the record the fallback exists to save.
+    """
+
+    @property
+    def __class__(self):  # type: ignore[override]
+        return str
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded")
+
+
+def test_exception_whose_str_also_raises_does_not_cost_the_record():
+    # Pre-fix: the fallback built `f"{type(exc).__name__}: {exc}"` directly, so
+    # describing the failure *became* the failure and the record was dropped.
+    records = _emit_three("json-nested-exploding", _RaisesNasty())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["level"] == "INFO"
+    assert poisoned["message"] == "poisoned"
+    # Degraded to the bare class name rather than "Name: message".
+    assert poisoned["serialization_error"] == "_NastyError"
+
+
+def test_fallback_filter_is_not_fooled_by_a_forged_class():
+    # Pins `type(value) is ...` over `isinstance(...)` in _is_json_safe_scalar.
+    # With the isinstance form this value is retained and the record is lost.
+    records = _emit_three("json-forged-class", _ForgedClassStr())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["level"] == "INFO"
+    assert poisoned["message"] == "poisoned"
+    assert "correlation_id" not in poisoned
+    assert poisoned["serialization_error"].startswith("RuntimeError:")
+
+
+def test_oversized_int_enrichment_does_not_cost_the_record():
+    # A scalar type test is not enough on its own. `int` is a scalar by every
+    # such test, but CPython caps int->str conversion at 4300 digits and `json`
+    # renders ints through `str`, so a large `correlation_id` raises inside the
+    # fallback too and the record is lost anyway.
+    records = _emit_three("json-oversized-int", 10**4400)
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["level"] == "INFO"
+    assert poisoned["message"] == "poisoned"
+    assert "correlation_id" not in poisoned
+    assert poisoned["serialization_error"].startswith("ValueError:")
+
+
+def test_int_within_the_conversion_limit_is_still_kept():
+    # The magnitude guard must not cost ordinary integer enrichments.
+    logger, buf = _make_json_logger("json-ordinary-int")
+    logger.info("fine", extra={"request_id": 1234567890})
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["correlation_id"] == 1234567890
+    assert "serialization_error" not in parsed
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_non_finite_enrichment_does_not_produce_invalid_json(value):
+    # Python's json emits the JavaScript literals NaN/Infinity for these, which
+    # are not valid JSON — a strict downstream parser rejects the whole record,
+    # which is the same loss as dropping it, moved to the consumer. `json.loads`
+    # accepts them by default, so this asserts against a *strict* parse.
+    logger, buf = _make_json_logger(f"json-non-finite-{value}")
+    logger.info("measured", extra={"request_id": value})
+
+    def _reject(constant: str) -> None:
+        raise AssertionError(f"non-JSON constant in record: {constant}")
+
+    parsed = json.loads(buf.getvalue(), parse_constant=_reject)
+    assert parsed["level"] == "INFO"
+    assert parsed["message"] == "measured"
+    assert "correlation_id" not in parsed
+    assert "serialization_error" in parsed
+
+
+def test_finite_float_enrichment_is_kept():
+    # The non-finite guard must not cost ordinary numeric enrichments.
+    logger, buf = _make_json_logger("json-finite-float")
+    logger.info("measured", extra={"performance_ms": 12.5})
+    parsed = json.loads(buf.getvalue())
+
+    assert parsed["performance_ms"] == 12.5
+    assert "serialization_error" not in parsed
+
+
+def test_last_resort_record_is_pre_validated_json():
+    # Tier 3 is what makes the guarantee a property of the code rather than of
+    # the failure modes that happened to be anticipated, so pin that emitting
+    # it involves no encoding step that could itself fail.
+    parsed = json.loads(_JSON_UNSERIALIZABLE_RECORD)
+    assert parsed["serialization_error"]
+
+
+def test_describe_exception_survives_an_exception_that_cannot_be_stringified():
+    assert _describe_exception(_NastyError()) == "_NastyError"
 
 
 @pytest.fixture
