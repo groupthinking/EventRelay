@@ -111,6 +111,36 @@ describe('login gate must fail closed (issue #1058)', () => {
     expect(response.status).not.toBe(503);
   });
 
+  it('lets public Studio Act on findings through when the secret IS configured', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: 'test-secret',
+      NODE_ENV: 'production',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+
+    const start = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions', {
+        method: 'POST',
+      }),
+    );
+    expect(start.status).not.toBe(401);
+    expect(start.status).not.toBe(503);
+
+    const poll = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions/run_1'),
+    );
+    expect(poll.status).not.toBe(401);
+    expect(poll.status).not.toBe(503);
+
+    // Sibling workflow surfaces stay gated — WDK C deploy must not inherit this.
+    const other = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/studio-deploy', {
+        method: 'POST',
+      }),
+    );
+    expect(other.status).toBe(401);
+  });
+
   it('leaves local development unchanged (no secret, no 503)', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: undefined,
