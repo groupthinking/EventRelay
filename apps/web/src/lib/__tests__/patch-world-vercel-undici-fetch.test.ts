@@ -42,12 +42,13 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(patterns).toContain('/scripts/');
   });
 
-  it('rewrites await fetch( to undici.fetch from the same module as Agent', () => {
+  it('rewrites await fetch( to undici.fetch and drops dispatcher', () => {
     const { src, result } = patchSource(FIXTURE);
     expect(result).toBe('patched');
     expect(src).toContain("import { fetch as undiciFetch } from 'undici';");
     expect(src).toContain('await undiciFetch(request, {');
     expect(src).not.toContain('await fetch(');
+    expect(src).not.toContain('dispatcher');
   });
 
   it('is idempotent', () => {
@@ -89,5 +90,7 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     );
     expect(utils).toContain('await undiciFetch(');
     expect(httpCore).toContain('await undiciFetch(');
+    expect(utils).not.toMatch(/dispatcher:\s*getDispatcher/);
+    expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
   });
 });
