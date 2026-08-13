@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   SENTRY_INTEGRATIONS_UNSAFE_FOR_WDK,
+  SENTRY_SERVER_SKIP_OTEL_SETUP,
   WORKFLOW_UNDICI_DISPATCH_CODE,
   sentryServerIntegrations,
   withoutWorkflowBreakingIntegrations,
@@ -22,6 +23,11 @@ describe('withoutWorkflowBreakingIntegrations (issue #1538)', () => {
   it('is a no-op when NodeFetch is not present', () => {
     const input = [{ name: 'Http' }, { name: 'LinkedErrors' }];
     expect(withoutWorkflowBreakingIntegrations(input)).toEqual(input);
+  });
+
+  it('requires skipOpenTelemetrySetup — filtering NodeFetch alone is not enough', () => {
+    // #1539 deployed to uvai.io and still returned WORKFLOW_UNDICI_DISPATCH_CONFLICT.
+    expect(SENTRY_SERVER_SKIP_OTEL_SETUP).toBe(true);
   });
 
   it('is the Sentry.init integrations callback', () => {
