@@ -29,6 +29,12 @@ export function sentryServerIntegrations<T extends { name: string }>(
   return withoutWorkflowBreakingIntegrations(integrations);
 }
 
+/**
+ * Sentry Node still wraps undici inside `initOpenTelemetry()` even after
+ * NodeFetch is filtered (#1539 shipped, production still `#P`). Must stay true.
+ */
+export const SENTRY_SERVER_SKIP_OTEL_SETUP = true;
+
 export const WORKFLOW_UNDICI_DISPATCH_CODE = 'WORKFLOW_UNDICI_DISPATCH_CONFLICT';
 
 export function workflowStartErrorBody(err: unknown): {
