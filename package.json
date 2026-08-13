@@ -16,8 +16,8 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=20.6.0",
-    "npm": ">=8.0.0"
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
