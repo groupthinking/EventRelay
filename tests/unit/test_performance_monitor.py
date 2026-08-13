@@ -1306,6 +1306,96 @@ class TestRecordMetricsBatch:
                 want.component, want.metric_name, want.value, want.unit
             )
 
+    @staticmethod
+    def _walking_clock(instants):
+        """Stand-in for the module's ``datetime`` whose ``now`` walks a list.
+
+        Wall-clock resolution is too coarse to assert on directly -- several
+        ``datetime.now()`` calls in a tight loop can legitimately return the
+        same value -- so distinctness alone would be a flaky proxy for "one
+        stamp per record". Handing out a known sequence instead makes the
+        assertion exact: the Nth record must carry the Nth instant, which is
+        true only if ``now`` was consulted once per record, in order.
+
+        Running out of instants raises ``IndexError``. ``record_metrics``
+        swallows it, so the batch lands nothing and the caller's assertion on
+        buffer contents fails -- an extra clock read cannot pass silently.
+        """
+        remaining = list(instants)
+
+        class _Clock:
+            @staticmethod
+            def now(tz=None):
+                return remaining.pop(0)
+
+        return _Clock
+
+    async def test_batch_stamps_each_record_with_its_own_now(self, monitor):
+        """Every record gets its own stamp, as serial ``record_metric`` does.
+
+        A single shared ``now`` reused across the batch would give all three
+        records instant[0] and leave the last two unconsumed. That is the
+        regression this pins: the docstring promises behaviour identical to
+        calling ``record_metric`` once per entry, and the timestamp is the one
+        field where a batched implementation is tempted to diverge.
+        """
+        instants = [
+            datetime(2026, 1, 1, 0, 0, second, tzinfo=timezone.utc)
+            for second in range(3)
+        ]
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock(instants)
+        ):
+            await monitor.record_metrics(self._samples(3))
+
+        assert [m.timestamp for m in monitor.metrics_buffer] == instants
+
+    async def test_batch_honours_an_explicitly_supplied_timestamp(self, monitor):
+        """An entry carrying its own ``timestamp`` must not be re-stamped.
+
+        Callers replaying buffered samples depend on this: the clock is only
+        consulted for entries that omit the field.
+        """
+        supplied = datetime(2020, 6, 1, 12, 30, 0, tzinfo=timezone.utc)
+        generated = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock([generated])
+        ):
+            await monitor.record_metrics([
+                {"component": "system", "metric_name": "replayed",
+                 "value": 1.0, "unit": "ms", "timestamp": supplied},
+                {"component": "system", "metric_name": "live",
+                 "value": 2.0, "unit": "ms"},
+            ])
+
+        stamped = {m.metric_name: m.timestamp for m in monitor.metrics_buffer}
+        assert stamped == {"replayed": supplied, "live": generated}
+
+    async def test_batch_persists_the_per_record_timestamps(self, monitor):
+        """The distinct stamps must survive the write, not just the buffer."""
+        instants = [
+            datetime(2026, 1, 1, 0, 0, second, tzinfo=timezone.utc)
+            for second in range(3)
+        ]
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock(instants)
+        ):
+            await monitor.record_metrics(self._samples(3))
+
+        conn = sqlite3.connect(monitor.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT metric_name, timestamp FROM performance_metrics "
+                "ORDER BY metric_name"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert [r[1] for r in rows] == [i.isoformat() for i in instants]
+
     async def test_empty_batch_does_no_database_work(self, monitor):
         calls: list[int] = []
         with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):

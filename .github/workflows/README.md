@@ -171,12 +171,18 @@ A full audit of this directory was performed (see
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
 
 
-| Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Creates the independent, head-bound `Agent completion enforcement` Check from protected default-branch code. |
 | PR Governance | `pr-governance.yml` | `pull_request_target` (opened/edited/reopened/synchronize/ready_for_review) | Validates that every ready PR links exactly one real open canonical issue and contains non-empty delivery evidence sections; fails on competing PRs. |
 | Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Non-destructive daily report of ready PRs missing a canonical issue, issues with competing implementation PRs, and stale unattached branches. |
 
 ## Agent-completion enforcement
 
-`pr-checks.yml` retains the advisory `agent-completion/truth-gate/pr-<number>` status; it is never required. `agent-completion-enforcement.yml` runs protected default-branch code, does not execute PR code, and creates the separate **Agent completion enforcement** Check directly on the PR head SHA. It accepts only an exact-head, machine-readable report published by the configured dedicated GitHub App. Stale, edited/deleted, ambiguous, or untrusted evidence fails closed. While the trust policy is unprovisioned (empty allowlists) the Check reports **neutral (advisory)** instead of red so its signal is not lost to constant noise; once the policy is provisioned, a missing report also fails closed.
+Removed. The `agent-completion/truth-gate` status and the `Agent completion
+enforcement` Check were retired because they were unsatisfiable: the gate scored a
+pull request against an intent snapshot written only on `issues` events, so any
+pull request that satisfied `PR Governance` (which requires `Closes #<issue>`)
+necessarily armed the gate and then failed it. It was red on ~100% of pull
+requests, including merged ones such as #1368.
 
-Before enabling the rule, provision `.github/agent-lock/trusted-publishers.json` through protected review with the trusted App and actor allowlists. Until then the Check is **neutral (advisory)** and blocks nothing; populating the allowlists (and adding the Check to required status checks) is what makes it blocking. Configure the repository ruleset to require **Agent completion enforcement**, one independent approval, and resolved conversations. Do not require `agent-completion/truth-gate`.
+Binding a pull request to one focused issue is now owned solely by
+`pr-governance.yml`, which produces the `PR Governance` and `Canonical issue and
+evidence` Checks. See `MERGE_POLICY.md` at the repository root.

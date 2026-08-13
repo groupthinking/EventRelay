@@ -6,8 +6,8 @@ on:
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
+  # No base-branch filter — see the note in ci.yml.
   pull_request:
-    branches: [main, develop]
     paths-ignore:
       - "**/*.md"
       - "**/*.txt"
@@ -17,9 +17,13 @@ permissions:
   contents: read
   actions: read
 
+# Keyed by PR number for PR runs and by commit SHA otherwise. The previous
+# github.ref key collided every merge to main into one group, where GitHub
+# cancels the pending run -- a burst of merges silently dropped the middle
+# commits' verdicts. See the fuller note in ci.yml.
 concurrency:
-  group: coverage-${{ github.ref }}
-  cancel-in-progress: true
+  group: coverage-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
   coverage:
