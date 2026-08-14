@@ -15,17 +15,16 @@ interface NavProps {
   fixed?: boolean;
 }
 
-/** Primary product navigation — dashboard-first journey. */
+/** Primary product navigation — one analyze loop. */
 const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard', hint: 'Video library' },
-  { href: '/dashboard/agents', label: 'Agents', hint: 'Pipeline graph' },
+  { href: '/', label: 'Analyze', hint: 'Paste a YouTube URL' },
+  { href: '/dashboard', label: 'Library', hint: 'Saved videos' },
   { href: '/features', label: 'Features' },
   { href: '/pricing', label: 'Pricing' },
 ];
 
 /** Secondary / developer surfaces — not part of the default user path. */
 const DEV_LINKS = [
-  { href: '/studio', label: 'Studio', hint: 'Local drafts' },
   { href: '/docs/api', label: 'API' },
 ];
 
@@ -50,7 +49,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
       )}
     >
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="flex items-center gap-3 group">
+        <Link href="/" className="flex items-center gap-3 group">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
             U
           </div>
@@ -87,11 +86,10 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
             </Link>
           ))}
           <div className="h-5 w-px bg-white/[0.08] mx-1" />
-          {DEV_LINKS.map(({ href, label, hint }) => (
+          {DEV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
-              title={hint}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03]',
                 pathname === href && 'text-white/60 bg-white/[0.04]'
@@ -105,8 +103,8 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/dashboard" className="btn btn-primary py-2 px-5 text-sm">
-            Open Dashboard
+          <Link href="/" className="btn btn-primary py-2 px-5 text-sm">
+            Analyze
           </Link>
         )}
         <button
