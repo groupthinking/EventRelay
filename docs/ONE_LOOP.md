@@ -9,7 +9,7 @@
 | Source | What we take | What we do not build |
 |--------|----------------|----------------------|
 | L4 accept | Five wires, Run = public `/api/pipeline/stream` | Fake `buildPackage` brief |
-| Google Doc “UVAI MASTER FILE DUMP” | Digital Refinery: video → structured action | ADK/LWP Virtual Ports, Ultron, OPA, canvas glyphs |
+| Google Doc “UVAI MASTER FILE DUMP” | Digital Refinery: video → structured action (`docs/landscape/google-doc-deep-research.json`, `intent_match: false`) | ADK/LWP Virtual Ports, Ultron, OPA, canvas glyphs |
 | Notion `approach` | Taskmaster: take action, not a chatbot | Enterprise fleet / contest theater as a second product |
 | HF `ViralNow/uvai` | Timestamp-grounded events idea | NVIDIA AV-Skills 2.8M-row **noncommercial** trainer |
 | Notion Launch Board | Studio “shipped” was the fake brief | Treating June P0s as live CI |

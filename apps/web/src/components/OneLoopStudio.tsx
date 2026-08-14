@@ -84,6 +84,12 @@ export default function OneLoopStudio() {
     setBusy(true);
     setWorkflowActions(null);
     setMessage('Running the live pipeline…');
+    const tick = window.setInterval(() => {
+      const live = useDashboardStore
+        .getState()
+        .videos.find((v) => v.url === next || v.url.includes(getYouTubeId(next)));
+      if (live) selectVideo(live.id);
+    }, 250);
     try {
       const id = await processVideo(next);
       selectVideo(id);
@@ -98,6 +104,7 @@ export default function OneLoopStudio() {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Analysis failed.');
     } finally {
+      window.clearInterval(tick);
       setBusy(false);
     }
   };
