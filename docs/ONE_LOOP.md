@@ -60,3 +60,5 @@ Two trees only: `apps/web` + `src/youtube_extension`.
 ## Feedback loop
 
 After each phase: print completed → compare to this table → if mismatch, re-run research on the gap, then fix.
+
+**Next phase map:** [NEXT-PHASE.md](./NEXT-PHASE.md) · **Goal:** [GOAL.md](./GOAL.md) · Orchestrator `/uvai-one-loop-next`.
