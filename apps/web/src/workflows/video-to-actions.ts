@@ -4,19 +4,30 @@
  * Orchestrates existing EventRelay capabilities as retryable steps so a long
  * analysis does not die with a single serverless request timeout.
  *
- * Trigger: POST /api/workflows/video-to-actions  { url, videoTitle? }
+ * Trigger: POST /api/workflows/video-to-actions
+ *          { url, videoTitle?, transcript?, events? }
  * Status:  GET  /api/workflows/video-to-actions/:runId
  * Inspect: npx workflow web  (from apps/web)
  *
- * Steps call server libs directly (no self-HTTP loopback) so Vercel production
- * does not depend on NEXTAUTH_URL / internal tokens for step execution.
+ * When Analyze already produced a transcript, pass it through so Act stays on
+ * the same run instead of re-fetching YouTube. Steps call server libs directly
+ * (no self-HTTP loopback) so Vercel production does not depend on NEXTAUTH_URL
+ * / internal tokens for step execution.
  */
 
 import { FatalError } from 'workflow';
 
+export interface VideoToActionsEvent {
+  type?: string;
+  title: string;
+  description?: string;
+}
+
 export interface VideoToActionsInput {
   url: string;
   videoTitle?: string;
+  transcript?: string;
+  events?: VideoToActionsEvent[];
 }
 
 export interface VideoToActionsResult {
@@ -24,6 +35,7 @@ export interface VideoToActionsResult {
   transcriptChars: number;
   actionCount: number;
   provider?: string;
+  usedProvidedTranscript?: boolean;
   actions: Array<{ tool: string; status: string; result?: string }>;
 }
 
@@ -37,18 +49,31 @@ export async function videoToActionsWorkflow(
     throw new FatalError('url must be an http(s) URL');
   }
 
-  console.log('[video-to-actions] start', { url });
+  const provided = (input.transcript || '').trim();
+  const usedProvidedTranscript = provided.length >= 40;
+  console.log('[video-to-actions] start', { url, usedProvidedTranscript });
 
-  const transcript = await transcribeStep(url);
+  const transcript = usedProvidedTranscript ? provided : await transcribeStep(url);
   if (!transcript || transcript.trim().length < 40) {
     throw new FatalError('Transcript too short or unavailable for action extraction');
   }
 
-  const agent = await runActionsStep(transcript, input.videoTitle);
+  const eventLines = (input.events || [])
+    .slice(0, 40)
+    .map((event) => {
+      const kind = event.type || 'event';
+      return `- [${kind}] ${event.title}${event.description ? `: ${event.description}` : ''}`;
+    })
+    .join('\n');
+  const agentSource = eventLines
+    ? `${transcript.slice(0, 12_000)}\n\nEVENTS FROM ANALYZE:\n${eventLines}`
+    : transcript;
+  const agent = await runActionsStep(agentSource, input.videoTitle);
 
   console.log('[video-to-actions] complete', {
     chars: transcript.length,
     actions: agent.actions.length,
+    usedProvidedTranscript,
   });
 
   return {
@@ -56,6 +81,7 @@ export async function videoToActionsWorkflow(
     transcriptChars: transcript.length,
     actionCount: agent.actions.length,
     provider: agent.provider,
+    usedProvidedTranscript,
     actions: agent.actions.map((a) => ({
       tool: a.tool,
       status: a.status,

@@ -4,7 +4,8 @@
 **Goal command:** see [GOAL.md](./GOAL.md)  
 **Live view:** `~/BrainVault/UVAI-EventRelay-SSOT/17-ONE-LOOP-LIVE.md`
 
-P1 is done (`/` and `/studio` call live `/api/pipeline/stream`). This phase is only what is still missing.
+P1 is done (`/` and `/studio` call live `/api/pipeline/stream`).  
+**P3 implement + verify passed** (`uvai-one-loop-next`, 2026-08-15). Remaining: optional OneLoopStudio `#act-results` test; P2 is audit-pass (no local secret).
 
 ## Goal
 

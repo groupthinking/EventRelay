@@ -32,6 +32,7 @@ export interface VideoToActionsResult {
   transcriptChars: number;
   actionCount: number;
   provider?: string;
+  usedProvidedTranscript?: boolean;
   actions: VideoToActionsAction[];
 }
 
@@ -182,14 +183,19 @@ export async function pollStudioDeploy(
 export async function startVideoToActions(input: {
   url: string;
   videoTitle?: string;
+  transcript?: string;
+  events?: Array<{ type?: string; title: string; description?: string }>;
   signal?: AbortSignal;
 }): Promise<VideoToActionsStart> {
   const response = await fetch('/api/workflows/video-to-actions', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       url: input.url,
       videoTitle: input.videoTitle,
+      ...(input.transcript ? { transcript: input.transcript } : {}),
+      ...(input.events && input.events.length > 0 ? { events: input.events } : {}),
     }),
     signal: input.signal ?? AbortSignal.timeout(30_000),
   });
@@ -217,6 +223,7 @@ export async function getVideoToActionsStatus(
     `/api/workflows/video-to-actions/${encodeURIComponent(runId)}`,
     {
       method: 'GET',
+      credentials: 'same-origin',
       signal: opts?.signal ?? AbortSignal.timeout(15_000),
     },
   );
@@ -235,6 +242,7 @@ export async function getVideoToActionsStatus(
       transcriptChars: typeof r.transcriptChars === 'number' ? r.transcriptChars : 0,
       actionCount: typeof r.actionCount === 'number' ? r.actionCount : actionsRaw.length,
       provider: str(r.provider),
+      usedProvidedTranscript: r.usedProvidedTranscript === true,
       actions: actionsRaw
         .filter((a): a is Record<string, unknown> => Boolean(a) && typeof a === 'object')
         .map((a) => ({

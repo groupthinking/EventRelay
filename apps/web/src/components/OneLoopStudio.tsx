@@ -23,6 +23,8 @@ import {
   studioStatusLabel,
   studioStatusMessage,
 } from '@/lib/studio-pipeline-status';
+import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
+import type { ExtractedEvent } from '@/lib/types';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -38,6 +40,50 @@ function getYouTubeId(url: string) {
   return isValidYouTubeId(candidate) ? candidate : '';
 }
 
+function mapExtractedEvents(raw: unknown[], videoId: string): ExtractedEvent[] {
+  return raw
+    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+    .map((item, i) => {
+      const priority = typeof item.priority === 'string' ? item.priority : '';
+      return {
+        id: `evt_${videoId}_${i}`,
+        type: (typeof item.type === 'string' ? item.type : 'topic') as ExtractedEvent['type'],
+        title: typeof item.title === 'string' ? item.title : 'Event',
+        description: typeof item.description === 'string' ? item.description : undefined,
+        timestamp: typeof item.timestamp === 'string' ? item.timestamp : undefined,
+        confidence: priority === 'high' ? 0.95 : priority === 'medium' ? 0.75 : 0.5,
+      };
+    });
+}
+
+/** Session-gated enrich. 401/403 means anonymous — Act still proceeds. */
+async function tryExtractEvents(input: {
+  transcript: string;
+  videoTitle?: string;
+  videoUrl: string;
+  videoId: string;
+}): Promise<ExtractedEvent[] | null> {
+  const res = await fetch('/api/extract-events', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      transcript: input.transcript,
+      videoTitle: input.videoTitle,
+      videoUrl: input.videoUrl,
+    }),
+    signal: AbortSignal.timeout(45_000),
+  });
+  if (res.status === 401 || res.status === 403) return null;
+  const extraction = (await res.json().catch(() => null)) as {
+    success?: boolean;
+    data?: { events?: unknown[] };
+  } | null;
+  if (!extraction?.success || !Array.isArray(extraction.data?.events)) return null;
+  const events = mapExtractedEvents(extraction.data.events, input.videoId);
+  return events.length > 0 ? events : null;
+}
+
 export default function OneLoopStudio() {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
@@ -46,10 +92,13 @@ export default function OneLoopStudio() {
   const [actBusy, setActBusy] = useState(false);
   const [deployBusy, setDeployBusy] = useState(false);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
+  const [actRunId, setActRunId] = useState<string | null>(null);
+  const [usedSameRun, setUsedSameRun] = useState(false);
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
+  const updateVideo = useDashboardStore((s) => s.updateVideo);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
@@ -83,6 +132,8 @@ export default function OneLoopStudio() {
     }
     setBusy(true);
     setWorkflowActions(null);
+    setActRunId(null);
+    setUsedSameRun(false);
     setMessage('Running the live pipeline…');
     const tick = window.setInterval(() => {
       const live = useDashboardStore
@@ -116,12 +167,38 @@ export default function OneLoopStudio() {
       return;
     }
     setActBusy(true);
-    setMessage('Acting on findings…');
+    setWorkflowActions(null);
+    setActRunId(null);
+    setMessage('Acting on this run\'s transcript…');
     try {
-      const started = await startVideoToActions({
+      let events = selected?.events;
+      const transcript = selected?.transcript?.trim() || '';
+      if (selected && transcript.length >= MIN_ACT_TRANSCRIPT_CHARS && !(events?.length)) {
+        try {
+          const enriched = await tryExtractEvents({
+            transcript,
+            videoTitle: selected.title,
+            videoUrl: next,
+            videoId: selected.id,
+          });
+          if (enriched) {
+            updateVideo(selected.id, { events: enriched });
+            events = enriched;
+          }
+        } catch {
+          // extract-events is optional; Act still uses the Analyze transcript.
+        }
+      }
+
+      const payload = buildSameRunActInput({
         url: next,
         videoTitle: selected?.title,
+        transcript: selected?.transcript,
+        events,
       });
+      setUsedSameRun(Boolean(payload.transcript || payload.events?.length));
+
+      const started = await startVideoToActions(payload);
       if (!started.ok || !started.runId) {
         if (started.status === 401 || started.status === 403) {
           window.location.href = `/login?callbackUrl=${encodeURIComponent('/')}`;
@@ -130,13 +207,25 @@ export default function OneLoopStudio() {
         setMessage(started.error || 'Could not start Act.');
         return;
       }
+      setActRunId(started.runId);
+      setMessage(
+        payload.transcript
+          ? `Act ${started.runId} started on this run's transcript.`
+          : `Act ${started.runId} started.`,
+      );
       const polled = await pollVideoToActions(started.runId, {
         attempts: 24,
         delayMs: 2000,
       });
       if (polled.runStatus === 'completed' && polled.result) {
         setWorkflowActions(polled.result);
-        setMessage(`Act completed — ${polled.result.actionCount} tool result(s).`);
+        const sameRun =
+          polled.result.usedProvidedTranscript ??
+          Boolean(payload.transcript || payload.events?.length);
+        setUsedSameRun(sameRun);
+        setMessage(
+          `Act completed — ${polled.result.actionCount} tool result(s) on this page.`,
+        );
       } else {
         setMessage(polled.error || `Act status: ${polled.runStatus || 'unknown'}.`);
       }
@@ -313,18 +402,39 @@ export default function OneLoopStudio() {
           </section>
         )}
 
-        {workflowActions && (
-          <section className="mt-6 rounded-2xl border border-teal-400/20 bg-teal-400/5 p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-200">Act results</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {workflowActions.actions.map((action, i) => (
-                <li key={`${action.tool}-${i}`}>
-                  <span className="font-medium">{action.tool}</span>
-                  <span className="text-white/50"> — {action.status}</span>
-                  {action.result && <div className="text-white/70">{action.result}</div>}
-                </li>
-              ))}
-            </ul>
+        {(actRunId || workflowActions) && (
+          <section
+            id="act-results"
+            data-testid="act-results"
+            className="mt-6 rounded-2xl border border-teal-400/20 bg-teal-400/5 p-5"
+          >
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-200">
+              Act results
+            </h2>
+            {actRunId && (
+              <p className="mt-2 text-xs text-white/50">
+                Run {actRunId}
+                {usedSameRun ? " · this run's transcript" : ''}
+              </p>
+            )}
+            {workflowActions ? (
+              <ul className="mt-3 space-y-2 text-sm">
+                {workflowActions.actions.length === 0 && (
+                  <li className="text-white/50">No tool results from this run.</li>
+                )}
+                {workflowActions.actions.map((action, i) => (
+                  <li key={`${action.tool}-${i}`}>
+                    <span className="font-medium">{action.tool}</span>
+                    <span className="text-white/50"> — {action.status}</span>
+                    {action.result && <div className="text-white/70">{action.result}</div>}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-white/60">
+                {actBusy ? 'Running tools on this page…' : 'Waiting for tool results on this page.'}
+              </p>
+            )}
           </section>
         )}
 
@@ -335,7 +445,7 @@ export default function OneLoopStudio() {
             disabled={actBusy || !hasPayload}
             className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
-            Act
+            {actBusy ? 'Acting…' : 'Act'}
           </button>
           <button
             type="button"
@@ -363,8 +473,12 @@ export default function OneLoopStudio() {
             Library
           </Link>
         </div>
-        {deployRunId && (
-          <p className="mt-3 text-xs text-white/40">Deploy run {deployRunId}</p>
+        {(actRunId || deployRunId) && (
+          <p className="mt-3 text-xs text-white/40">
+            {actRunId ? `Act run ${actRunId}` : null}
+            {actRunId && deployRunId ? ' · ' : null}
+            {deployRunId ? `Deploy run ${deployRunId}` : null}
+          </p>
         )}
       </main>
     </div>

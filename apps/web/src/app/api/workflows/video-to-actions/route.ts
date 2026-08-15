@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { workflowStartErrorBody } from '@/lib/sentry-server-integrations';
+import { sanitizeActEvents, usableProvidedTranscript } from '@/lib/video-to-actions-input';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import { videoToActionsWorkflow } from '@/workflows/video-to-actions';
 
@@ -11,11 +12,17 @@ export const maxDuration = 60;
 /**
  * POST /api/workflows/video-to-actions
  *
- * Starts a durable Workflow DevKit run for video → transcript → actions.
+ * Starts a durable Workflow DevKit run for video → actions.
+ * Accepts an Analyze transcript/events so Act stays on the same run.
  * Returns immediately with { runId }; poll GET .../:runId or use `npx workflow web`.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  let body: { url?: unknown; videoTitle?: unknown };
+  let body: {
+    url?: unknown;
+    videoTitle?: unknown;
+    transcript?: unknown;
+    events?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -53,10 +60,14 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   const videoTitle =
     typeof body.videoTitle === 'string' ? body.videoTitle.slice(0, 200) : undefined;
+  const transcript = usableProvidedTranscript(
+    typeof body.transcript === 'string' ? body.transcript : undefined,
+  );
+  const events = sanitizeActEvents(body.events);
 
   try {
     const run = await withWorldVercelFetch(() =>
-      start(videoToActionsWorkflow, [{ url, videoTitle }]),
+      start(videoToActionsWorkflow, [{ url, videoTitle, transcript, events }]),
     );
     return NextResponse.json({
       ok: true,

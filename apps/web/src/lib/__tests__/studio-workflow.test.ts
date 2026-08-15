@@ -39,6 +39,29 @@ describe('studio-workflow (WDK Product v1)', () => {
     );
   });
 
+  it('startVideoToActions posts the same-run transcript and events', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, runId: 'wrun_same' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await startVideoToActions({
+      url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+      videoTitle: 'Fixture',
+      transcript: 'x'.repeat(50),
+      events: [{ type: 'action', title: 'Ship', description: 'now' }],
+    });
+    expect(result.ok).toBe(true);
+    expect(result.runId).toBe('wrun_same');
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const body = JSON.parse(String(init.body));
+    expect(body.url).toContain('auJzb1D-fag');
+    expect(body.transcript).toHaveLength(50);
+    expect(body.events).toEqual([{ type: 'action', title: 'Ship', description: 'now' }]);
+  });
+
   it('startVideoToActions fails closed when ok but no runId', async () => {
     vi.stubGlobal(
       'fetch',
@@ -80,6 +103,31 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(poll.runStatus).toBe('completed');
     expect(poll.result?.actionCount).toBe(1);
     expect(poll.result?.actions[0].tool).toBe('create_workflow_task');
+  });
+
+  it('getVideoToActionsStatus maps usedProvidedTranscript', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_same',
+          runStatus: 'completed',
+          result: {
+            url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+            transcriptChars: 80,
+            actionCount: 1,
+            usedProvidedTranscript: true,
+            actions: [{ tool: 'create_workflow_task', status: 'fulfilled', result: 'ok' }],
+          },
+        }),
+      }),
+    );
+    const poll = await getVideoToActionsStatus('wrun_same');
+    expect(poll.result?.usedProvidedTranscript).toBe(true);
+    expect(poll.result?.url).toContain('auJzb1D-fag');
   });
 
   it('pollVideoToActions returns when status becomes terminal', async () => {
