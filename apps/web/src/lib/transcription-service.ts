@@ -6,6 +6,7 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
+import { isTrustedTranscriptSource } from '@/lib/analysis-evidence';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -54,9 +55,69 @@ export interface TranscriptionResult {
   transcript: string;
   segments?: any[];
   source?: string;
+  /** True only for captions or speech-to-text returned by an acquisition provider. */
+  verified?: boolean;
+  acquisitionMethod?: string;
+  sourceUrl?: string;
+  acquiredAt?: string;
+  /** Search/metadata reconstruction may be useful context, but is never a transcript. */
+  derivedContent?: string;
   wordCount?: number;
   metadata?: any;
   error?: string;
+}
+
+/**
+ * Convert the Python transcript envelope into trusted acquisition evidence.
+ * A backend success flag or non-empty string is not sufficient: the backend
+ * can also return model-derived text, which must never be relabelled captions.
+ */
+export function parseVerifiedBackendTranscript(
+  result: Record<string, any>,
+  sourceUrl: string,
+): TranscriptionResult | null {
+  if (result.success !== true) return null;
+
+  const envelope = result.transcript;
+  const segments = Array.isArray(envelope)
+    ? envelope
+    : Array.isArray(envelope?.segments)
+      ? envelope.segments
+      : [];
+  const transcript =
+    typeof envelope === 'string'
+      ? envelope.trim()
+      : typeof envelope?.text === 'string'
+        ? envelope.text.trim()
+        : segments
+            .map((segment: { text?: unknown }) =>
+              typeof segment?.text === 'string' ? segment.text.trim() : '',
+            )
+            .filter(Boolean)
+            .join(' ');
+  const source = String(
+    (envelope && !Array.isArray(envelope) && envelope.source) ||
+      result.transcript_source ||
+      'unknown',
+  );
+
+  if (transcript.length <= 50 || !isTrustedTranscriptSource(source)) {
+    return null;
+  }
+
+  return {
+    success: true,
+    transcript,
+    segments,
+    source,
+    verified: true,
+    acquisitionMethod: source.startsWith('speech_to_text')
+      ? 'backend-speech-to-text'
+      : 'backend-caption-api',
+    sourceUrl,
+    acquiredAt: new Date().toISOString(),
+    wordCount: transcript.split(/\s+/).length,
+  };
 }
 
 /**
@@ -72,7 +133,12 @@ export async function fetchTranscript({
   language = 'en',
 }: TranscriptionOptions): Promise<TranscriptionResult> {
   if (!url && !audioUrl) {
-    return { success: false, error: 'url or audioUrl is required', transcript: '' };
+    return {
+      success: false,
+      verified: false,
+      error: 'url or audioUrl is required',
+      transcript: '',
+    };
   }
 
   // Fetch YouTube metadata (description, chapters, title) — shared by all strategies
@@ -103,39 +169,8 @@ export async function fetchTranscript({
 
       if (ytResponse.ok) {
         const result = await ytResponse.json();
-
-        // Handle transcript as segments array
-        const segments = Array.isArray(result.transcript) ? result.transcript : [];
-        if (segments.length > 0) {
-          const fullText = segments
-            .map((s: { text?: string }) => s.text || '')
-            .join(' ')
-            .trim();
-
-          if (fullText.length > 50) {
-            return {
-              success: true,
-              transcript: fullText,
-              segments,
-              source: 'youtube',
-              wordCount: fullText.split(/\s+/).length,
-            } satisfies TranscriptionResult;
-          }
-        }
-
-        // Handle transcript as { text: string }
-        const transcriptText =
-          typeof result.transcript === 'string'
-            ? result.transcript
-            : result.transcript?.text;
-        if (typeof transcriptText === 'string' && transcriptText.length > 50) {
-          return {
-            success: true,
-            transcript: transcriptText,
-            source: 'youtube',
-            wordCount: transcriptText.split(/\s+/).length,
-          } satisfies TranscriptionResult;
-        }
+        const verifiedBackendResult = parseVerifiedBackendTranscript(result, url);
+        if (verifiedBackendResult) return verifiedBackendResult;
       }
     } catch (e) {
       console.log('YouTube backend transcript unavailable:', e);
@@ -191,10 +226,16 @@ INSTRUCTIONS:
               ).text ?? '';
           if (text.length > 100) {
             return {
-              success: true,
-              transcript: text,
-              source: 'gemini-search',
+              success: false,
+              transcript: '',
+              derivedContent: text,
+              source: 'gemini-search-metadata',
+              verified: false,
+              acquisitionMethod: 'generative-search-context',
+              sourceUrl: url,
+              acquiredAt: new Date().toISOString(),
               wordCount: text.split(/\s+/).length,
+              error: 'No verified transcript was available; only derived context was found.',
               metadata: metadata
                 ? {
                     title: metadata.title,
@@ -240,10 +281,16 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
             (text.length < 300 && text.includes('transcript'));
           if (text.length > 100 && !isGarbage) {
             return {
-              success: true,
-              transcript: text,
-              source: 'openai-web-search',
+              success: false,
+              transcript: '',
+              derivedContent: text,
+              source: 'openai-web-search-metadata',
+              verified: false,
+              acquisitionMethod: 'generative-search-context',
+              sourceUrl: url,
+              acquiredAt: new Date().toISOString(),
               wordCount: text.split(/\s+/).length,
+              error: 'No verified transcript was available; only derived context was found.',
             } satisfies TranscriptionResult;
           }
           return null;
@@ -366,6 +413,10 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         success: true,
         transcript: transcription.text,
         source: 'openai-stt',
+        verified: true,
+        acquisitionMethod: 'openai-speech-to-text',
+        sourceUrl: audioUrl,
+        acquiredAt: new Date().toISOString(),
         wordCount: transcription.text.split(/\s+/).length,
       };
     } catch (e) {
@@ -389,6 +440,7 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
   );
   return {
     success: false,
+    verified: false,
     error: 'Could not transcribe video — all strategies failed',
     transcript: '',
   };

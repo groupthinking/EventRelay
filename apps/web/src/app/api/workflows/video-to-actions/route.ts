@@ -3,6 +3,7 @@ import { start } from 'workflow/api';
 import { workflowStartErrorBody } from '@/lib/sentry-server-integrations';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import { videoToActionsWorkflow } from '@/workflows/video-to-actions';
+import { extractYouTubeId } from '@/lib/timestamp';
 
 export const runtime = 'nodejs';
 /** start() returns quickly; the durable run continues in the workflow world. */
@@ -30,25 +31,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  // Reject obviously private/local targets at the edge (SSRF defense-in-depth;
-  // assertPublicHttpUrl still runs inside transcription when audioUrl is used).
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host === '0.0.0.0' ||
-      host === '::1' ||
-      host.endsWith('.local') ||
-      host.endsWith('.internal')
-    ) {
-      return NextResponse.json(
-        { error: 'url host is not allowed' },
-        { status: 400 },
-      );
-    }
-  } catch {
-    return NextResponse.json({ error: 'url is not a valid URL' }, { status: 400 });
+  // This workflow only supports YouTube sources. Restricting the route to an
+  // extracted 11-character ID removes the user-controlled server-fetch target
+  // entirely instead of relying on a hostname/DNS denylist.
+  if (!extractYouTubeId(url)) {
+    return NextResponse.json(
+      { error: 'A valid YouTube watch, share, embed, shorts, or live URL is required.' },
+      { status: 400 },
+    );
   }
 
   const videoTitle =
@@ -61,7 +51,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({
       ok: true,
       runId: run.runId,
+      generationId: run.runId,
+      status: 'queued',
       statusUrl: `/api/workflows/video-to-actions/${encodeURIComponent(run.runId)}`,
+      startedAt: new Date().toISOString(),
       message:
         'Durable video-to-actions workflow started. Poll statusUrl or run: npx workflow web',
     });

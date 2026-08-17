@@ -1,7 +1,29 @@
 import { NextResponse } from 'next/server';
-import { runActionAgent } from '@/lib/action-agent';
+import { executePreparedActions, runActionAgent } from '@/lib/action-agent';
 import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
 import { hasGeminiKey } from '@/lib/gemini-client';
+import type { AgentAction } from '@/lib/action-lifecycle';
+import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
+import { isProSubscriber } from '@/lib/billing/entitlement-store';
+
+const MAX_CONFIRMED_ACTIONS = 50;
+const PRO_ACTION_TOOLS = new Set([
+  'dispatch_agent',
+  'dispatch_subagents',
+  'add_to_knowledge_base',
+]);
+
+function isPreparedAction(value: unknown): value is AgentAction {
+  if (!value || typeof value !== 'object') return false;
+  const action = value as Record<string, unknown>;
+  return (
+    typeof action.tool === 'string' &&
+    !!action.tool &&
+    typeof action.input === 'object' &&
+    action.input !== null &&
+    !Array.isArray(action.input)
+  );
+}
 
 /**
  * GET /api/agents/actions
@@ -17,14 +39,19 @@ export async function GET(): Promise<NextResponse> {
 /**
  * POST /api/agents/actions
  *
- * Runs the Transcription-Driven Action Agent over a transcript: the LLM decides
- * which tools to call, the tools execute, and the fulfilled actions are
- * returned. Keys stay server-side; no work is fabricated when a key is missing
- * (REAL_MODE_ONLY) — the route returns an honest error instead.
+ * The safe default is `mode: "preview"`: the LLM prepares tool calls but no
+ * tool runs. `mode: "execute"` requires the exact reviewed action list and is
+ * the only path that performs side effects.
  */
 export async function POST(request: Request): Promise<NextResponse> {
   // Malformed JSON is a client error (400), not a server failure.
-  let body: { transcript?: unknown; videoTitle?: unknown; jobId?: unknown };
+  let body: {
+    mode?: unknown;
+    transcript?: unknown;
+    videoTitle?: unknown;
+    jobId?: unknown;
+    actions?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -34,7 +61,61 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const { transcript, videoTitle, jobId } = body;
+  const { mode, transcript, videoTitle, jobId, actions } = body;
+  if (mode === 'execute') {
+    if (
+      !Array.isArray(actions) ||
+      actions.length === 0 ||
+      actions.length > MAX_CONFIRMED_ACTIONS ||
+      !actions.every(isPreparedAction)
+    ) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `actions must contain 1-${MAX_CONFIRMED_ACTIONS} valid reviewed tool calls`,
+          actions: [],
+        },
+        { status: 400 },
+      );
+    }
+
+    if (actions.some((action) => PRO_ACTION_TOOLS.has(action.tool))) {
+      const billingEmail = await resolveTrustedBillingEmail(request);
+      if (!(await isProSubscriber(billingEmail))) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'External agent and knowledge-store actions require Pro.',
+            upgradeRequired: true,
+            actions: [],
+          },
+          { status: 402 },
+        );
+      }
+    }
+
+    try {
+      const fulfilled = await executePreparedActions({
+        actions,
+        jobId: typeof jobId === 'string' ? jobId : undefined,
+      });
+      return NextResponse.json({ success: true, provider: 'confirmed-plan', actions: fulfilled });
+    } catch (error) {
+      console.error('Confirmed action execution error:', error);
+      return NextResponse.json(
+        { success: false, error: 'Internal server error', actions: [] },
+        { status: 502 },
+      );
+    }
+  }
+
+  if (mode !== undefined && mode !== 'preview') {
+    return NextResponse.json(
+      { success: false, error: 'mode must be "preview" or "execute"', actions: [] },
+      { status: 400 },
+    );
+  }
+
   if (!transcript || typeof transcript !== 'string') {
     return NextResponse.json(
       { success: false, error: 'transcript (string) is required', actions: [] },
@@ -47,6 +128,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       transcript,
       videoTitle: typeof videoTitle === 'string' ? videoTitle : undefined,
       jobId: typeof jobId === 'string' ? jobId : undefined,
+      executeTools: false,
     });
 
     return NextResponse.json({

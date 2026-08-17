@@ -4,12 +4,11 @@
  * Holds a single `PromptLifecycle` and drives it through the state machine
  * (`action-lifecycle.ts`) by calling the real API routes:
  *   - `/api/transcribe`      → audio/URL to transcript
- *   - `/api/agents/actions`  → transcript to executed tool calls (fulfilment)
+ *   - `/api/agents/actions`  → review-only tool plan, then explicit fulfilment
  *
- * The server route extracts and fulfils actions atomically, so on the client we
- * advance `extracting → dispatching → fulfilled` once the response lands. This
- * keeps every lifecycle phase observable for the dashboard without simulating
- * progress (REAL_MODE_ONLY).
+ * Preparation and execution are deliberately separate. The client advances to
+ * `dispatching` after a plan is prepared, and only reaches `fulfilled` after a
+ * second, explicit user confirmation executes that exact plan.
  */
 
 import { create } from 'zustand';
@@ -61,6 +60,8 @@ interface ActionAgentState {
   runFromSource: (input: SourceInput) => Promise<void>;
   /** Skip capture/transcription and run the agent on an existing transcript. */
   runFromTranscript: (transcript: string, videoTitle?: string) => Promise<void>;
+  /** Execute the exact prepared action list after explicit review. */
+  confirmPreparedActions: () => Promise<void>;
   reset: () => void;
 }
 
@@ -70,13 +71,13 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
     set((s) => ({ lifecycle: reduceLifecycle(s.lifecycle, event) }));
   }
 
-  /** Call /api/agents/actions and advance through dispatching → fulfilled. */
-  async function fulfilActions(transcript: string, videoTitle?: string): Promise<void> {
+  /** Ask the model for a review-only action plan. No tool executes here. */
+  async function prepareActions(transcript: string, videoTitle?: string): Promise<void> {
     const jobId = get().lifecycle.id;
     const res = await fetch('/api/agents/actions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transcript, videoTitle, jobId }),
+      body: JSON.stringify({ mode: 'preview', transcript, videoTitle, jobId }),
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const body = await res.json();
@@ -89,9 +90,8 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
     const actions: AgentAction[] = Array.isArray(body.actions)
       ? body.actions.filter(isAgentAction)
       : [];
-    // The server already executed the tools, so the actions arrive resolved.
     apply({ type: 'ACTIONS_EXTRACTED', actions, provider: body.provider });
-    apply({ type: 'ACTIONS_FULFILLED', actions });
+    if (actions.length === 0) apply({ type: 'ACTIONS_FULFILLED', actions });
   }
 
   return {
@@ -106,7 +106,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
         apply({ type: 'START_CAPTURE' });
         apply({ type: 'AUDIO_CAPTURED' });
         apply({ type: 'TRANSCRIBED', transcript });
-        await fulfilActions(transcript, videoTitle);
+        await prepareActions(transcript, videoTitle);
       } catch (err) {
         apply({ type: 'ERROR', error: err instanceof Error ? err.message : String(err) });
       } finally {
@@ -135,7 +135,35 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
         }
 
         apply({ type: 'TRANSCRIBED', transcript: body.transcript });
-        await fulfilActions(body.transcript, videoTitle || body.metadata?.title);
+        await prepareActions(body.transcript, videoTitle || body.metadata?.title);
+      } catch (err) {
+        apply({ type: 'ERROR', error: err instanceof Error ? err.message : String(err) });
+      } finally {
+        set({ isRunning: false });
+      }
+    },
+
+    async confirmPreparedActions() {
+      if (get().isRunning || get().lifecycle.phase !== 'dispatching') return;
+      const { id: jobId, actions } = get().lifecycle;
+      if (actions.length === 0) return;
+      set({ isRunning: true });
+      try {
+        const res = await fetch('/api/agents/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'execute', actions, jobId }),
+          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        });
+        const body = await res.json();
+        if (!res.ok || !body.success) {
+          apply({ type: 'ERROR', error: body.error || `Action execution failed (${res.status})` });
+          return;
+        }
+        const fulfilled: AgentAction[] = Array.isArray(body.actions)
+          ? body.actions.filter(isAgentAction)
+          : [];
+        apply({ type: 'ACTIONS_FULFILLED', actions: fulfilled });
       } catch (err) {
         apply({ type: 'ERROR', error: err instanceof Error ? err.message : String(err) });
       } finally {

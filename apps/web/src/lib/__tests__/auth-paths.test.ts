@@ -130,6 +130,7 @@ describe('login gate mode (issue #1058)', () => {
 describe('AI route classification (rate-limit budget)', () => {
   it('meters model-backed routes against the AI budget', () => {
     for (const path of [
+      '/api/agents/actions',
       '/api/agents/dispatch',
       '/api/chat',
       '/api/extract-events',
@@ -147,6 +148,11 @@ describe('AI route classification (rate-limit budget)', () => {
     expect(isAiRoute('/api/billing/status', 'GET')).toBe(false);
     expect(isAiRoute('/api/health', 'GET')).toBe(false);
     expect(isAiRoute('/api/auth/session', 'GET')).toBe(false);
+  });
+
+  it('meters action preparation and execution but not its availability probe', () => {
+    expect(isAiRoute('/api/agents/actions', 'POST')).toBe(true);
+    expect(isAiRoute('/api/agents/actions', 'GET')).toBe(false);
   });
 
   it('keeps starting a workflow run on the AI budget', () => {

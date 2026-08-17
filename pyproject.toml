@@ -77,6 +77,11 @@ dependencies = [
     "orjson>=3.9.0",
     "aiohttp>=3.8.0",
     "redis>=5.0.0",
+    # Captions and source video acquisition are core runtime capabilities.
+    # Keeping these in an optional extra made production FastAPI services
+    # start healthy while the video path was actually unavailable.
+    "youtube-transcript-api>=1.0.0",
+    "yt-dlp>=2025.05.22",
 ]
 
 [project.optional-dependencies]
@@ -114,10 +119,8 @@ deploy = [
 ]
 # Video and external API tooling (YouTube processing, downloads, etc.)
 youtube = [
-    "youtube-transcript-api>=1.0.0",
     "google-api-python-client>=2.100.0",
     "google-cloud-speech>=2.26.0",
-    "yt-dlp>=2025.05.22",  # Minimum version with PO Token plugin support and current bot-detection mitigations
     "asyncio-throttle>=1.0.0",
     "websockets>=12.0",
     "gitpython>=3.1.0",

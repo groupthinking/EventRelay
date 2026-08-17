@@ -19,7 +19,9 @@ describe('auth configuration source safety', () => {
   it('keeps the Google sign-in asset local to avoid CSP-hosted icon failures', () => {
     const source = readSource('app/login/GoogleSignInButton.tsx');
     expect(source).toContain("signIn('google'");
-    expect(source).toContain('<svg');
+    expect(source).toContain("from 'lucide-react'");
+    expect(source).toContain('<LogIn');
+    expect(source).not.toContain('<svg');
     expect(source).not.toContain('<Image');
   });
 

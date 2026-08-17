@@ -1,4 +1,5 @@
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
+import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -23,7 +24,7 @@ export interface Action {
   estimatedMinutes?: number | null;
 }
 
-export type PipelineMode = 'live' | 'serverless' | 'fallback' | 'handoff';
+export type PipelineMode = 'workflow' | 'live' | 'serverless' | 'fallback' | 'handoff';
 
 export interface Video {
   id: string;
@@ -44,6 +45,16 @@ export interface Video {
   jobId?: string;
   /** Poll URL for async job status. */
   statusUrl?: string;
+  /** Durable Workflow DevKit generation identity. */
+  runId?: string;
+  provenance?: AnalysisProvenance;
+  quality?: EvidenceAssessment;
+  failure?: {
+    stage: 'start' | 'acquisition' | 'analysis' | 'quality' | 'persistence' | 'deployment' | 'unknown';
+    message: string;
+    retryable: boolean;
+    failedAt: string;
+  };
   insights?: {
     summary: string;
     actions: Action[];

@@ -53,6 +53,8 @@ export interface RunActionAgentOptions {
   transcript: string;
   videoTitle?: string;
   jobId?: string;
+  /** False prepares an exact review plan without invoking any tool. */
+  executeTools?: boolean;
   /** Injectable fetch passed through to tools (testability). */
   fetchImpl?: typeof fetch;
 }
@@ -62,15 +64,24 @@ export interface RunActionAgentResult {
   actions: AgentAction[];
 }
 
-function toAction(tool: string, input: Record<string, unknown>, result: ActionToolResult): AgentAction {
+function toAction(
+  tool: string,
+  input: Record<string, unknown>,
+  result: ActionToolResult,
+  status?: AgentAction['status'],
+): AgentAction {
   return {
     tool,
     input,
-    status: result.isError ? 'failed' : 'fulfilled',
+    status: status ?? (result.isError ? 'failed' : 'fulfilled'),
     result: result.summary,
     isError: result.isError,
   };
 }
+
+const REVIEW_ONLY_RESULT: ActionToolResult = {
+  summary: 'Prepared for review. No tool has been executed.',
+};
 
 function isQuotaError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -128,20 +139,26 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
         continue;
       }
 
-      // A throwing tool becomes a failed action — it must not abort the run
-      // or drop the remaining tool calls.
-      try {
+      if (opts.executeTools === false) {
         result = tool
-          ? await tool.execute(input, ctx)
+          ? REVIEW_ONLY_RESULT
           : { summary: `Unknown tool: ${call.name}`, isError: true };
-      } catch (err) {
-        result = {
-          summary: `Tool "${call.name}" threw: ${err instanceof Error ? err.message : String(err)}`,
-          isError: true,
-        };
+        actions.push(toAction(call.name, input, result, tool ? 'pending' : 'failed'));
+      } else {
+        // A throwing tool becomes a failed action — it must not abort the run
+        // or drop the remaining tool calls.
+        try {
+          result = tool
+            ? await tool.execute(input, ctx)
+            : { summary: `Unknown tool: ${call.name}`, isError: true };
+        } catch (err) {
+          result = {
+            summary: `Tool "${call.name}" threw: ${err instanceof Error ? err.message : String(err)}`,
+            isError: true,
+          };
+        }
+        actions.push(toAction(call.name, input, result));
       }
-
-      actions.push(toAction(call.name, input, result));
       toolOutputs.push({
         type: 'function_call_output',
         call_id: call.call_id,
@@ -185,6 +202,13 @@ async function runWithGemini(opts: RunActionAgentOptions, ctx: ToolContext): Pro
       continue;
     }
     const input: Record<string, unknown> = rawArgs;
+    if (opts.executeTools === false) {
+      const result = tool
+        ? REVIEW_ONLY_RESULT
+        : { summary: `Unknown tool: ${call.name}`, isError: true };
+      actions.push(toAction(call.name, input, result, tool ? 'pending' : 'failed'));
+      continue;
+    }
     let result: ActionToolResult;
     try {
       result = tool
@@ -233,6 +257,50 @@ export async function runActionAgent(opts: RunActionAgentOptions): Promise<RunAc
   }
 
   throw new Error('No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY.');
+}
+
+export interface ExecutePreparedActionsOptions {
+  actions: AgentAction[];
+  jobId?: string;
+  fetchImpl?: typeof fetch;
+}
+
+/** Execute only the exact, user-reviewed tool calls supplied by the client. */
+export async function executePreparedActions(
+  opts: ExecutePreparedActionsOptions,
+): Promise<AgentAction[]> {
+  const ctx: ToolContext = {
+    backendBaseUrl: resolveBackendBaseUrl(),
+    fetchImpl: opts.fetchImpl,
+    jobId: opts.jobId,
+  };
+
+  const actions: AgentAction[] = [];
+  for (const prepared of opts.actions) {
+    const tool = getTool(prepared.tool);
+    if (!tool || !isPlainObject(prepared.input)) {
+      actions.push(
+        toAction(
+          prepared.tool,
+          isPlainObject(prepared.input) ? prepared.input : {},
+          { summary: `Unknown or invalid prepared tool: ${prepared.tool}`, isError: true },
+        ),
+      );
+      continue;
+    }
+
+    let result: ActionToolResult;
+    try {
+      result = await tool.execute(prepared.input, ctx);
+    } catch (err) {
+      result = {
+        summary: `Tool "${prepared.tool}" threw: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+    actions.push(toAction(prepared.tool, prepared.input, result));
+  }
+  return actions;
 }
 
 /** The tool names this agent can invoke — handy for UI affordances/tests. */

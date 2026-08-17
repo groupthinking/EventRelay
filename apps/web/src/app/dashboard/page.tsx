@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { clsx } from 'clsx';
+import { ArrowRight, LoaderCircle, Video as VideoIcon, Zap } from 'lucide-react';
 import Nav from '@/components/Nav';
 import PreferencesPanel from '@/components/PreferencesPanel';
 import BillingStatusBanner from '@/components/billing/BillingStatusBanner';
@@ -36,13 +37,15 @@ function VideoCard({
   onClick: () => void;
 }) {
   return (
-    <div
+    <button
+      type="button"
       onClick={onClick}
       className={clsx(
         'group relative overflow-hidden rounded-2xl cursor-pointer',
         'bg-surface-900/50 backdrop-blur-xl flex flex-col',
         'border border-white/[0.08] hover:border-primary-500/30',
-        'transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary-500/10'
+        'w-full text-left transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary-500/10',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400/70'
       )}
     >
       <div className="relative aspect-video bg-surface-800 overflow-hidden flex-none">
@@ -56,26 +59,17 @@ function VideoCard({
             sizes="(max-width: 768px) 100vw, 33vw"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-5xl bg-gradient-to-br from-surface-800 to-surface-900">
-            🎬
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-surface-800 to-surface-900">
+            <VideoIcon className="h-12 w-12 text-white/20" aria-hidden="true" />
           </div>
         )}
 
         {video.status === 'processing' && (
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center">
             <div className="text-center">
-              <div className="relative w-16 h-16 mx-auto mb-3 overflow-hidden">
-                <svg className="w-16 h-16 animate-spin" width="64" height="64" viewBox="0 0 24 24">
-                  <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
-                  <circle
-                    className="text-primary-500" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"
-                    strokeDasharray="62.83" strokeDashoffset={62.83 * (1 - video.progress / 100)} strokeLinecap="round"
-                    transform="rotate(-90 12 12)"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold">
-                  {video.progress}%
-                </span>
+              <div className="mb-3 flex items-center justify-center gap-2 text-primary-400">
+                <LoaderCircle className="h-6 w-6 animate-spin" aria-hidden="true" />
+                <span className="text-sm font-bold">{video.progress}%</span>
               </div>
             </div>
           </div>
@@ -112,7 +106,7 @@ function VideoCard({
           </div>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -128,13 +122,14 @@ function DashboardContent() {
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const processVideo = useDashboardStore((s) => s.processVideo);
+  const resumeProcessingRuns = useDashboardStore((s) => s.resumeProcessingRuns);
   const extractEvents = useDashboardStore((s) => s.extractEvents);
 
   const selectedVideo = videos.find((v) => v.id === selectedVideoId) || null;
 
   useEffect(() => {
-    useDashboardStore.persist.rehydrate();
-  }, []);
+    void Promise.resolve(useDashboardStore.persist.rehydrate()).then(() => resumeProcessingRuns());
+  }, [resumeProcessingRuns]);
 
   useEffect(() => {
     const video = searchParams.get('video');
@@ -184,7 +179,8 @@ function DashboardContent() {
               href="/dashboard/agents"
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-400 font-bold uppercase tracking-wider hover:bg-indigo-500/20 transition-all"
             >
-              ⚡ <span className="hidden sm:inline">Agent Pipeline</span><span className="sm:hidden">Agents</span>
+              <Zap className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="hidden sm:inline">Agent Pipeline</span><span className="sm:hidden">Agents</span>
             </Link>
             {processingCount > 0 ? (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary-500/10 border border-primary-500/20">
@@ -218,14 +214,14 @@ function DashboardContent() {
               <span className="text-[10px] tracking-[0.3em] uppercase mb-4 block" style={{ color: '#6af2de', fontFamily: 'var(--font-heading)' }}>Video Intelligence Engine</span>
               <h1 className="font-heading text-4xl font-bold tracking-tighter mb-3" style={{ color: '#f8f5fd' }}>Analyze New Video</h1>
               <p className="mb-6 max-w-lg" style={{ color: 'rgba(248,245,253,0.4)' }}>
-                Paste a YouTube URL — like adding a video to your library. We transcribe it, extract events, and dispatch agents to act on what matters.
+                Paste a YouTube URL to acquire timed captions, verify the evidence, and prepare review-only actions.
               </p>
               <ol className="mb-8 flex flex-wrap items-center justify-center gap-2 text-[10px] font-heading font-bold uppercase tracking-widest" aria-label="Workflow steps">
                 {[
                   { n: 1, label: 'Paste URL' },
                   { n: 2, label: 'Analyze' },
                   { n: 3, label: 'Review insights' },
-                  { n: 4, label: 'Dispatch agents' },
+                  { n: 4, label: 'Review actions' },
                 ].map((step, i) => (
                   <li key={step.n} className="flex items-center gap-2">
                     <span
@@ -235,7 +231,9 @@ function DashboardContent() {
                       {step.n}
                     </span>
                     <span style={{ color: 'rgba(248,245,253,0.55)' }}>{step.label}</span>
-                    {i < 3 && <span style={{ color: 'rgba(248,245,253,0.2)' }}>→</span>}
+                    {i < 3 && (
+                      <ArrowRight className="h-3 w-3" style={{ color: 'rgba(248,245,253,0.2)' }} aria-hidden="true" />
+                    )}
                   </li>
                 ))}
               </ol>
@@ -247,7 +245,7 @@ function DashboardContent() {
                   <input
                     type="text"
                     value={videoUrl}
-                    onChange={(e) => setVideoUrl(e.target.value)}
+                    onInput={(e) => setVideoUrl(e.currentTarget.value)}
                     placeholder="https://youtube.com/watch?v=..."
                     className="flex-1 px-4 py-3 bg-transparent text-white placeholder:text-white/20 focus:outline-none text-sm"
                   />

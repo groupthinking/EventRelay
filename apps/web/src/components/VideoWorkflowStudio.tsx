@@ -521,7 +521,7 @@ export default function VideoWorkflowStudio() {
 
     setActionsBusy(true);
     setWorkflowActions(null);
-    setActionMessage('Starting durable video→actions workflow…');
+    setActionMessage('Starting durable video-to-actions workflow…');
 
     try {
       const started = await startVideoToActions({
@@ -710,9 +710,8 @@ export default function VideoWorkflowStudio() {
             <Link href="/dashboard" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Dashboard
             </Link>
-            <Link href="/prototype" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Prototype
-              <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600">Preview</span>
+            <Link href="/features" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Verified capabilities
             </Link>
             <Link href="/dashboard/agents" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Agents
@@ -738,7 +737,7 @@ export default function VideoWorkflowStudio() {
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
               {' '}
-              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video→transcript→actions workflow.
+              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video-to-transcript-to-actions workflow.
               {' '}
               <span className="font-semibold text-slate-950">Dashboard</span> runs the live SSE agent pipeline.
               {' '}

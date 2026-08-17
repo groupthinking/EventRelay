@@ -1,7 +1,8 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { AlignLeft, Bot, Clock3, Search, ShieldCheck } from 'lucide-react';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import InteractiveTranscript, { type TranscriptSegment } from '@/components/InteractiveTranscript';
 import {
@@ -66,7 +67,7 @@ export function TranscriptPanel({
   if (!video.transcript) {
     return (
       <EmptyState
-        icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>}
+        icon={<AlignLeft className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
       >
         {video.status === 'processing' ? 'Transcript is being generated…' : 'No transcript available.'}
       </EmptyState>
@@ -106,7 +107,7 @@ export function InsightsPanel({ video }: { video: Video }) {
   if (!hasInsights) {
     return (
       <EmptyState
-        icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v4l2 2" /></svg>}
+        icon={<Clock3 className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
       >
         {video.status === 'processing'
           ? 'AI is analyzing the video. Insights will appear here shortly.'
@@ -195,8 +196,9 @@ export function ActionsPanel({
 }) {
   const transcript = (video.transcript || '').trim();
   const hasTranscript = transcript.length > 40;
-  const { lifecycle, isRunning, runFromTranscript, reset } = useActionAgentStore();
+  const { lifecycle, isRunning, runFromTranscript, confirmPreparedActions, reset } = useActionAgentStore();
   const fulfilled = lifecycle.actions || [];
+  const isPrepared = lifecycle.phase === 'dispatching';
   const plannedActions = video.insights?.actions || [];
   const projectScaffold = video.insights?.project_scaffold;
   const scaffoldPreview = summarizeProjectScaffold(projectScaffold);
@@ -235,7 +237,7 @@ export function ActionsPanel({
 
   return (
     <div className="space-y-4">
-      {/* F12: Act on findings via /api/agents/actions */}
+      {/* F12: Prepare, review, then explicitly confirm /api/agents/actions */}
       <section
         className="rounded-xl border p-4 space-y-3"
         style={{ borderColor: 'rgba(129,140,248,0.25)', background: 'rgba(129,140,248,0.06)' }}
@@ -243,11 +245,11 @@ export function ActionsPanel({
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#a5b4fc' }}>
-              Act on findings
+              Review action plan
             </h3>
             <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(248,245,253,0.55)' }}>
-              Canonical action surface (F3): run tools via{' '}
-              <code className="text-[10px]">/api/agents/actions</code>, then export a scaffold package.
+              Preparation uses AI to propose tool calls but executes nothing. Confirming runs only the
+              exact items shown below, including any external agent or knowledge-store action.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -264,15 +266,27 @@ export function ActionsPanel({
             <button
               type="button"
               disabled={!hasTranscript || isRunning}
-              onClick={() => runFromTranscript(transcript, video.title)}
+              onClick={() =>
+                isPrepared
+                  ? confirmPreparedActions()
+                  : runFromTranscript(transcript, video.title)
+              }
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded disabled:opacity-40"
               style={{
-                background: 'rgba(129,140,248,0.2)',
-                color: '#c7d2fe',
-                border: '1px solid rgba(129,140,248,0.4)',
+                background: isPrepared ? 'rgba(248,113,113,0.16)' : 'rgba(129,140,248,0.2)',
+                color: isPrepared ? '#fecaca' : '#c7d2fe',
+                border: isPrepared
+                  ? '1px solid rgba(248,113,113,0.4)'
+                  : '1px solid rgba(129,140,248,0.4)',
               }}
             >
-              {isRunning ? 'Acting…' : 'Act on findings'}
+              {isRunning
+                ? isPrepared
+                  ? 'Executing confirmed plan…'
+                  : 'Preparing plan…'
+                : isPrepared
+                  ? `Confirm ${fulfilled.length} action${fulfilled.length === 1 ? '' : 's'}`
+                  : 'Prepare action plan'}
             </button>
           </div>
         </div>
@@ -285,10 +299,23 @@ export function ActionsPanel({
 
         {lifecycle.phase !== 'idle' && (
           <p className="text-[11px] font-mono" style={{ color: 'rgba(165,180,252,0.8)' }}>
-            Phase: {lifecycle.phase}
+            {isPrepared ? 'Status: prepared for review' : `Phase: ${lifecycle.phase}`}
             {lifecycle.provider ? ` · ${lifecycle.provider}` : ''}
             {lifecycle.error ? ` · ${lifecycle.error}` : ''}
           </p>
+        )}
+
+        {isPrepared && (
+          <div
+            className="flex items-start gap-2 rounded-lg border px-3 py-2"
+            style={{ borderColor: 'rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.08)' }}
+          >
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#fca5a5' }} aria-hidden="true" />
+            <p className="text-xs leading-relaxed" style={{ color: '#fecaca' }}>
+              Review required. The confirmation button is the authorization boundary; nothing below
+              has run yet.
+            </p>
+          </div>
         )}
 
         {fulfilled.length > 0 && (
@@ -319,6 +346,13 @@ export function ActionsPanel({
                     {action.status}
                   </span>
                 </div>
+                <p className="mt-1 text-[10px] font-mono uppercase" style={{ color: 'rgba(248,245,253,0.42)' }}>
+                  {['dispatch_agent', 'dispatch_subagents', 'add_to_knowledge_base'].includes(action.tool)
+                    ? 'External write or execution'
+                    : action.tool === 'get_agent_session_logs'
+                      ? 'External read'
+                      : 'Local structured output'}
+                </p>
                 {action.result && (
                   <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(172,170,177,0.9)' }}>
                     {action.result}
@@ -410,6 +444,7 @@ export function AgentsPanel({
   onDispatch: (videoId: string) => void;
   onRefresh: (videoId: string) => void;
 }) {
+  const [dispatchReview, setDispatchReview] = useState(false);
   const hasEvents = !!(video.events && video.events.length > 0);
   const agents = video.agents || [];
   const anyRunning = agents.some((a) => a.status === 'running' || a.status === 'queued');
@@ -418,14 +453,41 @@ export function AgentsPanel({
     <div className="space-y-4">
       {(hasEvents || agents.length > 0) && (
         <div className="flex items-center justify-end gap-2 flex-wrap">
-          {hasEvents && agentBackend && (
+          {hasEvents && agentBackend && !dispatchReview && (
             <button
-              onClick={() => onDispatch(video.id)}
+              type="button"
+              onClick={() => setDispatchReview(true)}
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded"
               style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
             >
-              Dispatch {video.events!.length} events
+              Review dispatch
             </button>
+          )}
+          {hasEvents && agentBackend && dispatchReview && (
+            <>
+              <span className="text-xs" style={{ color: '#fca5a5' }}>
+                Dispatch {video.events!.length} event{video.events!.length === 1 ? '' : 's'} to backend agents?
+              </span>
+              <button
+                type="button"
+                onClick={() => setDispatchReview(false)}
+                className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded"
+                style={{ color: 'rgba(248,245,253,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDispatchReview(false);
+                  onDispatch(video.id);
+                }}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 rounded"
+                style={{ background: 'rgba(248,113,113,0.15)', color: '#fecaca', border: '1px solid rgba(248,113,113,0.35)' }}
+              >
+                Confirm dispatch
+              </button>
+            </>
           )}
           {anyRunning && (
             <button
@@ -451,7 +513,7 @@ export function AgentsPanel({
       </Suspense>
       {video.status !== 'processing' && agents.length === 0 && (
         <EmptyState
-          icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2" /><path d="M12 8V4M9 14h.01M15 14h.01" /></svg>}
+          icon={<Bot className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
         >
           No agent executions yet.
         </EmptyState>
@@ -534,7 +596,7 @@ export function SearchPanel({
         </div>
       ) : (
         <EmptyState
-          icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>}
+          icon={<Search className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
         >
           Search for a topic to jump to that moment in the video.
         </EmptyState>

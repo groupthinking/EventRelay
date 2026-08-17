@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, ChevronLeft, ChevronRight, TriangleAlert, XCircle } from 'lucide-react';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import { extractYouTubeId, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
 import { useDashboardDetail } from '@/hooks/use-dashboard-detail';
 import { isThinDashboardAnalysis } from '@/lib/dashboard-analysis';
 import type { PipelineMode, Video } from '@/store/dashboard-types';
 import VideoCanvasStage, { type TimelineMarker } from './VideoCanvasStage';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   ActionsPanel,
   AgentsPanel,
@@ -17,6 +19,7 @@ import {
 
 function pipelineModeLabel(mode?: PipelineMode): string | null {
   switch (mode) {
+    case 'workflow': return 'Durable workflow';
     case 'live': return 'Live backend';
     case 'serverless': return 'Gemini analysis';
     case 'fallback': return 'Direct analysis';
@@ -25,11 +28,15 @@ function pipelineModeLabel(mode?: PipelineMode): string | null {
   }
 }
 
-/** Small matchMedia hook: true at >= 1280px (Tailwind xl). SSR-safe. */
+/**
+ * Match the evidence workspace's three-rail desktop composition from 900px.
+ * This keeps the selected 990px design target intact while preserving the
+ * stacked mobile workspace below that width.
+ */
 function useIsDesktop(): boolean {
   const [isDesktop, setIsDesktop] = useState(false);
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1280px)');
+    const mq = window.matchMedia('(min-width: 900px)');
     const update = () => setIsDesktop(mq.matches);
     update();
     mq.addEventListener('change', update);
@@ -93,14 +100,19 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
 
   // Shared panel renderers (single instance per active layout).
   const transcriptPanel = (
-    <TranscriptPanel
-      video={video}
-      segments={segments}
-      hasTimings={hasTimings}
-      currentTime={player.currentTime}
-      isPlaying={player.isPlaying}
-      onSeek={player.seekTo}
-    />
+    <div className="space-y-4">
+      <ProvenanceSummary video={video} />
+      <div className="border-t border-white/[0.08] pt-4">
+        <TranscriptPanel
+          video={video}
+          segments={segments}
+          hasTimings={hasTimings}
+          currentTime={player.currentTime}
+          isPlaying={player.isPlaying}
+          onSeek={player.seekTo}
+        />
+      </div>
+    </div>
   );
   const renderDock = (key: DockKey) => {
     switch (key) {
@@ -162,7 +174,7 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
           className="flex items-center gap-2 text-sm transition-colors hover:text-white min-h-[44px]"
           style={{ color: 'rgba(248,245,253,0.5)', fontFamily: 'var(--font-heading)', letterSpacing: '0.05em', fontSize: '12px', textTransform: 'uppercase' }}
         >
-          <span className="text-lg" aria-hidden="true">←</span> Back to Library
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" /> Back to Library
         </button>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -175,9 +187,10 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
               {pipelineModeLabel(video.pipelineMode)}
             </span>
           )}
-          {video.transcript && (
+          <div className="flex flex-col items-end gap-1">
             <button
               onClick={() => {
+                if (!video.transcript || !video.quality?.passed) return;
                 const blob = new Blob([video.transcript!], { type: 'text/plain' });
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(blob);
@@ -185,12 +198,19 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
                 a.click();
                 URL.revokeObjectURL(a.href);
               }}
-              className="px-4 py-2 font-heading font-bold text-[11px] tracking-wider uppercase transition-all min-h-[44px]"
+              disabled={!video.transcript || !video.quality?.passed}
+              title={!video.quality?.passed ? 'Export requires verified source evidence.' : undefined}
+              className="px-4 py-2 font-heading font-bold text-[11px] tracking-wider uppercase transition-[background-color,color,opacity] min-h-[44px] disabled:cursor-not-allowed disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]"
               style={{ background: 'rgba(16, 183, 165, 0.9)', color: '#002b26' }}
             >
               Export
             </button>
-          )}
+            {!video.quality?.passed && (
+              <span className="max-w-52 text-right text-[10px] text-white/55">
+                Export requires verified evidence.
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
@@ -203,11 +223,11 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
               className="flex-none w-[340px] flex flex-col overflow-hidden"
               style={{ borderRight: '1px solid rgba(255,255,255,0.05)', background: '#0b0b0f' }}
             >
-              <RailHeader title="Transcript" onCollapse={() => setLeftOpen(false)} side="left" />
+              <RailHeader title="Source & Transcript" onCollapse={() => setLeftOpen(false)} side="left" />
               <div className="flex-1 overflow-y-auto p-3">{transcriptPanel}</div>
             </aside>
           ) : (
-            <RailReopen label="Transcript" onClick={() => setLeftOpen(true)} side="left" />
+            <RailReopen label="Source & Transcript" onClick={() => setLeftOpen(true)} side="left" />
           )}
 
           {/* Center stage */}
@@ -233,7 +253,7 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
                   className="flex-none px-3 h-full text-lg transition-colors hover:text-white"
                   style={{ color: 'rgba(248,245,253,0.4)' }}
                 >
-                  ›
+                  <ChevronRight className="h-4 w-4" aria-hidden="true" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-5">{renderDock(dockTab)}</div>
@@ -265,16 +285,94 @@ export default function DashboardCanvasView({ video, onClose, onExtractEvents }:
 /* ─────────────────────────── small pieces ─────────────────────────── */
 
 function StatusPill({ video, thinAnalysis }: { video: Video; thinAnalysis: boolean }) {
-  const partial = thinAnalysis && video.status === 'complete';
-  const color = partial ? '#f59e0b' : video.status === 'complete' ? '#22c55e' : video.status === 'failed' ? '#ff716c' : '#6af2de';
-  const bg = partial ? 'rgba(245,158,11,0.1)' : video.status === 'complete' ? 'rgba(34,197,94,0.1)' : video.status === 'failed' ? 'rgba(255,113,108,0.1)' : 'rgba(106,242,222,0.1)';
+  const evidenceState = video.quality?.state;
+  const partial = evidenceState === 'degraded' || (thinAnalysis && video.status === 'complete');
+  const failed = video.status === 'failed' || evidenceState === 'failed' || evidenceState === 'unavailable';
+  const color = partial ? '#facc15' : failed ? '#ff716c' : evidenceState === 'verified' ? '#22c55e' : '#6af2de';
+  const bg = partial ? 'rgba(250,204,21,0.1)' : failed ? 'rgba(255,113,108,0.1)' : evidenceState === 'verified' ? 'rgba(34,197,94,0.1)' : 'rgba(106,242,222,0.1)';
+  const label = video.status === 'processing'
+    ? 'PROCESSING'
+    : evidenceState === 'verified'
+      ? 'EVIDENCE VERIFIED'
+      : partial
+        ? 'EVIDENCE DEGRADED'
+        : failed
+          ? 'EVIDENCE UNAVAILABLE'
+          : video.status.toUpperCase();
   return (
-    <span className="flex items-center gap-2">
+    <span className="flex items-center gap-2" aria-live="polite">
       <span className="text-[10px] font-bold uppercase tracking-widest px-3 py-1" style={{ background: bg, color, borderLeft: `2px solid ${color}` }}>
-        {partial ? 'PARTIAL' : video.status.toUpperCase()}
+        {label}
       </span>
       {video.status === 'processing' && <span className="text-xs font-mono" style={{ color: '#6af2de' }}>{video.progress}%</span>}
     </span>
+  );
+}
+
+function ProvenanceSummary({ video }: { video: Video }) {
+  const provenance = video.provenance;
+  const unavailable = 'Unavailable';
+  const acquiredAt = provenance?.acquiredAt
+    ? new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(provenance.acquiredAt))
+    : unavailable;
+  const rows = [
+    ['Source', provenance?.sourceHost || unavailable],
+    ['Acquisition', provenance?.acquisitionMethod || unavailable],
+    ['Fetched', acquiredAt],
+    ['Segments', provenance ? new Intl.NumberFormat().format(provenance.segmentCount) : unavailable],
+    ['Timed', provenance ? `${provenance.timedSegmentCount}/${provenance.segmentCount}` : unavailable],
+    ['Coverage', provenance?.durationCoverageSeconds != null
+      ? `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(provenance.durationCoverageSeconds)} s`
+      : unavailable],
+  ];
+
+  return (
+    <section aria-labelledby="source-provenance-heading" className="rounded-xl border border-white/[0.1] bg-white/[0.025] p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h3 id="source-provenance-heading" className="font-heading text-[11px] font-bold uppercase tracking-[0.16em] text-white/85">
+          Source Provenance
+        </h3>
+        {provenance?.sourceUrl && (
+          <a
+            href={provenance.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="min-h-[44px] inline-flex items-center text-[10px] font-bold uppercase tracking-wider text-[#6af2de] underline-offset-4 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]"
+          >
+            Inspect Raw
+          </a>
+        )}
+      </div>
+      <dl className="space-y-2 text-[11px]">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[88px_minmax(0,1fr)] gap-2">
+            <dt className="uppercase tracking-wider text-white/50">{label}</dt>
+            <dd className="min-w-0 break-words font-mono text-white/80">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {video.failure && (
+        <Alert variant="destructive" className="mt-3">
+          <XCircle aria-hidden="true" />
+          <AlertTitle>{video.failure.stage} failed</AlertTitle>
+          <AlertDescription>{video.failure.message}</AlertDescription>
+        </Alert>
+      )}
+      {(video.quality?.issues.length ?? 0) > 0 && (
+        <Alert variant="warning" className="mt-3">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>Evidence checks</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-4">
+              {video.quality!.issues.map((issue) => <li key={issue}>{issue}</li>)}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+    </section>
   );
 }
 
@@ -307,7 +405,9 @@ function RailHeader({ title, onCollapse, side }: { title: string; onCollapse: ()
     <div className="flex-none flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', background: 'rgba(25,25,31,0.9)' }}>
       <span className="font-heading text-[11px] tracking-[0.2em] uppercase font-bold" style={{ color: '#f8f5fd' }}>{title}</span>
       <button onClick={onCollapse} aria-label={`Collapse ${title}`} className="text-lg transition-colors hover:text-white" style={{ color: 'rgba(248,245,253,0.4)' }}>
-        {side === 'left' ? '‹' : '›'}
+        {side === 'left'
+          ? <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+          : <ChevronRight className="h-4 w-4" aria-hidden="true" />}
       </button>
     </div>
   );

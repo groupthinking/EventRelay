@@ -27,7 +27,7 @@ describe('POST /api/workflows/video-to-actions error body', () => {
       new Request('https://uvai.io/api/workflows/video-to-actions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }),
+        body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' }),
       }),
     );
     const json = (await res.json()) as Record<string, unknown>;
@@ -47,7 +47,7 @@ describe('POST /api/workflows/video-to-actions error body', () => {
       new Request('https://uvai.io/api/workflows/video-to-actions', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }),
+        body: JSON.stringify({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' }),
       }),
     );
     const json = (await res.json()) as Record<string, unknown>;
