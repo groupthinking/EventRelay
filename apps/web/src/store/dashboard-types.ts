@@ -57,7 +57,8 @@ export interface Video {
   };
   insights?: {
     summary: string;
-    actions: Action[];
+    /** Older backend results may persist action titles as strings; renderers normalize both shapes. */
+    actions: Array<Action | string>;
     sentiment: string;
     topics: string[];
     /**

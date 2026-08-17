@@ -91,6 +91,36 @@ function formatVerifiedTranscript(segments: TranscriptSegment[]): string | undef
   return text || undefined;
 }
 
+function normalizeDashboardActions(value: unknown): Action[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.flatMap((item) => {
+    if (typeof item === 'string' && item.trim()) {
+      return [{
+        title: item.trim(),
+        description: '',
+        category: 'recommended',
+        estimatedMinutes: null,
+      }];
+    }
+    if (!item || typeof item !== 'object') return [];
+
+    const candidate = item as Record<string, unknown>;
+    const title = typeof candidate.title === 'string' ? candidate.title.trim() : '';
+    if (!title) return [];
+    return [{
+      title,
+      description: typeof candidate.description === 'string' ? candidate.description : '',
+      category:
+        typeof candidate.category === 'string' && candidate.category.trim()
+          ? candidate.category
+          : 'recommended',
+      estimatedMinutes:
+        typeof candidate.estimatedMinutes === 'number' ? candidate.estimatedMinutes : null,
+    }];
+  });
+}
+
 function verifiedResultPatch(
   id: string,
   runId: string,
@@ -157,7 +187,7 @@ function verifiedResultPatch(
     failure: undefined,
     insights: {
       summary: analysis.summary,
-      actions: analysis.actions || [],
+      actions: normalizeDashboardActions(analysis.actions),
       sentiment: 'Unscored',
       topics: analysis.topics || [],
       ...(analysis.project_scaffold != null
@@ -468,7 +498,9 @@ export const useDashboardStore = create<DashboardState>()(
               : terminalSuccess
                 ? 'Deployment verified with a live HTTPS URL.'
                 : 'Deployment did not produce a verified live URL.'),
-          actions: (result.result?.features_implemented || result.features_implemented) || [],
+          actions: normalizeDashboardActions(
+            result.result?.features_implemented || result.features_implemented,
+          ),
           sentiment: 'Unscored',
           topics: (result.result?.code_generation?.files_created || result.code_generation?.files) || [],
         },
@@ -534,7 +566,7 @@ export const useDashboardStore = create<DashboardState>()(
     const events: ExtractedEvent[] = [];
 
     // Derive events from insights
-    (video.insights?.actions || []).forEach((action, i) => {
+    normalizeDashboardActions(video.insights?.actions || []).forEach((action, i) => {
       events.push({
         id: `evt_${videoId}_${i}`,
         type: 'action',

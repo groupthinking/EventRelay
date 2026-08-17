@@ -80,20 +80,20 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
             >
               <span>{label}</span>
               {hint && (
-                <span className="ml-1.5 hidden lg:inline text-[9px] uppercase tracking-wider text-white/25">
+                <span className="ml-1.5 hidden 2xl:inline text-[9px] uppercase tracking-wider text-white/25">
                   {hint}
                 </span>
               )}
             </Link>
           ))}
-          <div className="h-5 w-px bg-white/[0.08] mx-1" />
+          <div className="mx-1 hidden h-5 w-px bg-white/[0.08] xl:block" />
           {DEV_LINKS.map(({ href, label, hint }) => (
             <Link
               key={href}
               href={href}
               title={hint}
               className={clsx(
-                'text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03]',
+                'hidden text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03] xl:inline-flex',
                 pathname === href && 'text-white/60 bg-white/[0.04]'
               )}
             >

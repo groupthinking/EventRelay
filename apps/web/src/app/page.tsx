@@ -75,10 +75,10 @@ function DashboardPreview() {
   return (
     <figure className="relative mx-auto w-full max-w-xl overflow-hidden rounded-[2rem] border border-white/[0.08] bg-surface-950/90 shadow-2xl shadow-teal-500/10">
       <Image
-        src="/verified-dashboard.png"
+        src="/evidence-workspace-dashboard.png"
         alt="UVAI dashboard showing a verified YouTube source, timed captions, the video player, and grounded analysis"
-        width={990}
-        height={762}
+        width={1440}
+        height={1024}
         priority
         className="h-auto w-full"
         sizes="(max-width: 1024px) 100vw, 560px"
@@ -103,7 +103,7 @@ export default function Home() {
               Video intelligence for agent workflows
             </div>
             <h1 className="max-w-3xl font-heading text-5xl font-black leading-[1.02] tracking-tight md:text-7xl">
-              Turn any video into actions, insights, and agent workflows.
+              Turn YouTube videos into evidence, findings, and reviewable actions.
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-8 text-white/50 md:text-lg">
               UVAI acquires timed YouTube captions, verifies the evidence, extracts structured events, and prepares actions for review before automation.
