@@ -4,7 +4,9 @@
  * Agent as `dispatcher`. Those are different undici class copies, so
  * dispatch() throws "Cannot read private member #P".
  *
- * Rebind those two call sites to `undici.fetch` from the same package as Agent.
+ * Remove the custom dispatcher from world-vercel call sites that ultimately
+ * reach Node/Next global fetch. For world-local, use npm `undici.fetch` with
+ * the npm `Agent` so its long-running-step timeout configuration is preserved.
  * Idempotent. Safe to skip if the package is absent.
  *
  * Lives under apps/web. Root .vercelignore must use `/scripts/` (anchored).
@@ -18,9 +20,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const require = createRequire(import.meta.url);
 
 export function patchSource(src) {
-  const hasFetchCall =
-    src.includes('await fetch(') || src.includes('await undiciFetch(');
-  if (!hasFetchCall) {
+  const hasAffectedCallSite =
+    src.includes('await fetch(') ||
+    src.includes('await undiciFetch(') ||
+    src.includes('dispatcher: getDispatcher(');
+  if (!hasAffectedCallSite) {
     return { src, result: 'no-fetch-call' };
   }
   let next = src;
@@ -44,9 +48,32 @@ export function patchSource(src) {
   return { src: next, result: 'patched' };
 }
 
-export function patchFile(absPath) {
+export function patchWorldLocalSource(src) {
+  const hasLocalQueueCall =
+    src.includes('dispatcher: httpAgent') ||
+    src.includes('undiciFetch(createWorkflowUrl(');
+  if (!hasLocalQueueCall) {
+    return { src, result: 'no-local-queue-call' };
+  }
+
+  let next = src
+    .replace(
+      "import { Agent } from 'undici';",
+      "import { Agent, fetch as undiciFetch } from 'undici';",
+    )
+    .replace(
+      'response = await fetch(createWorkflowUrl(',
+      'response = await undiciFetch(createWorkflowUrl(',
+    );
+  if (next === src) {
+    return { src, result: 'already-patched' };
+  }
+  return { src: next, result: 'patched' };
+}
+
+export function patchFile(absPath, transform = patchSource) {
   const original = fs.readFileSync(absPath, 'utf8');
-  const { src, result } = patchSource(original);
+  const { src, result } = transform(original);
   if (result === 'patched') {
     fs.writeFileSync(absPath, src);
   }
@@ -87,6 +114,38 @@ export function resolveWorldVercelRoot() {
   return null;
 }
 
+export function resolveWorldLocalRoot() {
+  try {
+    let dir = path.dirname(require.resolve('@workflow/world-local'));
+    while (dir !== path.dirname(dir)) {
+      const pkgPath = path.join(dir, 'package.json');
+      if (fs.existsSync(pkgPath)) {
+        const name = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).name;
+        if (name === '@workflow/world-local') {
+          return dir;
+        }
+      }
+      dir = path.dirname(dir);
+    }
+  } catch {
+    // fall through to path candidates
+  }
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(process.cwd(), 'node_modules/@workflow/world-local'),
+    path.resolve(process.cwd(), '../node_modules/@workflow/world-local'),
+    path.resolve(process.cwd(), '../../node_modules/@workflow/world-local'),
+    path.resolve(here, '../../node_modules/@workflow/world-local'),
+    path.resolve(here, '../../../node_modules/@workflow/world-local'),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(path.join(candidate, 'dist', 'queue.js'))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 export function patchInstalledWorldVercel() {
   const pkgRoot = resolveWorldVercelRoot();
   if (!pkgRoot) {
@@ -94,17 +153,25 @@ export function patchInstalledWorldVercel() {
     return ['not-installed'];
   }
   const targets = [
-    path.join(pkgRoot, 'dist', 'utils.js'),
-    path.join(pkgRoot, 'dist', 'http-core.js'),
+    { abs: path.join(pkgRoot, 'dist', 'utils.js'), transform: patchSource },
+    { abs: path.join(pkgRoot, 'dist', 'http-core.js'), transform: patchSource },
+    { abs: path.join(pkgRoot, 'dist', 'queue.js'), transform: patchSource },
   ];
+  const localRoot = resolveWorldLocalRoot();
+  if (localRoot) {
+    targets.push({
+      abs: path.join(localRoot, 'dist', 'queue.js'),
+      transform: patchWorldLocalSource,
+    });
+  }
   const results = [];
-  for (const abs of targets) {
+  for (const { abs, transform } of targets) {
     if (!fs.existsSync(abs)) {
       console.log(`[patch-world-vercel] skip missing ${abs}`);
       results.push('missing');
       continue;
     }
-    const result = patchFile(abs);
+    const result = patchFile(abs, transform);
     console.log(`[patch-world-vercel] ${abs} ${result}`);
     results.push(result);
   }

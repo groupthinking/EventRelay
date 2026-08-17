@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { GitFork, Play } from 'lucide-react';
+import { GitFork, Menu, Play, X } from 'lucide-react';
 
 const NAV_LINKS = [
   { href: '/#features', label: 'Features', page: '/features' },
@@ -17,6 +17,7 @@ const REPO_URL = 'https://github.com/groupthinking/EventRelay';
 
 export default function LandingNav() {
   const [scrolled, setScrolled] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function LandingNav() {
         borderBottom: scrolled ? '1px solid rgba(106,242,222,0.08)' : '1px solid transparent',
       }}
     >
-      <div className="flex justify-between items-center px-8 py-5 max-w-[1440px] mx-auto">
+      <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-4 sm:px-6 md:px-8 md:py-5">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2.5 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] rounded-lg" aria-label="UVAI home">
           <span
@@ -73,7 +74,7 @@ export default function LandingNav() {
         </div>
 
         {/* Right actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <a
             href={REPO_URL}
             target="_blank"
@@ -86,13 +87,46 @@ export default function LandingNav() {
           </a>
           <Link
             href="/dashboard"
-            className="px-5 py-2.5 rounded-lg font-bold text-sm transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
+            className="hidden rounded-lg px-5 py-2.5 text-sm font-bold transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] sm:inline-flex"
             style={{ background: '#6af2de', color: '#021a18' }}
           >
             Open dashboard
           </Link>
+          <button
+            type="button"
+            aria-expanded={mobileOpen}
+            aria-controls="mobile-navigation"
+            aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+            onClick={() => setMobileOpen((open) => !open)}
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-white/10 text-ink/70 transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] md:hidden"
+          >
+            {mobileOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
+          </button>
         </div>
       </div>
+      {mobileOpen && (
+        <div id="mobile-navigation" className="border-t border-white/[0.08] bg-[#050508]/95 px-4 pb-5 pt-3 backdrop-blur-2xl md:hidden">
+          <div className="mx-auto flex max-w-[1440px] flex-col gap-1">
+            {NAV_LINKS.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setMobileOpen(false)}
+                className="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-ink/70 transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
+              >
+                {link.label}
+              </Link>
+            ))}
+            <Link
+              href="/dashboard"
+              onClick={() => setMobileOpen(false)}
+              className="evidence-primary-button mt-2 flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-bold"
+            >
+              Open dashboard
+            </Link>
+          </div>
+        </div>
+      )}
     </nav>
   );
 }

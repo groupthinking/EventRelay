@@ -105,7 +105,7 @@ export default function FeaturesPage() {
 
           <figure className="mt-14 overflow-hidden rounded-[2rem] border border-white/[0.08] bg-black/30 shadow-2xl shadow-teal-500/10">
             <Image
-              src="/verified-dashboard.png"
+              src="/evidence-workspace-dashboard.png"
               alt="Verified UVAI analysis with source provenance, timed captions, YouTube playback, and grounded synthesis"
               width={990}
               height={762}

@@ -56,12 +56,14 @@ interface SourceInput {
 interface ActionAgentState {
   lifecycle: PromptLifecycle;
   isRunning: boolean;
+  /** Video whose transcript produced the current plan. Prevents cross-video confirmation. */
+  sourceVideoId: string | null;
   /** Full flow: capture → transcribe (via /api/transcribe) → extract+fulfil actions. */
   runFromSource: (input: SourceInput) => Promise<void>;
   /** Skip capture/transcription and run the agent on an existing transcript. */
-  runFromTranscript: (transcript: string, videoTitle?: string) => Promise<void>;
+  runFromTranscript: (transcript: string, videoTitle?: string, sourceVideoId?: string) => Promise<void>;
   /** Execute the exact prepared action list after explicit review. */
-  confirmPreparedActions: () => Promise<void>;
+  confirmPreparedActions: (selectedActions?: AgentAction[], expectedVideoId?: string) => Promise<void>;
   reset: () => void;
 }
 
@@ -97,10 +99,11 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
   return {
     lifecycle: createLifecycle(newId()),
     isRunning: false,
+    sourceVideoId: null,
 
-    async runFromTranscript(transcript, videoTitle) {
+    async runFromTranscript(transcript, videoTitle, sourceVideoId) {
       if (get().isRunning) return;
-      set({ isRunning: true, lifecycle: createLifecycle(newId()) });
+      set({ isRunning: true, lifecycle: createLifecycle(newId()), sourceVideoId: sourceVideoId ?? null });
       try {
         // Jump straight to a known transcript: capture → transcribe are implicit.
         apply({ type: 'START_CAPTURE' });
@@ -116,7 +119,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
 
     async runFromSource({ url, audioUrl, videoTitle }) {
       if (get().isRunning) return;
-      set({ isRunning: true, lifecycle: createLifecycle(newId()) });
+      set({ isRunning: true, lifecycle: createLifecycle(newId()), sourceVideoId: null });
       try {
         apply({ type: 'START_CAPTURE' });
         apply({ type: 'AUDIO_CAPTURED' });
@@ -143,9 +146,13 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
       }
     },
 
-    async confirmPreparedActions() {
+    async confirmPreparedActions(selectedActions, expectedVideoId) {
       if (get().isRunning || get().lifecycle.phase !== 'dispatching') return;
-      const { id: jobId, actions } = get().lifecycle;
+      if (expectedVideoId && get().sourceVideoId !== expectedVideoId) {
+        return;
+      }
+      const { id: jobId, actions: preparedActions } = get().lifecycle;
+      const actions = selectedActions ?? preparedActions;
       if (actions.length === 0) return;
       set({ isRunning: true });
       try {
@@ -172,7 +179,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
     },
 
     reset() {
-      set({ lifecycle: createLifecycle(newId()), isRunning: false });
+      set({ lifecycle: createLifecycle(newId()), isRunning: false, sourceVideoId: null });
     },
   };
 });

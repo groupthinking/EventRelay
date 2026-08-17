@@ -249,7 +249,10 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
               codeMapping: 'review()',
               cloudService: 'none',
             }],
-            actions: [{ title: 'Review evidence', description: 'Inspect it.', category: 'research', estimatedMinutes: 5 }],
+            actions: [
+              'Review the verified caption evidence.',
+              { title: 'Review evidence', description: 'Inspect it.', category: 'research', estimatedMinutes: 5 },
+            ],
             topics: ['evidence'],
             architectureCode: '',
             ingestScript: '',
@@ -281,6 +284,15 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     expect(video.transcript).toContain('[0:00]');
     expect(video.events?.[0].confidence).toBeUndefined();
     expect(video.agents).toHaveLength(3);
+    expect(video.insights?.actions).toEqual([
+      {
+        title: 'Review the verified caption evidence.',
+        description: '',
+        category: 'recommended',
+        estimatedMinutes: null,
+      },
+      { title: 'Review evidence', description: 'Inspect it.', category: 'research', estimatedMinutes: 5 },
+    ]);
   });
 
   it('keeps a failed workflow failed and preserves a recovery record', async () => {

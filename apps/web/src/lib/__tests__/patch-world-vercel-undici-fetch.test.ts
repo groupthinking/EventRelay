@@ -6,6 +6,8 @@ import {
   patchFile,
   patchInstalledWorldVercel,
   patchSource,
+  patchWorldLocalSource,
+  resolveWorldLocalRoot,
   resolveWorldVercelRoot,
 } from '../../../scripts/patch-world-vercel-undici-fetch.mjs';
 
@@ -20,6 +22,24 @@ export async function doRequest(request) {
     dispatcher: getDispatcher(),
   });
   return response;
+}
+`;
+
+const QUEUE_FIXTURE = `import { getDispatcher } from './http-client.js';
+export function createQueue(config) {
+  return new QueueClient({
+    region: 'iad1',
+    dispatcher: getDispatcher(config),
+  });
+}
+`;
+
+const LOCAL_QUEUE_FIXTURE = `import { Agent } from 'undici';
+export async function deliver(url, httpAgent) {
+  return (response = await fetch(createWorkflowUrl(url), {
+    method: 'POST',
+    dispatcher: httpAgent,
+  }));
 }
 `;
 
@@ -48,6 +68,24 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(src).toContain('await fetch(request, {');
     expect(src).not.toContain('undiciFetch');
     expect(src).not.toContain('dispatcher');
+  });
+
+  it('drops the dispatcher from queue client options without a direct fetch call', () => {
+    const { src, result } = patchSource(QUEUE_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).not.toMatch(/dispatcher:\s*getDispatcher/);
+  });
+
+  it('pairs world-local fetch with its npm Agent and preserves dispatcher settings', () => {
+    const { src, result } = patchWorldLocalSource(LOCAL_QUEUE_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).toContain("import { Agent, fetch as undiciFetch } from 'undici';");
+    expect(src).toContain('undiciFetch(createWorkflowUrl(url)');
+    expect(src).toMatch(/dispatcher:\s*httpAgent/);
+
+    const twice = patchWorldLocalSource(src);
+    expect(twice.result).toBe('already-patched');
+    expect(twice.src).toBe(src);
   });
 
   it('undoes a prior undiciFetch rename so Request objects still work', () => {
@@ -97,10 +135,24 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
       path.join(pkgRoot as string, 'dist', 'http-core.js'),
       'utf8',
     );
+    const queue = fs.readFileSync(
+      path.join(pkgRoot as string, 'dist', 'queue.js'),
+      'utf8',
+    );
+    const localRoot = resolveWorldLocalRoot();
+    expect(localRoot).toBeTruthy();
+    const localQueue = fs.readFileSync(
+      path.join(localRoot as string, 'dist', 'queue.js'),
+      'utf8',
+    );
     expect(utils).toContain('await fetch(');
     expect(httpCore).toContain('await fetch(');
     expect(utils).not.toContain('undiciFetch');
     expect(utils).not.toMatch(/dispatcher:\s*getDispatcher/);
     expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
+    expect(queue).not.toMatch(/dispatcher:\s*getDispatcher/);
+    expect(localQueue).toContain("fetch as undiciFetch } from 'undici'");
+    expect(localQueue).toContain('undiciFetch(createWorkflowUrl(');
+    expect(localQueue).toMatch(/dispatcher:\s*httpAgent/);
   });
 });
