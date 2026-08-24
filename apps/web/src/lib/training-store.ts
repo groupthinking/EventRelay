@@ -1,41 +1,41 @@
 import 'server-only';
 
 /**
- * Training Data Store — Auto-saves pipeline outputs as JSONL for fine-tuning.
+ * Training Data Store — accumulates pipeline outputs for fine-tuning.
  *
- * Every successful pipeline run is saved as a training example in:
- *   data/training/video-analysis.jsonl
+ * Backed by Postgres (`training_examples`, `training_runs`). Examples are
+ * serialised to Vertex AI SFT-compatible JSONL on demand by
+ * `readTrainingFile()`; nothing is written to the local filesystem.
  *
- * Format (Vertex AI SFT compatible):
- * {
- *   "contents": [
- *     { "role": "user", "parts": [{ "text": "<system_prompt + video_url>" }] },
- *     { "role": "model", "parts": [{ "text": "<structured_json_output>" }] }
- *   ]
- * }
+ * Why this was rewritten (audit finding F4):
  *
- * When the dataset reaches the configured threshold (default: 100),
- * the system can auto-trigger fine-tuning on Vertex AI.
+ * This module previously appended to `data/training/video-analysis.jsonl` under
+ * `process.cwd()`. On Vercel that directory is part of a read-only bundle, so
+ * `fs.mkdir` rejected with EROFS and **every** save threw. Because
+ * `getMetadata()` also called `ensureDir()` before reading, the read path threw
+ * too — so `/api/training/status` returned a 500 instead of reporting an empty
+ * dataset. The system had been reporting a growing training corpus that did not
+ * exist.
  *
- * IMPORTANT: All network calls (BigQuery export, metadata server) have
- * explicit timeouts to prevent hanging the pipeline. BigQuery export is
- * best-effort — failures are logged but never block the caller.
+ * Dedup is now a UNIQUE index on `video_url` rather than a
+ * `videosProcessed.includes(url)` scan. The old check was read-then-write with
+ * no atomicity: two concurrent runs of the same video could both pass the check
+ * and both append. `ON CONFLICT DO NOTHING` plus the index makes duplicates
+ * impossible under any interleaving.
+ *
+ * BigQuery export remains best-effort with explicit timeouts, unchanged.
  */
 
-import { promises as fs } from 'fs';
-import path from 'path';
+import { sql } from 'drizzle-orm';
+import { getDb, queryRows, requireDb } from '@/lib/db/client';
 
-/** Where training data lives */
-const TRAINING_DIR = path.join(process.cwd(), 'data', 'training');
-const TRAINING_FILE = path.join(TRAINING_DIR, 'video-analysis.jsonl');
-const METADATA_FILE = path.join(TRAINING_DIR, 'metadata.json');
 const BIGQUERY_PROJECT_ID = process.env.GOOGLE_CLOUD_PROJECT;
 const BIGQUERY_DATASET = process.env.TRAINING_BIGQUERY_DATASET;
 const BIGQUERY_TABLE = process.env.TRAINING_BIGQUERY_TABLE;
 
 /** Network timeouts (ms) */
-const METADATA_SERVER_TIMEOUT_MS = 3_000; // 3s — metadata server should respond instantly on GCP
-const BIGQUERY_INSERT_TIMEOUT_MS = 10_000; // 10s — BigQuery insert
+const METADATA_SERVER_TIMEOUT_MS = 3_000; // metadata server responds instantly on GCP
+const BIGQUERY_INSERT_TIMEOUT_MS = 10_000;
 
 /** Thresholds for auto-tuning triggers */
 export const TUNING_THRESHOLD = 100;
@@ -49,7 +49,14 @@ export interface TrainingExample {
   }>;
 }
 
-/** Dataset metadata persisted alongside the JSONL */
+/**
+ * Dataset metadata.
+ *
+ * Shape preserved from the file-backed implementation so the four existing
+ * callers need no changes. It is now derived from the tables on read rather
+ * than stored as a mutable JSON blob, which removes a second read-then-write
+ * race on the counter itself.
+ */
 export interface DatasetMetadata {
   totalExamples: number;
   lastUpdated: string;
@@ -58,7 +65,7 @@ export interface DatasetMetadata {
   tuningTriggered: boolean;
   tuningTriggeredAt: string | null;
   tuningJobId: string | null;
-  videosProcessed: string[]; // dedup list of URLs
+  videosProcessed: string[];
 }
 
 const SYSTEM_PROMPT = `You are a video intelligence analysis engine. Given a YouTube video URL, analyze it and return a structured JSON response containing:
@@ -74,49 +81,81 @@ const SYSTEM_PROMPT = `You are a video intelligence analysis engine. Given a You
 
 Output ONLY valid JSON matching this schema.`;
 
-/**
- * Ensure the training directory exists.
- */
-async function ensureDir(): Promise<void> {
-  await fs.mkdir(TRAINING_DIR, { recursive: true });
+/** Metadata for a dataset that has no storage configured or no rows yet. */
+function emptyMetadata(): DatasetMetadata {
+  return {
+    totalExamples: 0,
+    lastUpdated: '',
+    lastVideoUrl: '',
+    lastVideoTitle: '',
+    tuningTriggered: false,
+    tuningTriggeredAt: null,
+    tuningJobId: null,
+    videosProcessed: [],
+  };
 }
 
 /**
- * Load current metadata, or create defaults.
+ * Load dataset metadata.
+ *
+ * Read-only: unlike the previous implementation this never attempts to create
+ * storage as a side effect of reading, so a status check cannot fail because of
+ * a write permission problem.
  */
 export async function getMetadata(): Promise<DatasetMetadata> {
-  await ensureDir();
-  try {
-    const raw = await fs.readFile(METADATA_FILE, 'utf-8');
-    return JSON.parse(raw) as DatasetMetadata;
-  } catch {
-    return {
-      totalExamples: 0,
-      lastUpdated: '',
-      lastVideoUrl: '',
-      lastVideoTitle: '',
-      tuningTriggered: false,
-      tuningTriggeredAt: null,
-      tuningJobId: null,
-      videosProcessed: [],
-    };
-  }
-}
+  const db = getDb();
+  if (!db) return emptyMetadata();
 
-/**
- * Save metadata to disk.
- */
-async function saveMetadata(meta: DatasetMetadata): Promise<void> {
-  await ensureDir();
-  await fs.writeFile(METADATA_FILE, JSON.stringify(meta, null, 2), 'utf-8');
+  const [stats] = await queryRows<{
+    total: number;
+    last_updated: string | null;
+    last_url: string | null;
+    last_title: string | null;
+  }>(
+    db,
+    sql`
+    SELECT
+      COUNT(*)::int                                        AS total,
+      MAX(created_at)                                      AS last_updated,
+      (SELECT video_url   FROM training_examples ORDER BY created_at DESC LIMIT 1) AS last_url,
+      (SELECT video_title FROM training_examples ORDER BY created_at DESC LIMIT 1) AS last_title
+    FROM training_examples
+  `,
+  );
+
+  const [job] = await queryRows<{
+    tuning_triggered_at: string | null;
+    tuning_job_id: string | null;
+  }>(db, sql`SELECT tuning_triggered_at, tuning_job_id FROM training_runs WHERE id = 1`);
+
+  // `videosProcessed` is retained for API compatibility. It is intentionally
+  // capped: the original unbounded array was serialised into every response and
+  // grew without limit. Dedup no longer depends on it.
+  const processed = await queryRows<{ video_url: string }>(
+    db,
+    sql`SELECT video_url FROM training_examples ORDER BY created_at DESC LIMIT 500`,
+  );
+
+  return {
+    totalExamples: stats?.total ?? 0,
+    lastUpdated: stats?.last_updated ? new Date(stats.last_updated).toISOString() : '',
+    lastVideoUrl: stats?.last_url ?? '',
+    lastVideoTitle: stats?.last_title ?? '',
+    tuningTriggered: Boolean(job?.tuning_triggered_at),
+    tuningTriggeredAt: job?.tuning_triggered_at
+      ? new Date(job.tuning_triggered_at).toISOString()
+      : null,
+    tuningJobId: job?.tuning_job_id ?? null,
+    videosProcessed: processed.map((r) => r.video_url),
+  };
 }
 
 /**
  * Export a training example to BigQuery. Best-effort with explicit timeouts.
  *
- * On non-GCP hosts (e.g., Vercel), the metadata server fetch will time out
- * in 3 seconds instead of hanging indefinitely. This was the root cause of
- * the 95% pipeline hang — see https://github.com/groupthinking/EventRelay/issues/139
+ * On non-GCP hosts (e.g. Vercel) the metadata server fetch aborts in 3s instead
+ * of hanging — this was the root cause of the 95% pipeline hang, see
+ * https://github.com/groupthinking/EventRelay/issues/139
  */
 async function exportTrainingExampleToBigQuery(
   videoUrl: string,
@@ -124,14 +163,11 @@ async function exportTrainingExampleToBigQuery(
   example: TrainingExample,
   metadata: DatasetMetadata,
 ): Promise<void> {
-  // Guard: skip if BigQuery config is not set
   if (!BIGQUERY_PROJECT_ID || !BIGQUERY_DATASET || !BIGQUERY_TABLE) {
     console.debug('[Training] BigQuery env vars not configured — skipping export.');
     return;
   }
 
-  // Fetch GCP access token from metadata server with a hard timeout.
-  // On non-GCP hosts this will abort in 3s instead of hanging forever.
   let tokenResponse: Response | null = null;
   try {
     tokenResponse = await fetch(
@@ -142,7 +178,6 @@ async function exportTrainingExampleToBigQuery(
       },
     );
   } catch (error) {
-    // AbortError (timeout), TypeError (DNS failure), or network error
     console.debug('[Training] Metadata server unavailable for BigQuery export:', error);
     return;
   }
@@ -150,7 +185,8 @@ async function exportTrainingExampleToBigQuery(
   if (!tokenResponse || !tokenResponse.ok) {
     console.debug(
       '[Training] Metadata server returned error for BigQuery export (status: ' +
-      (tokenResponse?.status || 'unavailable') + '). Training data saved locally only.'
+        (tokenResponse?.status || 'unavailable') +
+        '). Training data saved to Postgres only.',
     );
     return;
   }
@@ -159,7 +195,7 @@ async function exportTrainingExampleToBigQuery(
   if (!tokenData.access_token) {
     console.debug(
       '[Training] Google Cloud access token missing from metadata response. ' +
-      'Training data saved locally only.'
+        'Training data saved to Postgres only.',
     );
     return;
   }
@@ -202,78 +238,64 @@ async function exportTrainingExampleToBigQuery(
 /**
  * Save a pipeline run as a training example.
  *
- * Returns the updated metadata including the new example count.
- * If the video URL was already processed, it skips the save (dedup).
+ * Returns `saved: false` when the video was already recorded. Dedup is decided
+ * by the database via `ON CONFLICT DO NOTHING`, so the answer is authoritative
+ * even when two runs race.
  */
 export async function saveTrainingExample(
   videoUrl: string,
   analysisOutput: Record<string, unknown>,
 ): Promise<{ saved: boolean; metadata: DatasetMetadata; milestone: number | null }> {
-  await ensureDir();
+  // requireDb, not getDb: a save that cannot persist must fail loudly. Silently
+  // discarding it is what produced a phantom training corpus.
+  const db = requireDb();
 
-  const meta = await getMetadata();
-
-  // Dedup: don't save the same video twice
-  if (meta.videosProcessed.includes(videoUrl)) {
-    return { saved: false, metadata: meta, milestone: null };
-  }
-
-  // Build the Vertex AI SFT training example
   const example: TrainingExample = {
     contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            text: `${SYSTEM_PROMPT}\n\nAnalyze this video: ${videoUrl}`,
-          },
-        ],
-      },
-      {
-        role: 'model',
-        parts: [
-          {
-            text: JSON.stringify(analysisOutput),
-          },
-        ],
-      },
+      { role: 'user', parts: [{ text: `${SYSTEM_PROMPT}\n\nAnalyze this video: ${videoUrl}` }] },
+      { role: 'model', parts: [{ text: JSON.stringify(analysisOutput) }] },
     ],
   };
 
-  // Append to JSONL file
-  const line = JSON.stringify(example) + '\n';
-  await fs.appendFile(TRAINING_FILE, line, 'utf-8');
+  const title = (analysisOutput.title as string) || 'Unknown';
 
-  // Update metadata
-  meta.totalExamples += 1;
-  meta.lastUpdated = new Date().toISOString();
-  meta.lastVideoUrl = videoUrl;
-  meta.lastVideoTitle = (analysisOutput.title as string) || 'Unknown';
-  meta.videosProcessed.push(videoUrl);
-  await saveMetadata(meta);
+  const inserted = await queryRows<{ id: string }>(db, sql`
+    INSERT INTO training_examples (video_url, video_title, example, analysis)
+    VALUES (
+      ${videoUrl},
+      ${title},
+      ${JSON.stringify(example)}::jsonb,
+      ${JSON.stringify(analysisOutput)}::jsonb
+    )
+    ON CONFLICT (video_url) DO NOTHING
+    RETURNING id
+  `);
 
-  // BigQuery export — best effort, never blocks caller
+  // Empty result means the unique index rejected it: already present.
+  if (inserted.length === 0) {
+    return { saved: false, metadata: await getMetadata(), milestone: null };
+  }
+
+  const meta = await getMetadata();
+
   try {
     await exportTrainingExampleToBigQuery(videoUrl, analysisOutput, example, meta);
   } catch (error) {
     console.warn('[Training] BigQuery export failed (non-fatal):', error);
   }
 
-  // Check if we hit a milestone
   const milestone = TUNING_NOTIFY_AT.find((n) => n === meta.totalExamples) || null;
 
   console.log(
     `[Training] Saved example #${meta.totalExamples} for "${meta.lastVideoTitle}" | ` +
-    `${meta.totalExamples}/${TUNING_THRESHOLD} toward fine-tuning` +
-    (milestone ? ` | 🎯 MILESTONE: ${milestone} examples reached!` : ''),
+      `${meta.totalExamples}/${TUNING_THRESHOLD} toward fine-tuning` +
+      (milestone ? ` | MILESTONE: ${milestone} examples reached!` : ''),
   );
 
   return { saved: true, metadata: meta, milestone };
 }
 
-/**
- * Get the current training dataset status.
- */
+/** Current training dataset status. */
 export async function getTrainingStatus(): Promise<{
   metadata: DatasetMetadata;
   readyForTuning: boolean;
@@ -283,31 +305,36 @@ export async function getTrainingStatus(): Promise<{
   const meta = await getMetadata();
   const readyForTuning = meta.totalExamples >= TUNING_THRESHOLD;
   const progress = Math.min(100, Math.round((meta.totalExamples / TUNING_THRESHOLD) * 100));
-
-  const nextMilestone =
-    TUNING_NOTIFY_AT.find((n) => n > meta.totalExamples) || null;
+  const nextMilestone = TUNING_NOTIFY_AT.find((n) => n > meta.totalExamples) || null;
 
   return { metadata: meta, readyForTuning, progress, nextMilestone };
 }
 
 /**
- * Read the raw JSONL file content for upload to Vertex AI.
+ * Serialise the dataset as JSONL for upload to Vertex AI.
+ *
+ * Returns null when there is nothing to upload, preserving the previous
+ * contract for callers that treat null as "no dataset".
  */
 export async function readTrainingFile(): Promise<string | null> {
-  try {
-    return await fs.readFile(TRAINING_FILE, 'utf-8');
-  } catch {
-    return null;
-  }
+  const db = getDb();
+  if (!db) return null;
+
+  const rows = await queryRows<{ example: TrainingExample }>(
+    db,
+    sql`SELECT example FROM training_examples ORDER BY created_at ASC`,
+  );
+  if (rows.length === 0) return null;
+
+  return rows.map((r) => JSON.stringify(r.example)).join('\n') + '\n';
 }
 
-/**
- * Mark that fine-tuning has been triggered.
- */
+/** Mark that fine-tuning has been triggered. */
 export async function markTuningTriggered(jobId: string): Promise<void> {
-  const meta = await getMetadata();
-  meta.tuningTriggered = true;
-  meta.tuningTriggeredAt = new Date().toISOString();
-  meta.tuningJobId = jobId;
-  await saveMetadata(meta);
+  const db = requireDb();
+  await db.execute(sql`
+    UPDATE training_runs
+       SET tuning_triggered_at = now(), tuning_job_id = ${jobId}
+     WHERE id = 1
+  `);
 }

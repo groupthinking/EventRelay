@@ -10,7 +10,9 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "analyze": "next experimental-analyze --output",
-    "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs"
+    "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs",
+    "db:migrate": "node --env-file-if-exists=../../.env.development.local scripts/apply-migrations.mjs",
+    "db:verify": "node --env-file-if-exists=../../.env.development.local scripts/apply-migrations.mjs --check"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.40",
