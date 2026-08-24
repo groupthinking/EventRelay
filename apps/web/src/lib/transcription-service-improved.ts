@@ -6,6 +6,7 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { CircuitBreaker, retryWithBackoff, withTimeout } from '@/lib/error-handling';
+import { backendHeaders, resolveLegacyBackend } from '@/lib/backend/capability';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -13,9 +14,9 @@ function getOpenAI() {
   return _openai;
 }
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+// Resolved through the shared capability resolver so this also picks up
+// NEXT_PUBLIC_BACKEND_URL (audit finding F1).
+const { url: BACKEND_URL, available: BACKEND_AVAILABLE } = resolveLegacyBackend();
 
 // Circuit breakers for external services
 const backendCircuitBreaker = new CircuitBreaker(3, 60_000);
@@ -65,12 +66,9 @@ export async function fetchTranscript({
               const response = await withTimeout(
                 fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
                   method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    ...(process.env.EVENTRELAY_API_KEY
-                      ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY }
-                      : {}),
-                  },
+                  // Shared builder trims EVENTRELAY_API_KEY (Secret Manager
+                  // values often carry a trailing newline).
+                  headers: backendHeaders(),
                   body: JSON.stringify({ video_url: url, language }),
                   signal: controller.signal,
                 }),

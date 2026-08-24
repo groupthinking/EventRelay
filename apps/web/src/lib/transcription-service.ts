@@ -7,6 +7,7 @@ import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { backendHeaders, resolveLegacyBackend } from '@/lib/backend/capability';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -14,9 +15,12 @@ function getOpenAI() {
   return _openai;
 }
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+// Resolved through the shared capability resolver so this also picks up
+// NEXT_PUBLIC_BACKEND_URL, the only backend name this project actually sets
+// (audit finding F1). Previously BACKEND_AVAILABLE was always false in
+// production, so Strategy 1 — the free backend caption fetch — was skipped
+// entirely and every request fell straight through to the paid AI providers.
+const { url: BACKEND_URL, available: BACKEND_AVAILABLE } = resolveLegacyBackend();
 
 // Resolve with the first non-null candidate, or null once every candidate has
 // settled (resolved null or rejected). Unlike Promise.race() over null-swapped
@@ -159,10 +163,9 @@ export async function fetchTranscript({
 
       const ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
-        },
+        // Shared builder trims EVENTRELAY_API_KEY; the inline header did not, so
+        // a Secret Manager trailing newline produced a silent 401.
+        headers: backendHeaders(),
         body: JSON.stringify({ video_url: url, language }),
         signal: controller.signal,
       }).finally(() => clearTimeout(timeout));

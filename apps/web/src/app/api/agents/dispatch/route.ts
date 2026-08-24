@@ -2,12 +2,7 @@ import { NextResponse } from 'next/server';
 import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
-
-/** Resolve the FastAPI backend base URL, or null if not configured. */
-function backendBaseUrl(): string | null {
-  const raw = process.env.BACKEND_URL || '';
-  return raw.startsWith('http') ? raw : null;
-}
+import { backendHeaders, resolveBackendCapability } from '@/lib/backend/capability';
 
 /**
  * GET /api/agents/dispatch
@@ -17,7 +12,14 @@ function backendBaseUrl(): string | null {
  * exists when a FastAPI server is reachable (Vercel has none by default).
  */
 export async function GET() {
-  return NextResponse.json({ available: backendBaseUrl() !== null });
+  const capability = resolveBackendCapability();
+  return NextResponse.json({
+    available: capability.configured,
+    // Surfacing the source lets the UI (and an operator reading the network
+    // tab) see which env var was used, instead of a bare false.
+    source: capability.source,
+    reason: capability.reason,
+  });
 }
 
 /**
@@ -50,21 +52,27 @@ export async function POST(request: Request) {
     decision: `email=${billingEmail}`,
   });
 
-  const base = backendBaseUrl();
-  if (!base) {
+  const capability = resolveBackendCapability();
+  if (!capability.configured || !capability.url) {
     return NextResponse.json(
-      { error: 'Agent backend not configured. Deploy the FastAPI backend and set BACKEND_URL.' },
+      {
+        error:
+          'Agent backend not configured. Set BACKEND_URL (or NEXT_PUBLIC_BACKEND_URL) to the FastAPI service.',
+        reason: capability.reason,
+      },
       { status: 503 },
     );
   }
+  const base = capability.url;
 
   try {
     const res = await fetch(`${base}/api/v1/agents/dispatch`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
-      },
+      // Use the shared header builder: it trims EVENTRELAY_API_KEY, which the
+      // inline version here did not. An API key stored in Secret Manager
+      // commonly carries a trailing newline, and an untrimmed header value
+      // makes the backend reject the request as unauthorized.
+      headers: backendHeaders(),
       body: JSON.stringify({
         job_id: body.job_id,
         events: body.events ?? [],

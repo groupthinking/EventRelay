@@ -9,11 +9,13 @@
  * REAL_MODE_ONLY: handlers never fabricate success. Tools that only need local
  * structuring (tasks, resources, reminders) return concrete structured output;
  * tools that require the FastAPI backend (agent dispatch, knowledge base) call
- * it for real and report an honest failure when `BACKEND_URL` is not configured.
+ * it for real and report an honest failure when no backend is reachable. Backend
+ * resolution goes through `@/lib/backend/capability` — never `process.env`
+ * directly — so a missing backend degrades explicitly instead of silently.
  */
 
 import type { FunctionDeclaration } from '@google/genai';
-import { backendHeaders } from '@/lib/pipeline-backend';
+import { backendHeaders, resolveBackendCapability } from '@/lib/backend/capability';
 
 // ── JSON Schema (shared by OpenAI strict tools + Gemini declarations) ──
 
@@ -67,21 +69,27 @@ function strArray(input: Record<string, unknown>, key: string): string[] {
 
 /**
  * Resolve the configured backend URL, or null when running frontend-only.
- * Validates the URL and enforces an http(s) scheme so a malformed value can't
- * produce a broken endpoint when concatenated; the trailing slash is trimmed so
- * callers can safely append `/api/...`.
+ *
+ * Delegates to the shared resolver in `@/lib/backend/capability`. This function
+ * used to read `process.env.BACKEND_URL` exclusively — the audit finding (F1)
+ * behind every tool below reporting `isError: true` in production, because this
+ * project publishes the backend as `NEXT_PUBLIC_BACKEND_URL`. The shared
+ * resolver accepts all supported names in a defined precedence order.
  */
 export function resolveBackendBaseUrl(): string | null {
-  const raw = (process.env.BACKEND_URL || '').trim();
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    return raw.replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
+  return resolveBackendCapability().url;
 }
+
+/**
+ * Shared failure hint for tools that require the backend.
+ *
+ * Names every variable the resolver accepts rather than just `BACKEND_URL`. The
+ * old message named only the one variable that this project does *not* set, so
+ * an operator following it would have configured a second URL while the working
+ * one sat unread.
+ */
+const NO_BACKEND_HINT =
+  'no build backend reachable. Set BACKEND_URL (or NEXT_PUBLIC_BACKEND_URL) to the FastAPI service.';
 
 // ── Tool definitions ──
 
@@ -201,7 +209,7 @@ const dispatchAgent: ActionTool = {
     // backend. Report honestly rather than pretending the dispatch happened.
     if (!ctx.backendBaseUrl) {
       return {
-        summary: `Cannot dispatch ${agentType} agent — no backend configured (set BACKEND_URL).`,
+        summary: `Cannot dispatch ${agentType} agent — ${NO_BACKEND_HINT}`,
         isError: true,
       };
     }
@@ -248,7 +256,7 @@ const addToKnowledgeBase: ActionTool = {
 
     if (!ctx.backendBaseUrl) {
       return {
-        summary: 'Cannot persist insight — no knowledge-base backend configured (set BACKEND_URL).',
+        summary: `Cannot persist insight — ${NO_BACKEND_HINT}`,
         isError: true,
       };
     }
@@ -308,7 +316,7 @@ const dispatchSubagents: ActionTool = {
 
     if (!ctx.backendBaseUrl) {
       return {
-        summary: `Cannot dispatch subagents — no backend configured (set BACKEND_URL).`,
+        summary: `Cannot dispatch subagents — ${NO_BACKEND_HINT}`,
         isError: true,
       };
     }
@@ -430,7 +438,7 @@ const getAgentSessionLogs: ActionTool = {
   async execute(input, ctx) {
     if (!ctx.backendBaseUrl) {
       return {
-        summary: 'Cannot retrieve session logs — no backend configured (set BACKEND_URL).',
+        summary: `Cannot retrieve session logs — ${NO_BACKEND_HINT}`,
         isError: true,
       };
     }

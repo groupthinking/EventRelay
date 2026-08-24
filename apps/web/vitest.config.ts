@@ -27,8 +27,17 @@ export default defineConfig({
     // https://ai-gateway.vercel.sh — which is both non-hermetic and flaky
     // (billing-chat-gating intermittently blew its 5s timeout). Tests that need
     // a key set it explicitly in their own setup, so a blank default is safe.
+    // `resolveBackendCapability()` accepts BACKEND_URL, NEXT_PUBLIC_BACKEND_URL,
+    // and NEXT_PUBLIC_API_URL (see lib/backend/capability.ts). Blanking only
+    // BACKEND_URL would leave the other two live, so any machine with the real
+    // deployed backend exported — every Vercel build, since
+    // NEXT_PUBLIC_BACKEND_URL is a project env var — would resolve
+    // `configured: true` and start issuing real network calls from unit tests.
+    // All three must be blanked together for the suite to stay hermetic.
     env: {
       BACKEND_URL: '',
+      NEXT_PUBLIC_BACKEND_URL: '',
+      NEXT_PUBLIC_API_URL: '',
       BILLING_COOKIE_SECRET: 'test-billing-cookie-secret',
       AI_GATEWAY_API_KEY: '',
       VERCEL_AI_GATEWAY_API_KEY: '',

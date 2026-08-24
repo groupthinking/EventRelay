@@ -62,7 +62,11 @@ describe('action tool registry', () => {
       NO_BACKEND,
     );
     expect(res.isError).toBe(true);
-    expect(res.summary).toMatch(/no backend configured/i);
+    expect(res.summary).toMatch(/no build backend reachable/i);
+    // The hint must name every variable the resolver actually accepts. Naming
+    // only BACKEND_URL is what sent operators to configure an unread variable
+    // while the live NEXT_PUBLIC_BACKEND_URL sat ignored (audit finding F1).
+    expect(res.summary).toContain('NEXT_PUBLIC_BACKEND_URL');
   });
 
   it('dispatch_agent calls the backend when configured', async () => {
@@ -132,7 +136,7 @@ describe('action tool registry', () => {
       NO_BACKEND,
     );
     expect(res.isError).toBe(true);
-    expect(res.summary).toMatch(/no backend configured/i);
+    expect(res.summary).toMatch(/no build backend reachable/i);
   });
 
   it('dispatch_subagents dispatches one call per subagent, pairing agentType with its own instruction', async () => {

@@ -1,13 +1,32 @@
 import { NextResponse } from 'next/server';
+import { backendHeaders, resolveBackendCapability } from '@/lib/backend/capability';
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+/**
+ * Dashboard metrics + Looker embed proxy.
+ *
+ * Previously this module computed a `BACKEND_AVAILABLE` flag at import time and
+ * then never read it, so both handlers fetched the `http://localhost:8000`
+ * placeholder on every production request. GET swallowed the connection error
+ * and reported `status: 'degraded'` — indistinguishable from a real backend
+ * outage — while POST returned a generic 500. Resolution now happens
+ * per-request through the shared capability resolver, and an unconfigured
+ * backend is reported as exactly that.
+ */
 
 export async function GET() {
+  const capability = resolveBackendCapability();
+  if (!capability.configured || !capability.url) {
+    return NextResponse.json({
+      status: 'unconfigured',
+      timestamp: new Date().toISOString(),
+      reason: capability.reason,
+      metrics: { activeWorkflows: 0, totalProcessed: 0, errorRate: 0 },
+    });
+  }
+
   try {
-    // Use the real backend health endpoint
-    const response = await fetch(`${BACKEND_URL}/api/v1/health`, {
+    const response = await fetch(`${capability.url}/api/v1/health`, {
+      headers: backendHeaders(),
       signal: AbortSignal.timeout(5000),
     });
 
@@ -28,34 +47,42 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Dashboard stats error:', error);
-    // Return honest fallback — backend is not reachable
+    // Honest fallback: the backend is configured but not answering right now.
     return NextResponse.json({
       status: 'degraded',
       timestamp: new Date().toISOString(),
-      metrics: {
-        activeWorkflows: 0,
-        totalProcessed: 0,
-        errorRate: 0,
-      },
+      reason: error instanceof Error ? error.message : String(error),
+      metrics: { activeWorkflows: 0, totalProcessed: 0, errorRate: 0 },
     });
   }
 }
 
 export async function POST(request: Request) {
+  const capability = resolveBackendCapability();
+  if (!capability.configured || !capability.url) {
+    return NextResponse.json(
+      {
+        error:
+          'Reporting backend not configured. Set BACKEND_URL (or NEXT_PUBLIC_BACKEND_URL).',
+        reason: capability.reason,
+      },
+      { status: 503 },
+    );
+  }
+
   try {
     const body = await request.json();
-    
-    const response = await fetch(`${BACKEND_URL}/api/v1/reporting/embed/dashboard`, {
+
+    const response = await fetch(`${capability.url}/api/v1/reporting/embed/dashboard`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
-      },
+      // Shared builder trims EVENTRELAY_API_KEY; the previous inline header did
+      // not, so a Secret Manager newline produced a silent 401.
+      headers: backendHeaders(),
       body: JSON.stringify({
         dashboard_id: body.dashboard_id || 'events_overview',
         tenant_id: body.tenant_id || 'tenant_default',
         user_id: body.user_id || 'user_demo',
-        user_email: body.user_email || 'demo@example.com'
+        user_email: body.user_email || 'demo@example.com',
       }),
       signal: AbortSignal.timeout(5000),
     });
@@ -65,13 +92,12 @@ export async function POST(request: Request) {
       throw new Error(`Backend Looker service failed: ${response.status} ${errText}`);
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(await response.json());
   } catch (error) {
     console.error('Dashboard embed error:', error);
     return NextResponse.json(
       { error: 'Failed to retrieve dashboard embed URL' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,11 +1,5 @@
 import { NextResponse } from 'next/server';
-import { backendHeaders } from '@/lib/pipeline-backend';
-
-/** Resolve the FastAPI backend base URL, or null if not configured. */
-function backendBaseUrl(): string | null {
-  const raw = process.env.BACKEND_URL || '';
-  return raw.startsWith('http') ? raw : null;
-}
+import { backendHeaders, resolveBackendCapability } from '@/lib/backend/capability';
 
 /**
  * GET /api/agents/status?agentId=...
@@ -14,10 +8,14 @@ function backendBaseUrl(): string | null {
  * dispatched agent's progress without exposing the backend URL to the browser.
  */
 export async function GET(request: Request) {
-  const base = backendBaseUrl();
-  if (!base) {
-    return NextResponse.json({ error: 'Agent backend not configured.' }, { status: 503 });
+  const capability = resolveBackendCapability();
+  if (!capability.configured || !capability.url) {
+    return NextResponse.json(
+      { error: 'Agent backend not configured.', reason: capability.reason },
+      { status: 503 },
+    );
   }
+  const base = capability.url;
 
   const agentId = new URL(request.url).searchParams.get('agentId');
   if (!agentId) {

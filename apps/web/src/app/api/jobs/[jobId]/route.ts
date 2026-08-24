@@ -1,8 +1,5 @@
 import { NextResponse } from 'next/server';
-import { backendHeaders } from '@/lib/pipeline-backend';
-
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
+import { backendHeaders, resolveBackendCapability } from '@/lib/backend/capability';
 
 export const runtime = 'nodejs';
 
@@ -21,12 +18,21 @@ export async function GET(
     return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
   }
 
-  if (!BACKEND_URL) {
-    return NextResponse.json({ error: 'BACKEND_URL is not configured' }, { status: 503 });
+  // Resolved per-request through the shared resolver so this picks up
+  // NEXT_PUBLIC_BACKEND_URL as well as BACKEND_URL (audit finding F1).
+  const capability = resolveBackendCapability();
+  if (!capability.configured || !capability.url) {
+    return NextResponse.json(
+      {
+        error: 'Backend is not configured. Set BACKEND_URL (or NEXT_PUBLIC_BACKEND_URL).',
+        reason: capability.reason,
+      },
+      { status: 503 },
+    );
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/api/v1/jobs/${encodeURIComponent(jobId)}`, {
+    const response = await fetch(`${capability.url}/api/v1/jobs/${encodeURIComponent(jobId)}`, {
       cache: 'no-store',
       headers: backendHeaders(),
       signal: AbortSignal.timeout(15_000),
