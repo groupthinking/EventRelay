@@ -43,7 +43,9 @@ const CANDIDATES = [
 const REQUIRED_CONSTRAINTS = [
   'delivery_runs_delivered_requires_evidence',
   'delivery_runs_blocked_requires_reason',
-  'delivery_runs_deployment_url_is_https',
+  // Renamed from `..._is_https` by 0002: requiring https alone was too weak,
+  // since `https://localhost` and `https://example.org` both satisfied it.
+  'delivery_runs_deployment_url_real',
   'delivery_runs_source_shape',
   'run_gates_pass_requires_evidence',
 ];
