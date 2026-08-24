@@ -91,16 +91,46 @@ export async function saveEntitlement(record: EntitlementRecord): Promise<Entitl
   };
   memoryStore.set(normalized, stored);
 
-  await writeEntitlementToFile(stored);
-
+  // Durable write FIRST, and never swallowed.
+  //
+  // This used to run *after* an unguarded `await writeEntitlementToFile()`.
+  // On Vercel the bundle is mounted read-only, so that filesystem write
+  // rejected with EROFS and threw straight out of this function — before the
+  // Redis write ran. The Stripe webhook calls this to record a completed
+  // subscription, so the customer was charged while the app never recorded
+  // them as Pro (audit finding F5).
+  //
+  // A failure of the durable store is also no longer swallowed:
+  // `assertEntitlementDurability()` above promises durability in production,
+  // so silently dropping the write would break that promise and leave the
+  // record only in this instance's memory.
   const redis = await getRedis();
   if (redis) {
     try {
       await redis.set(entitlementKey(normalized), stored);
-    } catch {
-      // file + memory remain durable for this host
+    } catch (error) {
+      throw new Error(
+        `Failed to persist entitlement for ${normalized} to the durable store: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+        { cause: error },
+      );
     }
   }
+
+  // Local JSON mirror — a development convenience for hosts without Redis.
+  // Best-effort by design: on a read-only filesystem this always fails, and
+  // that must not undo the durable write above.
+  try {
+    await writeEntitlementToFile(stored);
+  } catch (error) {
+    const code = (error as { code?: string } | null)?.code;
+    // EROFS/EACCES on serverless hosts is expected, not actionable.
+    if (code !== 'EROFS' && code !== 'EACCES' && code !== 'EPERM') {
+      console.warn('[Billing] Local entitlement mirror write failed (non-fatal):', error);
+    }
+  }
+
   return stored;
 }
 

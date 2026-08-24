@@ -103,7 +103,11 @@ function isUnreachableInProduction(hostname: string): boolean {
  * {@link checkBackendHealth} when liveness matters.
  */
 export function resolveBackendCapability(
-  env: NodeJS.ProcessEnv = process.env,
+  // Typed as a plain string map rather than `NodeJS.ProcessEnv`: this function
+  // only ever reads string-valued keys, and requiring the full ProcessEnv shape
+  // forced callers (tests especially) into an unsafe `as NodeJS.ProcessEnv`
+  // cast just to pass a two-key object.
+  env: Readonly<Record<string, string | undefined>> = process.env,
 ): BackendCapability {
   const unreachable: string[] = [];
 
@@ -306,6 +310,36 @@ export async function checkBackendHealth(
 
   await writeCachedHealth(health);
   return health;
+}
+
+/**
+ * Module-scope backend config: whether a backend is configured and its URL.
+ *
+ * Preserves the `pipeline-backend-health.getBackendConfig()` shape so existing
+ * call sites keep working, but resolves through the shared candidate list.
+ */
+export function getBackendConfig(): { configured: boolean; url: string | null } {
+  const capability = resolveBackendCapability();
+  return { configured: capability.configured, url: capability.url };
+}
+
+/**
+ * A `BackendHealth` for the "never probed" case.
+ *
+ * Call sites that skip the probe (because no backend is configured) previously
+ * hand-wrote an object literal here. Those literals omitted `source` and
+ * `reason`, which widened the inferred union and made `backendHealth.reason`
+ * a type error at the use site. Constructing it here keeps every branch on one
+ * shape.
+ */
+export function unprobedHealth(reason = 'No backend configured.'): BackendHealth {
+  return {
+    configured: false,
+    available: false,
+    host: null,
+    source: null,
+    reason,
+  };
 }
 
 /**

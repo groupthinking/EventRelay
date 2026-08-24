@@ -15,11 +15,13 @@ import {
   parseVerifiedBackendTranscript,
   type TranscriptionResult,
 } from '@/lib/transcription-service';
+import { backendHeaders, resolveLegacyBackend } from '@/lib/backend/capability';
 
-// Backend URL with validation - skip if not a valid URL
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+// Resolved through the shared capability resolver so this also picks up
+// NEXT_PUBLIC_BACKEND_URL (audit finding F1). Previously BACKEND_AVAILABLE was
+// always false in production, so Strategy 1 (the full backend pipeline) was
+// skipped on every request and this route silently ran frontend-only.
+const { url: BACKEND_URL, available: BACKEND_AVAILABLE } = resolveLegacyBackend();
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
@@ -107,7 +109,9 @@ export async function POST(request: Request) {
         try {
           response = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+            // Shared builder trims EVENTRELAY_API_KEY (Secret Manager values
+            // commonly carry a trailing newline, which yields a silent 401).
+            headers: backendHeaders(),
             body: JSON.stringify({ video_url: url, language: 'en' }),
             signal: controller.signal,
           });

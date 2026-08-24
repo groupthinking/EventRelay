@@ -7,12 +7,13 @@ import { grokChatCompletion } from '@/lib/billing/grok-client';
 import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/paid-tier-model';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
+import { backendHeaders, resolveLegacyBackend } from '@/lib/backend/capability';
 
 type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+// Resolved through the shared capability resolver so this also picks up
+// NEXT_PUBLIC_BACKEND_URL (audit finding F1).
+const { url: BACKEND_URL, available: BACKEND_AVAILABLE } = resolveLegacyBackend();
 
 function isValidChatHistoryMessage(message: unknown): message is ChatHistoryMessage {
   if (!message || typeof message !== 'object') {
@@ -85,13 +86,13 @@ export async function POST(request: Request) {
     if (BACKEND_AVAILABLE) {
       const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
+        // Shared builder trims EVENTRELAY_API_KEY; billing routing headers are
+        // passed through as extras.
+        headers: backendHeaders({
           'X-Billing-Plan': routing.plan,
           'X-Lead-Model': routing.model,
           'X-Lead-Runtime': routing.runtime,
-        },
+        }),
         body: JSON.stringify({
           message: body.query,
           video_url: body.video_url || '',
@@ -124,7 +125,8 @@ export async function POST(request: Request) {
     if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_AI_GATEWAY_API_KEY && !process.env.VERCEL_API_KEY) {
       return NextResponse.json(
         {
-          answer: 'Chat requires either BACKEND_URL or AI_GATEWAY_API_KEY to be configured.',
+          answer:
+            'Chat requires a backend (BACKEND_URL or NEXT_PUBLIC_BACKEND_URL) or AI_GATEWAY_API_KEY to be configured.',
           routing,
           plan: routing.plan,
         },

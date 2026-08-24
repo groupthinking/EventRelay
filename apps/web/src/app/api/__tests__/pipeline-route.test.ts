@@ -94,6 +94,7 @@ describe('POST /api/pipeline', () => {
       configured: true,
       available: true,
       host: 'api.uvai.io',
+      source: 'BACKEND_URL',
     });
     vi.mocked(hasGeminiKey).mockReturnValue(true);
     vi.mocked(analyzeVideoWithGemini).mockResolvedValue({
@@ -140,6 +141,7 @@ describe('POST /api/pipeline', () => {
       configured: true,
       available: false,
       host: 'api.uvai.io',
+      source: 'BACKEND_URL',
       reason: 'Backend health returned 503',
     });
     vi.mocked(hasGeminiKey).mockReturnValue(true);
@@ -177,7 +179,8 @@ describe('POST /api/pipeline', () => {
       configured: false,
       available: false,
       host: null,
-      reason: 'BACKEND_URL is not configured',
+      source: null,
+      reason: 'No backend URL configured',
     });
     vi.mocked(hasGeminiKey).mockReturnValue(false);
 

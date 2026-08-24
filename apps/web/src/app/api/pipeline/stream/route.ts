@@ -24,8 +24,13 @@ import { analyzeVideoWithGemini, type VideoAnalysisResult } from '@/lib/gemini-v
 import { hasGeminiKey } from '@/lib/gemini-client';
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
-import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
-import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
+import {
+  backendHeaders,
+  checkBackendHealth,
+  getBackendConfig,
+  resolveBackendStatusUrl,
+  unprobedHealth,
+} from '@/lib/backend/capability';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 import { PipelineDeadline } from '../route';
 import {
@@ -659,8 +664,8 @@ export async function POST(request: Request) {
         let streamMode: 'backend-ws' | 'gemini-sse' = 'gemini-sse';
         try {
           const backendHealth = BACKEND_CONFIGURED
-            ? await checkBackendHealth(5_000)
-            : { configured: false, available: false, host: null as string | null };
+            ? await checkBackendHealth({ timeoutMs: 5_000 })
+            : unprobedHealth();
           const useBackend = backendHealth.available;
           const backendUrl = CONFIGURED_BACKEND_URL;
           streamMode = useBackend ? 'backend-ws' : 'gemini-sse';

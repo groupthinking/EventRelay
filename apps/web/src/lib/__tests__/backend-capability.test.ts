@@ -25,7 +25,7 @@ describe('resolveBackendCapability — F1 regression', () => {
     const capability = resolveBackendCapability({
       NEXT_PUBLIC_BACKEND_URL: PROD_BACKEND,
       NODE_ENV: 'production',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(true);
     expect(capability.url).toBe(PROD_BACKEND);
@@ -35,7 +35,7 @@ describe('resolveBackendCapability — F1 regression', () => {
   it('resolves when ONLY NEXT_PUBLIC_API_URL is set', () => {
     const capability = resolveBackendCapability({
       NEXT_PUBLIC_API_URL: PROD_BACKEND,
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(true);
     expect(capability.source).toBe('NEXT_PUBLIC_API_URL');
@@ -46,7 +46,7 @@ describe('resolveBackendCapability — F1 regression', () => {
       BACKEND_URL: 'https://server.example.com',
       NEXT_PUBLIC_BACKEND_URL: PROD_BACKEND,
       NEXT_PUBLIC_API_URL: 'https://third.example.com',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.source).toBe('BACKEND_URL');
     expect(capability.url).toBe('https://server.example.com');
@@ -57,7 +57,7 @@ describe('resolveBackendCapability — normalisation', () => {
   it('strips trailing slashes so callers can safely append /api/...', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: 'https://backend.example.com///',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.url).toBe('https://backend.example.com');
   });
@@ -65,7 +65,7 @@ describe('resolveBackendCapability — normalisation', () => {
   it('trims surrounding whitespace from Secret Manager values', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: `  ${PROD_BACKEND}\n`,
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(true);
     expect(capability.url).toBe(PROD_BACKEND);
@@ -74,7 +74,7 @@ describe('resolveBackendCapability — normalisation', () => {
   it('reports host without the scheme for safe logging', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: PROD_BACKEND,
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.host).toBe('uvai-backend-gpwz4wb5na-uc.a.run.app');
   });
@@ -82,7 +82,7 @@ describe('resolveBackendCapability — normalisation', () => {
 
 describe('resolveBackendCapability — rejection paths', () => {
   it('is unconfigured when no candidate env var is present', () => {
-    const capability = resolveBackendCapability({} as NodeJS.ProcessEnv);
+    const capability = resolveBackendCapability({});
 
     expect(capability.configured).toBe(false);
     expect(capability.url).toBeNull();
@@ -95,7 +95,7 @@ describe('resolveBackendCapability — rejection paths', () => {
   it('rejects a malformed URL and explains which variable was bad', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: 'not-a-url',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(false);
     expect(capability.reason).toContain('BACKEND_URL');
@@ -104,7 +104,7 @@ describe('resolveBackendCapability — rejection paths', () => {
   it('rejects non-http schemes', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: 'ftp://backend.example.com',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(false);
     expect(capability.reason).toContain('scheme');
@@ -114,7 +114,7 @@ describe('resolveBackendCapability — rejection paths', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: 'not-a-url',
       NEXT_PUBLIC_BACKEND_URL: PROD_BACKEND,
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(true);
     expect(capability.source).toBe('NEXT_PUBLIC_BACKEND_URL');
@@ -124,7 +124,7 @@ describe('resolveBackendCapability — rejection paths', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: 'http://localhost:8000',
       NODE_ENV: 'production',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(false);
     expect(capability.reason).toContain('non-routable');
@@ -141,7 +141,7 @@ describe('resolveBackendCapability — rejection paths', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: url,
       NODE_ENV: 'production',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(false);
   });
@@ -150,7 +150,7 @@ describe('resolveBackendCapability — rejection paths', () => {
     const capability = resolveBackendCapability({
       BACKEND_URL: 'http://localhost:8000',
       NODE_ENV: 'development',
-    } as NodeJS.ProcessEnv);
+    });
 
     expect(capability.configured).toBe(true);
     expect(capability.url).toBe('http://localhost:8000');
