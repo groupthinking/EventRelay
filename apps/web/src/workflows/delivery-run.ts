@@ -310,7 +310,9 @@ type PlanOutcome = { ok: true; plan: string } | { ok: false; reason: string };
 async function planStep(runId: string, requirements: string): Promise<PlanOutcome> {
   'use step';
 
-  const { recordGate, setPhase, blockRun } = await import('@/lib/db/delivery-repo');
+  const { recordGate, saveSpec, setPhase, blockRun } = await import(
+    '@/lib/db/delivery-repo'
+  );
   const { generatePlan } = await import('@/lib/delivery-agents');
 
   const planned = await generatePlan(requirements);
@@ -320,7 +322,17 @@ async function planStep(runId: string, requirements: string): Promise<PlanOutcom
     return { ok: false, reason: planned.reason };
   }
 
+  // Persist the exact text the human will approve, versioned. The approval row
+  // references this id, so a later re-plan cannot retroactively change what was
+  // signed off.
+  const specId = await saveSpec(
+    runId,
+    { text: requirements },
+    { text: planned.plan, stepCount: planned.stepCount, model: planned.model },
+  );
+
   await recordGate(runId, 'plan_executable', 'pass', {
+    specId,
     chars: planned.plan.length,
     steps: planned.stepCount,
     model: planned.model,

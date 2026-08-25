@@ -22,7 +22,9 @@ import {
   deliveryRuns,
   runApprovals,
   runGates,
+  runSpecs,
   type GateKind,
+  type RunSpec,
   type RunStatus,
 } from '@/lib/db/schema';
 import {
@@ -193,7 +195,58 @@ export async function blockRun(
   await setPhase(runId, 'blocked', { blockedReason: reason, blockedFrom: from });
 }
 
-/** Record a human approval decision. */
+/**
+ * Persist the requirements + plan a human is about to read.
+ *
+ * Versioned per run: re-planning after a rejection creates version N+1 rather
+ * than overwriting, so an approval can never point at text that has since
+ * changed underneath it. Returns the new spec id.
+ */
+export async function saveSpec(
+  runId: string,
+  requirements: unknown,
+  plan: unknown,
+): Promise<string> {
+  const db = requireDb();
+  const [previous] = await db
+    .select({ version: runSpecs.version })
+    .from(runSpecs)
+    .where(eq(runSpecs.runId, runId))
+    .orderBy(desc(runSpecs.version))
+    .limit(1);
+
+  const [row] = await db
+    .insert(runSpecs)
+    .values({
+      runId,
+      version: (previous?.version ?? 0) + 1,
+      requirements: requirements as object,
+      plan: plan as object,
+    })
+    .returning({ id: runSpecs.id });
+  return row.id;
+}
+
+/** Newest spec version for a run, or null when nothing has been planned yet. */
+export async function latestSpec(runId: string): Promise<RunSpec | null> {
+  const db = getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select()
+    .from(runSpecs)
+    .where(eq(runSpecs.runId, runId))
+    .orderBy(desc(runSpecs.version))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Record a human approval decision against the exact spec version reviewed.
+ *
+ * `spec_id` is NOT NULL by design: an approval with no spec attached would be
+ * a signature on a blank page. When no spec exists this throws rather than
+ * inventing one, so the run blocks instead of advancing on a phantom sign-off.
+ */
 export async function recordApproval(
   runId: string,
   decision: 'approved' | 'rejected',
@@ -201,7 +254,15 @@ export async function recordApproval(
   note?: string,
 ): Promise<void> {
   const db = requireDb();
-  await db.insert(runApprovals).values({ runId, decision, decidedBy, note });
+  const spec = await latestSpec(runId);
+  if (!spec) {
+    throw new Error(
+      `Cannot record approval for run ${runId}: no spec version has been persisted`,
+    );
+  }
+  await db
+    .insert(runApprovals)
+    .values({ runId, specId: spec.id, decision, decidedBy, note });
 }
 
 /** Most recent approval decision for a run, if any. */
@@ -230,6 +291,24 @@ export async function listRuns(userId: string, limit = 50): Promise<DeliveryRun[
     .orderBy(desc(deliveryRuns.createdAt))
     .limit(limit);
   return rows.map((row) => toDeliveryRun(row, []));
+}
+
+/**
+ * Owner of a run, for authorization checks in API routes.
+ *
+ * Returned separately from `loadRun` so that every caller that needs to decide
+ * "may this session act on this run?" has to ask for the owner explicitly
+ * rather than inferring access from a successful load.
+ */
+export async function getRunOwner(runId: string): Promise<string | null> {
+  const db = getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select({ userId: deliveryRuns.userId })
+    .from(deliveryRuns)
+    .where(eq(deliveryRuns.id, runId))
+    .limit(1);
+  return row?.userId ?? null;
 }
 
 /** Find a run by user and source URL, used to avoid duplicate work. */

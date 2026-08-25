@@ -80,6 +80,17 @@ const TERMINAL: ReadonlySet<DeliveryPhase> = new Set<DeliveryPhase>([
 ]);
 
 /**
+ * True when a run can make no further progress on its own.
+ *
+ * `blocked` is deliberately excluded: it is a resumable state, not an ending.
+ * Callers that need "stop watching" semantics must decide about `blocked`
+ * explicitly rather than having it quietly folded into failure.
+ */
+export function isTerminalPhase(phase: DeliveryPhase): boolean {
+  return TERMINAL.has(phase);
+}
+
+/**
  * The evidence a run has accumulated.
  *
  * Mirrors the guarded columns on `delivery_runs`. Every field starts absent and

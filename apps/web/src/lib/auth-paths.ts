@@ -89,6 +89,9 @@ const AI_ROUTE_PREFIXES = [
   '/api/extract-events',
   '/api/pipeline',
   '/api/realtime',
+  // POST /api/runs starts a full delivery run (transcript + requirements +
+  // plan + build). GET/HEAD below are the run-state reads the Studio polls.
+  '/api/runs',
   '/api/training',
   '/api/transcribe',
   '/api/video',
@@ -117,6 +120,10 @@ const AI_ROUTE_PREFIXES = [
  */
 const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
   '/api/agents/actions': new Set(['GET', 'HEAD']),
+  // The run detail endpoint and its SSE stream are pure state reads, and the
+  // stream reconnects continuously — metering them as model work would 429 the
+  // whole AI class within seconds of one run starting.
+  '/api/runs': new Set(['GET', 'HEAD']),
   '/api/workflows': new Set(['GET', 'HEAD']),
 };
 
