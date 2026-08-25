@@ -161,6 +161,47 @@ except ImportError:
     logger.debug("AI Code Generator not available — using template-based generation only")
 
 
+# Every environment variable that can enable at least one LLMRouter provider.
+# Keep in sync with LLMRouter.__init__.
+_LLM_PROVIDER_ENV_KEYS = (
+    "GEMINI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "XAI_API_KEY",
+    "XAI_GROK4_API",
+    "XAI_GROK4_OR_3_API",
+    "PERPLEXITY_API_KEY",
+)
+
+
+def _any_llm_provider_configured() -> bool:
+    """
+    True when at least one AI provider is usable.
+
+    Prefers LLMRouter.has_provider(), which additionally confirms the SDK is
+    installed and the client actually constructed. Falls back to an env-var
+    scan when the router cannot be imported, so a missing optional SDK never
+    silently forces template-only generation.
+    """
+    try:
+        from youtube_extension.backend.llm_router import LLMRouter
+
+        router = LLMRouter()
+        try:
+            return router.has_provider()
+        finally:
+            # Release any HTTP sessions opened during client construction.
+            close = getattr(router, "close", None)
+            if callable(close):
+                try:
+                    close()
+                except Exception:
+                    pass
+    except Exception as exc:
+        logger.debug("LLMRouter probe unavailable (%s); falling back to env scan", exc)
+        return any(os.getenv(key) for key in _LLM_PROVIDER_ENV_KEYS)
+
+
 class ProjectCodeGenerator:
     """
     Generates project code based on video analysis results.
@@ -174,9 +215,17 @@ class ProjectCodeGenerator:
         self.templates_dir = Path(__file__).parent / "templates"
         self.ensure_templates_directory()
 
-        # AI generation is ON by default when the key is present
+        # AI generation is ON by default when ANY provider is configured.
+        #
+        # This must not gate on GEMINI_API_KEY alone: LLMRouter falls back
+        # across Gemini → Anthropic → OpenAI → Grok → Perplexity, so keying
+        # off Gemini silently downgraded the whole pipeline to templates
+        # whenever the Gemini key was absent or revoked, even with other
+        # providers available. AICodeGenerator self-disables via
+        # LLMRouter.has_provider(), so the safe default here is "enabled
+        # unless we can prove no provider exists".
         if use_ai_generation is None:
-            use_ai_generation = bool(os.getenv("GEMINI_API_KEY"))
+            use_ai_generation = _any_llm_provider_configured()
 
         self.use_ai_generation = use_ai_generation and AI_CODE_GENERATOR_AVAILABLE
         self.ai_generator: Optional[Any] = None

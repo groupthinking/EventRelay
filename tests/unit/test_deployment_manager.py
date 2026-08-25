@@ -342,8 +342,35 @@ class TestGenerateDeploymentUrls:
         assert urls == {}
 
     def test_project_config_not_required(self) -> None:
-        urls = self.mgr._generate_deployment_urls({"p": {"url": "https://x.com"}}, {})
+        urls = self.mgr._generate_deployment_urls(
+            {"p": {"status": "success", "url": "https://x.com"}}, {}
+        )
         assert urls["p"] == "https://x.com"
+
+    def test_entry_without_status_is_not_treated_as_live(self) -> None:
+        """A URL counts as live only when its deployment explicitly succeeded.
+
+        Statusless entries were previously collected, which is how failed and
+        simulated deployments leaked into the live URL map.
+        """
+        urls = self.mgr._generate_deployment_urls({"p": {"url": "https://x.com"}}, {})
+        assert urls == {}
+
+    def test_failed_deployment_url_is_excluded(self) -> None:
+        """A manual-import link must never be reported as a live URL."""
+        deployments = {
+            "vercel": {
+                "status": "failed",
+                "url": "https://vercel.com/new/import?s=https://github.com/o/r",
+            },
+        }
+        assert self.mgr._generate_deployment_urls(deployments, {}) == {}
+
+    def test_simulated_deployment_url_is_excluded(self) -> None:
+        deployments = {
+            "github_pages": {"status": "simulated", "url": "https://o.github.io/r"},
+        }
+        assert self.mgr._generate_deployment_urls(deployments, {}) == {}
 
 
 # ===========================================================================
@@ -993,7 +1020,12 @@ class TestDeployToGithubPages:
             }
         )
         assert result["status"] == "simulated"
-        assert "myuser.github.io/myrepo" in result["url"]
+        # Pages is not enabled via the API here, so there is no live URL. The
+        # prospective address is exposed as `pending_url` so it can never be
+        # collected into the live URL map or reported as a deployment.
+        assert result["url"] is None
+        assert "myuser.github.io/myrepo" in result["pending_url"]
+        assert result["action_required"] == "enable_github_pages"
 
     async def test_returns_instructions(self) -> None:
         mgr = _make_manager()

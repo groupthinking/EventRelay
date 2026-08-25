@@ -396,30 +396,66 @@ class VideoProcessingService:
             processing_time = time.time() - start_time
             deployment_urls = deployment_result.get("urls", {})
 
-            # Determine build status and primary URL
+            # Determine build status and primary URL.
+            #
+            # `deployment_urls` now contains only URLs from deployments that
+            # actually succeeded (see DeploymentManager._generate_deployment_urls),
+            # so any URL found here is safe to report as live. A run is only
+            # "completed" when a verified live URL exists.
             deployment_status = deployment_result.get("status")
             primary_url = deployment_urls.get(deployment_target)
 
-            # Fallback: If primary_url is missing or deployment failed, try other platforms
-            if deployment_status == "success" and primary_url:
-                build_status = "completed"
-            else:
-                # Try fallback to other deployment URLs (e.g., vercel, netlify)
-                fallback_url = None
+            if not primary_url:
+                # The requested target produced no live URL. Another platform
+                # may still have deployed successfully.
                 for platform in ["vercel", "netlify"]:
                     url = deployment_urls.get(platform)
                     if url:
-                        fallback_url = url
+                        primary_url = url
+                        logger.info(
+                            "Target %s produced no live URL; using %s deployment",
+                            deployment_target,
+                            platform,
+                        )
                         break
-                if fallback_url:
-                    primary_url = fallback_url
-                    build_status = "completed"
-                else:
-                    build_status = "failed"
-                    primary_url = ""  # Set to empty string on failure
 
+            build_status = "completed" if primary_url else "failed"
+            if not primary_url:
+                primary_url = ""
+
+            # Surface any manual follow-up the adapters reported (e.g. Vercel
+            # import link, enabling GitHub Pages) instead of disguising it as
+            # a live URL.
+            action_required: list[dict[str, Any]] = []
+            for platform, result in (deployment_result.get("deployments") or {}).items():
+                if not isinstance(result, dict):
+                    continue
+                action = result.get("action_required") or (
+                    result.get("metadata", {}) or {}
+                ).get("action_required")
+                if action:
+                    metadata = result.get("metadata", {}) or {}
+                    action_required.append({
+                        "platform": platform,
+                        "action": action,
+                        "url": (
+                            metadata.get("import_url")
+                            or result.get("pending_url")
+                            or result.get("build_log_url")
+                        ),
+                        "error": result.get("error") or result.get("error_message"),
+                    })
+
+            # Only report a repository URL when the push actually succeeded.
+            # This previously defaulted to a hardcoded placeholder repo that
+            # does not exist, so failed pushes returned a plausible-looking
+            # but broken GitHub link.
             github_deployment = deployment_result.get("deployments", {}).get("github", {})
-            github_url = github_deployment.get("url", "https://github.com/uvai-generated/project-pending")
+            github_url = (
+                github_deployment.get("url")
+                if github_deployment.get("status") == "success"
+                else None
+            )
 
             return {
                 "video_url": video_url,
@@ -443,14 +479,33 @@ class VideoProcessingService:
                     "build_command": generation_result.get("build_command"),
                     "start_command": generation_result.get("start_command")
                 },
+                # Build verification is what makes the deploy trustworthy, but
+                # it was computed and then dropped from the response, leaving
+                # callers to *infer* that a deploy implied a passing build.
+                # Surfacing it lets a caller gate on the evidence directly.
+                "verification": {
+                    "passed": bool(
+                        (deployment_result.get("verification") or {}).get("passed", False)
+                    ),
+                    "attempts": (deployment_result.get("verification") or {}).get(
+                        "attempts", []
+                    ),
+                    "fixes_applied": (deployment_result.get("verification") or {}).get(
+                        "fixes_applied", []
+                    ),
+                },
                 "deployment": {
-                    "status": deployment_result.get("status"),
+                    "status": deployment_status,
                     "deployment_id": deployment_result.get("deployment_id"),
                     "platforms": list(deployment_result.get("deployments", {}).keys()),
                     "urls": deployment_urls,
                     "errors": deployment_result.get("errors", [])
                 },
-                "status": "success",
+                # Derived from the actual outcome rather than hardcoded. A run
+                # that produced no live deployment reports "failed", so callers
+                # can no longer read a successful envelope around a failed build.
+                "status": "success" if build_status == "completed" else "failed",
+                "action_required": action_required,
                 "timestamp": datetime.now().isoformat(),
                 "real_implementation": True
             }

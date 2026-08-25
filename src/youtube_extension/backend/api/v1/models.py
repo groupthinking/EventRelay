@@ -425,15 +425,32 @@ class VideoToSoftwareResponse(BaseModel):
     project_name: str = Field(..., description="Generated project name")
     project_type: str = Field(..., description="Project type")
     deployment_target: str = Field(..., description="Deployment target")
-    live_url: str = Field(..., description="Live deployment URL")
-    github_repo: str = Field(..., description="GitHub repository URL")
+    # `live_url` and `github_repo` are only populated when a deployment is
+    # actually live / a repository was actually pushed. They are optional
+    # because a failed run must be representable: previously `github_repo`
+    # was a required str, which forced the service layer to invent a
+    # placeholder repo URL for failed pushes just to satisfy this schema.
+    live_url: str = Field(
+        default="", description="Live deployment URL; empty when nothing is live"
+    )
+    github_repo: Optional[str] = Field(
+        default=None, description="GitHub repository URL; null when no repo was pushed"
+    )
     build_status: str = Field(..., description="Build status")
     processing_time: str = Field(..., description="Total processing time")
     features_implemented: list[str] = Field(..., description="Implemented features")
     video_analysis: dict[str, Any] = Field(..., description="Video analysis results")
     code_generation: dict[str, Any] = Field(..., description="Code generation details")
+    verification: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Build verification evidence (passed, attempts, fixes applied)",
+    )
     deployment: dict[str, Any] = Field(..., description="Deployment information")
     status: str = Field(..., description="Overall status")
+    action_required: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Manual follow-up steps (e.g. Vercel import link) when a stage could not complete",
+    )
     timestamp: datetime = Field(..., description="Completion timestamp")
 
     class Config:

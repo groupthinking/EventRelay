@@ -124,20 +124,22 @@ export async function deliveryRunWorkflow(
     await recordApprovalStep(runId, true, 'automation', 'autoApprove');
   }
 
-  // 5. Build.
-  const build = await buildStep(runId, plan.plan);
+  // 5. Build — delegated to the FastAPI pipeline, which generates, verifies,
+  // publishes, and deploys as one orchestrated unit.
+  const build = await buildStep(runId, plan.plan, input.sourceUrl);
   if (!build.ok) {
     return blockedResult(runId, 'build_succeeded', build.reason);
   }
 
-  // 6. Verify. A test suite that did not run is not a passing test suite.
-  const verify = await verifyStep(runId, build.repoUrl);
+  // 6. Verify against the backend's reported build evidence. A deployment that
+  // exists is not by itself proof that the build passed.
+  const verify = await verifyStep(runId, build.pipeline);
   if (!verify.ok) {
     return blockedResult(runId, 'tests_passed', verify.reason);
   }
 
-  // 7. Deploy, then prove the deployment answers a live request.
-  const deploy = await deployStep(runId, build.repoUrl);
+  // 7. Require a live URL, then independently prove it answers a request.
+  const deploy = await deployStep(runId, build.pipeline);
   if (!deploy.ok) {
     return blockedResult(runId, 'deployment_live', deploy.reason);
   }
@@ -357,28 +359,52 @@ async function recordApprovalStep(
   await setPhase(runId, 'building');
 }
 
-type BuildOutcome = { ok: true; repoUrl: string } | { ok: false; reason: string };
+type BuildOutcome =
+  | { ok: true; repoUrl: string; pipeline: unknown }
+  | { ok: false; reason: string };
 
-async function buildStep(runId: string, plan: string): Promise<BuildOutcome> {
+/**
+ * Delegate the build to the FastAPI pipeline.
+ *
+ * The backend generates, verifies, publishes, and deploys as one orchestrated
+ * unit, so this single call produces the evidence for the build, verify, and
+ * deploy gates. The gates are still evaluated separately below — sharing a
+ * transport does not mean sharing a verdict.
+ */
+async function buildStep(
+  runId: string,
+  plan: string,
+  sourceUrl?: string,
+): Promise<BuildOutcome> {
   'use step';
 
   const { recordGate, setPhase, blockRun } = await import('@/lib/db/delivery-repo');
-  const { buildFromPlan } = await import('@/lib/delivery-agents');
+  const { runPipeline, repoFromPipeline } = await import('@/lib/delivery-agents');
 
-  const built = await buildFromPlan(plan);
-  if (!built.ok) {
-    await recordGate(runId, 'build_succeeded', 'fail', { error: built.reason });
-    await blockRun(runId, 'building', built.reason);
-    return { ok: false, reason: built.reason };
+  const run = await runPipeline({ sourceUrl, plan });
+  if (!run.ok) {
+    await recordGate(runId, 'build_succeeded', 'fail', { error: run.reason });
+    await blockRun(runId, 'building', run.reason);
+    return { ok: false, reason: run.reason };
+  }
+
+  const repo = repoFromPipeline(run.pipeline);
+  if (!repo.ok) {
+    await recordGate(runId, 'build_succeeded', 'fail', {
+      error: repo.reason,
+      buildStatus: run.pipeline.build_status ?? null,
+    });
+    await blockRun(runId, 'building', repo.reason);
+    return { ok: false, reason: repo.reason };
   }
 
   await recordGate(runId, 'build_succeeded', 'pass', {
-    repoUrl: built.repoUrl,
-    commitSha: built.commitSha,
-    fileCount: built.fileCount,
+    repoUrl: repo.repoUrl,
+    fileCount: repo.fileCount,
+    framework: run.pipeline.code_generation?.framework ?? null,
   });
-  await setPhase(runId, 'verifying', { repoUrl: built.repoUrl });
-  return { ok: true, repoUrl: built.repoUrl };
+  await setPhase(runId, 'verifying', { repoUrl: repo.repoUrl });
+  return { ok: true, repoUrl: repo.repoUrl, pipeline: run.pipeline };
 }
 
 type VerifyOutcome =
@@ -392,31 +418,27 @@ type VerifyOutcome =
  * identical to success. That is the precise shape of the false-positive this
  * pipeline exists to prevent, so it is rejected explicitly.
  */
-async function verifyStep(runId: string, repoUrl: string): Promise<VerifyOutcome> {
+async function verifyStep(
+  runId: string,
+  pipeline: unknown,
+): Promise<VerifyOutcome> {
   'use step';
 
   const { recordGate, blockRun, setPhase } = await import('@/lib/db/delivery-repo');
-  const { runTests } = await import('@/lib/delivery-agents');
 
-  const tests = await runTests(repoUrl);
+  // The backend runs `npm install` + `npm run build` (+ tsc) and will not
+  // deploy unless they pass. We gate on that reported evidence rather than
+  // inferring a passing build from the existence of a deployment.
+  const verification = (pipeline as {
+    verification?: { passed?: boolean; attempts?: unknown[]; fixes_applied?: unknown[] };
+  }).verification;
 
-  if (!tests.ok) {
+  if (!verification || verification.passed !== true) {
+    const reason =
+      'backend did not report a passing build verification for this project';
     await recordGate(runId, 'tests_passed', 'fail', {
-      exitCode: tests.exitCode,
-      passed: tests.passed,
-      failed: tests.failed,
-      error: tests.reason,
-    });
-    await blockRun(runId, 'verifying', tests.reason);
-    return { ok: false, reason: tests.reason };
-  }
-
-  if (tests.passed <= 0) {
-    const reason = 'test suite exited zero but ran no tests, which is not proof of anything';
-    await recordGate(runId, 'tests_passed', 'fail', {
-      exitCode: tests.exitCode,
-      passed: 0,
-      reason,
+      verificationPassed: verification?.passed ?? null,
+      attempts: verification?.attempts?.length ?? 0,
     });
     await blockRun(runId, 'verifying', reason);
     return { ok: false, reason };
@@ -424,9 +446,9 @@ async function verifyStep(runId: string, repoUrl: string): Promise<VerifyOutcome
 
   const testsPassedAt = new Date().toISOString();
   await recordGate(runId, 'tests_passed', 'pass', {
-    exitCode: tests.exitCode,
-    passed: tests.passed,
-    failed: tests.failed,
+    verificationPassed: true,
+    attempts: verification.attempts?.length ?? 0,
+    fixesApplied: verification.fixes_applied?.length ?? 0,
   });
   await setPhase(runId, 'deploying', { testsPassedAt: new Date(testsPassedAt) });
   return { ok: true, testsPassedAt };
@@ -442,14 +464,21 @@ type DeployOutcome =
  * `isRealDeploymentUrl` rejects placeholder hosts, and the probe confirms the
  * host actually responds — a URL that merely *looks* right is not evidence.
  */
-async function deployStep(runId: string, repoUrl: string): Promise<DeployOutcome> {
+async function deployStep(runId: string, pipeline: unknown): Promise<DeployOutcome> {
   'use step';
 
   const { recordGate, blockRun } = await import('@/lib/db/delivery-repo');
-  const { deployRepo, probeDeployment } = await import('@/lib/delivery-agents');
+  const { deploymentFromPipeline, probeDeployment } = await import(
+    '@/lib/delivery-agents'
+  );
   const { isRealDeploymentUrl } = await import('@/lib/delivery-lifecycle');
 
-  const deployed = await deployRepo(repoUrl);
+  // `live_url` is populated only from a deployment the backend polled to
+  // READY; a manual-import link or a failed deploy yields no URL and is
+  // reported here as the block reason.
+  const deployed = deploymentFromPipeline(
+    pipeline as Parameters<typeof deploymentFromPipeline>[0],
+  );
   if (!deployed.ok) {
     await recordGate(runId, 'deployment_live', 'fail', { error: deployed.reason });
     await blockRun(runId, 'deploying', deployed.reason);

@@ -111,6 +111,13 @@ export const deliveryRuns = pgTable(
 
     /** Which gate refused, when `status = 'blocked'`. */
     blockedReason: text('blocked_reason'),
+    /**
+     * The phase the run was in when it blocked, so it can be resumed from the
+     * failing stage instead of restarting work that already succeeded.
+     */
+    blockedFrom: text('blocked_from'),
+    /** Populated when `status = 'failed'` (an unexpected crash, not a gate). */
+    error: text('error'),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

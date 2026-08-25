@@ -115,11 +115,16 @@ class VercelAdapter(BaseDeploymentAdapter):
             return DeploymentResult(
                 status='failed',
                 platform=self.platform,
-                url=import_url,
+                # `url` is reserved for a URL that actually serves the app.
+                # A manual-import link is a call to action, not a running
+                # site; returning it here made every downstream consumer
+                # report a failed deploy as a live deployment.
+                url=None,
                 error_message=f"API deployment failed: {e.message}. Use the import URL to deploy manually.",
                 build_log_url=import_url,
                 metadata={
                     'project_name': project_name,
+                    'action_required': 'manual_import',
                     'import_url': import_url,
                     'api_error': e.message,
                     'api_details': e.details,
@@ -134,17 +139,19 @@ class VercelAdapter(BaseDeploymentAdapter):
             return DeploymentResult(
                 status='failed',
                 platform=self.platform,
-                url=import_url,
+                url=None,
                 error_message="Vercel deployment creation returned no deployment ID. Use the import URL to deploy manually.",
                 build_log_url=import_url,
                 metadata={
                     'project_name': project_name,
+                    'action_required': 'manual_import',
                     'import_url': import_url,
                     'deployment_response': deployment_data,
                 }
             )
 
         # Poll for deployment completion
+        inspector_url = f"https://vercel.com/{project_name}/{deployment_id}"
         ready = deployment_data.get('readyState', deployment_data.get('status', ''))
         if ready.upper() != 'READY':
             status_url = f"{VERCEL_API}/v13/deployments/{deployment_id}"
@@ -161,21 +168,62 @@ class VercelAdapter(BaseDeploymentAdapter):
                 )
                 deployment_url = self._ensure_https(final_status.get('url', '')) or deployment_url
             except DeploymentError as poll_err:
-                self.logger.warning(f"Polling failed: {poll_err.message}, using initial URL")
+                # A deployment that never reached READY is not a success.
+                # Previously this fell through and returned status='success'
+                # with a guessed <project>.vercel.app URL that may 404 or
+                # serve a stale build, which is how build failures and
+                # timeouts were reported as live deployments.
+                self.logger.error(
+                    f"Vercel deployment {deployment_id} never reached READY: {poll_err.message}"
+                )
+                return DeploymentResult(
+                    status='failed',
+                    platform=self.platform,
+                    deployment_id=deployment_id,
+                    url=None,
+                    error_message=(
+                        f"Deployment did not reach READY state: {poll_err.message}"
+                    ),
+                    build_log_url=inspector_url,
+                    metadata={
+                        'project_name': project_name,
+                        'action_required': 'inspect_build_logs',
+                        'last_known_url': deployment_url,
+                        'poll_error': poll_err.message,
+                        'deployment_data': deployment_data,
+                    }
+                )
 
-        # Ensure we have a usable URL
+        # A READY deployment must expose a real URL. Guessing the hostname
+        # here would reintroduce unverified URLs, so treat this as a failure.
         if not deployment_url:
-            deployment_url = f"https://{project_name}.vercel.app"
+            self.logger.error(
+                f"Vercel deployment {deployment_id} reported READY without a URL"
+            )
+            return DeploymentResult(
+                status='failed',
+                platform=self.platform,
+                deployment_id=deployment_id,
+                url=None,
+                error_message="Deployment reached READY but returned no URL.",
+                build_log_url=inspector_url,
+                metadata={
+                    'project_name': project_name,
+                    'action_required': 'inspect_build_logs',
+                    'deployment_data': deployment_data,
+                }
+            )
 
         return DeploymentResult(
             status='success',
             platform=self.platform,
             deployment_id=deployment_id,
             url=deployment_url,
-            build_log_url=f"https://vercel.com/{project_name}/{deployment_id}",
+            build_log_url=inspector_url,
             metadata={
                 'project_name': project_name,
                 'framework': self._detect_framework(project_config),
+                'verified_ready': True,
                 'deployment_data': deployment_data
             }
         )

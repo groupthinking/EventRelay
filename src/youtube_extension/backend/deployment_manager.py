@@ -694,7 +694,13 @@ class DeploymentManager:
 
             return {
                 "status": "simulated",
-                "url": pages_url,
+                # Not deployed: Pages has not been enabled via the API, so this
+                # URL does not serve anything yet. It is exposed as
+                # `pending_url` rather than `url` so it can never be collected
+                # into the live URL map or reported as a live deployment.
+                "url": None,
+                "pending_url": pages_url,
+                "action_required": "enable_github_pages",
                 "message": "GitHub Pages deployment simulated. To enable for real:",
                 "instructions": [
                     "1. Go to your GitHub repository settings",
@@ -733,14 +739,36 @@ class DeploymentManager:
         import string
         return ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
 
+    #: Deployment statuses whose URL refers to a real, serving deployment.
+    #: Anything else (failed, skipped, simulated, pending) must not contribute
+    #: a URL that callers may present as live.
+    _LIVE_URL_STATUSES = frozenset({"success"})
+
     def _generate_deployment_urls(self, deployments: dict[str, Any], project_config: dict[str, Any]) -> dict[str, str]:
-        """Generate final deployment URLs from all deployment results"""
-        urls = {}
+        """
+        Collect URLs for deployments that actually succeeded.
+
+        Only successful deployments contribute a URL. Previously every result
+        was included regardless of status, so a failed deploy's manual-import
+        link or a 'simulated' GitHub Pages URL was indistinguishable from a
+        real one and downstream callers reported them as live.
+
+        Non-live URLs remain available under ``deployments[platform]`` for
+        diagnostics; they are deliberately excluded from this map.
+        """
+        urls: dict[str, str] = {}
 
         for platform, result in deployments.items():
+            if not isinstance(result, dict):
+                continue
+            status = str(result.get("status", "")).lower()
             url = result.get("url")
-            if url:
+            if url and status in self._LIVE_URL_STATUSES:
                 urls[platform] = url
+            elif url:
+                logger.debug(
+                    "Excluding %s URL from live map (status=%s)", platform, status
+                )
 
         return urls
 

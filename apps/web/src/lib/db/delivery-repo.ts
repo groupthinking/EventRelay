@@ -51,7 +51,8 @@ function toDeliveryRun(row: RunRow, gates: DeliveryGate[]): DeliveryRun {
     blockedReason: row.blockedReason ?? undefined,
     blockedFrom: (row.blockedFrom as DeliveryPhase | null) ?? undefined,
     error: row.error ?? undefined,
-    startedAt: row.startedAt.toISOString(),
+    // The lifecycle model calls this `startedAt`; the column is `created_at`.
+    startedAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
 }
@@ -65,7 +66,7 @@ export interface CreateRunInput {
 
 /** Insert a new run in `sourcing`. Returns its id. */
 export async function createRun(input: CreateRunInput): Promise<string> {
-  const db = requireDb('create a delivery run');
+  const db = requireDb();
   const [row] = await db
     .insert(deliveryRuns)
     .values({
@@ -115,7 +116,7 @@ export async function recordGate(
   result: DeliveryGate['result'],
   evidence: Record<string, unknown>,
 ): Promise<void> {
-  const db = requireDb('record a gate result');
+  const db = requireDb();
   await db.insert(runGates).values({ runId, kind, result, evidence });
 }
 
@@ -142,7 +143,7 @@ export async function setPhase(
   phase: DeliveryPhase,
   patch: PhasePatch = {},
 ): Promise<void> {
-  const db = requireDb('update a delivery run phase');
+  const db = requireDb();
 
   if (phase === 'delivered') {
     const current = await loadRun(runId);
@@ -199,7 +200,7 @@ export async function recordApproval(
   decidedBy: string,
   note?: string,
 ): Promise<void> {
-  const db = requireDb('record an approval');
+  const db = requireDb();
   await db.insert(runApprovals).values({ runId, decision, decidedBy, note });
 }
 
@@ -226,7 +227,7 @@ export async function listRuns(userId: string, limit = 50): Promise<DeliveryRun[
     .select()
     .from(deliveryRuns)
     .where(eq(deliveryRuns.userId, userId))
-    .orderBy(desc(deliveryRuns.startedAt))
+    .orderBy(desc(deliveryRuns.createdAt))
     .limit(limit);
   return rows.map((row) => toDeliveryRun(row, []));
 }
@@ -242,7 +243,7 @@ export async function findRunBySource(
     .select()
     .from(deliveryRuns)
     .where(and(eq(deliveryRuns.userId, userId), eq(deliveryRuns.sourceUrl, sourceUrl)))
-    .orderBy(desc(deliveryRuns.startedAt))
+    .orderBy(desc(deliveryRuns.createdAt))
     .limit(1);
   return row ? toDeliveryRun(row, []) : null;
 }
