@@ -254,6 +254,60 @@ export function missingDeliveryEvidence(run: DeliveryRun): string[] {
   return missing;
 }
 
+/**
+ * Every gate a run must have passed before `delivered` is an honest claim.
+ *
+ * `missingDeliveryEvidence` above checks the three *artifacts* (repo, tests,
+ * URL). That is necessary but not sufficient: artifacts can exist while the
+ * process that is supposed to have produced them was skipped — a run whose
+ * `human_approved` gate never fired still has a repo and a URL, and would read
+ * as delivered. This list is the process half of the proof.
+ *
+ * Ordered as the pipeline evaluates them, so a missing-gate report reads as a
+ * point in the timeline rather than an unordered set.
+ */
+export const REQUIRED_GATES: readonly GateKind[] = [
+  'source_evidence',
+  'requirements_complete',
+  'plan_executable',
+  'human_approved',
+  'build_succeeded',
+  'tests_passed',
+  'deployment_live',
+] as const;
+
+/**
+ * Required gates that have no `pass` record on this run.
+ *
+ * A later `pass` supersedes an earlier `fail` for the same gate — a gate that
+ * failed, was fixed, and re-evaluated green is legitimately passed, and the
+ * failure stays in the history as the audit trail.
+ */
+export function missingRequiredGates(run: DeliveryRun): GateKind[] {
+  const passed = new Set(
+    run.evidence.gates.filter((g) => g.result === 'pass').map((g) => g.kind),
+  );
+  return REQUIRED_GATES.filter((kind) => !passed.has(kind));
+}
+
+/**
+ * Everything wrong with calling this run `delivered`, artifacts and process
+ * both. Empty means the claim is fully backed.
+ *
+ * This is the function the nightly audit agent runs against stored rows: any
+ * run whose status is `delivered` and whose audit is non-empty is a divergence
+ * that should never have been storable, and is reported rather than repaired
+ * in place.
+ */
+export function auditDeliveredRun(run: DeliveryRun): string[] {
+  const problems = missingDeliveryEvidence(run);
+  const gaps = missingRequiredGates(run);
+  if (gaps.length > 0) {
+    problems.push(`gates never passed: ${gaps.join(', ')}`);
+  }
+  return problems;
+}
+
 // ── Construction ──
 
 export function createRun(
@@ -446,7 +500,14 @@ export function reduceRun(
   }
 }
 
-/** True once the run has shipped with complete evidence. */
+/**
+ * True once the run has shipped with complete evidence — artifacts *and* the
+ * full gate history behind them.
+ *
+ * Deliberately re-derived from the run rather than trusting `phase`: a row
+ * whose status was set to `delivered` by any path that skipped a gate reads as
+ * not delivered here.
+ */
 export function isDelivered(run: DeliveryRun): boolean {
-  return run.phase === 'delivered' && missingDeliveryEvidence(run).length === 0;
+  return run.phase === 'delivered' && auditDeliveredRun(run).length === 0;
 }

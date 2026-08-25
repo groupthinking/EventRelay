@@ -48,6 +48,13 @@ const REQUIRED_CONSTRAINTS = [
   'delivery_runs_deployment_url_real',
   'delivery_runs_source_shape',
   'run_gates_pass_requires_evidence',
+  'run_approvals_decision_valid',
+  // 0003: a blocked run must name the phase it stopped in, or it cannot be
+  // resumed and the operator is left guessing.
+  'delivery_runs_blocked_requires_origin',
+  'delivery_runs_blocked_from_valid',
+  // 0004: an empty embedding set is not a saved index.
+  'video_embeddings_non_empty',
 ];
 
 function resolveConnectionString() {

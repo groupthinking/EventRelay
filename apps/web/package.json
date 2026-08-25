@@ -12,7 +12,8 @@
     "analyze": "next experimental-analyze --output",
     "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs",
     "db:migrate": "node --env-file-if-exists=../../.env.development.local scripts/apply-migrations.mjs",
-    "db:verify": "node --env-file-if-exists=../../.env.development.local scripts/apply-migrations.mjs --check"
+    "db:verify": "node --env-file-if-exists=../../.env.development.local scripts/apply-migrations.mjs --check",
+    "db:verify-constraints": "node --env-file-if-exists=../../.env.development.local scripts/verify-constraints.mjs"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.40",
@@ -58,12 +59,14 @@
     "@playwright/test": "^1.62.0",
     "@tailwindcss/postcss": "^4.3.2",
     "@types/node": "^26",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.5.2",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.0",
+    "pg": "^8.23.0",
     "playwright": "^1.62.0",
     "postcss": "^8.5.23",
     "tailwindcss": "^4.3.2",

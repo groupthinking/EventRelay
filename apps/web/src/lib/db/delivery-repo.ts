@@ -16,6 +16,7 @@
  * rather than silently reporting success.
  */
 
+import * as Sentry from '@sentry/nextjs';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb, requireDb, type DeliveryDatabase } from '@/lib/db/client';
 import {
@@ -28,7 +29,7 @@ import {
   type RunStatus,
 } from '@/lib/db/schema';
 import {
-  missingDeliveryEvidence,
+  auditDeliveredRun,
   type DeliveryGate,
   type DeliveryPhase,
   type DeliveryRun,
@@ -120,6 +121,37 @@ export async function recordGate(
 ): Promise<void> {
   const db = requireDb();
   await db.insert(runGates).values({ runId, kind, result, evidence });
+  reportGate(runId, kind, result);
+}
+
+/**
+ * Mirror the gate outcome into Sentry as a breadcrumb tagged with `runId` and
+ * `gate`.
+ *
+ * The gate table is the durable record; this exists so a failing gate is
+ * greppable in tracing alongside the request that produced it, without having
+ * to join against the database during an incident. Failures are raised to
+ * `error` level so they surface without a query.
+ *
+ * Never throws: observability must not be able to fail a delivery run. A
+ * missing or misconfigured Sentry is a degraded trace, not a blocked build.
+ */
+function reportGate(runId: string, kind: GateKind, result: DeliveryGate['result']): void {
+  try {
+    Sentry.addBreadcrumb({
+      category: 'delivery.gate',
+      message: `${kind}: ${result}`,
+      level: result === 'fail' ? 'error' : 'info',
+      data: { runId, gate: kind, result },
+    });
+    Sentry.getActiveSpan()?.setAttributes({
+      'delivery.run_id': runId,
+      'delivery.gate': kind,
+      'delivery.gate_result': result,
+    });
+  } catch {
+    // Intentionally swallowed — see doc comment.
+  }
 }
 
 /** Fields a phase transition may update alongside `status`. */
@@ -159,7 +191,11 @@ export async function setPhase(
         deploymentUrl: patch.deploymentUrl ?? current.evidence.deploymentUrl,
       },
     };
-    const missing = missingDeliveryEvidence(merged);
+    // `auditDeliveredRun` checks the gate history as well as the artifacts.
+    // The CHECK constraint can only see the three columns on this row; gate
+    // coverage lives in another table, so this is the only layer that can
+    // refuse a run whose artifacts exist but whose approval never happened.
+    const missing = auditDeliveredRun(merged);
     if (missing.length > 0) {
       throw new Error(`Refusing to mark run ${runId} delivered: ${missing.join('; ')}`);
     }
