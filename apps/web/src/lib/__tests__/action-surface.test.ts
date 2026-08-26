@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  actionsFromStudioRun,
   buildScaffoldPackage,
   summarizeProjectScaffold,
 } from '@/lib/action-surface';
@@ -48,5 +49,35 @@ describe('action-surface (F3)', () => {
     expect(summarizeProjectScaffold({ raw: 'plain scaffold text' })).toEqual([
       'plain scaffold text',
     ]);
+  });
+
+  it('actionsFromStudioRun prefers Analyze actions, then events, then Act tools', () => {
+    expect(
+      actionsFromStudioRun({
+        insightActions: [{ title: 'Ship scaffold', description: 'from insights', category: 'build' }],
+        events: [{ type: 'action', title: 'Duplicate-ish', description: 'event' }],
+        workflowActions: [{ tool: 'save_resource', status: 'ok', result: 'saved' }],
+      }),
+    ).toEqual([
+      { title: 'Ship scaffold', description: 'from insights', category: 'build' },
+      { title: 'Duplicate-ish', description: 'event', category: 'action' },
+    ]);
+
+    expect(
+      actionsFromStudioRun({
+        insightActions: [],
+        events: [{ type: 'topic', title: 'Paste URL', description: 'start here' }],
+        workflowActions: [{ tool: 'create_workflow_task', status: 'ok' }],
+      }),
+    ).toEqual([{ title: 'Paste URL', description: 'start here', category: 'topic' }]);
+
+    expect(
+      actionsFromStudioRun({
+        events: [],
+        workflowActions: [{ tool: 'save_resource', status: 'ok', result: 'wrote file' }],
+      }),
+    ).toEqual([{ title: 'save_resource', description: 'wrote file', category: 'act' }]);
+
+    expect(actionsFromStudioRun({ insightActions: [{ title: '  ' }], events: [] })).toEqual([]);
   });
 });

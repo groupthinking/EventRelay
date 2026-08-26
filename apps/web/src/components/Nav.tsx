@@ -17,10 +17,8 @@ interface NavProps {
 
 /** Primary product navigation — one analyze loop. */
 const NAV_LINKS = [
-  { href: '/', label: 'Analyze', hint: 'Paste a YouTube URL' },
-  { href: '/dashboard', label: 'Library', hint: 'Saved videos' },
-  { href: '/features', label: 'Features' },
-  { href: '/pricing', label: 'Pricing' },
+  { href: '/', label: 'Analyze' },
+  { href: '/dashboard', label: 'Library' },
 ];
 
 /** Secondary / developer surfaces — not part of the default user path. */
@@ -64,25 +62,19 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
         )}
 
         <div className="hidden md:flex items-center gap-1 ml-4">
-          {NAV_LINKS.map(({ href, label, hint }) => (
+          {NAV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
               aria-current={pathname === href ? 'page' : undefined}
-              title={hint}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors',
                 pathname === href || pathname.startsWith(`${href}/`)
-                  ? 'text-white/90 bg-white/[0.05]'
-                  : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
+                  ? 'text-white bg-white/[0.08]'
+                  : 'text-white/55 hover:text-white hover:bg-white/[0.04]'
               )}
             >
-              <span>{label}</span>
-              {hint && (
-                <span className="ml-1.5 hidden lg:inline text-[9px] uppercase tracking-wider text-white/25">
-                  {hint}
-                </span>
-              )}
+              {label}
             </Link>
           ))}
           <div className="h-5 w-px bg-white/[0.08] mx-1" />

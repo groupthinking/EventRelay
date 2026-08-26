@@ -15,7 +15,16 @@ function getOpenAI() {
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+function isLoopbackHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+/** Skip loopback backends — they hang Analyze for 8s on ECONNREFUSED. */
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http') && !isLoopbackHost(BACKEND_URL);
 
 // Resolve with the first non-null candidate, or null once every candidate has
 // settled (resolved null or rejected). Unlike Promise.race() over null-swapped

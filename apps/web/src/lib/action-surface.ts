@@ -42,6 +42,65 @@ function safeProjectName(name: string): string {
 }
 
 /** Build deterministic scaffold files from planned/fulfilled actions (workbench absorb). */
+export type StudioEventLike = {
+  type?: string;
+  title?: string;
+  description?: string;
+};
+
+export type StudioWorkflowActionLike = {
+  tool?: string;
+  status?: string;
+  result?: string;
+};
+
+/**
+ * Export uses this Studio run: Analyze actions, else events, else Act tools.
+ * Button is enabled on transcript/events; do not require insights.actions.
+ */
+export function actionsFromStudioRun(input: {
+  insightActions?: ActionCardLike[] | null;
+  events?: StudioEventLike[] | null;
+  workflowActions?: StudioWorkflowActionLike[] | null;
+}): ActionCardLike[] {
+  const out: ActionCardLike[] = [];
+  const seen = new Set<string>();
+
+  const push = (action: ActionCardLike) => {
+    const title = action.title.trim();
+    if (!title) return;
+    const key = title.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...action, title });
+  };
+
+  for (const action of input.insightActions || []) {
+    if (!action?.title) continue;
+    push(action);
+  }
+  for (const event of input.events || []) {
+    if (!event?.title) continue;
+    push({
+      title: event.title,
+      description: event.description,
+      category: event.type || 'event',
+    });
+  }
+  if (out.length === 0) {
+    for (const action of input.workflowActions || []) {
+      const title = (action.tool || '').trim();
+      if (!title) continue;
+      push({
+        title,
+        description: action.result || action.status,
+        category: 'act',
+      });
+    }
+  }
+  return out;
+}
+
 export function buildScaffoldPackage(input: {
   projectName?: string;
   actions: ActionCardLike[];

@@ -240,6 +240,30 @@ describe('dashboard-store · processVideo (real SSE pipeline)', () => {
     expect(store().activities.some((a) => a.event.includes('Consensus'))).toBe(true);
   });
 
+  it('maps Gemini workflow events that use label instead of title', async () => {
+    const events = [
+      {
+        type: 'workflow',
+        data: {
+          title: 'Studio',
+          summary: 'Live analysis',
+          actions: [{ title: 'Build the loop', description: 'act', category: 'build' }],
+          topics: ['gemini'],
+          events: [{ label: 'Paste a URL', description: 'start', timestamp: 12 }],
+          transcript: [{ text: 'x'.repeat(50) }],
+        },
+        timestamp: 't',
+      },
+      { type: 'pipeline_status', status: 'complete', timestamp: 't' },
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(sseResponse(events)));
+
+    const id = await store().processVideo('https://youtu.be/auJzb1D-fag');
+    const video = store().videos.find((v) => v.id === id)!;
+    expect(video.events?.[0]?.title).toBe('Paste a URL');
+    expect(video.transcript?.length).toBe(50);
+  });
+
   it('falls back to /api/video when the stream is unavailable', async () => {
     const fetchMock = vi
       .fn()

@@ -109,7 +109,7 @@ function mapStreamEvents(raw: unknown, videoId: string): ExtractedEvent[] {
     return {
       id: `evt_${videoId}_${i}`,
       type,
-      title: String(e.title ?? e.name ?? 'Event'),
+      title: String(e.title ?? e.name ?? e.label ?? 'Event'),
       description: e.description ? String(e.description) : undefined,
       timestamp: e.timestamp ? String(e.timestamp) : undefined,
       confidence,

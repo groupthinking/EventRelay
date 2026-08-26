@@ -8,6 +8,7 @@ import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
 import {
+  actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
 } from '@/lib/action-surface';
@@ -88,7 +89,8 @@ export default function OneLoopStudio() {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('Paste a YouTube URL to transcribe and extract events.');
+  const [elapsed, setElapsed] = useState(0);
+  const [message, setMessage] = useState('Paste a YouTube URL. Transcript and events land here.');
   const [actBusy, setActBusy] = useState(false);
   const [deployBusy, setDeployBusy] = useState(false);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
@@ -109,8 +111,20 @@ export default function OneLoopStudio() {
 
   useEffect(() => {
     const q = searchParams.get('video') || searchParams.get('url');
-    if (q && !url) setUrl(q);
-  }, [searchParams, url]);
+    if (q) setUrl(q);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!busy) {
+      setElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsed(Math.floor((Date.now() - started) / 1000));
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [busy]);
 
   const videoId = useMemo(() => getYouTubeId(url), [url]);
   const hasPayload =
@@ -134,12 +148,17 @@ export default function OneLoopStudio() {
     setWorkflowActions(null);
     setActRunId(null);
     setUsedSameRun(false);
-    setMessage('Running the live pipeline…');
+    setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
-      const live = useDashboardStore
+      const id = getYouTubeId(next);
+      const matches = useDashboardStore
         .getState()
-        .videos.find((v) => v.url === next || v.url.includes(getYouTubeId(next)));
-      if (live) selectVideo(live.id);
+        .videos.filter((v) => v.url === next || (id !== '' && v.url.includes(id)));
+      if (matches.length === 0) return;
+      const live = matches.reduce((best, video) =>
+        Number(video.id) >= Number(best.id) ? video : best,
+      );
+      selectVideo(live.id);
     }, 250);
     try {
       const id = await processVideo(next);
@@ -149,8 +168,8 @@ export default function OneLoopStudio() {
         (video?.transcript?.trim().length ?? 0) >= 40 || (video?.events?.length ?? 0) > 0;
       setMessage(
         ready
-          ? 'Transcript and events are on this page. Act, export, or save from here.'
-          : 'Pipeline finished without a usable transcript. Try another public video.',
+          ? 'Ready — run tools, export, or save from this page.'
+          : 'No usable transcript. Try another public video.',
       );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Analysis failed.');
@@ -204,7 +223,7 @@ export default function OneLoopStudio() {
           window.location.href = `/login?callbackUrl=${encodeURIComponent('/')}`;
           return;
         }
-        setMessage(started.error || 'Could not start Act.');
+        setMessage(started.error || started.message || 'Could not start Act.');
         return;
       }
       setActRunId(started.runId);
@@ -237,12 +256,11 @@ export default function OneLoopStudio() {
   };
 
   const exportPkg = () => {
-    const actions = (selected?.insights?.actions || []).map((a) => ({
-      title: a.title,
-      description: a.description,
-      category: a.category,
-      estimatedMinutes: a.estimatedMinutes,
-    }));
+    const actions = actionsFromStudioRun({
+      insightActions: selected?.insights?.actions,
+      events: selected?.events,
+      workflowActions: workflowActions?.actions,
+    });
     if (actions.length === 0 && !selected?.insights?.project_scaffold) {
       setMessage('Nothing to export yet — analyze a video first.');
       return;
@@ -287,69 +305,80 @@ export default function OneLoopStudio() {
     }
   };
 
+  const statusText = busy
+    ? `Working · ${elapsed}s — ${message}`
+    : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
+
   return (
-    <div className="min-h-screen bg-surface-950 text-white">
+    <div className="flex min-h-screen flex-col bg-[#0b0c10] text-[#f4f1ea]">
       <Nav
-        subtitle="Analyze"
         rightSlot={
           <Link
             href={`/login?callbackUrl=${encodeURIComponent('/')}`}
-            className="text-sm text-white/60 hover:text-white"
+            className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/5"
           >
             Sign in
           </Link>
         }
       />
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-300">UVAI</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Video to action</h1>
-        <p className="mt-2 max-w-2xl text-sm text-white/55">
-          Paste a YouTube URL. You get a transcript, typed events, then you act — on this page.
-        </p>
 
-        <form onSubmit={analyze} className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <label className="sr-only" htmlFor="youtube-url">
-            YouTube URL
-          </label>
-          <input
-            id="youtube-url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder={FIXTURE}
-            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm outline-none focus:border-teal-400/60"
-          />
-          <button
-            type="submit"
-            disabled={busy}
-            className={clsx(
-              'inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold',
-              'bg-teal-400 text-slate-950 disabled:opacity-50',
-            )}
-          >
-            <Play className="h-4 w-4" aria-hidden />
-            {busy ? 'Analyzing…' : 'Analyze'}
-          </button>
-        </form>
-
-        <p className="mt-4 text-sm text-white/70" role="status">
-          <span className="font-semibold text-white/90">
-            {studioStatusLabel(quality, runState)}
-          </span>
-          {' — '}
-          {message || studioStatusMessage(quality, runState, 'Analysis', false)}
-        </p>
-
-        {selected?.status === 'processing' && (
-          <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full bg-teal-400 transition-all"
-              style={{ width: `${Math.min(100, selected.progress || 5)}%` }}
-            />
+      <header className="border-b border-white/10 bg-[#11131a]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
+          <div>
+            <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
+              Paste a YouTube URL
+            </h1>
+            <p className="mt-1 text-sm text-white/55">
+              Transcript, events, and tools stay on this page.
+            </p>
           </div>
-        )}
+          <form onSubmit={analyze} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            <label className="sr-only" htmlFor="youtube-url">
+              YouTube URL
+            </label>
+            <input
+              id="youtube-url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder={FIXTURE}
+              autoComplete="off"
+              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0b0c10] px-4 py-3 font-mono text-sm text-white outline-none focus:border-[#e8b86d]"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setUrl(FIXTURE)}
+                className="rounded-lg border border-white/15 px-3 py-3 text-sm text-white/70 hover:bg-white/5"
+              >
+                Sample
+              </button>
+              <button
+                type="submit"
+                disabled={busy}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#e8b86d] px-5 py-3 text-sm font-semibold text-[#1a1408] disabled:opacity-50 sm:flex-none"
+              >
+                <Play className="h-4 w-4" aria-hidden />
+                {busy ? `Running ${elapsed}s` : 'Run'}
+              </button>
+            </div>
+          </form>
+          <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
+            {statusText}
+          </p>
+          {(busy || selected?.status === 'processing') && (
+            <div className="h-1 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full bg-[#e8b86d] transition-all"
+                style={{ width: `${Math.min(95, selected?.progress || 8 + elapsed * 2)}%` }}
+              />
+            </div>
+          )}
+        </div>
+      </header>
 
-        {videoId && (
-          <div className="mt-8 overflow-hidden rounded-2xl border border-white/10 bg-black">
+      <main className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+        <section className="overflow-hidden rounded-xl border border-white/10 bg-black">
+          {videoId ? (
             <iframe
               title="YouTube source"
               className="aspect-video w-full"
@@ -357,48 +386,64 @@ export default function OneLoopStudio() {
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
-          </div>
-        )}
+          ) : (
+            <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
+              Paste a link. The video plays here while we pull the transcript.
+            </div>
+          )}
+        </section>
 
-        {selected && (
-          <section className="mt-8 grid gap-6 lg:grid-cols-2">
-            <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Transcript</h2>
-              <p className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap text-sm leading-6 text-white/80">
-                {selected.transcript?.trim() || 'No transcript yet.'}
-              </p>
-            </article>
-            <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Events</h2>
-              <ul className="mt-3 max-h-72 space-y-2 overflow-auto text-sm">
-                {(selected.events || []).length === 0 && (
-                  <li className="text-white/50">No events yet.</li>
-                )}
-                {(selected.events || []).map((event) => (
-                  <li key={event.id} className="rounded-lg border border-white/5 px-3 py-2">
-                    <div className="text-xs uppercase tracking-wide text-teal-300/80">{event.type}</div>
-                    <div className="font-medium">{event.title}</div>
-                    {event.description && (
-                      <div className="text-white/55">{event.description}</div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </article>
-          </section>
-        )}
+        <section className="flex min-h-[280px] flex-col rounded-xl border border-white/10 bg-[#11131a]">
+          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+              Transcript
+            </h2>
+            {selected?.transcript ? (
+              <span className="font-mono text-[11px] text-white/35">
+                {selected.transcript.trim().split(/\s+/).length} words
+              </span>
+            ) : null}
+          </div>
+          <div className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80">
+            {selected?.transcript?.trim() ||
+              (busy ? 'Waiting on captions…' : 'Nothing yet.')}
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
+          <div className="border-b border-white/10 px-4 py-3">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+              Events
+            </h2>
+          </div>
+          <ul className="divide-y divide-white/5">
+            {(selected?.events || []).length === 0 && (
+              <li className="px-4 py-4 text-sm text-white/40">
+                {busy ? 'Extracting events…' : 'Events show up after Run.'}
+              </li>
+            )}
+            {(selected?.events || []).map((event) => (
+              <li key={event.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
+                <div className="font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]">
+                  {event.type}
+                </div>
+                <div>
+                  <div className="text-sm font-medium text-white">{event.title}</div>
+                  {event.description && (
+                    <div className="mt-0.5 text-sm text-white/55">{event.description}</div>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
 
         {selected?.insights && (
-          <section className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-white/50">Summary</h2>
+          <section className="rounded-xl border border-white/10 bg-[#11131a] p-4 lg:col-span-2">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+              Summary
+            </h2>
             <p className="mt-3 text-sm leading-6 text-white/80">{selected.insights.summary}</p>
-            {(selected.insights.actions?.length ?? 0) > 0 && (
-              <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-white/70">
-                {selected.insights.actions.map((action) => (
-                  <li key={action.title}>{action.title}</li>
-                ))}
-              </ul>
-            )}
           </section>
         )}
 
@@ -406,15 +451,15 @@ export default function OneLoopStudio() {
           <section
             id="act-results"
             data-testid="act-results"
-            className="mt-6 rounded-2xl border border-teal-400/20 bg-teal-400/5 p-5"
+            className="rounded-xl border border-[#e8b86d]/30 bg-[#e8b86d]/5 p-4 lg:col-span-2"
           >
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-teal-200">
-              Act results
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
+              Tool results
             </h2>
             {actRunId && (
-              <p className="mt-2 text-xs text-white/50">
-                Run {actRunId}
-                {usedSameRun ? " · this run's transcript" : ''}
+              <p className="mt-2 font-mono text-[11px] text-white/40">
+                {actRunId}
+                {usedSameRun ? ' · this transcript' : ''}
               </p>
             )}
             {workflowActions ? (
@@ -432,26 +477,28 @@ export default function OneLoopStudio() {
               </ul>
             ) : (
               <p className="mt-3 text-sm text-white/60">
-                {actBusy ? 'Running tools on this page…' : 'Waiting for tool results on this page.'}
+                {actBusy ? 'Running tools…' : 'Waiting for tool results.'}
               </p>
             )}
           </section>
         )}
+      </main>
 
-        <div className="mt-8 flex flex-wrap gap-3">
+      <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
           <button
             type="button"
             onClick={() => void act()}
             disabled={actBusy || !hasPayload}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
           >
-            {actBusy ? 'Acting…' : 'Act'}
+            {actBusy ? 'Running tools…' : 'Run tools'}
           </button>
           <button
             type="button"
             onClick={exportPkg}
             disabled={!hasPayload}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Download className="h-4 w-4" aria-hidden />
             Export
@@ -460,27 +507,20 @@ export default function OneLoopStudio() {
             type="button"
             onClick={() => void deploy()}
             disabled={deployBusy || !hasPayload}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
             Deploy
           </button>
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2 text-sm"
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm"
           >
             <Save className="h-4 w-4" aria-hidden />
             Library
           </Link>
         </div>
-        {(actRunId || deployRunId) && (
-          <p className="mt-3 text-xs text-white/40">
-            {actRunId ? `Act run ${actRunId}` : null}
-            {actRunId && deployRunId ? ' · ' : null}
-            {deployRunId ? `Deploy run ${deployRunId}` : null}
-          </p>
-        )}
-      </main>
+      </footer>
     </div>
   );
 }
