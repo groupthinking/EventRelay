@@ -14,9 +14,17 @@ import type {
 } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
 
+export interface VideoToActionsEvent {
+  type?: string;
+  title: string;
+  description?: string;
+}
+
 export interface VideoToActionsInput {
   url: string;
   videoTitle?: string;
+  transcript?: string;
+  events?: VideoToActionsEvent[];
 }
 
 export interface VideoToActionsResult {
@@ -24,6 +32,7 @@ export interface VideoToActionsResult {
   transcriptChars: number;
   actionCount: number;
   provider?: string;
+  usedProvidedTranscript?: boolean;
   actions: Array<{ tool: string; status: string; result?: string }>;
   analysis: VideoAnalysisResult;
   provenance: AnalysisProvenance;
