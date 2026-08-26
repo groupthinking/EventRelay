@@ -7,6 +7,12 @@ __pycache__
 .pytest_cache
 .mypy_cache
 .ruff_cache
+.turbo
+htmlcov/
+coverage.xml
+reports/
+work/
+.superdesign/
 logs/
 tmp/
 *.db

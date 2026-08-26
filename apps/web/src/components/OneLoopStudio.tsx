@@ -155,10 +155,7 @@ export default function OneLoopStudio() {
         .getState()
         .videos.filter((v) => v.url === next || (id !== '' && v.url.includes(id)));
       if (matches.length === 0) return;
-      const live = matches.reduce((best, video) =>
-        Number(video.id) >= Number(best.id) ? video : best,
-      );
-      selectVideo(live.id);
+      selectVideo(matches[0].id);
     }, 250);
     try {
       const id = await processVideo(next);
@@ -256,8 +253,14 @@ export default function OneLoopStudio() {
   };
 
   const exportPkg = () => {
+    const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
+      if (typeof action === 'string') {
+        return action.trim() ? [{ title: action.trim() }] : [];
+      }
+      return action.title?.trim() ? [action] : [];
+    });
     const actions = actionsFromStudioRun({
-      insightActions: selected?.insights?.actions,
+      insightActions,
       events: selected?.events,
       workflowActions: workflowActions?.actions,
     });

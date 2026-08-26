@@ -28,10 +28,6 @@ const DEV_LINKS = [
 
 /**
  * Renders the main site navigation bar.
- *
- * @param rightSlot - Optional content to display on the right side
- * @param subtitle - Optional content displayed next to the logo
- * @param fixed - Renders the navigation bar with fixed positioning when `true`
  */
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
@@ -83,7 +79,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
               key={href}
               href={href}
               className={clsx(
-                'text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03]',
+                'hidden text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03] xl:inline-flex',
                 pathname === href && 'text-white/60 bg-white/[0.04]'
               )}
             >
@@ -115,7 +111,6 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
         </button>
       </div>
 
-      {/* Mobile links */}
       {mobileOpen && (
         <div
           id="mobile-nav"

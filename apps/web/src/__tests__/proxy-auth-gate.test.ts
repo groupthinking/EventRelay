@@ -15,11 +15,24 @@ vi.mock('next-auth/jwt', () => ({
   getToken: vi.fn(async () => null),
 }));
 
+vi.mock('redis', () => ({
+  createClient: vi.fn(() => ({
+    on: vi.fn(),
+    connect: vi.fn(async () => undefined),
+    incr: vi.fn(async () => 1),
+    expire: vi.fn(async () => 1),
+  })),
+}));
+
 const ENV_KEYS = [
   'NEXTAUTH_SECRET',
   'NODE_ENV',
   'INTERNAL_REQUEST_TOKEN',
   'AUTH_ALLOW_UNAUTHENTICATED',
+  'UPSTASH_REDIS_REST_URL',
+  'UPSTASH_REDIS_REST_TOKEN',
+  'STORAGE_REDIS_URL',
+  'UVAI_RATE_LIMIT_DISABLED',
 ] as const;
 
 type EnvKey = (typeof ENV_KEYS)[number];
@@ -114,7 +127,7 @@ describe('login gate must fail closed (issue #1058)', () => {
   it('lets public Studio Act on findings through when the secret IS configured', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: 'test-secret',
-      NODE_ENV: 'production',
+      NODE_ENV: 'development',
       AUTH_ALLOW_UNAUTHENTICATED: undefined,
     });
 
@@ -139,6 +152,48 @@ describe('login gate must fail closed (issue #1058)', () => {
       }),
     );
     expect(other.status).toBe(401);
+  });
+
+  it('fails paid AI starts closed in production when distributed limiting is unavailable', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'production',
+      AUTH_ALLOW_UNAUTHENTICATED: '1',
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined,
+      STORAGE_REDIS_URL: undefined,
+    });
+
+    const response = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions', {
+        method: 'POST',
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual(
+      expect.objectContaining({ error: expect.stringContaining('rate limiting') }),
+    );
+  });
+
+  it('uses the Vercel Storage Redis binding for paid AI starts', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'production',
+      AUTH_ALLOW_UNAUTHENTICATED: '1',
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined,
+      STORAGE_REDIS_URL: 'redis://example.test:6379',
+    });
+
+    const response = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions', {
+        method: 'POST',
+      }),
+    );
+
+    expect(response.status).not.toBe(503);
+    expect(response.headers.get('x-ratelimit-limit')).toBe('12');
   });
 
   it('leaves local development unchanged (no secret, no 503)', async () => {

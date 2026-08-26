@@ -11,7 +11,6 @@ const USE_CASES = ['Meeting Notes', 'Conference Talks', 'Tutorials', 'Product De
 
 const EXTERNAL_LINKS = [
   { label: 'GitHub', href: 'https://github.com/groupthinking/EventRelay' },
-  { label: 'Product Hunt', href: 'https://www.producthunt.com' },
 ];
 
 interface FooterProps {
@@ -29,7 +28,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
     return (
       <footer className="border-t border-white/[0.06] py-6">
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
-          <span>UVAI • Video to Software</span>
+          <span>UVAI video intelligence</span>
           <div className="flex items-center gap-4">
             <Link href="/features" className="hover:text-white/50 transition py-2 px-1">
               Features
@@ -63,7 +62,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
               <span className="font-bold text-sm">UVAI</span>
             </div>
             <p className="text-xs text-white/30 leading-relaxed">
-              AI-powered video intelligence for teams and individuals.
+              Evidence-gated video intelligence with durable workflows and reviewed actions.
             </p>
           </div>
           <div>
@@ -114,10 +113,14 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
         </div>
         <div className="border-t border-white/[0.05] pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-white/25">
           <span>© 2026 UVAI. MIT License.</span>
-          <div className="flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse motion-reduce:animate-none" />
-            <span>All systems operational</span>
-          </div>
+          <a
+            href="https://github.com/groupthinking/EventRelay"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-white/50 transition"
+          >
+            Inspect current source on GitHub
+          </a>
         </div>
       </div>
     </footer>

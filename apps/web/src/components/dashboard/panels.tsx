@@ -1,7 +1,8 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { AlignLeft, Bot, Clock3, Search, ShieldCheck } from 'lucide-react';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import InteractiveTranscript, { type TranscriptSegment } from '@/components/InteractiveTranscript';
 import {
@@ -10,6 +11,7 @@ import {
   summarizeProjectScaffold,
   type ActionCardLike,
 } from '@/lib/action-surface';
+import type { AgentAction } from '@/lib/action-lifecycle';
 import { hasRichDashboardInsights, isThinDashboardAnalysis } from '@/lib/dashboard-analysis';
 import { useActionAgentStore } from '@/store/action-agent-store';
 import type { SearchResult, Video } from '@/store/dashboard-types';
@@ -66,7 +68,7 @@ export function TranscriptPanel({
   if (!video.transcript) {
     return (
       <EmptyState
-        icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>}
+        icon={<AlignLeft className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
       >
         {video.status === 'processing' ? 'Transcript is being generated…' : 'No transcript available.'}
       </EmptyState>
@@ -106,7 +108,7 @@ export function InsightsPanel({ video }: { video: Video }) {
   if (!hasInsights) {
     return (
       <EmptyState
-        icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v4l2 2" /></svg>}
+        icon={<Clock3 className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
       >
         {video.status === 'processing'
           ? 'AI is analyzing the video. Insights will appear here shortly.'
@@ -122,18 +124,18 @@ export function InsightsPanel({ video }: { video: Video }) {
   return (
     <div className="space-y-8 stitch-fade-in">
       <section>
-        <SectionHeading>Intelligence Synthesis</SectionHeading>
-        <p className="leading-relaxed text-sm" style={{ color: 'rgba(172, 170, 177, 1)' }}>{insights.summary}</p>
+        <SectionHeading>Key takeaways</SectionHeading>
+        <p className="text-[15px] leading-7" style={{ color: 'rgba(214, 219, 216, 0.82)' }}>{insights.summary}</p>
       </section>
 
       {insights.topics.length > 0 && (
         <section>
-          <SectionHeading>Extracted Topics</SectionHeading>
+          <SectionHeading>Topics</SectionHeading>
           <div className="flex flex-wrap gap-2">
             {insights.topics.map((topic, i) => (
               <span
                 key={topic}
-                className="text-[10px] font-bold uppercase tracking-widest px-3 py-1"
+                className="rounded-md px-3 py-1.5 text-xs font-medium"
                 style={{ background: 'rgba(37, 37, 44, 1)', color: i < 2 ? '#6af2de' : i < 4 ? '#69ccff' : 'rgba(172, 170, 177, 1)' }}
               >
                 {topic}
@@ -145,11 +147,15 @@ export function InsightsPanel({ video }: { video: Video }) {
 
       {insights.actions.length > 0 && (
         <section>
-          <SectionHeading>Directive Protocols</SectionHeading>
+          <SectionHeading>Proposed actions</SectionHeading>
           <div className="grid grid-cols-1 gap-3">
-            {insights.actions.map((action, i) => (
+            {insights.actions.map((action, i) => {
+              const normalized = typeof action === 'string'
+                ? { title: action, description: '', category: 'Recommended', estimatedMinutes: null }
+                : action;
+              return (
               <div
-                key={i}
+                key={`${normalized.title}-${i}`}
                 className="p-4 transition-all stitch-fade-in"
                 style={{
                   background: 'rgba(37, 37, 44, 0.4)',
@@ -163,18 +169,19 @@ export function InsightsPanel({ video }: { video: Video }) {
                     className="px-2 py-0.5 text-[10px] font-bold tracking-widest uppercase rounded-sm"
                     style={{ background: i === 0 ? 'rgba(159,5,25,0.2)' : 'rgba(16,183,165,0.2)', color: i === 0 ? '#ff716c' : '#6af2de' }}
                   >
-                    {action.category || (i === 0 ? 'Critical' : 'Strategic')}
+                    {normalized.category || (i === 0 ? 'Critical' : 'Strategic')}
                   </span>
-                  {action.estimatedMinutes != null && (
-                    <span className="text-[10px] font-mono" style={{ color: 'rgba(248,245,253,0.35)' }}>~{action.estimatedMinutes}m</span>
+                  {normalized.estimatedMinutes != null && (
+                    <span className="text-[10px] font-mono" style={{ color: 'rgba(248,245,253,0.35)' }}>~{normalized.estimatedMinutes}m</span>
                   )}
                 </div>
-                <p className="font-heading font-medium text-sm leading-tight mb-1" style={{ color: '#f8f5fd' }}>{action.title}</p>
-                {action.description && (
-                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(172, 170, 177, 0.8)' }}>{action.description}</p>
+                <p className="mb-1 font-heading text-base font-medium leading-snug" style={{ color: '#f8f5fd' }}>{normalized.title}</p>
+                {normalized.description && (
+                  <p className="text-sm leading-6" style={{ color: 'rgba(200, 205, 202, 0.78)' }}>{normalized.description}</p>
                 )}
               </div>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
@@ -195,8 +202,22 @@ export function ActionsPanel({
 }) {
   const transcript = (video.transcript || '').trim();
   const hasTranscript = transcript.length > 40;
-  const { lifecycle, isRunning, runFromTranscript, reset } = useActionAgentStore();
-  const fulfilled = lifecycle.actions || [];
+  const {
+    lifecycle,
+    isRunning,
+    sourceVideoId,
+    runFromTranscript,
+    confirmPreparedActions,
+    reset,
+  } = useActionAgentStore();
+  const planMatchesVideo = sourceVideoId === video.id;
+  const fulfilled = planMatchesVideo ? lifecycle.actions || [] : [];
+  const isPrepared = planMatchesVideo && lifecycle.phase === 'dispatching';
+  const [selectedActionIndexes, setSelectedActionIndexes] = useState<number[]>([]);
+  useEffect(() => {
+    setSelectedActionIndexes(isPrepared ? lifecycle.actions.map((_, index) => index) : []);
+  }, [isPrepared, lifecycle.actions, lifecycle.id]);
+  const selectedActions = fulfilled.filter((_, index) => selectedActionIndexes.includes(index));
   const plannedActions = video.insights?.actions || [];
   const projectScaffold = video.insights?.project_scaffold;
   const scaffoldPreview = summarizeProjectScaffold(projectScaffold);
@@ -215,12 +236,16 @@ export function ActionsPanel({
           (typeof a.input?.description === 'string' ? a.input.description : ''),
         category: a.tool,
       }));
-    const fromPlan: ActionCardLike[] = plannedActions.map((a) => ({
-      title: a.title,
-      description: a.description,
-      category: a.category,
-      estimatedMinutes: a.estimatedMinutes,
-    }));
+    const fromPlan: ActionCardLike[] = plannedActions.map((a) =>
+      typeof a === 'string'
+        ? { title: a, description: '', category: 'recommended' }
+        : {
+            title: a.title,
+            description: a.description,
+            category: a.category,
+            estimatedMinutes: a.estimatedMinutes,
+          },
+    );
     const actions = fromTools.length > 0 ? fromTools : fromPlan;
     const pkg = buildScaffoldPackage({
       projectName: video.title || 'eventrelay-project',
@@ -233,9 +258,21 @@ export function ActionsPanel({
   const canExport =
     fulfilled.length > 0 || plannedActions.length > 0 || projectScaffold != null;
 
+  const actionOutcomeTitle = (action: AgentAction): string => {
+    const title = typeof action.input?.title === 'string' ? action.input.title : '';
+    const name = typeof action.input?.name === 'string' ? action.input.name : '';
+    const topic = typeof action.input?.topic === 'string' ? action.input.topic : '';
+    const task = typeof action.input?.task === 'string' ? action.input.task : '';
+    if (action.tool === 'save_resource') return `Save ${name || 'resource'}`;
+    if (action.tool === 'schedule_followup') return `Schedule follow-up${topic ? `: ${topic}` : ''}`;
+    if (action.tool === 'create_workflow_task') return title || 'Create workflow task';
+    if (action.tool === 'dispatch_agent') return task || title || 'Dispatch agent';
+    return title || name || topic || action.tool.replace(/_/g, ' ');
+  };
+
   return (
     <div className="space-y-4">
-      {/* F12: Act on findings via /api/agents/actions */}
+      {/* F12: Prepare, review, then explicitly confirm /api/agents/actions */}
       <section
         className="rounded-xl border p-4 space-y-3"
         style={{ borderColor: 'rgba(129,140,248,0.25)', background: 'rgba(129,140,248,0.06)' }}
@@ -243,11 +280,11 @@ export function ActionsPanel({
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: '#a5b4fc' }}>
-              Act on findings
+              Review action plan
             </h3>
             <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(248,245,253,0.55)' }}>
-              Canonical action surface (F3): run tools via{' '}
-              <code className="text-[10px]">/api/agents/actions</code>, then export a scaffold package.
+              Preparation proposes tool calls but executes nothing. Select, inspect, or reject each
+              item before confirming any external side effect.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -263,16 +300,28 @@ export function ActionsPanel({
             )}
             <button
               type="button"
-              disabled={!hasTranscript || isRunning}
-              onClick={() => runFromTranscript(transcript, video.title)}
+              disabled={!hasTranscript || isRunning || (isPrepared && selectedActions.length === 0)}
+              onClick={() =>
+                isPrepared
+                  ? confirmPreparedActions(selectedActions, video.id)
+                  : runFromTranscript(transcript, video.title, video.id)
+              }
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded disabled:opacity-40"
               style={{
-                background: 'rgba(129,140,248,0.2)',
-                color: '#c7d2fe',
-                border: '1px solid rgba(129,140,248,0.4)',
+                background: isPrepared ? 'rgba(248,113,113,0.16)' : 'rgba(129,140,248,0.2)',
+                color: isPrepared ? '#fecaca' : '#c7d2fe',
+                border: isPrepared
+                  ? '1px solid rgba(248,113,113,0.4)'
+                  : '1px solid rgba(129,140,248,0.4)',
               }}
             >
-              {isRunning ? 'Acting…' : 'Act on findings'}
+              {isRunning
+                ? isPrepared
+                  ? 'Executing confirmed plan…'
+                  : 'Preparing plan…'
+                : isPrepared
+                  ? `Confirm ${selectedActions.length} selected action${selectedActions.length === 1 ? '' : 's'}`
+                  : 'Prepare action plan'}
             </button>
           </div>
         </div>
@@ -285,10 +334,30 @@ export function ActionsPanel({
 
         {lifecycle.phase !== 'idle' && (
           <p className="text-[11px] font-mono" style={{ color: 'rgba(165,180,252,0.8)' }}>
-            Phase: {lifecycle.phase}
+            {isPrepared ? 'Status: prepared for review' : `Phase: ${lifecycle.phase}`}
             {lifecycle.provider ? ` · ${lifecycle.provider}` : ''}
             {lifecycle.error ? ` · ${lifecycle.error}` : ''}
           </p>
+        )}
+
+        {sourceVideoId && !planMatchesVideo && (
+          <div className="rounded-lg border border-amber-300/20 bg-amber-300/[0.07] px-3 py-3 text-sm text-amber-100/80">
+            The prepared plan belongs to another video. Preparing here will replace it; it cannot be
+            confirmed from this workspace.
+          </div>
+        )}
+
+        {isPrepared && (
+          <div
+            className="flex items-start gap-2 rounded-lg border px-3 py-2"
+            style={{ borderColor: 'rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.08)' }}
+          >
+            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: '#fca5a5' }} aria-hidden="true" />
+            <p className="text-xs leading-relaxed" style={{ color: '#fecaca' }}>
+              Review required. The confirmation button is the authorization boundary; nothing below
+              has run yet.
+            </p>
+          </div>
         )}
 
         {fulfilled.length > 0 && (
@@ -305,12 +374,28 @@ export function ActionsPanel({
                   background: 'rgba(0,0,0,0.2)',
                 }}
               >
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold" style={{ color: '#f8f5fd' }}>
-                    {action.tool}
-                  </span>
+                <div className="flex items-start justify-between gap-3">
+                  <label className="flex min-h-11 min-w-0 cursor-pointer items-start gap-3 py-1">
+                    <input
+                      type="checkbox"
+                      checked={selectedActionIndexes.includes(i)}
+                      disabled={!isPrepared}
+                      onChange={() => {
+                        setSelectedActionIndexes((current) =>
+                          current.includes(i)
+                            ? current.filter((index) => index !== i)
+                            : [...current, i],
+                        );
+                      }}
+                      className="mt-0.5 h-5 w-5 accent-[#6de1c6]"
+                      aria-label={`Select ${actionOutcomeTitle(action)}`}
+                    />
+                    <span className="min-w-0 break-words text-sm font-semibold text-[#f8f5fd]">
+                      {actionOutcomeTitle(action)}
+                    </span>
+                  </label>
                   <span
-                    className="text-[10px] font-mono uppercase"
+                    className="mt-1 text-xs font-mono uppercase"
                     style={{
                       color:
                         action.status === 'failed' || action.isError ? '#fca5a5' : '#6ee7b7',
@@ -319,16 +404,31 @@ export function ActionsPanel({
                     {action.status}
                   </span>
                 </div>
+                <p className="mt-1 text-xs" style={{ color: 'rgba(248,245,253,0.5)' }}>
+                  {['dispatch_agent', 'dispatch_subagents', 'add_to_knowledge_base'].includes(action.tool)
+                    ? 'External write or execution'
+                    : action.tool === 'get_agent_session_logs'
+                      ? 'External read'
+                      : 'Temporary structured result — not durably saved'}
+                </p>
+                <p className="mt-1 text-[11px] font-mono text-white/40">
+                  Tool: {action.tool.replace(/_/g, ' ')}
+                </p>
                 {action.result && (
                   <p className="mt-1 text-xs leading-relaxed" style={{ color: 'rgba(172,170,177,0.9)' }}>
                     {action.result}
                   </p>
                 )}
-                {typeof action.input?.title === 'string' && (
-                  <p className="mt-0.5 text-[11px]" style={{ color: 'rgba(248,245,253,0.45)' }}>
-                    {action.input.title}
-                  </p>
-                )}
+                <dl className="mt-3 space-y-2 border-t border-white/[0.07] pt-3">
+                  {Object.entries(action.input || {}).map(([key, value]) => (
+                    <div key={key} className="grid grid-cols-[110px_minmax(0,1fr)] gap-3 text-xs leading-5">
+                      <dt className="break-words font-mono text-white/45">{key}</dt>
+                      <dd className="min-w-0 break-words text-white/75">
+                        {typeof value === 'string' ? value : JSON.stringify(value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
               </li>
             ))}
           </ul>
@@ -410,6 +510,7 @@ export function AgentsPanel({
   onDispatch: (videoId: string) => void;
   onRefresh: (videoId: string) => void;
 }) {
+  const [dispatchReview, setDispatchReview] = useState(false);
   const hasEvents = !!(video.events && video.events.length > 0);
   const agents = video.agents || [];
   const anyRunning = agents.some((a) => a.status === 'running' || a.status === 'queued');
@@ -418,14 +519,41 @@ export function AgentsPanel({
     <div className="space-y-4">
       {(hasEvents || agents.length > 0) && (
         <div className="flex items-center justify-end gap-2 flex-wrap">
-          {hasEvents && agentBackend && (
+          {hasEvents && agentBackend && !dispatchReview && (
             <button
-              onClick={() => onDispatch(video.id)}
+              type="button"
+              onClick={() => setDispatchReview(true)}
               className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 rounded"
               style={{ background: 'rgba(129,140,248,0.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,0.3)' }}
             >
-              Dispatch {video.events!.length} events
+              Review dispatch
             </button>
+          )}
+          {hasEvents && agentBackend && dispatchReview && (
+            <>
+              <span className="text-xs" style={{ color: '#fca5a5' }}>
+                Dispatch {video.events!.length} event{video.events!.length === 1 ? '' : 's'} to backend agents?
+              </span>
+              <button
+                type="button"
+                onClick={() => setDispatchReview(false)}
+                className="px-3 py-2 text-xs font-bold uppercase tracking-wider rounded"
+                style={{ color: 'rgba(248,245,253,0.6)', border: '1px solid rgba(255,255,255,0.12)' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDispatchReview(false);
+                  onDispatch(video.id);
+                }}
+                className="px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50 rounded"
+                style={{ background: 'rgba(248,113,113,0.15)', color: '#fecaca', border: '1px solid rgba(248,113,113,0.35)' }}
+              >
+                Confirm dispatch
+              </button>
+            </>
           )}
           {anyRunning && (
             <button
@@ -451,7 +579,7 @@ export function AgentsPanel({
       </Suspense>
       {video.status !== 'processing' && agents.length === 0 && (
         <EmptyState
-          icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="4" y="8" width="16" height="12" rx="2" /><path d="M12 8V4M9 14h.01M15 14h.01" /></svg>}
+          icon={<Bot className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
         >
           No agent executions yet.
         </EmptyState>
@@ -534,7 +662,7 @@ export function SearchPanel({
         </div>
       ) : (
         <EmptyState
-          icon={<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>}
+          icon={<Search className="h-10 w-10" strokeWidth={1.5} aria-hidden="true" />}
         >
           Search for a topic to jump to that moment in the video.
         </EmptyState>

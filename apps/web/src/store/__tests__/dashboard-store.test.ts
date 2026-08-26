@@ -169,12 +169,12 @@ describe('dashboard-store · extractEvents', () => {
 
     const action = events.find((e) => e.type === 'action')!;
     expect(action.title).toBe('Build it');
-    expect(action.confidence).toBe(0.85);
+    expect(action.confidence).toBeUndefined();
     expect(action.id).toBe('evt_v1_0');
 
     const topics = events.filter((e) => e.type === 'topic');
     expect(topics.map((t) => t.title)).toEqual(['rust', 'wasm']);
-    expect(topics[0].confidence).toBe(0.9);
+    expect(topics[0].confidence).toBeUndefined();
     expect(topics[0].id).toBe('evt_v1_t0');
   });
 
@@ -190,189 +190,210 @@ describe('dashboard-store · extractEvents', () => {
   });
 });
 
-describe('dashboard-store · processVideo (real SSE pipeline)', () => {
-  it('streams agent updates, insights, and transcript into the video', async () => {
-    const events = [
-      { type: 'pipeline_status', status: 'running', data: { mode: 'gemini-sse' }, timestamp: 't' },
-      { type: 'agent_update', agentId: 'orchestrator', agentName: 'Orchestrator', status: 'running', timestamp: 't' },
-      { type: 'agent_update', agentId: 'orchestrator', agentName: 'Orchestrator', status: 'complete', duration: 1.2, data: { title: 'My Video' }, timestamp: 't' },
-      { type: 'agent_update', agentId: 'action_gen', agentName: 'ActionGenerator', status: 'complete', data: {}, timestamp: 't' },
-      { type: 'consensus', data: { votes: [], finalClassification: 'tutorial', agreementRatio: 0.67 }, timestamp: 't' },
-      {
-        type: 'workflow',
-        data: {
-          title: 'My Video',
-          summary: 'A great tutorial',
-          actions: [{ title: 'Do X', description: 'd', category: 'build' }],
-          topics: ['rust'],
-          events: [{ type: 'action', title: 'Step 1', priority: 'high' }],
-          transcript: [{ text: 'hello' }, { text: 'world' }],
+describe('dashboard-store · processVideo (durable evidence workflow)', () => {
+  const provenance = {
+    sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+    sourceHost: 'www.youtube.com',
+    acquisitionMethod: 'backend-caption-api',
+    transcriptSource: 'youtube-captions',
+    transcriptVerified: true,
+    acquiredAt: '2026-08-16T12:00:00.000Z',
+    segmentCount: 1,
+    timedSegmentCount: 1,
+    durationCoverageSeconds: 12,
+    contentSha256: 'abc123',
+    warnings: [],
+  };
+  const quality = {
+    state: 'verified',
+    passed: true,
+    issues: [],
+    transcriptCharacters: 70,
+    segmentCount: 1,
+    timedSegmentCount: 1,
+    checkedAt: '2026-08-16T12:00:02.000Z',
+  };
+
+  it('persists the run id and maps only a verified result to complete', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_verified',
+        statusUrl: '/api/workflows/video-to-actions/wrun_verified',
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_verified',
+        runStatus: 'completed',
+        result: {
+          url: provenance.sourceUrl,
+          transcriptChars: 70,
+          actionCount: 1,
+          provider: 'gateway:google/gemini-2.5-flash',
+          actions: [{ tool: 'review_action', status: 'proposed', result: 'Review evidence' }],
+          provenance,
+          quality,
+          analysis: {
+            title: 'Verified Video',
+            summary: 'A source-backed summary.',
+            transcript: [{
+              start: 0,
+              duration: 12,
+              text: 'This is verified source speech with enough content for the quality gate.',
+            }],
+            events: [{
+              timestamp: 4,
+              label: 'Key point',
+              description: 'A traceable event.',
+              codeMapping: 'review()',
+              cloudService: 'none',
+            }],
+            actions: [
+              'Review the verified caption evidence.',
+              { title: 'Review evidence', description: 'Inspect it.', category: 'research', estimatedMinutes: 5 },
+            ],
+            topics: ['evidence'],
+            architectureCode: '',
+            ingestScript: '',
+            e22Snippets: [],
+            provenance,
+            quality,
+          },
         },
-        timestamp: 't',
-      },
-      { type: 'pipeline_status', status: 'complete', duration: 5, data: { totalAgents: 2, completedAgents: 2 }, timestamp: 't' },
-    ];
-    const fetchMock = vi.fn().mockResolvedValueOnce(sseResponse(events));
+      }));
     vi.stubGlobal('fetch', fetchMock);
 
-    const id = await store().processVideo('https://youtu.be/abc');
-    const video = store().videos.find((v) => v.id === id)!;
+    const id = await store().processVideo(provenance.sourceUrl);
+    const video = store().videos.find((item) => item.id === id)!;
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/pipeline/stream', expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/workflows/video-to-actions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      '/api/workflows/video-to-actions/wrun_verified',
+      expect.objectContaining({ method: 'GET' }),
+    );
     expect(video.status).toBe('complete');
-    expect(video.progress).toBe(100);
-
-    // Real streamed agents (orchestrator de-duped to one complete entry)
-    expect(video.agents).toHaveLength(2);
-    expect(video.agents!.every((a) => a.status === 'complete')).toBe(true);
-    expect(video.agents!.map((a) => a.agent_type)).toContain('Orchestrator');
-
-    // Insights + events + transcript from the workflow event
-    expect(video.insights?.summary).toBe('A great tutorial');
-    expect(video.insights?.actions).toHaveLength(1);
-    expect(video.insights?.topics).toEqual(['rust']);
-    expect(video.events).toHaveLength(1);
-    expect(video.events![0].id).toBe(`evt_${id}_0`);
-    expect(video.events![0].confidence).toBe(0.95); // priority 'high'
-    expect(video.transcript).toBe('hello world');
-    expect(video.pipelineMode).toBe('serverless');
-
-    expect(store().activities.some((a) => a.event.includes('Consensus'))).toBe(true);
+    expect(video.runId).toBe('wrun_verified');
+    expect(video.quality?.passed).toBe(true);
+    expect(video.provenance?.contentSha256).toBe('abc123');
+    expect(video.transcript).toContain('[0:00]');
+    expect(video.events?.[0].confidence).toBeUndefined();
+    expect(video.agents).toHaveLength(3);
+    expect(video.insights?.actions).toEqual([
+      {
+        title: 'Review the verified caption evidence.',
+        description: '',
+        category: 'recommended',
+        estimatedMinutes: null,
+      },
+      { title: 'Review evidence', description: 'Inspect it.', category: 'research', estimatedMinutes: 5 },
+    ]);
   });
 
-  it('maps Gemini workflow events that use label instead of title', async () => {
-    const events = [
-      {
-        type: 'workflow',
-        data: {
-          title: 'Studio',
-          summary: 'Live analysis',
-          actions: [{ title: 'Build the loop', description: 'act', category: 'build' }],
-          topics: ['gemini'],
-          events: [{ label: 'Paste a URL', description: 'start', timestamp: 12 }],
-          transcript: [{ text: 'x'.repeat(50) }],
+  it('keeps a failed workflow failed and preserves a recovery record', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_failed',
+        statusUrl: '/api/workflows/video-to-actions/wrun_failed',
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_failed',
+        runStatus: 'failed',
+        error: 'Verified captions or speech-to-text were unavailable.',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl);
+    const video = store().videos.find((item) => item.id === id)!;
+
+    expect(video.status).toBe('failed');
+    expect(video.runId).toBe('wrun_failed');
+    expect(video.failure?.stage).toBe('acquisition');
+    expect(video.quality?.passed).toBe(false);
+    expect(video.insights?.actions).toEqual([]);
+    expect(video.title).toContain('Analysis blocked');
+  });
+
+  it('fails closed when no durable run id is created', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
+      jsonResponse({ ok: false, error: 'world not configured' }, false, 500),
+    ));
+
+    const id = await store().processVideo(provenance.sourceUrl);
+    const video = store().videos.find((item) => item.id === id)!;
+
+    expect(video.status).toBe('failed');
+    expect(video.runId).toBeUndefined();
+    expect(video.failure?.stage).toBe('start');
+  });
+
+  it('recovers a verified durable result after a page refresh', async () => {
+    store().addVideo(makeVideo({
+      id: 'recover_me',
+      url: provenance.sourceUrl,
+      runId: 'wrun_recovered',
+      status: 'processing',
+      progress: 10,
+    }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({
+      ok: true,
+      runId: 'wrun_recovered',
+      runStatus: 'completed',
+      result: {
+        url: provenance.sourceUrl,
+        transcriptChars: 70,
+        actionCount: 1,
+        provider: 'gateway:google/gemini-2.5-flash',
+        actions: [{ tool: 'review_action', status: 'proposed' }],
+        provenance,
+        quality,
+        analysis: {
+          title: 'Recovered Video',
+          summary: 'Recovered from the persisted durable run.',
+          transcript: [{
+            start: 0,
+            duration: 12,
+            text: 'This is verified source speech with enough content for the quality gate.',
+          }],
+          events: [],
+          actions: [],
+          topics: ['recovery'],
+          architectureCode: '',
+          ingestScript: '',
+          e22Snippets: [],
+          provenance,
+          quality,
         },
-        timestamp: 't',
       },
-      { type: 'pipeline_status', status: 'complete', timestamp: 't' },
-    ];
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(sseResponse(events)));
+    })));
 
-    const id = await store().processVideo('https://youtu.be/auJzb1D-fag');
-    const video = store().videos.find((v) => v.id === id)!;
-    expect(video.events?.[0]?.title).toBe('Paste a URL');
-    expect(video.transcript?.length).toBe(50);
+    await store().resumeProcessingRuns();
+
+    const recovered = store().videos.find((video) => video.id === 'recover_me')!;
+    expect(recovered.status).toBe('complete');
+    expect(recovered.progress).toBe(100);
+    expect(recovered.title).toBe('Recovered Video');
+    expect(recovered.quality?.passed).toBe(true);
+    expect(store().activities.some((activity) => activity.event.includes('Recovered verified durable run'))).toBe(true);
   });
 
-  it('falls back to /api/video when the stream is unavailable', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(sseResponse([], false)) // stream 503
-      .mockResolvedValueOnce(
-        jsonResponse({
-          status: 'complete',
-          result: {
-            insights: { summary: 'Legacy summary', actions: [], sentiment: 'Neutral', topics: [] },
-            transcript_segments: 2,
-            raw_response: { transcript: { text: 'x'.repeat(200) } },
-          },
-        }),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          success: true,
-          data: { events: [], actions: [{ title: 'A', description: 'd', category: 'build' }], summary: 'Legacy final', topics: ['t'] },
-        }),
-      );
+  it('does not restart processing records that never received a durable run id', async () => {
+    store().addVideo(makeVideo({ id: 'no_run_id', status: 'processing', progress: 0 }));
+    const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const id = await store().processVideo('https://youtu.be/x');
-    const video = store().videos.find((v) => v.id === id)!;
+    await store().resumeProcessingRuns();
 
-    expect(fetchMock).toHaveBeenNthCalledWith(1, '/api/pipeline/stream', expect.anything());
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/video', expect.anything());
-    expect(video.status).toBe('complete');
-    expect(video.insights?.summary).toBe('Legacy final');
-    expect(video.transcript).toBe('x'.repeat(200));
-  });
-
-  it('falls back when the stream emits an error event', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        sseResponse([
-          { type: 'pipeline_status', status: 'running', timestamp: 't' },
-          { type: 'error', data: { message: 'boom' }, timestamp: 't' },
-        ]),
-      )
-      .mockResolvedValueOnce(
-        jsonResponse({
-          status: 'complete',
-          result: {
-            insights: { summary: 'Recovered', actions: [], sentiment: 'Neutral', topics: [] },
-            raw_response: { transcript: { text: 'y'.repeat(200) } },
-          },
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ success: false, error: 'no key' }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const id = await store().processVideo('https://youtu.be/x');
-    const video = store().videos.find((v) => v.id === id)!;
-
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/video', expect.anything());
-    expect(video.status).toBe('complete');
-    expect(video.insights?.summary).toBe('Recovered');
-  });
-
-  it('enriches thin stream results via direct analysis', async () => {
-    const events = [
-      { type: 'pipeline_status', status: 'running', timestamp: 't' },
-      {
-        type: 'workflow',
-        data: { title: 'Video x', summary: 'Analysis complete', actions: [], topics: [], events: [] },
-        timestamp: 't',
-      },
-      { type: 'pipeline_status', status: 'complete', timestamp: 't' },
-    ];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(sseResponse(events))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          status: 'complete',
-          result: {
-            insights: { summary: 'Enriched summary', actions: [], sentiment: 'Neutral', topics: ['ai'] },
-            raw_response: { transcript: { text: 'z'.repeat(200) } },
-          },
-        }),
-      )
-      .mockResolvedValueOnce(jsonResponse({ success: false, error: 'no key' }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const id = await store().processVideo('https://youtu.be/thin');
-    const video = store().videos.find((v) => v.id === id)!;
-
-    expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/video', expect.anything());
-    expect(video.insights?.summary).toBe('Enriched summary');
-    expect(video.transcript).toBe('z'.repeat(200));
-  });
-
-  it('creates a local workflow package when both the stream and direct analysis fail', async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(sseResponse([], false)) // stream 503
-      .mockResolvedValueOnce(jsonResponse({}, false, 500)); // /api/video 500
-    vi.stubGlobal('fetch', fetchMock);
-
-    const id = await store().processVideo('https://youtu.be/x');
-    const video = store().videos.find((v) => v.id === id)!;
-
-    expect(video.status).toBe('complete');
-    expect(video.progress).toBe(100);
-    expect(video.title).toContain('Workflow brief');
-    expect(video.insights?.summary).toContain('fallback package');
-    expect(store().activities.some((a) => a.event.includes('starter workflow package'))).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(store().videos[0].status).toBe('processing');
   });
 });
 
@@ -477,12 +498,13 @@ describe('dashboard-store · deployPipeline (mocked fetch)', () => {
     expect(store().activities.some((a) => a.event.includes('live.example'))).toBe(true);
   });
 
-  it('creates a deploy handoff when the pipeline call errors', async () => {
+  it('preserves a deploy failure when the pipeline call errors', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({}, false, 500)));
     await store().deployPipeline('https://youtu.be/x');
-    expect(store().videos[0].status).toBe('complete');
-    expect(store().videos[0].title).toContain('Deploy handoff');
-    expect(store().videos[0].pipelineResult?.build_status).toBe('handoff_ready_backend_unavailable');
+    expect(store().videos[0].status).toBe('failed');
+    expect(store().videos[0].title).toContain('Deployment blocked');
+    expect(store().videos[0].pipelineResult?.build_status).toBe('failed_backend_unavailable');
+    expect(store().videos[0].failure?.stage).toBe('deployment');
   });
 });
 

@@ -1,33 +1,22 @@
 /**
- * Durable video → actions pipeline (Workflow DevKit) — Product v1.
+ * Durable, evidence-gated video ETL workflow.
  *
- * Orchestrates existing EventRelay capabilities as retryable steps so a long
- * analysis does not die with a single serverless request timeout.
- *
- * Trigger: POST /api/workflows/video-to-actions
- *          { url, videoTitle?, transcript?, events? }
- * Status:  GET  /api/workflows/video-to-actions/:runId
- * Inspect: npx workflow web  (from apps/web)
- *
- * When Analyze already produced a transcript, pass it through so Act stays on
- * the same run instead of re-fetching YouTube. Steps call server libs directly
- * (no self-HTTP loopback) so Vercel production does not depend on NEXTAUTH_URL
- * / internal tokens for step execution.
+ * Extract: acquire captions or speech-to-text from an accountable provider.
+ * Transform: analyze only the verified transcript through AI Gateway/Gemini.
+ * Load: persist the typed return value in Workflow DevKit under its runId.
  */
 
 import { FatalError } from 'workflow';
-
-export interface VideoToActionsEvent {
-  type?: string;
-  title: string;
-  description?: string;
-}
+import type {
+  AnalysisProvenance,
+  EvidenceAssessment,
+  TranscriptSegment,
+} from '@/lib/analysis-evidence';
+import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
 
 export interface VideoToActionsInput {
   url: string;
   videoTitle?: string;
-  transcript?: string;
-  events?: VideoToActionsEvent[];
 }
 
 export interface VideoToActionsResult {
@@ -35,8 +24,10 @@ export interface VideoToActionsResult {
   transcriptChars: number;
   actionCount: number;
   provider?: string;
-  usedProvidedTranscript?: boolean;
   actions: Array<{ tool: string; status: string; result?: string }>;
+  analysis: VideoAnalysisResult;
+  provenance: AnalysisProvenance;
+  quality: EvidenceAssessment;
 }
 
 export async function videoToActionsWorkflow(
@@ -49,102 +40,114 @@ export async function videoToActionsWorkflow(
     throw new FatalError('url must be an http(s) URL');
   }
 
-  const provided = (input.transcript || '').trim();
-  const usedProvidedTranscript = provided.length >= 40;
-  console.log('[video-to-actions] start', { url, usedProvidedTranscript });
+  const evidence = await transcribeStep(url);
+  const analysis = await analyzeStep(url, evidence);
+  const quality = analysis.quality;
+  const provenance = analysis.provenance;
 
-  const transcript = usedProvidedTranscript ? provided : await transcribeStep(url);
-  if (!transcript || transcript.trim().length < 40) {
-    throw new FatalError('Transcript too short or unavailable for action extraction');
+  if (!quality?.passed || !provenance?.transcriptVerified) {
+    throw new FatalError(
+      `Analysis quality gate failed: ${quality?.issues.join(' ') || 'missing provenance'}`,
+    );
   }
 
-  const eventLines = (input.events || [])
-    .slice(0, 40)
-    .map((event) => {
-      const kind = event.type || 'event';
-      return `- [${kind}] ${event.title}${event.description ? `: ${event.description}` : ''}`;
-    })
-    .join('\n');
-  const agentSource = eventLines
-    ? `${transcript.slice(0, 12_000)}\n\nEVENTS FROM ANALYZE:\n${eventLines}`
-    : transcript;
-  const agent = await runActionsStep(agentSource, input.videoTitle);
-
-  console.log('[video-to-actions] complete', {
-    chars: transcript.length,
-    actions: agent.actions.length,
-    usedProvidedTranscript,
-  });
+  const provider = await providerLabelStep();
+  const actions = (analysis.actions || []).map((action) => ({
+    tool: 'review_action',
+    status: 'proposed',
+    result: action.title,
+  }));
 
   return {
     url,
-    transcriptChars: transcript.length,
-    actionCount: agent.actions.length,
-    provider: agent.provider,
-    usedProvidedTranscript,
-    actions: agent.actions.map((a) => ({
-      tool: a.tool,
-      status: a.status,
-      result: a.result,
-    })),
+    transcriptChars: evidence.transcript.length,
+    actionCount: analysis.actions?.length || 0,
+    provider,
+    actions,
+    analysis,
+    provenance,
+    quality,
   };
 }
 
-async function transcribeStep(url: string): Promise<string> {
+async function transcribeStep(url: string): Promise<VerifiedVideoEvidence> {
   'use step';
-
-  console.log('[video-to-actions] step:transcribe', url);
 
   const { fetchTranscript } = await import('@/lib/transcription-service');
+  const {
+    assessAnalysisEvidence,
+    calculateDurationCoverageSeconds,
+    normalizeTranscriptSegments,
+    transcriptTextFromSegments,
+  } = await import('@/lib/analysis-evidence');
   const result = await fetchTranscript({ url });
+  const segments = normalizeTranscriptSegments(result.segments);
+  const transcript = result.transcript?.trim() || transcriptTextFromSegments(segments);
 
-  if (result?.success && result.transcript && typeof result.transcript === 'string') {
-    return result.transcript;
+  if (!result.success || result.verified !== true || transcript.length < 40) {
+    throw new FatalError(
+      result.error || 'Verified captions or speech-to-text were unavailable.',
+    );
   }
 
-  // Retryable when the service is flaky; Fatal when clearly unusable input/config.
-  const errMsg =
-    (result && typeof result.error === 'string' && result.error) ||
-    'Transcription returned no transcript';
-  if (
-    /invalid|required|rejected|too short|billing|not configured|No AI API/i.test(errMsg)
-  ) {
-    throw new FatalError(errMsg);
+  const authoritativeSegments: TranscriptSegment[] = segments.length > 0
+    ? segments
+    : [{ start: 0, duration: 0, text: transcript }];
+  const timedSegmentCount = authoritativeSegments.filter(
+    (segment) => segment.duration > 0,
+  ).length;
+  const sourceUrl = result.sourceUrl || url;
+  let sourceHost = '';
+  try { sourceHost = new URL(sourceUrl).hostname; } catch { /* invalid source is caught by the gate */ }
+
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(transcript),
+  );
+  const contentSha256 = Array.from(new Uint8Array(digest))
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('');
+
+  const provenance: AnalysisProvenance = {
+    sourceUrl,
+    sourceHost,
+    acquisitionMethod: result.acquisitionMethod || 'unknown',
+    transcriptSource: result.source || 'unknown',
+    transcriptVerified: true,
+    acquiredAt: result.acquiredAt || new Date().toISOString(),
+    segmentCount: authoritativeSegments.length,
+    timedSegmentCount,
+    durationCoverageSeconds: calculateDurationCoverageSeconds(authoritativeSegments),
+    contentSha256,
+    warnings: timedSegmentCount === authoritativeSegments.length
+      ? []
+      : ['Source timestamps were unavailable for part or all of the transcript.'],
+  };
+  const assessment = assessAnalysisEvidence({
+    transcript,
+    segments: authoritativeSegments,
+    provenance,
+  });
+  if (!assessment.passed) {
+    throw new FatalError(`Transcript evidence failed validation: ${assessment.issues.join(' ')}`);
   }
-  throw new Error(errMsg);
+
+  return { transcript, segments: authoritativeSegments, provenance };
 }
 
-async function runActionsStep(
-  transcript: string,
-  videoTitle?: string,
-): Promise<{
-  provider?: string;
-  actions: Array<{ tool: string; status: string; result?: string }>;
-}> {
+async function analyzeStep(
+  url: string,
+  evidence: VerifiedVideoEvidence,
+): Promise<VideoAnalysisResult> {
   'use step';
 
-  console.log('[video-to-actions] step:actions', { chars: transcript.length });
+  const { analyzeVideoWithGemini } = await import('@/lib/gemini-video-analyzer');
+  return analyzeVideoWithGemini(url, evidence);
+}
 
-  try {
-    const { runActionAgent } = await import('@/lib/action-agent');
-    const result = await runActionAgent({ transcript, videoTitle });
-    return {
-      provider: result.provider,
-      actions: (result.actions || []).map((a) => ({
-        tool: a.tool,
-        status: a.status,
-        result: a.result,
-      })),
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (
-      msg.includes('No AI API key') ||
-      msg.includes('too short') ||
-      /billing|not configured/i.test(msg)
-    ) {
-      throw new FatalError(msg);
-    }
-    throw err;
-  }
+async function providerLabelStep(): Promise<string> {
+  'use step';
+
+  const { getGeminiRoutingLabel } = await import('@/lib/gemini-client');
+  return getGeminiRoutingLabel();
 }

@@ -229,3 +229,6 @@ data/audit/*.jsonl
 # Local AI session artifacts
 *.rtf
 .gemini/extensions/
+
+# Local verification and native-module quarantine artifacts
+/work/

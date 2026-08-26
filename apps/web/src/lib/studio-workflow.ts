@@ -5,10 +5,14 @@
  * Workflow DevKit: start returns a runId immediately; poll until terminal status.
  */
 
+import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
+
 export interface VideoToActionsStart {
   ok: boolean;
   status: number;
   runId?: string;
+  statusUrl?: string;
   message?: string;
   error?: string;
 }
@@ -34,6 +38,9 @@ export interface VideoToActionsResult {
   provider?: string;
   usedProvidedTranscript?: boolean;
   actions: VideoToActionsAction[];
+  analysis?: VideoAnalysisResult;
+  provenance?: AnalysisProvenance;
+  quality?: EvidenceAssessment;
 }
 
 export interface VideoToActionsPoll {
@@ -204,11 +211,13 @@ export async function startVideoToActions(input: {
   const runId = str(payload.runId);
   const error = str(payload.error);
   const message = str(payload.message);
+  const statusUrl = str(payload.statusUrl);
 
   return {
     ok: Boolean(payload.ok) && response.ok && Boolean(runId),
     status: response.status,
     runId,
+    statusUrl,
     message,
     error,
   };
@@ -250,6 +259,18 @@ export async function getVideoToActionsStatus(
           status: str(a.status) || 'unknown',
           result: str(a.result),
         })),
+      analysis:
+        r.analysis && typeof r.analysis === 'object'
+          ? (r.analysis as VideoAnalysisResult)
+          : undefined,
+      provenance:
+        r.provenance && typeof r.provenance === 'object'
+          ? (r.provenance as AnalysisProvenance)
+          : undefined,
+      quality:
+        r.quality && typeof r.quality === 'object'
+          ? (r.quality as EvidenceAssessment)
+          : undefined,
     };
   }
 

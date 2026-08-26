@@ -83,6 +83,7 @@ export function shouldSkipRateLimit(pathname: string): boolean {
 
 /** Routes backed by model work, metered against the tighter AI budget. */
 const AI_ROUTE_PREFIXES = [
+  '/api/agents/actions',
   '/api/agents/dispatch',
   '/api/chat',
   '/api/extract-events',
@@ -115,6 +116,7 @@ const AI_ROUTE_PREFIXES = [
  * abuse vector the moment any of them serves model work over GET.
  */
 const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
+  '/api/agents/actions': new Set(['GET', 'HEAD']),
   '/api/workflows': new Set(['GET', 'HEAD']),
 };
 
