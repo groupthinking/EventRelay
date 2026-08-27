@@ -59,9 +59,10 @@ export async function videoToActionsWorkflow(
   const quality = analysis.quality;
   const provenance = analysis.provenance;
 
-  const fatal = fatalQualityFailure(quality);
-  if (fatal) {
-    throw new FatalError(fatal);
+  if (!quality?.passed) {
+    throw new FatalError(
+      fatalQualityFailure(quality) || 'Analysis quality gate failed: missing provenance',
+    );
   }
   if (!provenance) {
     throw new FatalError('Analysis quality gate failed: missing provenance');
