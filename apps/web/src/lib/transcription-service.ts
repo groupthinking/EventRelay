@@ -7,6 +7,7 @@ import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
 import { isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { fetchYouTubeCaptions } from '@/lib/youtube-captions';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -183,6 +184,28 @@ export async function fetchTranscript({
       }
     } catch (e) {
       console.log('YouTube backend transcript unavailable:', e);
+    }
+  }
+
+  // Strategy 1b: timed YouTube captions from the watch page (no FastAPI).
+  if (url && !audioUrl) {
+    try {
+      const captions = await fetchYouTubeCaptions(url, language);
+      if (captions) {
+        return {
+          success: true,
+          transcript: captions.transcript,
+          segments: captions.segments,
+          source: captions.source,
+          verified: true,
+          acquisitionMethod: 'youtube-captions',
+          sourceUrl: url,
+          acquiredAt: new Date().toISOString(),
+          wordCount: captions.transcript.split(/\s+/).length,
+        };
+      }
+    } catch (error) {
+      console.warn('Direct YouTube captions unavailable:', error);
     }
   }
 
