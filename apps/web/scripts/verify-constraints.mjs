@@ -21,13 +21,20 @@
  * that ends in ROLLBACK, and every assertion is a rejected write.
  */
 
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SQL_FILE = join(HERE, 'verify-constraints.sql');
+const DRIZZLE_DIR = join(HERE, '..', 'drizzle');
+
+// CI runs against a throwaway container with no schema; `--apply-migrations`
+// applies the same `drizzle/*.sql` files the app ships before proving the
+// constraints. The files are plain, idempotent SQL, so this is a no-op against
+// an already-migrated database (e.g. a developer running it against Neon).
+const APPLY_MIGRATIONS = process.argv.includes('--apply-migrations');
 
 const CANDIDATES = [
   'TEST_DATABASE_URL',
@@ -72,6 +79,16 @@ async function main() {
   client.on('notice', (notice) => console.log(`  ${notice.message}`));
 
   try {
+    if (APPLY_MIGRATIONS) {
+      const files = readdirSync(DRIZZLE_DIR)
+        .filter((name) => name.endsWith('.sql'))
+        .sort();
+      for (const name of files) {
+        await client.query(readFileSync(join(DRIZZLE_DIR, name), 'utf8'));
+        console.log(`  applied ${name}`);
+      }
+    }
+
     await client.query(readFileSync(SQL_FILE, 'utf8'));
     console.log('[constraints] every forbidden write was rejected and every legitimate one accepted');
   } catch (error) {

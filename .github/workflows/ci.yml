@@ -135,6 +135,43 @@ jobs:
           STRIPE_WEBHOOK_SECRET: ""
         run: cd apps/web && npx vitest run --reporter=default
 
+  # Proves the delivery CHECK constraints *behave*, against a real Postgres.
+  # The hermetic `test-frontend` job runs without a database, so a constraint
+  # whose predicate is wrong (e.g. accepting `https://localhost` as a shipped
+  # URL, which happened for weeks) is invisible to it. This job applies the
+  # shipped migrations to a throwaway Postgres and attempts every forbidden
+  # write; it fails if the engine accepts one.
+  db-constraints:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: eventrelay_test
+        ports:
+          - 5432:5432
+        # Don't start the proof until the container answers, or the first
+        # connection races startup and the job flakes red.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm install --legacy-peer-deps
+      - name: Apply migrations and verify constraint behavior
+        env:
+          # localhost triggers the no-TLS branch in the script; the container
+          # is a sibling process on the runner with no credential to protect.
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/eventrelay_test
+        run: cd apps/web && node scripts/verify-constraints.mjs --apply-migrations
+
   test:
     runs-on: ubuntu-latest
     steps:
