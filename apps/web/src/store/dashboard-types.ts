@@ -1,5 +1,6 @@
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { LinkedSop } from '@/lib/linked-sop';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -67,6 +68,8 @@ export interface Video {
      * Canonical plan surface for F3; paired with Act on findings tools.
      */
     project_scaffold?: unknown;
+    /** Tools the video named, SOP in speech order, plus stack deploy checks. */
+    linkedSop?: LinkedSop;
   };
 }
 

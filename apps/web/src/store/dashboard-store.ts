@@ -31,6 +31,7 @@ import {
 } from '@/lib/studio-workflow';
 import type { VideoToActionsResult } from '@/lib/studio-workflow';
 import type { TranscriptSegment } from '@/lib/analysis-evidence';
+import { compileLinkedSop } from '@/lib/linked-sop';
 
 export type {
   Action,
@@ -136,6 +137,18 @@ function verifiedResultPatch(
   }
 
   const transcript = formatVerifiedTranscript(analysis.transcript || []);
+  const actions = normalizeDashboardActions(analysis.actions);
+  const linkedSop = compileLinkedSop({
+    transcript,
+    segments: analysis.transcript || [],
+    events: (analysis.events || []).map((event) => ({
+      timestamp: event.timestamp,
+      label: event.label,
+      description: event.description,
+    })),
+    actions,
+    topics: analysis.topics || [],
+  });
   const events: ExtractedEvent[] = (analysis.events || []).map((event, index) => ({
     id: `evt_${id}_${index}`,
     type: 'insight',
@@ -187,9 +200,10 @@ function verifiedResultPatch(
     failure: undefined,
     insights: {
       summary: analysis.summary,
-      actions: normalizeDashboardActions(analysis.actions),
+      actions,
       sentiment: 'Unscored',
       topics: analysis.topics || [],
+      linkedSop,
       ...(analysis.project_scaffold != null
         ? { project_scaffold: analysis.project_scaffold }
         : {}),

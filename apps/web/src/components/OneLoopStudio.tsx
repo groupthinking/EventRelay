@@ -4,6 +4,8 @@ import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket, Save } from 'lucide-react';
+import { formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
+import { compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
@@ -97,6 +99,7 @@ export default function OneLoopStudio() {
   const [actRunId, setActRunId] = useState<string | null>(null);
   const [usedSameRun, setUsedSameRun] = useState(false);
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
+  const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
@@ -104,6 +107,26 @@ export default function OneLoopStudio() {
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
+  const linkedSop: LinkedSop | null = useMemo(() => {
+    if (selected?.insights?.linkedSop) return selected.insights.linkedSop;
+    if (!selected?.transcript && !(selected?.events?.length)) return null;
+    const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
+      if (typeof action === 'string') {
+        return action.trim() ? [{ title: action.trim() }] : [];
+      }
+      return action.title?.trim() ? [{ title: action.title, description: action.description, category: action.category }] : [];
+    });
+    return compileLinkedSop({
+      transcript: selected?.transcript,
+      events: (selected?.events || []).map((event) => ({
+        timestamp: parseTimestampToSeconds(event.timestamp) ?? undefined,
+        label: event.title,
+        description: event.description,
+      })),
+      actions: insightActions,
+      topics: selected?.insights?.topics,
+    });
+  }, [selected]);
 
   useEffect(() => {
     useDashboardStore.persist.rehydrate();
@@ -206,11 +229,16 @@ export default function OneLoopStudio() {
         }
       }
 
+      const sopEvents = (linkedSop?.steps || []).map((step) => ({
+        type: 'action',
+        title: step.title,
+        description: step.description,
+      }));
       const payload = buildSameRunActInput({
         url: next,
         videoTitle: selected?.title,
         transcript: selected?.transcript,
-        events,
+        events: [...(events || []), ...sopEvents],
       });
       setUsedSameRun(Boolean(payload.transcript || payload.events?.length));
 
@@ -264,7 +292,7 @@ export default function OneLoopStudio() {
       events: selected?.events,
       workflowActions: workflowActions?.actions,
     });
-    if (actions.length === 0 && !selected?.insights?.project_scaffold) {
+    if (actions.length === 0 && !selected?.insights?.project_scaffold && !linkedSop?.steps.length) {
       setMessage('Nothing to export yet — analyze a video first.');
       return;
     }
@@ -272,9 +300,14 @@ export default function OneLoopStudio() {
       projectName: selected?.title || 'uvai-project',
       actions,
       projectScaffold: selected?.insights?.project_scaffold,
+      linkedSop: linkedSop || undefined,
     });
     downloadScaffoldPackage(pkg);
-    setMessage('Exported scaffold files (README, tasks.json).');
+    setMessage(
+      linkedSop
+        ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
+        : 'Exported scaffold files (README, tasks.json).',
+    );
   };
 
   const deploy = async () => {
@@ -385,7 +418,11 @@ export default function OneLoopStudio() {
             <iframe
               title="YouTube source"
               className="aspect-video w-full"
-              src={`https://www.youtube.com/embed/${videoId}`}
+              src={
+                seekSeconds != null
+                  ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
+                  : `https://www.youtube.com/embed/${videoId}`
+              }
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
               allowFullScreen
             />
@@ -425,11 +462,23 @@ export default function OneLoopStudio() {
                 {busy ? 'Extracting events…' : 'Events show up after Run.'}
               </li>
             )}
-            {(selected?.events || []).map((event) => (
+            {(selected?.events || []).map((event) => {
+              const seconds = parseTimestampToSeconds(event.timestamp);
+              return (
               <li key={event.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
-                <div className="font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]">
-                  {event.type}
-                </div>
+                {seconds != null ? (
+                  <button
+                    type="button"
+                    onClick={() => setSeekSeconds(seconds)}
+                    className="text-left font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]"
+                  >
+                    {formatSeconds(seconds)}
+                  </button>
+                ) : (
+                  <div className="font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]">
+                    {event.type}
+                  </div>
+                )}
                 <div>
                   <div className="text-sm font-medium text-white">{event.title}</div>
                   {event.description && (
@@ -437,9 +486,121 @@ export default function OneLoopStudio() {
                   )}
                 </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </section>
+
+        {linkedSop && (linkedSop.entities.length > 0 || linkedSop.steps.length > 0) && (
+          <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
+            <div className="border-b border-white/10 px-4 py-3">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+                Named tools
+              </h2>
+            </div>
+            <div className="flex flex-wrap gap-2 px-4 py-3">
+              {linkedSop.entities.length === 0 && (
+                <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
+              )}
+              {linkedSop.entities.map((entity) => (
+                <span
+                  key={entity.name}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
+                >
+                  <a
+                    href={entity.officialUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-white hover:text-[#e8b86d]"
+                  >
+                    {entity.name}
+                  </a>
+                  {entity.docsUrl && entity.docsUrl !== entity.officialUrl && (
+                    <a
+                      href={entity.docsUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] uppercase tracking-wider text-white/45 hover:text-[#e8b86d]"
+                    >
+                      docs
+                    </a>
+                  )}
+                  {entity.timestamps[0] != null && (
+                    <button
+                      type="button"
+                      onClick={() => setSeekSeconds(entity.timestamps[0])}
+                      className="font-mono text-[11px] text-[#e8b86d]"
+                    >
+                      {formatSeconds(entity.timestamps[0])}
+                    </button>
+                  )}
+                </span>
+              ))}
+            </div>
+
+            <div className="border-t border-white/10 px-4 py-3">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+                SOP
+              </h2>
+            </div>
+            <ol className="divide-y divide-white/5">
+              {linkedSop.steps.length === 0 && (
+                <li className="px-4 py-3 text-sm text-white/40">No ordered SOP in this run.</li>
+              )}
+              {linkedSop.steps.map((step) => (
+                <li key={step.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
+                  {step.timestamp != null ? (
+                    <button
+                      type="button"
+                      onClick={() => setSeekSeconds(step.timestamp!)}
+                      className="text-left font-mono text-[11px] text-[#e8b86d]"
+                    >
+                      {formatSeconds(step.timestamp)}
+                    </button>
+                  ) : (
+                    <div className="font-mono text-[11px] text-white/35">{step.order}</div>
+                  )}
+                  <div>
+                    <div className="text-sm font-medium text-white">{step.title}</div>
+                    {step.description && (
+                      <div className="mt-0.5 text-sm text-white/55">{step.description}</div>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+
+            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+              <>
+                <div className="border-t border-white/10 px-4 py-3">
+                  <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+                    Stack checks
+                  </h2>
+                </div>
+                <ul className="divide-y divide-white/5">
+                  {linkedSop.checklist
+                    .filter((item) => item.source === 'stack')
+                    .map((item) => (
+                      <li key={item.id} className="px-4 py-3 text-sm">
+                        {item.href ? (
+                          <a
+                            href={item.href}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-white hover:text-[#e8b86d]"
+                          >
+                            {item.title}
+                          </a>
+                        ) : (
+                          <span className="text-white">{item.title}</span>
+                        )}
+                      </li>
+                    ))}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
 
         {selected?.insights && (
           <section className="rounded-xl border border-white/10 bg-[#11131a] p-4 lg:col-span-2">
