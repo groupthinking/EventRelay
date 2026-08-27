@@ -57,6 +57,12 @@ const TRANSCRIPT_ADVICE_PATTERNS = [
   /transcript\.you/i,
   /quicktranscript\.ai/i,
   /transcriptgrab/i,
+  /audexum/i,
+  /yttranscript\.ai/i,
+  /unable to access the transcript/i,
+  /i attempted to retrieve the transcript/i,
+  /online tools designed for this purpose/i,
+  /to obtain the transcript, you can use/i,
 ];
 
 export function normalizeTranscriptSegments(raw: unknown): TranscriptSegment[] {

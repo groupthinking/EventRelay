@@ -93,6 +93,16 @@ describe('analysis evidence gate', () => {
     expect(result.issues.join(' ')).toMatch(/advice/i);
   });
 
+  it('rejects Audexum / YTTranscript.AI retrieval advice', () => {
+    const text = `I attempted to retrieve the transcript for the YouTube video. However, I was unable to access the transcript directly. To obtain the transcript, you can use online tools designed for this purpose. For instance, Audexum allows you to paste a YouTube link. Similarly, YTTranscript.AI offers instant extraction.`;
+    expect(hasTranscriptAdvice(text)).toBe(true);
+    expect(assessAnalysisEvidence({
+      transcript: text,
+      segments: [{ start: 0, duration: 0, text }],
+      provenance: provenance({ transcriptSource: 'openai-web-search-metadata', transcriptVerified: false }),
+    }).passed).toBe(false);
+  });
+
   it('normalizes only non-empty transcript segments', () => {
     expect(normalizeTranscriptSegments([
       { start: '4', duration: '2.5', text: ' hello ' },

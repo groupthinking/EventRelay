@@ -1,5 +1,10 @@
 import 'server-only';
 
+import { ProxyAgent, fetch as undiciFetch } from 'undici';
+import {
+  resolveCaptionTransport,
+  timedtextLooksBlocked,
+} from '@/lib/caption-transport';
 import { extractVideoId } from '@/lib/youtube-metadata';
 
 const ANDROID_UA = 'com.google.android.youtube/20.10.38 (Linux; U; Android 10)';
@@ -135,67 +140,135 @@ function innertubeKeyFromHtml(html: string): string | null {
   return html.match(/"INNERTUBE_API_KEY":"([^"]+)"/)?.[1] || null;
 }
 
+type CaptionFetch = {
+  transcript: string;
+  segments: CaptionSegment[];
+  source: string;
+};
+
 /**
- * Pull timed YouTube captions via Innertube (Android client). No API key, no FastAPI.
+ * Pull timed YouTube captions the same way a local agent would:
+ * watch page → Innertube ANDROID player → timedtext XML.
+ *
+ * WEB player timedtext URLs come back empty. ANDROID caption URLs return
+ * the spoken transcript. Vercel IPs are blocked, so hosted runs tunnel the
+ * three requests through the same Webshare rotating residential proxy as
+ * the Python backend.
  */
 export async function fetchYouTubeCaptions(
   url: string,
   language = 'en',
-): Promise<{ transcript: string; segments: CaptionSegment[]; source: string } | null> {
+): Promise<CaptionFetch | null> {
   const videoId = extractVideoId(url);
   if (!videoId) return null;
 
+  const transport = resolveCaptionTransport();
+  const attempts = transport.proxyUrl ? 3 : 1;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const result = await fetchYouTubeCaptionsOnce(videoId, language, transport.proxyUrl);
+    if (result) return result;
+    console.warn(
+      `[youtube-captions] ${transport.kind} attempt ${attempt}/${attempts} missed`,
+    );
+  }
+  return null;
+}
+
+async function fetchYouTubeCaptionsOnce(
+  videoId: string,
+  language: string,
+  proxyUrl: string | null,
+): Promise<CaptionFetch | null> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), 25_000);
   const headers = {
     'User-Agent': ANDROID_UA,
     'Accept-Language': 'en-US,en;q=0.9',
   };
-  try {
-    const watch = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers,
+  const dispatcher = proxyUrl
+    ? new ProxyAgent({ uri: proxyUrl, connections: 1, pipelining: 0 })
+    : undefined;
+
+  const youtubeFetch = async (input: string, init?: Parameters<typeof undiciFetch>[1]) =>
+    undiciFetch(input, {
+      ...init,
+      headers: { ...headers, ...(init?.headers as Record<string, string> | undefined) },
       signal: controller.signal,
+      ...(dispatcher ? { dispatcher } : {}),
     });
+
+  try {
+    const watch = await youtubeFetch(`https://www.youtube.com/watch?v=${videoId}`);
     if (!watch.ok) return null;
     const html = await watch.text();
     const apiKey = innertubeKeyFromHtml(html);
     if (!apiKey) return null;
 
-    const playerRes = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${apiKey}`, {
-      method: 'POST',
-      headers: { ...headers, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        context: {
-          client: {
-            clientName: 'ANDROID',
-            clientVersion: '20.10.38',
-            hl: 'en',
-            gl: 'US',
+    const playerRes = await youtubeFetch(
+      `https://www.youtube.com/youtubei/v1/player?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          context: {
+            client: {
+              clientName: 'ANDROID',
+              clientVersion: '20.10.38',
+              hl: 'en',
+              gl: 'US',
+            },
           },
-        },
-        videoId,
-      }),
-      signal: controller.signal,
-    });
+          videoId,
+        }),
+      },
+    );
     if (!playerRes.ok) return null;
     const player = (await playerRes.json()) as Record<string, unknown>;
     const track = pickCaptionTrack(captionTracksFromPlayer(player), language);
     if (!track) return null;
     const captionUrl = track.baseUrl.replace(/&fmt=\w+$/, '');
 
-    const xmlRes = await fetch(captionUrl, {
-      headers: { ...headers, accept: 'application/xml' },
-      signal: controller.signal,
+    const xmlRes = await youtubeFetch(captionUrl, {
+      headers: { accept: 'application/xml' },
     });
     if (!xmlRes.ok) return null;
-    const segments = parseCaptionXml(await xmlRes.text());
-    const transcript = segments.map((segment) => segment.text).join(' ').replace(/\s+/g, ' ').trim();
-    if (transcript.length < 40) return null;
-    return { transcript, segments, source: 'youtube-captions' };
+    const xmlType = xmlRes.headers.get('content-type') || '';
+    const xmlBody = await xmlRes.text();
+    if (!timedtextLooksBlocked(xmlType, xmlBody)) {
+      const segments = parseCaptionXml(xmlBody);
+      const transcript = segments.map((segment) => segment.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (transcript.length >= 40) {
+        return { transcript, segments, source: 'youtube-captions' };
+      }
+    }
+
+    const jsonRes = await youtubeFetch(
+      captionUrl.includes('fmt=') ? captionUrl : `${captionUrl}&fmt=json3`,
+      { headers: { accept: 'application/json' } },
+    );
+    if (!jsonRes.ok) return null;
+    const jsonType = jsonRes.headers.get('content-type') || '';
+    const jsonBody = await jsonRes.text();
+    if (timedtextLooksBlocked(jsonType, jsonBody)) return null;
+    try {
+      const segments = parseJson3Captions(JSON.parse(jsonBody) as unknown);
+      const transcript = segments.map((segment) => segment.text).join(' ').replace(/\s+/g, ' ').trim();
+      if (transcript.length < 40) return null;
+      return { transcript, segments, source: 'youtube-captions' };
+    } catch {
+      return null;
+    }
   } catch (error) {
     console.warn('[youtube-captions] fetch failed:', error);
     return null;
   } finally {
     clearTimeout(timeout);
+    if (dispatcher) {
+      try {
+        await dispatcher.close();
+      } catch {
+        // ignore close races after abort
+      }
+    }
   }
 }

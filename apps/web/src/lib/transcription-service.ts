@@ -6,7 +6,7 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
-import { isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { hasTranscriptAdvice, isTrustedTranscriptSource } from '@/lib/analysis-evidence';
 import { fetchYouTubeCaptions } from '@/lib/youtube-captions';
 
 let _openai: OpenAI | null = null;
@@ -256,7 +256,7 @@ INSTRUCTIONS:
                   },
                 })
               ).text ?? '';
-          if (text.length > 100) {
+          if (text.length > 100 && !hasTranscriptAdvice(text)) {
             return {
               success: false,
               transcript: '',
@@ -307,6 +307,7 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           const text = response.output_text || '';
           // Reject results that are just instructions rather than actual content
           const isGarbage =
+            hasTranscriptAdvice(text) ||
             text.toLowerCase().includes('click show transcript') ||
             text.toLowerCase().includes('click on the three dots') ||
             text.toLowerCase().includes('steps to find') ||
