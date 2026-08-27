@@ -50,6 +50,21 @@ describe('analysis evidence gate', () => {
     expect(result.state).toBe('degraded');
   });
 
+  it('lets usable derived speech through as degraded instead of blocking the page', () => {
+    const text = 'The way we interact with AI is changing. Text was only the beginning of how models see the world.';
+    const result = assessAnalysisEvidence({
+      transcript: text,
+      segments: [{ start: 0, duration: 0, text }],
+      provenance: provenance({
+        transcriptVerified: false,
+        transcriptSource: 'gemini-search-metadata',
+        acquisitionMethod: 'generative-search-context',
+      }),
+    });
+    expect(result.passed).toBe(true);
+    expect(result.state).toBe('degraded');
+  });
+
   it('rejects transcript-retrieval advice even when it is long', () => {
     const text = "I don't have direct access to the transcript. You can obtain it using Transcript.you by pasting the YouTube URL.";
     const result = assessAnalysisEvidence({

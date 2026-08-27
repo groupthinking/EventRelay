@@ -91,9 +91,13 @@ async function transcribeStep(url: string): Promise<VerifiedVideoEvidence> {
   } = await import('@/lib/analysis-evidence');
   const result = await fetchTranscript({ url });
   const segments = normalizeTranscriptSegments(result.segments);
-  const transcript = result.transcript?.trim() || transcriptTextFromSegments(segments);
+  const transcript = (
+    result.transcript?.trim() ||
+    result.derivedContent?.trim() ||
+    transcriptTextFromSegments(segments)
+  );
 
-  if (!result.success || result.verified !== true || transcript.length < 40) {
+  if (transcript.length < 40) {
     throw new FatalError(
       result.error || 'Verified captions or speech-to-text were unavailable.',
     );
@@ -122,7 +126,7 @@ async function transcribeStep(url: string): Promise<VerifiedVideoEvidence> {
     sourceHost,
     acquisitionMethod: result.acquisitionMethod || 'unknown',
     transcriptSource: result.source || 'unknown',
-    transcriptVerified: true,
+    transcriptVerified: result.verified === true,
     acquiredAt: result.acquiredAt || new Date().toISOString(),
     segmentCount: authoritativeSegments.length,
     timedSegmentCount,
