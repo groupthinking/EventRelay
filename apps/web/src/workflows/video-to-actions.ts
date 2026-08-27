@@ -1,16 +1,21 @@
 /**
  * Durable, evidence-gated video ETL workflow.
  *
- * Extract: acquire captions or speech-to-text from an accountable provider.
- * Transform: analyze only the verified transcript through AI Gateway/Gemini.
+ * Extract: acquire captions, speech-to-text, or usable derived speech.
+ * Transform: analyze that transcript through AI Gateway/Gemini.
  * Load: persist the typed return value in Workflow DevKit under its runId.
+ *
+ * Verified captions are preferred. Usable derived speech (quality.passed with
+ * state=degraded) is still a completed run — Vercel IPs often cannot fetch
+ * YouTube timedtext.
  */
 
 import { FatalError } from 'workflow';
-import type {
-  AnalysisProvenance,
-  EvidenceAssessment,
-  TranscriptSegment,
+import {
+  fatalQualityFailure,
+  type AnalysisProvenance,
+  type EvidenceAssessment,
+  type TranscriptSegment,
 } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
 
@@ -54,10 +59,12 @@ export async function videoToActionsWorkflow(
   const quality = analysis.quality;
   const provenance = analysis.provenance;
 
-  if (!quality?.passed || !provenance?.transcriptVerified) {
-    throw new FatalError(
-      `Analysis quality gate failed: ${quality?.issues.join(' ') || 'missing provenance'}`,
-    );
+  const fatal = fatalQualityFailure(quality);
+  if (fatal) {
+    throw new FatalError(fatal);
+  }
+  if (!provenance) {
+    throw new FatalError('Analysis quality gate failed: missing provenance');
   }
 
   const provider = await providerLabelStep();

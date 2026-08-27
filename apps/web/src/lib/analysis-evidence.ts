@@ -174,3 +174,9 @@ export function assessAnalysisEvidence(input: {
     checkedAt: input.now ?? new Date().toISOString(),
   };
 }
+
+/** Fatal only when the evidence gate itself failed — degraded derived speech still completes. */
+export function fatalQualityFailure(quality?: EvidenceAssessment): string | null {
+  if (quality?.passed) return null;
+  return `Analysis quality gate failed: ${quality?.issues.join(' ') || 'missing provenance'}`;
+}

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assessAnalysisEvidence,
   calculateDurationCoverageSeconds,
+  fatalQualityFailure,
   hasTranscriptAdvice,
   normalizeTranscriptSegments,
   type AnalysisProvenance,
@@ -63,6 +64,20 @@ describe('analysis evidence gate', () => {
     });
     expect(result.passed).toBe(true);
     expect(result.state).toBe('degraded');
+    expect(fatalQualityFailure(result)).toBeNull();
+  });
+
+  it('fails the workflow only when evidence itself did not pass', () => {
+    expect(fatalQualityFailure({
+      state: 'failed',
+      passed: false,
+      issues: ['Transcript is empty or too short to support analysis.'],
+      transcriptCharacters: 0,
+      segmentCount: 0,
+      timedSegmentCount: 0,
+      checkedAt: '2026-08-27T08:00:00.000Z',
+    })).toMatch(/quality gate failed/i);
+    expect(fatalQualityFailure(undefined)).toMatch(/missing provenance/);
   });
 
   it('rejects transcript-retrieval advice even when it is long', () => {
