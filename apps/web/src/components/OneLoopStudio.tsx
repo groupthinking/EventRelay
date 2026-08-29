@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket, Save } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
 import { compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
+import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
@@ -100,6 +101,7 @@ export default function OneLoopStudio() {
   const [usedSameRun, setUsedSameRun] = useState(false);
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
+  const [completedChecks, setCompletedChecks] = useState<string[]>([]);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
@@ -127,6 +129,13 @@ export default function OneLoopStudio() {
       topics: selected?.insights?.topics,
     });
   }, [selected]);
+
+  useEffect(() => {
+    setCompletedChecks([]);
+  }, [selectedVideoId]);
+
+  const holdReason = deployHoldReason(linkedSop, completedChecks);
+  const officialTemplate = pickOfficialTemplate(linkedSop);
 
   useEffect(() => {
     useDashboardStore.persist.rehydrate();
@@ -304,9 +313,11 @@ export default function OneLoopStudio() {
     });
     downloadScaffoldPackage(pkg);
     setMessage(
-      linkedSop
-        ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
-        : 'Exported scaffold files (README, tasks.json).',
+      officialTemplate
+        ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
+        : linkedSop
+          ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
+          : 'Exported scaffold files (README, tasks.json).',
     );
   };
 
@@ -314,6 +325,10 @@ export default function OneLoopStudio() {
     const next = (selected?.url || url).trim();
     if (!getYouTubeId(next)) {
       setMessage('Analyze a video before deploy.');
+      return;
+    }
+    if (holdReason) {
+      setMessage(holdReason);
       return;
     }
     setDeployBusy(true);
@@ -580,22 +595,40 @@ export default function OneLoopStudio() {
                 <ul className="divide-y divide-white/5">
                   {linkedSop.checklist
                     .filter((item) => item.source === 'stack')
-                    .map((item) => (
-                      <li key={item.id} className="px-4 py-3 text-sm">
-                        {item.href ? (
-                          <a
-                            href={item.href}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-white hover:text-[#e8b86d]"
-                          >
-                            {item.title}
-                          </a>
-                        ) : (
-                          <span className="text-white">{item.title}</span>
-                        )}
+                    .map((item) => {
+                      const checked = completedChecks.includes(item.id);
+                      return (
+                      <li key={item.id} className="flex items-start gap-3 px-4 py-3 text-sm">
+                        <input
+                          id={`check-${item.id}`}
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            setCompletedChecks((current) =>
+                              current.includes(item.id)
+                                ? current.filter((id) => id !== item.id)
+                                : [...current, item.id],
+                            );
+                          }}
+                          className="mt-1 h-4 w-4 accent-[#e8b86d]"
+                        />
+                        <label htmlFor={`check-${item.id}`} className="min-w-0 flex-1">
+                          {item.href ? (
+                            <a
+                              href={item.href}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-white hover:text-[#e8b86d]"
+                            >
+                              {item.title}
+                            </a>
+                          ) : (
+                            <span className="text-white">{item.title}</span>
+                          )}
+                        </label>
                       </li>
-                    ))}
+                      );
+                    })}
                 </ul>
               </>
             )}
@@ -670,12 +703,18 @@ export default function OneLoopStudio() {
           <button
             type="button"
             onClick={() => void deploy()}
-            disabled={deployBusy || !hasPayload}
+            disabled={deployBusy || !hasPayload || Boolean(holdReason)}
+            title={holdReason || undefined}
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
             Deploy
           </button>
+          {holdReason && (
+            <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
+              {holdReason}
+            </p>
+          )}
           <Link
             href="/dashboard"
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm"

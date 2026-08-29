@@ -1,4 +1,5 @@
 import { renderDeployMarkdown, type LinkedSop } from '@/lib/linked-sop';
+import { officialTemplateFiles, pickOfficialTemplate } from '@/lib/official-templates';
 
 /**
  * Canonical action surface (F3).
@@ -157,9 +158,17 @@ export function buildScaffoldPackage(input: {
       taskLines || '- (no tasks yet — run Act on findings or re-analyze the video)'
     }\n`,
     'tasks.json': JSON.stringify(tasks, null, 2) + '\n',
-    'src/index.ts':
-      "export function main() {\n  console.log('Generated project scaffold loaded.');\n}\n\nmain();\n",
   };
+
+  const template = pickOfficialTemplate(sop);
+  const officialFiles = officialTemplateFiles(name, sop);
+  Object.assign(files, officialFiles);
+  if (!template) {
+    files['src/index.ts'] =
+      "export function main() {\n  console.log('Generated project scaffold loaded.');\n}\n\nmain();\n";
+  } else {
+    files['README.md'] += `\n## Official starter\n\n\`\`\`bash\n${template.clone}\n\`\`\`\n\n${template.docsUrl}\n`;
+  }
 
   if (sop) {
     files['linked-sop.json'] = JSON.stringify(sop, null, 2) + '\n';

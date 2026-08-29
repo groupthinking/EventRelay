@@ -57,6 +57,9 @@ describe('action-surface (F3)', () => {
     expect(pkg.files['DEPLOY.md']).toContain('https://vercel.com/docs/deployment-checks');
     expect(pkg.files['README.md']).toContain('https://vercel.com');
     expect(pkg.files['linked-sop.json']).toContain('Ship the preview');
+    expect(pkg.files['src/index.ts']).toBeUndefined();
+    expect(pkg.files['app/page.tsx']).toContain('export default function Page');
+    expect(pkg.files['README.md']).toContain('create-next-app');
   });
 
   it('includes project_scaffold.json when Gemini scaffold is present', () => {
