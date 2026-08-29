@@ -248,6 +248,10 @@ jobs:
                 'lint-frontend',
                 'build',
                 'test',
+                // Python pytest only. The apps/web vitest suite is the separate
+                // required check `test-frontend` (#1449) -- a green `test` is
+                // not evidence that web unit tests ran.
+                'test-frontend',
                 'CodeQL',
                 'gitleaks (working tree)',
                 'dependency-review',

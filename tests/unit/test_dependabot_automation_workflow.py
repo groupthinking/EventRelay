@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -188,6 +189,9 @@ REQUIRED_CHECKS = [
     "lint-frontend",
     "build",
     "test",
+    # Python pytest only; apps/web vitest is the separate `test-frontend`
+    # required check (#1449).
+    "test-frontend",
     "CodeQL",
     "gitleaks (working tree)",
     "dependency-review",
@@ -522,3 +526,30 @@ def test_merge_gate_accepts_a_minor_update(tmp_path: Path) -> None:
     )
 
     assert outcome["merged"] is True, outcome["log"]
+
+
+def test_required_checks_match_merge_policy() -> None:
+    """The gate hard-codes gate 2's list, so it can drift from the policy it
+    claims to enforce. It already did: `test-frontend` became required in
+    #1449/#1480 three weeks after this gate was written, and nothing objected —
+    the gate would have merged a Dependabot PR with the apps/web vitest suite
+    unrun. Pin the two together so the next addition fails here instead."""
+    policy_path = Path(__file__).resolve().parents[2] / "MERGE_POLICY.md"
+    policy = policy_path.read_text()
+
+    match = re.search(r"Required for every pull request:(.*?)\.\n", policy, re.S)
+    assert match, "MERGE_POLICY.md no longer states a 'Required for every pull request' list"
+    policy_checks = set(re.findall(r"`([^`]+)`", match.group(1)))
+
+    script = _load_workflow()["jobs"]["dependabot-auto-merge-merge"]["steps"][0][
+        "with"
+    ]["script"]
+    block = re.search(r"const REQUIRED_CHECKS = \[(.*?)\];", script, re.S)
+    assert block, "merge job no longer declares REQUIRED_CHECKS"
+    gate_checks = set(re.findall(r"'([^']+)'", block.group(1)))
+
+    assert gate_checks == policy_checks, (
+        "Dependabot merge gate is out of sync with MERGE_POLICY.md gate 2.\n"
+        f"  missing from gate: {sorted(policy_checks - gate_checks)}\n"
+        f"  extra in gate    : {sorted(gate_checks - policy_checks)}"
+    )
