@@ -145,13 +145,28 @@ def _describe_exception(exc: BaseException) -> str:
     Used only by the serialization fallback, which exists precisely because a
     hostile ``__str__`` can raise. The exception caught there may *be* one
     raised from a call site's own ``__str__``, so interpolating ``exc`` can
-    raise a second time — inside the handler for the first. The type name is a
-    plain attribute lookup and is always safe.
+    raise a second time — inside the handler for the first.
+
+    ``type(exc).__name__`` is the natural retreat from that, and is *not*
+    sufficient on its own: ``__name__`` on a class is looked up on its
+    **metaclass**, so a metaclass defining ``__name__`` as a raising property
+    defeats it too. That second raise would leave this function entirely,
+    past the ``_JSON_UNSERIALIZABLE_RECORD`` tier, and cost the record (#1576).
+
+    ``object.__getattribute__(type(exc), "__name__")`` does not help — it still
+    routes through the metaclass descriptor. Fetching the descriptor from
+    ``type.__dict__`` and binding it directly is what bypasses an override,
+    and it returns the ordinary name for ordinary classes.
     """
     try:
         return f"{type(exc).__name__}: {exc}"
+    except Exception:  # noqa: BLE001 - fall through to a narrower attempt
+        pass
+    try:
+        name: str = type.__dict__["__name__"].__get__(type(exc))
+        return name
     except Exception:  # noqa: BLE001 - the fallback must not need a fallback
-        return type(exc).__name__
+        return "UnrenderableException"
 
 
 class StructuredFormatter(logging.Formatter):

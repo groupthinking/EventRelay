@@ -293,6 +293,8 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
       },
       { title: 'Review evidence', description: 'Inspect it.', category: 'research', estimatedMinutes: 5 },
     ]);
+    expect(video.insights?.linkedSop?.steps[0]?.title).toBe('Key point');
+    expect(video.insights?.linkedSop?.checklist.some((item) => item.source === 'video-sop')).toBe(true);
   });
 
   it('keeps a failed workflow failed and preserves a recovery record', async () => {

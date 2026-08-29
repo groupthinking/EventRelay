@@ -8,7 +8,7 @@ on:
 permissions:
   contents: read
   issues: write
-  pull-requests: read
+  pull-requests: write
 
 concurrency:
   group: repository-reconciliation
@@ -138,10 +138,64 @@ jobs:
             const report = existing.data.items.find(item => item.title === title);
             const body = lines.join("\n");
 
+            let reportNumber;
             if (report) {
+              reportNumber = report.number;
               await github.rest.issues.update({
                 owner, repo, issue_number: report.number, body
               });
             } else {
-              await github.rest.issues.create({ owner, repo, title, body });
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              reportNumber = created.data.number;
+            }
+
+            // --- Remediation: comment on non-draft PRs missing a canonical issue ---
+            const botTag = "<!-- reconciliation-missing-issue -->";
+            for (const pr of untracked) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner, repo, issue_number: pr.number, per_page: 100
+              });
+              if (comments.some(c => (c.body || "").includes(botTag))) continue;
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: pr.number,
+                body: `${botTag}\n⚠️ **Repository reconciliation**: this PR does not reference exactly one canonical issue.\n\nPlease add a \`Closes #<issue>\` reference in the PR description so it can be tracked against the delivery plan.\n\nSee governance: #898`
+              });
+            }
+
+            // --- Remediation: auto-close superseded competing draft PRs ---
+            const supersedesPattern = /supersedes\s+(?:stalled\s+)?(?:draft\s+)?#(\d+)/gi;
+            for (const [issue, numbers] of duplicates) {
+              // For each competing group, check if any PR explicitly supersedes another.
+              const competingPRs = pulls.filter(p => numbers.includes(p.number));
+              for (const pr of competingPRs) {
+                const superseded = [...(pr.body || "").matchAll(supersedesPattern)]
+                  .map(m => Number(m[1]));
+                for (const targetNum of superseded) {
+                  const target = competingPRs.find(p => p.number === targetNum);
+                  if (!target || !target.draft) continue;
+                  // Close the superseded draft PR with explanation.
+                  const closedComments = await github.paginate(github.rest.issues.listComments, {
+                    owner, repo, issue_number: targetNum, per_page: 100
+                  });
+                  const closeTag = "<!-- reconciliation-superseded -->";
+                  if (closedComments.some(c => (c.body || "").includes(closeTag))) continue;
+                  await github.rest.issues.createComment({
+                    owner, repo, issue_number: targetNum,
+                    body: `${closeTag}\n🔄 **Auto-closed by repository reconciliation**: this draft PR has been superseded by #${pr.number}, which implements the same issue #${issue}.\n\nSee governance: #898`
+                  });
+                  await github.rest.pulls.update({
+                    owner, repo, pull_number: targetNum, state: "closed"
+                  });
+                  core.info(`Closed superseded draft PR #${targetNum} (superseded by #${pr.number} for issue #${issue})`);
+                }
+              }
+            }
+
+            // --- Close the drift report issue when all findings are zero ---
+            if (reportNumber && untracked.length === 0 && duplicates.length === 0 && staleBranches.length === 0) {
+              await github.rest.issues.update({
+                owner, repo, issue_number: reportNumber,
+                state: "closed", state_reason: "completed"
+              });
+              core.info("All drift findings resolved — closed the report issue.");
             }

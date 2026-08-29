@@ -6,7 +6,8 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
-import { isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { hasTranscriptAdvice, isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { fetchYouTubeCaptions } from '@/lib/youtube-captions';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -16,7 +17,16 @@ function getOpenAI() {
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+function isLoopbackHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+/** Skip loopback backends — they hang Analyze for 8s on ECONNREFUSED. */
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http') && !isLoopbackHost(BACKEND_URL);
 
 // Resolve with the first non-null candidate, or null once every candidate has
 // settled (resolved null or rejected). Unlike Promise.race() over null-swapped
@@ -177,6 +187,28 @@ export async function fetchTranscript({
     }
   }
 
+  // Strategy 1b: timed YouTube captions from the watch page (no FastAPI).
+  if (url && !audioUrl) {
+    try {
+      const captions = await fetchYouTubeCaptions(url, language);
+      if (captions) {
+        return {
+          success: true,
+          transcript: captions.transcript,
+          segments: captions.segments,
+          source: captions.source,
+          verified: true,
+          acquisitionMethod: 'youtube-captions',
+          sourceUrl: url,
+          acquiredAt: new Date().toISOString(),
+          wordCount: captions.transcript.split(/\s+/).length,
+        };
+      }
+    } catch (error) {
+      console.warn('Direct YouTube captions unavailable:', error);
+    }
+  }
+
   // Strategies 2 & 3: Run Gemini and OpenAI in parallel — first successful result wins.
   // This eliminates the worst-case sequential 30s + 30s wait when both providers
   // are available, cutting latency to the faster of the two.
@@ -224,7 +256,7 @@ INSTRUCTIONS:
                   },
                 })
               ).text ?? '';
-          if (text.length > 100) {
+          if (text.length > 100 && !hasTranscriptAdvice(text)) {
             return {
               success: false,
               transcript: '',
@@ -275,6 +307,7 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           const text = response.output_text || '';
           // Reject results that are just instructions rather than actual content
           const isGarbage =
+            hasTranscriptAdvice(text) ||
             text.toLowerCase().includes('click show transcript') ||
             text.toLowerCase().includes('click on the three dots') ||
             text.toLowerCase().includes('steps to find') ||

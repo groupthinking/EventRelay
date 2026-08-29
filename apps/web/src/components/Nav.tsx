@@ -15,26 +15,19 @@ interface NavProps {
   fixed?: boolean;
 }
 
-/** Primary product navigation — dashboard-first journey. */
+/** Primary product navigation — one analyze loop. */
 const NAV_LINKS = [
-  { href: '/dashboard', label: 'Dashboard', hint: 'Video library' },
-  { href: '/dashboard/agents', label: 'Agents', hint: 'Pipeline graph' },
-  { href: '/features', label: 'Features' },
-  { href: '/pricing', label: 'Pricing' },
+  { href: '/', label: 'Analyze' },
+  { href: '/dashboard', label: 'Library' },
 ];
 
 /** Secondary / developer surfaces — not part of the default user path. */
 const DEV_LINKS = [
-  { href: '/studio', label: 'Studio', hint: 'Local drafts' },
   { href: '/docs/api', label: 'API' },
 ];
 
 /**
  * Renders the main site navigation bar.
- *
- * @param rightSlot - Optional content to display on the right side
- * @param subtitle - Optional content displayed next to the logo
- * @param fixed - Renders the navigation bar with fixed positioning when `true`
  */
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
@@ -50,7 +43,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
       )}
     >
       <div className="flex items-center gap-4">
-        <Link href="/dashboard" className="flex items-center gap-3 group">
+        <Link href="/" className="flex items-center gap-3 group">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
             U
           </div>
@@ -65,33 +58,26 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
         )}
 
         <div className="hidden md:flex items-center gap-1 ml-4">
-          {NAV_LINKS.map(({ href, label, hint }) => (
+          {NAV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
               aria-current={pathname === href ? 'page' : undefined}
-              title={hint}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors',
                 pathname === href || pathname.startsWith(`${href}/`)
-                  ? 'text-white/90 bg-white/[0.05]'
-                  : 'text-white/40 hover:text-white/70 hover:bg-white/[0.03]'
+                  ? 'text-white bg-white/[0.08]'
+                  : 'text-white/55 hover:text-white hover:bg-white/[0.04]'
               )}
             >
-              <span>{label}</span>
-              {hint && (
-                <span className="ml-1.5 hidden 2xl:inline text-[9px] uppercase tracking-wider text-white/25">
-                  {hint}
-                </span>
-              )}
+              {label}
             </Link>
           ))}
-          <div className="mx-1 hidden h-5 w-px bg-white/[0.08] xl:block" />
-          {DEV_LINKS.map(({ href, label, hint }) => (
+          <div className="h-5 w-px bg-white/[0.08] mx-1" />
+          {DEV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
-              title={hint}
               className={clsx(
                 'hidden text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03] xl:inline-flex',
                 pathname === href && 'text-white/60 bg-white/[0.04]'
@@ -105,8 +91,8 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/dashboard" className="btn btn-primary py-2 px-5 text-sm">
-            Open Dashboard
+          <Link href="/" className="btn btn-primary py-2 px-5 text-sm">
+            Analyze
           </Link>
         )}
         <button
@@ -125,7 +111,6 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
         </button>
       </div>
 
-      {/* Mobile links */}
       {mobileOpen && (
         <div
           id="mobile-nav"

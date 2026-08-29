@@ -34,7 +34,7 @@ npm run dev
 # start
 curl -X POST http://localhost:3000/api/workflows/video-to-actions \
   -H 'Content-Type: application/json' \
-  --json '{"url":"https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
+  --json '{"url":"https://www.youtube.com/watch?v=auJzb1D-fag"}'
 # poll (use runId from response)
 curl http://localhost:3000/api/workflows/video-to-actions/<runId>
 npx workflow web
@@ -50,12 +50,23 @@ npx workflow inspect runs
 
 `turbo.json` build outputs include `apps/web/src/app/.well-known/workflow/**` so cache hits keep workflow registration.
 
+## Product C — Studio deploy durable
+
+| Piece | Path |
+|-------|------|
+| Workflow | `apps/web/src/workflows/studio-deploy.ts` |
+| Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` (FastAPI `/api/v1/videos/process` + `/api/v1/jobs/:id`, no self-HTTP) |
+| Start | `POST /api/workflows/studio-deploy` `{ "url", projectType?, outcome? }` → `{ runId, statusUrl }` |
+| Status | `GET /api/workflows/studio-deploy/:runId` → `{ runStatus, result? }` |
+| Studio UI | Deploy in `VideoWorkflowStudio`. **401 → /login**. Fallback to F5 `/api/pipeline` only when start() is 5xx/unavailable. |
+
+Auth: this route stays **session-gated**. Studio now has a Sign in link. Never use `dQw4w9WgXcQ` as a fixture — use `auJzb1D-fag`.
+
 ## Next product steps
 
-1. **C — Studio deploy durable:** kickoff + poll `/api/pipeline` jobs as WDK steps with automatic retry.  
-2. Stream step progress via `getWritable()` into Studio.  
-3. Human approval hooks (`createHook` / `resumeHook`) before deploy.  
-4. Optionally route Dashboard “act” through the same durable path.
+1. Stream step progress via `getWritable()` into Studio.  
+2. Human approval hooks (`createHook` / `resumeHook`) before deploy.  
+3. Optionally route Dashboard “act” through the same durable path.
 
 ## Relation to F-series
 

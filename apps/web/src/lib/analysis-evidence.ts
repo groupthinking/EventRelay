@@ -57,6 +57,12 @@ const TRANSCRIPT_ADVICE_PATTERNS = [
   /transcript\.you/i,
   /quicktranscript\.ai/i,
   /transcriptgrab/i,
+  /audexum/i,
+  /yttranscript\.ai/i,
+  /unable to access the transcript/i,
+  /i attempted to retrieve the transcript/i,
+  /online tools designed for this purpose/i,
+  /to obtain the transcript, you can use/i,
 ];
 
 export function normalizeTranscriptSegments(raw: unknown): TranscriptSegment[] {
@@ -139,24 +145,30 @@ export function assessAnalysisEvidence(input: {
   if (!isTrustedTranscriptSource(input.provenance.transcriptSource)) {
     issues.push(`Transcript source is not trusted: ${input.provenance.transcriptSource || 'unknown'}.`);
   }
+
+  const fatal: string[] = [];
   if (transcript.length < 40) {
-    issues.push('Transcript is empty or too short to support analysis.');
+    fatal.push('Transcript is empty or too short to support analysis.');
   }
   if (hasTranscriptAdvice(transcript)) {
-    issues.push('Transcript contains transcript-retrieval advice instead of source speech.');
+    fatal.push('Transcript contains transcript-retrieval advice instead of source speech.');
   }
   if (input.provenance.sourceUrl.trim().length === 0) {
-    issues.push('Source URL is unavailable.');
+    fatal.push('Source URL is unavailable.');
   }
 
-  const passed = issues.length === 0;
+  const passed = fatal.length === 0;
+  const trusted =
+    input.provenance.transcriptVerified &&
+    isTrustedTranscriptSource(input.provenance.transcriptSource);
   const state: EvidenceState = !passed
     ? transcript.length === 0
       ? 'unavailable'
       : 'failed'
-    : timedSegmentCount === segmentCount && segmentCount > 0
+    : trusted && timedSegmentCount === segmentCount && segmentCount > 0
       ? 'verified'
       : 'degraded';
+  issues.push(...fatal);
 
   return {
     state,
@@ -167,4 +179,10 @@ export function assessAnalysisEvidence(input: {
     timedSegmentCount,
     checkedAt: input.now ?? new Date().toISOString(),
   };
+}
+
+/** Fatal only when the evidence gate itself failed — degraded derived speech still completes. */
+export function fatalQualityFailure(quality?: EvidenceAssessment): string | null {
+  if (quality?.passed) return null;
+  return `Analysis quality gate failed: ${quality?.issues.join(' ') || 'missing provenance'}`;
 }

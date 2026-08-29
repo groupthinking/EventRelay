@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   assessAnalysisEvidence,
   calculateDurationCoverageSeconds,
+  fatalQualityFailure,
   hasTranscriptAdvice,
   normalizeTranscriptSegments,
   type AnalysisProvenance,
@@ -50,6 +51,35 @@ describe('analysis evidence gate', () => {
     expect(result.state).toBe('degraded');
   });
 
+  it('lets usable derived speech through as degraded instead of blocking the page', () => {
+    const text = 'The way we interact with AI is changing. Text was only the beginning of how models see the world.';
+    const result = assessAnalysisEvidence({
+      transcript: text,
+      segments: [{ start: 0, duration: 0, text }],
+      provenance: provenance({
+        transcriptVerified: false,
+        transcriptSource: 'gemini-search-metadata',
+        acquisitionMethod: 'generative-search-context',
+      }),
+    });
+    expect(result.passed).toBe(true);
+    expect(result.state).toBe('degraded');
+    expect(fatalQualityFailure(result)).toBeNull();
+  });
+
+  it('fails the workflow only when evidence itself did not pass', () => {
+    expect(fatalQualityFailure({
+      state: 'failed',
+      passed: false,
+      issues: ['Transcript is empty or too short to support analysis.'],
+      transcriptCharacters: 0,
+      segmentCount: 0,
+      timedSegmentCount: 0,
+      checkedAt: '2026-08-27T08:00:00.000Z',
+    })).toMatch(/quality gate failed/i);
+    expect(fatalQualityFailure(undefined)).toMatch(/missing provenance/);
+  });
+
   it('rejects transcript-retrieval advice even when it is long', () => {
     const text = "I don't have direct access to the transcript. You can obtain it using Transcript.you by pasting the YouTube URL.";
     const result = assessAnalysisEvidence({
@@ -61,6 +91,16 @@ describe('analysis evidence gate', () => {
     expect(hasTranscriptAdvice(text)).toBe(true);
     expect(result.passed).toBe(false);
     expect(result.issues.join(' ')).toMatch(/advice/i);
+  });
+
+  it('rejects Audexum / YTTranscript.AI retrieval advice', () => {
+    const text = `I attempted to retrieve the transcript for the YouTube video. However, I was unable to access the transcript directly. To obtain the transcript, you can use online tools designed for this purpose. For instance, Audexum allows you to paste a YouTube link. Similarly, YTTranscript.AI offers instant extraction.`;
+    expect(hasTranscriptAdvice(text)).toBe(true);
+    expect(assessAnalysisEvidence({
+      transcript: text,
+      segments: [{ start: 0, duration: 0, text }],
+      provenance: provenance({ transcriptSource: 'openai-web-search-metadata', transcriptVerified: false }),
+    }).passed).toBe(false);
   });
 
   it('normalizes only non-empty transcript segments', () => {

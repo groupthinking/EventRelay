@@ -409,11 +409,19 @@ class TestSecurityBestPractices:
         assert dockerfile.exists(), f"{dockerfile} not found"
 
         canonical = _canonical_floors()
-        installed = _installed_requirements(
-            _pip_install_command(dockerfile.read_text())
-        )
+        command = _pip_install_command(dockerfile.read_text())
+        tokens = shlex.split(command)
+        assert not any(
+            token == "--trusted-host" or token.startswith("--trusted-host=")
+            for token in tokens
+        ), "Dockerfile.production must use normal TLS certificate validation"
+        installed = _installed_requirements(command)
 
         assert installed, "Dockerfile.production declares no pinned dependencies"
+        assert "slowapi" in installed, (
+            "Dockerfile.production omits slowapi, which youtube_extension.main "
+            "imports unconditionally at startup"
+        )
 
         for name, floor in sorted(installed.items()):
             assert floor is not None, (
