@@ -73,7 +73,7 @@ The real contexts, as observed on live pull requests:
 
 | Surface | Check-run names |
 | --- | --- |
-| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test` |
+| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test`, `test-frontend` |
 | Static analysis | `CodeQL` |
 | Security | `Security Scan - python`, `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy` |
 | Secrets | `gitleaks (working tree)` |
@@ -81,10 +81,17 @@ The real contexts, as observed on live pull requests:
 | Binding | `PR Governance`, `Canonical issue and evidence` |
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
-`lint-frontend`, `build`, `test`, `CodeQL`, `gitleaks (working tree)`,
-`dependency-review`, `PR Governance`, `Canonical issue and evidence`,
-`Security Scan - python`, `Security Scan - javascript`, `bandit`,
-`python-safety`, `npm-audit`, `trivy`.
+`lint-frontend`, `build`, `test`, `test-frontend`, `CodeQL`,
+`gitleaks (working tree)`, `dependency-review`, `PR Governance`,
+`Canonical issue and evidence`, `Security Scan - python`,
+`Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`,
+`trivy`.
+
+> **`test` vs `test-frontend`.** The CI job id/name `test` runs **Python**
+> pytest only. Frontend unit tests (apps/web vitest, including CWE-209 /
+> billing disclosure regressions) are the separate required check
+> **`test-frontend`** (#1449). Do not treat a green `test` check as evidence
+> that web unit tests ran.
 
 All six were verified to report `success` on a documentation-only pull request
 (#1408 head `27b2ecf`, and again on #1410 head `7af6028`), so none of them can
@@ -195,8 +202,10 @@ was written to remove.
 A check red on everything has zero signal and actively hides real failures.
 `agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
-ignore it. `.github/workflows/agent-completion-enforcement.yml` even documents
-this failure mode in its own comments while its sibling did exactly that.
+ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
+this failure mode in its own comments while its sibling did exactly that. Both
+have since been removed as unsatisfiable; the rule above is what should have
+caught them first.
 
 Demotion is not forgiveness. It is refusing to let a broken gate keep
 laundering itself as enforcement.

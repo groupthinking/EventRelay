@@ -7,6 +7,12 @@ __pycache__
 .pytest_cache
 .mypy_cache
 .ruff_cache
+.turbo
+htmlcov/
+coverage.xml
+reports/
+work/
+.superdesign/
 logs/
 tmp/
 *.db
@@ -16,5 +22,8 @@ tmp/
 infrastructure/
 /docs/
 tests/
-scripts/
+# Anchor to the repo-root Python/ops tree only. An unanchored `scripts/`
+# also deletes apps/web/scripts, and Vercel then fails npm postinstall
+# (dpl_81Nh… / dpl_8y6i… MODULE_NOT_FOUND on the WDK undici patch).
+/scripts/
 mcp-servers/

@@ -8625,6 +8625,8 @@ dependencies = [
     { name = "structlog" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "youtube-transcript-api" },
+    { name = "yt-dlp" },
 ]
 
 [package.optional-dependencies]
@@ -8699,8 +8701,6 @@ youtube = [
     { name = "google-cloud-videointelligence" },
     { name = "google-cloud-vision" },
     { name = "websockets" },
-    { name = "youtube-transcript-api" },
-    { name = "yt-dlp" },
 ]
 
 [package.metadata]
@@ -8798,8 +8798,8 @@ requires-dist = [
     { name = "typer", specifier = ">=0.9.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
     { name = "websockets", marker = "extra == 'youtube'", specifier = ">=12.0" },
-    { name = "youtube-transcript-api", marker = "extra == 'youtube'", specifier = ">=1.0.0" },
-    { name = "yt-dlp", marker = "extra == 'youtube'", specifier = ">=2025.5.22" },
+    { name = "youtube-transcript-api", specifier = ">=1.0.0" },
+    { name = "yt-dlp", specifier = ">=2025.5.22" },
 ]
 provides-extras = ["dev", "docs", "deploy", "youtube", "postgres", "ml", "cloud"]
 
