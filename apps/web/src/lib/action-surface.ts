@@ -236,7 +236,9 @@ export function summarizeProjectScaffold(scaffold: unknown, maxItems = 6): strin
 export function downloadScaffoldPackage(pkg: ScaffoldPackage): void {
   if (typeof document === 'undefined') return;
   const zip = zipUtf8Files(pkg.files);
-  const blob = new Blob([zip], { type: 'application/zip' });
+  const bytes = new ArrayBuffer(zip.byteLength);
+  new Uint8Array(bytes).set(zip);
+  const blob = new Blob([bytes], { type: 'application/zip' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
