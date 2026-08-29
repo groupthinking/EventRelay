@@ -1301,7 +1301,7 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
                     "unit": str(stats.get("unit", "ms")),
                 })
         await performance_monitor.record_metrics(samples)
-        return {"status": "ok", "metrics_recorded": len(metrics)}
+        return {"status": "ok", "metrics_recorded": len(samples)}
     except Exception as e:
         logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
