@@ -57,3 +57,18 @@ class QuotaExceededError(CloudAIError):
                  quota_type: Optional[str] = None):
         super().__init__(message, provider, "QUOTA_EXCEEDED")
         self.quota_type = quota_type
+
+
+class UnsafeMediaPathError(CloudAIError):
+    """Exception raised when a caller-supplied local media path is rejected.
+
+    Raised instead of reading the file, so a traversal attempt fails loudly
+    rather than silently returning empty bytes. ``requested_path`` echoes only
+    the value the caller already supplied -- the resolved server-side path is
+    deliberately not included, to avoid disclosing the filesystem layout.
+    """
+
+    def __init__(self, message: str, provider: Optional[str] = None,
+                 requested_path: Optional[str] = None):
+        super().__init__(message, provider, "UNSAFE_MEDIA_PATH")
+        self.requested_path = requested_path

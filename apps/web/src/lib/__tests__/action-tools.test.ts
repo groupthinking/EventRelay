@@ -29,6 +29,13 @@ describe('action tool registry', () => {
       expect(t.parameters.type).toBe('object');
       expect(t.parameters.additionalProperties).toBe(false);
       expect(Array.isArray(t.parameters.required)).toBe(true);
+      // OpenAI strict function tools (toOpenAITools sets strict: true) reject
+      // a schema whose required[] omits any properties key. Production
+      // runActionsStep 400'd on get_agent_session_logs for missing agentType
+      // (wrun_01KZYCN3XJMP9ANBXEARCNM41F on dpl_7KGT).
+      expect([...t.parameters.required].sort()).toEqual(
+        Object.keys(t.parameters.properties).sort(),
+      );
     }
   });
 

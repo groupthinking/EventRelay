@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Final, Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from .services.api_cost_monitor import cost_monitor
@@ -28,10 +28,19 @@ from .services.real_youtube_api import get_youtube_service
 # Configure logging
 logger = logging.getLogger(__name__)
 
-# Distinguishes "no cache entry" from an entry that parses to ``None`` -- which is
-# what a file holding the JSON literal ``null`` yields. A plain ``None`` return
-# conflates the two and turns a stored ``null`` analysis into a 404.
+# Distinguishes "no cache entry" from any entry content. The read helper returns
+# raw bytes today, but its historical contract returned parsed JSON, where a file
+# holding the literal ``null`` yields ``None`` -- a plain ``None`` return conflates
+# that with absence and turns a stored ``null`` analysis into a 404. The sentinel
+# keeps "miss" impossible to confuse with any payload, parsed or raw.
 _CACHE_MISS: Final = object()
+
+# Cache entries at or below this size are JSON-validated (parsed and discarded)
+# before being served, so a damaged small entry still surfaces as a 500. The
+# validation parse holds the GIL at roughly 3 ms/MB, so this threshold *is* the
+# event-loop stall bound: ~6 ms worst case, independent of video duration. Real
+# entries sit well under it (~0.15 MB for an hour of video, ~1.6 MB long-form).
+_VALIDATION_MAX_BYTES: Final = 2 * 1024 * 1024
 
 
 def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
@@ -91,34 +100,45 @@ def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
 
 
 def _read_video_analysis_sync(cache_path: Path) -> Any:
-    """Read and parse a single cached video analysis.
+    """Read a single cached video analysis and return its raw JSON bytes.
 
-    This performs blocking filesystem work (``open()`` and a full
-    ``json.load()`` of the analysis payload) and is therefore intended to be
-    executed in a worker thread via :func:`asyncio.to_thread` rather than
-    directly on the event loop.
+    This performs blocking filesystem work (``open()`` and a full ``read()``
+    of the analysis payload) and is therefore intended to be executed in a
+    worker thread via :func:`asyncio.to_thread` rather than directly on the
+    event loop.
 
-    What that offload does and does not buy is worth stating precisely, because
-    the two halves of this function behave differently under the GIL:
+    Guarantee: the event-loop stall this read can cause is *bounded and
+    independent of payload size*. That holds because of two decisions:
 
-    * ``open()``/``read()`` release the GIL, so moving them off the loop removes
-      the caller's exposure to filesystem latency entirely. This is the part
-      that is unbounded -- a cold page cache, a networked mount or a contended
-      disk can stall for hundreds of milliseconds.
-    * ``json.load()`` is CPU-bound C code that *holds* the GIL for its whole
-      duration. Running it in a worker thread does not stop it blocking the
-      loop; it only relocates it. Measured stall tracks payload size at roughly
-      3 ms/MB (~0.4 ms for a typical one-hour transcript, ~3 ms for long-form).
+    * ``open()``/``read()`` release the GIL, so the loop is shielded from
+      filesystem latency entirely -- a cold page cache, a networked mount or a
+      contended disk can stall this thread for hundreds of milliseconds
+      without the loop noticing, at any payload size.
+    * The payload is *not* parsed into Python objects. ``json.load()`` is
+      CPU-bound C code that holds the GIL for its whole duration (~3 ms/MB),
+      so relocating it to a worker thread only moved the stall, and entry size
+      is unbounded -- it tracks video duration because the full transcript is
+      persisted into the cache entry. The only consumer of this helper streams
+      the bytes back to the client verbatim, which also removes FastAPI's
+      re-serialisation of the parsed object -- work that ran *on* the loop and
+      likewise scaled with payload size. The parse/re-encode round-trip was
+      pure overhead: the cache entry already is the response body.
 
-    So this converts an unbounded, environment-dependent stall into a bounded,
-    payload-proportional one. It does not make the read non-blocking. On a warm
-    page cache with a small payload the executor hop is measurably *worse* than
-    reading inline (~0.5 ms of dispatch overhead against a ~0.4 ms parse); the
-    change earns its keep when the filesystem is slow, which is precisely the
-    case that cannot be predicted from inside the handler.
+    Entries at or below :data:`_VALIDATION_MAX_BYTES` are still parse-validated
+    here (the parsed result is discarded) so a damaged entry keeps surfacing as
+    a 500 rather than being handed to clients as garbage. That validation is
+    the sole remaining GIL-held, size-proportional work, and the threshold caps
+    it at ~6 ms. Larger entries skip validation: the writer
+    (``RealVideoProcessor._write_cache_file``) publishes atomically via a temp
+    file and ``os.replace``, so a torn half-written entry cannot be observed;
+    only out-of-band corruption of an oversized entry would reach a client
+    unflagged, and that is accepted in exchange for the bounded stall.
 
-    Removing the residual parse stall needs a different fix (streaming/incremental
-    parse, a size cap, or a process pool) and is tracked in issue #1306.
+    The executor dispatch hop (~0.5 ms) still costs more than a warm-cache
+    read of a small entry. That fixed overhead is accepted deliberately: it is
+    the insurance premium against unbounded filesystem latency, which cannot
+    be predicted from inside the handler -- and unlike before, no deferred
+    parse or on-loop re-serialisation is added on top of it.
 
     Opening directly and treating :class:`FileNotFoundError` as the miss
     replaces a separate ``Path.exists()`` probe. That is one syscall instead of
@@ -138,17 +158,23 @@ def _read_video_analysis_sync(cache_path: Path) -> Any:
     treats anything older than ``_CACHE_TTL_SECONDS`` (24 hours) as a miss;
     reusing it here would turn every analysis over a day old into a 404.
 
-    Returns the parsed JSON payload, which may legitimately be ``None`` when the
-    entry holds the literal ``null``. Absence is reported as the distinct
-    :data:`_CACHE_MISS` sentinel so the two cannot be confused.
+    Returns the entry's UTF-8 JSON bytes -- ``b"null"`` for an entry holding
+    the literal ``null``, which must still be served as a 200. Absence is
+    reported as the distinct :data:`_CACHE_MISS` sentinel so the two cannot be
+    confused.
     """
     try:
-        handle = open(cache_path, encoding="utf-8")
+        handle = open(cache_path, "rb")
     except (FileNotFoundError, ValueError):
         return _CACHE_MISS
 
     with handle as f:
-        return json.load(f)
+        raw = f.read()
+
+    if len(raw) <= _VALIDATION_MAX_BYTES:
+        json.loads(raw)
+
+    return raw
 
 
 # Pydantic models for API requests/responses
@@ -334,16 +360,16 @@ def setup_real_api_endpoints(app: FastAPI):
             processor = get_real_video_processor()
             cache_path = processor._get_cache_path(video_id)
 
-            # Reading an entry opens and JSON-parses a file whose size is set
-            # by the stored analysis payload, so the parse cost scales with the
-            # video rather than being bounded. Run it in a worker thread so a
-            # large analysis cannot stall the event loop for every other
-            # in-flight request. Building the path stays here: it is pure
-            # string arithmetic and touches no filesystem.
+            # The entry is read in a worker thread; ``open()``/``read()``
+            # release the GIL, so the loop is shielded from filesystem latency
+            # at any payload size. The bytes come back *unparsed* -- see
+            # _read_video_analysis_sync for why that bounds the loop stall
+            # independently of video duration. Building the path stays here:
+            # it is pure string arithmetic and touches no filesystem.
             video_data = await asyncio.to_thread(_read_video_analysis_sync, cache_path)
 
-            # Identity check against the sentinel, not a truthiness or ``is None``
-            # test: an entry holding the JSON literal ``null`` parses to ``None``
+            # Identity check against the sentinel, not a truthiness test: an
+            # entry holding the JSON literal ``null`` comes back as ``b"null"``
             # and has always been served as a 200, so it must not 404 here.
             if video_data is _CACHE_MISS:
                 raise HTTPException(
@@ -351,7 +377,11 @@ def setup_real_api_endpoints(app: FastAPI):
                     detail=f"Video analysis not found: {video_id}"
                 )
 
-            return video_data
+            # Raw passthrough: the cache entry already is the response JSON.
+            # Returning a Response skips FastAPI's jsonable_encoder/json.dumps
+            # round-trip, which would otherwise re-serialise the payload on
+            # the event loop in proportion to its size.
+            return Response(content=video_data, media_type="application/json")
 
         except HTTPException:
             raise

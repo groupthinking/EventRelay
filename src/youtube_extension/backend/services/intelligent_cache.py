@@ -61,6 +61,18 @@ def _resolve_tag_write_limit(max_connections: int) -> int:
     return max(1, min(TAG_WRITE_CONCURRENCY, max_connections - TAG_WRITE_POOL_RESERVE))
 
 
+class CacheLoopOwnershipError(RuntimeError):
+    """A cache layer's connection pool was used from a non-owning event loop.
+
+    Raised by :class:`RedisCacheLayer` when the running loop is not the loop
+    that owns ``self.redis_pool``. This is a programming error, not a transient
+    Redis fault, so it is deliberately *not* folded into the ``None``/``False``/
+    ``0`` fallbacks that the layer returns for connection failures -- a silent
+    fallback here would hide cross-loop transport misuse behind what looks like
+    an ordinary cache miss.
+    """
+
+
 # Hit timestamps retained per key to drive _calculate_adaptive_ttl(). That
 # consumer reads only the first element, the last element and the length, so the
 # window only has to be long enough for the ratio between them to be a stable
@@ -327,7 +339,52 @@ class InMemoryCacheLayer(IntelligentCacheLayer):
                                            (1 - alpha) * self.stats.avg_access_time_ms)
 
 class RedisCacheLayer(IntelligentCacheLayer):
-    """L2 Cache: Redis distributed cache"""
+    """L2 Cache: Redis distributed cache.
+
+    Event-loop ownership contract
+    -----------------------------
+    A ``redis.asyncio.ConnectionPool`` caches connections whose transports are
+    bound to the event loop that opened them, so this layer and its
+    ``self.redis_pool`` are **owned by exactly one event loop**.
+
+    Ownership is claimed the first time the pool is touched -- normally inside
+    :meth:`connect`, which is what creates the pool -- and is then verified at
+    every call site that reaches ``self.redis_pool``: :meth:`connect`,
+    :meth:`disconnect`, :meth:`get`, :meth:`set`, :meth:`delete`, :meth:`clear`
+    and :meth:`invalidate_by_tags`. Two loops mean two threads, so every
+    ownership transition is serialized on a ``threading.Lock``; simultaneous
+    first use from two live loops resolves to one winner, never to both loops
+    building a pool and leaking the loser's.
+
+    The rules are:
+
+    * Called from the owning loop -> allowed.
+    * Called from a different loop while the owning loop is still **alive** ->
+      :class:`CacheLoopOwnershipError`. Two live loops sharing one pool is
+      exactly the cross-loop transport misuse this contract exists to prevent
+      (see redis/redis-py#3351), so it is rejected rather than papered over.
+    * Called from a different loop after the owning loop has **closed** -> the
+      pool can no longer be used by anyone, because every connection it cached
+      is attached to a dead loop. It is dropped, the layer is marked
+      disconnected, and the new loop may claim the layer by calling
+      :meth:`connect` again. This is logged at WARNING because connections that
+      were never closed on the owning loop leak their sockets.
+    * :meth:`disconnect` is the supported clean handoff: it closes the pool on
+      the owning loop and releases ownership, after which any loop may
+      :meth:`connect` again. Ownership is released only once the pool actually
+      closed; a teardown failure propagates and leaves the layer intact so the
+      caller can retry instead of silently leaking a live pool.
+
+    Guards run *before* each method's ``try``/``except Exception`` block, so a
+    :class:`CacheLoopOwnershipError` is never swallowed into a cache-miss-shaped
+    return value.
+
+    Why this matters here specifically: this module builds an
+    ``IntelligentCacheSystem`` singleton at import time, outside any event loop,
+    so a single process (a test suite giving each test a fresh loop, or any code
+    calling ``asyncio.run()`` more than once) can reach one layer instance from
+    several loops.
+    """
 
     def __init__(self, name: str = "L2_Redis", redis_url: str = "redis://localhost:6379", max_connections: int = 20):
         super().__init__(name, max_size=100000)  # Logical limit for Redis
@@ -335,9 +392,86 @@ class RedisCacheLayer(IntelligentCacheLayer):
         self.max_connections = max_connections
         self.redis_pool = None
         self._connected = False
+        self._pool_loop: Optional[asyncio.AbstractEventLoop] = None
+        # Serializes ownership transitions. asyncio primitives cannot do this
+        # job: the contending callers are, by definition, on different loops.
+        self._ownership_lock = threading.Lock()
         self._tag_write_limit = _resolve_tag_write_limit(max_connections)
         self._tag_write_semaphore: Optional[asyncio.Semaphore] = None
         self._tag_write_semaphore_loop: Optional[asyncio.AbstractEventLoop] = None
+
+    def _require_pool_loop(self) -> asyncio.AbstractEventLoop:
+        """Enforce the event-loop ownership contract for ``self.redis_pool``.
+
+        Ownership is only meaningful while a pool exists, so a layer with no
+        pool claims nothing and any loop may go on to :meth:`connect` it.
+
+        Returns:
+            The running loop. On return it is guaranteed to be a loop that may
+            safely use ``self.redis_pool``.
+
+        Raises:
+            CacheLoopOwnershipError: another, still-running, loop owns the pool.
+        """
+        loop = asyncio.get_running_loop()
+
+        # Fast path: the already-claimed owner re-checking itself needs no lock.
+        if self._pool_loop is loop:
+            return loop
+
+        with self._ownership_lock:
+            owner = self._pool_loop
+
+            if owner is loop:
+                return loop
+
+            if owner is None:
+                # A pool assigned without going through connect() is claimed by
+                # the first loop that touches it. With no pool there is nothing
+                # to own -- claiming anyway would lock a later connect() out.
+                if self.redis_pool is not None:
+                    self._pool_loop = loop
+                return loop
+
+            if not owner.is_closed():
+                raise CacheLoopOwnershipError(
+                    f"{self.name}: RedisCacheLayer is owned by event loop "
+                    f"{owner!r} but was used from {loop!r}. A redis.asyncio "
+                    "ConnectionPool caches connections bound to the loop that "
+                    "opened them and cannot be shared across live loops. Use "
+                    "one RedisCacheLayer per event loop, or await disconnect() "
+                    "on the owning loop before reconnecting from another one."
+                )
+
+            self._discard_pool_of_dead_owner(owner, loop)
+            return loop
+
+    def _discard_pool_of_dead_owner(
+        self,
+        owner: asyncio.AbstractEventLoop,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        """Drop a pool whose owning loop has closed. Caller holds ``_ownership_lock``.
+
+        The pool's cached connections are attached to transports on the dead
+        loop, so nothing can use it again -- and it must not be closed from
+        here either, because ``pool.disconnect()`` would touch those very
+        transports from the wrong loop. Discarding is the only safe option,
+        and it is loud because sockets never closed on the owner leak.
+        """
+        if self.redis_pool is not None:
+            logger.warning(
+                "%s: event loop %r that owned the Redis connection pool has "
+                "closed without disconnect(); discarding the pool (its "
+                "connections may have leaked) and releasing ownership. Call "
+                "connect() to re-establish the pool on loop %r.",
+                self.name,
+                owner,
+                loop,
+            )
+        self.redis_pool = None
+        self._connected = False
+        self._pool_loop = None
 
     def _get_tag_write_semaphore(self) -> asyncio.Semaphore:
         """Semaphore shared by every tag fan-out on this layer.
@@ -361,20 +495,11 @@ class RedisCacheLayer(IntelligentCacheLayer):
         singleton.
 
         It is therefore replaced whenever a different loop is seen, so that the
-        semaphore itself never outlives the loop it bound to.
-
-        Scope note: this limiter bounds tag-write fan-out within one loop. It is
-        deliberately *not* a cross-loop safety mechanism, and replacing the
-        semaphore does **not** make the layer reusable across loops. A
-        ``redis.asyncio`` pool caches connections whose transports are bound to
-        the loop that opened them, so a ``RedisCacheLayer`` is already
-        event-loop-affine through ``self.redis_pool`` -- and that affinity
-        applies equally to ``get()``, ``delete()`` and ``clear()``, none of
-        which this limiter touches -- and to the two paths that do acquire it,
-        since bounding fan-out is not the same guarantee as owning a loop.
-        Enforcing a loop-ownership contract is a layer-wide concern tracked in
-        #1162; guarding only these paths would give a misleading partial
-        guarantee. Use one layer per event loop.
+        semaphore itself never outlives the loop it bound to. Under the
+        layer-wide ownership contract documented on this class, a different
+        loop can only be seen here after ownership was released to that loop,
+        so replacement is a consequence of the contract rather than a
+        competing cross-loop mechanism.
         """
         loop = asyncio.get_running_loop()
 
@@ -385,8 +510,41 @@ class RedisCacheLayer(IntelligentCacheLayer):
         return self._tag_write_semaphore
 
     async def connect(self):
-        """Connect to Redis"""
+        """Connect to Redis.
+
+        Claims event-loop ownership of the pool this creates. The claim
+        happens under ``_ownership_lock`` *before* the pool is built, so a
+        simultaneous connect() from a second live loop is rejected instead of
+        racing this one, overwriting ``self.redis_pool`` and leaking the
+        losing pool. See the class docstring for the full contract.
+        """
+        loop = asyncio.get_running_loop()
+
+        # Outside the try below: an ownership violation is a programming error
+        # and must not be downgraded to "Redis is unreachable".
+        with self._ownership_lock:
+            owner = self._pool_loop
+            if owner is not None and owner is not loop:
+                if not owner.is_closed():
+                    raise CacheLoopOwnershipError(
+                        f"{self.name}: cannot connect() from {loop!r}; the "
+                        f"layer is owned by live event loop {owner!r}. Await "
+                        "disconnect() on the owning loop first, or use one "
+                        "RedisCacheLayer per event loop."
+                    )
+                self._discard_pool_of_dead_owner(owner, loop)
+
+            self._pool_loop = loop
+            old_pool = self.redis_pool
+            self.redis_pool = None
+            self._connected = False
+
         try:
+            if old_pool is not None:
+                # Reconnecting on the owning loop: close the previous pool
+                # instead of silently abandoning its connections.
+                await old_pool.disconnect()
+
             self.redis_pool = redis.ConnectionPool.from_url(
                 self.redis_url,
                 max_connections=self.max_connections,
@@ -403,9 +561,57 @@ class RedisCacheLayer(IntelligentCacheLayer):
         except Exception as e:
             logger.warning(f"❌ Failed to connect to Redis: {e}")
             self._connected = False
+            if self.redis_pool is None:
+                # Nothing was built, so there is nothing to own; release the
+                # eager claim so any loop may attempt the next connect().
+                with self._ownership_lock:
+                    if self._pool_loop is loop and self.redis_pool is None:
+                        self._pool_loop = None
+
+    async def disconnect(self) -> None:
+        """Close the pool on its owning loop and release ownership.
+
+        This is the supported way to hand a layer from one event loop to
+        another: ``await layer.disconnect()`` on the owning loop, then
+        ``await layer.connect()`` on the next one. It must run on the owning
+        loop, because closing the pool touches transports bound to it.
+
+        A teardown failure propagates and leaves the layer owned, connected
+        and holding its pool: ownership is released only once the pool has
+        actually closed, so a failed disconnect can be retried rather than
+        silently leaking a live pool.
+        """
+        loop = asyncio.get_running_loop()
+
+        with self._ownership_lock:
+            owner = self._pool_loop
+            if owner is not None and owner is not loop:
+                if not owner.is_closed():
+                    raise CacheLoopOwnershipError(
+                        f"{self.name}: cannot disconnect() from {loop!r}; the "
+                        f"pool is owned by live event loop {owner!r} and must "
+                        "be closed on that loop."
+                    )
+                # The owner died with its transports; discarding is all that
+                # is left to do, exactly as on any other post-mortem access.
+                self._discard_pool_of_dead_owner(owner, loop)
+                return
+            pool = self.redis_pool
+
+        if pool is not None:
+            await pool.disconnect()
+
+        with self._ownership_lock:
+            if self.redis_pool is pool:
+                self.redis_pool = None
+                self._connected = False
+                self._pool_loop = None
 
     async def get(self, key: str) -> Optional[Any]:
         """Get value from Redis cache"""
+        # Before the try and the _connected check: see the class docstring.
+        self._require_pool_loop()
+
         if not self._connected:
             return None
 
@@ -447,6 +653,8 @@ class RedisCacheLayer(IntelligentCacheLayer):
 
     async def set(self, key: str, value: Any, ttl: Optional[int] = None, tags: list[str] = None) -> bool:
         """Set value in Redis cache"""
+        self._require_pool_loop()
+
         if not self._connected:
             return False
 
@@ -511,6 +719,8 @@ class RedisCacheLayer(IntelligentCacheLayer):
 
     async def delete(self, key: str) -> bool:
         """Delete value from Redis cache"""
+        self._require_pool_loop()
+
         if not self._connected:
             return False
 
@@ -534,6 +744,8 @@ class RedisCacheLayer(IntelligentCacheLayer):
 
     async def clear(self) -> int:
         """Clear all Redis cache entries"""
+        self._require_pool_loop()
+
         if not self._connected:
             return 0
 
@@ -559,6 +771,8 @@ class RedisCacheLayer(IntelligentCacheLayer):
 
     async def invalidate_by_tags(self, tags: list[str]) -> int:
         """Invalidate cache entries by tags"""
+        self._require_pool_loop()
+
         if not self._connected:
             return 0
 
@@ -659,6 +873,18 @@ class IntelligentCacheSystem:
             if hasattr(layer, 'connect'):
                 await layer.connect()
 
+    async def shutdown(self) -> None:
+        """Release every layer's connections on the loop that owns them.
+
+        The counterpart to :meth:`initialize`. Call this before the running
+        event loop closes: ``RedisCacheLayer`` binds its connection pool to the
+        loop that created it, and this is the supported way to release that
+        binding so the next loop can call :meth:`initialize` cleanly.
+        """
+        for layer in self.layers:
+            if hasattr(layer, 'disconnect'):
+                await layer.disconnect()
+
     async def get(self, key: str) -> Optional[Any]:
         """Get value from cache layers (L1 → L2 → L3)"""
         start_time = time.time()
@@ -734,6 +960,13 @@ class IntelligentCacheSystem:
             tasks.append(self.set(key, value, ttl))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # An ownership violation is a programming error, not a failed warm;
+        # return_exceptions must not swallow it into the success count.
+        for result in results:
+            if isinstance(result, CacheLoopOwnershipError):
+                raise result
+
         success_count = sum(1 for r in results if r is True)
 
         logger.info(f"✅ Cache warming completed: {success_count}/{len(keys_and_values)} successful")

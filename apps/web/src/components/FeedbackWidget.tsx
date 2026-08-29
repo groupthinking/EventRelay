@@ -22,12 +22,14 @@ export default function FeedbackWidget({ videoId, tab, compact = false }: Feedba
   const [comment, setComment] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const commentId = useId();
 
   const handleSubmit = useCallback(async () => {
     if (rating === 0) return;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       await submitFeedback({
         videoId,
@@ -38,6 +40,7 @@ export default function FeedbackWidget({ videoId, tab, compact = false }: Feedba
       setSubmitted(true);
     } catch (err) {
       console.error('Feedback submission failed:', err);
+      setSubmitError('Feedback could not be saved. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -144,6 +147,11 @@ export default function FeedbackWidget({ videoId, tab, compact = false }: Feedba
               {submitting ? 'Sending…' : 'Submit'}
             </button>
           </div>
+          {submitError && (
+            <p role="alert" className="text-sm text-red-300">
+              {submitError}
+            </p>
+          )}
         </div>
       )}
     </div>

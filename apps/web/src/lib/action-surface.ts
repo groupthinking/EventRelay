@@ -1,3 +1,5 @@
+import { renderDeployMarkdown, type LinkedSop } from '@/lib/linked-sop';
+
 /**
  * Canonical action surface (F3).
  *
@@ -42,27 +44,100 @@ function safeProjectName(name: string): string {
 }
 
 /** Build deterministic scaffold files from planned/fulfilled actions (workbench absorb). */
+export type StudioEventLike = {
+  type?: string;
+  title?: string;
+  description?: string;
+};
+
+export type StudioWorkflowActionLike = {
+  tool?: string;
+  status?: string;
+  result?: string;
+};
+
+/**
+ * Export uses this Studio run: Analyze actions, else events, else Act tools.
+ * Button is enabled on transcript/events; do not require insights.actions.
+ */
+export function actionsFromStudioRun(input: {
+  insightActions?: ActionCardLike[] | null;
+  events?: StudioEventLike[] | null;
+  workflowActions?: StudioWorkflowActionLike[] | null;
+}): ActionCardLike[] {
+  const out: ActionCardLike[] = [];
+  const seen = new Set<string>();
+
+  const push = (action: ActionCardLike) => {
+    const title = action.title.trim();
+    if (!title) return;
+    const key = title.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...action, title });
+  };
+
+  for (const action of input.insightActions || []) {
+    if (!action?.title) continue;
+    push(action);
+  }
+  for (const event of input.events || []) {
+    if (!event?.title) continue;
+    push({
+      title: event.title,
+      description: event.description,
+      category: event.type || 'event',
+    });
+  }
+  if (out.length === 0) {
+    for (const action of input.workflowActions || []) {
+      const title = (action.tool || '').trim();
+      if (!title) continue;
+      push({
+        title,
+        description: action.result || action.status,
+        category: 'act',
+      });
+    }
+  }
+  return out;
+}
+
 export function buildScaffoldPackage(input: {
   projectName?: string;
   actions: ActionCardLike[];
   /** Optional Gemini project_scaffold blob from TranscriptActionAgent. */
   projectScaffold?: unknown;
+  linkedSop?: LinkedSop;
 }): ScaffoldPackage {
   const name = safeProjectName(input.projectName || 'generated-project');
-  const tasks = input.actions.map((a, i) => ({
-    id: `TASK-${String(i + 1).padStart(3, '0')}`,
-    title: a.title,
-    description: a.description || '',
-    category: a.category || 'build',
-    estimatedMinutes: a.estimatedMinutes ?? null,
-    source:
-      typeof a.start === 'number' && typeof a.end === 'number'
-        ? `${Math.round(a.start)}s-${Math.round(a.end)}s`
-        : undefined,
-    confidence: a.confidence,
-    tags: a.tags,
-    snippet: a.snippet,
-  }));
+  const sop = input.linkedSop;
+  const tasks = sop && sop.checklist.length > 0
+    ? sop.checklist.map((item, i) => ({
+        id: item.id || `TASK-${String(i + 1).padStart(3, '0')}`,
+        title: item.title,
+        description: item.source === 'stack' ? `Official ${item.stack || 'stack'} check` : 'Video SOP',
+        category: item.source === 'stack' ? 'deploy' : 'sop',
+        href: item.href,
+        timestamp: item.timestamp ?? null,
+        source: item.timestamp != null ? `${Math.round(item.timestamp)}s` : undefined,
+      }))
+    : input.actions.map((a, i) => ({
+        id: `TASK-${String(i + 1).padStart(3, '0')}`,
+        title: a.title,
+        description: a.description || '',
+        category: a.category || 'build',
+        estimatedMinutes: a.estimatedMinutes ?? null,
+        href: undefined as string | undefined,
+        timestamp: null as number | null,
+        source:
+          typeof a.start === 'number' && typeof a.end === 'number'
+            ? `${Math.round(a.start)}s-${Math.round(a.end)}s`
+            : undefined,
+        confidence: a.confidence,
+        tags: a.tags,
+        snippet: a.snippet,
+      }));
 
   const taskLines = tasks
     .map((t) => {
@@ -71,14 +146,25 @@ export function buildScaffoldPackage(input: {
     })
     .join('\n');
 
+  const entityLines = (sop?.entities || [])
+    .map((entity) => `- [${entity.name}](${entity.officialUrl})${entity.docsUrl && entity.docsUrl !== entity.officialUrl ? ` — [docs](${entity.docsUrl})` : ''}`)
+    .join('\n');
+
   const files: Record<string, string> = {
-    'README.md': `# ${name}\n\nGenerated from EventRelay video action surface.\n\n## Tasks\n\n${
+    'README.md': `# ${name}\n\nGenerated from a verified video transcript.\n\n${
+      entityLines ? `## Named tools\n\n${entityLines}\n\n` : ''
+    }## Tasks\n\n${
       taskLines || '- (no tasks yet — run Act on findings or re-analyze the video)'
     }\n`,
     'tasks.json': JSON.stringify(tasks, null, 2) + '\n',
     'src/index.ts':
       "export function main() {\n  console.log('Generated project scaffold loaded.');\n}\n\nmain();\n",
   };
+
+  if (sop) {
+    files['linked-sop.json'] = JSON.stringify(sop, null, 2) + '\n';
+    files['DEPLOY.md'] = renderDeployMarkdown(sop);
+  }
 
   if (input.projectScaffold != null) {
     files['project_scaffold.json'] =

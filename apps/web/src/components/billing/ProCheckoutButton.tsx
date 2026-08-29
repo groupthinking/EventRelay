@@ -32,7 +32,7 @@ const TURNSTILE_SCRIPT = 'https://challenges.cloudflare.com/turnstile/v0/api.js?
 export default function ProCheckoutButton({
   annual,
   className,
-  label = 'Start 14-day free trial →',
+  label = 'Continue to secure checkout',
 }: ProCheckoutButtonProps) {
   const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
   const widgetRef = useRef<HTMLDivElement>(null);

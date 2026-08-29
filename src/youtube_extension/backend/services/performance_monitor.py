@@ -293,13 +293,18 @@ class PerformanceMonitor:
             return
 
         try:
-            now = datetime.now(timezone.utc)
+            # Stamp each record with its own ``datetime.now`` exactly as the
+            # serial ``record_metric`` does. A single shared ``now`` for the
+            # whole batch gives every row an identical timestamp, which
+            # diverges from the parity this method's docstring promises and
+            # erases per-sample ordering for callers that submit genuinely
+            # distinct samples in one call.
             records = [
                 PerformanceMetric(
                     component=entry["component"],
                     metric_name=entry["metric_name"],
                     value=float(entry["value"]),
-                    timestamp=entry.get("timestamp") or now,
+                    timestamp=entry.get("timestamp") or datetime.now(timezone.utc),
                     unit=entry.get("unit", "ms"),
                     tags=entry.get("tags") or {},
                 )

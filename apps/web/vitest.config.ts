@@ -20,7 +20,21 @@ export default defineConfig({
     // Force frontend-only behaviour in route handlers (BACKEND_AVAILABLE=false)
     // so tests are deterministic regardless of the developer's shell env.
     // BILLING_COOKIE_SECRET lets billing tests mint/verify signed identity cookies.
-    env: { BACKEND_URL: '', BILLING_COOKIE_SECRET: 'test-billing-cookie-secret' },
+    //
+    // The AI gateway keys are blanked for the same reason. Without this, any
+    // machine with e.g. AI_GATEWAY_API_KEY exported would make route handlers
+    // take their *live* provider branch and issue a real network request to
+    // https://ai-gateway.vercel.sh — which is both non-hermetic and flaky
+    // (billing-chat-gating intermittently blew its 5s timeout). Tests that need
+    // a key set it explicitly in their own setup, so a blank default is safe.
+    env: {
+      BACKEND_URL: '',
+      BILLING_COOKIE_SECRET: 'test-billing-cookie-secret',
+      AI_GATEWAY_API_KEY: '',
+      VERCEL_AI_GATEWAY_API_KEY: '',
+      VERCEL_AI_GATEWAY_API: '',
+      VERCEL_API_KEY: '',
+    },
   },
   resolve: {
     alias: {
