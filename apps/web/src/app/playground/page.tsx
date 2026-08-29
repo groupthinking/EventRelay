@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import VideoGenerator from '@/components/video-generator';
+import { ExternalLink, LoaderCircle } from 'lucide-react';
 
 interface APIResponse {
   status: 'success' | 'error' | 'loading' | null;
@@ -35,7 +36,7 @@ function ResponseViewer({ response }: { response: APIResponse }) {
     return (
       <div className="flex items-center justify-center h-64 bg-surface-900 rounded-xl border border-white/10">
         <div className="text-center">
-          <div className="w-12 h-12 rounded-full border-4 border-primary-500 border-t-transparent animate-spin mx-auto mb-4" />
+          <LoaderCircle className="mx-auto mb-4 h-12 w-12 animate-spin text-primary-500" aria-hidden="true" />
           <p className="text-white/60">Processing request...</p>
         </div>
       </div>
@@ -55,7 +56,7 @@ function ResponseViewer({ response }: { response: APIResponse }) {
       <div className={`absolute top-2 right-2 px-2 py-1 rounded text-xs ${
         response.status === 'success' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
       }`}>
-        {response.status.toUpperCase()} {response.latency && `• ${response.latency}ms`}
+        {response.status.toUpperCase()} {response.latency && `(${response.latency} ms)`}
       </div>
       <pre className="w-full h-64 p-4 bg-slate-900 rounded-xl border border-white/10 font-mono text-sm text-white/80 overflow-auto">
         {JSON.stringify(response.data, null, 2)}
@@ -232,7 +233,8 @@ export default function APIPlaygroundPage() {
             target="_blank"
             className="px-4 py-2 rounded-lg bg-white/5 border border-white/10 text-sm hover:bg-white/10 transition"
           >
-            Full API Docs →
+            Full API Docs
+            <ExternalLink className="ml-1.5 inline h-3.5 w-3.5" aria-hidden="true" />
           </Link>
         }
       />
@@ -242,7 +244,7 @@ export default function APIPlaygroundPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 font-heading">API Playground</h1>
           <p className="text-white/60">
-            Test UVAI APIs directly in your browser. No authentication required for sandbox mode.
+            Test real UVAI API responses in your browser. Authentication and provider configuration requirements apply.
           </p>
         </div>
 

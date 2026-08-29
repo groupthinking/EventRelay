@@ -225,3 +225,10 @@ data/audit/*.jsonl
 /test_*.py
 # Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
 /.verification-gate-pass
+
+# Local AI session artifacts
+*.rtf
+.gemini/extensions/
+
+# Local verification and native-module quarantine artifacts
+/work/

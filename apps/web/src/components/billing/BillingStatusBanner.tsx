@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { clsx } from 'clsx';
+import { ArrowRight } from 'lucide-react';
 
 type BillingStatus = {
   plan: string;
@@ -42,7 +43,8 @@ export default function BillingStatusBanner() {
       </span>
       {!isPro && (
         <Link href="/pricing" className="text-primary-400 hover:text-primary-300 font-semibold">
-          Upgrade →
+          Upgrade
+          <ArrowRight className="ml-1 inline h-3.5 w-3.5" aria-hidden="true" />
         </Link>
       )}
     </div>

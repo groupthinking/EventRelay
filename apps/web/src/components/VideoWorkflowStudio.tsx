@@ -31,6 +31,12 @@ import {
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
 import { kickoffStudioDeploy, pollStudioJob } from '@/lib/studio-deploy';
+import { pollStudioDeploy, startStudioDeploy } from '@/lib/studio-workflow';
+import {
+  pollVideoToActions,
+  startVideoToActions,
+  type VideoToActionsResult,
+} from '@/lib/studio-workflow';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
@@ -373,12 +379,24 @@ export default function VideoWorkflowStudio() {
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const [deployLiveUrl, setDeployLiveUrl] = useState<string | null>(null);
   const [deployRepo, setDeployRepo] = useState<string | null>(null);
+  const [deployRunId, setDeployRunId] = useState<string | null>(null);
+  /** Durable WDK video→actions (Product v1) — separate from FastAPI pipeline jobs. */
+  const [actionsBusy, setActionsBusy] = useState(false);
+  const [workflowRunId, setWorkflowRunId] = useState<string | null>(null);
+  const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoUrlRef = useRef('');
   const promptRef = useRef(DEFAULT_PROMPT);
+  const deployAbortRef = useRef<AbortController | null>(null);
   const realtime = useRealtimeVoice(audioRef);
+
+  useEffect(() => {
+    return () => {
+      deployAbortRef.current?.abort();
+    };
+  }, []);
 
   const videoId = useMemo(() => getYouTubeId(videoUrl), [videoUrl]);
   const frameUrls = useMemo(() => makeFrameUrls(videoId), [videoId]);
@@ -497,6 +515,75 @@ export default function VideoWorkflowStudio() {
     }, unsafe ? 250 : 100);
   };
 
+  /**
+   * Act on findings — durable Workflow DevKit path (video → transcript → action agent).
+   * Survives reloads better than a single long request; poll by runId.
+   */
+  const handleActOnFindings = async () => {
+    if (actionsBusy) return;
+    const currentVideoUrl = videoUrlRef.current || videoUrl;
+    const currentVideoId = getYouTubeId(currentVideoUrl);
+    if (!currentVideoId) {
+      setActionMessage('Add a valid YouTube URL before acting on findings.');
+      return;
+    }
+
+    setActionsBusy(true);
+    setWorkflowActions(null);
+    setActionMessage('Starting durable video-to-actions workflow…');
+
+    try {
+      const started = await startVideoToActions({
+        url: currentVideoUrl,
+        videoTitle: selectedOutcomeLabel,
+      });
+      if (!started.ok || !started.runId) {
+        setActionMessage(
+          started.error
+            ? `Could not start durable workflow: ${started.error}`
+            : 'Could not start durable workflow. Check Workflow DevKit install and withWorkflow config.',
+        );
+        return;
+      }
+
+      setWorkflowRunId(started.runId);
+      setActionMessage(`Workflow ${started.runId} running — polling transcript + actions…`);
+
+      const polled = await pollVideoToActions(started.runId, {
+        attempts: 24,
+        delayMs: 2000,
+      });
+
+      if (polled.runStatus === 'completed' && polled.result) {
+        setWorkflowActions(polled.result);
+        const n = polled.result.actionCount;
+        setActionMessage(
+          n > 0
+            ? `Acted on findings: ${n} action${n === 1 ? '' : 's'} via ${polled.result.provider || 'agent'} (run ${started.runId}).`
+            : `Workflow finished with no tool actions (run ${started.runId}). Transcript ${polled.result.transcriptChars} chars.`,
+        );
+        return;
+      }
+
+      if (polled.runStatus === 'failed' || polled.runStatus === 'cancelled') {
+        setActionMessage(
+          `Workflow ${started.runId} ${polled.runStatus}${polled.error ? `: ${polled.error}` : ''}. Try Dashboard live analysis or re-run.`,
+        );
+        return;
+      }
+
+      setActionMessage(
+        `Workflow ${started.runId} still ${polled.runStatus || 'running'}. Re-check later or open Dashboard for SSE pipeline.`,
+      );
+    } catch (err) {
+      setActionMessage(
+        `Act on findings failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      setActionsBusy(false);
+    }
+  };
+
   const handleDeploy = async () => {
     if (deployBusy) return;
     const currentVideoUrl = videoUrlRef.current || videoUrl;
@@ -506,11 +593,69 @@ export default function VideoWorkflowStudio() {
       return;
     }
 
+    deployAbortRef.current?.abort();
+    const deployAbort = new AbortController();
+    deployAbortRef.current = deployAbort;
+
     setDeployBusy(true);
-    setActionMessage('Starting deploy handoff via /api/pipeline…');
+    setActionMessage('Starting durable Studio deploy…');
 
     try {
-      // Prefer reusing job from the last run when present.
+      const started = await startStudioDeploy({
+        url: currentVideoUrl,
+        projectType: selectedOutcome === 'app' ? 'web' : selectedOutcome,
+        outcome: selectedOutcome,
+        signal: deployAbort.signal,
+      });
+      if (started.status === 401 || started.status === 403) {
+        setActionMessage('Sign in to deploy. Redirecting to Google sign-in…');
+        window.location.assign('/login?callbackUrl=/studio');
+        return;
+      }
+      if (started.status === 400) {
+        setActionMessage(
+          started.error || 'Deploy rejected that URL. Use a public YouTube link.',
+        );
+        return;
+      }
+      if (started.ok && started.runId) {
+        setDeployRunId(started.runId);
+        setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
+        const polled = await pollStudioDeploy(started.runId, {
+          attempts: 24,
+          delayMs: 2000,
+          signal: deployAbort.signal,
+        });
+        const live = polled.result?.live_url;
+        if (live) setDeployLiveUrl(live);
+        if (polled.result?.github_repo) setDeployRepo(polled.result.github_repo);
+        if (polled.result?.jobId) setDeployJobId(polled.result.jobId);
+
+        if (live) {
+          setActionMessage(`Deploy ready: ${live} (run ${started.runId})`);
+          return;
+        }
+        if (polled.result?.kind === 'handoff') {
+          setActionMessage(
+            polled.result.message ||
+              'Backend returned a planning handoff. Export the package or set BACKEND_URL.',
+          );
+          return;
+        }
+        if (polled.runStatus === 'failed' || polled.runStatus === 'cancelled') {
+          setActionMessage(
+            `Deploy workflow ${started.runId} ${polled.runStatus}${polled.error ? `: ${polled.error}` : ''}. Export for manual Vercel handoff.`,
+          );
+          return;
+        }
+        setActionMessage(
+          `Deploy workflow ${started.runId} still ${polled.runStatus || 'running'}${polled.result?.jobId ? ` (job ${polled.result.jobId})` : ''}. Open Dashboard or Export.`,
+        );
+        return;
+      }
+
+      // Only when start() is down (5xx / network). 401/400 already returned.
+      setActionMessage('Durable deploy unavailable — falling back to /api/pipeline…');
       let jobId = lastPipelineCheck?.jobId || deployJobId || undefined;
 
       if (!jobId) {
@@ -632,15 +777,21 @@ export default function VideoWorkflowStudio() {
             <Link href="/dashboard" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Dashboard
             </Link>
-            <Link href="/prototype" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Prototype
-              <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-600">Preview</span>
+            <Link href="/features" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Verified capabilities
             </Link>
             <Link href="/dashboard/agents" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Agents
             </Link>
           </nav>
 
+          <div className="flex items-center gap-2">
+            <Link
+              href="/login?callbackUrl=/studio"
+              className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
+            >
+              Sign in
+            </Link>
           <button
             type="button"
             onClick={() => runWorkflow()}
@@ -651,6 +802,7 @@ export default function VideoWorkflowStudio() {
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             Run workflow
           </button>
+          </div>
         </div>
       </header>
 
@@ -660,18 +812,63 @@ export default function VideoWorkflowStudio() {
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
               {' '}
-              <span className="font-semibold text-slate-950">Dashboard</span> runs the live agent pipeline (transcript, actions, agents).
+              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video-to-transcript-to-actions workflow.
+              {' '}
+              <span className="font-semibold text-slate-950">Dashboard</span> runs the live SSE agent pipeline.
               {' '}
               <span className="font-semibold text-slate-950">Prototype</span> is a design walkthrough — not connected to production APIs.
             </div>
-            <Link
-              href={dashboardHandoffUrl}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
-            >
-              Open live analysis
-              <ChevronRight className="h-4 w-4" />
-            </Link>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void handleActOnFindings()}
+                disabled={actionsBusy || !hasVideo}
+                aria-busy={actionsBusy || undefined}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-800 transition hover:bg-violet-100 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Layers className="h-4 w-4" aria-hidden="true" />
+                {actionsBusy ? 'Acting…' : 'Act on findings'}
+              </button>
+              <Link
+                href={dashboardHandoffUrl}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                Open live analysis
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
           </div>
+          {workflowRunId ? (
+            <div className="mt-3 space-y-2">
+              <p className="text-xs text-slate-500">
+                Durable run{' '}
+                <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-[11px] text-slate-700">
+                  {workflowRunId}
+                </code>
+                {workflowActions
+                  ? ` · ${workflowActions.actionCount} action(s) · ${workflowActions.transcriptChars} transcript chars`
+                  : actionsBusy
+                    ? ' · running…'
+                    : null}
+              </p>
+              {workflowActions && workflowActions.actions.length > 0 ? (
+                <ul className="grid gap-1.5 sm:grid-cols-2">
+                  {workflowActions.actions.slice(0, 8).map((a, i) => (
+                    <li
+                      key={`${a.tool}-${i}`}
+                      className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-slate-700"
+                    >
+                      <span className="font-semibold text-violet-900">{a.tool}</span>
+                      <span className="text-slate-400"> · {a.status}</span>
+                      {a.result ? (
+                        <p className="mt-0.5 line-clamp-2 text-slate-600">{a.result}</p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
         </div>
 
         <section className="space-y-5">
@@ -934,12 +1131,17 @@ export default function VideoWorkflowStudio() {
                   {activeAction === 'deploy' && (
                     <div className="space-y-3">
                       <p className="leading-6">
-                        Deploy calls <code className="text-xs">POST /api/pipeline</code> with{' '}
-                        <code className="text-xs">deployment_target=vercel</code>
-                        {deployBusy ? ' (in progress…)' : '.'} If the backend is down, use Export for an offline handoff.
+                        Deploy starts a signed-in durable workflow, then falls back to{' '}
+                        <code className="text-xs">POST /api/pipeline</code> only if start() is unavailable.
+                        {deployBusy ? ' (in progress…)' : ''} Sign in first. If the backend is down, use Export.
                       </p>
-                      {(deployJobId || deployLiveUrl || deployRepo) && (
+                      {(deployRunId || deployJobId || deployLiveUrl || deployRepo) && (
                         <div className="space-y-1 rounded-lg border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs leading-5 text-slate-700">
+                          {deployRunId && (
+                            <div>
+                              Workflow: <span className="font-mono">{deployRunId}</span>
+                            </div>
+                          )}
                           {deployJobId && (
                             <div>
                               Job:{' '}

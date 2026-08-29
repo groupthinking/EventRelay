@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { clsx } from 'clsx';
+import { BrainCircuit, Check, LoaderCircle, Play, RotateCcw, X } from 'lucide-react';
 import Nav from '@/components/Nav';
 import AgentFlowVisualizer from '@/components/AgentFlowVisualizer';
 import TracePanel from '@/components/TracePanel';
@@ -17,7 +18,7 @@ const MODE_CONFIG: Record<PipelineMode, { label: string; color: string; bg: stri
   idle: null,
   live:       { label: 'Live',       color: 'text-emerald-300', bg: 'bg-emerald-500/15' },
   serverless: { label: 'Serverless', color: 'text-sky-300',     bg: 'bg-sky-500/15' },
-  demo:       { label: 'Demo',       color: 'text-amber-300',   bg: 'bg-amber-500/15' },
+  unavailable:{ label: 'Unavailable', color: 'text-red-300',    bg: 'bg-red-500/15' },
 };
 
 function ModeBadge({ mode }: { mode: PipelineMode }) {
@@ -68,8 +69,16 @@ function PipelineStatusBar({ state, mode }: { state: PipelineState; mode: Pipeli
       {/* Agent counts */}
       {state.status === 'processing' && (
         <div className="flex items-center gap-4 text-xs font-mono">
-          {running > 0 && <span className="text-indigo-400">⚡ {running} running</span>}
-          <span className="text-emerald-400/60">✓ {complete}/{total}</span>
+          {running > 0 && (
+            <span className="inline-flex items-center gap-1 text-indigo-400">
+              <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
+              {running} running
+            </span>
+          )}
+          <span className="inline-flex items-center gap-1 text-emerald-400/60">
+            <Check className="h-3 w-3" aria-hidden="true" />
+            {complete}/{total}
+          </span>
         </div>
       )}
 
@@ -106,9 +115,11 @@ function AgentDetailPanel({
         <h3 className="text-sm font-bold text-white/80">{agent.name}</h3>
         <button
           onClick={onClose}
-          className="text-white/30 hover:text-white/60 transition text-lg leading-none"
+          type="button"
+          aria-label="Close agent details"
+          className="text-white/30 hover:text-white/60 transition leading-none"
         >
-          ×
+          <X className="h-4 w-4" aria-hidden="true" />
         </button>
       </div>
 
@@ -273,7 +284,17 @@ export default function AgentPipelinePage() {
                   disabled={!videoUrl.trim() || pipelineState.status === 'processing' || pipelineState.status === 'validating'}
                   className="flex-1 btn btn-primary py-2.5 text-xs rounded-xl disabled:opacity-30"
                 >
-                  {pipelineState.status === 'processing' ? '⚡ Running…' : '▶ Start Pipeline'}
+                  {pipelineState.status === 'processing' ? (
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      Running…
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center justify-center gap-1.5">
+                      <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                      Start Pipeline
+                    </span>
+                  )}
                 </button>
                 {pipelineState.status !== 'idle' && (
                   <button
@@ -281,7 +302,7 @@ export default function AgentPipelinePage() {
                     onClick={handleReset}
                     className="btn btn-ghost py-2.5 text-xs rounded-xl text-white/40 hover:text-white/70"
                   >
-                    ↺
+                    <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 )}
               </div>
@@ -307,12 +328,12 @@ export default function AgentPipelinePage() {
             {/* Pipeline info */}
             {pipelineState.status === 'idle' && (
               <div className="text-center py-8 space-y-3">
-                <div className="text-4xl opacity-20">🧠</div>
+                <BrainCircuit className="mx-auto h-10 w-10 text-white/20" aria-hidden="true" />
                 <p className="text-xs text-white/30 leading-relaxed max-w-[220px] mx-auto">
                   Enter a YouTube URL above to start the multi-agent video intelligence pipeline.
                 </p>
                 <p className="text-[10px] text-white/25 leading-relaxed max-w-[240px] mx-auto">
-                  Mode after start: Live (backend SSE), Serverless (Gemini SSE), or Demo (simulated) — watch the badge in the header.
+                  Mode after start is Live (backend SSE) or Serverless (Gemini SSE). A failed stream is shown as unavailable; no demo result replaces it.
                 </p>
                 <div className="flex flex-wrap gap-1.5 justify-center pt-2">
                   {['Orchestrator', 'Router', 'ParallelCrew', 'Analysts ×3', 'ActionGen', 'QA'].map((label) => (
@@ -324,6 +345,15 @@ export default function AgentPipelinePage() {
                     </span>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {pipelineState.status === 'error' && pipelineState.error && (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/[0.06] p-4">
+                <h4 className="mb-2 text-[10px] font-bold uppercase tracking-wider text-red-300">
+                  Pipeline unavailable
+                </h4>
+                <p className="text-xs leading-relaxed text-red-100/70">{pipelineState.error}</p>
               </div>
             )}
 

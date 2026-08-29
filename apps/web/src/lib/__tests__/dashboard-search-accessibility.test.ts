@@ -22,4 +22,11 @@ describe('dashboard search accessibility', () => {
     expect(searchForm).not.toContain('aria-label="Submit search"');
     expect(searchForm).not.toContain('aria-label="Search"');
   });
+
+  it('labels a prepared action plan as review state rather than active dispatch', () => {
+    const source = readSource('components/dashboard/panels.tsx');
+
+    expect(source).toContain("isPrepared ? 'Status: prepared for review'");
+    expect(source).toContain('nothing below\n              has run yet');
+  });
 });

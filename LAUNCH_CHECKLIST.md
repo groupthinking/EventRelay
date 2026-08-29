@@ -100,7 +100,12 @@ production `assertEntitlementDurability()` **throws on boot** without Upstash.
   in `apps/web/.env.local` / Vercel env.
 
 ### 1.5 Google OAuth + NextAuth (sign-in) — ✅ LIVE (providers 200)
-Verified 2026-07-14: `/api/auth/providers` returns Google and `/api/auth/csrf` returns a token, so `NEXTAUTH_SECRET` + Google creds are set in Production. Auth is Google-only and stays **off until `NEXTAUTH_SECRET` is set**.
+Verified 2026-07-14: `/api/auth/providers` returns Google and `/api/auth/csrf` returns a token, so `NEXTAUTH_SECRET` + Google creds are set in Production. Auth is Google-only.
+
+> **`NEXTAUTH_SECRET` is mandatory in production.** If it is missing, `/dashboard`
+> and non-public `/api/*` fail **closed** with HTTP 503 instead of being served
+> to anonymous visitors. To run a deliberately public production deployment, set
+> `AUTH_ALLOW_UNAUTHENTICATED=1` explicitly.
 - Create a Google OAuth app (Authorized redirect URI:
   `https://<domain>/api/auth/callback/google`).
 - Set in `apps/web/.env.local`:

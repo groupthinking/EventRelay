@@ -6,12 +6,23 @@ import {
 } from '../studio-pipeline-status';
 
 describe('studio-pipeline-status', () => {
-  it('marks async backend kickoff as live', () => {
+  it('marks a job_id kickoff as draft until transcript or events exist', () => {
     expect(
       studioRunQuality(
         { ok: true, status: 200, pipeline: 'backend-async', jobId: 'job_1' },
         false,
         true,
+      ),
+    ).toBe('draft');
+  });
+
+  it('marks live when transcript or events are present', () => {
+    expect(
+      studioRunQuality(
+        { ok: true, status: 200, pipeline: 'backend-async', jobId: 'job_1' },
+        false,
+        true,
+        { transcript: 'x'.repeat(50), eventCount: 0 },
       ),
     ).toBe('live');
   });
@@ -26,14 +37,15 @@ describe('studio-pipeline-status', () => {
     ).toBe('draft');
   });
 
-  it('uses draft-only label when ready without live backend', () => {
-    expect(studioStatusLabel('draft', 'ready')).toBe('Draft only');
-    expect(studioStatusLabel('live', 'ready')).toBe('Backend connected');
+  it('uses no-transcript label when ready without payload', () => {
+    expect(studioStatusLabel('draft', 'ready')).toBe('No transcript yet');
+    expect(studioStatusLabel('live', 'ready')).toBe('Analysis ready');
   });
 
-  it('explains dashboard handoff in ready draft message', () => {
-    const msg = studioStatusMessage('draft', 'ready', 'App', false);
-    expect(msg).toContain('Dashboard');
-    expect(msg).toContain('planning draft');
+  it('does not send the user to a second product when ready', () => {
+    const draft = studioStatusMessage('draft', 'ready', 'App', false);
+    const live = studioStatusMessage('live', 'ready', 'App', false);
+    expect(draft.toLowerCase()).not.toContain('planning draft');
+    expect(live.toLowerCase()).not.toContain('dashboard');
   });
 });

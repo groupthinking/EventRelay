@@ -105,6 +105,7 @@ export interface PipelineState {
   trace: TraceStep[];
   consensus?: ConsensusResult;
   outputWorkflow?: string;      // Generated markdown workflow
+  error?: string;               // Honest terminal failure; never a simulated replacement
 }
 
 // ── Layout Positions (for SVG rendering) ──
