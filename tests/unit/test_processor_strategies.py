@@ -19,7 +19,6 @@ from youtube_extension.processors.strategies import (
     register_strategy,
 )
 
-
 # ===========================================================================
 # VideoSource enum
 # ===========================================================================

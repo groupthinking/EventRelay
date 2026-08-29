@@ -11,6 +11,8 @@ Implements video and image analysis using AWS Rekognition:
 
 import asyncio
 import logging
+import math
+import os
 from datetime import datetime
 from typing import Any
 
@@ -27,8 +29,88 @@ from ..exceptions import (
     ConfigurationError,
     RateLimitError,
 )
+from ..media_paths import resolve_local_media_path
 
 logger = logging.getLogger(__name__)
+
+
+# Default botocore timeouts. Every Rekognition/S3 call in this module runs via
+# ``asyncio.to_thread``, i.e. on the *shared* default executor. Without an
+# explicit read timeout a stalled AWS request pins one of the pool's limited
+# worker threads indefinitely, which would starve every other ``to_thread``
+# user in the process. Bounding the request bounds the worker.
+_DEFAULT_CONNECT_TIMEOUT = 10.0
+_DEFAULT_READ_TIMEOUT = 60.0
+_DEFAULT_MAX_ATTEMPTS = 3
+
+
+def _positive_finite_float_env(name: str, default: float) -> float:
+    """Read a strictly positive, finite float from the environment."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(
+            f"{name} must be a number, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        ) from exc
+    if not math.isfinite(value) or value <= 0:
+        raise ConfigurationError(
+            f"{name} must be a positive finite number, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        )
+    return value
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    """Read a strictly positive integer from the environment."""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ConfigurationError(
+            f"{name} must be an integer, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        ) from exc
+    if value <= 0:
+        raise ConfigurationError(
+            f"{name} must be a positive integer, got {raw!r}",
+            provider=CloudAIProvider.AWS_REKOGNITION.value,
+        )
+    return value
+
+
+def _timeout_config_kwargs() -> dict:
+    """Parse botocore timeout settings from the environment.
+
+    Kept separate from ``initialize`` so a bad value raises ConfigurationError
+    with its precise message instead of being re-wrapped as a generic
+    CloudAIError by that method's catch-all handler.
+    """
+    return {
+        'connect_timeout': _positive_finite_float_env(
+            'AWS_REKOGNITION_CONNECT_TIMEOUT', _DEFAULT_CONNECT_TIMEOUT
+        ),
+        'read_timeout': _positive_finite_float_env(
+            'AWS_REKOGNITION_READ_TIMEOUT', _DEFAULT_READ_TIMEOUT
+        ),
+        'retries': {
+            'max_attempts': _positive_int_env(
+                'AWS_REKOGNITION_MAX_ATTEMPTS', _DEFAULT_MAX_ATTEMPTS
+            ),
+            'mode': 'standard',
+        },
+    }
+
+
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's bytes. Module-level so it can run in a worker thread."""
+    with open(path, 'rb') as handle:
+        return handle.read()
 
 
 class AWSRekognition(BaseCloudAI):
@@ -57,8 +139,12 @@ class AWSRekognition(BaseCloudAI):
 
     async def initialize(self) -> None:
         """Initialize AWS Rekognition client."""
+        # Parsed before the try so a misconfigured value surfaces as a
+        # ConfigurationError rather than the catch-all CloudAIError below.
+        timeout_kwargs = _timeout_config_kwargs()
         try:
             import boto3
+            from botocore.config import Config as BotoConfig
             from botocore.exceptions import ClientError, NoCredentialsError
 
             # Create session with credentials
@@ -68,9 +154,15 @@ class AWSRekognition(BaseCloudAI):
                 region_name=self.config["region"]
             )
 
+            # Bound every request so a stalled call cannot hold a shared
+            # executor thread forever (all SDK calls here run in to_thread).
+            client_config = BotoConfig(**timeout_kwargs)
+
             # Initialize clients
-            self._rekognition_client = session.client('rekognition')
-            self._s3_client = session.client('s3')
+            self._rekognition_client = session.client(
+                'rekognition', config=client_config
+            )
+            self._s3_client = session.client('s3', config=client_config)
 
             # Test connection
             await self._test_connection()
@@ -103,8 +195,9 @@ class AWSRekognition(BaseCloudAI):
         """Test AWS Rekognition connection."""
         try:
             # Simple API call to test connectivity
-            self._rekognition_client.describe_collection(
-                CollectionId='non-existent-collection'
+            await asyncio.to_thread(
+                self._rekognition_client.describe_collection,
+                CollectionId='non-existent-collection',
             )
         except Exception as e:
             if "ResourceNotFoundException" in str(e):
@@ -174,27 +267,31 @@ class AWSRekognition(BaseCloudAI):
             results = {}
 
             if AnalysisType.LABEL_DETECTION in analysis_types:
-                results['labels'] = self._rekognition_client.detect_labels(
+                results['labels'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_labels,
                     Image=image_data,
                     MaxLabels=50,
-                    MinConfidence=0.5
+                    MinConfidence=0.5,
                 )
 
             if AnalysisType.FACE_DETECTION in analysis_types:
-                results['faces'] = self._rekognition_client.detect_faces(
+                results['faces'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_faces,
                     Image=image_data,
-                    Attributes=['ALL']
+                    Attributes=['ALL'],
                 )
 
             if AnalysisType.TEXT_DETECTION in analysis_types:
-                results['text'] = self._rekognition_client.detect_text(
-                    Image=image_data
+                results['text'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_text,
+                    Image=image_data,
                 )
 
             if AnalysisType.CONTENT_MODERATION in analysis_types:
-                results['moderation'] = self._rekognition_client.detect_moderation_labels(
+                results['moderation'] = await asyncio.to_thread(
+                    self._rekognition_client.detect_moderation_labels,
                     Image=image_data,
-                    MinConfidence=0.5
+                    MinConfidence=0.5,
                 )
 
             processing_time = (datetime.utcnow() - start_time).total_seconds()
@@ -203,6 +300,11 @@ class AWSRekognition(BaseCloudAI):
                 results, image_url, analysis_types, processing_time
             )
 
+        except CloudAIError:
+            # Typed errors (e.g. UnsafeMediaPathError from the local-path guard)
+            # already carry provider and error_code; re-wrapping them would
+            # flatten them into a generic CloudAIError and lose that type.
+            raise
         except Exception as e:
             raise CloudAIError(
                 f"AWS Rekognition image analysis failed: {e}",
@@ -219,8 +321,9 @@ class AWSRekognition(BaseCloudAI):
 
             # Test with describe_collection call
             try:
-                self._rekognition_client.describe_collection(
-                    CollectionId='health-check-collection'
+                await asyncio.to_thread(
+                    self._rekognition_client.describe_collection,
+                    CollectionId='health-check-collection',
                 )
             except Exception as e:
                 if "ResourceNotFoundException" in str(e):
@@ -278,28 +381,32 @@ class AWSRekognition(BaseCloudAI):
 
         # Start different analysis operations based on requested types
         if AnalysisType.LABEL_DETECTION in analysis_types:
-            response = self._rekognition_client.start_label_detection(
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_label_detection,
                 Video=video_input,
-                MinConfidence=0.5
+                MinConfidence=0.5,
             )
             job_ids['labels'] = response['JobId']
 
         if AnalysisType.FACE_DETECTION in analysis_types:
-            response = self._rekognition_client.start_face_detection(
-                Video=video_input
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_face_detection,
+                Video=video_input,
             )
             job_ids['faces'] = response['JobId']
 
         if AnalysisType.TEXT_DETECTION in analysis_types:
-            response = self._rekognition_client.start_text_detection(
-                Video=video_input
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_text_detection,
+                Video=video_input,
             )
             job_ids['text'] = response['JobId']
 
         if AnalysisType.CONTENT_MODERATION in analysis_types:
-            response = self._rekognition_client.start_content_moderation(
+            response = await asyncio.to_thread(
+                self._rekognition_client.start_content_moderation,
                 Video=video_input,
-                MinConfidence=0.5
+                MinConfidence=0.5,
             )
             job_ids['moderation'] = response['JobId']
 
@@ -326,13 +433,25 @@ class AWSRekognition(BaseCloudAI):
         while elapsed_time < max_wait_time:
             try:
                 if analysis_type == 'labels':
-                    response = self._rekognition_client.get_label_detection(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_label_detection,
+                        JobId=job_id,
+                    )
                 elif analysis_type == 'faces':
-                    response = self._rekognition_client.get_face_detection(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_face_detection,
+                        JobId=job_id,
+                    )
                 elif analysis_type == 'text':
-                    response = self._rekognition_client.get_text_detection(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_text_detection,
+                        JobId=job_id,
+                    )
                 elif analysis_type == 'moderation':
-                    response = self._rekognition_client.get_content_moderation(JobId=job_id)
+                    response = await asyncio.to_thread(
+                        self._rekognition_client.get_content_moderation,
+                        JobId=job_id,
+                    )
                 else:
                     raise ValueError(f"Unknown analysis type: {analysis_type}")
 
@@ -369,9 +488,12 @@ class AWSRekognition(BaseCloudAI):
                 response = await client.get(image_url)
                 return {'Bytes': response.content}
         else:
-            # Local file
-            with open(image_url, 'rb') as image_file:
-                return {'Bytes': image_file.read()}
+            # Local file. The path is caller-supplied, so it is validated
+            # against CLOUD_AI_MEDIA_ROOT first (raises UnsafeMediaPathError on
+            # traversal or symlink escape); the read then uses the resolved
+            # path, off the event loop.
+            safe_path = resolve_local_media_path(image_url, provider=self.provider.value)
+            return {'Bytes': await asyncio.to_thread(_read_file_bytes, str(safe_path))}
 
     def _process_video_results(self, results: dict[str, Any], video_id: str,
                              analysis_types: list[AnalysisType],

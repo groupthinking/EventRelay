@@ -2,7 +2,12 @@ name: Branch Cleanup
 
 # Manual, gated branch pruning driven by the branch-cleanup assessment.
 # Runs the archive-then-delete harness server-side, where the GITHUB_TOKEN has
-# the `contents: write` and `workflows: write` rights needed to delete/restore refs.
+# the `contents: write` rights needed to tag and delete refs.
+#
+# NOTE: `workflows` is not a GitHub Actions permission scope and cannot be
+# granted to GITHUB_TOKEN here — see the `permissions:` block below. Restoring a
+# branch whose tree contains `.github/workflows/` files therefore needs a PAT
+# with the `workflow` scope, or a local push.
 #
 # Triggers:
 #   1. workflow_dispatch (from default branch): Actions UI, pick batch + dry_run.
@@ -43,7 +48,21 @@ on:
 permissions:
   contents: write
   pull-requests: read
-  workflows: write
+
+
+# Supersede superseded work instead of stacking it. Without this, every push
+# to a PR branch queued a brand-new full run alongside the ones it obsoleted;
+# with ~30 workflows and dozens of open PRs the Actions queue could not drain.
+#
+# PR runs are keyed by PR number and cancel their predecessors -- that is where
+# all the queue pressure comes from, since every `push:` trigger here is already
+# filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
+# land in singleton groups: keying them on github.ref would collide every merge
+# to main into one group, and GitHub cancels the *pending* run in a group, so a
+# burst of merges would silently drop the middle commits' verdicts.
+concurrency:
+  group: branch-cleanup-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
   cleanup:

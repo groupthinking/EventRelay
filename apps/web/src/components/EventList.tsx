@@ -103,12 +103,14 @@ export default function EventList({ events, loading, onExtract, className }: Eve
                     </p>
                   )}
                 </div>
-                <span
-                  className="text-xs text-white/20 tabular-nums"
-                  title={`Confidence: ${Math.round(event.confidence * 100)}%`}
-                >
-                  {Math.round(event.confidence * 100)}%
-                </span>
+                {typeof event.confidence === 'number' && (
+                  <span
+                    className="text-xs text-white/45 tabular-nums"
+                    title={`Provider confidence: ${Math.round(event.confidence * 100)}%`}
+                  >
+                    {Math.round(event.confidence * 100)}%
+                  </span>
+                )}
               </div>
             </div>
           );

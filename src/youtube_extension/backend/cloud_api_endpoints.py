@@ -9,23 +9,18 @@ FastAPI endpoints for cloud-native deployment with:
 - Cloud Tasks for async processing
 """
 
-import asyncio
-import json
 import logging
-import os
 from datetime import datetime, timezone
-from typing import Dict, Any, List, Optional
+from typing import Any, Optional
 
-from fastapi import APIRouter, FastAPI, HTTPException, BackgroundTasks, Request, Header
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 # Import cloud services
 from ..services.cloud import (
-    get_firestore_service,
     get_cloud_tasks_service,
+    get_firestore_service,
     get_vertex_ai_service,
-    VideoProcessingTask,
 )
 from ..services.cloud.cloud_video_processor import get_cloud_video_processor
 
@@ -50,9 +45,9 @@ class CloudVideoAnalysisResponse(BaseModel):
     success: bool
     task_id: Optional[str] = None  # For async processing
     status: Optional[str] = None  # For sync processing
-    metadata: Optional[Dict[str, Any]] = None
-    transcript: Optional[Dict[str, Any]] = None
-    ai_analysis: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
+    transcript: Optional[dict[str, Any]] = None
+    ai_analysis: Optional[dict[str, Any]] = None
     processing_time: Optional[float] = None
     from_cache: bool = False
     error: Optional[str] = None
@@ -64,11 +59,11 @@ class CloudTaskPayload(BaseModel):
     video_url: str
     priority: int = 0
     callback_url: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
 
 
 class BatchCloudProcessingRequest(BaseModel):
-    video_urls: List[str] = Field(..., description="List of YouTube video URLs")
+    video_urls: list[str] = Field(..., description="List of YouTube video URLs")
     priority: int = Field(0, description="Processing priority", ge=0, le=10)
 
 
@@ -367,7 +362,7 @@ async def get_cloud_status():
 
         # Check Firestore
         try:
-            firestore_service = await get_firestore_service()
+            await get_firestore_service()
             status["services"]["firestore"] = {
                 "status": "operational",
                 "enabled": True,
@@ -397,7 +392,7 @@ async def get_cloud_status():
 
         # Check Vertex AI
         try:
-            vertex_service = get_vertex_ai_service()
+            get_vertex_ai_service()
             status["services"]["vertex_ai"] = {
                 "status": "operational",
                 "enabled": True,

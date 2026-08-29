@@ -15,8 +15,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.services.comprehensive_benchmarking import (
     BenchmarkResult as CBBenchmarkResult,
+)
+from youtube_extension.backend.services.comprehensive_benchmarking import (
     BenchmarkSuite,
     ComprehensiveBenchmark,
+)
+from youtube_extension.backend.services.comprehensive_benchmarking import (
     PerformanceTarget as CBPerformanceTarget,
 )
 
@@ -25,10 +29,13 @@ from youtube_extension.backend.services.comprehensive_benchmarking import (
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.services.performance_benchmark_system import (
     BenchmarkResult as PBSBenchmarkResult,
+)
+from youtube_extension.backend.services.performance_benchmark_system import (
     PerformanceBenchmarkSystem,
+)
+from youtube_extension.backend.services.performance_benchmark_system import (
     PerformanceTarget as PBSPerformanceTarget,
 )
-
 
 # ===========================================================================
 # comprehensive_benchmarking — BenchmarkResult

@@ -10,26 +10,32 @@ from __future__ import annotations
 # performance_monitor (which calls psutil.cpu_percent etc.) gets the real lib.
 # ---------------------------------------------------------------------------
 import sys
+
 sys.modules.pop('psutil', None)
 import psutil as _real_psutil
+
 sys.modules['psutil'] = _real_psutil
 sys.modules.pop('youtube_extension.backend.services.performance_monitor', None)
 
+import asyncio
+import contextlib
+import sqlite3
+import time
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
+from unittest.mock import patch
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
+from youtube_extension.backend.services import performance_monitor as perf_mod
 from youtube_extension.backend.services.performance_monitor import (
     PerformanceAlert,
     PerformanceMetric,
     PerformanceMonitor,
 )
-
 
 # ===========================================================================
 # PerformanceMetric dataclass
@@ -535,7 +541,10 @@ class TestStoreMetric:
 
     async def test_store_metric_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="test", metric_name="latency", value=42.0,
             timestamp=datetime.now(timezone.utc)
@@ -545,7 +554,10 @@ class TestStoreMetric:
     async def test_store_metric_persists_to_db(self, monitor):
         import sqlite3
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="video", metric_name="process_time", value=1500.0,
             timestamp=datetime.now(timezone.utc)
@@ -571,7 +583,10 @@ class TestCheckAlertThresholds:
 
     async def test_no_threshold_key_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="test", metric_name="unknown_metric", value=999.0,
             timestamp=datetime.now(timezone.utc)
@@ -580,7 +595,10 @@ class TestCheckAlertThresholds:
 
     async def test_below_warning_no_alert(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=50.0,
             timestamp=datetime.now(timezone.utc)
@@ -590,7 +608,10 @@ class TestCheckAlertThresholds:
 
     async def test_above_warning_creates_alert(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=150.0,
             timestamp=datetime.now(timezone.utc)
@@ -600,7 +621,10 @@ class TestCheckAlertThresholds:
 
     async def test_above_critical_severity_is_critical(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceMetric
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceMetric,
+        )
         metric = PerformanceMetric(
             component="db", metric_name="database_query_time", value=2000.0,
             timestamp=datetime.now(timezone.utc)
@@ -622,7 +646,10 @@ class TestStoreAlert:
 
     async def test_store_alert_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="test_001",
             component="db",
@@ -638,7 +665,10 @@ class TestStoreAlert:
     async def test_store_alert_persists(self, monitor):
         import sqlite3
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="test_002",
             component="api",
@@ -659,7 +689,10 @@ class TestStoreAlert:
 
     async def test_send_alert_notification_does_not_raise(self, monitor):
         from datetime import datetime, timezone
-        from youtube_extension.backend.services.performance_monitor import PerformanceAlert
+
+        from youtube_extension.backend.services.performance_monitor import (
+            PerformanceAlert,
+        )
         alert = PerformanceAlert(
             alert_id="notif_001",
             component="test",
@@ -685,6 +718,7 @@ class TestMonitorSystemResources:
 
     async def test_monitor_system_resources_does_not_raise(self, monitor, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_monitor as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=lambda interval=None: 30.0,
@@ -701,6 +735,7 @@ class TestMonitorSystemResources:
 
     async def test_monitor_system_resources_adds_metrics(self, monitor, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_monitor as _mod
         fake_psutil = types.SimpleNamespace(
             cpu_percent=lambda interval=None: 45.0,
@@ -762,7 +797,7 @@ class TestBasicCleanup:
 
     async def test_basic_cleanup_with_old_records(self, monitor):
         import sqlite3
-        from datetime import datetime, timezone, timedelta
+        from datetime import datetime, timedelta, timezone
         old_time = (datetime.now(timezone.utc) - timedelta(days=60)).isoformat()
         conn = sqlite3.connect(monitor.db_path)
         cursor = conn.cursor()
@@ -883,7 +918,6 @@ class TestRunPerformanceBenchmark:
         assert "comp_b1" in monitor.performance_baselines
 
     async def test_calculates_improvement_vs_baseline(self, monitor):
-        import time
         monitor.performance_baselines["comp_b1"] = 10000.0  # slow baseline
 
         async def fast_func():
@@ -914,19 +948,27 @@ class TestConvenienceFunctions:
         _mod._performance_monitor_instance = original
 
     async def test_track_video_processing_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_video_processing_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_video_processing_time,
+        )
         await track_video_processing_time(1500.0)
 
     async def test_track_database_query_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_database_query_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_database_query_time,
+        )
         await track_database_query_time(50.0, query_type="SELECT")
 
     async def test_track_api_response_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_api_response_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_api_response_time,
+        )
         await track_api_response_time(200.0, endpoint="/api/v1/videos")
 
     async def test_track_frontend_load_time(self):
-        from youtube_extension.backend.services.performance_monitor import track_frontend_load_time
+        from youtube_extension.backend.services.performance_monitor import (
+            track_frontend_load_time,
+        )
         await track_frontend_load_time(800.0, page="dashboard")
 
 
@@ -944,7 +986,9 @@ class TestPerformanceTimerDecorator:
         return m
 
     async def test_decorator_on_async_function(self, monitor):
-        from youtube_extension.backend.services.performance_monitor import performance_timer
+        from youtube_extension.backend.services.performance_monitor import (
+            performance_timer,
+        )
 
         @performance_timer("test_comp", "async_op")
         async def my_async_func():
@@ -954,7 +998,9 @@ class TestPerformanceTimerDecorator:
         assert result == 42
 
     def test_decorator_on_sync_function(self, monitor):
-        from youtube_extension.backend.services.performance_monitor import performance_timer
+        from youtube_extension.backend.services.performance_monitor import (
+            performance_timer,
+        )
 
         @performance_timer("test_comp", "sync_op")
         def my_sync_func():
@@ -962,3 +1008,480 @@ class TestPerformanceTimerDecorator:
 
         result = my_sync_func()
         assert result == "hello"
+
+
+# ===========================================================================
+# SQLite I/O must not block the event loop
+# ===========================================================================
+
+
+class TestSqliteDoesNotBlockEventLoop:
+    """`sqlite3` is fully synchronous: connect + INSERT + commit (fsync) + close.
+
+    `PerformanceMonitor.record_metric` runs on live request paths
+    (`api/v1/router.py:1165` and `:1183`), so every one of those calls used to
+    stall the event loop for the duration of the write.  These tests measure
+    whether an independent coroutine keeps getting scheduled while the database
+    work is in flight.
+    """
+
+    _DB_SECONDS = 0.15
+    _HEARTBEAT_INTERVAL = 0.01
+
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return PerformanceMonitor(db_path=str(tmp_path / "perf.db"))
+
+    def _slow_connect(self, real_connect):
+        """Wrap sqlite3.connect so the *synchronous* work takes a visible time."""
+
+        def _connect(*args, **kwargs):
+            time.sleep(self._DB_SECONDS)
+            return real_connect(*args, **kwargs)
+
+        return _connect
+
+    async def _count_heartbeats_during(self, coro):
+        ticks = 0
+        stop = False
+
+        async def heartbeat():
+            nonlocal ticks
+            while not stop:
+                await asyncio.sleep(self._HEARTBEAT_INTERVAL)
+                ticks += 1
+
+        beat = asyncio.create_task(heartbeat())
+        await asyncio.sleep(0)  # let the heartbeat reach its first await first
+        try:
+            result = await coro
+        finally:
+            stop = True
+            beat.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await beat
+        return result, ticks
+
+    async def test_store_metric_does_not_block_event_loop(self, monitor):
+        metric = PerformanceMetric(
+            component="api",
+            metric_name="api_response_time",
+            value=12.5,
+            timestamp=datetime.now(timezone.utc),
+            unit="ms",
+            tags={},
+        )
+        real = perf_mod.sqlite3.connect
+        with patch.object(perf_mod.sqlite3, "connect", self._slow_connect(real)):
+            _, ticks = await self._count_heartbeats_during(monitor._store_metric(metric))
+        assert ticks > 0, "event loop was blocked for the whole sqlite write"
+
+    async def test_record_metric_does_not_block_event_loop(self, monitor):
+        """The public request-path entry point, not just the private writer."""
+        real = perf_mod.sqlite3.connect
+        with patch.object(perf_mod.sqlite3, "connect", self._slow_connect(real)):
+            _, ticks = await self._count_heartbeats_during(
+                monitor.record_metric("api", "api_response_time", 12.5)
+            )
+        assert ticks > 0, "record_metric blocked the event loop"
+
+    async def test_read_path_does_not_block_event_loop(self, monitor):
+        real = perf_mod.sqlite3.connect
+        with patch.object(perf_mod.sqlite3, "connect", self._slow_connect(real)):
+            _, ticks = await self._count_heartbeats_during(
+                monitor.get_current_performance_summary()
+            )
+        assert ticks > 0, "the read path blocked the event loop"
+
+    # --- preserved-behaviour guards (pass under old and new code alike) -----
+
+    async def test_store_metric_still_writes_the_row(self, monitor):
+        metric = PerformanceMetric(
+            component="api",
+            metric_name="api_response_time",
+            value=42.0,
+            timestamp=datetime.now(timezone.utc),
+            unit="ms",
+            tags={"route": "/x"},
+        )
+        await monitor._store_metric(metric)
+
+        conn = sqlite3.connect(monitor.db_path)
+        rows = conn.execute(
+            "SELECT component, metric_name, value, unit FROM performance_metrics"
+        ).fetchall()
+        conn.close()
+        assert rows == [("api", "api_response_time", 42.0, "ms")]
+
+    async def test_summary_reflects_stored_metrics(self, monitor):
+        for value in (10.0, 20.0):
+            await monitor._store_metric(
+                PerformanceMetric(
+                    component="api",
+                    metric_name="api_response_time",
+                    value=value,
+                    timestamp=datetime.now(timezone.utc),
+                    unit="ms",
+                    tags={},
+                )
+            )
+        summary = await monitor.get_current_performance_summary()
+        assert summary["api"]["api_response_time"] == 15.0
+
+    async def test_store_metric_swallows_database_errors(self, monitor):
+        """Error handling must still absorb failures rather than propagate."""
+        metric = PerformanceMetric(
+            component="api",
+            metric_name="api_response_time",
+            value=1.0,
+            timestamp=datetime.now(timezone.utc),
+            unit="ms",
+            tags={},
+        )
+
+        def _boom(*_args, **_kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        with patch.object(perf_mod.sqlite3, "connect", _boom):
+            await monitor._store_metric(metric)  # must not raise
+
+
+# ===========================================================================
+# PerformanceMonitor — record_metrics / _store_metrics (batched writes)
+# ===========================================================================
+
+
+class TestRecordMetricsBatch:
+    """The batch path must be a drop-in for N serial record_metric calls.
+
+    Everything observable -- rows persisted, buffer contents, fast-access
+    collections, alerts -- has to match. The only difference permitted is the
+    number of database connections, which is the entire point.
+    """
+
+    @pytest.fixture
+    def monitor(self, tmp_path):
+        return self._quiesced(tmp_path / "perf.db")
+
+    @staticmethod
+    def _quiesced(db_path):
+        """Build a monitor with its background task stopped.
+
+        ``__init__`` calls ``start_monitoring()`` whenever an event loop is
+        running, which every async test provides. That task records real
+        system metrics into the same buffer these tests assert on, so it has
+        to be cancelled before the buffer means anything.
+        """
+        mon = PerformanceMonitor(db_path=str(db_path))
+        mon.monitoring_enabled = False
+        if mon.monitoring_task is not None:
+            mon.monitoring_task.cancel()
+            mon.monitoring_task = None
+        return mon
+
+    @staticmethod
+    def _counting_connect(counter):
+        """Wrap sqlite3.connect so we can count how many times it is called."""
+        real_connect = sqlite3.connect
+
+        def _wrapped(*args, **kwargs):
+            counter.append(1)
+            return real_connect(*args, **kwargs)
+
+        return _wrapped
+
+    @staticmethod
+    def _impl_module():
+        """The module whose globals ``PerformanceMonitor`` methods actually read.
+
+        This file's preamble deliberately re-imports the performance monitor,
+        and CI runs with ``PYTHONPATH=src`` so the package can also resolve
+        under a second name. Either can leave the module-level ``perf_mod``
+        alias bound to a *different* module object than the one the class was
+        defined in, at which point ``monkeypatch.setattr(perf_mod, ...)``
+        silently no-ops and the real ``psutil`` runs instead of the fake.
+        Resolving from the class is correct under every import identity.
+        """
+        return sys.modules[PerformanceMonitor.__module__]
+
+    @staticmethod
+    def _samples(n):
+        return [
+            {
+                "component": "system",
+                "metric_name": f"metric_{i}",
+                "value": float(i),
+                "unit": "ms",
+            }
+            for i in range(n)
+        ]
+
+    async def test_batch_opens_exactly_one_connection(self, monitor):
+        """Seven metrics must cost one connection, not seven.
+
+        This is the regression guard for the whole change. The background
+        monitor records seven metrics every thirty seconds forever, so a
+        per-metric connection is ~20k connections and commit fsyncs a day.
+        """
+        calls: list[int] = []
+        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+            await monitor.record_metrics(self._samples(7))
+
+        assert len(calls) == 1, f"expected 1 connection for the batch, got {len(calls)}"
+
+    async def test_serial_path_still_opens_one_connection_per_metric(self, monitor):
+        """Pins the old behaviour so the comparison above is meaningful.
+
+        record_metric is left untouched by this change -- ~15 callers record a
+        single metric and gain nothing from batching -- so it should still
+        connect once per call.
+        """
+        calls: list[int] = []
+        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+            for sample in self._samples(7):
+                await monitor.record_metric(
+                    sample["component"], sample["metric_name"], sample["value"]
+                )
+
+        assert len(calls) == 7
+
+    async def test_batch_persists_every_row_with_correct_values(self, monitor):
+        await monitor.record_metrics([
+            {"component": "system", "metric_name": "cpu_usage_percent",
+             "value": 42.5, "unit": "%"},
+            {"component": "process", "metric_name": "threads_count",
+             "value": 8.0, "unit": "count"},
+            {"component": "frontend", "metric_name": "bundle_load_time",
+             "value": 1500.0, "unit": "ms", "tags": {"page": "home"}},
+        ])
+
+        conn = sqlite3.connect(monitor.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT component, metric_name, value, unit, tags "
+                "FROM performance_metrics ORDER BY metric_name"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert len(rows) == 3
+        by_name = {r[1]: r for r in rows}
+        assert by_name["cpu_usage_percent"][0] == "system"
+        assert by_name["cpu_usage_percent"][2] == 42.5
+        assert by_name["cpu_usage_percent"][3] == "%"
+        assert by_name["threads_count"][0] == "process"
+        assert by_name["threads_count"][2] == 8.0
+        assert by_name["bundle_load_time"][2] == 1500.0
+        assert '"page": "home"' in by_name["bundle_load_time"][4]
+
+    async def test_batch_matches_serial_buffer_and_collections(self, tmp_path):
+        """Same inputs through both paths must leave identical in-memory state."""
+        samples = [
+            {"component": "video", "metric_name": "video_processing_time",
+             "value": 1200.0, "unit": "ms"},
+            {"component": "db", "metric_name": "database_query_time",
+             "value": 35.0, "unit": "ms"},
+            {"component": "api", "metric_name": "api_response_time",
+             "value": 250.0, "unit": "ms"},
+            {"component": "system", "metric_name": "cpu_usage_percent",
+             "value": 10.0, "unit": "%"},
+        ]
+
+        serial = self._quiesced(tmp_path / "serial.db")
+        for s in samples:
+            await serial.record_metric(
+                s["component"], s["metric_name"], s["value"], s["unit"]
+            )
+
+        batched = self._quiesced(tmp_path / "batched.db")
+        await batched.record_metrics(samples)
+
+        assert list(batched.video_processing_times) == list(serial.video_processing_times)
+        assert list(batched.database_query_times) == list(serial.database_query_times)
+        assert list(batched.api_response_times) == list(serial.api_response_times)
+
+        assert len(batched.metrics_buffer) == len(serial.metrics_buffer)
+        for got, want in zip(batched.metrics_buffer, serial.metrics_buffer):
+            assert (got.component, got.metric_name, got.value, got.unit) == (
+                want.component, want.metric_name, want.value, want.unit
+            )
+
+    @staticmethod
+    def _walking_clock(instants):
+        """Stand-in for the module's ``datetime`` whose ``now`` walks a list.
+
+        Wall-clock resolution is too coarse to assert on directly -- several
+        ``datetime.now()`` calls in a tight loop can legitimately return the
+        same value -- so distinctness alone would be a flaky proxy for "one
+        stamp per record". Handing out a known sequence instead makes the
+        assertion exact: the Nth record must carry the Nth instant, which is
+        true only if ``now`` was consulted once per record, in order.
+
+        Running out of instants raises ``IndexError``. ``record_metrics``
+        swallows it, so the batch lands nothing and the caller's assertion on
+        buffer contents fails -- an extra clock read cannot pass silently.
+        """
+        remaining = list(instants)
+
+        class _Clock:
+            @staticmethod
+            def now(tz=None):
+                return remaining.pop(0)
+
+        return _Clock
+
+    async def test_batch_stamps_each_record_with_its_own_now(self, monitor):
+        """Every record gets its own stamp, as serial ``record_metric`` does.
+
+        A single shared ``now`` reused across the batch would give all three
+        records instant[0] and leave the last two unconsumed. That is the
+        regression this pins: the docstring promises behaviour identical to
+        calling ``record_metric`` once per entry, and the timestamp is the one
+        field where a batched implementation is tempted to diverge.
+        """
+        instants = [
+            datetime(2026, 1, 1, 0, 0, second, tzinfo=timezone.utc)
+            for second in range(3)
+        ]
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock(instants)
+        ):
+            await monitor.record_metrics(self._samples(3))
+
+        assert [m.timestamp for m in monitor.metrics_buffer] == instants
+
+    async def test_batch_honours_an_explicitly_supplied_timestamp(self, monitor):
+        """An entry carrying its own ``timestamp`` must not be re-stamped.
+
+        Callers replaying buffered samples depend on this: the clock is only
+        consulted for entries that omit the field.
+        """
+        supplied = datetime(2020, 6, 1, 12, 30, 0, tzinfo=timezone.utc)
+        generated = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock([generated])
+        ):
+            await monitor.record_metrics([
+                {"component": "system", "metric_name": "replayed",
+                 "value": 1.0, "unit": "ms", "timestamp": supplied},
+                {"component": "system", "metric_name": "live",
+                 "value": 2.0, "unit": "ms"},
+            ])
+
+        stamped = {m.metric_name: m.timestamp for m in monitor.metrics_buffer}
+        assert stamped == {"replayed": supplied, "live": generated}
+
+    async def test_batch_persists_the_per_record_timestamps(self, monitor):
+        """The distinct stamps must survive the write, not just the buffer."""
+        instants = [
+            datetime(2026, 1, 1, 0, 0, second, tzinfo=timezone.utc)
+            for second in range(3)
+        ]
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock(instants)
+        ):
+            await monitor.record_metrics(self._samples(3))
+
+        conn = sqlite3.connect(monitor.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT metric_name, timestamp FROM performance_metrics "
+                "ORDER BY metric_name"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert [r[1] for r in rows] == [i.isoformat() for i in instants]
+
+    async def test_empty_batch_does_no_database_work(self, monitor):
+        calls: list[int] = []
+        with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):
+            await monitor.record_metrics([])
+
+        assert calls == []
+        assert len(monitor.metrics_buffer) == 0
+
+    async def test_batch_evaluates_thresholds_for_every_metric(self, monitor):
+        """A breach in one metric must not mask a breach in another."""
+        await monitor.record_metrics([
+            {"component": "system", "metric_name": "cpu_usage_percent",
+             "value": 99.0, "unit": "%"},
+            {"component": "system", "metric_name": "memory_usage_percent",
+             "value": 95.0, "unit": "%"},
+        ])
+
+        assert len(monitor.active_alerts) == 2
+
+    async def test_batch_swallows_database_errors(self, monitor):
+        """Metric recording is best-effort; a dead disk must not fail callers."""
+        def _boom(*_args, **_kwargs):
+            raise sqlite3.OperationalError("disk I/O error")
+
+        with patch.object(perf_mod.sqlite3, "connect", _boom):
+            await monitor.record_metrics(self._samples(3))  # must not raise
+
+    async def test_system_resource_cycle_uses_a_single_connection(
+        self, monitor, monkeypatch
+    ):
+        """End-to-end proof for the background loop's 30-second cycle."""
+        import types
+
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=lambda interval=None: 45.0,
+            virtual_memory=lambda: types.SimpleNamespace(
+                percent=60.0, available=3 * 1024**3
+            ),
+            disk_usage=lambda path: types.SimpleNamespace(
+                used=60 * 1024**3, total=100 * 1024**3
+            ),
+            Process=lambda: types.SimpleNamespace(
+                memory_info=lambda: types.SimpleNamespace(rss=200 * 1024**2),
+                cpu_percent=lambda: 10.0,
+                num_threads=lambda: 8,
+            ),
+        )
+        monkeypatch.setattr(self._impl_module(), "psutil", fake_psutil)
+
+        monitor.metrics_buffer.clear()
+        calls: list[int] = []
+        with patch.object(self._impl_module().sqlite3, "connect", self._counting_connect(calls)):
+            await monitor._monitor_system_resources()
+
+        assert len(calls) == 1, (
+            f"one monitoring cycle should be one write, got {len(calls)}"
+        )
+        assert len(monitor.metrics_buffer) == 7
+
+    async def test_system_resource_cycle_survives_process_metrics_failure(
+        self, monitor, monkeypatch
+    ):
+        """Process metrics are optional; losing them must not lose the rest."""
+        import types
+
+        def _no_process():
+            raise RuntimeError("process introspection unavailable")
+
+        fake_psutil = types.SimpleNamespace(
+            cpu_percent=lambda interval=None: 45.0,
+            virtual_memory=lambda: types.SimpleNamespace(
+                percent=60.0, available=3 * 1024**3
+            ),
+            disk_usage=lambda path: types.SimpleNamespace(
+                used=60 * 1024**3, total=100 * 1024**3
+            ),
+            Process=_no_process,
+        )
+        monkeypatch.setattr(self._impl_module(), "psutil", fake_psutil)
+
+        monitor.metrics_buffer.clear()
+        await monitor._monitor_system_resources()
+
+        # The four system-level metrics still land even though the process
+        # block raised partway through.
+        assert len(monitor.metrics_buffer) == 4
+        names = {m.metric_name for m in monitor.metrics_buffer}
+        assert "cpu_usage_percent" in names
+        assert "disk_usage_percent" in names

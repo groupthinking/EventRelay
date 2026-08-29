@@ -3,12 +3,30 @@ name: CI
 on:
   push:
     branches: [main]
+  # No base-branch filter. A `branches:` allowlist here gates on the PR's *base*,
+  # so a PR stacked onto another PR's branch ran no CI at all (see #1440, which
+  # targets #1381's branch and has zero CI runs). Every PR gets the gate; the
+  # push trigger above stays scoped to main.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
   actions: read
+
+
+# Supersede superseded work instead of stacking it. Without this, every push
+# to a PR branch queued a brand-new full run alongside the ones it obsoleted;
+# with ~30 workflows and dozens of open PRs the Actions queue could not drain.
+#
+# PR runs are keyed by PR number and cancel their predecessors -- that is where
+# all the queue pressure comes from, since every `push:` trigger here is already
+# filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
+# land in singleton groups: keying them on github.ref would collide every merge
+# to main into one group, and GitHub cancels the *pending* run in a group, so a
+# burst of merges would silently drop the middle commits' verdicts.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
   guards:
@@ -40,7 +58,7 @@ jobs:
             exit 1
           fi
           echo "No IDE self-identifiers found."
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Python source compiles (no import-time SyntaxErrors)
@@ -73,7 +91,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install ruff
@@ -94,11 +112,34 @@ jobs:
         continue-on-error: true
         run: cd apps/web && npm run lint
 
+  # Required for apps/web unit tests (see #1449). The Python `test` job only
+  # runs pytest; without this job, ~300 frontend tests including CWE-209 /
+  # Stripe-leak regressions never gate merges.
+  test-frontend:
+    name: test-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm install --legacy-peer-deps
+      - name: Unit tests (apps/web)
+        # Hermetic: do not inject ambient AI/billing keys (see #1230).
+        env:
+          OPENAI_API_KEY: ""
+          AI_GATEWAY_API_KEY: ""
+          VERCEL_AI_GATEWAY_API_KEY: ""
+          STRIPE_SECRET_KEY: ""
+          STRIPE_WEBHOOK_SECRET: ""
+        run: cd apps/web && npx vitest run --reporter=default
+
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install dependencies

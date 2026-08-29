@@ -10,17 +10,28 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import threading
 import time
 import uuid as _uuid
+import weakref
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
+
 try:
     from youtube_extension.services.agents import AgentOrchestrator
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -72,6 +83,7 @@ from .models import (
     AgentStatus,
     AgentStatusResponse,
     ApiResponse,
+    BlueprintRequest,
     CacheStats,
     ChatRequest,
     ChatResponse,
@@ -87,6 +99,7 @@ from .models import (
     GeminiCacheResponse,
     GeminiTokenRequest,
     GeminiTokenResponse,
+    GenerateCodeRequest,
     HealthResponse,
     JobStatus,
     KnowledgeIngestRequest,
@@ -96,14 +109,12 @@ from .models import (
     TranscriptActionRequest,
     TranscriptActionResponse,
     VideoJobStatusResponse,
+    VideoPackRequest,
     VideoProcessingRequest,
     VideoProcessJobRequest,
     VideoProcessJobResponse,
     VideoToSoftwareRequest,
     VideoToSoftwareResponse,
-    VideoPackRequest,
-    BlueprintRequest,
-    GenerateCodeRequest,
 )
 
 performance_monitor = PerformanceMonitor()
@@ -899,6 +910,33 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
 
 
 # Data Endpoints
+def _collect_videos_page(
+    data_service: DataService, limit: int, offset: int
+) -> tuple[int, list[dict[str, Any]], bool]:
+    """Gather the total video count and one page of summaries.
+
+    Both ``count_videos`` and ``get_videos_summary`` perform blocking
+    filesystem work, so they are grouped into this single synchronous helper
+    and dispatched to a worker thread by the caller with one
+    ``asyncio.to_thread`` hop instead of two.
+
+    One hop is *not* an atomic snapshot. ``DataService`` backs both reads with
+    a TTL cache that holds no lock and exposes no snapshot object shared
+    between them, so the entry can still expire -- or be refreshed by another
+    worker -- in between. Grouping the calls narrows that window to a single
+    thread hand-off rather than eliminating it; callers must still treat the
+    count and the page as independently observed values.
+
+    Returns ``(total, page, past_end)``. ``page`` is empty when ``offset`` is
+    past the end, and ``past_end`` reports that condition so the caller does
+    not re-derive the bounds check.
+    """
+    total = data_service.count_videos()
+    if offset >= total:
+        return total, [], True
+    return total, data_service.get_videos_summary(limit=limit, offset=offset), False
+
+
 @router.get(
     "/videos",
     response_model=dict[str, Any],
@@ -912,8 +950,10 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        total = data_service.count_videos()
-        if offset >= total:
+        total, paginated_videos, past_end = await asyncio.to_thread(
+            _collect_videos_page, data_service, limit, offset
+        )
+        if past_end:
             return {
                 "videos": [],
                 "total": total,
@@ -921,7 +961,6 @@ async def list_videos_v1(
                 "offset": offset,
                 "has_more": False,
             }
-        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,
@@ -936,6 +975,67 @@ async def list_videos_v1(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Shared concurrency gate for the uncached filesystem walks this router hands to
+# ``asyncio.to_thread``.
+#
+# A single module-level ``asyncio.Semaphore`` would be a latent landmine rather
+# than an obvious bug. ``Semaphore.acquire`` only reaches ``_get_loop()`` when it
+# has to wait -- the uncontended path decrements the counter and returns before
+# any loop is touched. So the semaphore stays unbound, and works fine across any
+# number of event loops, right up until the first time it is genuinely contended.
+# That acquisition pins it, and every later use from a different loop raises
+# ``RuntimeError: ... is bound to a different event loop``.
+#
+# The failure therefore cannot show up in low-concurrency tests; it waits for the
+# exact burst this gate exists to absorb. Building the gate per running loop
+# removes the trap outright -- each loop gets its own semaphore.
+#
+# The weak keying bounds growth; it is not a guarantee of collection, and the
+# same fast-path asymmetry is why. ``WeakKeyDictionary`` holds its *values*
+# strongly, and the waiting path above stores the loop on the semaphore, so a
+# gate that has ever been contended keeps its own weak key reachable and is
+# never evicted on its own. Uncontended gates still fall out by themselves;
+# contended ones are reclaimed by ``_discard_closed_fs_walk_gates`` below. Under
+# the production deployment -- one Uvicorn worker, one long-lived loop -- this is
+# a single entry either way, so it only matters where loops are created
+# repeatedly, as they are in tests.
+#
+# The budget is deliberately shared by every endpoint that performs one of these
+# walks, rather than one gate per endpoint. The resource being protected is the
+# single default ``ThreadPoolExecutor``, sized ``min(32, cpu_count + 4)`` and so
+# as small as five workers. Two independent gates of four would each be reasoning
+# locally about a global resource and could between them occupy every worker --
+# precisely the starvation a gate exists to prevent. One budget of four always
+# leaves at least one worker for unrelated ``to_thread`` callers.
+_FS_WALK_MAX_CONCURRENCY = 4
+# Maps a running event loop -> the ``asyncio.Semaphore`` bound to that loop.
+_fs_walk_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_fs_walk_gates_lock = threading.Lock()
+
+
+def _discard_closed_fs_walk_gates() -> None:
+    """Drop registry entries whose event loop has been closed.
+
+    Callers must hold ``_fs_walk_gates_lock``. Deletions are applied only after
+    the comprehension has finished, because a ``WeakKeyDictionary`` must not
+    change size while it is being iterated.
+    """
+    for closed in [loop for loop in _fs_walk_gates if loop.is_closed()]:
+        del _fs_walk_gates[closed]
+
+
+def _get_fs_walk_gate() -> asyncio.Semaphore:
+    """Return the filesystem-walk concurrency gate bound to the running loop."""
+    loop = asyncio.get_running_loop()
+    with _fs_walk_gates_lock:
+        gate = _fs_walk_gates.get(loop)
+        if gate is None:
+            _discard_closed_fs_walk_gates()
+            gate = asyncio.Semaphore(_FS_WALK_MAX_CONCURRENCY)
+            _fs_walk_gates[loop] = gate
+        return gate
+
+
 @router.get(
     "/videos/{video_id}",
     summary="Get Video Details",
@@ -946,7 +1046,16 @@ async def get_video_detail_v1(
 ):
     """Get detailed info for specific video"""
     try:
-        video_detail = data_service.get_video_detail(video_id)
+        # ``get_video_detail`` runs an uncached recursive glob over the
+        # enhanced-analysis tree, stats every match, then opens and reads a
+        # metadata file and the full markdown body. That is blocking I/O whose
+        # cost grows with the corpus, so it is dispatched to a worker thread
+        # instead of being run on the event loop, and it shares the router's
+        # filesystem-walk budget so a burst cannot monopolise the executor.
+        async with _get_fs_walk_gate():
+            video_detail = await asyncio.to_thread(
+                data_service.get_video_detail, video_id
+            )
 
         if not video_detail:
             raise HTTPException(status_code=404, detail=f"Video not found: {video_id}")
@@ -969,7 +1078,17 @@ async def get_video_detail_v1(
 async def get_learning_log_v1(data_service: DataService = Depends(get_data_service)):
     """Get learning log from enhanced analysis files"""
     try:
-        learning_log = data_service.get_learning_log()
+        # ``get_learning_log`` walks the enhanced-analysis tree and opens a
+        # metadata file per entry. That is unbounded blocking I/O, so it is
+        # dispatched to a worker thread rather than run on the event loop.
+        #
+        # The walk is also uncached, so every concurrent request starts its own.
+        # Without a bound those walks would be free to occupy every worker in
+        # the shared default executor and starve unrelated ``to_thread``
+        # callers. The gate caps how many walks may be in flight; requests over
+        # the cap wait here on the event loop, holding no worker thread.
+        async with _get_fs_walk_gate():
+            learning_log = await asyncio.to_thread(data_service.get_learning_log)
         return learning_log
     except Exception as e:
         logger.error(f"Error getting learning log: {e}", exc_info=True)
@@ -1168,12 +1287,20 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
         metrics: dict[str, Any] = (
             report.get("metrics", {}) if isinstance(report, dict) else {}
         )
+        # Collect first, then write once. A report carries every web-vital the
+        # page gathered, and recording them one at a time cost one SQLite
+        # connection and one commit fsync each while the client waited.
+        samples: list[dict[str, Any]] = []
         for name, stats in metrics.items():
             value = stats.get("current") if isinstance(stats, dict) else None
             if isinstance(value, (int, float)):
-                await performance_monitor.record_metric(
-                    "frontend", name, float(value), unit=str(stats.get("unit", "ms"))
-                )
+                samples.append({
+                    "component": "frontend",
+                    "metric_name": name,
+                    "value": float(value),
+                    "unit": str(stats.get("unit", "ms")),
+                })
+        await performance_monitor.record_metrics(samples)
         return {"status": "ok", "metrics_recorded": len(metrics)}
     except Exception as e:
         logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
@@ -1694,7 +1821,11 @@ async def get_or_create_videopack(request: VideoPackRequest):
     # In a real implementation, this would look up in a VideoPackStore.
     # For MVP, we return a synthesized pack from the job or a 404.
     try:
-        from youtube_extension.videopack.schema import Provenance, Transcript, VideoPackV0
+        from youtube_extension.videopack.schema import (
+            Provenance,
+            Transcript,
+            VideoPackV0,
+        )
 
         # Check if we have a job with results
         job = None
@@ -1842,6 +1973,10 @@ async def extract_events(request: EventExtractRequest):
     _CHUNK_SIZE = 24_000
     _CHUNK_OVERLAP = 500
     _MAX_EVENTS = 50
+    # Chunks are extracted in bounded windows rather than one at a time.  Each
+    # chunk is an independent, *billed* Gemini round-trip, so the window is kept
+    # small and the _MAX_EVENTS budget is re-checked between windows.
+    _EXTRACT_CONCURRENCY = 4
 
     def _build_chunks(text: str) -> list[str]:
         if len(text) <= _CHUNK_SIZE:
@@ -1915,14 +2050,28 @@ async def extract_events(request: EventExtractRequest):
         return chunk_events
 
     try:
-        for chunk in transcript_chunks:
+        for window_start in range(0, len(transcript_chunks), _EXTRACT_CONCURRENCY):
             if len(events) >= _MAX_EVENTS:
                 break
-            chunk_events = await _extract_chunk(chunk)
-            for ev in chunk_events:
-                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
-                    seen_titles.add(ev.title)
-                    events.append(ev)
+            window = transcript_chunks[
+                window_start : window_start + _EXTRACT_CONCURRENCY
+            ]
+            # asyncio.gather preserves input order, so results are merged in the
+            # same chunk order the serial loop used -- dedup and the _MAX_EVENTS
+            # cut-off therefore select exactly the same events.  _extract_chunk
+            # isolates every ordinary Exception (it catches Exception and returns
+            # []), so return_exceptions=False cannot abort a sibling chunk on a
+            # normal provider failure.  A BaseException such as CancelledError can
+            # still propagate -- that is intended: request cancellation should tear
+            # the whole fan-out down rather than be swallowed into a result value.
+            window_results = await asyncio.gather(
+                *(_extract_chunk(chunk) for chunk in window)
+            )
+            for chunk_events in window_results:
+                for ev in chunk_events:
+                    if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                        seen_titles.add(ev.title)
+                        events.append(ev)
     except Exception as exc:
         logger.warning(f"Chunked extraction failed: {exc}")
 
@@ -2127,9 +2276,11 @@ async def get_agent_status(agent_id: str):
     tags=["Agents"],
 )
 async def send_a2a_message(
-    body: dict[str, Any] = {},
+    body: dict[str, Any] = None,
 ):
     """Send a context-share or tool-request message between agents."""
+    if body is None:
+        body = {}
     sender = body.get("sender", "frontend")
     recipient = body.get("recipient")
     content = body.get("content", {})

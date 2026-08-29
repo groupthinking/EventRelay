@@ -8,12 +8,16 @@ Replaces in-memory caching for cloud-native, scalable deployment.
 """
 
 import asyncio
-import json
 import logging
 import os
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional
+
+from youtube_extension.core.env_config import (
+    positive_finite_float_env,
+    positive_int_env,
+)
 
 try:
     from google.cloud import firestore
@@ -28,6 +32,22 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Worker-pool size and per-delete deadline used by cleanup_old_states().
+# Cleanup can match an unbounded number of documents, so deletes are pulled from
+# a shared iterator by this many workers rather than dispatched all at once.
+# Sizing the pool -- rather than gating a full fan-out -- bounds the in-flight
+# delete RPCs and the number of allocated task objects by the same constant.
+# Both controls are overridable so operators can tune cleanup independently of an
+# application deployment. Invalid values log and use the shipped default.
+# Bound the worker pool so a typo cannot allocate one task per queued document.
+CLEANUP_DELETE_CONCURRENCY_MAX = 64
+CLEANUP_DELETE_CONCURRENCY = positive_int_env(
+    "CLEANUP_DELETE_CONCURRENCY", 16, maximum=CLEANUP_DELETE_CONCURRENCY_MAX
+)
+CLEANUP_DELETE_TIMEOUT_SECONDS = positive_finite_float_env(
+    "CLEANUP_DELETE_TIMEOUT_SECONDS", 30.0
+)
+
 
 @dataclass
 class VideoProcessingState:
@@ -36,15 +56,15 @@ class VideoProcessingState:
     video_url: str
     status: str  # 'pending', 'processing', 'completed', 'failed'
     current_stage: str  # 'metadata', 'transcript', 'analysis', 'complete'
-    metadata: Optional[Dict[str, Any]] = None
-    transcript: Optional[Dict[str, Any]] = None
-    ai_analysis: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
+    transcript: Optional[dict[str, Any]] = None
+    ai_analysis: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     processing_time: Optional[float] = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for Firestore storage"""
         data = asdict(self)
         # Ensure timestamps are properly formatted
@@ -54,7 +74,7 @@ class VideoProcessingState:
         return data
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'VideoProcessingState':
+    def from_dict(cls, data: dict[str, Any]) -> 'VideoProcessingState':
         """Create from Firestore dictionary"""
         return cls(**data)
 
@@ -98,8 +118,8 @@ class FirestoreStateService:
 
         # Initialize Firestore client
         self.db: Optional[AsyncClient] = None
-        self._local_cache: Dict[str, VideoProcessingState] = {}
-        self._cache_timestamps: Dict[str, datetime] = {}
+        self._local_cache: dict[str, VideoProcessingState] = {}
+        self._cache_timestamps: dict[str, datetime] = {}
 
         logger.info(
             f"FirestoreStateService initialized: "
@@ -202,9 +222,9 @@ class FirestoreStateService:
         video_id: str,
         status: Optional[str] = None,
         current_stage: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        transcript: Optional[Dict[str, Any]] = None,
-        ai_analysis: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        transcript: Optional[dict[str, Any]] = None,
+        ai_analysis: Optional[dict[str, Any]] = None,
         error_message: Optional[str] = None,
         processing_time: Optional[float] = None,
     ) -> VideoProcessingState:
@@ -280,7 +300,7 @@ class FirestoreStateService:
         self,
         status: Optional[str] = None,
         limit: int = 100,
-    ) -> List[VideoProcessingState]:
+    ) -> list[VideoProcessingState]:
         """
         List processing states with optional filtering.
 
@@ -322,11 +342,49 @@ class FirestoreStateService:
         query = collection.where('created_at', '<', cutoff_date)
         docs = await query.get()
 
-        # Delete in batch
-        count = 0
-        for doc in docs:
-            await doc.reference.delete()
-            count += 1
+        if not docs:
+            logger.info(f"Cleaned up 0 old states (>{days} days)")
+            return 0
+
+        # Delete with a fixed pool of workers pulling from a shared iterator.
+        # Deleting sequentially made cleanup latency scale with the size of the
+        # expired backlog. The pool overlaps up to CLEANUP_DELETE_CONCURRENCY
+        # deletes at a time while keeping *both* the in-flight RPCs and the
+        # number of pending task objects bounded -- gather() over every document
+        # would allocate one task per document up front, which is unsafe for a
+        # query whose result set has no limit. Failures are tallied rather than
+        # raised so one bad delete cannot abandon the rest of the backlog.
+        pending = iter(docs)
+        succeeded = 0
+        failures: list[Exception] = []
+
+        async def _delete_worker() -> None:
+            nonlocal succeeded
+            while True:
+                try:
+                    doc = next(pending)
+                except StopIteration:
+                    return
+                try:
+                    await doc.reference.delete(timeout=CLEANUP_DELETE_TIMEOUT_SECONDS)
+                    succeeded += 1
+                except Exception as exc:  # noqa: BLE001 - tallied and logged below
+                    failures.append(exc)
+
+        await asyncio.gather(
+            *(
+                _delete_worker()
+                for _ in range(min(CLEANUP_DELETE_CONCURRENCY, len(docs)))
+            )
+        )
+
+        count = succeeded
+
+        if failures:
+            logger.warning(
+                f"Failed to delete {len(failures)} of {len(docs)} old states; "
+                f"first error: {failures[0]!r}"
+            )
 
         logger.info(f"Cleaned up {count} old states (>{days} days)")
         return count

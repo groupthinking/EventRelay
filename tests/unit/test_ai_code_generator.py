@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
+import threading
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -12,8 +14,11 @@ import pytest
 _SRC = Path(__file__).resolve().parents[2] / "src"
 sys.path.insert(0, str(_SRC))
 
-from youtube_extension.backend.ai_code_generator import AICodeGenerator, get_ai_code_generator
 import youtube_extension.backend.ai_code_generator as _mod
+from youtube_extension.backend.ai_code_generator import (
+    AICodeGenerator,
+    get_ai_code_generator,
+)
 
 _ARCH = {
     "type": "web_app",
@@ -1068,6 +1073,286 @@ class TestFixBuildErrors:
         errors = ["error in src/app/page.tsx:1"]
         result = await gen.fix_build_errors(tmp_path, errors, [])
         assert result["success"] is False
+
+
+class TestFixBuildErrorsConcurrency:
+    """fix_build_errors fans files out concurrently and keeps I/O off the loop.
+
+    Each error file is independent (own read, own LLM round-trip, own write), so
+    the previous sequential loop made wall-clock cost scale linearly with the
+    number of failing files while the event loop sat blocked on file I/O.
+    """
+
+    @staticmethod
+    def _make_files(tmp_path, count):
+        rel_paths = []
+        for i in range(count):
+            rel = f"src/app/page{i}.tsx"
+            file_path = tmp_path / rel
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(f"const x = {i};")
+            rel_paths.append(rel)
+        return rel_paths
+
+    @staticmethod
+    def _errors_for(rel_paths):
+        return [f"error in {rel}:1:5 - Type error" for rel in rel_paths]
+
+    @staticmethod
+    def _tracking_generate(record):
+        """Return an async generate() that records peak concurrent calls."""
+        state = {"inflight": 0}
+
+        async def _generate(prompt, **kwargs):
+            state["inflight"] += 1
+            record["max_inflight"] = max(
+                record.get("max_inflight", 0), state["inflight"]
+            )
+            try:
+                await asyncio.sleep(0.05)
+                return "const fixed = true;"
+            finally:
+                state["inflight"] -= 1
+
+        return _generate
+
+    async def test_files_are_fixed_concurrently(self, tmp_path):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 4)
+        record = {}
+        gen.router.generate = AsyncMock(side_effect=self._tracking_generate(record))
+
+        result = await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        assert result["success"] is True
+        assert len(result["fixed_files"]) == 4
+        # A sequential loop can never have more than one call in flight.
+        assert record["max_inflight"] > 1
+
+    async def test_default_concurrency_is_bounded(self, tmp_path):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 8)
+        record = {}
+        gen.router.generate = AsyncMock(side_effect=self._tracking_generate(record))
+
+        await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        # Unbounded fan-out would reach 8 and risk provider rate limits.
+        assert 1 < record["max_inflight"] <= _mod._MAX_CONCURRENT_FIXES
+
+    async def test_max_concurrency_override_is_respected(self, tmp_path):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 8)
+        record = {}
+        gen.router.generate = AsyncMock(side_effect=self._tracking_generate(record))
+
+        result = await gen.fix_build_errors(
+            tmp_path, self._errors_for(rel_paths), [], max_concurrency=2
+        )
+
+        assert len(result["fixed_files"]) == 8
+        assert record["max_inflight"] == 2
+
+    @pytest.mark.parametrize("bad_limit", [0, -5])
+    async def test_non_positive_max_concurrency_clamps_to_one(self, tmp_path, bad_limit):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 3)
+        record = {}
+        gen.router.generate = AsyncMock(side_effect=self._tracking_generate(record))
+
+        result = await gen.fix_build_errors(
+            tmp_path, self._errors_for(rel_paths), [], max_concurrency=bad_limit
+        )
+
+        assert len(result["fixed_files"]) == 3
+        assert record["max_inflight"] == 1
+
+    async def test_fixed_files_order_is_deterministic(self, tmp_path):
+        """error_files is a set, so results must be sorted to be assertable."""
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 5)
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        result = await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        assert result["fixed_files"] == sorted(rel_paths)
+
+    async def test_file_io_runs_off_the_event_loop_thread(self, tmp_path, monkeypatch):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 2)
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        loop_thread = threading.get_ident()
+        read_threads: list[int] = []
+        write_threads: list[int] = []
+        real_read, real_write = Path.read_text, Path.write_text
+
+        def _tracked_read(self, *args, **kwargs):
+            read_threads.append(threading.get_ident())
+            return real_read(self, *args, **kwargs)
+
+        def _tracked_write(self, *args, **kwargs):
+            write_threads.append(threading.get_ident())
+            return real_write(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _tracked_read)
+        monkeypatch.setattr(Path, "write_text", _tracked_write)
+
+        await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        assert read_threads and write_threads
+        assert loop_thread not in read_threads
+        assert loop_thread not in write_threads
+
+    async def test_one_file_failure_does_not_abort_siblings(self, tmp_path):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 3)
+
+        async def _generate(prompt, **kwargs):
+            # The prompt embeds the whole error list, so key off the per-file
+            # "CURRENT CODE (<path>)" marker to target exactly one file.
+            if "CURRENT CODE (src/app/page1.tsx)" in prompt:
+                raise RuntimeError("provider blew up")
+            return "const fixed = true;"
+
+        gen.router.generate = AsyncMock(side_effect=_generate)
+
+        result = await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        assert result["fixed_files"] == ["src/app/page0.tsx", "src/app/page2.tsx"]
+        assert result["success"] is True
+
+    async def test_missing_file_does_not_abort_siblings(self, tmp_path):
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 2)
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+        errors = self._errors_for([*rel_paths, "src/app/gone.tsx"])
+
+        result = await gen.fix_build_errors(tmp_path, errors, [])
+
+        assert result["fixed_files"] == sorted(rel_paths)
+
+    async def test_undecodable_source_does_not_abort_siblings(self, tmp_path):
+        """A non-UTF-8 source must be skipped, not blow up the whole fan-out.
+
+        Path.read_text() raises UnicodeDecodeError -- a ValueError subclass, *not*
+        an OSError -- on undecodable bytes. Because the files are gathered with
+        the default return_exceptions=False, letting that escape _fix_one would
+        propagate out of gather and discard every sibling's successful fix.
+        """
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 3)
+        # Invalid UTF-8: a lone continuation byte cannot start a sequence.
+        (tmp_path / "src/app/page1.tsx").write_bytes(b"const x = '\xff\xfe';")
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        result = await gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+
+        assert result["fixed_files"] == ["src/app/page0.tsx", "src/app/page2.tsx"]
+        assert result["success"] is True
+
+    async def test_concurrent_invocations_share_the_fix_budget(self, tmp_path):
+        """The concurrency bound is process-wide, not per-invocation.
+
+        get_deployment_manager() builds a fresh DeploymentManager -- and so a
+        fresh AICodeGenerator -- per pipeline run. A semaphore owned by a single
+        call would therefore let N concurrent deployments issue N * limit LLM
+        calls, defeating the rate-limit protection the bound exists to provide.
+        """
+        record = {"max_inflight": 0}
+        shared = {"inflight": 0}
+
+        async def _generate(prompt, **kwargs):
+            shared["inflight"] += 1
+            record["max_inflight"] = max(record["max_inflight"], shared["inflight"])
+            try:
+                await asyncio.sleep(0.05)
+                return "const fixed = true;"
+            finally:
+                shared["inflight"] -= 1
+
+        projects = []
+        for n in range(3):
+            root = tmp_path / f"proj{n}"
+            root.mkdir()
+            rel_paths = self._make_files(root, 4)
+            gen = _make_gen_with_mock_client(root)
+            gen.router.generate = AsyncMock(side_effect=_generate)
+            projects.append((gen, root, rel_paths))
+
+        results = await asyncio.gather(
+            *(
+                gen.fix_build_errors(root, self._errors_for(rel_paths), [])
+                for gen, root, rel_paths in projects
+            )
+        )
+
+        # All 12 files across all 3 generators still get fixed...
+        assert [len(r["fixed_files"]) for r in results] == [4, 4, 4]
+        # ...but the three independent generators never exceed one shared budget.
+        assert record["max_inflight"] > 1
+        assert record["max_inflight"] <= 4
+
+    async def test_cancellation_drains_the_in_flight_write(
+        self, tmp_path, monkeypatch
+    ):
+        """A cancelled fix must not abandon a half-written file.
+
+        asyncio.to_thread hands work to a worker thread and has no way to
+        interrupt it. Cancelling a bare `await asyncio.to_thread(write_text, ...)`
+        therefore returns control to the caller immediately while the thread is
+        still truncating and rewriting the file -- and gather() cancels every
+        sibling the moment one task raises, so this is reachable in normal
+        operation, not just on Ctrl-C. The caller would see a failed repair and
+        could begin cleanup on a file that is actively being written.
+        """
+        gen = _make_gen_with_mock_client(tmp_path)
+        rel_paths = self._make_files(tmp_path, 1)
+        target = tmp_path / rel_paths[0]
+        original = target.read_text()
+        gen.router.generate = AsyncMock(return_value="const fixed = true;")
+
+        write_started = threading.Event()
+        may_finish = threading.Event()
+        real_write = Path.write_text
+
+        def _slow_write(self, *args, **kwargs):
+            if self == target:
+                write_started.set()
+                # Block until the test explicitly releases us. A fixed sleep
+                # would let this write complete early on a slow runner and the
+                # test would pass without ever opening the race window.
+                may_finish.wait(5)
+            return real_write(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", _slow_write)
+
+        task = asyncio.create_task(
+            gen.fix_build_errors(tmp_path, self._errors_for(rel_paths), [])
+        )
+        # Wait for the worker thread to actually enter write_text before
+        # cancelling, so the race window is open rather than assumed.
+        await asyncio.to_thread(write_started.wait, 5)
+        assert write_started.is_set()
+        task.cancel()
+
+        # Release the worker only after the cancellation has been delivered.
+        # With the drain the coroutine is parked on the write and observes it
+        # complete; without it the coroutine has already unwound and the file
+        # is still unwritten when the assertion below runs.
+        releaser = threading.Timer(0.2, may_finish.set)
+        releaser.start()
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await task
+        finally:
+            releaser.cancel()
+            may_finish.set()
+
+        # Cancellation propagated only after the write was drained, so the file
+        # is whole. Without the drain this still holds the pre-fix contents.
+        assert target.read_text() == "const fixed = true;"
+        assert target.read_text() != original
 
 
 # ===========================================================================

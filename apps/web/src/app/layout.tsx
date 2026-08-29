@@ -41,20 +41,11 @@ export const metadata: Metadata = {
     siteName: 'UVAI',
     title: 'UVAI — Video to Workflow',
     description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'UVAI — Agentic Video Execution Platform',
-      },
-    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'UVAI — Video to Workflow',
     description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
-    images: ['/og-image.png'],
     creator: '@groupthinking',
   },
   robots: {
@@ -97,6 +88,8 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <StructuredData />
+        <link rel="preconnect" href="https://img.youtube.com" crossOrigin="anonymous" />
+        <link rel="preconnect" href="https://i.ytimg.com" crossOrigin="anonymous" />
       </head>
       <body
         className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-surface-950 font-sans antialiased`}

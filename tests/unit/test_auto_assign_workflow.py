@@ -4,7 +4,6 @@ from pathlib import Path
 
 import yaml
 
-
 WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/auto-assign.yml"
 
 

@@ -228,7 +228,7 @@ class MCPOrchestrator:
         finally:
             # Always clean up the spawned_tasks entry
             self.spawned_tasks.pop(task_id, None)
-    
+
     async def execute_task(self, task_id: str) -> dict[str, Any]:
         """
         Execute a specific task

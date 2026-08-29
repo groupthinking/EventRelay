@@ -24,6 +24,7 @@ import statistics
 import threading
 import time
 from collections import defaultdict, deque
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -268,9 +269,112 @@ class PerformanceMonitor:
         except Exception as e:
             logger.error(f"Failed to record metric: {e}")
 
+    async def record_metrics(self, metrics: Sequence[Mapping[str, Any]]) -> None:
+        """Record several metrics with a single database round-trip.
+
+        Each mapping takes the same keys as :meth:`record_metric` --
+        ``component``, ``metric_name``, ``value``, and optionally ``unit`` and
+        ``tags``. The observable behaviour is identical to calling
+        ``record_metric`` once per entry: the buffer, the fast-access
+        collections and the alert thresholds are all updated the same way, in
+        the same order.
+
+        The difference is the write. ``record_metric`` opens a connection,
+        inserts one row, commits and closes, so a caller holding N metrics pays
+        N connections and -- far more expensively -- N commit fsyncs. This
+        collapses them into one connection, one ``executemany`` and one commit.
+
+        Batching rather than parallelising is deliberate: SQLite serialises
+        writers behind a single database-level write lock, so concurrent
+        writers would queue anyway while adding lock contention on top of the
+        same number of fsyncs.
+        """
+        if not metrics:
+            return
+
+        try:
+            # Stamp each record with its own ``datetime.now`` exactly as the
+            # serial ``record_metric`` does. A single shared ``now`` for the
+            # whole batch gives every row an identical timestamp, which
+            # diverges from the parity this method's docstring promises and
+            # erases per-sample ordering for callers that submit genuinely
+            # distinct samples in one call.
+            records = [
+                PerformanceMetric(
+                    component=entry["component"],
+                    metric_name=entry["metric_name"],
+                    value=float(entry["value"]),
+                    timestamp=entry.get("timestamp") or datetime.now(timezone.utc),
+                    unit=entry.get("unit", "ms"),
+                    tags=entry.get("tags") or {},
+                )
+                for entry in metrics
+            ]
+
+            # Mirror record_metric's buffer bookkeeping, but take the lock once
+            # for the whole batch instead of once per metric.
+            with self._lock:
+                for metric in records:
+                    self.metrics_buffer.append(metric)
+
+                    if metric.metric_name == "video_processing_time":
+                        self.video_processing_times.append(metric.value)
+                    elif metric.metric_name == "database_query_time":
+                        self.database_query_times.append(metric.value)
+                    elif metric.metric_name == "api_response_time":
+                        self.api_response_times.append(metric.value)
+
+            # The one write that replaces N.
+            await self._store_metrics(records)
+
+            # Thresholds are evaluated per metric exactly as before; an alert
+            # for one metric must not suppress the rest.
+            for metric in records:
+                await self._check_alert_thresholds(metric)
+
+            logger.debug(f"📊 Recorded {len(records)} metrics in one write")
+
+        except Exception as e:
+            logger.error(f"Failed to record metrics: {e}")
+
+    async def _store_metrics(self, metrics: Sequence[PerformanceMetric]) -> None:
+        """Persist a batch of metrics using one connection and one commit."""
+        if not metrics:
+            return
+
+        rows = [
+            (
+                metric.component,
+                metric.metric_name,
+                metric.value,
+                metric.unit,
+                json.dumps(metric.tags),
+                metric.timestamp.isoformat(),
+            )
+            for metric in metrics
+        ]
+
+        def _write() -> None:
+            conn = sqlite3.connect(self.db_path)
+            try:
+                conn.executemany('''
+                    INSERT INTO performance_metrics
+                    (component, metric_name, value, unit, tags, timestamp)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', rows)
+                conn.commit()
+            finally:
+                conn.close()
+
+        try:
+            await asyncio.to_thread(_write)
+        except Exception as e:
+            logger.error(f"Failed to store metrics in database: {e}")
+
     async def _store_metric(self, metric: PerformanceMetric):
         """Store metric in database"""
-        try:
+
+        def _write() -> None:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -290,6 +394,8 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to store metric in database: {e}")
 
@@ -353,7 +459,8 @@ class PerformanceMonitor:
 
     async def _store_alert(self, alert: PerformanceAlert):
         """Store alert in database"""
-        try:
+
+        def _write() -> None:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -375,6 +482,8 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to store alert in database: {e}")
 
@@ -413,28 +522,56 @@ class PerformanceMonitor:
     async def _monitor_system_resources(self):
         """Monitor system resource usage"""
         try:
+            samples: list[dict[str, Any]] = []
+
             # CPU usage
             cpu_percent = psutil.cpu_percent(interval=1)
-            await self.record_metric("system", "cpu_usage_percent", cpu_percent, "%")
+            samples.append({
+                "component": "system", "metric_name": "cpu_usage_percent",
+                "value": cpu_percent, "unit": "%",
+            })
 
             # Memory usage
             memory = psutil.virtual_memory()
-            await self.record_metric("system", "memory_usage_percent", memory.percent, "%")
-            await self.record_metric("system", "memory_available_bytes", memory.available, "bytes")
+            samples.append({
+                "component": "system", "metric_name": "memory_usage_percent",
+                "value": memory.percent, "unit": "%",
+            })
+            samples.append({
+                "component": "system", "metric_name": "memory_available_bytes",
+                "value": memory.available, "unit": "bytes",
+            })
 
             # Disk usage
             disk = psutil.disk_usage('/')
             disk_percent = (disk.used / disk.total) * 100
-            await self.record_metric("system", "disk_usage_percent", disk_percent, "%")
+            samples.append({
+                "component": "system", "metric_name": "disk_usage_percent",
+                "value": disk_percent, "unit": "%",
+            })
 
             # Process-specific metrics if available
             try:
                 process = psutil.Process()
-                await self.record_metric("process", "memory_usage_mb", process.memory_info().rss / 1024 / 1024, "MB")
-                await self.record_metric("process", "cpu_percent", process.cpu_percent(), "%")
-                await self.record_metric("process", "threads_count", process.num_threads(), "count")
+                samples.append({
+                    "component": "process", "metric_name": "memory_usage_mb",
+                    "value": process.memory_info().rss / 1024 / 1024, "unit": "MB",
+                })
+                samples.append({
+                    "component": "process", "metric_name": "cpu_percent",
+                    "value": process.cpu_percent(), "unit": "%",
+                })
+                samples.append({
+                    "component": "process", "metric_name": "threads_count",
+                    "value": process.num_threads(), "unit": "count",
+                })
             except Exception:
                 pass  # Process monitoring is optional
+
+            # One connection and one commit for the whole cycle, instead of one
+            # per metric. This loop runs every 30s for the life of the process,
+            # so the saving is ~17k connections and fsyncs per day.
+            await self.record_metrics(samples)
 
         except Exception as e:
             logger.error(f"Error monitoring system resources: {e}")
@@ -498,7 +635,8 @@ class PerformanceMonitor:
 
     async def _basic_cleanup(self):
         """Basic cleanup fallback when service is not available"""
-        try:
+
+        def _purge() -> None:
             cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
 
             conn = sqlite3.connect(self.db_path)
@@ -518,8 +656,9 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_purge)
             logger.info("Basic cleanup completed successfully")
-
         except Exception as e:
             logger.error(f"Error in basic cleanup: {e}")
 
@@ -562,7 +701,8 @@ class PerformanceMonitor:
 
     async def get_current_performance_summary(self) -> dict[str, dict[str, float]]:
         """Get current performance summary (last hour averages)"""
-        try:
+
+        def _query() -> dict[str, dict[str, float]]:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -582,6 +722,8 @@ class PerformanceMonitor:
             conn.close()
             return dict(results)
 
+        try:
+            return await asyncio.to_thread(_query)
         except Exception as e:
             logger.error(f"Error getting performance summary: {e}")
             return {}
@@ -658,7 +800,8 @@ class PerformanceMonitor:
 
     async def _get_recent_metrics_summary(self) -> dict[str, Any]:
         """Get recent metrics summary"""
-        try:
+
+        def _query() -> dict[str, Any]:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -683,6 +826,8 @@ class PerformanceMonitor:
             conn.close()
             return metrics_summary
 
+        try:
+            return await asyncio.to_thread(_query)
         except Exception as e:
             logger.error(f"Error getting recent metrics summary: {e}")
             return {}
@@ -798,7 +943,8 @@ class PerformanceMonitor:
 
     async def _store_benchmark_result(self, result: dict[str, Any]):
         """Store benchmark result in database"""
-        try:
+
+        def _write() -> None:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
 
@@ -824,6 +970,8 @@ class PerformanceMonitor:
             conn.commit()
             conn.close()
 
+        try:
+            await asyncio.to_thread(_write)
         except Exception as e:
             logger.error(f"Failed to store benchmark result: {e}")
 

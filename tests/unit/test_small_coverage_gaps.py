@@ -19,6 +19,7 @@ class TestMCPBridge:
     def _make_client(self):
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
+
         from youtube_extension.backend.api.mcp_bridge import router
 
         app = FastAPI()
@@ -65,6 +66,7 @@ class TestVideoProcessorInterface:
 
     def test_is_protocol(self):
         from typing import Protocol
+
         from youtube_extension.backend.video_processor_interface import VideoProcessor
         assert issubclass(VideoProcessor, Protocol)
 
@@ -104,7 +106,6 @@ class TestAgentsRegistry:
 
 class TestBaseAgentMethods:
     def _make_agent(self):
-        import logging
         from youtube_extension.services.agents.base_agent import BaseAgent
         from youtube_extension.services.agents.dto import AgentRequest, AgentResult
 
@@ -168,7 +169,9 @@ class TestAgentCompatibilityShims:
 
 class TestCalculateTotalTimeElseBranch:
     def _make_agent(self):
-        from youtube_extension.services.agents.adapters.action_implementer_agent import ActionImplementerAgent
+        from youtube_extension.services.agents.adapters.action_implementer_agent import (
+            ActionImplementerAgent,
+        )
         return ActionImplementerAgent()
 
     def test_calculate_total_time_zero_actions_returns_minutes_only(self):
@@ -224,8 +227,11 @@ class TestVideoMasterAgentGeminiSetupException:
     def test_gemini_client_init_exception_is_caught(self, monkeypatch):
         import logging
         from unittest.mock import MagicMock, patch
+
         import youtube_extension.services.agents.base_agent as _ba
-        from youtube_extension.services.agents.adapters.video_master_agent import VideoMasterAgent
+        from youtube_extension.services.agents.adapters.video_master_agent import (
+            VideoMasterAgent,
+        )
 
         mock_genai = MagicMock()
         mock_genai.Client.side_effect = RuntimeError("test: connection refused")
@@ -258,13 +264,14 @@ class TestVideoMasterAgentGeminiSetupException:
 
 class TestAgentGapAnalyzerSaveException:
     def test_save_gaps_exception_is_caught(self, tmp_path, monkeypatch):
-        import logging
-        from youtube_extension.services.agents.agent_gap_analyzer import AgentGapAnalyzer
+        from youtube_extension.services.agents.agent_gap_analyzer import (
+            AgentGapAnalyzer,
+        )
 
         analyzer = AgentGapAnalyzer(storage_dir=tmp_path)
         # Make the gaps_file path unwritable by patching open inside the module
-        import youtube_extension.services.agents.agent_gap_analyzer as _mod
         import builtins
+
 
         original_open = builtins.open
 

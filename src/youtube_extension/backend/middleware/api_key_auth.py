@@ -92,10 +92,12 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS" or self._is_public(path):
             return await call_next(request)
 
-        # Fail closed when the server has no key configured (unless dev opt-in).
+        # Local dev or test opt-in bypasses auth regardless of ambient API key.
+        if self.allow_unauthenticated:
+            return await call_next(request)
+
+        # Fail closed when the server has no key configured.
         if not self.api_key:
-            if self.allow_unauthenticated:
-                return await call_next(request)
             return Response(
                 content=_MISCONFIGURED_BODY,
                 status_code=503,

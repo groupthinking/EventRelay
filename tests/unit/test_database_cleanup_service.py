@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import sqlite3
 import sys
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -17,7 +16,6 @@ from youtube_extension.backend.services.database_cleanup_service import (
     DatabaseCleanupService,
     RetentionPolicy,
 )
-
 
 # ===========================================================================
 # RetentionPolicy dataclass

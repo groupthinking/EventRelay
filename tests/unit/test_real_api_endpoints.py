@@ -20,12 +20,17 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import json
+import os
 import sys
-import tempfile
+import threading
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -40,14 +45,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 # initialised at import time via init_real_api_services())
 # ---------------------------------------------------------------------------
 from youtube_extension.backend.real_api_endpoints import (  # noqa: E402
+    _CACHE_MISS,
+    _VALIDATION_MAX_BYTES,
     BatchProcessingRequest,
     VideoAnalysisResponse,
     VideoProcessingRequest,
     VideoValidationRequest,
+    _collect_processed_videos_sync,
+    _read_video_analysis_sync,
     init_real_api_services,
     setup_real_api_endpoints,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures & Helpers
@@ -834,3 +842,687 @@ class TestSearchVideosEndpoint:
         response = client.post("/api/v2/search-videos?query=unusual+query")
         assert response.json()["total_results"] == 0
         assert response.json()["results"] == []
+
+
+# ===========================================================================
+# GET /api/v2/videos/list - blocking I/O offload (performance regression)
+# ===========================================================================
+
+
+class _ThreadRecordingPath:
+    """Path-like proxy that records the thread performing the per-file read.
+
+    ``open()`` resolves a non-``str`` argument through ``__fspath__``, so this
+    captures the calling thread at the exact moment the blocking read starts —
+    rather than inferring it from the enclosing directory scan.
+    """
+
+    def __init__(self, real_path: Path, read_thread_ids: list[int]) -> None:
+        self._real = real_path
+        self._read_thread_ids = read_thread_ids
+
+    def __fspath__(self) -> str:
+        self._read_thread_ids.append(threading.get_ident())
+        return str(self._real)
+
+    def __str__(self) -> str:
+        return str(self._real)
+
+
+class _ThreadRecordingCacheDir:
+    """Stand-in for ``processor.cache_dir`` that records the scanning thread.
+
+    Delegates to a real :class:`~pathlib.Path` so the endpoint keeps its normal
+    behaviour, while capturing which thread performed each blocking filesystem
+    operation — both the directory-level ``exists()``/``glob()`` and the
+    per-entry ``open()``.
+    """
+
+    def __init__(self, real_dir: Path) -> None:
+        self._real = real_dir
+        self.scan_thread_ids: list[int] = []
+        self.read_thread_ids: list[int] = []
+
+    def exists(self) -> bool:
+        self.scan_thread_ids.append(threading.get_ident())
+        return self._real.exists()
+
+    def glob(self, pattern: str):
+        self.scan_thread_ids.append(threading.get_ident())
+        return [
+            _ThreadRecordingPath(p, self.read_thread_ids)
+            for p in self._real.glob(pattern)
+        ]
+
+
+class TestVideosListOffloadsBlockingIO:
+    """The cache scan must not run on the event loop thread."""
+
+    def test_cache_scan_runs_off_the_event_loop_thread(
+        self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        recording_dir = _ThreadRecordingCacheDir(tmp_cache)
+        mock_processor.cache_dir = recording_dir
+
+        # get_real_video_processor() is invoked by the handler *on the event
+        # loop thread*, immediately before the scan is dispatched. Recording it
+        # here gives us the loop's thread id without assuming the test itself
+        # runs on that loop.
+        loop_thread_ids: list[int] = []
+
+        def _record_loop_thread():
+            loop_thread_ids.append(threading.get_ident())
+            return mock_processor
+
+        with (
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                side_effect=_record_loop_thread,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+        ):
+            with TestClient(api_app, raise_server_exceptions=False) as c:
+                response = c.get("/api/v2/videos/list")
+
+        assert response.status_code == 200
+        assert len(response.json()) == 1
+
+        assert loop_thread_ids, "handler never resolved the processor"
+        assert recording_dir.scan_thread_ids, "cache directory was never scanned"
+
+        loop_thread_id = loop_thread_ids[0]
+        assert all(tid != loop_thread_id for tid in recording_dir.scan_thread_ids), (
+            "blocking cache scan ran on the event loop thread "
+            f"({loop_thread_id}); observed {recording_dir.scan_thread_ids}"
+        )
+
+        # The directory scan and the per-entry read are separate blocking
+        # operations; assert the reads moved off-loop too rather than inferring
+        # it from the helper extraction.
+        assert recording_dir.read_thread_ids, "no cache entry was ever read"
+        assert all(tid != loop_thread_id for tid in recording_dir.read_thread_ids), (
+            "blocking cache entry read ran on the event loop thread "
+            f"({loop_thread_id}); observed {recording_dir.read_thread_ids}"
+        )
+
+    async def test_event_loop_stays_responsive_during_cache_scan(
+        self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
+    ):
+        """A slow scan must not starve other tasks on the loop."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+
+        scan_duration = 0.30
+
+        class _SlowCacheDir:
+            def exists(self) -> bool:
+                return True
+
+            def glob(self, pattern: str):
+                time.sleep(scan_duration)
+                return []
+
+        mock_processor.cache_dir = _SlowCacheDir()
+
+        heartbeats = 0
+
+        async def _heartbeat():
+            nonlocal heartbeats
+            while True:
+                await asyncio.sleep(0.01)
+                heartbeats += 1
+
+        with (
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                return_value=mock_processor,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+        ):
+            transport = httpx.ASGITransport(app=api_app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as ac:
+                ticker = asyncio.create_task(_heartbeat())
+                try:
+                    response = await ac.get("/api/v2/videos/list")
+                finally:
+                    ticker.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await ticker
+
+        assert response.status_code == 200
+        # A responsive loop ticks ~30x during a 0.30s scan. Assert a very
+        # conservative fraction of that to stay robust on loaded CI runners,
+        # while still failing outright when the loop is fully blocked.
+        assert (
+            heartbeats >= 5
+        ), f"event loop was starved during the cache scan (ticks={heartbeats})"
+
+    def test_offloaded_scan_returns_same_payload(
+        self, client, mock_processor, tmp_cache
+    ):
+        """Offloading must not change the response contract."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        response = client.get("/api/v2/videos/list")
+
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload == _collect_processed_videos_sync(tmp_cache)
+
+
+class TestCollectProcessedVideosSync:
+    """Direct coverage of the extracted blocking helper."""
+
+    def test_missing_directory_returns_empty_list(self, tmp_path):
+        assert _collect_processed_videos_sync(tmp_path / "absent") == []
+
+    def test_empty_directory_returns_empty_list(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        assert _collect_processed_videos_sync(tmp_cache) == []
+
+    def test_corrupt_entry_is_skipped_without_failing_the_scan(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        (tmp_cache / "bad_processed.json").write_text("{invalid json", encoding="utf-8")
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        result = _collect_processed_videos_sync(tmp_cache)
+
+        assert [v["id"] for v in result] == ["auJzb1D-fag"]
+
+    def test_results_are_sorted_by_timestamp_descending(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "vid_a", {"timestamp": "2026-01-01T00:00:00Z"})
+        _write_cache_file(tmp_cache, "vid_b", {"timestamp": "2026-06-01T00:00:00Z"})
+
+        result = _collect_processed_videos_sync(tmp_cache)
+
+        assert [v["id"] for v in result] == ["vid_b", "vid_a"]
+
+    def test_non_matching_files_are_ignored(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        (tmp_cache / "notes.txt").write_text("ignore me", encoding="utf-8")
+        (tmp_cache / "other.json").write_text("{}", encoding="utf-8")
+
+        assert _collect_processed_videos_sync(tmp_cache) == []
+
+
+# ===========================================================================
+# GET /api/v2/videos/{video_id} - blocking I/O offload (performance regression)
+# ===========================================================================
+
+
+class _SlowReadPath:
+    """Path-like proxy whose resolution blocks, standing in for a large read.
+
+    ``open()`` resolves a non-``str`` argument through ``__fspath__``, so the
+    sleep lands inside the blocking read itself rather than around it. If the
+    read is dispatched to a worker thread the loop stays free for that whole
+    window; if it is not, the loop is pinned for exactly this long.
+    """
+
+    def __init__(self, real_path: Path, duration: float) -> None:
+        self._real = real_path
+        self._duration = duration
+
+    def __fspath__(self) -> str:
+        time.sleep(self._duration)
+        return str(self._real)
+
+    def __str__(self) -> str:
+        return str(self._real)
+
+
+class TestVideoDetailOffloadsBlockingIO:
+    """The single-entry cache read must not run on the event loop thread."""
+
+    def test_cache_entry_read_runs_off_the_event_loop_thread(
+        self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        read_thread_ids: list[int] = []
+        mock_processor._get_cache_path.return_value = _ThreadRecordingPath(
+            cache_file, read_thread_ids
+        )
+
+        # get_real_video_processor() is invoked by the handler *on the event
+        # loop thread*, immediately before the read is dispatched. Recording it
+        # here gives us the loop's thread id without assuming the test itself
+        # runs on that loop.
+        loop_thread_ids: list[int] = []
+
+        def _record_loop_thread():
+            loop_thread_ids.append(threading.get_ident())
+            return mock_processor
+
+        with (
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                side_effect=_record_loop_thread,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+        ):
+            with TestClient(api_app, raise_server_exceptions=False) as c:
+                response = c.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.json()["video_id"] == "auJzb1D-fag"
+
+        assert loop_thread_ids, "handler never resolved the processor"
+        assert read_thread_ids, "cache entry was never read"
+
+        loop_thread_id = loop_thread_ids[0]
+        assert all(tid != loop_thread_id for tid in read_thread_ids), (
+            "blocking cache entry read ran on the event loop thread "
+            f"({loop_thread_id}); observed {read_thread_ids}"
+        )
+
+    async def test_event_loop_stays_responsive_during_cache_read(
+        self, api_app, mock_processor, mock_youtube, mock_cost_monitor, tmp_cache
+    ):
+        """A slow read must not starve other tasks on the loop.
+
+        Scope note: ``_SlowReadPath`` sleeps in ``__fspath__``, which models
+        *filesystem* latency -- and ``time.sleep`` releases the GIL, exactly as
+        a real blocking syscall does. It is not vacuous: reverting the
+        ``asyncio.to_thread`` hop drives ``heartbeats`` to 0. Since the helper
+        stopped parsing the payload, filesystem latency is essentially the
+        whole read; the size-proportional stall that used to remain is pinned
+        by ``test_read_stall_no_longer_scales_with_payload``.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        read_duration = 0.30
+        mock_processor._get_cache_path.return_value = _SlowReadPath(
+            cache_file, read_duration
+        )
+
+        heartbeats = 0
+
+        async def _heartbeat():
+            nonlocal heartbeats
+            while True:
+                await asyncio.sleep(0.01)
+                heartbeats += 1
+
+        with (
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                return_value=mock_processor,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+        ):
+            transport = httpx.ASGITransport(app=api_app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as ac:
+                ticker = asyncio.create_task(_heartbeat())
+                try:
+                    response = await ac.get("/api/v2/videos/auJzb1D-fag")
+                finally:
+                    ticker.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await ticker
+
+        assert response.status_code == 200
+        # A responsive loop ticks ~30x during a 0.30s read. Assert a very
+        # conservative fraction of that to stay robust on loaded CI runners,
+        # while still failing outright when the loop is fully blocked.
+        assert (
+            heartbeats >= 5
+        ), f"event loop was starved during the cache read (ticks={heartbeats})"
+
+    async def test_read_stall_no_longer_scales_with_payload(self, tmp_path):
+        """The read must not stall the loop in proportion to payload size.
+
+        Successor to ``test_parse_still_stalls_the_loop_in_proportion_to_
+        payload``, which characterised the residual left by the ``to_thread``
+        offload: ``json.load()`` held the GIL in the worker, so the loop still
+        stalled ~3 ms/MB of payload. The helper no longer parses entries above
+        the validation threshold -- it returns raw bytes, and ``read()``
+        releases the GIL -- so that proportional stall must be gone.
+
+        Self-calibrating rather than absolute-time based: the baseline is the
+        same payload pushed through ``json.loads`` on a worker thread, which
+        is exactly the old behaviour. The helper's read must stall the loop
+        for a small fraction of what the parse does, whatever the runner's
+        speed. If this fails, size-proportional GIL-held work has crept back
+        into the read path and the documented bounded-stall guarantee in
+        ``_read_video_analysis_sync`` no longer holds.
+        """
+        payload = json.dumps({"transcript": [{"t": i} for i in range(400_000)]})
+        large = tmp_path / "large.json"
+        large.write_text(payload)
+        # The point of the threshold is that entries above it skip the
+        # validation parse; the fixture must actually exercise that path.
+        assert large.stat().st_size > _VALIDATION_MAX_BYTES
+
+        async def _max_loop_gap(work, arg):
+            gaps: list[float] = []
+            stop = asyncio.Event()
+
+            async def _ticker():
+                last = time.perf_counter()
+                while not stop.is_set():
+                    await asyncio.sleep(0)
+                    now = time.perf_counter()
+                    gaps.append(now - last)
+                    last = now
+
+            task = asyncio.create_task(_ticker())
+            await asyncio.sleep(0.02)
+            gaps.clear()
+            await asyncio.to_thread(work, arg)
+            stop.set()
+            await task
+            return max(gaps)
+
+        parse_gap = await _max_loop_gap(json.loads, payload)
+        # Take the best of a few runs for the read: a single scheduling hiccup
+        # on a loaded CI runner must not masquerade as a proportional stall.
+        read_gap = min(
+            [await _max_loop_gap(_read_video_analysis_sync, large) for _ in range(3)]
+        )
+
+        assert read_gap < parse_gap / 4, (
+            "expected the raw-bytes read to stall the loop far less than "
+            "parsing the same payload "
+            f"(read={read_gap * 1000:.2f}ms, parse={parse_gap * 1000:.2f}ms); "
+            "size-proportional GIL-held work appears to be back on the read "
+            "path -- re-narrow the guarantee documented in "
+            "_read_video_analysis_sync if that is intentional"
+        )
+
+    def test_offloaded_read_returns_same_payload(
+        self, client, mock_processor, tmp_cache
+    ):
+        """Offloading must not change the response contract.
+
+        Stronger than semantic equality: the raw-passthrough response body is
+        the cache entry byte-for-byte, and it still declares itself as JSON.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
+        mock_processor._get_cache_path.return_value = cache_file
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("application/json")
+        assert response.content == cache_file.read_bytes()
+        assert response.json() == json.loads(cache_file.read_text(encoding="utf-8"))
+
+
+class TestReadVideoAnalysisSync:
+    """Direct coverage of the extracted blocking helper."""
+
+    def test_missing_file_returns_the_miss_sentinel(self, tmp_path):
+        assert (
+            _read_video_analysis_sync(tmp_path / "absent_processed.json") is _CACHE_MISS
+        )
+
+    def test_existing_file_returns_raw_bytes_verbatim(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        result = _read_video_analysis_sync(cache_file)
+
+        assert isinstance(result, bytes)
+        assert result == cache_file.read_bytes()
+        assert json.loads(result)["video_id"] == "auJzb1D-fag"
+
+    def test_null_content_is_a_payload_not_a_miss(self, tmp_cache):
+        """A stored JSON ``null`` is a payload, *not* a cache miss.
+
+        It comes back as the raw bytes ``b"null"`` and must be served as a
+        200. The sentinel keeps absence distinguishable from any content --
+        including the parsed-``None`` form the helper used to return.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "nullish_processed.json"
+        cache_file.write_text("null", encoding="utf-8")
+
+        result = _read_video_analysis_sync(cache_file)
+
+        assert result == b"null"
+        assert result is not _CACHE_MISS
+
+    def test_falsy_payloads_are_not_misses(self, tmp_cache):
+        """Neither is any other JSON value that parses to something falsy."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+
+        for index, raw in enumerate(("{}", "[]", '""', "0", "false")):
+            cache_file = tmp_cache / f"falsy{index}_processed.json"
+            cache_file.write_text(raw, encoding="utf-8")
+
+            assert _read_video_analysis_sync(cache_file) is not _CACHE_MISS, raw
+
+    def test_embedded_null_byte_in_path_is_a_miss(self, tmp_cache):
+        """A path the OS cannot even name is a miss, not a fault.
+
+        ``Path.exists()`` swallows the ``ValueError`` that an embedded null
+        byte provokes and reports the entry as absent, so the pre-change
+        handler answered 404. A bare ``open()`` lets that ``ValueError``
+        escape, which would turn the same request into a 500.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        poisoned = Path(f"{tmp_cache}/\x00_processed.json")
+
+        assert _read_video_analysis_sync(poisoned) is _CACHE_MISS
+
+    def test_corrupt_entry_raises_rather_than_reporting_a_miss(self, tmp_cache):
+        """A damaged entry must surface as a 500, never as a 404.
+
+        Only "the path names no readable entry" -- ``FileNotFoundError`` or a
+        path the OS rejects outright -- means "no such analysis"; anything
+        else is a real fault and has to keep propagating.
+
+        This guarantee is now scoped to entries at or below
+        ``_VALIDATION_MAX_BYTES``; validating above the threshold would
+        reintroduce the unbounded GIL-held parse the raw-bytes read removed.
+        See ``test_oversized_corrupt_entry_is_returned_unvalidated`` for the
+        other side of that line.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "bad_processed.json"
+        cache_file.write_text("{invalid json", encoding="utf-8")
+
+        with pytest.raises(json.JSONDecodeError):
+            _read_video_analysis_sync(cache_file)
+
+    def test_corrupt_entry_at_the_threshold_still_raises(self, tmp_cache):
+        """The validation boundary is inclusive: exactly-at-cap entries parse."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "boundary_processed.json"
+        blob = b"{invalid json" + b" " * (_VALIDATION_MAX_BYTES - len(b"{invalid json"))
+        assert len(blob) == _VALIDATION_MAX_BYTES
+        cache_file.write_bytes(blob)
+
+        with pytest.raises(json.JSONDecodeError):
+            _read_video_analysis_sync(cache_file)
+
+    def test_oversized_corrupt_entry_is_returned_unvalidated(self, tmp_cache):
+        """Entries above the validation threshold are served verbatim.
+
+        Validating them would mean a GIL-held parse proportional to payload
+        size -- exactly the unbounded loop stall this helper exists to avoid.
+        Integrity above the threshold is delegated to the writer, which
+        publishes entries atomically (temp file + ``os.replace``), so a torn
+        entry cannot be observed; only out-of-band corruption slips through,
+        and it reaches the client as-is rather than as a 500.
+        """
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "huge_processed.json"
+        blob = b"{not json at all" + b"x" * _VALIDATION_MAX_BYTES
+        cache_file.write_bytes(blob)
+
+        assert _read_video_analysis_sync(cache_file) == blob
+
+    def test_directory_path_raises_rather_than_reporting_a_miss(self, tmp_cache):
+        """Opening a directory is an ``OSError`` but not a missing entry."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        directory = tmp_cache / "a_directory_processed.json"
+        directory.mkdir()
+
+        with pytest.raises(OSError) as excinfo:
+            _read_video_analysis_sync(directory)
+
+        assert not isinstance(excinfo.value, FileNotFoundError)
+
+
+class TestVideoDetailIgnoresProcessorCacheTtl:
+    """This endpoint has never expired cached analyses, and still must not.
+
+    ``RealVideoProcessor._read_cache_file`` treats any entry older than
+    ``_CACHE_TTL_SECONDS`` (24 hours) as a miss. Reusing it here to avoid a
+    second reader would silently turn every analysis over a day old into a 404.
+    These tests pin the existing contract so that "simplification" cannot land
+    unnoticed.
+    """
+
+    @staticmethod
+    def _age_file(path: Path, seconds: float) -> None:
+        stale = path.stat().st_mtime - seconds
+        os.utime(path, (stale, stale))
+
+    def test_helper_returns_entry_older_than_processor_ttl(self, tmp_cache):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
+        self._age_file(cache_file, 48 * 60 * 60)
+
+        result = _read_video_analysis_sync(cache_file)
+
+        assert result is not _CACHE_MISS
+        assert json.loads(result)["video_id"] == "auJzb1D-fag"
+
+    def test_endpoint_serves_entry_older_than_processor_ttl(
+        self, client, mock_processor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = _write_cache_file(tmp_cache, "auJzb1D-fag")
+        self._age_file(cache_file, 48 * 60 * 60)
+        mock_processor._get_cache_path.return_value = cache_file
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.json()["video_id"] == "auJzb1D-fag"
+
+
+# ===========================================================================
+# Cache-miss sentinel: absence vs. a stored ``null``
+# ===========================================================================
+
+
+class TestVideoDetailDistinguishesNullFromMissing:
+    """A stored JSON ``null`` is a payload; only absence is a 404.
+
+    The helper runs in a worker thread and hands its result back to the
+    handler, so the value it uses to signal "no entry" must be one that
+    ``json.load`` can never itself produce. ``None`` fails that test, and
+    using it regressed a ``null`` entry from 200 to 404.
+    """
+
+    def test_null_content_entry_is_served_as_200(
+        self, client, mock_processor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        cache_file = tmp_cache / "auJzb1D-fag_processed.json"
+        cache_file.write_text("null", encoding="utf-8")
+        mock_processor._get_cache_path.return_value = cache_file
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.json() is None
+
+    def test_absent_entry_is_still_a_404(self, client, mock_processor, tmp_cache):
+        """The control: the sentinel must not swallow genuine misses."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        mock_processor._get_cache_path.return_value = (
+            tmp_cache / "auJzb1D-fag_processed.json"
+        )
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 404
+
+
+# ============================================================================
+# Malformed identifiers stay on the 404 path
+# ============================================================================
+
+
+class TestVideoDetailRejectsMalformedIdentifiers:
+    """A ``video_id`` the filesystem cannot name is a 404, not a 500.
+
+    Dropping the ``Path.exists()`` probe removed an implicit guard: that call
+    catches ``ValueError`` as well as ``OSError``, so an identifier carrying an
+    embedded null byte was reported as absent. A bare ``open()`` raises
+    instead, which escalated the same request from 404 to 500.
+    """
+
+    def test_null_byte_identifier_is_a_404_not_a_500(
+        self, client, mock_processor, tmp_cache
+    ):
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        # Real path-building semantics, mirroring ``_get_cache_path``: a fixed
+        # return value would never carry the null byte into the open() call.
+        mock_processor._get_cache_path.side_effect = lambda vid: Path(
+            f"{tmp_cache}/{vid}_processed.json"
+        )
+
+        response = client.get("/api/v2/videos/%00")
+
+        assert response.status_code == 404
+        assert "not found" in response.json()["detail"].lower()
+
+    def test_wellformed_identifier_still_reaches_the_payload(
+        self, client, mock_processor, tmp_cache
+    ):
+        """The control: the widened miss rule must not swallow real reads."""
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+        mock_processor._get_cache_path.side_effect = lambda vid: Path(
+            f"{tmp_cache}/{vid}_processed.json"
+        )
+
+        response = client.get("/api/v2/videos/auJzb1D-fag")
+
+        assert response.status_code == 200
+        assert response.json()["video_id"] == "auJzb1D-fag"

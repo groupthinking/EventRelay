@@ -10,23 +10,19 @@ Tests the agent gap detection and recommendation system including:
 - Edge cases and error handling
 """
 
-import json
-import pytest
-import tempfile
-from pathlib import Path
-from datetime import datetime
-
 # Import the modules to test
 import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
+
+import pytest
+
 project_root = Path(__file__).parent.parent.parent  # tests/unit -> tests -> project root
 agent_module_path = project_root / "src" / "youtube_extension" / "services" / "agents"
 sys.path.insert(0, str(agent_module_path))
 
-from agent_gap_analyzer import (
-    AgentGapAnalyzer,
-    AgentGap,
-    AgentRecommendation
-)
+from agent_gap_analyzer import AgentGap, AgentGapAnalyzer, AgentRecommendation
 
 
 class TestAgentGap:

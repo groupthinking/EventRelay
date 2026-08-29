@@ -1,10 +1,4 @@
-/**
- * Feedback persistence layer.
- *
- * Stores user feedback in Supabase when available, falls back to
- * the backend API endpoint. Feedback flows into the correction loop
- * to guide architecture rewrites.
- */
+/** Feedback client for the durable feedback API. */
 
 export interface FeedbackEntry {
   videoId: string;
@@ -18,8 +12,9 @@ const FEEDBACK_API = '/api/v1/feedback';
 
 /**
  * Submit feedback for a specific video tab.
- * Tries the backend API first. If the API is unreachable,
- * queues the feedback for later submission.
+ *
+ * A resolved promise means the server accepted the entry. Network and HTTP
+ * failures reject so callers never claim that an in-memory value was saved.
  */
 export async function submitFeedback(entry: FeedbackEntry): Promise<void> {
   const payload = {
@@ -27,20 +22,14 @@ export async function submitFeedback(entry: FeedbackEntry): Promise<void> {
     timestamp: new Date().toISOString(),
   };
 
-  try {
-    const res = await fetch(FEEDBACK_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+  const res = await fetch(FEEDBACK_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
 
-    if (!res.ok) {
-      throw new Error(`Feedback API returned ${res.status}`);
-    }
-  } catch (err) {
-    // Queue for retry — store in memory (no localStorage per artifact rules)
-    console.warn('Feedback API unavailable, queuing for retry:', err);
-    queueFeedback(payload);
+  if (!res.ok) {
+    throw new Error(`Feedback API returned ${res.status}`);
   }
 }
 
@@ -62,27 +51,10 @@ export async function getFeedback(videoId: string, tab?: string): Promise<Feedba
   }
 }
 
-// --- In-memory feedback queue for offline resilience ---
-const pendingFeedback: FeedbackEntry[] = [];
-
-function queueFeedback(entry: FeedbackEntry): void {
-  pendingFeedback.push(entry);
-}
-
 /**
- * Flush any queued feedback. Call this when connectivity is restored.
+ * Retained for compatibility with older callers. Feedback is no longer kept
+ * in volatile memory because a reload would silently discard it.
  */
 export async function flushPendingFeedback(): Promise<number> {
-  let flushed = 0;
-  while (pendingFeedback.length > 0) {
-    const entry = pendingFeedback[0];
-    try {
-      await submitFeedback(entry);
-      pendingFeedback.shift();
-      flushed++;
-    } catch {
-      break; // Still offline, stop trying
-    }
-  }
-  return flushed;
+  return 0;
 }

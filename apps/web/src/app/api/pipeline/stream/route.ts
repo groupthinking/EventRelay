@@ -28,6 +28,13 @@ import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend'
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 import { PipelineDeadline } from '../route';
+import {
+  assessAnalysisEvidence,
+  calculateDurationCoverageSeconds,
+  normalizeTranscriptSegments,
+  transcriptTextFromSegments,
+  type AnalysisProvenance,
+} from '@/lib/analysis-evidence';
 
 const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const JOB_POLL_INTERVAL_MS = 2000;
@@ -115,7 +122,10 @@ function mapTaskBoardActions(taskBoard: Record<string, unknown> | undefined) {
   );
 }
 
-function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisResult {
+function mapBackendResultToAnalysis(
+  result: Record<string, any>,
+  sourceUrl: string,
+): VideoAnalysisResult {
   const transcriptAction = result.outputs?.transcript_action?.data || {};
   const rankedActions = Array.isArray(transcriptAction.priority_ranked_actions)
     ? transcriptAction.priority_ranked_actions.map((action: Record<string, unknown>) => ({
@@ -127,6 +137,38 @@ function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisR
     : [];
   const taskBoardActions = mapTaskBoardActions(transcriptAction.task_board);
 
+  const transcriptSegments = normalizeTranscriptSegments(result.transcript?.segments);
+  const transcriptText = typeof result.transcript?.text === 'string'
+    ? result.transcript.text.trim()
+    : transcriptTextFromSegments(transcriptSegments);
+  const authoritativeSegments = transcriptSegments.length > 0
+    ? transcriptSegments
+    : transcriptText
+      ? [{ start: 0, duration: 0, text: transcriptText }]
+      : [];
+  const timedSegmentCount = authoritativeSegments.filter((segment) => segment.duration > 0).length;
+  const provenance: AnalysisProvenance = {
+    sourceUrl,
+    sourceHost: (() => {
+      try { return new URL(sourceUrl).hostname; } catch { return ''; }
+    })(),
+    acquisitionMethod: 'backend-transcript-action',
+    transcriptSource: 'youtube-captions',
+    transcriptVerified: transcriptText.length >= 40,
+    acquiredAt: new Date().toISOString(),
+    segmentCount: authoritativeSegments.length,
+    timedSegmentCount,
+    durationCoverageSeconds: calculateDurationCoverageSeconds(authoritativeSegments),
+    warnings: timedSegmentCount === authoritativeSegments.length
+      ? []
+      : ['Source timestamps were unavailable for part or all of the transcript.'],
+  };
+  const quality = assessAnalysisEvidence({
+    transcript: transcriptText,
+    segments: authoritativeSegments,
+    provenance,
+  });
+
   return {
     title:
       result.metadata?.title ||
@@ -136,15 +178,17 @@ function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisR
       typeof transcriptAction.summary === 'string'
         ? transcriptAction.summary
         : 'Analysis complete',
-    transcript: Array.isArray(result.transcript?.segments)
-      ? result.transcript.segments
-      : [],
+    transcript: authoritativeSegments,
     events: [],
     actions: rankedActions.length > 0 ? rankedActions : taskBoardActions,
     topics: transcriptAction.metadata?.topics || [],
     architectureCode: '',
     ingestScript: '',
     e22Snippets: [],
+    // F3: keep backend plan surface (not only task_board → actions).
+    project_scaffold: transcriptAction.project_scaffold ?? null,
+    provenance,
+    quality,
   };
 }
 
@@ -379,7 +423,7 @@ async function handleBackendStrategy(
             segments: [],
           },
           outputs: job.metadata?.outputs || {},
-        });
+        }, url);
 
         // Stream all agent events including pipeline_status:complete
         for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
@@ -391,7 +435,7 @@ async function handleBackendStrategy(
         return;
       }
 
-      const mappedAnalysis = mapBackendResultToAnalysis(result);
+      const mappedAnalysis = mapBackendResultToAnalysis(result, url);
 
       // Stream all agent events including pipeline_status:complete
       for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
@@ -467,258 +511,111 @@ async function* generateAgentEvents(
   analysis: VideoAnalysisResult,
   startTime: number,
 ): AsyncGenerator<string> {
-  const elapsed = () => ((Date.now() - startTime) / 1000).toFixed(1);
+  const elapsed = () => Number(((Date.now() - startTime) / 1000).toFixed(1));
+  const provenance = analysis.provenance ?? {
+    sourceUrl: '',
+    sourceHost: '',
+    acquisitionMethod: 'unknown',
+    transcriptSource: 'unknown',
+    transcriptVerified: false,
+    acquiredAt: new Date().toISOString(),
+    segmentCount: analysis.transcript?.length || 0,
+    timedSegmentCount: 0,
+    durationCoverageSeconds: null,
+    warnings: ['Pipeline result did not include source provenance.'],
+  };
+  const transcript = transcriptTextFromSegments(
+    normalizeTranscriptSegments(analysis.transcript),
+  );
+  const quality = analysis.quality ?? assessAnalysisEvidence({
+    transcript,
+    segments: normalizeTranscriptSegments(analysis.transcript),
+    provenance,
+  });
 
-  // --- Orchestrator ---
   yield makeEvent({
     type: 'agent_update',
     agentId: 'orchestrator',
-    agentName: 'VideoIntelligenceOrchestrator',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(300);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'orchestrator',
-    agentName: 'VideoIntelligenceOrchestrator',
+    agentName: 'DurableOrchestrator',
     status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { title: analysis.title },
+    progress: 100,
+    duration: elapsed(),
+    data: { accepted: true },
     timestamp: new Date().toISOString(),
   });
 
-  // --- Router ---
   yield makeEvent({
     type: 'agent_update',
-    agentId: 'router',
-    agentName: 'ContentTypeRouter',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(200);
-
-  // Determine content type from topics
-  const topics = analysis.topics || [];
-  const contentType =
-    topics.some((t) => t.toLowerCase().includes('tutorial'))
-      ? 'tutorial'
-      : topics.some((t) => t.toLowerCase().includes('demo'))
-        ? 'demo'
-        : 'general';
-
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'router',
-    agentName: 'ContentTypeRouter',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { contentType, dataLabel: 'Content Type' },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Analysis Crew ---
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'crew',
-    agentName: 'AnalysisCrew',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(100);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'crew',
-    agentName: 'AnalysisCrew',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Parallel Analysts (start all, complete with real data) ---
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'transcript_analyst',
-    agentName: 'TranscriptAnalyst',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'embedding_agent',
-    agentName: 'SemanticEmbeddingAgent',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'visual_analyst',
-    agentName: 'VisualAnalyst',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'audio_analyst',
-    agentName: 'AudioAnalyst',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Transcript analyst completes first (has transcript data)
-  await sleep(400);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'transcript_analyst',
-    agentName: 'TranscriptAnalyst',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
+    agentId: 'transcript_acquisition',
+    agentName: 'TranscriptAcquisition',
+    status: provenance.transcriptVerified ? 'complete' : 'error',
+    progress: provenance.transcriptVerified ? 100 : 0,
+    duration: elapsed(),
     data: {
-      classification: contentType,
-      confidence: 0.92,
-      segments: analysis.transcript?.length || 0,
-      dataLabel: 'Segments',
+      source: provenance.transcriptSource,
+      method: provenance.acquisitionMethod,
+      segmentCount: provenance.segmentCount,
+      timedSegmentCount: provenance.timedSegmentCount,
     },
     timestamp: new Date().toISOString(),
   });
 
-  // Visual analyst completes second (has events data)
-  await sleep(300);
   yield makeEvent({
     type: 'agent_update',
-    agentId: 'visual_analyst',
-    agentName: 'VisualAnalyst',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: {
-      classification: contentType,
-      confidence: 0.88,
-      events: analysis.events?.length || 0,
-      dataLabel: 'Frames',
-    },
+    agentId: 'analysis',
+    agentName: 'EvidenceAnalysis',
+    status: quality.passed ? 'complete' : 'error',
+    progress: quality.passed ? 100 : 0,
+    duration: elapsed(),
+    data: quality.passed
+      ? { actions: analysis.actions?.length || 0, topics: analysis.topics?.length || 0 }
+      : { blocked: true },
     timestamp: new Date().toISOString(),
   });
 
-  // Embedding agent completes
-  await sleep(200);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'embedding_agent',
-    agentName: 'SemanticEmbeddingAgent',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { dataLabel: 'Vector Embeddings' },
-    timestamp: new Date().toISOString(),
-  });
-
-  // Audio analyst completes last
-  await sleep(200);
-  const audioClassification = contentType === 'tutorial' ? 'demo' : contentType;
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'audio_analyst',
-    agentName: 'AudioAnalyst',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: {
-      classification: audioClassification,
-      confidence: 0.71,
-      dataLabel: 'Audio Data',
-    },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Consensus ---
-  const votes = [
-    { agentId: 'transcript_analyst', agentName: 'TranscriptAnalyst', classification: contentType, confidence: 0.92 },
-    { agentId: 'visual_analyst', agentName: 'VisualAnalyst', classification: contentType, confidence: 0.88 },
-    { agentId: 'audio_analyst', agentName: 'AudioAnalyst', classification: audioClassification, confidence: 0.71 },
-  ];
-  const agreeing = votes.filter((v) => v.classification === contentType).length;
-  yield makeEvent({
-    type: 'consensus',
-    data: {
-      votes,
-      finalClassification: contentType,
-      agreementRatio: agreeing / votes.length,
-    },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Action Generator ---
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'action_gen',
-    agentName: 'ActionGenerator',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(300);
-
-  const workflow = analysis.actions?.map((a) => a.title).join('\n') || 'No actions generated';
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'action_gen',
-    agentName: 'ActionGenerator',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { actions: analysis.actions?.length || 0, dataLabel: 'Workflow' },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Quality Checker ---
   yield makeEvent({
     type: 'agent_update',
     agentId: 'quality',
-    agentName: 'QualityChecker',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(200);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'quality',
-    agentName: 'QualityChecker',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { validationPassed: true },
+    agentName: 'EvidenceQualityGate',
+    status: quality.passed ? 'complete' : 'error',
+    progress: quality.passed ? 100 : 0,
+    duration: elapsed(),
+    data: {
+      validationPassed: quality.passed,
+      evidenceState: quality.state,
+      issues: quality.issues,
+    },
     timestamp: new Date().toISOString(),
   });
 
-  // --- Workflow output ---
   yield makeEvent({
     type: 'workflow',
     data: {
-      title: analysis.title,
-      summary: analysis.summary,
-      actions: analysis.actions,
-      topics: analysis.topics,
-      events: analysis.events,
-      transcript: analysis.transcript,
-      architectureCode: analysis.architectureCode,
-      workflow,
+      title: quality.passed ? analysis.title : 'Analysis blocked',
+      summary: quality.passed
+        ? analysis.summary
+        : 'Analysis output is unavailable because source evidence did not pass validation.',
+      actions: quality.passed ? analysis.actions : [],
+      topics: quality.passed ? analysis.topics : [],
+      events: quality.passed ? analysis.events : [],
+      transcript: quality.passed ? analysis.transcript : [],
+      architectureCode: quality.passed ? analysis.architectureCode : '',
+      project_scaffold: quality.passed ? analysis.project_scaffold ?? null : null,
+      provenance,
+      quality,
     },
     timestamp: new Date().toISOString(),
   });
 
-  // --- Pipeline complete ---
   yield makeEvent({
     type: 'pipeline_status',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
+    status: quality.passed ? 'complete' : 'error',
+    duration: elapsed(),
     data: {
-      totalAgents: 9,
-      completedAgents: 9,
-      mode: 'gemini-sse',
+      totalStages: 4,
+      completedStages: quality.passed ? 4 : 1,
+      evidenceState: quality.state,
+      validationPassed: quality.passed,
     },
     timestamp: new Date().toISOString(),
   });

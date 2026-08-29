@@ -121,7 +121,13 @@ workflow_results/
 # Agent-IDE skill caches materialized into the working tree (Antigravity/dak
 # plugin skills under .agents/). Same drift class as the .vscode rule above:
 # tool state, not project source — never commit.
+.agent/
 .agents/
+ai-speech-demo/
+apps/sales_dashboard/
+strategy/
+*.egg-info/
+src/*.egg-info/
 .webassets-cache
 .yarn/
 Desktop.ini
@@ -219,3 +225,10 @@ data/audit/*.jsonl
 /test_*.py
 # Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
 /.verification-gate-pass
+
+# Local AI session artifacts
+*.rtf
+.gemini/extensions/
+
+# Local verification and native-module quarantine artifacts
+/work/

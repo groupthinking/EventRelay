@@ -21,7 +21,6 @@ if "youtube_extension.videopack" not in sys.modules:
 sys.modules.pop("youtube_extension.videopack.schema", None)
 
 from youtube_extension.videopack.schema import (
-    ArtifactRef,
     CodeSnippet,
     Keyframe,
     Metrics,
@@ -29,12 +28,11 @@ from youtube_extension.videopack.schema import (
     Requirement,
     Transcript,
     TranscriptSegment,
-    VPVersion,
     VideoPackV0,
     VisualContext,
     VisualElement,
+    VPVersion,
 )
-
 
 # ===========================================================================
 # VPVersion enum

@@ -5,23 +5,25 @@ Tests for Agent Gap Monitoring
 Tests the optional monitoring integration for agent gap detection.
 """
 
-import pytest
-import tempfile
-from pathlib import Path
 import os
 
 # Import the modules to test
 import sys
+import tempfile
+from pathlib import Path
+
+import pytest
+
 project_root = Path(__file__).parent.parent.parent  # tests/unit -> tests -> project root
 src_path = project_root / "src"
 sys.path.insert(0, str(src_path))
 
 from youtube_extension.services.agents.monitor import (
+    MonitoredTask,
     get_analyzer,
-    monitor_file_access,
-    monitor_error,
     monitor_agent_usage,
-    MonitoredTask
+    monitor_error,
+    monitor_file_access,
 )
 
 

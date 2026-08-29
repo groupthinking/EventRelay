@@ -12,13 +12,13 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional
 
 try:
-    from google.cloud import aiplatform
-    from vertexai.preview import reasoning_engines
-    from vertexai.generative_models import GenerativeModel, Part, Content
     import vertexai
+    from google.cloud import aiplatform
+    from vertexai.generative_models import Content, GenerativeModel, Part
+    from vertexai.preview import reasoning_engines
     VERTEX_AI_AVAILABLE = True
 except ImportError:
     aiplatform = None
@@ -44,20 +44,20 @@ class AgentConfig:
     top_p: float = 0.95
     top_k: int = 40
     max_output_tokens: int = 8192
-    response_schema: Optional[Dict[str, Any]] = None
-    tools: Optional[List[Any]] = None
-    safety_settings: Optional[Dict[str, Any]] = None
+    response_schema: Optional[dict[str, Any]] = None
+    tools: Optional[list[Any]] = None
+    safety_settings: Optional[dict[str, Any]] = None
 
 
 @dataclass
 class AgentResponse:
     """Response from Vertex AI Agent"""
     text: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
     thinking_process: Optional[str] = None
-    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_calls: Optional[list[dict[str, Any]]] = None
     finish_reason: Optional[str] = None
-    usage: Optional[Dict[str, Any]] = None
+    usage: Optional[dict[str, Any]] = None
 
 
 class VertexAIAgentService:
@@ -256,7 +256,7 @@ Analyze:
     async def analyze_transcript(
         self,
         transcript: str,
-        video_metadata: Optional[Dict[str, Any]] = None,
+        video_metadata: Optional[dict[str, Any]] = None,
     ) -> AgentResponse:
         """
         Analyze video transcript using Vertex AI agent.
@@ -296,8 +296,8 @@ Analyze this video transcript and provide:
     async def generate_structured_output(
         self,
         prompt: str,
-        schema: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        schema: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Generate structured JSON output from prompt.
 
@@ -326,9 +326,9 @@ Analyze this video transcript and provide:
 
     async def batch_process(
         self,
-        prompts: List[str],
+        prompts: list[str],
         max_concurrent: int = 5,
-    ) -> List[AgentResponse]:
+    ) -> list[AgentResponse]:
         """
         Process multiple prompts concurrently.
 
@@ -386,10 +386,10 @@ Analyze this video transcript and provide:
 
     async def generate_embeddings(
         self,
-        texts: List[str],
+        texts: list[str],
         model_name: str = "text-embedding-004",
         task_type: str = "RETRIEVAL_DOCUMENT",
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         """
         Generate embeddings for text using Google Embedded 2.
 

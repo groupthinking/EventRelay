@@ -7,7 +7,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ _DEFAULT_ROOT = Path(os.getenv("UVAI_JOB_STORE_DIR", "data/jobs"))
 class PipelineJobStore:
     """JSON file store for VideoJobStatusResponse-shaped records."""
 
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Path | None = None) -> None:
         self.root = Path(root or _DEFAULT_ROOT)
         self.root.mkdir(parents=True, exist_ok=True)
 
@@ -29,7 +29,7 @@ class PipelineJobStore:
         path = self._path(job_id)
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def load(self, job_id: str) -> Optional[dict[str, Any]]:
+    def load(self, job_id: str) -> dict[str, Any] | None:
         path = self._path(job_id)
         if not path.exists():
             return None
@@ -88,7 +88,7 @@ class PipelineJobStore:
         return removed
 
 
-_job_store: Optional[PipelineJobStore] = None
+_job_store: PipelineJobStore | None = None
 
 
 def get_job_store() -> PipelineJobStore:

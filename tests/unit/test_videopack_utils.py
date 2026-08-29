@@ -22,10 +22,12 @@ sys.modules.pop("youtube_extension.videopack.versioning", None)
 sys.modules.pop("youtube_extension.videopack.exceptions", None)
 sys.modules.pop("youtube_extension.videopack.provenance", None)
 
-from youtube_extension.videopack.versioning import UpgradePolicy, upgrade_to_v0
-from youtube_extension.videopack.exceptions import VideoPackError, VideoPackValidationError
+from youtube_extension.videopack.exceptions import (
+    VideoPackError,
+    VideoPackValidationError,
+)
 from youtube_extension.videopack.provenance import stable_hash
-
+from youtube_extension.videopack.versioning import UpgradePolicy, upgrade_to_v0
 
 # ===========================================================================
 # UpgradePolicy enum

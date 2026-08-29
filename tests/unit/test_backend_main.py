@@ -133,26 +133,26 @@ def client(mock_container):  # noqa: F811
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _get(client: TestClient, url: str, **kwargs) -> "Response":
+def _get(client: TestClient, url: str, **kwargs) -> Response:
     """GET with a unique X-Forwarded-For header to avoid rate-limiter exhaustion."""
     headers = kwargs.pop("headers", {})
     headers.setdefault("X-Forwarded-For", _unique_ip())
     return client.get(url, headers=headers, **kwargs)
 
 
-def _post(client: TestClient, url: str, **kwargs) -> "Response":
+def _post(client: TestClient, url: str, **kwargs) -> Response:
     headers = kwargs.pop("headers", {})
     headers.setdefault("X-Forwarded-For", _unique_ip())
     return client.post(url, headers=headers, **kwargs)
 
 
-def _delete(client: TestClient, url: str, **kwargs) -> "Response":
+def _delete(client: TestClient, url: str, **kwargs) -> Response:
     headers = kwargs.pop("headers", {})
     headers.setdefault("X-Forwarded-For", _unique_ip())
     return client.delete(url, headers=headers, **kwargs)
 
 
-def _options(client: TestClient, url: str, **kwargs) -> "Response":
+def _options(client: TestClient, url: str, **kwargs) -> Response:
     headers = kwargs.pop("headers", {})
     headers.setdefault("X-Forwarded-For", _unique_ip())
     return client.options(url, headers=headers, **kwargs)

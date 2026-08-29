@@ -120,7 +120,7 @@ jobs:
           fi
           echo "All required secrets present for mode '${PIPELINE_MODE}'."
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -146,7 +146,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
           cache: pip
@@ -209,7 +209,7 @@ jobs:
           merge-multiple: false
         continue-on-error: true
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 

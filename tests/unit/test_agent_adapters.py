@@ -12,8 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sys
-import types as _types
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -68,16 +66,13 @@ def _patch_base_agent_attrs() -> None:
 # ---------------------------------------------------------------------------
 # Lazy imports – agents are imported after the base class is patched
 # ---------------------------------------------------------------------------
-from youtube_extension.services.agents.dto import AgentRequest, AgentResult
+from youtube_extension.services.agents.dto import AgentRequest
 from youtube_extension.services.ai.hybrid_processor_service import (
     HybridConfig,
     HybridResult,
     ProcessingMode,
-    RoutingDecision,
     TaskType,
 )
-from youtube_extension.services.ai.gemini_service import GeminiConfig, GeminiResult
-
 
 # ===========================================================================
 # Helpers
@@ -134,7 +129,9 @@ class TestHybridVisionAgent:
     """Tests for HybridVisionAgent."""
 
     def _make_agent(self, processor: MagicMock | None = None) -> Any:
-        from youtube_extension.services.agents.adapters.hybrid_vision_agent import HybridVisionAgent
+        from youtube_extension.services.agents.adapters.hybrid_vision_agent import (
+            HybridVisionAgent,
+        )
 
         mock_proc = processor or _make_mock_processor()
         with patch(
@@ -152,7 +149,9 @@ class TestHybridVisionAgent:
         assert agent._hybrid_processor is not None
 
     def test_init_processor_none_on_exception(self):
-        from youtube_extension.services.agents.adapters.hybrid_vision_agent import HybridVisionAgent
+        from youtube_extension.services.agents.adapters.hybrid_vision_agent import (
+            HybridVisionAgent,
+        )
 
         with patch(
             "youtube_extension.services.agents.adapters.hybrid_vision_agent.HybridProcessorService",
@@ -388,7 +387,9 @@ class TestHybridVisionAgent:
     # --- _parse_hybrid_result ---
 
     def test_parse_hybrid_result_success_with_response(self):
-        from youtube_extension.services.agents.adapters.hybrid_vision_agent import VisionAnalysisResult
+        from youtube_extension.services.agents.adapters.hybrid_vision_agent import (
+            VisionAnalysisResult,
+        )
 
         agent = self._make_agent()
         hybrid_result = _make_hybrid_result(
@@ -400,7 +401,9 @@ class TestHybridVisionAgent:
         assert "person" in result.objects_detected or result.description != ""
 
     def test_parse_hybrid_result_failure(self):
-        from youtube_extension.services.agents.adapters.hybrid_vision_agent import VisionAnalysisResult
+        from youtube_extension.services.agents.adapters.hybrid_vision_agent import (
+            VisionAnalysisResult,
+        )
 
         agent = self._make_agent()
         hybrid_result = _make_hybrid_result(success=False, response=None, error="err")
@@ -574,7 +577,9 @@ class TestVideoMasterAgent:
     """Tests for VideoMasterAgent."""
 
     def _make_agent(self, api_key: str | None = "test-api-key") -> Any:
-        from youtube_extension.services.agents.adapters.video_master_agent import VideoMasterAgent
+        from youtube_extension.services.agents.adapters.video_master_agent import (
+            VideoMasterAgent,
+        )
 
         mock_genai = MagicMock()
         mock_client = MagicMock()
@@ -598,7 +603,9 @@ class TestVideoMasterAgent:
     # --- init ---
 
     def test_init_no_api_key_leaves_client_none(self):
-        from youtube_extension.services.agents.adapters.video_master_agent import VideoMasterAgent
+        from youtube_extension.services.agents.adapters.video_master_agent import (
+            VideoMasterAgent,
+        )
 
         with patch("youtube_extension.services.agents.adapters.video_master_agent.GEMINI_AVAILABLE", True):
             with patch("youtube_extension.services.agents.adapters.video_master_agent.genai", MagicMock()):
@@ -607,7 +614,9 @@ class TestVideoMasterAgent:
         assert agent._gemini_client is None
 
     def test_init_gemini_not_available(self):
-        from youtube_extension.services.agents.adapters.video_master_agent import VideoMasterAgent
+        from youtube_extension.services.agents.adapters.video_master_agent import (
+            VideoMasterAgent,
+        )
 
         with patch("youtube_extension.services.agents.adapters.video_master_agent.GEMINI_AVAILABLE", False):
             agent = VideoMasterAgent()
@@ -795,7 +804,9 @@ class TestActionImplementerAgent:
     """Tests for ActionImplementerAgent."""
 
     def _make_agent(self) -> Any:
-        from youtube_extension.services.agents.adapters.action_implementer_agent import ActionImplementerAgent
+        from youtube_extension.services.agents.adapters.action_implementer_agent import (
+            ActionImplementerAgent,
+        )
         return ActionImplementerAgent()
 
     # --- init ---
@@ -1024,7 +1035,9 @@ class TestTranscriptActionAgent:
     """Tests for TranscriptActionAgent."""
 
     def _make_agent(self, process_result: HybridResult | None = None) -> Any:
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
 
         processor = _make_mock_processor(process_result=process_result or _make_hybrid_result(
             response=json.dumps({"key": "value"})
@@ -1042,7 +1055,9 @@ class TestTranscriptActionAgent:
         assert agent._language == "en"
 
     def test_init_custom_config(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
 
         processor = _make_mock_processor()
         agent = TranscriptActionAgent({
@@ -1151,81 +1166,111 @@ class TestTranscriptActionAgent:
     # --- _safe_parse_json ---
 
     def test_safe_parse_json_valid(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._safe_parse_json('{"a": 1}')
         assert result == {"a": 1}
 
     def test_safe_parse_json_invalid(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._safe_parse_json("not json")
         assert result is None
 
     # --- _clip_window_notes ---
 
     def test_clip_window_notes_with_offsets(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._clip_window_notes({"start_offset": 5, "end_offset": 20, "fps": 25})
         assert result == {"start_offset": 5, "end_offset": 20, "fps": 25}
 
     def test_clip_window_notes_empty(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._clip_window_notes({})
         assert result is None
 
     def test_clip_window_notes_no_relevant_keys(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._clip_window_notes({"title": "test"})
         assert result is None
 
     def test_clip_window_notes_partial_keys(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._clip_window_notes({"start_offset": 0})
         assert result == {"start_offset": 0}
 
     # --- _format_offset ---
 
     def test_format_offset_none(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         assert TranscriptActionAgent._format_offset(None) is None
 
     def test_format_offset_int(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset(90)
         assert result is not None
         assert ":" in result
 
     def test_format_offset_float(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset(3661.5)
         assert result is not None
 
     def test_format_offset_string_with_s(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset("45s")
         assert result is not None
 
     def test_format_offset_string_invalid(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset("abc")
         assert result is None
 
     def test_format_offset_negative(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset(-5)
         assert result is None
 
     def test_format_offset_zero(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset(0)
         assert result is not None
 
     def test_format_offset_hours(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset(7265)
         assert result is not None and ":" in result
 
     def test_format_offset_other_type(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import TranscriptActionAgent
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            TranscriptActionAgent,
+        )
         result = TranscriptActionAgent._format_offset([1, 2])
         assert result is None
 
@@ -1288,7 +1333,9 @@ class TestPersonalityAgent:
     """Tests for PersonalityAgent."""
 
     def _make_agent(self, process_result: HybridResult | None = None) -> Any:
-        from youtube_extension.services.agents.adapters.personality_agent import PersonalityAgent
+        from youtube_extension.services.agents.adapters.personality_agent import (
+            PersonalityAgent,
+        )
 
         processor = _make_mock_processor(
             process_result=process_result or _make_hybrid_result(
@@ -1308,7 +1355,9 @@ class TestPersonalityAgent:
         assert agent._model is not None
 
     def test_init_custom_model(self):
-        from youtube_extension.services.agents.adapters.personality_agent import PersonalityAgent
+        from youtube_extension.services.agents.adapters.personality_agent import (
+            PersonalityAgent,
+        )
 
         processor = _make_mock_processor()
         agent = PersonalityAgent({"hybrid_processor": processor, "model": "gemini-ultra"})
@@ -1414,7 +1463,9 @@ class TestStrategyAgent:
     """Tests for StrategyAgent."""
 
     def _make_agent(self, process_result: HybridResult | None = None) -> Any:
-        from youtube_extension.services.agents.adapters.strategy_agent import StrategyAgent
+        from youtube_extension.services.agents.adapters.strategy_agent import (
+            StrategyAgent,
+        )
 
         processor = _make_mock_processor(
             process_result=process_result or _make_hybrid_result(
@@ -1437,7 +1488,9 @@ class TestStrategyAgent:
         assert agent._model is not None
 
     def test_init_custom_model(self):
-        from youtube_extension.services.agents.adapters.strategy_agent import StrategyAgent
+        from youtube_extension.services.agents.adapters.strategy_agent import (
+            StrategyAgent,
+        )
 
         processor = _make_mock_processor()
         agent = StrategyAgent({"hybrid_processor": processor, "model": "gemini-pro"})
@@ -1546,7 +1599,9 @@ class TestStrategyAgent:
 
 class TestVisionAnalysisResult:
     def test_can_instantiate(self):
-        from youtube_extension.services.agents.adapters.hybrid_vision_agent import VisionAnalysisResult
+        from youtube_extension.services.agents.adapters.hybrid_vision_agent import (
+            VisionAnalysisResult,
+        )
 
         r = VisionAnalysisResult(
             description="A scene",
@@ -1561,7 +1616,9 @@ class TestVisionAnalysisResult:
         assert r.local_latency is None
 
     def test_optional_latencies(self):
-        from youtube_extension.services.agents.adapters.hybrid_vision_agent import VisionAnalysisResult
+        from youtube_extension.services.agents.adapters.hybrid_vision_agent import (
+            VisionAnalysisResult,
+        )
 
         r = VisionAnalysisResult(
             description="",
@@ -1583,7 +1640,9 @@ class TestVisionAnalysisResult:
 
 class TestVideoAnalysisResult:
     def test_can_instantiate(self):
-        from youtube_extension.services.agents.adapters.video_master_agent import VideoAnalysisResult
+        from youtube_extension.services.agents.adapters.video_master_agent import (
+            VideoAnalysisResult,
+        )
 
         r = VideoAnalysisResult(
             title="T",
@@ -1604,7 +1663,9 @@ class TestVideoAnalysisResult:
 
 class TestActionPlanDataclass:
     def test_can_instantiate(self):
-        from youtube_extension.services.agents.adapters.action_implementer_agent import ActionPlan
+        from youtube_extension.services.agents.adapters.action_implementer_agent import (
+            ActionPlan,
+        )
 
         plan = ActionPlan(
             primary_actions=[{"id": "p1"}],
@@ -1625,13 +1686,17 @@ class TestActionPlanDataclass:
 
 class TestPromptResultDataclass:
     def test_can_instantiate_with_parsed(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import PromptResult
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            PromptResult,
+        )
 
         r = PromptResult(raw_text='{"a": 1}', parsed={"a": 1})
         assert r.parsed == {"a": 1}
 
     def test_can_instantiate_with_none_parsed(self):
-        from youtube_extension.services.agents.adapters.transcript_action_agent import PromptResult
+        from youtube_extension.services.agents.adapters.transcript_action_agent import (
+            PromptResult,
+        )
 
         r = PromptResult(raw_text="not json", parsed=None)
         assert r.parsed is None

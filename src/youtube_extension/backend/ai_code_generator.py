@@ -8,15 +8,58 @@ based on video analysis. Produces monetizable products, not templates.
 """
 
 import ast
+import asyncio
+import contextlib
 import json
 import logging
 import os
 import sys
+import weakref
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Upper bound on concurrent AI auto-fix calls. Each fix is an independent
+# multi-second LLM round-trip, so some fan-out is a large win, but an unbounded
+# one would hit provider rate limits on projects with many failing files.
+_MAX_CONCURRENT_FIXES = 4
+
+# The fix budget is *process-wide*, not per-invocation.  get_deployment_manager()
+# builds a fresh DeploymentManager -- and therefore a fresh AICodeGenerator --
+# for every pipeline run, so a semaphore owned by one call would let N concurrent
+# deployments issue N * limit LLM calls and defeat the rate-limit protection this
+# bound exists to provide.  Sharing one semaphore per (event loop, limit) caps
+# total in-flight fixes at `limit` no matter how many generators exist.
+#
+# Keyed by the running loop because asyncio primitives bind to the first loop
+# that awaits them; a module-level singleton would raise once a second loop
+# (e.g. the next test case) tried to use it.  WeakKeyDictionary so finished
+# loops do not leak.
+_FIX_SEMAPHORES: "weakref.WeakKeyDictionary[Any, dict[int, asyncio.Semaphore]]" = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _shared_fix_semaphore(limit: int) -> asyncio.Semaphore:
+    """Return the process-wide fix semaphore for `limit` on the running loop."""
+    loop = asyncio.get_running_loop()
+    try:
+        by_limit = _FIX_SEMAPHORES.get(loop)
+        if by_limit is None:
+            by_limit = {}
+            _FIX_SEMAPHORES[loop] = by_limit
+    except TypeError:
+        # Some loop implementations are not weak-referenceable. Fall back to an
+        # unshared semaphore: the per-invocation bound still holds.
+        return asyncio.Semaphore(limit)
+
+    semaphore = by_limit.get(limit)
+    if semaphore is None:
+        semaphore = asyncio.Semaphore(limit)
+        by_limit[limit] = semaphore
+    return semaphore
 
 # Add project root for knowledge_base import
 # Add scripts directory for knowledge_base import
@@ -485,7 +528,7 @@ CRITICAL CONSTRAINTS (MUST FOLLOW EXACTLY):
 - Import ONLY from 'lucide-react' for icons, 'react' for hooks.
 
 CRITICAL CONSTRAINTS (MUST FOLLOW):
-- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json). 
+- Use ONLY Tailwind CSS classes + lucide-react icons (already in package.json).
 - DO NOT import or use ANY external UI libraries: no @material-ui, no @mui/material, no Chakra, no AntD, no shadcn components.
 - All UI must be built with <div>, <button>, Tailwind (border, p-4, grid, flex, bg-white, shadow etc).
 - Keep it simple and functional.
@@ -697,7 +740,7 @@ TASK: Generate {description}
         package["dependencies"]["@ai-sdk/anthropic"] = "^0.0.15"  # Anthropic provider
 
         # For agent/MCP apps or dashboards with container features: Add dockerode
-        if (architecture.get("type") in ("agent", "fullstack_app") or 
+        if (architecture.get("type") in ("agent", "fullstack_app") or
             "docker" in str(architecture.get("features", [])).lower() or
             "dashboard" in str(architecture.get("features", [])).lower()):
             package["dependencies"]["dockerode"] = "^4.0.2"
@@ -1260,15 +1303,24 @@ jobs:
         self,
         project_path: Path,
         errors: list[str],
-        suggested_fixes: list[str]
+        suggested_fixes: list[str],
+        max_concurrency: Optional[int] = None
     ) -> dict[str, Any]:
         """
         Use AI to fix build errors in generated code.
+
+        Files are fixed concurrently, bounded by *max_concurrency*, because each
+        one is independent and dominated by a network round-trip to the LLM. The
+        bound is shared process-wide, so concurrent deployments cannot multiply
+        it (see _shared_fix_semaphore).
 
         Args:
             project_path: Path to the project
             errors: List of build error messages
             suggested_fixes: List of suggested resolutions from skill database
+            max_concurrency: Max files fixed in parallel, across *all* in-flight
+                calls in this process. Defaults to _MAX_CONCURRENT_FIXES; values
+                below 1 are clamped to 1.
 
         Returns:
             Dict with fixed files and status
@@ -1293,14 +1345,42 @@ jobs:
             # Try common problem files
             error_files = {"src/app/page.tsx", "src/components/Button.tsx"}
 
-        fixed_files = []
-        for rel_path in error_files:
-            file_path = project_path / rel_path
-            if not file_path.exists():
-                continue
+        # Each error file is independent: its own read, its own AI call and its
+        # own write. self.router.generate() is a multi-second network round-trip,
+        # so running them one after another made wall-clock cost scale linearly
+        # with the number of failing files. Bound the fan-out so we do not trip
+        # provider rate limits.
+        limit = (
+            _MAX_CONCURRENT_FIXES
+            if max_concurrency is None
+            else max(1, max_concurrency)
+        )
+        semaphore = _shared_fix_semaphore(limit)
 
-            # Read current file content
-            current_content = file_path.read_text()
+        async def _fix_one(rel_path: str) -> Optional[str]:
+            """Fix one file; return its path on success, otherwise None."""
+            file_path = project_path / rel_path
+
+            def _read_source() -> Optional[str]:
+                # Path.exists()/read_text() are blocking syscalls - keep them
+                # off the event loop.
+                if not file_path.exists():
+                    return None
+                return file_path.read_text()
+
+            try:
+                current_content = await asyncio.to_thread(_read_source)
+            except (OSError, UnicodeError) as e:
+                # UnicodeDecodeError (a ValueError, *not* an OSError) is raised by
+                # read_text() on a non-UTF-8 source. Letting it escape _fix_one
+                # would propagate through gather(return_exceptions=False) and throw
+                # away every sibling file's successful fix, so it is handled here
+                # as just another per-file read failure.
+                logger.warning(f"⚠️ Failed to read {rel_path}: {e}")
+                return None
+
+            if current_content is None:
+                return None
 
             # Build fix prompt
             fix_prompt = f"""You are a TypeScript/Next.js expert. Fix the following code that has build errors.
@@ -1328,7 +1408,7 @@ Return ONLY the fixed code, no explanations. Ensure:
 
                 if not response_text:
                     logger.warning(f"⚠️ LLM router returned no text for {rel_path}, skipping")
-                    continue
+                    return None
 
                 fixed_code = response_text.strip()
 
@@ -1345,13 +1425,42 @@ Return ONLY the fixed code, no explanations. Ensure:
                                 fixed_code = block
                             break
 
-                # Write fixed content
-                file_path.write_text(fixed_code)
-                fixed_files.append(rel_path)
+                # Write fixed content. asyncio.to_thread cannot interrupt the
+                # worker thread once write_text has started, so a plain
+                # `await asyncio.to_thread(...)` that gets cancelled -- which
+                # gather() does to every sibling as soon as one task raises --
+                # would return control to the caller while the thread is still
+                # writing. The caller would then see a "failed" repair and could
+                # start cleanup on a file being truncated and rewritten
+                # underneath it. Shield the write so cancellation doesn't detach
+                # it, then drain it before propagating.
+                write = asyncio.create_task(
+                    asyncio.to_thread(file_path.write_text, fixed_code)
+                )
+                try:
+                    await asyncio.shield(write)
+                except asyncio.CancelledError:
+                    with contextlib.suppress(Exception):
+                        await write
+                    raise
                 logger.info(f"✅ Fixed: {rel_path}")
+                return rel_path
 
             except Exception as e:
                 logger.warning(f"⚠️ Failed to fix {rel_path}: {e}")
+                return None
+
+        async def _fix_guarded(rel_path: str) -> Optional[str]:
+            async with semaphore:
+                return await _fix_one(rel_path)
+
+        # error_files is a set, so the previous sequential loop reported results
+        # in arbitrary order; sort for a stable, assertable ordering.
+        ordered_paths = sorted(error_files)
+        results = await asyncio.gather(
+            *(_fix_guarded(rel_path) for rel_path in ordered_paths)
+        )
+        fixed_files = [rel_path for rel_path in results if rel_path]
 
         return {
             "success": len(fixed_files) > 0,

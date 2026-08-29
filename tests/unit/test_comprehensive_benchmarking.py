@@ -17,9 +17,7 @@ Covers:
 - ComprehensiveBenchmark._extract_metric_value (async)
 """
 
-import asyncio
 from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -32,7 +30,6 @@ from youtube_extension.backend.services.comprehensive_benchmarking import (
     create_default_benchmark_suites,
     get_benchmark_status,
 )
-
 
 # ---------------------------------------------------------------------------
 # BenchmarkResult dataclass tests
@@ -628,7 +625,8 @@ class TestAsyncSystemMethods:
         assert isinstance(info, dict)
 
     async def test_get_memory_usage_returns_float(self, monkeypatch):
-        import sys, types
+        import sys
+        import types
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
                 memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024)
@@ -640,7 +638,8 @@ class TestAsyncSystemMethods:
         assert isinstance(usage, float)
 
     async def test_get_memory_usage_non_negative(self, monkeypatch):
-        import sys, types
+        import sys
+        import types
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
                 memory_info=lambda: types.SimpleNamespace(rss=256 * 1024 * 1024)
@@ -658,7 +657,8 @@ class TestAsyncSystemMethods:
         assert usage == 0.0
 
     async def test_get_cpu_usage_returns_float(self, monkeypatch):
-        import sys, types
+        import sys
+        import types
         fake = types.SimpleNamespace(cpu_percent=lambda interval=None: 25.0)
         monkeypatch.setitem(sys.modules, 'psutil', fake)
         cb = ComprehensiveBenchmark()
@@ -666,7 +666,8 @@ class TestAsyncSystemMethods:
         assert isinstance(usage, float)
 
     async def test_get_cpu_usage_returns_zero_on_exception(self, monkeypatch):
-        import sys, types
+        import sys
+        import types
         fake = types.SimpleNamespace(cpu_percent=lambda interval=None: (_ for _ in ()).throw(Exception("unavailable")))
         monkeypatch.setitem(sys.modules, 'psutil', fake)
         cb = ComprehensiveBenchmark()
@@ -674,7 +675,8 @@ class TestAsyncSystemMethods:
         assert usage == 0.0
 
     async def test_get_cpu_usage_non_negative(self, monkeypatch):
-        import sys, types
+        import sys
+        import types
         fake = types.SimpleNamespace(cpu_percent=lambda interval=None: 25.0)
         monkeypatch.setitem(sys.modules, 'psutil', fake)
         cb = ComprehensiveBenchmark()
@@ -1760,7 +1762,9 @@ class TestConvenienceFunctions:
     """run_phase3_validation, establish_performance_baseline, get_benchmark_status"""
 
     async def test_run_phase3_validation_calls_comprehensive_methods(self, monkeypatch):
-        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        from youtube_extension.backend.services import (
+            comprehensive_benchmarking as _mod,
+        )
         mock_bench = MagicMock()
         mock_bench.baseline_established = True
         mock_bench.run_comprehensive_benchmark = AsyncMock(return_value={
@@ -1777,7 +1781,9 @@ class TestConvenienceFunctions:
         mock_bench.run_comprehensive_benchmark.assert_called_once()
 
     async def test_run_phase3_validation_establishes_baseline_when_needed(self, monkeypatch):
-        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        from youtube_extension.backend.services import (
+            comprehensive_benchmarking as _mod,
+        )
         mock_bench = MagicMock()
         mock_bench.baseline_established = False
         mock_bench.establish_baseline = AsyncMock(return_value={})
@@ -1794,7 +1800,9 @@ class TestConvenienceFunctions:
         mock_bench.establish_baseline.assert_called_once()
 
     async def test_establish_performance_baseline_calls_benchmark(self, monkeypatch):
-        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        from youtube_extension.backend.services import (
+            comprehensive_benchmarking as _mod,
+        )
         mock_bench = MagicMock()
         mock_bench.establish_baseline = AsyncMock(return_value={"ok": True})
         monkeypatch.setattr(_mod, "comprehensive_benchmark", mock_bench)
@@ -1802,7 +1810,9 @@ class TestConvenienceFunctions:
         assert result == {"ok": True}
 
     def test_get_benchmark_status_returns_summary(self, monkeypatch):
-        from youtube_extension.backend.services import comprehensive_benchmarking as _mod
+        from youtube_extension.backend.services import (
+            comprehensive_benchmarking as _mod,
+        )
         mock_bench = MagicMock()
         mock_bench.get_benchmark_summary.return_value = {"registered_suites": []}
         monkeypatch.setattr(_mod, "comprehensive_benchmark", mock_bench)
@@ -1814,7 +1824,6 @@ class TestSaveBenchmarkReportExceptionPath:
     """_save_benchmark_report: exception path logs error without raising"""
 
     async def test_exception_does_not_propagate(self, monkeypatch, tmp_path):
-        import aiofiles
         cb = ComprehensiveBenchmark()
         cb.results_directory = str(tmp_path / "results")
 

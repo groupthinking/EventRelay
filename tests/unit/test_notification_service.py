@@ -15,7 +15,6 @@ from youtube_extension.backend.services.notification_service import (
     NotificationService,
 )
 
-
 # ===========================================================================
 # NotificationMessage dataclass + __post_init__
 # ===========================================================================

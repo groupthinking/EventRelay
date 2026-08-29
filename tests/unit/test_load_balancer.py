@@ -19,7 +19,6 @@ from youtube_extension.backend.services.load_balancer import (
     ServiceStatus,
 )
 
-
 # ===========================================================================
 # LoadBalancingAlgorithm enum
 # ===========================================================================
