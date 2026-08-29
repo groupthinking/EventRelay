@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, BackgroundTasks, FastAPI, Header, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 # Import cloud services
 from ..services.cloud import (
@@ -143,9 +143,24 @@ async def process_video_cloud(
         # detail is a static string; error_msg (with the exception) is logged above only
         raise HTTPException(status_code=500, detail="Internal server error")
 
-@router.post("/api/v3/process-video-task")
+@router.post(
+    "/api/v3/process-video-task",
+    # The body is parsed manually after the Cloud Tasks header check, so the
+    # schema is declared here to keep it documented in OpenAPI.
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": CloudTaskPayload.model_json_schema(
+                        ref_template="#/components/schemas/{model}"
+                    )
+                }
+            },
+        }
+    },
+)
 async def process_video_task_handler(
-    payload: CloudTaskPayload,
     request: Request,
     x_cloudtasks_taskname: Optional[str] = Header(None),
 ):
@@ -162,6 +177,13 @@ async def process_video_task_handler(
             status_code=403,
             detail="Only Cloud Tasks can call this endpoint"
         )
+
+    try:
+        payload = CloudTaskPayload.model_validate_json(await request.body())
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=422, detail=exc.errors(include_input=False)
+        ) from exc
 
     logger.info(
         f"📝 Processing Cloud Task: {x_cloudtasks_taskname} "

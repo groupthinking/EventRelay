@@ -15,6 +15,10 @@ permissions:
   contents: write
   pull-requests: write
   statuses: read
+  # Required by the merge job's check-run readiness scan. Commit statuses and
+  # check runs are separate surfaces with separate scopes; without this the
+  # `checks.listForRef` call 403s.
+  checks: read
 
 
 # Supersede superseded work instead of stacking it. Without this, every push
@@ -37,7 +41,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
-  approve:
+  dependabot-auto-merge-approve:
     if: >-
       vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true' &&
       github.event_name == 'pull_request_target' &&
@@ -99,7 +103,7 @@ jobs:
               core.info(`Auto-merge could not be enabled for PR #${pull_number}: ${error.message}`);
             }
 
-  merge:
+  dependabot-auto-merge-merge:
     if: vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true' && github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
@@ -136,33 +140,65 @@ jobs:
                 continue;
               }
 
-              const metadata = await github.request(
-                'GET /repos/{owner}/{repo}/pulls/{pull_number}',
-                {
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  pull_number: pullRequest.number,
-                  mediaType: { previews: ['dorian'] },
-                }
-              );
+              // Dependabot records the update metadata as a YAML block in the
+              // commit message; the pulls REST API carries no dependency
+              // metadata at all. The previous lookup here read
+              // `dependency.update_type` off `GET /pulls/{n}` behind a
+              // `dorian` preview -- fields that do not exist on that schema
+              // (and a preview that gated draft PRs, not Dependabot data). So
+              // `updateType` was always undefined, every PR hit the
+              // "could not determine update type" branch, and this job merged
+              // nothing it was meant to merge.
+              const { data: headCommit } = await github.rest.repos.getCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pullRequest.head.sha,
+              });
 
-              const updateType =
-                metadata.data?.dependency?.update_type ??
-                metadata.data?.update_type ??
-                metadata.data?.dependency_update_type;
+              const updateTypes = [
+                ...(headCommit.commit?.message ?? '').matchAll(
+                  /^\s*update-type:\s*(\S+)\s*$/gm,
+                ),
+              ].map(match => match[1]);
 
-              if (!updateType) {
+              // Absent for indirect/transitive bumps, where Dependabot emits
+              // dependency-name/version/type and no update-type. Skipping is
+              // the conservative read: never merge a bump whose semver impact
+              // we cannot establish.
+              if (updateTypes.length === 0) {
                 core.info(
                   `Could not determine update type for PR #${pullRequest.number}; skipping.`
                 );
                 continue;
               }
 
-              if (updateType.includes('semver-major')) {
-                core.info(`Skipping major update PR #${pullRequest.number}.`);
+              // Allowlist rather than deny-major: policy is patch/minor only, so
+              // anything we do not positively recognise -- a major, a new
+              // Dependabot update kind, or a value mangled by parser drift --
+              // must fail closed. Grouped updates carry one entry per
+              // dependency, so every entry has to qualify.
+              const ALLOWED_UPDATE_TYPES = new Set([
+                'version-update:semver-patch',
+                'version-update:semver-minor',
+              ]);
+              const disallowed = updateTypes.filter(
+                type => !ALLOWED_UPDATE_TYPES.has(type),
+              );
+              if (disallowed.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; update type(s) outside the ` +
+                    `patch/minor policy: ${disallowed.join(', ')}`,
+                );
                 continue;
               }
 
+              // `getCombinedStatusForRef` reports only legacy commit statuses.
+              // Every GitHub Actions gate on this repo is a *check run*, which
+              // that endpoint does not see -- on a typical Dependabot head it
+              // returns `success` off two Vercel statuses alone while `test`,
+              // `build` and `guards` are still queued. Gating on it merged to
+              // a protected branch on a green that meant nothing. Require both
+              // surfaces, and require checks to have actually finished.
               const { data: combined } = await github.rest.repos.getCombinedStatusForRef({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -172,6 +208,98 @@ jobs:
               if (combined.state !== 'success') {
                 core.info(
                   `Skipping PR #${pullRequest.number} because combined status is ${combined.state}.`
+                );
+                continue;
+              }
+
+              const checkRuns = await github.paginate(
+                github.rest.checks.listForRef,
+                {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: pullRequest.head.sha,
+                  per_page: 100,
+                  // Re-running a job creates an additional check run under the
+                  // same name; `latest` keeps only the most recent per name, so
+                  // a superseded failure cannot block a head that is now green.
+                  filter: 'latest',
+                },
+              );
+
+              // This workflow's own jobs are check runs on the same head, and
+              // this one is necessarily in progress while it evaluates them, so
+              // counting them would deadlock the gate against itself. The job
+              // names are workflow-qualified precisely so that this exclusion
+              // cannot silently swallow an unrelated workflow's `merge` job.
+              const SELF_JOBS = new Set([
+                'dependabot-auto-merge-approve',
+                'dependabot-auto-merge-merge',
+              ]);
+              const ACCEPTABLE = new Set(['success', 'skipped', 'neutral']);
+
+              // MERGE_POLICY.md gate 2, "Required for every pull request".
+              // `trivy` is lowercase deliberately: a separate `Trivy` check run
+              // exists on the same head and reports `neutral` forever, so
+              // requiring the capitalised one would never pass.
+              const REQUIRED_CHECKS = [
+                'validate',
+                'guards',
+                'lint-python',
+                'lint-frontend',
+                'build',
+                'test',
+                // Python pytest only. The apps/web vitest suite is the separate
+                // required check `test-frontend` (#1449) -- a green `test` is
+                // not evidence that web unit tests ran.
+                'test-frontend',
+                'CodeQL',
+                'gitleaks (working tree)',
+                'dependency-review',
+                'PR Governance',
+                'Canonical issue and evidence',
+                'Security Scan - python',
+                'Security Scan - javascript',
+                'bandit',
+                'python-safety',
+                'npm-audit',
+                'trivy',
+              ];
+
+              const relevant = checkRuns.filter(run => !SELF_JOBS.has(run.name));
+              const present = new Set(relevant.map(run => run.name));
+
+              // Absence is not success. This job is triggered by a completed
+              // check suite, and the first suite to complete may well be this
+              // workflow's own -- at which point the other workflows' check
+              // runs do not exist yet, `unfinished` and `failed` are both
+              // empty, and a bare "nothing is failing" test would merge a PR
+              // that has had no CI run against it at all.
+              const missing = REQUIRED_CHECKS.filter(name => !present.has(name));
+              if (missing.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; required check run(s) not reported yet: ` +
+                    missing.join(', '),
+                );
+                continue;
+              }
+
+              const unfinished = relevant.filter(run => run.status !== 'completed');
+              const failed = relevant.filter(
+                run => run.status === 'completed' && !ACCEPTABLE.has(run.conclusion),
+              );
+
+              if (unfinished.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; ${unfinished.length} check run(s) still running: ` +
+                    unfinished.map(run => run.name).join(', '),
+                );
+                continue;
+              }
+
+              if (failed.length > 0) {
+                core.info(
+                  `Skipping PR #${pullRequest.number}; failing check run(s): ` +
+                    failed.map(run => `${run.name}=${run.conclusion}`).join(', '),
                 );
                 continue;
               }

@@ -604,6 +604,13 @@ class TestCloudApiEndpoints:
         })
         assert response.status_code == 403
 
+    def test_process_video_task_no_header_malformed_payload_still_403(self):
+        client = self._build_app()
+        response = client.post("/api/v3/process-video-task", json={
+            "video_id": "auJzb1D-fag",
+        })
+        assert response.status_code == 403
+
     def test_process_video_task_with_header_success(self):
         state = self._make_state()
 
@@ -625,6 +632,33 @@ class TestCloudApiEndpoints:
         data = response.json()
         assert data["success"] is True
         assert data["video_id"] == "auJzb1D-fag"
+
+    def test_process_video_task_with_header_malformed_payload_returns_422(self):
+        client = self._build_app()
+        response = client.post(
+            "/api/v3/process-video-task",
+            json={"video_id": "auJzb1D-fag"},
+            headers={"X-CloudTasks-TaskName": "task-abc-123"},
+        )
+        assert response.status_code == 422
+
+    def test_process_video_task_with_header_invalid_utf8_returns_422(self):
+        client = self._build_app()
+        response = client.post(
+            "/api/v3/process-video-task",
+            content=b"\xff",
+            headers={"X-CloudTasks-TaskName": "task-abc-123"},
+        )
+        assert response.status_code == 422
+        assert response.json()["detail"][0]["type"] == "json_invalid"
+
+    def test_process_video_task_documents_request_body_schema(self):
+        client = self._build_app()
+        spec = client.app.openapi()
+        operation = spec["paths"]["/api/v3/process-video-task"]["post"]
+        schema = operation["requestBody"]["content"]["application/json"]["schema"]
+        assert operation["requestBody"]["required"] is True
+        assert set(schema["required"]) == {"video_id", "video_url"}
 
     def test_process_video_task_exception(self):
         mock_processor = AsyncMock()
