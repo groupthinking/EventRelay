@@ -53,6 +53,16 @@
 
 name: "EventRelay CI Investigator (report-first)"
 on:
+  # steps: # Steps injected into pre-activation job
+  # - env:
+  # CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
+  # id: require_codex_credential
+  # name: Require dedicated Codex credential
+  # run: |
+  # if [ -z "${CODEX_API_KEY}" ]; then
+  # echo "::error::Dedicated CODEX_API_KEY is required"
+  # exit 1
+  # fi
   workflow_dispatch:
     inputs:
       aw_context:
@@ -1708,6 +1718,15 @@ jobs:
             setupGlobals(core, github, context, exec, io, getOctokit);
             const { main } = require('${{ runner.temp }}/gh-aw/actions/check_membership.cjs');
             await main();
+      - name: Require dedicated Codex credential
+        id: require_codex_credential
+        run: |
+          if [ -z "${CODEX_API_KEY}" ]; then
+            echo "::error::Dedicated CODEX_API_KEY is required"
+            exit 1
+          fi
+        env:
+          CODEX_API_KEY: ${{ secrets.CODEX_API_KEY }}
 
   safe_outputs:
     needs:
