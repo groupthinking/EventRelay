@@ -138,12 +138,15 @@ jobs:
             const report = existing.data.items.find(item => item.title === title);
             const body = lines.join("\n");
 
+            let reportNumber;
             if (report) {
+              reportNumber = report.number;
               await github.rest.issues.update({
                 owner, repo, issue_number: report.number, body
               });
             } else {
-              await github.rest.issues.create({ owner, repo, title, body });
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              reportNumber = created.data.number;
             }
 
             // --- Remediation: comment on non-draft PRs missing a canonical issue ---
@@ -189,9 +192,9 @@ jobs:
             }
 
             // --- Close the drift report issue when all findings are zero ---
-            if (report && untracked.length === 0 && duplicates.length === 0 && staleBranches.length === 0) {
+            if (reportNumber && untracked.length === 0 && duplicates.length === 0 && staleBranches.length === 0) {
               await github.rest.issues.update({
-                owner, repo, issue_number: report.number,
+                owner, repo, issue_number: reportNumber,
                 state: "closed", state_reason: "completed"
               });
               core.info("All drift findings resolved — closed the report issue.");
