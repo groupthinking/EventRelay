@@ -6,3 +6,8 @@
 **Vulnerability:** API routes were returning internal server exceptions and stack traces directly to the client via `HTTPException(..., detail=str(e))`.
 **Learning:** Developers often unintentionally leak sensitive deployment context (e.g., paths, database errors) when relying on generic exception catching blocks.
 **Prevention:** Hardcode static error strings for unexpected 500 exceptions (e.g., `detail="Internal server error"`) while ensuring the full exception trace is securely logged server-side. Every sanitized 500 handler in `router.py`, `main.py`, and mounted routers (e.g. `reporting_routes.py`) now logs via `logger.error(..., exc_info=True)` so the traceback is preserved for internal monitoring without ever reaching the client. Guard against regressions with tests that assert the response body equals the generic message AND excludes the raised exception string (status-code-only assertions are insufficient).
+
+## 2026-08-03 - Prevent Information Disclosure in API Error Responses
+**Vulnerability:** API routes were returning internal stack traces directly to the client by conditionally evaluating `error instanceof Error ? error.message : String(error)` in catch blocks.
+**Learning:** Returning `error.message` directly from generic catch blocks can inadvertently expose sensitive deployment context (e.g. file paths, internal service failures, API keys).
+**Prevention:** Hardcode static error strings or rely on the sanitized utility `formatApiError(error).message` when constructing API response payloads. Use the raw error only for server-side logic checks, logs, or debugging.

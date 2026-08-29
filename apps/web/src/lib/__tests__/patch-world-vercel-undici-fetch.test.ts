@@ -1,0 +1,158 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  patchFile,
+  patchInstalledWorldVercel,
+  patchSource,
+  patchWorldLocalSource,
+  resolveWorldLocalRoot,
+  resolveWorldVercelRoot,
+} from '../../../scripts/patch-world-vercel-undici-fetch.mjs';
+
+const VERCELIGNORE = fs.readFileSync(
+  path.resolve(import.meta.dirname, '../../../../../.vercelignore'),
+  'utf8',
+);
+
+const FIXTURE = `import { getDispatcher } from './http-client.js';
+export async function doRequest(request) {
+  const response = await fetch(request, {
+    dispatcher: getDispatcher(),
+  });
+  return response;
+}
+`;
+
+const QUEUE_FIXTURE = `import { getDispatcher } from './http-client.js';
+export function createQueue(config) {
+  return new QueueClient({
+    region: 'iad1',
+    dispatcher: getDispatcher(config),
+  });
+}
+`;
+
+const LOCAL_QUEUE_FIXTURE = `import { Agent } from 'undici';
+export async function deliver(url, httpAgent) {
+  return (response = await fetch(createWorkflowUrl(url), {
+    method: 'POST',
+    dispatcher: httpAgent,
+  }));
+}
+`;
+
+describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
+  it('externalizes undici and world-vercel so webpack cannot split them', () => {
+    const config = fs.readFileSync(
+      path.resolve(import.meta.dirname, '../../../next.config.js'),
+      'utf8',
+    );
+    expect(config).toMatch(
+      /serverExternalPackages:\s*\[[^\]]*'undici'[^\]]*'@workflow\/world-vercel'/,
+    );
+  });
+
+  it('does not let .vercelignore delete apps/web/scripts', () => {
+    const patterns = VERCELIGNORE.split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith('#'));
+    expect(patterns).not.toContain('scripts/');
+    expect(patterns).toContain('/scripts/');
+  });
+
+  it('keeps global fetch and drops dispatcher', () => {
+    const { src, result } = patchSource(FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).toContain('await fetch(request, {');
+    expect(src).not.toContain('undiciFetch');
+    expect(src).not.toContain('dispatcher');
+  });
+
+  it('drops the dispatcher from queue client options without a direct fetch call', () => {
+    const { src, result } = patchSource(QUEUE_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).not.toMatch(/dispatcher:\s*getDispatcher/);
+  });
+
+  it('pairs world-local fetch with its npm Agent and preserves dispatcher settings', () => {
+    const { src, result } = patchWorldLocalSource(LOCAL_QUEUE_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).toContain("import { Agent, fetch as undiciFetch } from 'undici';");
+    expect(src).toContain('undiciFetch(createWorkflowUrl(url)');
+    expect(src).toMatch(/dispatcher:\s*httpAgent/);
+
+    const twice = patchWorldLocalSource(src);
+    expect(twice.result).toBe('already-patched');
+    expect(twice.src).toBe(src);
+  });
+
+  it('undoes a prior undiciFetch rename so Request objects still work', () => {
+    const renamed = `import { fetch as undiciFetch } from 'undici';\n${FIXTURE.replaceAll('await fetch(', 'await undiciFetch(')}`;
+    const { src, result } = patchSource(renamed);
+    expect(result).toBe('patched');
+    expect(src).toContain('await fetch(request, {');
+    expect(src).not.toContain('undiciFetch');
+    expect(src).not.toContain('dispatcher');
+  });
+
+  it('is idempotent', () => {
+    const once = patchSource(FIXTURE);
+    const twice = patchSource(once.src);
+    expect(twice.result).toBe('already-patched');
+    expect(twice.src).toBe(once.src);
+  });
+
+  it('leaves files without the WDK call site alone', () => {
+    const { src, result } = patchSource("export const ping = () => 'ok';\n");
+    expect(result).toBe('no-fetch-call');
+    expect(src).toBe("export const ping = () => 'ok';\n");
+  });
+
+  it('writes the rewrite to disk', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'world-vercel-patch-'));
+    const file = path.join(dir, 'utils.js');
+    fs.writeFileSync(file, FIXTURE);
+    expect(patchFile(file)).toBe('patched');
+    expect(patchFile(file)).toBe('already-patched');
+    const written = fs.readFileSync(file, 'utf8');
+    expect(written).toContain('await fetch(');
+    expect(written).not.toContain('dispatcher');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('installed @workflow/world-vercel call sites drop dispatcher', () => {
+    const results = patchInstalledWorldVercel();
+    expect(results).not.toContain('not-installed');
+    const pkgRoot = resolveWorldVercelRoot();
+    expect(pkgRoot).toBeTruthy();
+    const utils = fs.readFileSync(
+      path.join(pkgRoot as string, 'dist', 'utils.js'),
+      'utf8',
+    );
+    const httpCore = fs.readFileSync(
+      path.join(pkgRoot as string, 'dist', 'http-core.js'),
+      'utf8',
+    );
+    const queue = fs.readFileSync(
+      path.join(pkgRoot as string, 'dist', 'queue.js'),
+      'utf8',
+    );
+    const localRoot = resolveWorldLocalRoot();
+    expect(localRoot).toBeTruthy();
+    const localQueue = fs.readFileSync(
+      path.join(localRoot as string, 'dist', 'queue.js'),
+      'utf8',
+    );
+    expect(utils).toContain('await fetch(');
+    expect(httpCore).toContain('await fetch(');
+    expect(utils).not.toContain('undiciFetch');
+    expect(utils).not.toMatch(/dispatcher:\s*getDispatcher/);
+    expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
+    expect(queue).not.toMatch(/dispatcher:\s*getDispatcher/);
+    expect(localQueue).toContain("fetch as undiciFetch } from 'undici'");
+    expect(localQueue).toContain('undiciFetch(createWorkflowUrl(');
+    expect(localQueue).toMatch(/dispatcher:\s*httpAgent/);
+  });
+});

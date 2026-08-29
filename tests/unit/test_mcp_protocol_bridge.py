@@ -992,29 +992,43 @@ class TestOpenAIAdapter:
         result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://10.1.2.3"})
         assert result is False
 
-    async def test_initialize_rejects_hostname_with_mixed_resolution(self) -> None:
+    async def test_initialize_rejects_hostname_with_mixed_resolution(
+        self, monkeypatch
+    ) -> None:
+        # The URL must be allowlisted, otherwise initialize() short-circuits at
+        # the allowlist gate and this test would pass without ever exercising
+        # the DNS check it exists to cover.
+        monkeypatch.setenv("OPENAI_ALLOWED_BASE_URLS", "https://mixed.example.com/v1")
         adapter = OpenAIAdapter()
         with patch.object(
             _pb_mod.socket,
             "getaddrinfo",
             return_value=[_dns_result("93.184.216.34"), _dns_result("127.0.0.1")],
-        ):
+        ) as getaddrinfo:
             result = await adapter.initialize(
                 {"api_key": "sk-test", "base_url": "https://mixed.example.com/v1"}
             )
         assert result is False
+        getaddrinfo.assert_called_once()
 
-    async def test_initialize_rejects_unresolvable_hostname(self) -> None:
+    async def test_initialize_rejects_unresolvable_hostname(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "OPENAI_ALLOWED_BASE_URLS", "https://does-not-resolve.example/v1"
+        )
         adapter = OpenAIAdapter()
         with patch.object(
             _pb_mod.socket,
             "getaddrinfo",
             side_effect=_pb_mod.socket.gaierror(),
-        ):
+        ) as getaddrinfo:
             result = await adapter.initialize(
-                {"api_key": "sk-test", "base_url": "https://does-not-resolve.example/v1"}
+                {
+                    "api_key": "sk-test",
+                    "base_url": "https://does-not-resolve.example/v1",
+                }
             )
         assert result is False
+        getaddrinfo.assert_called_once()
 
     async def test_initialize_rejects_invalid_port_without_raising(self) -> None:
         adapter = OpenAIAdapter()
@@ -1037,17 +1051,19 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-    async def test_initialize_rejects_malformed_dns_result(self) -> None:
+    async def test_initialize_rejects_malformed_dns_result(self, monkeypatch) -> None:
+        monkeypatch.setenv("OPENAI_ALLOWED_BASE_URLS", "https://malformed.example/v1")
         adapter = OpenAIAdapter()
         with patch.object(
             _pb_mod.socket,
             "getaddrinfo",
             return_value=[(_pb_mod.socket.AF_INET,)],
-        ):
+        ) as getaddrinfo:
             result = await adapter.initialize(
                 {"api_key": "sk-test", "base_url": "https://malformed.example/v1"}
             )
         assert result is False
+        getaddrinfo.assert_called_once()
 
     async def test_health_check_returns_false_when_not_initialized(self):
         adapter = OpenAIAdapter()

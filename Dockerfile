@@ -25,6 +25,13 @@ COPY apps/web/package.json ./apps/web/
 COPY src/dataconnect-generated ./src/dataconnect-generated
 COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 
+# apps/web postinstall runs scripts/patch-world-vercel-undici-fetch.mjs, so the
+# scripts directory must exist in the builder stage before `npm ci`
+# postinstall in apps/web/package.json runs
+# `node scripts/patch-world-vercel-undici-fetch.mjs`. npm ci fails if the
+# script is missing from the builder context (Security Scan / Trivy).
+COPY apps/web/scripts ./apps/web/scripts
+
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     (pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -e .)

@@ -49,6 +49,7 @@ def _make_service(api_key: str = "fake_key", model_name: str | None = None, **ex
 def _mock_response(text: str = "test response") -> MagicMock:
     resp = MagicMock()
     resp.text = text
+    resp.usage_metadata = None
     return resp
 
 
@@ -686,6 +687,21 @@ class TestProcessText:
         result = await svc.process_text("hello")
         assert result.success is True
         assert result.response == "text response here"
+
+    async def test_process_text_preserves_usage_metadata(self):
+        svc, mock_model, m = self._make_initialized_service()
+        usage = SimpleNamespace(
+            prompt_token_count=12,
+            candidates_token_count=7,
+            total_token_count=19,
+        )
+        mock_response = _mock_response("tracked response")
+        mock_response.usage_metadata = usage
+        mock_model.generate_content.return_value = mock_response
+
+        result = await svc.process_text("hello")
+
+        assert result.usage_metadata is usage
 
     async def test_process_text_with_input_text(self):
         svc, mock_model, m = self._make_initialized_service()

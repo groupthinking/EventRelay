@@ -1,3 +1,8 @@
+// Must be set before Sentry/Next instrument fetch. @workflow/world-vercel
+// passes an undici Agent as fetch's dispatcher; any wrap of dispatch() reads
+// private field #P on the wrong class copy (#1538).
+process.env.NEXT_OTEL_FETCH_DISABLED = '1';
+
 import * as Sentry from '@sentry/nextjs';
 
 export async function register() {
