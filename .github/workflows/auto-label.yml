@@ -71,6 +71,14 @@ jobs:
             // --- Label issues by title/body keywords (powers saved issue views) ---
             if (context.eventName === 'issues') {
               const issue = context.payload.issue;
+
+              // Skip empty bot-opened issues (agent-session artifacts). The Issue
+              // Triage workflow closes these; labeling them here would race that
+              // closure and re-surface them in saved views.
+              if (issue.user && issue.user.type === 'Bot' && !(issue.body || '').trim()) {
+                return;
+              }
+
               const text = `${issue.title} ${issue.body || ''}`.toLowerCase();
 
               if (/\b(mcp|agent|a2a|orchestrat|dispatch)/.test(text)) labels.add('mcp/agent');
