@@ -1,5 +1,6 @@
 import { renderDeployMarkdown, type LinkedSop } from '@/lib/linked-sop';
 import { officialTemplateFiles, pickOfficialTemplate } from '@/lib/official-templates';
+import { zipUtf8Files } from '@/lib/zip-store';
 
 /**
  * Canonical action surface (F3).
@@ -231,20 +232,18 @@ export function summarizeProjectScaffold(scaffold: unknown, maxItems = 6): strin
   return lines.slice(0, maxItems);
 }
 
-/** Trigger browser downloads for each file in a scaffold package. */
+/** One zip so Chrome does not swallow official starter files after the first blob. */
 export function downloadScaffoldPackage(pkg: ScaffoldPackage): void {
   if (typeof document === 'undefined') return;
-  const entries = Object.entries(pkg.files);
-  for (const [path, content] of entries) {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = path.includes('/') ? path.split('/').pop() || path : path;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+  const zip = zipUtf8Files(pkg.files);
+  const blob = new Blob([zip], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${pkg.projectName || 'uvai-project'}.zip`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

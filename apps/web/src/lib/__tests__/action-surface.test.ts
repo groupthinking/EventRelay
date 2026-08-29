@@ -4,6 +4,7 @@ import {
   buildScaffoldPackage,
   summarizeProjectScaffold,
 } from '@/lib/action-surface';
+import { zipEntryNames, zipUtf8Files } from '@/lib/zip-store';
 
 describe('action-surface (F3)', () => {
   it('buildScaffoldPackage emits README, tasks.json, and stub index', () => {
@@ -60,6 +61,9 @@ describe('action-surface (F3)', () => {
     expect(pkg.files['src/index.ts']).toBeUndefined();
     expect(pkg.files['app/page.tsx']).toContain('export default function Page');
     expect(pkg.files['README.md']).toContain('create-next-app');
+    expect(zipEntryNames(zipUtf8Files(pkg.files))).toEqual(
+      expect.arrayContaining(['README.md', 'DEPLOY.md', 'app/page.tsx', 'package.json']),
+    );
   });
 
   it('includes project_scaffold.json when Gemini scaffold is present', () => {
