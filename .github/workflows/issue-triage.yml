@@ -2,6 +2,12 @@ name: Issue Triage
 on:
   issues:
     types: [opened]
+  # The `opened` handler below only catches shells created after it shipped
+  # (2026-08-29). Empty bot-opened issues from before then -- and any that slip
+  # through a failed run -- stay open forever, so sweep them on a schedule too.
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
 permissions:
   issues: write
 
@@ -21,6 +27,7 @@ concurrency:
 
 jobs:
   triage:
+    if: github.event_name == 'issues'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v9
@@ -76,3 +83,41 @@ jobs:
               issue_number: issue.number,
               body: '👋 Thanks for opening this issue! It has been automatically labeled for triage.'
             });
+
+  # Backfill for the auto-close above: close open bot-opened issues with no
+  # body that predate it or slipped past a failed run. Same criteria and same
+  # comment as the `opened` handler so the two paths stay interchangeable.
+  sweep-empty-bot-issues:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v9
+        with:
+          script: |
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            for (const issue of issues) {
+              if (issue.pull_request) continue;
+              const body = (issue.body || '').trim();
+              if (!issue.user || issue.user.type !== 'Bot' || body !== '') continue;
+
+              core.info(`Closing empty bot-opened issue #${issue.number} (${issue.title})`);
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '🤖 Closing automatically: this issue was opened by a bot with no description. If it tracks real work, reopen it and add a description of the problem or task.'
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'not_planned'
+              });
+            }
