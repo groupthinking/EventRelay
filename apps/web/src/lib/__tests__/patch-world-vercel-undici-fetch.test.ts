@@ -152,7 +152,12 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
     expect(queue).not.toMatch(/dispatcher:\s*getDispatcher/);
     expect(localQueue).toContain("fetch as undiciFetch } from 'undici'");
-    expect(localQueue).toContain('undiciFetch(createWorkflowUrl(');
+    // world-local 4.2.x patches fetch(createWorkflowUrl(...)). Newer builds
+    // deliver via nodeHttpFetch / fetch(url, { dispatcher: httpAgent }).
+    const patchedLegacy = localQueue.includes('undiciFetch(createWorkflowUrl(');
+    const patchedUrl = localQueue.includes('undiciFetch(url');
+    const nodeHttp = localQueue.includes('nodeHttpFetch');
+    expect(patchedLegacy || patchedUrl || nodeHttp).toBe(true);
     expect(localQueue).toMatch(/dispatcher:\s*httpAgent/);
   });
 });
