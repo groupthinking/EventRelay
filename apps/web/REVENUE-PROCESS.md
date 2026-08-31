@@ -1,6 +1,6 @@
-# EventRelay Pro — subscription revenue process
+# UVAI Workflow Pro — subscription revenue process
 
-Recurring revenue is anchored on **EventRelay Pro** ($19/mo or $180/yr) via Stripe Checkout, with acquisition protected by Cloudflare Turnstile and returning-user flows traced via kaizen-style logs.
+Recurring revenue is anchored on **UVAI Workflow Pro** ($39/mo or $390/yr) via Stripe Checkout, with acquisition protected by Cloudflare Turnstile and returning-user flows traced via kaizen-style logs.
 
 ## Entry point
 
@@ -16,7 +16,7 @@ Copy from Vercel or use test values in `.env.local`:
 |----------|---------|
 | `STRIPE_SECRET_KEY` | Server-side Stripe API |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Client Stripe.js (future portal) |
-| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_ANNUAL` | **Required** recurring Price IDs (no inline fallback) |
+| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_ANNUAL` | **Required in production.** Last-resort documented fallbacks (non-prod only): `price_1U9AbLAmTgsI2zgNEZD4Kwed` ($39/mo, lookup `uvai-workflow-pro-monthly`) and `price_1U9AbLAmTgsI2zgN0SM70JN9` ($390/yr, lookup `uvai-workflow-pro-annual`). Product `prod_V9TYXeVHLQGrVW`. Never reuse dead EventRelay Pro $19/$180 IDs. |
 | `STRIPE_WEBHOOK_SECRET` | Required for `/api/billing/webhook` (checkout.session.completed) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget on pricing |
 | `TURNSTILE_SECRET_KEY` | Server siteverify |
