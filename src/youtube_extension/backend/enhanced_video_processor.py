@@ -12,14 +12,16 @@ Integrates:
 """
 
 import asyncio
+import contextlib
+import json
 import logging
 import os
-import json
-import aiohttp
-from typing import Dict, Any, Optional, List
-from pathlib import Path
+import threading
 from datetime import datetime
-import hashlib
+from pathlib import Path
+from typing import Any, Optional
+
+import aiohttp
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -29,10 +31,19 @@ from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_co
 
 logger = logging.getLogger(__name__)
 
+# Serialises the markdown+metadata pair written by
+# ``EnhancedVideoProcessor._write_result_files``. Result filenames carry only
+# one-second precision, so two saves of the same video inside the same second
+# resolve to the same two paths; without this lock their individually-atomic
+# writes can interleave and leave one save's markdown paired with the other's
+# metadata. Held only across two file writes, and only inside a worker thread,
+# so it never blocks the event loop.
+_RESULT_WRITE_LOCK = threading.Lock()
+
 # Optional Gemini Vision integration for frame analysis
 try:
     # Use package import (works with PYTHONPATH=src and when the real MCP server on 8010 is exercised)
-    from youtube_extension.services.ai.gemini_service import GeminiService, GeminiConfig
+    from youtube_extension.services.ai.gemini_service import GeminiConfig, GeminiService
     GEMINI_VISION_AVAILABLE = True
 except ImportError:
     GeminiService = None
@@ -44,7 +55,7 @@ class EnhancedVideoProcessor:
     """
     Enhanced video processor using Google Gemini API, LiveKit, and Mozilla AI tools
     """
-    
+
     def __init__(self):
         # API Keys - Gemini required; YouTube key optional (fallbacks available)
         self.gemini_api_key = (
@@ -85,7 +96,7 @@ class EnhancedVideoProcessor:
                 self.gemini_vision = None
 
         logger.info("✅ EnhancedVideoProcessor initialized with validated API keys")
-    
+
     async def _init_session(self):
         """Initialize aiohttp session with proper headers and SSL context"""
         if os.getenv("SENTRY_DSN"):
@@ -94,10 +105,11 @@ class EnhancedVideoProcessor:
         if not self.session or getattr(self.session, 'closed', False):
             # Create SSL context that handles certificate verification
             import ssl
+
             import certifi
-            
+
             ssl_context = ssl.create_default_context(cafile=certifi.where())
-            
+
             self.session = aiohttp.ClientSession(
                 headers={
                     'User-Agent': 'UVAI-Enhanced-Video-Processor/1.0',
@@ -136,20 +148,20 @@ class EnhancedVideoProcessor:
             "status": "extracted"
         }
 
-    async def process_video(self, video_url: str) -> Dict[str, Any]:
+    async def process_video(self, video_url: str) -> dict[str, Any]:
         """
         Enhanced video processing pipeline
         """
         logger.info(f"🚀 Enhanced processing for: {video_url}")
-        
+
         try:
             # Initialize session if needed
             await self._init_session()
-            
+
             # Step 1: Extract video metadata
             video_id = self._extract_video_id(video_url)
             metadata = await self._get_video_metadata(video_id)
-            
+
             # Step 2: Get transcript using YouTube transcript API first (preferred)
             transcript = await self._get_youtube_transcript_fallback(video_id)
 
@@ -202,7 +214,7 @@ class EnhancedVideoProcessor:
                 'success': True,
                 'pipeline': 'enhanced_multimodal_gemini_vision'
             }
-            
+
         except Exception as e:
             logger.error(f"❌ Enhanced processing failed: {e}")
             raise
@@ -212,34 +224,34 @@ class EnhancedVideoProcessor:
                 await self.close()
             except Exception:
                 pass
-    
-    async def _get_gemini_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
+
+    async def _get_gemini_transcript(self, video_id: str, video_url: str) -> dict[str, Any]:
         """
         [DEPRECATED] Get transcript using Google Gemini API (OpenAI-compatible endpoint). This method is now considered a fallback and may be removed in future versions.
         """
         try:
             if not self.gemini_api_key:
                 raise ValueError("GEMINI_API_KEY not configured")
-            
+
             # Use Gemini's OpenAI-compatible transcription endpoint
             model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
             url = f"{self.gemini_base_url}/models/{model}:generateContent"
-            
+
             # Create prompt for video analysis
             prompt = f"""
             Analyze this YouTube video: {video_url}
             Video ID: {video_id}
-            
+
             Please provide:
             1. A detailed transcript of the video content
             2. Key topics and concepts discussed
             3. Technical details and code examples mentioned
             4. Learning objectives and takeaways
             5. Difficulty level and prerequisites
-            
+
             Format the response as structured markdown.
             """
-            
+
             payload = {
                 "contents": [{
                     "parts": [{"text": prompt}]
@@ -251,7 +263,7 @@ class EnhancedVideoProcessor:
                     "maxOutputTokens": 8192
                 }
             }
-            
+
             async with self.session.post(
                 url,
                 params={'key': self.gemini_api_key},
@@ -261,7 +273,7 @@ class EnhancedVideoProcessor:
                     data = await response.json()
                     content = data.get('candidates', [{}])[0].get('content', {})
                     parts = content.get('parts', [])
-                    
+
                     if parts:
                         transcript_text = parts[0].get('text', '')
                         return {
@@ -270,20 +282,21 @@ class EnhancedVideoProcessor:
                             'confidence': 0.95,
                             'processing_time': datetime.now().isoformat()
                         }
-                
+
                 raise Exception(f"Gemini API error: {response.status}")
-                
+
         except Exception as e:
             logger.warning(f"Gemini transcript failed: {e}")
             # Fallback to YouTube transcript API
             return await self._get_youtube_transcript_fallback(video_id)
 
-    async def _get_openai_whisper_transcript(self, video_id: str, video_url: str) -> Dict[str, Any]:
+    async def _get_openai_whisper_transcript(self, video_id: str, video_url: str) -> dict[str, Any]:
         """Fallback to OpenAI Whisper for transcription (avoids Gemini 403s, better STT)."""
         try:
-            from openai import OpenAI
-            import tempfile
             import os as os_mod
+            import tempfile
+
+            from openai import OpenAI
 
             client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
@@ -291,22 +304,47 @@ class EnhancedVideoProcessor:
             with tempfile.TemporaryDirectory() as tmpdir:
                 audio_path = os_mod.path.join(tmpdir, f"{video_id}.mp3")
                 # yt-dlp command for audio only
-                import subprocess
                 ytdlp_cmd = ["yt-dlp", "-x", "--audio-format", "mp3"]
                 proxy_url = get_proxy_url()
                 if proxy_url:
                     ytdlp_cmd.extend(["--proxy", proxy_url])
-                ytdlp_cmd.extend(["-o", audio_path, video_url])
-                subprocess.run(
-                    ytdlp_cmd, check=True, capture_output=True, timeout=60
-                )
+                canonical_video_url = f"https://www.youtube.com/watch?v={video_id}"
+                ytdlp_cmd.extend(["-o", audio_path, "--", canonical_video_url])
 
-                with open(audio_path, "rb") as audio_file:
-                    transcription = client.audio.transcriptions.create(
-                        model="whisper-1",
-                        file=audio_file,
-                        response_format="text"
+                # Spawned via asyncio: a synchronous download here would pin the
+                # event loop for the whole timeout, stalling every other request.
+                download = await asyncio.create_subprocess_exec(
+                    *ytdlp_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                try:
+                    _, stderr = await asyncio.wait_for(
+                        download.communicate(), timeout=60
                     )
+                except asyncio.TimeoutError:
+                    download.kill()
+                    await download.wait()
+                    raise RuntimeError(
+                        "yt-dlp audio download timed out after 60s"
+                    ) from None
+
+                if download.returncode != 0:
+                    raise RuntimeError(
+                        f"yt-dlp audio download failed: {stderr.decode()[:200]}"
+                    )
+
+                # The OpenAI client is synchronous and Whisper calls run for tens
+                # of seconds on long audio, so keep it off the event loop thread.
+                def _transcribe() -> Any:
+                    with open(audio_path, "rb") as audio_file:
+                        return client.audio.transcriptions.create(
+                            model="whisper-1",
+                            file=audio_file,
+                            response_format="text"
+                        )
+
+                transcription = await asyncio.to_thread(_transcribe)
 
             return {
                 'text': transcription,
@@ -317,8 +355,8 @@ class EnhancedVideoProcessor:
         except Exception as e:
             logger.warning(f"OpenAI Whisper failed: {e}")
             return {'text': '', 'source': 'failed', 'error': str(e)}
-    
-    async def _get_youtube_transcript_fallback(self, video_id: str) -> Dict[str, Any]:
+
+    async def _get_youtube_transcript_fallback(self, video_id: str) -> dict[str, Any]:
         """Fallback to YouTube transcript API"""
         try:
             from youtube_transcript_api import YouTubeTranscriptApi
@@ -353,7 +391,7 @@ class EnhancedVideoProcessor:
                 'segments': segments_data,
                 'processing_time': datetime.now().isoformat()
             }
-            
+
         except Exception as e:
             logger.error(f"YouTube transcript fallback failed: {e}")
             return {
@@ -363,18 +401,18 @@ class EnhancedVideoProcessor:
                 'error': str(e),
                 'processing_time': datetime.now().isoformat()
             }
-    
-    async def _analyze_with_gemini(self, video_url: str, transcript: Dict, metadata: Dict) -> Dict[str, Any]:
+
+    async def _analyze_with_gemini(self, video_url: str, transcript: dict, metadata: dict) -> dict[str, Any]:
         """
         Enhanced AI analysis using Gemini's multimodal capabilities
         """
         try:
             if not self.gemini_api_key:
                 return {'error': 'GEMINI_API_KEY not configured'}
-            
+
             model = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
             url = f"{self.gemini_base_url}/models/{model}:generateContent"
-            
+
             # Create comprehensive analysis prompt with strict JSON schema
             prompt = f"""
             You are analyzing a YouTube video based on its transcript and metadata.
@@ -405,21 +443,21 @@ class EnhancedVideoProcessor:
                 ]
               }}
             }}
-            
+
             Video URL: {video_url}
             Title: {metadata.get('title', 'Unknown')}
             Channel: {metadata.get('channel', 'Unknown')}
             Duration: {metadata.get('duration', 'Unknown')}
-            
+
             Transcript excerpt (truncate as needed): {transcript.get('text', '')[:2000]}...
-            
+
             Rules:
             - Respond with JSON only. Do not include markdown fences.
             - If a field cannot be determined, provide a best-effort concise summary.
             - build_plan.steps must be in chronological order (3–12 steps).
             - Keep code_content to the most essential snippet (≤ 20 lines).
             """
-            
+
             payload = {
                 "contents": [{
                     "parts": [{"text": prompt}]
@@ -431,7 +469,7 @@ class EnhancedVideoProcessor:
                     "maxOutputTokens": 4096
                 }
             }
-            
+
             async with self.session.post(
                 url,
                 params={'key': self.gemini_api_key},
@@ -441,7 +479,7 @@ class EnhancedVideoProcessor:
                     data = await response.json()
                     content = data.get('candidates', [{}])[0].get('content', {})
                     parts = content.get('parts', [])
-                    
+
                     if parts:
                         analysis_text = parts[0].get('text', '')
                         # Try to parse as JSON directly; else extract from code fence; else coerce
@@ -458,9 +496,9 @@ class EnhancedVideoProcessor:
                                 except Exception:
                                     pass
                             return self._coerce_analysis_to_structured_dict(analysis_text)
-                
+
                 raise Exception(f"Gemini analysis failed: {response.status}")
-                
+
         except Exception as e:
             logger.warning(f"Gemini analysis failed: {e}")
             return {
@@ -469,7 +507,7 @@ class EnhancedVideoProcessor:
                 'fallback': True
             }
 
-    async def _extract_visual_context(self, video_url: str, video_id: str) -> Dict[str, Any]:
+    async def _extract_visual_context(self, video_url: str, video_id: str) -> dict[str, Any]:
         """
         Extract visual context from video frames using Gemini Vision (Stage 1: Multimodal Ingestion)
         """
@@ -562,8 +600,8 @@ Provide a structured JSON response with visual_elements array containing:
                 'processing_timestamp': datetime.now()
             }
 
-    async def _generate_enhanced_markdown(self, video_id: str, metadata: Dict,
-                                        transcript: Dict, ai_analysis: Dict, visual_context: Optional[Dict] = None) -> str:
+    async def _generate_enhanced_markdown(self, video_id: str, metadata: dict,
+                                        transcript: dict, ai_analysis: dict, visual_context: Optional[dict] = None) -> str:
         """
         Generate comprehensive markdown using all available data
         """
@@ -658,14 +696,14 @@ Provide a structured JSON response with visual_elements array containing:
 *Processing Time: {datetime.now().isoformat()}*
 *Pipeline: Enhanced Multimodal (Gemini Vision + STT + AI Analysis)*
 """
-            
+
             return markdown
-            
+
         except Exception as e:
             logger.error(f"Markdown generation failed: {e}")
             return f"# Video Analysis\n\nError generating markdown: {str(e)}"
 
-    def _coerce_analysis_to_structured_dict(self, text: str) -> Dict[str, Any]:
+    def _coerce_analysis_to_structured_dict(self, text: str) -> dict[str, Any]:
         """Best-effort conversion of freeform Gemini text into structured fields expected by UI."""
         try:
             # Try to extract a JSON snippet if present in the text
@@ -683,7 +721,7 @@ Provide a structured JSON response with visual_elements array containing:
         lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
         summary = lines[0] if lines else ''
         # Group bullets as key concepts if present
-        key_concepts: List[str] = [ln.lstrip('-* ').strip() for ln in lines if ln.startswith(('-', '*'))]
+        key_concepts: list[str] = [ln.lstrip('-* ').strip() for ln in lines if ln.startswith(('-', '*'))]
         return {
             'summary': summary,
             'key_concepts': '\n'.join(f"- {kc}" for kc in key_concepts[:8]) if key_concepts else '',
@@ -697,37 +735,91 @@ Provide a structured JSON response with visual_elements array containing:
             'source': 'gemini_api',
             'format': 'text_coerced'
         }
-    
-    async def _save_enhanced_result(self, video_id: str, metadata: Dict, markdown: str) -> str:
+
+    @staticmethod
+    def _atomic_write_text(path: Any, contents: str) -> None:
+        """
+        Write ``contents`` to ``path`` so a reader never sees a partial file.
+
+        ``open(path, 'w')`` truncates before it writes, so a concurrent reader
+        -- or a crash mid-write -- can leave a half-written analysis on disk.
+        Write to a sibling temporary file and rename it into place instead;
+        ``os.replace`` is atomic, so the target is either the complete previous
+        file or the complete new one. The temporary name carries the pid and
+        thread id so two writers cannot collide on it.
+        """
+        tmp_path = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        try:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                f.write(contents)
+            os.replace(tmp_path, path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
+
+    @staticmethod
+    def _write_result_files(
+        save_dir: Any,
+        filepath: Any,
+        metadata_file: Any,
+        markdown: str,
+        metadata: dict,
+    ) -> None:
+        """
+        All blocking filesystem work for :meth:`_save_enhanced_result`.
+
+        Kept in one function so the whole save costs a single thread hop
+        rather than one per syscall. ``json.dumps`` is done here rather than
+        by the caller so the serialisation cost -- which scales with the size
+        of the metadata dict -- is paid off the event loop too.
+
+        The two writes are individually atomic *and* are held together under
+        ``_RESULT_WRITE_LOCK`` so concurrent saves cannot pair one save's
+        markdown with another's metadata.
+        """
+        save_dir.mkdir(parents=True, exist_ok=True)
+        payload = json.dumps(metadata, indent=2, default=str)
+        # Both files must land as a matched pair -- see _RESULT_WRITE_LOCK.
+        with _RESULT_WRITE_LOCK:
+            EnhancedVideoProcessor._atomic_write_text(filepath, markdown)
+            EnhancedVideoProcessor._atomic_write_text(metadata_file, payload)
+
+    async def _save_enhanced_result(self, video_id: str, metadata: dict, markdown: str) -> str:
         """Save enhanced results to organized directory structure"""
         try:
             # Create enhanced directory structure
             category = metadata.get('category', 'General')
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            
+
             save_dir = Path('youtube_processed_videos') / 'enhanced_analysis' / category
-            save_dir.mkdir(parents=True, exist_ok=True)
-            
+
             # Save markdown with timestamp
             filename = f"{video_id}_{timestamp}_enhanced.md"
             filepath = save_dir / filename
-            
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(markdown)
-            
-            # Save metadata
             metadata_file = save_dir / f"{video_id}_{timestamp}_metadata.json"
-            with open(metadata_file, 'w', encoding='utf-8') as f:
-                json.dump(metadata, f, indent=2, default=str)
-            
+
+            # mkdir, both writes and the JSON serialisation are synchronous and
+            # scale with the size of the analysis. Run on this event loop they
+            # stall every other request for the duration of the save, so hand
+            # the whole group to a worker thread in one dispatch.
+            await asyncio.to_thread(
+                self._write_result_files,
+                save_dir,
+                filepath,
+                metadata_file,
+                markdown,
+                metadata,
+            )
+
             logger.info(f"✅ Enhanced results saved to: {filepath}")
             return str(filepath)
-            
+
         except Exception as e:
             logger.error(f"Failed to save enhanced results: {e}")
             return ""
 
-    def get_cached_result(self, video_url: str) -> Optional[Dict[str, Any]]:
+    def get_cached_result(self, video_url: str) -> Optional[dict[str, Any]]:
         """Return a previously cached processing result for the given URL if available.
 
         Note: Caching is orchestrated by higher-level services. This method exists to
@@ -735,7 +827,7 @@ Provide a structured JSON response with visual_elements array containing:
         processor during tests or specialized deployments.
         """
         return None
-    
+
     def _extract_video_id(self, url: str) -> str:
         """Extract video ID from YouTube URL"""
         import re
@@ -744,43 +836,43 @@ Provide a structured JSON response with visual_elements array containing:
             r'(?:embed\/)([0-9A-Za-z_-]{11})',
             r'(?:watch\?v=)([0-9A-Za-z_-]{11})'
         ]
-        
+
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
                 return match.group(1)
-        
+
         if len(url) == 11:
             return url
-        
+
         raise ValueError(f"Could not extract video ID from: {url}")
-    
-    async def _get_video_metadata(self, video_id: str) -> Dict[str, Any]:
+
+    async def _get_video_metadata(self, video_id: str) -> dict[str, Any]:
         """Get comprehensive video metadata"""
         try:
             if not self.youtube_api_key:
                 return {'error': 'YOUTUBE_API_KEY not configured'}
-            
+
             url = "https://www.googleapis.com/youtube/v3/videos"
             params = {
                 'part': 'snippet,contentDetails,statistics',
                 'id': video_id,
                 'key': self.youtube_api_key
             }
-            
+
             async with self.session.get(url, params=params) as response:
                 if response.status == 200:
                     data = await response.json()
-                    
+
                     if not data.get('items'):
                         raise ValueError(f"Video not found: {video_id}")
-                    
+
                     video = data['items'][0]
-                    
+
                     # Parse duration
                     duration = video['contentDetails']['duration']
                     duration_readable = self._parse_duration(duration)
-                    
+
                     return {
                         'video_id': video_id,
                         'title': video['snippet']['title'],
@@ -796,9 +888,9 @@ Provide a structured JSON response with visual_elements array containing:
                         'category_id': video['snippet']['categoryId'],
                         'category': self._categorize_video(video['snippet'])
                     }
-                
+
                 raise Exception(f"YouTube API error: {response.status}")
-                
+
         except Exception as e:
             logger.error(f"Failed to get video metadata: {e}")
             return {
@@ -806,11 +898,11 @@ Provide a structured JSON response with visual_elements array containing:
                 'title': 'Unknown Video',
                 'error': str(e)
             }
-    
+
     def _parse_duration(self, duration: str) -> str:
         """Parse ISO 8601 duration to readable format"""
         import re
-        
+
         # Parse PT1H2M3S format
         match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
         if match:
@@ -818,20 +910,20 @@ Provide a structured JSON response with visual_elements array containing:
             hours = int(hours) if hours else 0
             minutes = int(minutes) if minutes else 0
             seconds = int(seconds) if seconds else 0
-            
+
             if hours > 0:
                 return f"{hours}h {minutes}m {seconds}s"
             elif minutes > 0:
                 return f"{minutes}m {seconds}s"
             else:
                 return f"{seconds}s"
-        
+
         return duration
-    
-    def _categorize_video(self, snippet: Dict) -> str:
+
+    def _categorize_video(self, snippet: dict) -> str:
         """Categorize video based on title and description"""
         text = (snippet.get('title', '') + ' ' + snippet.get('description', '')).lower()
-        
+
         categories = {
             'Programming': ['code', 'programming', 'tutorial', 'developer', 'software'],
             'AI/ML': ['ai', 'machine learning', 'neural network', 'deep learning'],
@@ -844,13 +936,13 @@ Provide a structured JSON response with visual_elements array containing:
             'Blockchain': ['blockchain', 'cryptocurrency', 'web3', 'defi'],
             'Cloud Computing': ['aws', 'azure', 'gcp', 'cloud', 'serverless']
         }
-        
+
         for category, keywords in categories.items():
             if any(keyword in text for keyword in keywords):
                 return category
-        
+
         return 'General'
-    
+
     async def close(self):
         """Clean up resources"""
         if self.session:
@@ -868,19 +960,19 @@ def get_enhanced_video_processor() -> EnhancedVideoProcessor:
 async def test_enhanced_processor():
     """Test the enhanced video processor"""
     processor = EnhancedVideoProcessor()
-    
+
     try:
         # Test with a sample video
         result = await processor.process_video("https://www.youtube.com/watch?v=aircAruvnKk")
-        
-        print(f"✅ Enhanced processing successful!")
+
+        print("✅ Enhanced processing successful!")
         print(f"📺 Video: {result['metadata']['title']}")
         print(f"🔑 Source: {result['transcript']['source']}")
         print(f"📁 Saved to: {result['save_path']}")
         print(f"🚀 Pipeline: {result['pipeline']}")
-        
+
         return result
-        
+
     except Exception as e:
         print(f"❌ Enhanced processing failed: {e}")
         return None

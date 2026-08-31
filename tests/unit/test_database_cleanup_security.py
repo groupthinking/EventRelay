@@ -6,12 +6,11 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from youtube_extension.backend.services.database_cleanup_service import (
-    CleanupResult,
-    DatabaseCleanupService,
-    RetentionPolicy,
     _ALLOWED_TIME_COLUMNS,
     _TABLE_NAME_RE,
     _TIME_COLUMN_PRIORITY,
+    DatabaseCleanupService,
+    RetentionPolicy,
     _validate_identifier,
 )
 

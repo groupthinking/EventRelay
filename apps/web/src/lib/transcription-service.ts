@@ -6,6 +6,8 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
+import { hasTranscriptAdvice, isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { fetchYouTubeCaptions } from '@/lib/youtube-captions';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -15,12 +17,42 @@ function getOpenAI() {
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+function isLoopbackHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+/** Skip loopback backends — they hang Analyze for 8s on ECONNREFUSED. */
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http') && !isLoopbackHost(BACKEND_URL);
 
-// A never-resolving promise used to skip null candidates in Promise.race():
-// when a candidate resolves to null we swap it for this so the race ignores it
-// and waits for a real result from another candidate.
-const PENDING_FOREVER = new Promise<never>(() => {});
+// Resolve with the first non-null candidate, or null once every candidate has
+// settled (resolved null or rejected). Unlike Promise.race() over null-swapped
+// promises, this always settles — it cannot hang when every candidate fails.
+export function firstNonNull<T>(candidates: Promise<T | null>[]): Promise<T | null> {
+  return new Promise(resolve => {
+    let remaining = candidates.length;
+    if (remaining === 0) {
+      resolve(null);
+      return;
+    }
+    const settle = (value: T | null) => {
+      // Null check, not a truthy check: a falsy-but-valid result (e.g. an empty
+      // string or 0 for other T) must count as a real result, not a failed
+      // candidate. null is the only "no result" sentinel here.
+      if (value !== null) {
+        resolve(value);
+      } else if (--remaining === 0) {
+        resolve(null);
+      }
+    };
+    for (const p of candidates) {
+      p.then(settle, () => settle(null));
+    }
+  });
+}
 
 export interface TranscriptionOptions {
   url?: string;
@@ -33,9 +65,69 @@ export interface TranscriptionResult {
   transcript: string;
   segments?: any[];
   source?: string;
+  /** True only for captions or speech-to-text returned by an acquisition provider. */
+  verified?: boolean;
+  acquisitionMethod?: string;
+  sourceUrl?: string;
+  acquiredAt?: string;
+  /** Search/metadata reconstruction may be useful context, but is never a transcript. */
+  derivedContent?: string;
   wordCount?: number;
   metadata?: any;
   error?: string;
+}
+
+/**
+ * Convert the Python transcript envelope into trusted acquisition evidence.
+ * A backend success flag or non-empty string is not sufficient: the backend
+ * can also return model-derived text, which must never be relabelled captions.
+ */
+export function parseVerifiedBackendTranscript(
+  result: Record<string, any>,
+  sourceUrl: string,
+): TranscriptionResult | null {
+  if (result.success !== true) return null;
+
+  const envelope = result.transcript;
+  const segments = Array.isArray(envelope)
+    ? envelope
+    : Array.isArray(envelope?.segments)
+      ? envelope.segments
+      : [];
+  const transcript =
+    typeof envelope === 'string'
+      ? envelope.trim()
+      : typeof envelope?.text === 'string'
+        ? envelope.text.trim()
+        : segments
+            .map((segment: { text?: unknown }) =>
+              typeof segment?.text === 'string' ? segment.text.trim() : '',
+            )
+            .filter(Boolean)
+            .join(' ');
+  const source = String(
+    (envelope && !Array.isArray(envelope) && envelope.source) ||
+      result.transcript_source ||
+      'unknown',
+  );
+
+  if (transcript.length <= 50 || !isTrustedTranscriptSource(source)) {
+    return null;
+  }
+
+  return {
+    success: true,
+    transcript,
+    segments,
+    source,
+    verified: true,
+    acquisitionMethod: source.startsWith('speech_to_text')
+      ? 'backend-speech-to-text'
+      : 'backend-caption-api',
+    sourceUrl,
+    acquiredAt: new Date().toISOString(),
+    wordCount: transcript.split(/\s+/).length,
+  };
 }
 
 /**
@@ -51,10 +143,25 @@ export async function fetchTranscript({
   language = 'en',
 }: TranscriptionOptions): Promise<TranscriptionResult> {
   if (!url && !audioUrl) {
-    return { success: false, error: 'url or audioUrl is required', transcript: '' };
+    return {
+      success: false,
+      verified: false,
+      error: 'url or audioUrl is required',
+      transcript: '',
+    };
   }
 
-  // Strategy 1: Try YouTube transcript API via backend (fast + free)
+  // Fetch YouTube metadata (description, chapters, title) — shared by all strategies
+  const metadataPromise = url ? fetchYouTubeMetadata(url).catch((err) => {
+    console.log('YouTube metadata fetch failed:', err);
+    return null;
+  }) : Promise.resolve(null);
+
+  // Strategy 1: Try YouTube transcript API via backend (fast + free).
+  // Run this FIRST and return early on success so the paid AI providers
+  // (Gemini/OpenAI) are only invoked as a fallback. Racing them in parallel
+  // would run — and bill — the paid providers on every request even when the
+  // free backend transcript is available (denial-of-wallet / cost regression).
   if (url && !audioUrl && BACKEND_AVAILABLE) {
     try {
       const controller = new AbortController();
@@ -62,72 +169,59 @@ export async function fetchTranscript({
 
       const ytResponse = await fetch(`${BACKEND_URL}/api/v1/transcript-action`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}) },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.EVENTRELAY_API_KEY ? { 'X-API-Key': process.env.EVENTRELAY_API_KEY } : {}),
+        },
         body: JSON.stringify({ video_url: url, language }),
         signal: controller.signal,
       }).finally(() => clearTimeout(timeout));
 
       if (ytResponse.ok) {
         const result = await ytResponse.json();
-
-        // Handle transcript as segments array
-        const segments = Array.isArray(result.transcript) ? result.transcript : [];
-        if (segments.length > 0) {
-          const fullText = segments
-            .map((s: { text?: string }) => s.text || '')
-            .join(' ')
-            .trim();
-
-          if (fullText.length > 50) {
-            return {
-              success: true,
-              transcript: fullText,
-              segments,
-              source: 'youtube',
-              wordCount: fullText.split(/\s+/).length,
-            };
-          }
-        }
-
-        // Handle transcript as { text: string }
-        const transcriptText =
-          typeof result.transcript === 'string'
-            ? result.transcript
-            : result.transcript?.text;
-        if (typeof transcriptText === 'string' && transcriptText.length > 50) {
-          return {
-            success: true,
-            transcript: transcriptText,
-            source: 'youtube',
-            wordCount: transcriptText.split(/\s+/).length,
-          };
-        }
+        const verifiedBackendResult = parseVerifiedBackendTranscript(result, url);
+        if (verifiedBackendResult) return verifiedBackendResult;
       }
-    } catch {
-      console.log('YouTube transcript unavailable, falling back to AI providers');
+    } catch (e) {
+      console.log('YouTube backend transcript unavailable:', e);
     }
   }
 
-  // Fetch YouTube metadata (description, chapters, title) — shared by both fallback strategies
-  let metadata: Awaited<ReturnType<typeof fetchYouTubeMetadata>> = null;
-  if (url) {
+  // Strategy 1b: timed YouTube captions from the watch page (no FastAPI).
+  if (url && !audioUrl) {
     try {
-      metadata = await fetchYouTubeMetadata(url);
-    } catch {
-      console.log('YouTube metadata fetch failed, continuing without');
+      const captions = await fetchYouTubeCaptions(url, language);
+      if (captions) {
+        return {
+          success: true,
+          transcript: captions.transcript,
+          segments: captions.segments,
+          source: captions.source,
+          verified: true,
+          acquisitionMethod: 'youtube-captions',
+          sourceUrl: url,
+          acquiredAt: new Date().toISOString(),
+          wordCount: captions.transcript.split(/\s+/).length,
+        };
+      }
+    } catch (error) {
+      console.warn('Direct YouTube captions unavailable:', error);
     }
   }
 
   // Strategies 2 & 3: Run Gemini and OpenAI in parallel — first successful result wins.
-  // This eliminates the worst-case sequential 30s+30s wait when both providers
+  // This eliminates the worst-case sequential 30s + 30s wait when both providers
   // are available, cutting latency to the faster of the two.
   if (url && !audioUrl) {
     const candidates: Promise<TranscriptionResult | null>[] = [];
 
     // Strategy 2: Gemini with Google Search grounding
     if (hasGeminiKey()) {
-      const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
-      const geminiPrompt = `You are a video transcription assistant.
+      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
+        try {
+          const metadata = await metadataPromise;
+          const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
+          const geminiPrompt = `You are a video transcription assistant.
 
 For the following YouTube video, find the ACTUAL transcript, description, and chapter content.
 The video creator often provides detailed descriptions with chapter breakdowns — USE that
@@ -143,8 +237,6 @@ INSTRUCTIONS:
 4. Include timestamps in [MM:SS] format where possible.
 5. Do NOT return generic advice like "click Show Transcript" — return actual content.`;
 
-      const geminiPromise: Promise<TranscriptionResult | null> = (async () => {
-        try {
           const text = hasAiGatewayKey()
             ? (
                 await gatewayChat({
@@ -164,12 +256,18 @@ INSTRUCTIONS:
                   },
                 })
               ).text ?? '';
-          if (text.length > 100) {
+          if (text.length > 100 && !hasTranscriptAdvice(text)) {
             return {
-              success: true,
-              transcript: text,
-              source: 'gemini-search',
+              success: false,
+              transcript: '',
+              derivedContent: text,
+              source: 'gemini-search-metadata',
+              verified: false,
+              acquisitionMethod: 'generative-search-context',
+              sourceUrl: url,
+              acquiredAt: new Date().toISOString(),
               wordCount: text.split(/\s+/).length,
+              error: 'No verified transcript was available; only derived context was found.',
               metadata: metadata
                 ? {
                     title: metadata.title,
@@ -190,9 +288,10 @@ INSTRUCTIONS:
 
     // Strategy 3: OpenAI Responses API with web_search
     if (process.env.OPENAI_API_KEY) {
-      const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
       const openaiPromise: Promise<TranscriptionResult | null> = (async () => {
         try {
+          const metadata = await metadataPromise;
+          const metadataContext = metadata ? formatMetadataAsContext(metadata) : '';
           const response = await getOpenAI().responses.create({
             model: 'gpt-4o-mini',
             instructions: `You are a video content transcription assistant.
@@ -208,16 +307,23 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           const text = response.output_text || '';
           // Reject results that are just instructions rather than actual content
           const isGarbage =
+            hasTranscriptAdvice(text) ||
             text.toLowerCase().includes('click show transcript') ||
             text.toLowerCase().includes('click on the three dots') ||
             text.toLowerCase().includes('steps to find') ||
             (text.length < 300 && text.includes('transcript'));
           if (text.length > 100 && !isGarbage) {
             return {
-              success: true,
-              transcript: text,
-              source: 'openai-web-search',
+              success: false,
+              transcript: '',
+              derivedContent: text,
+              source: 'openai-web-search-metadata',
+              verified: false,
+              acquisitionMethod: 'generative-search-context',
+              sourceUrl: url,
+              acquiredAt: new Date().toISOString(),
               wordCount: text.split(/\s+/).length,
+              error: 'No verified transcript was available; only derived context was found.',
             } satisfies TranscriptionResult;
           }
           return null;
@@ -231,19 +337,12 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
 
     if (candidates.length > 0) {
       // Run all candidates concurrently and return the first non-null result.
-      // When a candidate resolves to null (no usable transcript found), we
-      // replace it with PENDING_FOREVER so Promise.race() skips it and waits
-      // for a successful result from another candidate.
-      const winner = await Promise.race(
-        candidates.map(p => p.then(r => r ?? PENDING_FOREVER))
-      ).catch(() => null);
+      // firstNonNull resolves as soon as any candidate yields a usable result,
+      // and resolves null once every candidate has failed — so this never hangs
+      // when all providers return null (a Promise.race() over null-swapped
+      // promises would hang forever in that case).
+      const winner = await firstNonNull(candidates);
       if (winner) return winner;
-      // If the race produced no winner (all candidates resolved to null),
-      // wait for all results and return the first usable one.
-      const results = await Promise.allSettled(candidates);
-      for (const r of results) {
-        if (r.status === 'fulfilled' && r.value) return r.value;
-      }
     }
   }
 
@@ -254,18 +353,35 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
       try {
         await assertPublicHttpUrl(audioUrl);
       } catch (guardErr) {
+        // The guard throws five distinguishable messages — `Invalid URL`,
+        // `Blocked URL scheme: <protocol>`, `Blocked host`, `Blocked private IP
+        // literal`, and `Host does not resolve to a public address`. Forwarding
+        // them told the caller WHICH rule fired: `Blocked host` confirms a
+        // hostname-blocklist match, while the resolution message confirms only
+        // that DNS gave nothing public. That difference is a policy oracle, and
+        // it sharpens as BLOCKED_HOSTNAMES grows. One fixed message for every
+        // rejection; the real reason goes to the log.
+        console.error('[transcription] audioUrl rejected by SSRF guard:', guardErr);
         return {
           success: false,
-          error: `Rejected audioUrl: ${guardErr instanceof Error ? guardErr.message : 'blocked'}`,
+          error: 'Rejected audioUrl',
           transcript: '',
         };
       }
 
       const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
       if (!audioResponse.ok) {
+        // The status belongs to a caller-supplied `audioUrl`. Echoing it turns
+        // this route into a probe: the caller learns 401 vs 403 vs 404 vs 500
+        // for any host the SSRF guard admits, which is a cross-origin read the
+        // browser same-origin policy would otherwise deny them. Log it, and
+        // report only that the fetch failed.
+        console.error(
+          `[transcription] audioUrl fetch failed with status ${audioResponse.status}`,
+        );
         return {
           success: false,
-          error: `Failed to fetch audio: ${audioResponse.status}`,
+          error: 'Could not retrieve the audio file',
           transcript: '',
         };
       }
@@ -330,6 +446,10 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         success: true,
         transcript: transcription.text,
         source: 'openai-stt',
+        verified: true,
+        acquisitionMethod: 'openai-speech-to-text',
+        sourceUrl: audioUrl,
+        acquiredAt: new Date().toISOString(),
         wordCount: transcription.text.split(/\s+/).length,
       };
     } catch (e) {
@@ -337,13 +457,24 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
   }
 
-  // No strategy succeeded
+  // No strategy succeeded.
+  //
+  // Which provider keys this deployment holds is server configuration, not
+  // caller-facing detail: branching the client message on `hasKeys` told any
+  // caller whether OPENAI_API_KEY/GEMINI_API_KEY were set, and named the
+  // variables and the hosting platform. Both outcomes now report the same
+  // string; the distinction survives in the operator log, which is the only
+  // place it was ever actionable.
   const hasKeys = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
+  console.error(
+    hasKeys
+      ? '[transcription] all strategies failed with provider keys configured'
+      : '[transcription] all strategies failed: no OPENAI_API_KEY or GEMINI_API_KEY configured',
+  );
   return {
     success: false,
-    error: hasKeys
-      ? 'Could not transcribe video — all strategies failed'
-      : 'No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY in Vercel environment variables.',
+    verified: false,
+    error: 'Could not transcribe video — all strategies failed',
     transcript: '',
   };
 }

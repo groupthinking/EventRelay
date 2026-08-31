@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useRef, type KeyboardEvent } from 'react';
+import { LoaderCircle, VideoOff } from 'lucide-react';
 import { buildEmbedUrl, formatSeconds } from '@/lib/timestamp';
 
 /** A point-in-time marker rendered on the scrubber. */
@@ -124,11 +125,7 @@ export default function VideoCanvasStage({
             {!ready && (
               <div className="absolute inset-0 flex items-center justify-center" style={{ background: '#000' }}>
                 <div className="flex flex-col items-center gap-3">
-                  <div
-                    className="h-8 w-8 rounded-full border-2 border-t-transparent animate-spin motion-reduce:animate-none"
-                    style={{ borderColor: '#6af2de', borderTopColor: 'transparent' }}
-                    aria-hidden="true"
-                  />
+                  <LoaderCircle className="h-8 w-8 animate-spin text-[#6af2de] motion-reduce:animate-none" aria-hidden="true" />
                   <span className="text-xs uppercase tracking-[0.2em]" style={{ color: 'rgba(248,245,253,0.4)' }}>
                     Loading player
                   </span>
@@ -138,10 +135,7 @@ export default function VideoCanvasStage({
           </>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3" style={{ color: 'rgba(248,245,253,0.3)' }}>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <path d="m10 9 5 3-5 3z" />
-            </svg>
+            <VideoOff className="size-10" strokeWidth={1.5} aria-hidden="true" />
             <span className="text-sm">Video player not available</span>
           </div>
         )}
@@ -163,6 +157,7 @@ export default function VideoCanvasStage({
           aria-valuemax={Math.floor(duration) || 0}
           aria-valuenow={Math.floor(currentTime) || 0}
           aria-valuetext={`${formatSeconds(currentTime)} of ${formatSeconds(duration)}`}
+          aria-keyshortcuts="ArrowLeft ArrowRight Home End"
           onClick={(e) => seekFromClientX(e.clientX)}
           onKeyDown={onTrackKeyDown}
           className={`group relative flex-1 h-9 flex items-center rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0e13] ${seekable ? 'cursor-pointer' : 'cursor-default'}`}

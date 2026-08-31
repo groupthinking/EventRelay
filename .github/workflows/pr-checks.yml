@@ -1,65 +1,90 @@
 name: PR Checks
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, edited]
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review]
 
-permissions:
-  pull-requests: write
-  issues: write
+permissions: {}
+
+
+# Supersede superseded work instead of stacking it. Without this, every push
+# to a PR branch queued a brand-new full run alongside the ones it obsoleted;
+# with ~30 workflows and dozens of open PRs the Actions queue could not drain.
+#
+# PR runs are keyed by PR number and cancel their predecessors -- that is where
+# all the queue pressure comes from, since every `push:` trigger here is already
+# filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
+# land in singleton groups: keying them on github.ref would collide every merge
+# to main into one group, and GitHub cancels the *pending* run in a group, so a
+# burst of merges would silently drop the middle commits' verdicts.
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const pr = context.payload.pull_request;
-            if (!pr) {
-              core.info('Not a pull_request event — skipping validation.');
+            const findings = [];
+            if (pr.title.length < 10) {
+              findings.push('❌ PR title too short (minimum 10 characters)');
+            }
+            if (!/^(?:⚡\s*)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/i.test(pr.title)) {
+              findings.push('⚠️ PR title should follow conventional commits format');
+            }
+            if (!pr.body || pr.body.length < 20) {
+              findings.push('❌ PR description is required (minimum 20 characters)');
+            }
+            const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
+            if (totalChanges > 500) {
+              findings.push('⚠️ Large PR detected (' + totalChanges + ' lines changed)');
+            }
+            const marker = '<!-- pr-validation:v1 -->';
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {owner: context.repo.owner, repo: context.repo.repo, issue_number: pr.number, per_page: 100}
+            );
+            const existing = comments.find(comment =>
+              comment.user &&
+              comment.user.login === 'github-actions[bot]' &&
+              comment.body && comment.body.includes(marker)
+            );
+            if (findings.length === 0) {
+              if (existing) {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: existing.id,
+                  body: marker + '\n## 🔍 PR Validation\n\n' +
+                    '✅ Current validation passed.'
+                });
+              }
               return;
             }
-            const issues = [];
-
-            if (pr.title.length < 10) {
-              issues.push('❌ PR title too short (minimum 10 characters)');
+            const body = marker + '\n## 🔍 PR Validation\n\n' + findings.join('\n');
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body
+              });
             }
-            if (!/^(?:⚡\s*)?(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?:/i.test(pr.title) && !pr.title.startsWith('⚡')) {
-              issues.push('⚠️ PR title should follow conventional commits format');
+            if (findings.some(finding => finding.startsWith('❌'))) {
+              core.setFailed('PR validation failed');
             }
 
-            if (!pr.body || pr.body.length < 20) {
-              issues.push('❌ PR description is required (minimum 20 characters)');
-            }
-
-            const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
-            const errors = issues.filter(issue => issue.startsWith('❌'));
-            const warnings = issues.filter(issue => issue.startsWith('⚠️'));
-
-            if (totalChanges > 500) {
-              warnings.push(`⚠️ Large PR detected (${totalChanges} lines changed)`);
-            }
-
-            if (errors.length > 0 || warnings.length > 0) {
-              const allIssues = [...errors, ...warnings];
-              if (pr.head.repo.full_name === pr.base.repo.full_name) {
-                const comment = `## 🔍 PR Validation\n\n${allIssues.join('\n')}`;
-                try {
-                  await github.rest.issues.createComment({
-                    owner: context.repo.owner,
-                    repo: context.repo.repo,
-                    issue_number: pr.number,
-                    body: comment
-                  });
-                } catch (commentError) {
-                  core.warning(`Could not post validation comment: ${commentError.message}`);
-                }
-              } else {
-                core.warning('Skipping PR comment for fork PR (read-only token)');
-                allIssues.forEach(issue => core.warning(issue));
-              }
-              if (errors.length > 0) {
-                core.setFailed('PR validation failed');
-              }
-            }

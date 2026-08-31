@@ -14,11 +14,11 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import parse_qs, urlparse
 
 from shared.youtube import RobustYouTubeMetadata, RobustYouTubeService
-from youtube_extension.utils.proxy import get_proxy_url
-from youtube_extension.utils.video_utils import extract_video_id
 from uvai.ml.client import UVAIMLClient, get_uvai_ml_client
 from youtube_extension.backend.services.metrics_service import MetricsService
 from youtube_extension.utils import parse_duration_to_seconds
+from youtube_extension.utils.proxy import get_proxy_url
+from youtube_extension.utils.video_utils import extract_video_id
 
 try:
     from youtube_extension.services.agents.adapters.agent_orchestrator import (
@@ -226,14 +226,14 @@ class TranscriptActionWorkflow:
         parsed = urlparse(video_url)
         query_params = parse_qs(parsed.query)
         is_playlist_path = parsed.path.rstrip("/").endswith("/playlist")
-        
+
         # Try to extract video ID from the URL (supports both youtu.be/ and v= formats)
         try:
             extract_video_id(video_url)
             has_video_id = True
         except ValueError:
             has_video_id = False
-        
+
         # Reject if it's a playlist path or if there's a list parameter but no video ID
         playlist_without_video = bool(query_params.get("list")) and not has_video_id
         if is_playlist_path or playlist_without_video:
@@ -382,22 +382,22 @@ class TranscriptActionWorkflow:
     @staticmethod
     def _normalize_transcript_source(actual_source: str) -> str:
         """Normalize actual service source names to routing category names for ML consistency.
-        
+
         Maps actual sources returned by services to the routing names used in _build_transcript_source_order,
         ensuring ML model training/inference uses consistent source names.
         """
         # YouTube API sources map to "youtube_api"
         if actual_source in {"youtube_transcript_api", "innertube_android", "youtube_search_python"}:
             return "youtube_api"
-        
+
         # Speech-to-Text sources map to "speech_v2"
         if actual_source.startswith("speech_to_text_v2"):
             return "speech_v2"
-        
+
         # Gemini sources map to their category
         if actual_source in {"gemini_video", "gemini_video_file"}:
             return actual_source
-        
+
         # Fallback: return as-is for unknown sources
         return actual_source
 
@@ -765,6 +765,25 @@ class TranscriptActionWorkflow:
             video_metadata=video_metadata,
         )
 
+        # Retry once for transient network errors (timeouts, 503/504, deadline
+        # exceeded) before falling through to the yt-dlp download fallback.
+        # This avoids triggering the expensive and bot-blocked download path
+        # for what are often short-lived Gemini API hiccups.
+        _transient_markers = ("timeout", "503", "504", "deadline", "unavailable")
+        if not (primary_result.success and primary_result.response) and primary_result.error:
+            if any(m in str(primary_result.error).lower() for m in _transient_markers):
+                logger.info(
+                    "Transient error in Gemini process_youtube (%s); retrying before download fallback",
+                    primary_result.error,
+                )
+                await asyncio.sleep(2.0)
+                primary_result = await gemini_service.process_youtube(
+                    video_url,
+                    transcription_prompt,
+                    response_mime_type="application/json",
+                    video_metadata=video_metadata,
+                )
+
         await self._record_metric(
             "transcript_fallback_latency_seconds",
             (primary_result.latency or 0.0),
@@ -830,13 +849,7 @@ class TranscriptActionWorkflow:
                 if file_result.error:
                     errors.append(file_result.error)
             finally:
-                if video_path.exists():
-                    try:
-                        video_path.unlink()
-                    except OSError:
-                        pass
-                if temp_root and temp_root.exists():
-                    shutil.rmtree(temp_root, ignore_errors=True)
+                await self._cleanup_download_artifacts(video_path, temp_root)
 
         error_message = errors[0] if errors else "Gemini transcription failed"
         logger.warning("Gemini transcription fallback failed: %s", error_message)
@@ -847,6 +860,70 @@ class TranscriptActionWorkflow:
             "source": "gemini_video_failed",
             "error": error_message,
         }
+
+    @staticmethod
+    async def _cleanup_download_artifacts(
+        video_path: Path | None,
+        temp_root: Path | None,
+    ) -> None:
+        """Remove downloaded video artifacts without blocking the event loop.
+
+        The Gemini file fallback downloads a whole video into a temporary tree.
+        Because the format chain may fall back to separate video/audio streams,
+        that tree can hold the merged output plus unmerged ``.fNNN`` fragments,
+        so the removal is unbounded disk work. It therefore runs in a worker
+        thread using the same ``to_thread`` idiom as ``_download_video_file``.
+
+        The await is shielded because this runs from a ``finally`` block. The
+        previous inline implementation was synchronous and so uncancellable,
+        which meant cleanup ran to completion once entered; an unshielded await
+        would let a cancellation delivered during the ``finally`` skip cleanup
+        and leak the tree. Shielding preserves that property while still
+        yielding the loop, and still re-raises ``CancelledError`` to the caller.
+
+        The bound is process lifetime, not an absolute guarantee: cleanup
+        continues unless the process exits. A ``SIGKILL``, a hard crash, or
+        interpreter shutdown before the worker thread finishes still leaves the
+        tree behind, and nothing in this helper can prevent that.
+
+        ``CancelledError`` is deliberately allowed to propagate rather than
+        being suppressed in favour of any exception already in flight. Python
+        chains the in-flight exception onto it as ``__context__``, so no
+        diagnostic information is lost, whereas swallowing it would report a
+        cancelled task as ``cancelled() is False`` and defeat
+        ``asyncio.timeout``. The caller in ``_extract_transcript`` catches
+        ``Exception``, so a suppressed cancellation would be downgraded to a
+        per-source error and the pipeline would keep issuing network calls
+        after the request was abandoned.
+        """
+
+        def _cleanup() -> None:
+            # Both branches are total. This runs from a ``finally``, so raising
+            # here would replace whatever exception is already propagating.
+            #
+            # Note the absence of ``exists()`` probes: ``exists()`` performs a
+            # stat and can itself raise, which is exactly the masking this must
+            # avoid. ``unlink`` already raises ``FileNotFoundError`` for absent
+            # paths and ``rmtree`` tolerates them.
+            #
+            # The guards catch ``Exception``, not ``OSError``, because neither
+            # call is OSError-total. A path holding a NUL byte makes ``unlink``
+            # raise ``ValueError: embedded null character``, and makes
+            # ``rmtree`` raise the same from its internal ``lstat`` despite
+            # ``ignore_errors=True`` -- that flag only suppresses ``OSError``.
+            # ``CancelledError`` is a ``BaseException``, so it still propagates.
+            if video_path is not None:
+                try:
+                    video_path.unlink()
+                except Exception:  # noqa: BLE001 - must not mask in-flight error
+                    logger.debug("Cleanup failed for %s", video_path, exc_info=True)
+            if temp_root is not None:
+                try:
+                    shutil.rmtree(temp_root, ignore_errors=True)
+                except Exception:  # noqa: BLE001 - must not mask in-flight error
+                    logger.debug("Cleanup failed for %s", temp_root, exc_info=True)
+
+        await asyncio.shield(asyncio.to_thread(_cleanup))
 
     async def _record_metric(
         self,
@@ -984,24 +1061,56 @@ class TranscriptActionWorkflow:
 
         def _download() -> tuple[Path | None, Path | None]:
             temp_dir = Path(tempfile.mkdtemp(prefix="gemini_video_"))
-            output_template = str(temp_dir / "%(id)s.%(ext)s")
-            ydl_opts = {
-                "skip_download": False,
-                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/mp4",
-                "merge_output_format": "mp4",
-                "outtmpl": output_template,
-                "noplaylist": True,
-                "quiet": True,
-            }
-            proxy_url = get_proxy_url()
-            if proxy_url:
-                ydl_opts["proxy"] = proxy_url
+            try:
+                output_template = str(temp_dir / "%(id)s.%(ext)s")
+                ydl_opts = {
+                    "skip_download": False,
+                    # Use mweb then web_embedded clients — both are significantly
+                    # less scrutinised than the default web client on GCP/Cloud Run
+                    # IPs. web_embedded does not require a PO Token for public videos.
+                    "extractor_args": {
+                        "youtube": {
+                            "player_client": ["mweb", "web_embedded"],
+                        }
+                    },
+                    # Prefer a pre-muxed stream (no ffmpeg required) before falling
+                    # back to separate video+audio tracks that need merging.
+                    "format": "best[ext=mp4]/bestvideo[ext=mp4]+bestaudio[ext=m4a]/best",
+                    "merge_output_format": "mp4",
+                    "outtmpl": output_template,
+                    "noplaylist": True,
+                    "quiet": True,
+                    # With noplaylist=True, ignoreerrors makes extract_info return
+                    # None on a failed download instead of raising; the None guard
+                    # below turns that into an explicit FileNotFoundError. (Format
+                    # fallback via the "/" chain is handled by yt-dlp's format
+                    # selection regardless. `abort_on_error` is a CLI-only compat
+                    # option ignored by the API.)
+                    "ignoreerrors": True,
+                }
+                proxy_url = get_proxy_url()
+                if proxy_url:
+                    ydl_opts["proxy"] = proxy_url
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
-                info = ydl.extract_info(video_url, download=True)
-                filename = Path(ydl.prepare_filename(info))
-                if not filename.exists():
-                    raise FileNotFoundError("Video download failed")
-                return filename, temp_dir
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:  # type: ignore[attr-defined]
+                    info = ydl.extract_info(video_url, download=True)
+                    # With ignoreerrors=True, extract_info returns None on a failed
+                    # download instead of raising — guard so callers get the
+                    # intended FileNotFoundError rather than a cryptic TypeError
+                    # from prepare_filename(None).
+                    if info is None:
+                        raise FileNotFoundError("Video download failed")
+                    filename = Path(ydl.prepare_filename(info))
+                    if not filename.exists():
+                        raise FileNotFoundError("Video download failed")
+                    return filename, temp_dir
+            except Exception:
+                # Clean up the temp dir on any failure. The caller only receives
+                # temp_dir (and later removes it) on the success path, so an
+                # exception here would otherwise leak an orphaned directory —
+                # a frequent event now that ignoreerrors makes the None-return
+                # the primary download-failure mode.
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                raise
 
         return await asyncio.to_thread(_download)

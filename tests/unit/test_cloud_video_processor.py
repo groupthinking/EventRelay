@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -29,7 +29,6 @@ if isinstance(sys.modules.get(_cvp_key), MagicMock):
 # Module-level import alias (resolved once; importable in all tests)
 # ---------------------------------------------------------------------------
 import youtube_extension.services.cloud.cloud_video_processor as _mod
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -116,7 +115,9 @@ def mock_services():
 @pytest.fixture()
 def processor(mock_services):
     """Return a fully-enabled CloudNativeVideoProcessor with all services mocked."""
-    from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+    from youtube_extension.services.cloud.cloud_video_processor import (
+        CloudNativeVideoProcessor,
+    )
 
     return CloudNativeVideoProcessor(
         enable_queue=True,
@@ -131,7 +132,9 @@ def processor(mock_services):
 
 class TestVideoProcessingResult:
     def test_required_fields(self):
-        from youtube_extension.services.cloud.cloud_video_processor import VideoProcessingResult
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            VideoProcessingResult,
+        )
 
         r = VideoProcessingResult(video_id="abc", video_url="https://yt.be/abc", success=True)
         assert r.video_id == "abc"
@@ -139,7 +142,9 @@ class TestVideoProcessingResult:
         assert r.success is True
 
     def test_optional_defaults(self):
-        from youtube_extension.services.cloud.cloud_video_processor import VideoProcessingResult
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            VideoProcessingResult,
+        )
 
         r = VideoProcessingResult(video_id="x", video_url="u", success=False)
         assert r.metadata is None
@@ -150,7 +155,9 @@ class TestVideoProcessingResult:
         assert r.from_cache is False
 
     def test_all_fields_set(self):
-        from youtube_extension.services.cloud.cloud_video_processor import VideoProcessingResult
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            VideoProcessingResult,
+        )
 
         r = VideoProcessingResult(
             video_id="vid",
@@ -168,7 +175,9 @@ class TestVideoProcessingResult:
         assert r.metadata["title"] == "t"
 
     def test_failed_result(self):
-        from youtube_extension.services.cloud.cloud_video_processor import VideoProcessingResult
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            VideoProcessingResult,
+        )
 
         r = VideoProcessingResult(
             video_id="v",
@@ -186,7 +195,9 @@ class TestVideoProcessingResult:
 
 class TestCloudNativeVideoProcessorInit:
     def test_default_flags_all_true(self):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor()
         assert p.enable_queue is True
@@ -194,7 +205,9 @@ class TestCloudNativeVideoProcessorInit:
         assert p.enable_vertex_ai is True
 
     def test_custom_flags(self):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_queue=False, enable_state=False, enable_vertex_ai=False)
         assert p.enable_queue is False
@@ -202,7 +215,9 @@ class TestCloudNativeVideoProcessorInit:
         assert p.enable_vertex_ai is False
 
     def test_mixed_flags(self):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_queue=True, enable_state=False, enable_vertex_ai=True)
         assert p.enable_queue is True
@@ -258,14 +273,18 @@ class TestProcessVideoAsync:
         assert task.callback_url == cb
 
     async def test_raises_when_queue_disabled(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_queue=False)
         with pytest.raises(RuntimeError, match="Cloud Tasks queue not enabled"):
             await p.process_video_async("https://youtube.com/watch?v=abc123")
 
     async def test_skips_firestore_when_state_disabled(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_queue=True, enable_state=False)
         await p.process_video_async("https://youtube.com/watch?v=abc123")
@@ -278,7 +297,9 @@ class TestProcessVideoAsync:
 
 class TestProcessVideoSyncCacheHit:
     async def test_returns_from_cache(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         completed = _make_completed_state()
         mock_services["firestore"].get_state = AsyncMock(return_value=completed)
@@ -294,7 +315,9 @@ class TestProcessVideoSyncCacheHit:
         assert result.ai_analysis == {"summary": "cached summary"}
 
     async def test_cache_bypassed_with_force_refresh(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         completed = _make_completed_state()
         mock_services["firestore"].get_state = AsyncMock(return_value=completed)
@@ -351,7 +374,9 @@ class TestProcessVideoSyncFullPipeline:
         assert result.ai_analysis["summary"] == "AI summary"
 
     async def test_vertex_ai_skipped_when_disabled(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         mock_services["firestore"].get_state = AsyncMock(return_value=None)
         p = CloudNativeVideoProcessor(enable_vertex_ai=False, enable_state=True)
@@ -363,7 +388,9 @@ class TestProcessVideoSyncFullPipeline:
         mock_services["vertex"].analyze_transcript.assert_not_awaited()
 
     async def test_state_disabled_skips_firestore_calls(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_state=False, enable_vertex_ai=False)
 
@@ -374,7 +401,9 @@ class TestProcessVideoSyncFullPipeline:
         mock_services["firestore"].update_state.assert_not_awaited()
 
     async def test_error_returns_failed_result(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         # Make get_state raise to trigger the except block
         mock_services["firestore"].get_state = AsyncMock(side_effect=Exception("DB offline"))
@@ -383,11 +412,18 @@ class TestProcessVideoSyncFullPipeline:
         result = await p.process_video_sync("https://youtube.com/watch?v=failid")
 
         assert result.success is False
-        assert "failid" in result.error_message
+        # error_message is persisted to Firestore and echoed to clients by
+        # /status and /result, so it must be sanitized: neither the request's
+        # video_id nor the internal exception text may leak (CWE-209).
+        assert result.error_message == "Internal server error"
+        assert "failid" not in result.error_message
+        assert "DB offline" not in result.error_message
         assert result.processing_time >= 0.0
 
     async def test_error_updates_state_to_failed(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         mock_services["firestore"].get_state = AsyncMock(side_effect=Exception("DB offline"))
 
@@ -429,7 +465,9 @@ class TestBatchProcessAsync:
         assert all(t.priority == 9 for t in tasks)
 
     async def test_raises_when_queue_disabled(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_queue=False)
         with pytest.raises(RuntimeError, match="Cloud Tasks queue not enabled"):
@@ -447,7 +485,9 @@ class TestBatchProcessAsync:
 
 class TestGetProcessingStatus:
     async def test_returns_state_from_firestore(self, processor, mock_services):
-        from youtube_extension.services.cloud.firestore_state import VideoProcessingState
+        from youtube_extension.services.cloud.firestore_state import (
+            VideoProcessingState,
+        )
 
         expected = VideoProcessingState(
             video_id="myid", video_url="u", status="processing", current_stage="transcript"
@@ -465,7 +505,9 @@ class TestGetProcessingStatus:
         assert result is None
 
     async def test_raises_when_state_disabled(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_state=False)
         with pytest.raises(RuntimeError, match="Firestore state not enabled"):
@@ -525,7 +567,9 @@ class TestAnalyzeWithVertexAI:
         assert result["summary"] == "AI summary"
 
     async def test_returns_empty_dict_when_vertex_disabled(self, mock_services):
-        from youtube_extension.services.cloud.cloud_video_processor import CloudNativeVideoProcessor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            CloudNativeVideoProcessor,
+        )
 
         p = CloudNativeVideoProcessor(enable_vertex_ai=False)
         result = await p._analyze_with_vertex_ai("vid", {}, {"text": "t"})
@@ -552,15 +596,17 @@ class TestAnalyzeWithVertexAI:
 class TestGetCloudVideoProcessor:
     def test_returns_instance(self):
         from youtube_extension.services.cloud.cloud_video_processor import (
-            get_cloud_video_processor,
             CloudNativeVideoProcessor,
+            get_cloud_video_processor,
         )
 
         p = get_cloud_video_processor()
         assert isinstance(p, CloudNativeVideoProcessor)
 
     def test_returns_same_instance_on_repeated_calls(self):
-        from youtube_extension.services.cloud.cloud_video_processor import get_cloud_video_processor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            get_cloud_video_processor,
+        )
 
         p1 = get_cloud_video_processor()
         p2 = get_cloud_video_processor()
@@ -571,13 +617,17 @@ class TestGetCloudVideoProcessor:
         assert _mod._cloud_video_processor is None
 
     def test_singleton_stored_on_module(self):
-        from youtube_extension.services.cloud.cloud_video_processor import get_cloud_video_processor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            get_cloud_video_processor,
+        )
 
         p = get_cloud_video_processor()
         assert _mod._cloud_video_processor is p
 
     def test_new_instance_created_after_reset(self):
-        from youtube_extension.services.cloud.cloud_video_processor import get_cloud_video_processor
+        from youtube_extension.services.cloud.cloud_video_processor import (
+            get_cloud_video_processor,
+        )
 
         p1 = get_cloud_video_processor()
         _mod._cloud_video_processor = None

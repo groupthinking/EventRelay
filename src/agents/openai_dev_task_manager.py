@@ -12,12 +12,13 @@ Notes:
 """
 
 import asyncio
-import importlib.util
 import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+from utils.path_utils import select_writable_dir
 
 
 @dataclass
@@ -35,32 +36,27 @@ class OpenAIDevTaskManager:
     """MCP-first dev task manager to operationalize YouTube video capabilities."""
 
     def __init__(self, workspace_root: Optional[str] = None):
-        self.workspace_root = Path(
-            workspace_root or "/Users/garvey/UVAI/src/core/youtube_extension"
-        )
+        explicit = workspace_root or os.getenv("WORKSPACE_ROOT")
+        if explicit:
+            self.workspace_root = Path(explicit)
+        else:
+            # Reuse the legacy dev root only if it already exists and is
+            # writable; otherwise fall back to a runtime workspace under cwd.
+            self.workspace_root = select_writable_dir(
+                "/Users/garvey/UVAI/src/core/youtube_extension",
+                Path.cwd() / "workflow_workspace",
+            )
         self.output_root = self.workspace_root / "workflow_output"
         self.output_root.mkdir(parents=True, exist_ok=True)
 
     def _load_mcp_video_processor(self):
         """Dynamically load MCPVideoProcessor from src/mcp/mcp_video_processor.py by file path."""
-        processor_path = self.workspace_root / "src" / "mcp" / "mcp_video_processor.py"
-        if not processor_path.exists():
-            raise FileNotFoundError(
-                f"MCP video processor not found at {processor_path}"
-            )
+        try:
+            from mcp.mcp_video_processor import MCPVideoProcessor
 
-        spec = importlib.util.spec_from_file_location(
-            "mcp_video_processor", str(processor_path)
-        )
-        if spec is None or spec.loader is None:
-            raise ImportError("Unable to load mcp_video_processor module spec")
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)  # type: ignore[attr-defined]
-        if not hasattr(module, "MCPVideoProcessor"):
-            raise ImportError(
-                "MCPVideoProcessor class not found in mcp_video_processor module"
-            )
-        return module.MCPVideoProcessor()
+            return MCPVideoProcessor()
+        except ImportError as e:
+            raise ImportError("Unable to load MCPVideoProcessor module") from e
 
     async def run_videos(self, video_urls: list[str]) -> list[DevTaskResult]:
         results: list[DevTaskResult] = []

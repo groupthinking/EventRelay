@@ -8,6 +8,17 @@ import pytest
 from agents import gemini_video_master_agent as master
 
 
+@pytest.fixture(autouse=True)
+def _isolate_gemini_sdk_client(monkeypatch):
+    """Keep unit tests from constructing the SDK's real HTTP transport."""
+    if master.GEMINI_AVAILABLE:
+        monkeypatch.setattr(
+            master.genai,
+            "Client",
+            lambda **_: SimpleNamespace(),
+        )
+
+
 def test_task_delegation_uses_current_gemini_models(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -79,8 +90,8 @@ def test_default_input_does_not_surface_banned_video_id():
     prompt = master.build_default_video_prompt()
 
     assert master.extract_video_id(master.DEFAULT_VIDEO_URL) not in master.BANNED_VIDEO_IDS
-    assert "dQw4w9WgXcQ" not in master.DEFAULT_VIDEO_URL
-    assert "dQw4w9WgXcQ" not in prompt
+    assert "auJzb1D-fag" not in master.DEFAULT_VIDEO_URL
+    assert "auJzb1D-fag" not in prompt
 
 
 def test_normalize_youtube_url_removes_timestamp_params():

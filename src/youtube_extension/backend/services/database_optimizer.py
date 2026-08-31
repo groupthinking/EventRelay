@@ -18,6 +18,7 @@ Key Features:
 """
 
 import asyncio
+import contextlib
 import hashlib
 import json
 import logging
@@ -27,7 +28,7 @@ import sqlite3
 import statistics
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any
@@ -69,6 +70,15 @@ except ImportError:
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Pre-compiled regex patterns for query optimization
+_RE_NUMBERS = re.compile(r"\b\d+\b")
+_RE_STRINGS = re.compile(r"'[^']*'")
+_RE_FROM = re.compile(r"from\s+(\w+)")
+_RE_INTO = re.compile(r"into\s+(\w+)")
+_RE_UPDATE = re.compile(r"update\s+(\w+)")
+_RE_WHERE = re.compile(r"where\s+(\w+)")
+_RE_ORDER_BY = re.compile(r"order by\s+(\w+)")
 
 
 @dataclass
@@ -177,7 +187,12 @@ class DatabaseConnectionPool:
             else:
                 # SQLite or other - prepare SQLite path
                 if self._sqlite_path and self._sqlite_path != ":memory:":
-                    os.makedirs(os.path.dirname(self._sqlite_path), exist_ok=True)
+                    # Filesystem metadata calls block; keep them off the loop.
+                    await asyncio.to_thread(
+                        os.makedirs,
+                        os.path.dirname(self._sqlite_path),
+                        exist_ok=True,
+                    )
                     logger.info(f"✅ SQLite database configured at {self._sqlite_path}")
                 else:
                     logger.info("✅ SQLite in-memory database configured")
@@ -194,8 +209,23 @@ class DatabaseConnectionPool:
             if self.pool:
                 connection = await self.pool.acquire()
             else:
-                # SQLite fallback (file or memory)
-                connection = sqlite3.connect(self._sqlite_path or ":memory:")
+                # SQLite fallback (file or memory). sqlite3.connect performs
+                # blocking filesystem work, so it runs on a worker thread.
+                #
+                # check_same_thread=False is required, not optional: the
+                # connection is created on a worker thread but is subsequently
+                # used from the event loop thread and from other worker threads
+                # (see QueryOptimizer.execute_query). Without it sqlite3 raises
+                # ProgrammingError on the first cross-thread use.
+                #
+                # This is safe because a connection is owned by exactly one
+                # caller between get_connection() and release_connection(), so
+                # it is never touched by two threads at the same time.
+                connection = await asyncio.to_thread(
+                    sqlite3.connect,
+                    self._sqlite_path or ":memory:",
+                    check_same_thread=False,
+                )
 
             connection_time = (time.time() - start_time) * 1000
 
@@ -220,7 +250,9 @@ class DatabaseConnectionPool:
             if self.pool and hasattr(self.pool, "release"):
                 await self.pool.release(connection)
             elif hasattr(connection, "close"):
-                connection.close()
+                # Closing a SQLite connection flushes and releases the file
+                # handle; keep that blocking work off the event loop.
+                await asyncio.to_thread(connection.close)
 
             with self._lock:
                 self.pool_stats["connections_in_use"] = max(
@@ -286,10 +318,10 @@ class QueryOptimizer:
         normalized = query.lower().strip()
         # Remove parameter values for pattern matching
 
-        normalized = re.sub(r"\b\d+\b", "?", normalized)  # Replace numbers with ?
-        normalized = re.sub(r"'[^']*'", "'?'", normalized)  # Replace string literals
+        normalized = _RE_NUMBERS.sub("?", normalized)  # Replace numbers with ?
+        normalized = _RE_STRINGS.sub("'?'", normalized)  # Replace string literals
 
-        return hashlib.md5(normalized.encode()).hexdigest()
+        return hashlib.sha256(normalized.encode()).hexdigest()
 
     def _get_query_pattern(self, query: str) -> str:
         """Extract query pattern for analysis"""
@@ -299,19 +331,19 @@ class QueryOptimizer:
 
         if query_lower.startswith("select"):
             # Extract table names from FROM clause
-            from_match = re.search(r"from\s+(\w+)", query_lower)
+            from_match = _RE_FROM.search(query_lower)
             table = from_match.group(1) if from_match else "unknown"
             return f"SELECT from {table}"
         elif query_lower.startswith("insert"):
-            into_match = re.search(r"into\s+(\w+)", query_lower)
+            into_match = _RE_INTO.search(query_lower)
             table = into_match.group(1) if into_match else "unknown"
             return f"INSERT into {table}"
         elif query_lower.startswith("update"):
-            update_match = re.search(r"update\s+(\w+)", query_lower)
+            update_match = _RE_UPDATE.search(query_lower)
             table = update_match.group(1) if update_match else "unknown"
             return f"UPDATE {table}"
         elif query_lower.startswith("delete"):
-            from_match = re.search(r"from\s+(\w+)", query_lower)
+            from_match = _RE_FROM.search(query_lower)
             table = from_match.group(1) if from_match else "unknown"
             return f"DELETE from {table}"
         else:
@@ -331,7 +363,7 @@ class QueryOptimizer:
 
         # Check query cache first
         if use_cache:
-            cache_key = f"query:{query_hash}:{hashlib.md5(str(params).encode()).hexdigest() if params else 'no_params'}"
+            cache_key = f"query:{query_hash}:{hashlib.sha256(str(params).encode()).hexdigest() if params else 'no_params'}"
             cached_result = await cache_get(cache_key)
 
             if cached_result is not None:
@@ -348,6 +380,7 @@ class QueryOptimizer:
 
         # Execute query
         connection = None
+        sync_worker: asyncio.Future[Any] | None = None
         try:
             connection = await self.connection_pool.get_connection()
 
@@ -358,13 +391,32 @@ class QueryOptimizer:
                 else:
                     result = await connection.fetch(query)
             elif hasattr(connection, "execute"):
-                # SQLite or other
-                cursor = connection.cursor()
-                if params:
-                    cursor.execute(query, params)
-                else:
-                    cursor.execute(query)
-                result = cursor.fetchall()
+                # SQLite or other DB-API connection. cursor.execute() and
+                # fetchall() are blocking calls that hold the GIL only while
+                # not waiting on I/O, so running them on a worker thread lets
+                # the event loop keep serving other work — and lets
+                # execute_batch_queries' gather actually overlap queries
+                # instead of running them back to back.
+                def _run_sync_query() -> Any:
+                    cursor = connection.cursor()
+                    if params:
+                        cursor.execute(query, params)
+                    else:
+                        cursor.execute(query)
+                    return cursor.fetchall()
+
+                # Run the blocking work as a *task* and await it shielded. A
+                # worker thread cannot be cancelled: if this coroutine is
+                # cancelled (execute_batch_queries does exactly that when a
+                # sibling query fails) a bare `await asyncio.to_thread(...)`
+                # would unwind here while the thread keeps using `connection`,
+                # and the `finally` below would then close that connection on a
+                # second thread. The shield keeps the worker running and the
+                # drain in `finally` waits for it before any release/close.
+                sync_worker = asyncio.ensure_future(
+                    asyncio.to_thread(_run_sync_query)
+                )
+                result = await asyncio.shield(sync_worker)
             else:
                 raise Exception(f"Unsupported connection type: {type(connection)}")
 
@@ -404,6 +456,20 @@ class QueryOptimizer:
             raise
 
         finally:
+            # A cancellation may have unwound the await above while the worker
+            # thread is still running _run_sync_query against `connection`.
+            # Drain it before releasing: release_connection() closes the
+            # connection on *another* thread, and check_same_thread=False
+            # disables sqlite3's same-thread *check*, not the underlying
+            # requirement that operations on one connection never overlap.
+            # Each shielded await can itself be cancelled, so loop until the
+            # worker has genuinely finished (it always does — it is bounded by
+            # the query, not by us).
+            if sync_worker is not None:
+                while not sync_worker.done():
+                    with contextlib.suppress(BaseException):
+                        await asyncio.shield(sync_worker)
+
             if connection:
                 await self.connection_pool.release_connection(connection)
 
@@ -411,7 +477,29 @@ class QueryOptimizer:
         self, queries_and_params: list[tuple[str, tuple]]
     ) -> list[Any]:
         """
-        Execute batch of queries with optimization
+        Execute a batch of queries concurrently.
+
+        Queries are scheduled together so independent queries run concurrently,
+        with two safeguards:
+
+        * **Bounded fan-out.** Concurrency is capped by a semaphore sized to the
+          connection pool, so a large batch cannot open more simultaneous
+          connection attempts than the pool can serve (which would stall the batch
+          and starve unrelated concurrent callers).
+        * **Fail-fast cancellation.** On the first query error, the remaining
+          in-flight queries are cancelled before the error propagates, so a failed
+          batch does not keep starting/finishing work after the caller has already
+          seen the failure. (There is no batch-level transaction, so writes that
+          already committed are not rolled back — but no further queries proceed.)
+
+        ``asyncio.gather`` preserves input order, so results align with
+        ``queries_and_params`` by index without manual remapping.
+
+        This method deliberately does NOT acquire its own pooled connection: every
+        ``execute_query`` call acquires and releases its own connection. Holding an
+        extra, unused connection here would waste a pool slot and can starve or
+        deadlock the gathered queries when the pool is saturated (the batch would
+        pin the last connection while its own queries wait for one).
 
         Target: Significant improvement over sequential execution
         """
@@ -419,66 +507,49 @@ class QueryOptimizer:
 
         logger.info(f"🚀 Executing batch: {len(queries_and_params)} queries")
 
-        # Group similar queries for batch processing
-        query_groups = defaultdict(list)
-        for i, (query, params) in enumerate(queries_and_params):
-            pattern = self._get_query_pattern(query)
-            query_groups[pattern].append((i, query, params))
+        if not queries_and_params:
+            return []
 
-        # Execute groups in parallel
-        connection = None
+        # Cap concurrent fan-out at the pool capacity; fall back to the batch size
+        # when the pool does not expose an integer capacity.
+        pool_capacity = getattr(self.connection_pool, "max_connections", None)
+        max_concurrency = (
+            pool_capacity
+            if isinstance(pool_capacity, int) and pool_capacity > 0
+            else len(queries_and_params)
+        )
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def _run_one(query: str, params: tuple) -> Any:
+            async with semaphore:
+                return await self.execute_query(query, params, use_cache=True)
+
+        # Explicit tasks (not bare coroutines) so stragglers can be cancelled if
+        # any query fails. gather preserves input order.
+        tasks = [
+            asyncio.ensure_future(_run_one(query, params))
+            for query, params in queries_and_params
+        ]
+
         try:
-            connection = await self.connection_pool.get_connection()
-            results = [None] * len(queries_and_params)
-
-            # Execute each group
-            for pattern, group_queries in query_groups.items():
-                if len(group_queries) > 1 and hasattr(connection, "executemany"):
-                    # Use batch execution if available
-                    batch_start = time.time()
-
-                    # Extract queries and params
-                    [q[1] for q in group_queries]
-                    [q[2] for q in group_queries]
-
-                    # Execute batch (simplified - real implementation would be more complex)
-                    for i, (original_index, query, params) in enumerate(group_queries):
-                        query_result = await self.execute_query(
-                            query, params, use_cache=True
-                        )
-                        results[original_index] = query_result
-
-                    batch_time = (time.time() - batch_start) * 1000
-                    logger.debug(
-                        f"Batch executed ({batch_time:.2f}ms): {len(group_queries)} {pattern} queries"
-                    )
-                else:
-                    # Execute individually concurrently
-                    coroutines = [
-                        self.execute_query(query, params, use_cache=True)
-                        for _, query, params in group_queries
-                    ]
-                    query_results = await asyncio.gather(*coroutines)
-
-                    for (original_index, _, _), query_result in zip(group_queries, query_results):
-                        results[original_index] = query_result
-
-            total_time = (time.time() - start_time) * 1000
-            avg_time_per_query = total_time / len(queries_and_params)
-
-            logger.info(
-                f"✅ Batch completed ({total_time:.2f}ms, {avg_time_per_query:.2f}ms/query avg)"
-            )
-            return results
-
+            results = await asyncio.gather(*tasks)
         except Exception as e:
+            # Cancel any still-in-flight queries and drain them so nothing keeps
+            # running after the batch has reported failure.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
             total_time = (time.time() - start_time) * 1000
             logger.error(f"❌ Batch failed ({total_time:.2f}ms): {e}")
             raise
 
-        finally:
-            if connection:
-                await self.connection_pool.release_connection(connection)
+        total_time = (time.time() - start_time) * 1000
+        avg_time_per_query = total_time / len(queries_and_params)
+        logger.info(
+            f"✅ Batch completed ({total_time:.2f}ms, {avg_time_per_query:.2f}ms/query avg)"
+        )
+        return list(results)
 
     async def _update_query_stats(
         self,
@@ -526,12 +597,10 @@ class QueryOptimizer:
 
         if "where" in query_lower and "index" not in query_lower:
             # Recommend index on WHERE clause columns
-            import re
-
-            where_match = re.search(r"where\s+(\w+)", query_lower)
+            where_match = _RE_WHERE.search(query_lower)
             if where_match:
                 column = where_match.group(1)
-                table_match = re.search(r"from\s+(\w+)", query_lower)
+                table_match = _RE_FROM.search(query_lower)
                 table = table_match.group(1) if table_match else "unknown"
 
                 recommendation = IndexRecommendation(
@@ -548,10 +617,10 @@ class QueryOptimizer:
 
         if "order by" in query_lower:
             # Recommend index on ORDER BY columns
-            order_match = re.search(r"order by\s+(\w+)", query_lower)
+            order_match = _RE_ORDER_BY.search(query_lower)
             if order_match:
                 column = order_match.group(1)
-                table_match = re.search(r"from\s+(\w+)", query_lower)
+                table_match = _RE_FROM.search(query_lower)
                 table = table_match.group(1) if table_match else "unknown"
 
                 recommendation = IndexRecommendation(
@@ -853,8 +922,10 @@ class DatabaseHealthMonitor:
 # Global database optimization system
 # Use /tmp for Cloud Run compatibility (read-only filesystem except /tmp)
 database_url = os.getenv("DATABASE_URL", "sqlite:////tmp/uvai_data/app.db")
+# Increase connection pool size to handle more concurrent requests.
+# min_connections: 5 (keep some ready), max_connections: 50 (handle bursts)
 connection_pool = DatabaseConnectionPool(
-    database_url, min_connections=1, max_connections=10
+    database_url, min_connections=5, max_connections=50
 )
 query_optimizer = QueryOptimizer(connection_pool)
 health_monitor = DatabaseHealthMonitor(query_optimizer)
@@ -892,34 +963,28 @@ async def initialize_database_optimization():
         try:
             cur = conn.cursor() if hasattr(conn, "cursor") else None
             if cur:
-                cur.execute(
-                    """
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS videos (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         title TEXT,
                         processed BOOLEAN DEFAULT 0,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
-                cur.execute(
-                    """
+                    """)
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS video_analytics (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         processing_time_ms REAL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
-                cur.execute(
-                    """
+                    """)
+                cur.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         email TEXT,
                         last_active DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
-                    """
-                )
+                    """)
                 # Seed minimal data if tables are empty
                 try:
                     # Seed videos

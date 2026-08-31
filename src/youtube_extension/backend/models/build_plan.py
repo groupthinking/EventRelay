@@ -11,7 +11,6 @@ to Stage 3 (Code Generation), eliminating the need for loose text and template f
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -32,8 +31,8 @@ class BuildStep(BaseModel):
     order: int = Field(..., description="1-based step order")
     action: StepAction = Field(..., description="What this step does")
     description: str = Field(..., description="Human-readable description of what happens")
-    target_file: Optional[str] = Field(None, description="File path this step creates/modifies")
-    code_content: Optional[str] = Field(None, description="Code snippet shown in the video (if visible)")
+    target_file: str | None = Field(None, description="File path this step creates/modifies")
+    code_content: str | None = Field(None, description="Code snippet shown in the video (if visible)")
     dependencies: list[str] = Field(default_factory=list, description="Packages/tools this step requires")
     prerequisites: list[int] = Field(default_factory=list, description="Step order numbers that must complete first")
 
@@ -49,7 +48,7 @@ class BuildPlan(BaseModel):
     video_id: str = Field(..., description="YouTube video ID")
     video_title: str = Field(..., description="Video title")
     project_type: str = Field(default="web", description="web | api | mobile | cli")
-    framework: Optional[str] = Field(None, description="Primary framework (react, vue, fastapi, etc.)")
+    framework: str | None = Field(None, description="Primary framework (react, vue, fastapi, etc.)")
     technologies: list[str] = Field(default_factory=list, description="All technologies mentioned")
     steps: list[BuildStep] = Field(default_factory=list, description="Ordered build steps")
     summary: str = Field(default="", description="One-paragraph summary of what the video teaches")

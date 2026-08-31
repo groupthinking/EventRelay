@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -22,7 +22,6 @@ from youtube_extension.backend.middleware.security_headers import (
     SecurityHeadersMiddleware,
     create_security_headers_middleware,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers

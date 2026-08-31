@@ -20,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from integration.gemini_video import GeminiVideoService, VideoAnalysisResult
 
-
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
 # ---------------------------------------------------------------------------
@@ -29,6 +28,19 @@ _GEMINI_KEY = "test-gemini-key"
 _GROK_KEY = "test-grok-key"
 _VIDEO_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
 _PROMPT = "Analyze this video and extract key events"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_service_state(monkeypatch):
+    """Avoid real transports and class-level API-key leakage between tests."""
+    client = MagicMock()
+    client.post = AsyncMock()
+    client.aclose = AsyncMock()
+    monkeypatch.setattr(
+        "integration.gemini_video.httpx.AsyncClient",
+        MagicMock(return_value=client),
+    )
+    monkeypatch.setattr(GeminiVideoService, "API_KEYS", [])
 
 
 def _make_service(grok_key: str | None = _GROK_KEY) -> GeminiVideoService:

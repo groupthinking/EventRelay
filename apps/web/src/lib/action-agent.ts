@@ -8,14 +8,19 @@ import 'server-only';
  * fulfilled actions. This is the `extracting → dispatching → fulfilled` core of
  * the lifecycle defined in `action-lifecycle.ts`.
  *
- * Provider routing mirrors the rest of the app: OpenAI (Responses API,
- * multi-round function calling) is primary; Gemini is a single-round fallback
- * used only when OpenAI is unavailable or quota-limited.
+ * Provider routing mirrors the rest of the app: Vercel AI Gateway is primary,
+ * using its OpenAI-compatible Responses API for multi-round function calling.
+ * Direct OpenAI and Gemini remain fallbacks for installations without Gateway.
  */
 
 import OpenAI from 'openai';
-import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
+import { getGeminiClient, resolveGeminiApiKey } from '@/lib/gemini-client';
 import { GEMINI_FAST_MODEL } from '@/lib/gemini-models';
+import {
+  hasAiGatewayKey,
+  resolveAiGatewayKey,
+  VERCEL_AI_GATEWAY_DEFAULT_MODEL,
+} from '@/lib/vercel-ai-gateway';
 import type { AgentAction } from '@/lib/action-lifecycle';
 import {
   ACTION_TOOLS,
@@ -31,6 +36,20 @@ let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
   if (!_openai) _openai = new OpenAI();
   return _openai;
+}
+
+const GATEWAY_BASE_URL = 'https://ai-gateway.vercel.sh/v1';
+let _gatewayOpenAI: OpenAI | null = null;
+let _gatewayOpenAIKey = '';
+
+function getGatewayOpenAI(): OpenAI {
+  const apiKey = resolveAiGatewayKey();
+  if (!apiKey) throw new Error('AI Gateway API key is not configured');
+  if (!_gatewayOpenAI || _gatewayOpenAIKey !== apiKey) {
+    _gatewayOpenAI = new OpenAI({ apiKey, baseURL: GATEWAY_BASE_URL });
+    _gatewayOpenAIKey = apiKey;
+  }
+  return _gatewayOpenAI;
 }
 
 const MODEL_OPENAI = 'gpt-4o-mini';
@@ -53,6 +72,8 @@ export interface RunActionAgentOptions {
   transcript: string;
   videoTitle?: string;
   jobId?: string;
+  /** False prepares an exact review plan without invoking any tool. */
+  executeTools?: boolean;
   /** Injectable fetch passed through to tools (testability). */
   fetchImpl?: typeof fetch;
 }
@@ -62,15 +83,24 @@ export interface RunActionAgentResult {
   actions: AgentAction[];
 }
 
-function toAction(tool: string, input: Record<string, unknown>, result: ActionToolResult): AgentAction {
+function toAction(
+  tool: string,
+  input: Record<string, unknown>,
+  result: ActionToolResult,
+  status?: AgentAction['status'],
+): AgentAction {
   return {
     tool,
     input,
-    status: result.isError ? 'failed' : 'fulfilled',
+    status: status ?? (result.isError ? 'failed' : 'fulfilled'),
     result: result.summary,
     isError: result.isError,
   };
 }
+
+const REVIEW_ONLY_RESULT: ActionToolResult = {
+  summary: 'Prepared for review. No tool has been executed.',
+};
 
 function isQuotaError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message : String(err);
@@ -83,12 +113,16 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /** Run the OpenAI Responses-API tool-calling loop until the model stops calling tools. */
-async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Promise<AgentAction[]> {
-  const openai = getOpenAI();
+async function runWithOpenAI(
+  opts: RunActionAgentOptions,
+  ctx: ToolContext,
+  openai: OpenAI,
+  model: string,
+): Promise<AgentAction[]> {
   const actions: AgentAction[] = [];
 
   let response = await openai.responses.create({
-    model: MODEL_OPENAI,
+    model,
     instructions: SYSTEM_PROMPT,
     input: buildUserPrompt(opts.transcript, opts.videoTitle),
     tools: toOpenAITools(),
@@ -128,20 +162,26 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
         continue;
       }
 
-      // A throwing tool becomes a failed action — it must not abort the run
-      // or drop the remaining tool calls.
-      try {
+      if (opts.executeTools === false) {
         result = tool
-          ? await tool.execute(input, ctx)
+          ? REVIEW_ONLY_RESULT
           : { summary: `Unknown tool: ${call.name}`, isError: true };
-      } catch (err) {
-        result = {
-          summary: `Tool "${call.name}" threw: ${err instanceof Error ? err.message : String(err)}`,
-          isError: true,
-        };
+        actions.push(toAction(call.name, input, result, tool ? 'pending' : 'failed'));
+      } else {
+        // A throwing tool becomes a failed action — it must not abort the run
+        // or drop the remaining tool calls.
+        try {
+          result = tool
+            ? await tool.execute(input, ctx)
+            : { summary: `Unknown tool: ${call.name}`, isError: true };
+        } catch (err) {
+          result = {
+            summary: `Tool "${call.name}" threw: ${err instanceof Error ? err.message : String(err)}`,
+            isError: true,
+          };
+        }
+        actions.push(toAction(call.name, input, result));
       }
-
-      actions.push(toAction(call.name, input, result));
       toolOutputs.push({
         type: 'function_call_output',
         call_id: call.call_id,
@@ -149,8 +189,14 @@ async function runWithOpenAI(opts: RunActionAgentOptions, ctx: ToolContext): Pro
       });
     }
 
+    // Preview is deliberately single-round: the first response is the exact
+    // review plan, and no follow-up generation is needed until a person has
+    // selected and confirmed those calls. This also keeps preview compatible
+    // with Gateway providers that require a user message on every response.
+    if (opts.executeTools === false) break;
+
     response = await openai.responses.create({
-      model: MODEL_OPENAI,
+      model,
       previous_response_id: response.id,
       input: toolOutputs,
       tools: toOpenAITools(),
@@ -185,6 +231,13 @@ async function runWithGemini(opts: RunActionAgentOptions, ctx: ToolContext): Pro
       continue;
     }
     const input: Record<string, unknown> = rawArgs;
+    if (opts.executeTools === false) {
+      const result = tool
+        ? REVIEW_ONLY_RESULT
+        : { summary: `Unknown tool: ${call.name}`, isError: true };
+      actions.push(toAction(call.name, input, result, tool ? 'pending' : 'failed'));
+      continue;
+    }
     let result: ActionToolResult;
     try {
       result = tool
@@ -216,11 +269,22 @@ export async function runActionAgent(opts: RunActionAgentOptions): Promise<RunAc
     jobId: opts.jobId,
   };
 
+  if (hasAiGatewayKey()) {
+    const model = VERCEL_AI_GATEWAY_DEFAULT_MODEL;
+    return {
+      provider: `gateway:${model}`,
+      actions: await runWithOpenAI(opts, ctx, getGatewayOpenAI(), model),
+    };
+  }
+
   if (process.env.OPENAI_API_KEY) {
     try {
-      return { provider: 'openai', actions: await runWithOpenAI(opts, ctx) };
+      return {
+        provider: 'openai',
+        actions: await runWithOpenAI(opts, ctx, getOpenAI(), MODEL_OPENAI),
+      };
     } catch (err) {
-      if (isQuotaError(err) && hasGeminiKey()) {
+      if (isQuotaError(err) && resolveGeminiApiKey()) {
         console.warn('OpenAI quota hit, falling back to Gemini for action extraction');
         return { provider: 'gemini', actions: await runWithGemini(opts, ctx) };
       }
@@ -228,11 +292,55 @@ export async function runActionAgent(opts: RunActionAgentOptions): Promise<RunAc
     }
   }
 
-  if (hasGeminiKey()) {
+  if (resolveGeminiApiKey()) {
     return { provider: 'gemini', actions: await runWithGemini(opts, ctx) };
   }
 
-  throw new Error('No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY.');
+  throw new Error('No AI API key configured. Set AI_GATEWAY_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.');
+}
+
+export interface ExecutePreparedActionsOptions {
+  actions: AgentAction[];
+  jobId?: string;
+  fetchImpl?: typeof fetch;
+}
+
+/** Execute only the exact, user-reviewed tool calls supplied by the client. */
+export async function executePreparedActions(
+  opts: ExecutePreparedActionsOptions,
+): Promise<AgentAction[]> {
+  const ctx: ToolContext = {
+    backendBaseUrl: resolveBackendBaseUrl(),
+    fetchImpl: opts.fetchImpl,
+    jobId: opts.jobId,
+  };
+
+  const actions: AgentAction[] = [];
+  for (const prepared of opts.actions) {
+    const tool = getTool(prepared.tool);
+    if (!tool || !isPlainObject(prepared.input)) {
+      actions.push(
+        toAction(
+          prepared.tool,
+          isPlainObject(prepared.input) ? prepared.input : {},
+          { summary: `Unknown or invalid prepared tool: ${prepared.tool}`, isError: true },
+        ),
+      );
+      continue;
+    }
+
+    let result: ActionToolResult;
+    try {
+      result = await tool.execute(prepared.input, ctx);
+    } catch (err) {
+      result = {
+        summary: `Tool "${prepared.tool}" threw: ${err instanceof Error ? err.message : String(err)}`,
+        isError: true,
+      };
+    }
+    actions.push(toAction(prepared.tool, prepared.input, result));
+  }
+  return actions;
 }
 
 /** The tool names this agent can invoke — handy for UI affordances/tests. */

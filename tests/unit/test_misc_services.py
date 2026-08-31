@@ -16,7 +16,6 @@ import json
 import sqlite3
 import sys
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -40,7 +39,6 @@ from youtube_extension.backend.services.youtube.adapters.innertube import (
     _select_caption_track,
     fetch_innertube_transcript,
     parse_transcript_xml,
-    sync_fetch_innertube_transcript,
 )
 
 
@@ -589,8 +587,8 @@ class TestPerformanceContext:
 from youtube_extension.backend.services.database_cleanup_service import (
     DatabaseCleanupService,
     RetentionPolicy,
-    run_database_cleanup,
     get_cleanup_report,
+    run_database_cleanup,
 )
 
 
@@ -865,8 +863,7 @@ class TestAddErrorHandlingMiddleware:
 
 class TestMiddlewareDispatchHappyPath:
     async def test_dispatch_passes_through_on_success(self):
-        from fastapi import FastAPI, Request
-        from fastapi.responses import JSONResponse
+        from fastapi import FastAPI
         from fastapi.testclient import TestClient
 
         app = FastAPI()
@@ -987,11 +984,14 @@ class TestAPICostMonitorCleanup:
         result = await monitor.trigger_manual_cleanup()
         assert isinstance(result, dict)
 
-    async def test_trigger_manual_cleanup_when_unavailable(self, tmp_path):
+    async def test_trigger_manual_cleanup_returns_error_on_failure(self, tmp_path):
         monitor = APICostMonitor(db_path=str(tmp_path / "m2.db"))
-        with patch(
-            "youtube_extension.backend.services.api_cost_monitor.CLEANUP_AVAILABLE",
-            False
+        # The cleanup path was rewritten to use SQLAlchemy sessions directly and
+        # no longer relies on an external cleanup service / CLEANUP_AVAILABLE flag.
+        # Force the session factory to fail and assert the error path still
+        # returns a dict carrying an "error" key rather than raising.
+        with patch.object(
+            monitor, "Session", side_effect=RuntimeError("session unavailable")
         ):
             result = await monitor.trigger_manual_cleanup()
             assert "error" in result
@@ -1081,6 +1081,15 @@ class TestAPICostMonitorInMemory:
 
 
 from youtube_extension.processors.strategies import EnhancedStrategy
+
+
+@pytest.fixture(autouse=True)
+def _disable_external_strategy_clients(monkeypatch):
+    """These heuristic tests do not exercise Google or Gemini client setup."""
+    from youtube_extension.processors import strategies
+
+    monkeypatch.setattr(strategies, "HAS_VIDEO_DEPS", False)
+    monkeypatch.setattr(strategies, "HAS_AI_DEPS", False)
 
 
 class TestEnhancedStrategyExtractKeyPoints:

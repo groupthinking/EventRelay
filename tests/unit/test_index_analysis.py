@@ -5,9 +5,13 @@ from unittest.mock import MagicMock
 sys.modules['asyncpg'] = MagicMock()
 sys.modules['psutil'] = MagicMock()
 
-import pytest
 from typing import Any, Dict
-from infrastructure.database.index_analysis import DatabaseOptimizer, DatabaseHealthMetrics
+
+from infrastructure.database.index_analysis import (
+    DatabaseHealthMetrics,
+    DatabaseOptimizer,
+)
+
 
 def create_targets(sub_achieved: bool, sub_percent: float,
                    cache_achieved: bool, cache_percent: float,

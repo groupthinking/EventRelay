@@ -10,6 +10,7 @@ workflow; this README is the index.
 |----------|------|---------|---------|
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
+| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
@@ -22,12 +23,14 @@ workflow; this README is the index.
 | Phase Goal Tracker | `phase-goal-tracker.yml` | issue opened/edited/reopened; manual | Track phase checklist progress, comment status, auto-close when complete |
 | Bulk Issue Processor | `bulk-issue-processor.yml` | manual | Bulk label / summarize / close-stale across many issues |
 | Close stale issues | `stale.yml` | daily (00:00 UTC) | Mark and close stale issues and PRs |
-| Branch Cleanup | `branch-cleanup.yml` | manual | Gated archive-then-delete of branches (dry-run by default) |
+| Branch Cleanup | `branch-cleanup.yml` | manual; push sentinel on `claude/branch-cleanup-*` | Gated archive-then-delete of branches (dry-run by default); push `[restore-branch:<branch>]` sentinel to restore a deleted branch from its archive tag |
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
-| Autonomous Video Processing | `autonomous-video-processing.yml` | manual | Batch-process YouTube videos by category (matrix) |
+| Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
-| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Build, push, and deploy the API image to Cloud Run |
+| API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
+| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Drift report: PRs without canonical issues, competing PRs, stale branches; auto-comments on untracked PRs and auto-closes superseded drafts |
 
 ## Key Workflows
 
@@ -68,13 +71,64 @@ Generates pytest coverage and uploads lcov to Qlty.
   <https://qlty.sh>, then add it under **Settings → Secrets and variables →
   Actions**.
 - Coverage HTML and lcov are stored as artifacts for 30 days.
+- The test step is authoritative (`--cov-fail-under=90`, no `continue-on-error`,
+  no `|| true`) so failures cannot report green.
+
+### Autonomous Video Processing — `autonomous-video-processing.yml`
+
+The batch video pipeline. It is the repository's first reusable workflow
+(`workflow_call`), so it also establishes the convention: `workflow_dispatch`
+and `workflow_call` declare the *same* input names and every step reads them
+through the `inputs` context (never `github.event.inputs`), so a single job body
+serves both triggers.
+
+All logic lives in versioned, unit-tested scripts rather than inline heredocs:
+
+| Script | Job | Responsibility |
+|--------|-----|----------------|
+| `scripts/ci/autonomous_video_plan.py` | `prepare` | Build the category matrix; fail closed if the batch exceeds the video or model-call cap |
+| `scripts/ci/autonomous_video_processing.py` | `process` | Discover videos, run the stage pipeline, write the manifest tree |
+| `scripts/ci/autonomous_video_summary.py` | `summary` | Aggregate per-category manifests into the run status and workflow outputs |
+
+**Modes.** `pipeline_mode: discovery` (default) discovers candidates and writes
+manifests without invoking any generation API — this is the dry-run path for the
+whole pipeline. `pipeline_mode: full` executes every stage and fails closed while
+the Phase 2 agents are unimplemented.
+
+**Stage roles.** ATLAS, PRISM, FORGE and SENTINEL are role labels mapped onto the
+existing `PipelineOrchestrator` stages (`video-ingest`, `research-grounding`,
+`code-gen`, `quality-gate`) — see `STAGES` in
+`scripts/ci/autonomous_video_processing.py`. They are deliberately *not* a second
+agent system.
+
+**Evidence.** Each run writes a manifest tree retained for 30 days:
+
+```
+pipeline_output/<category>/run.json
+pipeline_output/<category>/videos/<video_id>/manifest.json
+pipeline_output/<category>/videos/<video_id>/stages/{atlas,prism,forge,sentinel}.json
+```
+
+Every video carries a deterministic correlation ID that is repeated in each stage
+record, so any artifact can be linked back to its originating run.
+
+**Guardrails.**
+
+- `max_videos_per_run` and `max_model_calls` are enforced in `prepare`, before any
+  external call; an over-budget batch never starts.
+- Discovery returning zero videos is a failure, not an empty success.
+- A video is `delivered` only when every stage — including the terminal SENTINEL
+  QA stage — reports success. The deliverables artifact upload is conditioned on
+  that status, so a blocked run publishes evidence but never deliverables.
 
 ### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
 
-The production deployment path. Manual (`workflow_dispatch`) only — it was
-converted away from automatic triggers to avoid failing runs when Google Cloud
-auth inputs are absent. Re-enable automatic deploys by restoring the `on:`
-triggers after configuring `GCP_SA_KEY` / Workload Identity Federation.
+The only backend deployment path. It remains manual (`workflow_dispatch`) so a
+protected-environment reviewer can approve the exact tested SHA. The workflow
+requires all three PostgreSQL migration checks, authenticates only through
+Workload Identity Federation, pins numeric secret versions, migrates before
+either runtime, promotes the API only after candidate readiness succeeds, and
+reuses the latest successful staging run's exact image digest in production.
 
 ## Adding More Workflows
 
@@ -115,3 +169,20 @@ A full audit of this directory was performed (see
 - [CodeQL Action](https://github.com/github/codeql-action)
 - [Qlty Coverage Action](https://github.com/qltysh/qlty-action)
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
+
+
+| PR Governance | `pr-governance.yml` | `pull_request_target` (opened/edited/reopened/synchronize/ready_for_review) | Validates that every ready PR links exactly one real open canonical issue and contains non-empty delivery evidence sections; fails on competing PRs. |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Non-destructive daily report of ready PRs missing a canonical issue, issues with competing implementation PRs, and stale unattached branches. |
+
+## Agent-completion enforcement
+
+Removed. The `agent-completion/truth-gate` status and the `Agent completion
+enforcement` Check were retired because they were unsatisfiable: the gate scored a
+pull request against an intent snapshot written only on `issues` events, so any
+pull request that satisfied `PR Governance` (which requires `Closes #<issue>`)
+necessarily armed the gate and then failed it. It was red on ~100% of pull
+requests, including merged ones such as #1368.
+
+Binding a pull request to one focused issue is now owned solely by
+`pr-governance.yml`, which produces the `PR Governance` and `Canonical issue and
+evidence` Checks. See `MERGE_POLICY.md` at the repository root.

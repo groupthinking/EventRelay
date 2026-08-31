@@ -2,12 +2,9 @@
 Comprehensive pytest tests for performance_benchmark_system.py
 """
 
-import asyncio
 import threading
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -17,7 +14,6 @@ from youtube_extension.backend.services.performance_benchmark_system import (
     PerformanceTarget,
     get_benchmark_report,
 )
-
 
 # ---------------------------------------------------------------------------
 # BenchmarkResult dataclass tests
@@ -779,6 +775,7 @@ class TestBenchmarkMemoryEfficiency:
 
     async def test_memory_benchmark_has_performance_summary(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -792,6 +789,7 @@ class TestBenchmarkMemoryEfficiency:
 
     async def test_memory_benchmark_target_usage_mb(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         fake = types.SimpleNamespace(
             Process=lambda: types.SimpleNamespace(
@@ -905,7 +903,6 @@ class TestConvenienceFunctions:
     """Cover run_performance_benchmark and validate_phase3_targets."""
 
     async def test_run_performance_benchmark_returns_dict(self, monkeypatch):
-        import types
         import youtube_extension.backend.services.performance_benchmark_system as _mod
 
         async def _fast_benchmark(iterations=3, include_baseline=False):
@@ -1010,6 +1007,37 @@ class TestConvenienceFunctions:
 
 class TestRunComprehensiveBenchmark:
     """Cover the main orchestration method."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_component_benchmarks(self, monkeypatch):
+        """Keep orchestration tests deterministic and provider-free."""
+
+        summaries = {
+            "_benchmark_video_processing": {"avg_processing_time_ms": 10_000},
+            "_benchmark_database_queries": {
+                "avg_query_time_ms": 50,
+                "sub_100ms_percent": 100,
+            },
+            "_benchmark_frontend_performance": {"avg_load_time_ms": 1_000},
+            "_benchmark_memory_efficiency": {"max_memory_usage_mb": 512},
+            "_benchmark_cache_performance": {"cache_hit_rate_percent": 90},
+        }
+
+        def _safe_component(summary):
+            async def _run(_system, _iterations):
+                return {
+                    "success": True,
+                    "performance_summary": {"target_met": True, **summary},
+                }
+
+            return _run
+
+        for method_name, summary in summaries.items():
+            monkeypatch.setattr(
+                PerformanceBenchmarkSystem,
+                method_name,
+                _safe_component(summary),
+            )
 
     def _make_psutil_fake(self):
         import types
@@ -1116,6 +1144,22 @@ class TestRunComprehensiveBenchmark:
 
 class TestBenchmarkVideoProcessing:
 
+    @pytest.fixture(autouse=True)
+    def _provider_free_processor(self, monkeypatch):
+        import youtube_extension.backend.services.performance_benchmark_system as _mod
+
+        class _FailingProcessor:
+            def __init__(self, strategy="enhanced"):
+                self.strategy = strategy
+
+            async def process_video(self, _url, options=None):
+                raise RuntimeError("provider intentionally unavailable in unit tests")
+
+            async def process_batch(self, _urls, options=None):
+                raise RuntimeError("provider intentionally unavailable in unit tests")
+
+        monkeypatch.setattr(_mod, "VideoProcessor", _FailingProcessor)
+
     def _make_psutil_fake(self):
         import types
         return types.SimpleNamespace(
@@ -1125,10 +1169,9 @@ class TestBenchmarkVideoProcessing:
         )
 
     async def test_video_processing_returns_dict_on_error(self, monkeypatch):
-        import types
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
-        # VideoProcessor.process_video raises RuntimeError (the fallback stub)
+        # The class fixture supplies a deterministic provider-free failure.
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_video_processing(iterations=1)
         assert isinstance(result, dict)
@@ -1152,7 +1195,6 @@ class TestBenchmarkVideoProcessing:
         assert "error" in summary or "avg_processing_time_ms" in summary
 
     async def test_video_processing_success_path_with_mock_processor(self, monkeypatch):
-        import types
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
 
@@ -1175,7 +1217,6 @@ class TestBenchmarkVideoProcessing:
         assert "avg_processing_time_ms" in summary
 
     async def test_video_processing_improvement_calculated(self, monkeypatch):
-        import types
         import youtube_extension.backend.services.performance_benchmark_system as _mod
         monkeypatch.setattr(_mod, "psutil", self._make_psutil_fake())
 
@@ -1203,7 +1244,6 @@ class TestBenchmarkVideoProcessing:
 class TestBenchmarkDatabaseQueries:
 
     async def test_database_queries_returns_dict_on_error(self, monkeypatch):
-        import youtube_extension.backend.services.performance_benchmark_system as _mod
         # execute_optimized_query raises by default - result should still be dict
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_database_queries(iterations=1)
@@ -1211,13 +1251,11 @@ class TestBenchmarkDatabaseQueries:
         assert result.get("component") == "database"
 
     async def test_database_queries_has_benchmarks_key(self, monkeypatch):
-        import youtube_extension.backend.services.performance_benchmark_system as _mod
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_database_queries(iterations=1)
         assert "benchmarks" in result
 
     async def test_database_queries_error_path_in_summary(self, monkeypatch):
-        import youtube_extension.backend.services.performance_benchmark_system as _mod
         system = PerformanceBenchmarkSystem()
         result = await system._benchmark_database_queries(iterations=1)
         summary = result.get("performance_summary", {})
@@ -1442,6 +1480,7 @@ class TestBenchmarkMemoryEfficiencyExtended:
 
     async def test_memory_benchmark_error_path_on_psutil_failure(self, monkeypatch):
         import types
+
         import youtube_extension.backend.services.performance_benchmark_system as _mod
 
         class _BadProcess:

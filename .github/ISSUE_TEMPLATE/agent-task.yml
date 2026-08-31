@@ -1,0 +1,78 @@
+name: Agent task
+description: Define immutable intent and proof before delegating work to an agent.
+title: "[Agent] "
+labels:
+  - agent-task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Complete this contract before dispatch. The completion gate reads these headings from the issue, not from the pull request.
+
+  - type: input
+    id: agent_login
+    attributes:
+      label: Agent login
+      description: Exact GitHub login that will publish run events, including [bot] when applicable.
+      placeholder: google-labs-jules[bot]
+    validations:
+      required: true
+
+  - type: input
+    id: agent_run_id
+    attributes:
+      label: Agent run ID
+      description: Unique immutable provider or dispatch run ID used in the PR manifest and result comments.
+      placeholder: provider-run-id
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: State the observable outcome and why it is needed.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Use one independently verifiable criterion per line.
+      placeholder: |
+        - [ ] The invalid input returns a blocked verdict.
+        - [ ] The focused regression test passes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: declared_scope
+    attributes:
+      label: Declared file scope
+      description: List every required repository-relative path, one per line. Every declared path must be touched and remain present at that exact path; for a rename, declare the destination, and list the source or any intentional deletion under Allowed extra files. Exact scope is required until the protected unrestricted-scope rollout in #874.
+      placeholder: |
+        src/example.py
+        tests/unit/test_example.py
+    validations:
+      required: true
+
+  - type: textarea
+    id: allowed_extra
+    attributes:
+      label: Allowed extra files
+      description: Optional exact paths that may be changed in addition to the declared scope.
+
+  - type: textarea
+    id: focused_tests
+    attributes:
+      label: Focused test paths
+      description: For behavior changes, list Python unit-test paths collected by CI. Each path must also be in declared/allowed scope, remain present in the diff, and pass in CI.
+
+  - type: checkboxes
+    id: frozen
+    attributes:
+      label: Pre-dispatch confirmation
+      options:
+        - label: Objective, acceptance criteria, scope, and focused-test expectations are complete before delegation.
+          required: true

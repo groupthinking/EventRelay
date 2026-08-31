@@ -55,6 +55,20 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+def _read_and_encode_file(file_path: Path) -> str:
+    """Read a file and return its base64-encoded contents.
+
+    Both the disk read and the CPU-bound encode are performed here so a single
+    ``asyncio.to_thread`` hop covers the whole operation. Keeping them together
+    also means the raw ``bytes`` never cross back to the event loop — only the
+    encoded ``str`` does.
+    """
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    return base64.b64encode(content).decode('utf-8')
+
+
 class DeploymentManager:
     """
     Manages deployment of generated projects to various platforms
@@ -98,14 +112,7 @@ class DeploymentManager:
         Runs npm install and npm run build to catch errors early.
         """
         logger.info("🔍 Verifying project build...")
-        if os.getenv("SENTRY_DSN"):
-            import sentry_sdk
-            sentry_sdk.add_breadcrumb(
-                category="deployment",
-                message="Starting build verification",
-                data={"project_path": project_path, "has_package_json": package_json.exists()},
-                level="info"
-            )
+        project_dir = Path(project_path)
 
         result = {
             "passed": False,
@@ -114,8 +121,6 @@ class DeploymentManager:
             "typescript": {"success": False, "errors": []},
             "summary": ""
         }
-
-        project_dir = Path(project_path)
 
         # Security: validate and resolve path to prevent traversal
         try:
@@ -128,6 +133,18 @@ class DeploymentManager:
             return result
 
         package_json = resolved_path / "package.json"
+
+        if os.getenv("SENTRY_DSN"):
+            import sentry_sdk
+            sentry_sdk.add_breadcrumb(
+                category="deployment",
+                message="Starting build verification",
+                data={
+                    "project_name": resolved_path.name,
+                    "has_package_json": package_json.exists(),
+                },
+                level="info",
+            )
 
         # Check if package.json exists
         if not package_json.exists():
@@ -143,7 +160,8 @@ class DeploymentManager:
             npm_path = shutil.which("npm") or "/usr/local/bin/npm" if os.path.exists("/usr/local/bin/npm") else "npm"
             if not shutil.which("npm") and not os.path.exists("/usr/local/bin/npm"):
                 logger.warning("⚠️ npm not found in PATH; build verification may fail. Ensure Node.js is installed in the container.")
-            install_result = subprocess.run(
+            install_result = await asyncio.to_thread(
+                subprocess.run,
                 [npm_path, "install", "--legacy-peer-deps", "--ignore-scripts"],
                 cwd=str(resolved_path),
                 capture_output=True,
@@ -168,7 +186,8 @@ class DeploymentManager:
             if not shutil.which("npm") and npm_path == "npm":
                 # Re-detect
                 npm_path = shutil.which("npm") or npm_path
-            build_result = subprocess.run(
+            build_result = await asyncio.to_thread(
+                subprocess.run,
                 [npm_path, "run", "build"],
                 cwd=str(resolved_path),
                 capture_output=True,
@@ -224,7 +243,8 @@ class DeploymentManager:
                 logger.info("🔎 Running TypeScript check...")
                 import shutil
                 npx_path = shutil.which("npx") or "/usr/local/bin/npx" if os.path.exists("/usr/local/bin/npx") else "npx"
-                tsc_result = subprocess.run(
+                tsc_result = await asyncio.to_thread(
+                    subprocess.run,
                     [npx_path, "tsc", "--noEmit"],
                     cwd=str(resolved_path),
                     capture_output=True,
@@ -367,6 +387,9 @@ class DeploymentManager:
             "project_config": project_config,
             "deployments": {},
             "verification": {},
+            # Keep the response contract stable even when build verification
+            # fails before any deployment adapter is invoked.
+            "summary": self._generate_deployment_summary({}),
             "errors": []
         }
 
@@ -600,12 +623,13 @@ class DeploymentManager:
             async def upload_single_file(file_path: Path, relative_path: Path):
                 async with semaphore:
                     try:
-                        # Read file content
-                        with open(file_path, 'rb') as f:
-                            content = f.read()
-
-                        # Encode content
-                        encoded_content = base64.b64encode(content).decode('utf-8')
+                        # Read and encode off the event loop: this coroutine runs
+                        # concurrently with up to 9 siblings, and a synchronous read
+                        # here would serialise them all and stall the aiohttp
+                        # transport servicing the other in-flight uploads.
+                        encoded_content = await asyncio.to_thread(
+                            _read_and_encode_file, file_path
+                        )
 
                         # Upload file
                         file_data = {

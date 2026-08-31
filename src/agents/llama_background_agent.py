@@ -122,7 +122,6 @@ class LlamaBackgroundAgent:
     def _download_llama_model(self, models_dir: Path) -> str:
         """Download Llama 3.1 8B Instruct model from HuggingFace"""
         try:
-            import huggingface_hub
             from huggingface_hub import hf_hub_download
 
             # Optional HuggingFace token from environment

@@ -1,53 +1,27 @@
-# System Status - 2026-01-02 02:55 CST
+# System Status - 2026-07-17 02:09 UTC
 
-## All Systems Operational ✅
+## Project Status Review (Issue #808)
 
-| Workflow          | Status     |
-| ----------------- | ---------- |
-| **CI**            | ✅ Passing |
-| **Coverage**      | ✅ Passing |
-| **Security Scan** | ⏳ Running |
+| Area                       | Status |
+| -------------------------- | ------ |
+| Frontend lint (`apps/web`) | ✅ Passing |
+| Frontend tests (`apps/web`) | ✅ Passing (41 files, 233 tests) |
+| Frontend build (`apps/web`) | ✅ Passing |
+| Backend unit tests (`tests/unit`) | ❌ Failing in current baseline (28 failed, coverage gate 87.76% < 90%) |
 
-## Verification Summary
+## Repository Snapshot
 
-| Check           | Status                            |
-| --------------- | --------------------------------- |
-| Git Status      | ✅ Clean, synced                  |
-| Open PRs        | 1 (PR #67 auto-merge pending)     |
-| Open Issues     | 0                                 |
-| Security Alerts | 14 (was 55) - 1 critical, 13 high |
-| Remote Branches | 3 clean                           |
+| Check | Status |
+| ----- | ------ |
+| Git status | ✅ Clean |
+| Open PRs | 33 |
+| Open issues | 3 (#808, #802, #153) — correction 2026-08-25: #802 was closed as a duplicate on 2026-07-17 (via PR #813), shortly after this snapshot; #808 and #153 have also since been closed |
+| Latest PR Checks run | ✅ Success |
+| Latest Security Scan run | ❌ Failure on `claude/determined-maxwell-ostftd` (run `29549151403`) |
+| Code/secret scanning alert API | ⚠️ Not accessible to integration (403) |
 
-## Session Commits (12 total)
+## Current Focus
 
-1. ✅ `fix(ci): add package-lock.json`
-2. ✅ `chore: remove youtube_processed_videos from tracking`
-3. ✅ `fix(ci): use npm install instead of npm ci`
-4. ✅ `fix: auto-fix 10086 ruff lint errors`
-5. ✅ `fix(ci): ignore legacy import errors`
-6. ✅ `fix(ci): remove invalid turbo filter, make lint non-blocking`
-7. ✅ `fix(ci): make build non-blocking`
-8. ✅ `docs: add system status to shared folder`
-9. ✅ `docs: update system status with verification results`
-10. ✅ `fix(ci): fix coverage.yml - remove duplicate permissions, use checkout@v4`
-
-## GCP Services
-
-| Service            | Status     |
-| ------------------ | ---------- |
-| eventrelay-staging | ✅ Running |
-| uvai-api           | ✅ Running |
-| uvai-worker        | ✅ Running |
-
-## Artifacts Cleaned
-
-- Deleted: `implementation_plan.md` (completed)
-- Deleted: `task.md` (completed)
-- Deleted: `SYSTEM_STATUS_REPORT.md` (superseded)
-- Cleaned: All `.resolved` and `.metadata.json` files
-
-## Remaining Items
-
-1. **PR #67** - Auto-merge pending CI
-2. **14 Security alerts** - Review high/critical items
-3. **GCP deployment** - Optional: update to latest stable
+1. Stabilize failing backend unit test baseline and restore 90% coverage gate.
+2. Triage recent Security Scan failure on active PR branch.
+3. Continue issue #808 tracking with this refreshed status snapshot.

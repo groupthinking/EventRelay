@@ -28,6 +28,13 @@ import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend'
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { saveTrainingExample, TUNING_THRESHOLD } from '@/lib/training-store';
 import { PipelineDeadline } from '../route';
+import {
+  assessAnalysisEvidence,
+  calculateDurationCoverageSeconds,
+  normalizeTranscriptSegments,
+  transcriptTextFromSegments,
+  type AnalysisProvenance,
+} from '@/lib/analysis-evidence';
 
 const { configured: BACKEND_CONFIGURED, url: CONFIGURED_BACKEND_URL } = getBackendConfig();
 const JOB_POLL_INTERVAL_MS = 2000;
@@ -115,7 +122,10 @@ function mapTaskBoardActions(taskBoard: Record<string, unknown> | undefined) {
   );
 }
 
-function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisResult {
+function mapBackendResultToAnalysis(
+  result: Record<string, any>,
+  sourceUrl: string,
+): VideoAnalysisResult {
   const transcriptAction = result.outputs?.transcript_action?.data || {};
   const rankedActions = Array.isArray(transcriptAction.priority_ranked_actions)
     ? transcriptAction.priority_ranked_actions.map((action: Record<string, unknown>) => ({
@@ -127,6 +137,38 @@ function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisR
     : [];
   const taskBoardActions = mapTaskBoardActions(transcriptAction.task_board);
 
+  const transcriptSegments = normalizeTranscriptSegments(result.transcript?.segments);
+  const transcriptText = typeof result.transcript?.text === 'string'
+    ? result.transcript.text.trim()
+    : transcriptTextFromSegments(transcriptSegments);
+  const authoritativeSegments = transcriptSegments.length > 0
+    ? transcriptSegments
+    : transcriptText
+      ? [{ start: 0, duration: 0, text: transcriptText }]
+      : [];
+  const timedSegmentCount = authoritativeSegments.filter((segment) => segment.duration > 0).length;
+  const provenance: AnalysisProvenance = {
+    sourceUrl,
+    sourceHost: (() => {
+      try { return new URL(sourceUrl).hostname; } catch { return ''; }
+    })(),
+    acquisitionMethod: 'backend-transcript-action',
+    transcriptSource: 'youtube-captions',
+    transcriptVerified: transcriptText.length >= 40,
+    acquiredAt: new Date().toISOString(),
+    segmentCount: authoritativeSegments.length,
+    timedSegmentCount,
+    durationCoverageSeconds: calculateDurationCoverageSeconds(authoritativeSegments),
+    warnings: timedSegmentCount === authoritativeSegments.length
+      ? []
+      : ['Source timestamps were unavailable for part or all of the transcript.'],
+  };
+  const quality = assessAnalysisEvidence({
+    transcript: transcriptText,
+    segments: authoritativeSegments,
+    provenance,
+  });
+
   return {
     title:
       result.metadata?.title ||
@@ -136,15 +178,17 @@ function mapBackendResultToAnalysis(result: Record<string, any>): VideoAnalysisR
       typeof transcriptAction.summary === 'string'
         ? transcriptAction.summary
         : 'Analysis complete',
-    transcript: Array.isArray(result.transcript?.segments)
-      ? result.transcript.segments
-      : [],
+    transcript: authoritativeSegments,
     events: [],
     actions: rankedActions.length > 0 ? rankedActions : taskBoardActions,
     topics: transcriptAction.metadata?.topics || [],
     architectureCode: '',
     ingestScript: '',
     e22Snippets: [],
+    // F3: keep backend plan surface (not only task_board → actions).
+    project_scaffold: transcriptAction.project_scaffold ?? null,
+    provenance,
+    quality,
   };
 }
 
@@ -241,6 +285,225 @@ async function pollBackendJob(
 }
 
 /**
+ * Schedule ancillary background work after the pipeline stream completes.
+ * Fires-and-forgets (via waitUntil) training-example saving, embedding
+ * generation, a PIPELINE_COMPLETED CloudEvent, and search indexing — none
+ * of which block the response stream.
+ */
+function schedulePostProcessing(videoUrl: string, analysis: VideoAnalysisResult, useBackend: boolean) {
+  // Direct waitUntil on saveTrainingExample for training save (ancillary, post-response)
+  // Orchestrated here AFTER pipeline_status:complete events are streamed.
+  waitUntil(
+    saveTrainingExample(
+      videoUrl,
+      analysis as unknown as Record<string, unknown>,
+    ).then(({ saved, metadata, milestone }) => {
+      if (saved && milestone) {
+        console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
+        if (milestone >= TUNING_THRESHOLD) {
+          console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
+        }
+      }
+      if (saved) {
+        console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
+      } else {
+        console.log(`[Training] Skipped duplicate: ${videoUrl}`);
+      }
+    }).catch((err) => {
+      console.warn(`[Training] Background task failed (non-fatal):`, err);
+    }),
+  );
+
+  // Embeddings — direct waitUntil on the post-processing promise (includes saveEmbeddings)
+  waitUntil(
+    (async () => {
+      let segments = analysis.transcript;
+      if (!segments || segments.length === 0) {
+        const { fetchTranscript } = await import('@/lib/transcription-service');
+        const result = await fetchTranscript({ url: videoUrl });
+        if (result.success && result.segments && result.segments.length > 0) {
+          segments = result.segments.map(s => ({
+            start: s.start,
+            duration: s.duration,
+            text: s.text || ''
+          }));
+        }
+      }
+
+      if (segments && segments.length > 0) {
+        const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
+        const { saveEmbeddings } = await import('@/lib/embedding-store');
+        const chunks = chunkTranscript(segments);
+        const embeddedChunks = await generateEmbeddingsForChunks(chunks);
+        const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
+        await saveEmbeddings(videoId, embeddedChunks);
+      }
+    })().catch((err) => {
+      console.warn(`[Embeddings] Background task failed (non-fatal):`, err);
+    }),
+  );
+
+  // CloudEvent — direct waitUntil on publishEvent
+  waitUntil(
+    publishEvent(EventTypes.PIPELINE_COMPLETED, {
+      strategy: useBackend ? 'backend-proxy' : 'gemini-stream',
+      success: true,
+    }, videoUrl).catch((err) => {
+      console.warn(`[CloudEvent] Background task failed (non-fatal):`, err);
+    }),
+  );
+
+  // Durable cross-video search index (Upstash) — unlike the local-disk
+  // stores above, this persists on Vercel's read-only filesystem.
+  // Skips honestly when UPSTASH_SEARCH_* env is absent.
+  waitUntil(
+    (async () => {
+      const { indexVideoAnalysis } = await import('@/lib/search-indexer');
+      await indexVideoAnalysis(videoUrl, analysis);
+    })().catch((err) => {
+      console.warn(`[SearchIndex] Background task failed (non-fatal):`, err);
+    }),
+  );
+}
+
+
+
+
+async function handleBackendStrategy(
+  url: string,
+  backendUrl: string,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  deadline: PipelineDeadline,
+  startTime: number
+) {
+  // Strategy 1: Proxy from backend
+  try {
+    const response = await fetch(`${backendUrl}/api/v1/transcript-action`, {
+      method: 'POST',
+      headers: backendHeaders(),
+      body: JSON.stringify({ video_url: url, language: 'en' }),
+      signal: deadline.signalFor(STREAM_BACKEND_KICKOFF_MS),
+    });
+
+    if (response.ok) {
+      const result = await response.json();
+      const transcriptResult = result as BackendTranscriptActionResponse;
+      if (transcriptResult.async_processing && transcriptResult.status_url) {
+        controller.enqueue(
+          encoder.encode(
+            makeEvent({
+              type: 'agent_update',
+              agentId: 'async_queue',
+              agentName: 'AsyncVideoQueue',
+              status: 'running',
+              progress: 5,
+              data: {
+                jobId: transcriptResult.job_id,
+                transport: transcriptResult.processing_transport,
+              },
+              timestamp: new Date().toISOString(),
+            }),
+          ),
+        );
+
+        const statusUrl = resolveBackendStatusUrl(
+          transcriptResult.status_url,
+          backendUrl,
+        );
+        const job = await pollBackendJob(statusUrl, controller, encoder, deadline);
+        if (job.status === 'failed') {
+          throw new Error(job.error || 'Async transcript job failed');
+        }
+
+        const mappedAnalysis = mapBackendResultToAnalysis({
+          metadata: job.metadata?.metadata || {},
+          transcript: {
+            text: job.transcript || '',
+            segments: [],
+          },
+          outputs: job.metadata?.outputs || {},
+        }, url);
+
+        // Stream all agent events including pipeline_status:complete
+        for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
+          controller.enqueue(encoder.encode(event));
+        }
+
+        // Schedule optional work AFTER stream events (incl. pipeline_status:complete) are done — direct waitUntil inside
+        schedulePostProcessing(url, mappedAnalysis, true);
+        return;
+      }
+
+      const mappedAnalysis = mapBackendResultToAnalysis(result, url);
+
+      // Stream all agent events including pipeline_status:complete
+      for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
+        controller.enqueue(encoder.encode(event));
+      }
+
+      // Schedule optional work — direct waitUntil (after complete events)
+      schedulePostProcessing(url, mappedAnalysis, true);
+    } else {
+      throw new Error(`Backend returned ${response.status}`);
+    }
+  } catch (backendErr) {
+    // Fall through to Gemini if backend fails
+    console.warn('Backend stream failed, falling through to Gemini:', backendErr);
+    if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
+      await handleGeminiStrategy(url, true, controller, encoder, deadline, startTime);
+    } else {
+      controller.enqueue(
+        encoder.encode(
+          makeEvent({
+            type: 'error',
+            data: { message: 'Backend unavailable and no Gemini key configured' },
+            timestamp: new Date().toISOString(),
+          }),
+        ),
+      );
+    }
+  }
+}
+
+async function handleGeminiStrategy(
+  url: string,
+  useBackend: boolean,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  deadline: PipelineDeadline,
+  startTime: number
+) {
+  // Strategy 2: Direct Gemini analysis
+  // Only publish TRANSCRIPT_STARTED on the direct Gemini path; the backend
+  // fallback path must not emit this event (it was absent in the original code).
+  if (!useBackend) {
+    waitUntil(
+      publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch((err) => {
+        console.warn('[CloudEvent] TRANSCRIPT_STARTED failed (non-fatal):', err);
+      }),
+    );
+  }
+
+  const analysis = await deadline.runWithBudget(
+    analyzeVideoWithGemini(url),
+    deadline.remainingMs(),
+    // Preserve the original operator-facing distinction: a backend failure
+    // that falls through to Gemini logs 'Gemini stream fallback', while the
+    // direct Gemini path logs 'Gemini stream analysis'.
+    useBackend ? 'Gemini stream fallback' : 'Gemini stream analysis',
+  );
+
+  // Stream all agent events including pipeline_status:complete
+  for await (const event of generateAgentEvents(analysis, startTime)) {
+    controller.enqueue(encoder.encode(event));
+  }
+
+  // Schedule optional work via direct waitUntil (non-blocking, after complete)
+  schedulePostProcessing(url, analysis, useBackend);
+}
+
+/**
  * Convert a full Gemini analysis result into a timed sequence of SSE events
  * that mimic the multi-agent pipeline execution agents would produce.
  */
@@ -248,258 +511,111 @@ async function* generateAgentEvents(
   analysis: VideoAnalysisResult,
   startTime: number,
 ): AsyncGenerator<string> {
-  const elapsed = () => ((Date.now() - startTime) / 1000).toFixed(1);
+  const elapsed = () => Number(((Date.now() - startTime) / 1000).toFixed(1));
+  const provenance = analysis.provenance ?? {
+    sourceUrl: '',
+    sourceHost: '',
+    acquisitionMethod: 'unknown',
+    transcriptSource: 'unknown',
+    transcriptVerified: false,
+    acquiredAt: new Date().toISOString(),
+    segmentCount: analysis.transcript?.length || 0,
+    timedSegmentCount: 0,
+    durationCoverageSeconds: null,
+    warnings: ['Pipeline result did not include source provenance.'],
+  };
+  const transcript = transcriptTextFromSegments(
+    normalizeTranscriptSegments(analysis.transcript),
+  );
+  const quality = analysis.quality ?? assessAnalysisEvidence({
+    transcript,
+    segments: normalizeTranscriptSegments(analysis.transcript),
+    provenance,
+  });
 
-  // --- Orchestrator ---
   yield makeEvent({
     type: 'agent_update',
     agentId: 'orchestrator',
-    agentName: 'VideoIntelligenceOrchestrator',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(300);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'orchestrator',
-    agentName: 'VideoIntelligenceOrchestrator',
+    agentName: 'DurableOrchestrator',
     status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { title: analysis.title },
+    progress: 100,
+    duration: elapsed(),
+    data: { accepted: true },
     timestamp: new Date().toISOString(),
   });
 
-  // --- Router ---
   yield makeEvent({
     type: 'agent_update',
-    agentId: 'router',
-    agentName: 'ContentTypeRouter',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(200);
-
-  // Determine content type from topics
-  const topics = analysis.topics || [];
-  const contentType =
-    topics.some((t) => t.toLowerCase().includes('tutorial'))
-      ? 'tutorial'
-      : topics.some((t) => t.toLowerCase().includes('demo'))
-        ? 'demo'
-        : 'general';
-
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'router',
-    agentName: 'ContentTypeRouter',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { contentType, dataLabel: 'Content Type' },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Analysis Crew ---
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'crew',
-    agentName: 'AnalysisCrew',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(100);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'crew',
-    agentName: 'AnalysisCrew',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Parallel Analysts (start all, complete with real data) ---
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'transcript_analyst',
-    agentName: 'TranscriptAnalyst',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'embedding_agent',
-    agentName: 'SemanticEmbeddingAgent',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'visual_analyst',
-    agentName: 'VisualAnalyst',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'audio_analyst',
-    agentName: 'AudioAnalyst',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-
-  // Transcript analyst completes first (has transcript data)
-  await sleep(400);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'transcript_analyst',
-    agentName: 'TranscriptAnalyst',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
+    agentId: 'transcript_acquisition',
+    agentName: 'TranscriptAcquisition',
+    status: provenance.transcriptVerified ? 'complete' : 'error',
+    progress: provenance.transcriptVerified ? 100 : 0,
+    duration: elapsed(),
     data: {
-      classification: contentType,
-      confidence: 0.92,
-      segments: analysis.transcript?.length || 0,
-      dataLabel: 'Segments',
+      source: provenance.transcriptSource,
+      method: provenance.acquisitionMethod,
+      segmentCount: provenance.segmentCount,
+      timedSegmentCount: provenance.timedSegmentCount,
     },
     timestamp: new Date().toISOString(),
   });
 
-  // Visual analyst completes second (has events data)
-  await sleep(300);
   yield makeEvent({
     type: 'agent_update',
-    agentId: 'visual_analyst',
-    agentName: 'VisualAnalyst',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: {
-      classification: contentType,
-      confidence: 0.88,
-      events: analysis.events?.length || 0,
-      dataLabel: 'Frames',
-    },
+    agentId: 'analysis',
+    agentName: 'EvidenceAnalysis',
+    status: quality.passed ? 'complete' : 'error',
+    progress: quality.passed ? 100 : 0,
+    duration: elapsed(),
+    data: quality.passed
+      ? { actions: analysis.actions?.length || 0, topics: analysis.topics?.length || 0 }
+      : { blocked: true },
     timestamp: new Date().toISOString(),
   });
 
-  // Embedding agent completes
-  await sleep(200);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'embedding_agent',
-    agentName: 'SemanticEmbeddingAgent',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { dataLabel: 'Vector Embeddings' },
-    timestamp: new Date().toISOString(),
-  });
-
-  // Audio analyst completes last
-  await sleep(200);
-  const audioClassification = contentType === 'tutorial' ? 'demo' : contentType;
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'audio_analyst',
-    agentName: 'AudioAnalyst',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: {
-      classification: audioClassification,
-      confidence: 0.71,
-      dataLabel: 'Audio Data',
-    },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Consensus ---
-  const votes = [
-    { agentId: 'transcript_analyst', agentName: 'TranscriptAnalyst', classification: contentType, confidence: 0.92 },
-    { agentId: 'visual_analyst', agentName: 'VisualAnalyst', classification: contentType, confidence: 0.88 },
-    { agentId: 'audio_analyst', agentName: 'AudioAnalyst', classification: audioClassification, confidence: 0.71 },
-  ];
-  const agreeing = votes.filter((v) => v.classification === contentType).length;
-  yield makeEvent({
-    type: 'consensus',
-    data: {
-      votes,
-      finalClassification: contentType,
-      agreementRatio: agreeing / votes.length,
-    },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Action Generator ---
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'action_gen',
-    agentName: 'ActionGenerator',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(300);
-
-  const workflow = analysis.actions?.map((a) => a.title).join('\n') || 'No actions generated';
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'action_gen',
-    agentName: 'ActionGenerator',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { actions: analysis.actions?.length || 0, dataLabel: 'Workflow' },
-    timestamp: new Date().toISOString(),
-  });
-
-  // --- Quality Checker ---
   yield makeEvent({
     type: 'agent_update',
     agentId: 'quality',
-    agentName: 'QualityChecker',
-    status: 'running',
-    progress: 0,
-    timestamp: new Date().toISOString(),
-  });
-  await sleep(200);
-  yield makeEvent({
-    type: 'agent_update',
-    agentId: 'quality',
-    agentName: 'QualityChecker',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
-    data: { validationPassed: true },
+    agentName: 'EvidenceQualityGate',
+    status: quality.passed ? 'complete' : 'error',
+    progress: quality.passed ? 100 : 0,
+    duration: elapsed(),
+    data: {
+      validationPassed: quality.passed,
+      evidenceState: quality.state,
+      issues: quality.issues,
+    },
     timestamp: new Date().toISOString(),
   });
 
-  // --- Workflow output ---
   yield makeEvent({
     type: 'workflow',
     data: {
-      title: analysis.title,
-      summary: analysis.summary,
-      actions: analysis.actions,
-      topics: analysis.topics,
-      events: analysis.events,
-      transcript: analysis.transcript,
-      architectureCode: analysis.architectureCode,
-      workflow,
+      title: quality.passed ? analysis.title : 'Analysis blocked',
+      summary: quality.passed
+        ? analysis.summary
+        : 'Analysis output is unavailable because source evidence did not pass validation.',
+      actions: quality.passed ? analysis.actions : [],
+      topics: quality.passed ? analysis.topics : [],
+      events: quality.passed ? analysis.events : [],
+      transcript: quality.passed ? analysis.transcript : [],
+      architectureCode: quality.passed ? analysis.architectureCode : '',
+      project_scaffold: quality.passed ? analysis.project_scaffold ?? null : null,
+      provenance,
+      quality,
     },
     timestamp: new Date().toISOString(),
   });
 
-  // --- Pipeline complete ---
   yield makeEvent({
     type: 'pipeline_status',
-    status: 'complete',
-    duration: parseFloat(elapsed()),
+    status: quality.passed ? 'complete' : 'error',
+    duration: elapsed(),
     data: {
-      totalAgents: 9,
-      completedAgents: 9,
-      mode: 'gemini-sse',
+      totalStages: 4,
+      completedStages: quality.passed ? 4 : 1,
+      evidenceState: quality.state,
+      validationPassed: quality.passed,
     },
     timestamp: new Date().toISOString(),
   });
@@ -568,202 +684,11 @@ export async function POST(request: Request) {
           // See: https://github.com/groupthinking/EventRelay/issues/139
           // Direct waitUntil (no fireAndForget, no bare top-level .catch) per ancillary paths standard.
 
-          const schedulePostProcessing = (videoUrl: string, analysis: VideoAnalysisResult) => {
-            // Direct waitUntil on saveTrainingExample for training save (ancillary, post-response)
-            // Orchestrated here AFTER pipeline_status:complete events are streamed.
-            waitUntil(
-              saveTrainingExample(
-                videoUrl,
-                analysis as unknown as Record<string, unknown>,
-              ).then(({ saved, metadata, milestone }) => {
-                if (saved && milestone) {
-                  console.log(`\n🎯 TRAINING MILESTONE: ${milestone}/${TUNING_THRESHOLD} examples collected!`);
-                  if (milestone >= TUNING_THRESHOLD) {
-                    console.log('🚀 READY FOR FINE-TUNING! Call POST /api/training/trigger to start.');
-                  }
-                }
-                if (saved) {
-                  console.log(`[Training] Dataset: ${metadata.totalExamples} examples`);
-                } else {
-                  console.log(`[Training] Skipped duplicate: ${videoUrl}`);
-                }
-              }).catch((err) => {
-                console.warn(`[Training] Background task failed (non-fatal):`, err);
-              }),
-            );
-
-            // Embeddings — direct waitUntil on the post-processing promise (includes saveEmbeddings)
-            waitUntil(
-              (async () => {
-                let segments = analysis.transcript;
-                if (!segments || segments.length === 0) {
-                  const { fetchTranscript } = await import('@/lib/transcription-service');
-                  const result = await fetchTranscript({ url: videoUrl });
-                  if (result.success && result.segments && result.segments.length > 0) {
-                    segments = result.segments.map(s => ({
-                      start: s.start,
-                      duration: s.duration,
-                      text: s.text || ''
-                    }));
-                  }
-                }
-
-                if (segments && segments.length > 0) {
-                  const { chunkTranscript, generateEmbeddingsForChunks } = await import('@/lib/gemini-embedding');
-                  const { saveEmbeddings } = await import('@/lib/embedding-store');
-                  const chunks = chunkTranscript(segments);
-                  const embeddedChunks = await generateEmbeddingsForChunks(chunks);
-                  const videoId = videoUrl.match(/[?&]v=([^&]+)/)?.[1] || videoUrl.replace(/[^a-zA-Z0-9_-]/g, '_');
-                  await saveEmbeddings(videoId, embeddedChunks);
-                }
-              })().catch((err) => {
-                console.warn(`[Embeddings] Background task failed (non-fatal):`, err);
-              }),
-            );
-
-            // CloudEvent — direct waitUntil on publishEvent
-            waitUntil(
-              publishEvent(EventTypes.PIPELINE_COMPLETED, {
-                strategy: useBackend ? 'backend-proxy' : 'gemini-stream',
-                success: true,
-              }, videoUrl).catch((err) => {
-                console.warn(`[CloudEvent] Background task failed (non-fatal):`, err);
-              }),
-            );
-
-            // Durable cross-video search index (Upstash) — unlike the local-disk
-            // stores above, this persists on Vercel's read-only filesystem.
-            // Skips honestly when UPSTASH_SEARCH_* env is absent.
-            waitUntil(
-              (async () => {
-                const { indexVideoAnalysis } = await import('@/lib/search-indexer');
-                await indexVideoAnalysis(videoUrl, analysis);
-              })().catch((err) => {
-                console.warn(`[SearchIndex] Background task failed (non-fatal):`, err);
-              }),
-            );
-          };
 
           if (useBackend && backendUrl) {
-            // Strategy 1: Proxy from backend
-            try {
-              const response = await fetch(`${backendUrl}/api/v1/transcript-action`, {
-                method: 'POST',
-                headers: backendHeaders(),
-                body: JSON.stringify({ video_url: url, language: 'en' }),
-                signal: deadline.signalFor(STREAM_BACKEND_KICKOFF_MS),
-              });
-
-              if (response.ok) {
-                const result = await response.json();
-                const transcriptResult = result as BackendTranscriptActionResponse;
-                if (transcriptResult.async_processing && transcriptResult.status_url) {
-                  controller.enqueue(
-                    encoder.encode(
-                      makeEvent({
-                        type: 'agent_update',
-                        agentId: 'async_queue',
-                        agentName: 'AsyncVideoQueue',
-                        status: 'running',
-                        progress: 5,
-                        data: {
-                          jobId: transcriptResult.job_id,
-                          transport: transcriptResult.processing_transport,
-                        },
-                        timestamp: new Date().toISOString(),
-                      }),
-                    ),
-                  );
-
-                  const statusUrl = resolveBackendStatusUrl(
-                    transcriptResult.status_url,
-                    backendUrl,
-                  );
-                  const job = await pollBackendJob(statusUrl, controller, encoder, deadline);
-                  if (job.status === 'failed') {
-                    throw new Error(job.error || 'Async transcript job failed');
-                  }
-
-                  const mappedAnalysis = mapBackendResultToAnalysis({
-                    metadata: job.metadata?.metadata || {},
-                    transcript: {
-                      text: job.transcript || '',
-                      segments: [],
-                    },
-                    outputs: job.metadata?.outputs || {},
-                  });
-
-                  // Stream all agent events including pipeline_status:complete
-                  for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
-                    controller.enqueue(encoder.encode(event));
-                  }
-
-                  // Schedule optional work AFTER stream events (incl. pipeline_status:complete) are done — direct waitUntil inside
-                  schedulePostProcessing(url, mappedAnalysis);
-                  return;
-                }
-
-                const mappedAnalysis = mapBackendResultToAnalysis(result);
-
-                // Stream all agent events including pipeline_status:complete
-                for await (const event of generateAgentEvents(mappedAnalysis, startTime)) {
-                  controller.enqueue(encoder.encode(event));
-                }
-
-                // Schedule optional work — direct waitUntil (after complete events)
-                schedulePostProcessing(url, mappedAnalysis);
-              } else {
-                throw new Error(`Backend returned ${response.status}`);
-              }
-            } catch (backendErr) {
-              // Fall through to Gemini if backend fails
-              console.warn('Backend stream failed, falling through to Gemini:', backendErr);
-              if (hasGeminiKey() && deadline.remainingMs() > 1_000) {
-                const analysis = await deadline.runWithBudget(
-                  analyzeVideoWithGemini(url),
-                  deadline.remainingMs(),
-                  'Gemini stream fallback',
-                );
-
-                // Stream all agent events including pipeline_status:complete
-                for await (const event of generateAgentEvents(analysis, startTime)) {
-                  controller.enqueue(encoder.encode(event));
-                }
-
-                // Schedule optional work — direct waitUntil (after complete events)
-                schedulePostProcessing(url, analysis);
-              } else {
-                controller.enqueue(
-                  encoder.encode(
-                    makeEvent({
-                      type: 'error',
-                      data: { message: 'Backend unavailable and no Gemini key configured' },
-                      timestamp: new Date().toISOString(),
-                    }),
-                  ),
-                );
-              }
-            }
+            await handleBackendStrategy(url, backendUrl, controller, encoder, deadline, startTime);
           } else {
-            // Strategy 2: Direct Gemini analysis
-            // Start event as true background (non-blocking even for stream setup) — direct waitUntil on publishEvent
-            waitUntil(
-              publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-stream' }, url).catch(() => {}),
-            );
-
-            const analysis = await deadline.runWithBudget(
-              analyzeVideoWithGemini(url),
-              deadline.remainingMs(),
-              'Gemini stream analysis',
-            );
-
-            // Stream all agent events including pipeline_status:complete
-            for await (const event of generateAgentEvents(analysis, startTime)) {
-              controller.enqueue(encoder.encode(event));
-            }
-
-            // Schedule optional work via direct waitUntil (non-blocking, after complete)
-            schedulePostProcessing(url, analysis);
+            await handleGeminiStrategy(url, useBackend, controller, encoder, deadline, startTime);
           }
         } catch (err) {
           console.error('Pipeline stream processing error:', err);

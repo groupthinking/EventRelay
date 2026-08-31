@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Download, Film, LoaderCircle } from 'lucide-react';
 
 type GenerationState = 'idle' | 'generating' | 'done' | 'error';
 
@@ -181,21 +182,28 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         <button
           onClick={handleGenerate}
           disabled={state === 'generating' || !prompt.trim()}
+          aria-describedby={!prompt.trim() ? 'video-generate-requirement' : undefined}
           className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 to-purple-700 font-medium text-sm hover:opacity-90 transition disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {state === 'generating' ? (
             <span className="flex items-center justify-center gap-2">
-              <span className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+              <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" />
               Generating… {elapsed > 0 && `(${elapsed}s)`}
             </span>
           ) : (
             'Generate Video'
           )}
         </button>
+        {!prompt.trim() && (
+          <p id="video-generate-requirement" className="text-xs text-white/50 text-center">
+            Enter a prompt to enable video generation.
+          </p>
+        )}
 
         {/* Warning */}
-        <p className="text-xs text-yellow-500/70 text-center">
-          ⚠️ Video generation can take 1–3 minutes and requires AI_GATEWAY_API_KEY to be configured.
+        <p className="flex items-center justify-center gap-1.5 text-center text-xs text-yellow-500/70">
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+          Video generation can take 1–3 minutes and requires AI_GATEWAY_API_KEY to be configured.
         </p>
 
         {/* Error */}
@@ -209,14 +217,20 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
         {state === 'done' && videoSrc && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-green-400">✅ Generation complete ({elapsed}s)</span>
+              <span className="inline-flex items-center gap-1.5 text-sm text-green-400">
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                Generation complete ({elapsed}s)
+              </span>
               <a
                 href={videoSrc}
                 download="generated-video.mp4"
                 aria-label="Download the generated video as an MP4 file"
                 className="text-xs text-white/50 hover:text-white transition"
               >
-                Download ↓
+                <span className="inline-flex items-center gap-1">
+                  Download
+                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                </span>
               </a>
             </div>
             <video
@@ -235,8 +249,9 @@ export default function VideoGenerator({ className = '' }: VideoGeneratorProps) 
 
         {/* Idle placeholder */}
         {state === 'idle' && (
-          <div className="flex items-center justify-center h-32 rounded-xl border border-white/5 bg-slate-900/50">
-            <p className="text-white/20 text-sm">Generated video will appear here</p>
+          <div className="flex h-32 flex-col items-center justify-center gap-2 rounded-xl border border-white/5 bg-slate-900/50">
+            <Film className="h-6 w-6 text-white/20" aria-hidden="true" />
+            <p className="text-white/30 text-sm">Enter a prompt to create a real generated video.</p>
           </div>
         )}
       </div>

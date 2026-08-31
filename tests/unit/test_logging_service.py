@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -16,6 +18,7 @@ from youtube_extension.backend.services.logging_service import (
     StructuredLogEntry,
 )
 
+MODULE_PATH = "youtube_extension.backend.services.logging_service"
 
 # ===========================================================================
 # LogLevel constants
@@ -387,3 +390,116 @@ class TestLoggingServiceGetHealthStatus:
         status = service.get_health_status()
         assert "uptime_seconds" in status
         assert status["uptime_seconds"] >= 0
+
+
+# ===========================================================================
+# LoggingService._write_to_files — batching
+# ===========================================================================
+
+
+class TestLoggingServiceWriteToFiles:
+    """Tests for _write_to_files().
+
+    aiofiles delegates every ``write()`` to the thread-pool executor, so the
+    number of ``write()`` calls -- not the number of bytes -- is what costs.
+    These tests pin the batch to a single write per file.
+    """
+
+    @pytest.fixture
+    async def service(self, tmp_path):
+        return LoggingService(
+            config={"log_directory": tmp_path / "logs", "enable_remote_logging": False}
+        )
+
+    @staticmethod
+    def _entries(n: int, level: str = "INFO") -> list[StructuredLogEntry]:
+        return [
+            StructuredLogEntry(
+                timestamp=f"2026-01-01T00:00:{i:02d}Z",
+                level=level,
+                logger_name="test",
+                message=f"msg-{i}",
+            )
+            for i in range(n)
+        ]
+
+    async def test_batches_structured_logs_into_one_write(self, service, tmp_path):
+        writes: list[str] = []
+
+        class _FakeFile:
+            async def write(self, data):
+                writes.append(data)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch(f"{MODULE_PATH}.aiofiles.open", return_value=_FakeFile()):
+            await service._write_to_files(self._entries(25))
+
+        assert len(writes) == 1, (
+            f"_write_to_files issued {len(writes)} write() calls for 25 log entries; "
+            "each aiofiles write is a separate thread-pool round-trip, so the batch "
+            "must be serialised into a single write"
+        )
+        assert writes[0].count("\n") == 25
+
+    async def test_batches_error_logs_into_one_write(self, service, tmp_path):
+        writes: list[str] = []
+
+        class _FakeFile:
+            async def write(self, data):
+                writes.append(data)
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        with patch(f"{MODULE_PATH}.aiofiles.open", return_value=_FakeFile()):
+            await service._write_to_files(self._entries(12, level="ERROR"))
+
+        # One write for structured_logs.jsonl, one for error_logs.jsonl.
+        assert len(writes) == 2, (
+            f"_write_to_files issued {len(writes)} write() calls for 12 ERROR entries; "
+            "expected exactly one batched write per file"
+        )
+        assert all(payload.count("\n") == 12 for payload in writes)
+
+    async def test_writes_every_entry_exactly_once(self, service, tmp_path):
+        await service._write_to_files(self._entries(5))
+
+        path = tmp_path / "logs" / "structured_logs.jsonl"
+        lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
+        assert len(lines) == 5
+        assert [json.loads(ln)["message"] for ln in lines] == [f"msg-{i}" for i in range(5)]
+
+    async def test_appends_rather_than_truncating(self, service, tmp_path):
+        await service._write_to_files(self._entries(3))
+        await service._write_to_files(self._entries(2))
+
+        path = tmp_path / "logs" / "structured_logs.jsonl"
+        lines = [ln for ln in path.read_text().splitlines() if ln.strip()]
+        assert len(lines) == 5
+
+    async def test_error_logs_routed_to_separate_file(self, service, tmp_path):
+        mixed = self._entries(2, level="INFO") + self._entries(3, level="CRITICAL")
+        await service._write_to_files(mixed)
+
+        structured = tmp_path / "logs" / "structured_logs.jsonl"
+        errors = tmp_path / "logs" / "error_logs.jsonl"
+        assert len([ln for ln in structured.read_text().splitlines() if ln.strip()]) == 5
+        assert len([ln for ln in errors.read_text().splitlines() if ln.strip()]) == 3
+
+    async def test_no_error_content_written_when_no_error_logs(self, service, tmp_path):
+        await service._write_to_files(self._entries(4, level="INFO"))
+        errors = tmp_path / "logs" / "error_logs.jsonl"
+        # The service pre-creates its log files at init, so assert on content.
+        existing = errors.read_text() if errors.exists() else ""
+        assert [ln for ln in existing.splitlines() if ln.strip()] == []
+
+    async def test_empty_batch_does_not_raise(self, service):
+        await service._write_to_files([])

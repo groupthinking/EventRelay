@@ -10,19 +10,17 @@ Cloud-native video processor using:
 - Cloud Run for serverless scaling
 """
 
-import asyncio
 import logging
-import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from ..cloud import (
-    get_firestore_service,
-    get_cloud_tasks_service,
-    get_vertex_ai_service,
     VideoProcessingState,
     VideoProcessingTask,
+    get_cloud_tasks_service,
+    get_firestore_service,
+    get_vertex_ai_service,
 )
 
 logger = logging.getLogger(__name__)
@@ -34,9 +32,9 @@ class VideoProcessingResult:
     video_id: str
     video_url: str
     success: bool
-    metadata: Optional[Dict[str, Any]] = None
-    transcript: Optional[Dict[str, Any]] = None
-    ai_analysis: Optional[Dict[str, Any]] = None
+    metadata: Optional[dict[str, Any]] = None
+    transcript: Optional[dict[str, Any]] = None
+    ai_analysis: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None
     processing_time: float = 0.0
     from_cache: bool = False
@@ -226,16 +224,26 @@ class CloudNativeVideoProcessor:
             )
 
         except Exception as e:
-            error_msg = f"Error processing video {video_id}: {str(e)}"
-            logger.error(error_msg)
+            # Full detail is logged server-side ONLY. The client-facing
+            # error_message is persisted to Firestore and returned in the sync
+            # response, and get_video_status/get_video_result echo it back to
+            # callers, so it must never carry raw exception text (CWE-209).
+            # Neutralize CR/LF in user-controlled values before logging so they
+            # cannot forge or split log records (CWE-117 log injection).
+            safe_video_id = str(video_id).replace("\r", " ").replace("\n", " ")
+            safe_error = str(e).replace("\r", " ").replace("\n", " ")
+            logger.error(
+                "Error processing video %s: %s", safe_video_id, safe_error, exc_info=True
+            )
+            client_safe_error = "Internal server error"
 
-            # Update state with error
+            # Update state with a user-safe message
             if self.enable_state:
                 firestore_service = await get_firestore_service()
                 await firestore_service.update_state(
                     video_id,
                     status='failed',
-                    error_message=error_msg
+                    error_message=client_safe_error
                 )
 
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
@@ -244,7 +252,7 @@ class CloudNativeVideoProcessor:
                 video_id=video_id,
                 video_url=video_url,
                 success=False,
-                error_message=error_msg,
+                error_message=client_safe_error,
                 processing_time=processing_time,
             )
 
@@ -309,7 +317,7 @@ class CloudNativeVideoProcessor:
             # Assume it's already an ID
             return video_url
 
-    async def _fetch_metadata(self, video_url: str) -> Dict[str, Any]:
+    async def _fetch_metadata(self, video_url: str) -> dict[str, Any]:
         """
         Fetch video metadata.
 
@@ -326,7 +334,7 @@ class CloudNativeVideoProcessor:
             'description': 'Video description',
         }
 
-    async def _extract_transcript(self, video_id: str) -> Dict[str, Any]:
+    async def _extract_transcript(self, video_id: str) -> dict[str, Any]:
         """
         Extract video transcript.
 
@@ -344,9 +352,9 @@ class CloudNativeVideoProcessor:
     async def _analyze_with_vertex_ai(
         self,
         video_id: str,
-        metadata: Dict[str, Any],
-        transcript: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any],
+        transcript: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Analyze video using Vertex AI Agent Builder.
 

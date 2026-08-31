@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import sys
-from http.server import HTTPServer
 from io import BytesIO
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest

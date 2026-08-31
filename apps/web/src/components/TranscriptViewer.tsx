@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useId } from 'react';
+import { useState, useId, useMemo } from 'react';
 import { ChevronUp, ChevronDown } from 'lucide-react';
 import { clsx } from 'clsx';
+import { buildSearchConfig } from '@/lib/transcript-search';
 
 interface TranscriptViewerProps {
   transcript: string;
@@ -20,24 +21,31 @@ export default function TranscriptViewer({ transcript, className }: TranscriptVi
   const [searchQuery, setSearchQuery] = useState('');
   const searchId = useId();
 
-  const paragraphs = transcript.split('\n').filter((p) => p.trim().length > 0);
+  // Memoize splitting and filtering since transcript can be large and static
+  const paragraphs = useMemo(() => {
+    return transcript.split('\n').filter((p) => p.trim().length > 0);
+  }, [transcript]);
+
   const displayParagraphs = expanded ? paragraphs : paragraphs.slice(0, 8);
 
+  // Precompute the highlight regex and lowercased query once per query change
+  // rather than per paragraph. See `@/lib/transcript-search` (issue #908).
+  const searchConfig = useMemo(() => buildSearchConfig(searchQuery), [searchQuery]);
+
   const highlight = (text: string) => {
-    if (!searchQuery) return text;
-    const escaped = searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Capturing split regex (no global flag) so `.test()` lastIndex state can't desync.
-    const parts = text.split(new RegExp(`(${escaped})`, 'i'));
-    const lower = searchQuery.toLowerCase();
-    return parts.map((part, i) =>
-      part.toLowerCase() === lower ? (
+    if (!searchConfig) return text;
+    const parts = text.split(searchConfig.regex);
+    // ⚡ Bolt: Implementing safety check during map iteration when comparing split regex parts.
+    return parts.map((part, i) => {
+      const lowerPart = part ? part.toLowerCase() : '';
+      return lowerPart === searchConfig.lower ? (
         <mark key={i} className="bg-primary-500/30 text-primary-300 rounded px-0.5">
           {part}
         </mark>
       ) : (
         part
-      ),
-    );
+      );
+    });
   };
 
   return (

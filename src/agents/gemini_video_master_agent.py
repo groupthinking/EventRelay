@@ -33,6 +33,8 @@ try:
 
     GEMINI_AVAILABLE = True
 except ImportError:
+    genai = None
+    types = None
     GEMINI_AVAILABLE = False
     logging.warning("Google AI not available - install: pip install google-genai")
 
@@ -53,6 +55,14 @@ try:
     load_dotenv(override=True)  # Ensure latest .env values are used
 except ImportError:
     logging.warning("python-dotenv not available")
+
+try:
+    from youtube_extension.utils.proxy import get_proxy_url, redact_proxy_credentials
+except ImportError:  # pragma: no cover - optional when running outside the package
+    def get_proxy_url() -> "str | None":  # type: ignore[misc]
+        return None
+    def redact_proxy_credentials(text: str) -> str:  # type: ignore[misc]
+        return text
 
 # Banned video IDs (memes, inappropriate content, etc.)
 BANNED_VIDEO_IDS = frozenset(
@@ -688,12 +698,19 @@ class GeminiVideoMasterAgent:
     def _extract_youtube_metadata_with_ytdlp(video_url: str) -> dict[str, Any]:
         import yt_dlp
 
-        options = {
+        proxy_url = get_proxy_url()
+        options: dict[str, Any] = {
             "quiet": True,
             "skip_download": True,
             "extract_flat": False,
             "noplaylist": True,
         }
+        if proxy_url:
+            options["proxy"] = proxy_url
+            logger.debug(
+                "yt-dlp metadata extraction using proxy: %s",
+                redact_proxy_credentials(proxy_url),
+            )
         with yt_dlp.YoutubeDL(options) as ydl:
             info = ydl.extract_info(video_url, download=False)
 
@@ -1077,7 +1094,7 @@ Malformed JSON:
     @staticmethod
     def _build_gemini_generation_config(
         response_mime_type: str | None = None,
-    ) -> types.GenerateContentConfig:
+    ) -> "types.GenerateContentConfig":
         config_kwargs = {
             "max_output_tokens": int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "16384"))
         }

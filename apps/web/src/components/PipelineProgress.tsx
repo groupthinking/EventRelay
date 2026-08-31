@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { Check, Circle, LoaderCircle, X } from 'lucide-react';
 
 /* ═══════════════════════════════════════════
    Real-time SSE Pipeline Progress UI
@@ -68,42 +69,16 @@ function StageRow({ stage, index }: { stage: PipelineStage; index: number }) {
       <div className="flex-shrink-0 w-6 h-6 flex items-center justify-center">
         <span className="sr-only">{`${stage.label}: ${stage.status}`}</span>
         {isComplete && (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#22c55e"
-            strokeWidth="2.5"
-            aria-hidden="true"
-          >
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
+          <Check className="h-4 w-4" style={{ color: '#22c55e' }} strokeWidth={2.5} aria-hidden="true" />
         )}
         {isRunning && (
-          <div className="relative" aria-hidden="true">
-            <span className="absolute inline-flex h-4 w-4 rounded-full opacity-40 animate-ping motion-reduce:animate-none" style={{ background: '#6af2de' }} />
-            <span className="relative inline-flex h-3 w-3 rounded-full" style={{ background: '#6af2de' }} />
-          </div>
+          <LoaderCircle className="h-4 w-4 animate-spin" style={{ color: '#6af2de' }} aria-hidden="true" />
         )}
         {isError && (
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#ef4444"
-            strokeWidth="2.5"
-            aria-hidden="true"
-          >
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
+          <X className="h-4 w-4" style={{ color: '#ef4444' }} strokeWidth={2.5} aria-hidden="true" />
         )}
         {isPending && (
-          <div
-            className="w-2.5 h-2.5 rounded-full"
-            style={{ background: 'rgba(248, 245, 253, 0.15)' }}
-          />
+          <Circle className="h-3 w-3" style={{ color: 'rgba(248, 245, 253, 0.2)' }} aria-hidden="true" />
         )}
       </div>
 

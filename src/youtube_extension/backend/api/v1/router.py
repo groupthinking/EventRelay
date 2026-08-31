@@ -10,21 +10,36 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import threading
 import time
 import uuid as _uuid
+import weakref
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
+
 try:
     from youtube_extension.services.agents import AgentOrchestrator
+    from youtube_extension.services.agents.adapters.agent_orchestrator import (
+        orchestrator as _shared_orchestrator,
+    )
 except ImportError:
     AgentOrchestrator = None
+    _shared_orchestrator = None
 from youtube_extension.services.ai import HybridProcessorService
 from youtube_extension.services.cloud.cloud_tasks_queue import (
     CloudTasksQueueService,
@@ -68,6 +83,7 @@ from .models import (
     AgentStatus,
     AgentStatusResponse,
     ApiResponse,
+    BlueprintRequest,
     CacheStats,
     ChatRequest,
     ChatResponse,
@@ -83,6 +99,7 @@ from .models import (
     GeminiCacheResponse,
     GeminiTokenRequest,
     GeminiTokenResponse,
+    GenerateCodeRequest,
     HealthResponse,
     JobStatus,
     KnowledgeIngestRequest,
@@ -92,6 +109,7 @@ from .models import (
     TranscriptActionRequest,
     TranscriptActionResponse,
     VideoJobStatusResponse,
+    VideoPackRequest,
     VideoProcessingRequest,
     VideoProcessJobRequest,
     VideoProcessJobResponse,
@@ -241,8 +259,8 @@ async def health_check_v1(
         )
         return HealthResponse(**health_status)
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Health check failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -270,8 +288,8 @@ async def detailed_health_check_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Detailed health check failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Detailed health check failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Capabilities / Model availability
@@ -650,7 +668,7 @@ async def chat_v1(
 
     except Exception as e:
         logger.error(f"Error in chat endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
 # Video Processing Endpoints
@@ -709,7 +727,7 @@ async def process_video_v1(
             {"url": request.video_url, "error": str(e)},
             request.video_url,
         )
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -753,9 +771,9 @@ async def process_video_markdown_v1(
         health_service.increment_metric("error_total")
         raise
     except Exception as e:
-        logger.error(f"Error in markdown processing: {e}")
+        logger.error(f"Error in markdown processing: {e}", exc_info=True)
         health_service.increment_metric("error_total")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -791,8 +809,8 @@ async def video_to_software_v1(
         return VideoToSoftwareResponse(**result)
 
     except Exception as e:
-        logger.error(f"Video-to-software processing failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Video-to-software processing failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Cache Management Endpoints
@@ -804,12 +822,19 @@ async def video_to_software_v1(
 )
 async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_service)):
     """Get cache statistics"""
+    global _stats_cache_time, _stats_cache
     try:
+        now = time.time()
+        if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
+            return CacheStats(**_stats_cache)
+
         stats = cache_service.get_cache_statistics()
+        _stats_cache = stats
+        _stats_cache_time = now
         return CacheStats(**stats)
     except Exception as e:
-        logger.error(f"Error getting cache stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting cache stats: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -837,8 +862,8 @@ async def get_cached_video_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving cached video: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving cached video: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete(
@@ -860,8 +885,8 @@ async def clear_video_cache_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing video cache: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error clearing video cache: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.delete(
@@ -880,11 +905,38 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing all cache: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error clearing all cache: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Data Endpoints
+def _collect_videos_page(
+    data_service: DataService, limit: int, offset: int
+) -> tuple[int, list[dict[str, Any]], bool]:
+    """Gather the total video count and one page of summaries.
+
+    Both ``count_videos`` and ``get_videos_summary`` perform blocking
+    filesystem work, so they are grouped into this single synchronous helper
+    and dispatched to a worker thread by the caller with one
+    ``asyncio.to_thread`` hop instead of two.
+
+    One hop is *not* an atomic snapshot. ``DataService`` backs both reads with
+    a TTL cache that holds no lock and exposes no snapshot object shared
+    between them, so the entry can still expire -- or be refreshed by another
+    worker -- in between. Grouping the calls narrows that window to a single
+    thread hand-off rather than eliminating it; callers must still treat the
+    count and the page as independently observed values.
+
+    Returns ``(total, page, past_end)``. ``page`` is empty when ``offset`` is
+    past the end, and ``past_end`` reports that condition so the caller does
+    not re-derive the bounds check.
+    """
+    total = data_service.count_videos()
+    if offset >= total:
+        return total, [], True
+    return total, data_service.get_videos_summary(limit=limit, offset=offset), False
+
+
 @router.get(
     "/videos",
     response_model=dict[str, Any],
@@ -898,8 +950,10 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        total = data_service.count_videos()
-        if offset >= total:
+        total, paginated_videos, past_end = await asyncio.to_thread(
+            _collect_videos_page, data_service, limit, offset
+        )
+        if past_end:
             return {
                 "videos": [],
                 "total": total,
@@ -907,7 +961,6 @@ async def list_videos_v1(
                 "offset": offset,
                 "has_more": False,
             }
-        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,
@@ -918,8 +971,69 @@ async def list_videos_v1(
         }
 
     except Exception as e:
-        logger.error(f"Error listing videos: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error listing videos: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Shared concurrency gate for the uncached filesystem walks this router hands to
+# ``asyncio.to_thread``.
+#
+# A single module-level ``asyncio.Semaphore`` would be a latent landmine rather
+# than an obvious bug. ``Semaphore.acquire`` only reaches ``_get_loop()`` when it
+# has to wait -- the uncontended path decrements the counter and returns before
+# any loop is touched. So the semaphore stays unbound, and works fine across any
+# number of event loops, right up until the first time it is genuinely contended.
+# That acquisition pins it, and every later use from a different loop raises
+# ``RuntimeError: ... is bound to a different event loop``.
+#
+# The failure therefore cannot show up in low-concurrency tests; it waits for the
+# exact burst this gate exists to absorb. Building the gate per running loop
+# removes the trap outright -- each loop gets its own semaphore.
+#
+# The weak keying bounds growth; it is not a guarantee of collection, and the
+# same fast-path asymmetry is why. ``WeakKeyDictionary`` holds its *values*
+# strongly, and the waiting path above stores the loop on the semaphore, so a
+# gate that has ever been contended keeps its own weak key reachable and is
+# never evicted on its own. Uncontended gates still fall out by themselves;
+# contended ones are reclaimed by ``_discard_closed_fs_walk_gates`` below. Under
+# the production deployment -- one Uvicorn worker, one long-lived loop -- this is
+# a single entry either way, so it only matters where loops are created
+# repeatedly, as they are in tests.
+#
+# The budget is deliberately shared by every endpoint that performs one of these
+# walks, rather than one gate per endpoint. The resource being protected is the
+# single default ``ThreadPoolExecutor``, sized ``min(32, cpu_count + 4)`` and so
+# as small as five workers. Two independent gates of four would each be reasoning
+# locally about a global resource and could between them occupy every worker --
+# precisely the starvation a gate exists to prevent. One budget of four always
+# leaves at least one worker for unrelated ``to_thread`` callers.
+_FS_WALK_MAX_CONCURRENCY = 4
+# Maps a running event loop -> the ``asyncio.Semaphore`` bound to that loop.
+_fs_walk_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_fs_walk_gates_lock = threading.Lock()
+
+
+def _discard_closed_fs_walk_gates() -> None:
+    """Drop registry entries whose event loop has been closed.
+
+    Callers must hold ``_fs_walk_gates_lock``. Deletions are applied only after
+    the comprehension has finished, because a ``WeakKeyDictionary`` must not
+    change size while it is being iterated.
+    """
+    for closed in [loop for loop in _fs_walk_gates if loop.is_closed()]:
+        del _fs_walk_gates[closed]
+
+
+def _get_fs_walk_gate() -> asyncio.Semaphore:
+    """Return the filesystem-walk concurrency gate bound to the running loop."""
+    loop = asyncio.get_running_loop()
+    with _fs_walk_gates_lock:
+        gate = _fs_walk_gates.get(loop)
+        if gate is None:
+            _discard_closed_fs_walk_gates()
+            gate = asyncio.Semaphore(_FS_WALK_MAX_CONCURRENCY)
+            _fs_walk_gates[loop] = gate
+        return gate
 
 
 @router.get(
@@ -932,7 +1046,16 @@ async def get_video_detail_v1(
 ):
     """Get detailed info for specific video"""
     try:
-        video_detail = data_service.get_video_detail(video_id)
+        # ``get_video_detail`` runs an uncached recursive glob over the
+        # enhanced-analysis tree, stats every match, then opens and reads a
+        # metadata file and the full markdown body. That is blocking I/O whose
+        # cost grows with the corpus, so it is dispatched to a worker thread
+        # instead of being run on the event loop, and it shares the router's
+        # filesystem-walk budget so a burst cannot monopolise the executor.
+        async with _get_fs_walk_gate():
+            video_detail = await asyncio.to_thread(
+                data_service.get_video_detail, video_id
+            )
 
         if not video_detail:
             raise HTTPException(status_code=404, detail=f"Video not found: {video_id}")
@@ -942,8 +1065,8 @@ async def get_video_detail_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting video detail: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting video detail: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get(
@@ -955,11 +1078,21 @@ async def get_video_detail_v1(
 async def get_learning_log_v1(data_service: DataService = Depends(get_data_service)):
     """Get learning log from enhanced analysis files"""
     try:
-        learning_log = data_service.get_learning_log()
+        # ``get_learning_log`` walks the enhanced-analysis tree and opens a
+        # metadata file per entry. That is unbounded blocking I/O, so it is
+        # dispatched to a worker thread rather than run on the event loop.
+        #
+        # The walk is also uncached, so every concurrent request starts its own.
+        # Without a bound those walks would be free to occupy every worker in
+        # the shared default executor and starve unrelated ``to_thread``
+        # callers. The gate caps how many walks may be in flight; requests over
+        # the cap wait here on the event loop, holding no worker thread.
+        async with _get_fs_walk_gate():
+            learning_log = await asyncio.to_thread(data_service.get_learning_log)
         return learning_log
     except Exception as e:
-        logger.error(f"Error getting learning log: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error getting learning log: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post(
@@ -1009,8 +1142,8 @@ async def get_actions_by_video_v1(video_id: str):
         actions = repo.get_by_video_id(video_id)
         return actions
     except Exception as e:
-        logger.error(f"Error retrieving actions for {video_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error retrieving actions for {video_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.put(
@@ -1057,8 +1190,8 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
                     logger.debug("Action feedback recording failed", exc_info=True)
         return {"success": bool(success)}
     except Exception as e:
-        logger.error(f"Error updating action {action_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error updating action {action_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Feedback Endpoints
@@ -1104,8 +1237,8 @@ async def submit_feedback_v1(
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
     except Exception as e:
-        logger.error(f"Error saving feedback: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving feedback: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Metrics Endpoints
@@ -1113,7 +1246,7 @@ async def submit_feedback_v1(
     "/metrics",
     summary="Get Metrics",
     description="Get system metrics in Prometheus format",
-    response_class=JSONResponse,
+    response_class=Response,
     responses={200: {"content": {"text/plain": {}}}},
 )
 async def get_metrics_v1(
@@ -1122,10 +1255,10 @@ async def get_metrics_v1(
     """Get system metrics in Prometheus format"""
     try:
         metrics_lines = health_service.get_metrics_prometheus_format()
-        return JSONResponse(content="\n".join(metrics_lines), media_type="text/plain")
+        return Response(content="\n".join(metrics_lines), media_type="text/plain")
     except Exception as e:
-        logger.error(f"Metrics endpoint failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Metrics endpoint failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Frontend performance ingestion endpoints
@@ -1144,8 +1277,8 @@ async def ingest_performance_alert_v1(payload: dict[str, Any]):
         )
         return {"status": "ok", "recorded": metric_name}
     except Exception as e:
-        logger.error(f"Failed to ingest performance alert: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to ingest performance alert: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/performance/report", summary="Ingest frontend performance report")
@@ -1154,16 +1287,24 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
         metrics: dict[str, Any] = (
             report.get("metrics", {}) if isinstance(report, dict) else {}
         )
+        # Collect first, then write once. A report carries every web-vital the
+        # page gathered, and recording them one at a time cost one SQLite
+        # connection and one commit fsync each while the client waited.
+        samples: list[dict[str, Any]] = []
         for name, stats in metrics.items():
             value = stats.get("current") if isinstance(stats, dict) else None
             if isinstance(value, (int, float)):
-                await performance_monitor.record_metric(
-                    "frontend", name, float(value), unit=str(stats.get("unit", "ms"))
-                )
-        return {"status": "ok", "metrics_recorded": len(metrics)}
+                samples.append({
+                    "component": "frontend",
+                    "metric_name": name,
+                    "value": float(value),
+                    "unit": str(stats.get("unit", "ms")),
+                })
+        await performance_monitor.record_metrics(samples)
+        return {"status": "ok", "metrics_recorded": len(samples)}
     except Exception as e:
-        logger.error(f"Failed to ingest performance report: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # ============================================================
@@ -1199,6 +1340,12 @@ class _TTLDict(dict[str, Any]):
     # ------------------------------------------------------------------
 
     def _touch(self, key: str) -> None:
+        # Delete-then-reinsert so the key moves to the *end* of the dict's
+        # insertion order. Plain re-assignment (`d[k] = v`) updates the value
+        # in place and leaves the key at its original position, which would
+        # make `_enforce_max_size` evict a freshly-touched entry instead of the
+        # least-recently-touched one.
+        self._timestamps.pop(key, None)
         self._timestamps[key] = time.monotonic()
 
     def _is_expired(self, key: str) -> bool:
@@ -1214,10 +1361,11 @@ class _TTLDict(dict[str, Any]):
             self._timestamps.pop(k, None)
 
     def _enforce_max_size(self) -> None:
-        """Drop the first-inserted entry when the dict exceeds *max_size*.
+        """Drop the least-recently-touched entry when the dict exceeds *max_size*.
 
-        Python 3.7+ dicts preserve insertion order, so ``next(iter(...))``
-        returns the oldest entry in O(1) without scanning all keys.
+        Python 3.7+ dicts preserve insertion order and ``_touch`` reinserts a
+        key on every access, so ``next(iter(...))`` returns the
+        least-recently-touched entry in O(1) without scanning all keys.
         """
         if len(self) > self._max_size:
             oldest = next(iter(self._timestamps), None)
@@ -1272,13 +1420,53 @@ _video_jobs: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _agent_executions: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 
+# Cache for heavy statistics calculations
+_stats_cache: dict[str, Any] = {}
+_stats_cache_time: float = 0
+_stats_cache_ttl: float = 60
+
+
+async def _periodic_cleanup():
+    """Background task to proactively evict expired jobs from in-memory stores."""
+    while True:
+        try:
+            _video_jobs.evict_expired()
+            _agent_executions.evict_expired()
+            _dispatches.evict_expired()
+        except Exception as exc:
+            logger.debug("Periodic cleanup failed: %s", exc)
+        await asyncio.sleep(300)  # Sweep every 5 minutes
+
+
+@router.on_event("startup")
+async def startup_event():
+    """Start background tasks on API startup."""
+    asyncio.create_task(_periodic_cleanup())
+
 
 def _persist_video_job(job: VideoJobStatusResponse) -> None:
+    """Persist job state. Uses a background task for expensive serialization to avoid blocking."""
     _video_jobs[job.job_id] = job
+
+    def _sync_persist():
+        try:
+            # model_dump(mode="json") can be slow for large results (Issue 5)
+            data = job.model_dump(mode="json")
+            get_job_store().save(job.job_id, data)
+        except Exception as exc:
+            logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+
+    # If we are in an async loop, offload serialization and I/O to a thread
     try:
-        get_job_store().save(job.job_id, job.model_dump(mode="json"))
-    except Exception as exc:
-        logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+        loop = asyncio.get_running_loop()
+        if loop.is_running():
+            asyncio.create_task(asyncio.to_thread(_sync_persist))
+            return
+    except RuntimeError:
+        pass
+
+    # Fallback to sync execution if no loop
+    _sync_persist()
 
 
 def _load_video_job(job_id: str) -> Optional[VideoJobStatusResponse]:
@@ -1601,6 +1789,143 @@ async def list_pipeline_audit_runs(limit: int = 20):
     return ApiResponse.success({"runs": runs, "count": len(runs)})
 
 
+# ============================================================
+# Phase 4 MVP — YouTube-to-Repo contract endpoints
+# ============================================================
+
+
+@router.post(
+    "/video/pack",
+    response_model=ApiResponse,
+    summary="Get or create a VideoPack",
+    tags=["Jobs"],
+)
+async def get_or_create_videopack(request: VideoPackRequest):
+    """Retrieve an existing VideoPack or create one from a job/URL."""
+    # This implementation is a shell that leverages existing fixtures and
+    # job outputs to satisfy the Phase 4 MVP contract.
+    video_id = request.video_id
+    if not video_id and request.video_url:
+        import re
+        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", request.video_url)
+        video_id = match.group(1) if match else None
+
+    if not video_id and request.job_id:
+        job = _load_video_job(request.job_id)
+        if job and job.metadata:
+            video_id = job.metadata.get("video_id")
+
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Could not determine video_id")
+
+    # In a real implementation, this would look up in a VideoPackStore.
+    # For MVP, we return a synthesized pack from the job or a 404.
+    try:
+        from youtube_extension.videopack.schema import (
+            Provenance,
+            Transcript,
+            VideoPackV0,
+        )
+
+        # Check if we have a job with results
+        job = None
+        if request.job_id:
+            job = _load_video_job(request.job_id)
+
+        pack = VideoPackV0(
+            video_id=video_id,
+            transcript=Transcript(
+                full_text=(
+                    job.transcript
+                    if job and job.transcript
+                    else "Transcript extraction pending or unavailable"
+                )
+            ),
+            provenance=Provenance(
+                created_at=datetime.now(timezone.utc), tool_versions={"api": "v1"}
+            ),
+        )
+        return ApiResponse.success(pack.model_dump())
+    except Exception as e:
+        logger.error(f"Failed to create VideoPack: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post(
+    "/projects/blueprint",
+    response_model=ApiResponse,
+    summary="Generate project blueprint",
+    tags=["Jobs"],
+)
+async def generate_blueprint(request: BlueprintRequest):
+    """Generate a project build plan (blueprint) from video analysis."""
+    # MVP implementation: uses the enhanced video processor to derive a build plan
+    try:
+        from youtube_extension.backend.enhanced_video_processor import (
+            EnhancedVideoProcessor,
+        )
+
+        processor = EnhancedVideoProcessor()
+
+        # If we have a job, pull real results to inform the blueprint
+        metadata = {"title": "New Project"}
+        transcript = {"text": ""}
+        ai_analysis = {"summary": "Generated via blueprint endpoint"}
+
+        if request.job_id:
+            job = _load_video_job(request.job_id)
+            if job:
+                metadata["title"] = (job.metadata or {}).get("title") or metadata[
+                    "title"
+                ]
+                transcript["text"] = job.transcript or ""
+                if job.metadata and "outputs" in job.metadata:
+                    ai_analysis["summary"] = (
+                        job.metadata["outputs"]
+                        .get("transcript_action", {})
+                        .get("data", {})
+                        .get("summary", ai_analysis["summary"])
+                    )
+
+        # Call the internal build plan generator (exposed for MVP orchestration)
+        blueprint = await processor._generate_build_plan(
+            video_url=request.video_url or "unknown",
+            metadata=metadata,
+            transcript=transcript,
+            ai_analysis=ai_analysis,
+        )
+        return ApiResponse.success(blueprint)
+    except Exception as e:
+        logger.error(f"Failed to generate blueprint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post(
+    "/projects/generate",
+    response_model=ApiResponse,
+    summary="Generate project code",
+    tags=["Jobs"],
+)
+async def generate_project_code(request: GenerateCodeRequest):
+    """Generate source code for a project based on a blueprint."""
+    try:
+        from youtube_extension.backend.ai_code_generator import AICodeGenerator
+        generator = AICodeGenerator()
+
+        # In MVP, we use default architecture if blueprint is missing
+        result = await generator.generate_fullstack_project(
+            video_analysis={"extracted_info": request.blueprint or {"title": "MVP Project"}},
+            project_config={
+                "project_type": request.project_type,
+                "framework": request.framework
+            }
+        )
+        return ApiResponse.success(result)
+    except Exception as e:
+        logger.error(f"Code generation failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get(
     "/audit/pipeline/{run_id}",
     response_model=ApiResponse,
@@ -1648,6 +1973,10 @@ async def extract_events(request: EventExtractRequest):
     _CHUNK_SIZE = 24_000
     _CHUNK_OVERLAP = 500
     _MAX_EVENTS = 50
+    # Chunks are extracted in bounded windows rather than one at a time.  Each
+    # chunk is an independent, *billed* Gemini round-trip, so the window is kept
+    # small and the _MAX_EVENTS budget is re-checked between windows.
+    _EXTRACT_CONCURRENCY = 4
 
     def _build_chunks(text: str) -> list[str]:
         if len(text) <= _CHUNK_SIZE:
@@ -1721,14 +2050,28 @@ async def extract_events(request: EventExtractRequest):
         return chunk_events
 
     try:
-        for chunk in transcript_chunks:
+        for window_start in range(0, len(transcript_chunks), _EXTRACT_CONCURRENCY):
             if len(events) >= _MAX_EVENTS:
                 break
-            chunk_events = await _extract_chunk(chunk)
-            for ev in chunk_events:
-                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
-                    seen_titles.add(ev.title)
-                    events.append(ev)
+            window = transcript_chunks[
+                window_start : window_start + _EXTRACT_CONCURRENCY
+            ]
+            # asyncio.gather preserves input order, so results are merged in the
+            # same chunk order the serial loop used -- dedup and the _MAX_EVENTS
+            # cut-off therefore select exactly the same events.  _extract_chunk
+            # isolates every ordinary Exception (it catches Exception and returns
+            # []), so return_exceptions=False cannot abort a sibling chunk on a
+            # normal provider failure.  A BaseException such as CancelledError can
+            # still propagate -- that is intended: request cancellation should tear
+            # the whole fan-out down rather than be swallowed into a result value.
+            window_results = await asyncio.gather(
+                *(_extract_chunk(chunk) for chunk in window)
+            )
+            for chunk_events in window_results:
+                for ev in chunk_events:
+                    if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                        seen_titles.add(ev.title)
+                        events.append(ev)
     except Exception as exc:
         logger.warning(f"Chunked extraction failed: {exc}")
 
@@ -1866,12 +2209,14 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
         execution.status = AgentStatus.running
         execution.progress = 10.0
 
-        orchestrator = AgentOrchestrator()
+        if _shared_orchestrator is None and AgentOrchestrator is None:
+            raise RuntimeError("AgentOrchestrator not available")
+        orch = _shared_orchestrator or AgentOrchestrator()
         event_data = next(
             (e for e in events if e.get("id") == execution.event_id),
             events[0] if events else {},
         )
-        result = await orchestrator.execute_single(
+        result = await orch.execute_single(
             agent_type=execution.agent_type,
             context=event_data,
         )
@@ -1879,7 +2224,16 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
             result if isinstance(result, dict) else {"output": str(result)}
         )
 
-        execution.status = AgentStatus.complete
+        # execute_single reports agent-level failures (not found, non-ok status,
+        # caught exceptions) by returning an {"error": ...} dict rather than
+        # raising, so the except block below never sees them. Inspect the result
+        # and surface those failures as AgentStatus.failed instead of silently
+        # marking the execution complete.
+        if isinstance(result, dict) and result.get("error"):
+            execution.status = AgentStatus.failed
+            execution.error = str(result["error"])
+        else:
+            execution.status = AgentStatus.complete
         execution.progress = 100.0
     except Exception as exc:
         execution.status = AgentStatus.failed
@@ -1922,9 +2276,11 @@ async def get_agent_status(agent_id: str):
     tags=["Agents"],
 )
 async def send_a2a_message(
-    body: dict[str, Any] = {},
+    body: dict[str, Any] = None,
 ):
     """Send a context-share or tool-request message between agents."""
+    if body is None:
+        body = {}
     sender = body.get("sender", "frontend")
     recipient = body.get("recipient")
     content = body.get("content", {})
@@ -1948,6 +2304,32 @@ async def send_a2a_message(
             "timestamp": msg.timestamp,
         }
     )
+
+
+@router.get(
+    "/agents/sessions",
+    response_model=ApiResponse,
+    summary="Get agent session logs",
+    tags=["Agents"],
+)
+async def get_agent_session_logs(
+    agent_type: Optional[str] = None,
+    limit: int = Query(default=50, ge=1, le=1000),
+):
+    """Return agent dispatch session logs.
+
+    Session logs track which agents were dispatched, what context they received,
+    and their execution outcomes. This enables a recursive feedback loop where
+    agent findings can be reviewed and re-dispatched as new actions.
+    """
+    if _shared_orchestrator is None:
+        raise HTTPException(
+            status_code=503, detail="AgentOrchestrator not available"
+        )
+    logs = _shared_orchestrator.get_session_logs(
+        agent_type=agent_type, limit=limit
+    )
+    return ApiResponse.success({"sessions": logs, "count": len(logs)})
 
 
 @router.get(

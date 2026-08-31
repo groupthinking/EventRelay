@@ -6,13 +6,13 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 _DEFAULT_ROOT = Path(os.getenv("UVAI_AUDIT_STORE_DIR", "data/audit"))
 
 
 class PipelineAuditStore:
-    def __init__(self, root: Optional[Path] = None) -> None:
+    def __init__(self, root: Path | None = None) -> None:
         self.root = Path(root or _DEFAULT_ROOT)
         self.root.mkdir(parents=True, exist_ok=True)
         self._buffer: dict[str, list[dict[str, Any]]] = {}
@@ -25,9 +25,9 @@ class PipelineAuditStore:
         action: str,
         success: bool,
         duration_ms: float,
-        details: Optional[dict[str, Any]] = None,
-        input_tokens: Optional[int] = None,
-        output_tokens: Optional[int] = None,
+        details: dict[str, Any] | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
     ) -> None:
         entry = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -59,7 +59,7 @@ class PipelineAuditStore:
         return [p.stem for p in files[:limit]]
 
 
-_audit_store: Optional[PipelineAuditStore] = None
+_audit_store: PipelineAuditStore | None = None
 
 
 def get_audit_store() -> PipelineAuditStore:

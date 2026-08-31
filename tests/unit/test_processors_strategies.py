@@ -13,9 +13,9 @@ sys.path.insert(0, str(_SRC))
 
 import youtube_extension.processors.strategies as _mod
 from youtube_extension.processors.strategies import (
+    EnhancedStrategy,
     OptimizedStrategy,
     ParallelStrategy,
-    EnhancedStrategy,
     ProcessingStage,
     ProcessorStrategy,
     TranscriptSegment,
@@ -32,6 +32,13 @@ from youtube_extension.processors.strategies import (
 
 _VALID_URL = "https://www.youtube.com/watch?v=auJzb1D-fag"
 _VALID_ID = "auJzb1D-fag"
+
+
+@pytest.fixture(autouse=True)
+def _disable_external_strategy_clients(monkeypatch):
+    """Pure strategy tests must not initialize Google clients or require ADC."""
+    monkeypatch.setattr(_mod, "HAS_VIDEO_DEPS", False)
+    monkeypatch.setattr(_mod, "HAS_AI_DEPS", False)
 
 
 # ===========================================================================
@@ -266,7 +273,7 @@ class TestOptimizedStrategyProcessVideo:
 
     async def test_cache_hit_increments_counter(self):
         opt = OptimizedStrategy()
-        cache_key = f"optimized_video:{__import__('hashlib').md5(_VALID_URL.encode()).hexdigest()}"
+        cache_key = f"optimized_video:{__import__('hashlib').sha256(_VALID_URL.encode()).hexdigest()}"
         _cache[cache_key] = {"cached": True}
         try:
             result = await opt.process_video(_VALID_URL)
@@ -277,7 +284,7 @@ class TestOptimizedStrategyProcessVideo:
 
     async def test_cache_disabled_skips_hit(self):
         opt = OptimizedStrategy({"enable_intelligent_caching": False})
-        cache_key = f"optimized_video:{__import__('hashlib').md5(_VALID_URL.encode()).hexdigest()}"
+        cache_key = f"optimized_video:{__import__('hashlib').sha256(_VALID_URL.encode()).hexdigest()}"
         _cache[cache_key] = {"cached": True}
         try:
             await opt.process_video(_VALID_URL)

@@ -6,6 +6,7 @@ Redis is not installed; stub it before importing the module under test.
 
 import sys
 import types as _types
+import asyncio
 
 # --- Redis stub (must happen before module import) ---
 _redis_mod = _types.ModuleType("redis")
@@ -32,7 +33,6 @@ from youtube_extension.backend.services.intelligent_cache import (
     IntelligentCacheLayer,
     datetime_decoder,
 )
-
 
 # ---------------------------------------------------------------------------
 # DateTimeEncoder
@@ -565,7 +565,9 @@ class TestIntelligentCacheSystem:
     """Tests for IntelligentCacheSystem that orchestrates multiple layers."""
 
     def setup_method(self):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         # Build a system with only an in-memory L1 layer (no Redis required).
         self.system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         self.system.layers = [
@@ -714,7 +716,7 @@ class TestGlobalConvenienceFunctions:
     async def test_cache_key_returns_hex_string(self):
         from youtube_extension.backend.services.intelligent_cache import cache_key
         k = cache_key("test")
-        assert len(k) == 32
+        assert len(k) == 64  # sha256 hex digest (migrated from md5's 32)
         int(k, 16)  # should not raise
 
 
@@ -727,7 +729,9 @@ class TestAdaptiveTtl:
     """Cover the frequency branches inside _calculate_adaptive_ttl."""
 
     def _make_system(self):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         system.layers = [
             InMemoryCacheLayer("L1", max_size=100, max_size_bytes=1024 * 1024)
@@ -785,7 +789,9 @@ class TestAnalyzePerformanceSuggestions:
     """Ensure all three optimization suggestion branches are exercised."""
 
     def _make_system_with_history(self, records):
-        from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
         system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
         system.layers = [
             InMemoryCacheLayer("L1", max_size=100, max_size_bytes=1024 * 1024)
@@ -1033,17 +1039,17 @@ class TestGlobalCacheDeleteAndInvalidateTags:
 
 
 # make IntelligentCacheSystem importable in tests defined above
-from youtube_extension.backend.services.intelligent_cache import IntelligentCacheSystem  # noqa: E402
-
-
 # ---------------------------------------------------------------------------
 # RedisCacheLayer (L2 Cache) — covers lines 254-450
 # ---------------------------------------------------------------------------
-
-import unittest.mock as _mock
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from youtube_extension.backend.services.intelligent_cache import RedisCacheLayer
+from youtube_extension.backend.services.intelligent_cache import (
+    TAG_WRITE_CONCURRENCY,
+    CacheLoopOwnershipError,
+    IntelligentCacheSystem,  # noqa: E402
+    RedisCacheLayer,
+)
 
 
 def _make_redis_conn(
@@ -1266,6 +1272,152 @@ class TestRedisCacheLayerSet:
 
         assert conn.sadd.call_count == 2
 
+    async def test_set_tag_writes_stay_within_concurrency_bound(self):
+        """A large tag list must not fan out past the connection-pool budget.
+
+        redis-py's async pool defaults to max_connections=20 and every
+        in-flight command holds a connection, so unbounded concurrency here
+        would be able to exhaust the pool.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so other pending tag writes can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+        tags = [f"tag{i}" for i in range(50)]
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", tags=tags)
+
+        assert result is True
+        assert conn.sadd.call_count == 50
+        assert peak <= layer._tag_write_limit
+
+    async def test_set_tag_write_failure_returns_false_and_drains(self):
+        """A failing tag write returns False with no writes left in flight."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        started = 0
+        finished = 0
+
+        async def _flaky_sadd(name, *_args, **_kwargs):
+            nonlocal started, finished
+            started += 1
+            await asyncio.sleep(0)
+            if name.endswith("tag3"):
+                finished += 1
+                raise RuntimeError("redis unavailable")
+            finished += 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_flaky_sadd)
+        tags = [f"tag{i}" for i in range(6)]
+
+        with _patch_redis(conn):
+            result = await layer.set("k", "v", tags=tags)
+
+        assert result is False
+        # Every scheduled write ran to completion before set() returned.
+        assert finished == started
+
+    async def test_concurrent_sets_share_one_tag_write_budget(self):
+        """Concurrent set() calls must share the tag-write budget.
+
+        The limiter has to be per-layer, not per-call: every caller draws from
+        the same connection pool, so N concurrent writers each running their
+        own budget would still exhaust it. warm_cache() gathers set() calls,
+        so this is a reachable path.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_sadd(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so every other pending tag write can start if unbounded.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        conn.sadd = AsyncMock(side_effect=_tracking_sadd)
+        tags = [f"tag{i}" for i in range(20)]
+
+        with _patch_redis(conn):
+            results = await asyncio.gather(
+                *(layer.set(f"k{i}", "v", tags=tags) for i in range(5))
+            )
+
+        assert all(results)
+        assert conn.sadd.call_count == 100
+        # Aggregate in-flight writes stay within the single shared budget,
+        # not 5x it, and leave headroom under the pool's max_connections.
+        assert peak <= layer._tag_write_limit
+        assert layer._tag_write_limit < layer.max_connections
+
+    async def test_tag_write_limit_scales_down_for_small_pools(self):
+        """A small pool must not be handed a fan-out wider than itself."""
+        small = RedisCacheLayer("L2", max_connections=4)
+        assert small._tag_write_limit >= 1
+        assert small._tag_write_limit < small.max_connections
+
+        default = RedisCacheLayer("L2")
+        assert default._tag_write_limit == TAG_WRITE_CONCURRENCY
+
+    def test_tag_write_semaphore_is_replaced_after_its_loop_closes(self):
+        """The semaphore must not stay bound to a loop that has closed.
+
+        Scope: this covers the *semaphore* only. An asyncio.Semaphore binds to
+        the first loop that uses it and raises for every other one, so a
+        semaphore retained past its loop's lifetime would raise on the next
+        loop. This module builds an IntelligentCacheSystem singleton at import
+        time, outside any loop, so that is reachable -- e.g. a process calling
+        asyncio.run() more than once, or a suite giving each test a fresh loop.
+
+        Pool reuse across loops is a separate concern governed by the
+        event-loop ownership contract (issue #1162): the first write's loop
+        closes, so the second loop must re-establish the pool via connect()
+        before it may write. That reconnect is what this test performs, and it
+        is exactly why the semaphore has to be replaced too.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        async def _write(key, tag):
+            with _patch_redis(conn):
+                return await layer.set(key, "v", tags=[tag])
+
+        async def _reconnect_and_write(key, tag):
+            with _patch_redis(conn):
+                # The owning loop is gone, so the layer released its pool.
+                await layer.connect()
+                return await layer.set(key, "v", tags=[tag])
+
+        assert asyncio.run(_write("k", "a")) is True
+        first = layer._tag_write_semaphore
+        first_loop = layer._tag_write_semaphore_loop
+        assert first is not None
+        assert first_loop is not None and first_loop.is_closed()
+
+        assert asyncio.run(_reconnect_and_write("k2", "b")) is True
+        assert layer._tag_write_semaphore is not first
+        assert layer._tag_write_semaphore_loop is not first_loop
+
     async def test_set_stores_metadata(self):
         layer = self._connected_layer()
         conn = _make_redis_conn()
@@ -1448,6 +1600,239 @@ class TestRedisCacheLayerInvalidateByTags:
 
         assert result == 0
 
+    async def test_invalidate_issues_tags_concurrently(self):
+        """Per-tag work must overlap rather than run one tag at a time.
+
+        This is the non-vacuity guard for the change: a serial ``for`` loop
+        yields a peak of exactly 1, so this assertion fails on the previous
+        implementation.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_smembers(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            # Yield so sibling tags can start if the fan-out is concurrent.
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return {b"key1"}
+
+        conn.smembers = AsyncMock(side_effect=_tracking_smembers)
+        conn.delete = AsyncMock(return_value=1)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags([f"tag{i}" for i in range(5)])
+
+        assert peak > 1
+        assert conn.smembers.call_count == 5
+        assert result == 5
+
+    async def test_invalidate_stays_within_concurrency_bound(self):
+        """A large tag list must not fan out past the connection-pool budget."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracking_smembers(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return set()
+
+        conn.smembers = AsyncMock(side_effect=_tracking_smembers)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags([f"tag{i}" for i in range(50)])
+
+        assert result == 0
+        assert conn.smembers.call_count == 50
+        assert peak <= layer._tag_write_limit
+
+    async def test_invalidate_holds_one_permit_across_both_commands(self):
+        """smembers and delete for a tag are scheduled under one permit.
+
+        Holding the permit across the pair keeps each tag's invalidation as one
+        indivisible unit of scheduled work, so with a single permit the pairs
+        run to completion without interleaving. (This does not change peak pool
+        usage -- redis.asyncio returns a connection to the pool between the two
+        awaits -- it pins the per-tag scheduling policy so a later refactor
+        cannot silently split the pair.)
+        """
+        layer = self._connected_layer()
+        layer._tag_write_limit = 1
+        conn = _make_redis_conn()
+
+        order = []
+
+        async def _smembers(name, *_args, **_kwargs):
+            order.append(("smembers", name))
+            await asyncio.sleep(0)
+            return {b"key1"}
+
+        async def _delete(*args, **_kwargs):
+            order.append(("delete", args[-1]))
+            await asyncio.sleep(0)
+            return 1
+
+        conn.smembers = AsyncMock(side_effect=_smembers)
+        conn.delete = AsyncMock(side_effect=_delete)
+
+        with _patch_redis(conn):
+            await layer.invalidate_by_tags(["tag1", "tag2"])
+
+        # With one permit the pairs must not interleave.
+        assert order == [
+            ("smembers", "uvai:tag:tag1"),
+            ("delete", "uvai:tag:tag1"),
+            ("smembers", "uvai:tag:tag2"),
+            ("delete", "uvai:tag:tag2"),
+        ]
+
+    async def test_invalidate_cancellation_drains_before_conn_closes(self):
+        """Cancellation must unwind every child before the connection closes.
+
+        This is the explicit cancellation-parity claim: gather() does not
+        complete its outer future until every cancelled child has finished, so
+        the enclosing ``async with redis.Redis(...)`` cannot close ``conn``
+        while a child could still issue a command on it.
+        """
+        layer = self._connected_layer()
+        layer._tag_write_limit = 4
+        conn = _make_redis_conn()
+
+        events: list[tuple] = []
+        all_blocked = asyncio.Event()
+        entered = 0
+
+        async def _blocking_smembers(name, *_args, **_kwargs):
+            nonlocal entered
+            events.append(("cmd", "smembers", name))
+            entered += 1
+            if entered == 3:
+                all_blocked.set()
+            try:
+                await asyncio.sleep(3600)
+                return {b"key1"}
+            finally:
+                events.append(("unwind", name))
+
+        async def _delete(*args, **_kwargs):
+            events.append(("cmd", "delete", args[-1]))
+            return 1
+
+        async def _aexit(*_args, **_kwargs):
+            events.append(("aexit",))
+            return False
+
+        conn.smembers = AsyncMock(side_effect=_blocking_smembers)
+        conn.delete = AsyncMock(side_effect=_delete)
+        conn.__aexit__ = AsyncMock(side_effect=_aexit)
+
+        with _patch_redis(conn):
+            task = asyncio.create_task(layer.invalidate_by_tags(["t1", "t2", "t3"]))
+            try:
+                await asyncio.wait_for(all_blocked.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                task.cancel()
+                try:
+                    await task
+                except BaseException:
+                    pass
+                pytest.fail(
+                    f"tags were not issued concurrently; only {entered} in flight"
+                )
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        kinds = [e[0] for e in events]
+        assert "aexit" in kinds, f"connection never closed: {events}"
+        aexit_idx = kinds.index("aexit")
+
+        # Every child finished its finally path before the connection closed.
+        assert kinds.count("unwind") == 3, f"not all children unwound: {events}"
+        assert all(
+            i < aexit_idx for i, e in enumerate(events) if e[0] == "unwind"
+        ), f"a child unwound after conn close: {events}"
+
+        # No Redis command was issued after the connection closed.
+        assert all(
+            i < aexit_idx for i, e in enumerate(events) if e[0] == "cmd"
+        ), f"command issued after conn close: {events}"
+
+    async def test_invalidate_failure_drains_in_flight_work(self):
+        """A failing tag returns 0 with no per-tag task left in flight."""
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        started = 0
+        finished = 0
+
+        async def _flaky_smembers(name, *_args, **_kwargs):
+            nonlocal started, finished
+            started += 1
+            await asyncio.sleep(0)
+            finished += 1
+            if name.endswith("tag3"):
+                raise RuntimeError("redis unavailable")
+            return set()
+
+        conn.smembers = AsyncMock(side_effect=_flaky_smembers)
+
+        with _patch_redis(conn):
+            result = await layer.invalidate_by_tags([f"tag{i}" for i in range(6)])
+
+        assert result == 0
+        # Every scheduled tag ran to completion before the method returned.
+        assert started == 6
+        assert finished == started
+
+    async def test_invalidate_shares_tag_write_budget_with_set(self):
+        """set() and invalidate_by_tags() must draw from one shared budget.
+
+        Both hold connections from the same pool, so separate budgets would let
+        a concurrent set storm and invalidation storm each claim the full limit.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        in_flight = 0
+        peak = 0
+
+        async def _tracked(*_args, **_kwargs):
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            await asyncio.sleep(0)
+            in_flight -= 1
+            return 1
+
+        async def _tracked_smembers(*_args, **_kwargs):
+            await _tracked()
+            return set()
+
+        conn.sadd = AsyncMock(side_effect=_tracked)
+        conn.smembers = AsyncMock(side_effect=_tracked_smembers)
+
+        with _patch_redis(conn):
+            await asyncio.gather(
+                layer.set("k", "v", tags=[f"s{i}" for i in range(40)]),
+                layer.invalidate_by_tags([f"i{i}" for i in range(40)]),
+            )
+
+        assert conn.sadd.call_count == 40
+        assert conn.smembers.call_count == 40
+        assert peak <= layer._tag_write_limit
+
 
 class TestRedisCacheLayerUpdateAvgAccessTime:
     """Tests for RedisCacheLayer._update_avg_access_time() — lines 442-450"""
@@ -1463,3 +1848,797 @@ class TestRedisCacheLayerUpdateAvgAccessTime:
         layer._update_avg_access_time(20.0)
         # EMA: 0.1 * 20 + 0.9 * 10 = 11.0
         assert layer.stats.avg_access_time_ms == pytest.approx(11.0, rel=0.01)
+
+
+# ---------------------------------------------------------------------------
+# Removal paths release entry bookkeeping
+# ---------------------------------------------------------------------------
+
+
+def _expire_now(layer: InMemoryCacheLayer, key: str) -> None:
+    """Backdate a resident entry's expiry so the next ``get()`` expires it.
+
+    Deterministic stand-in for sleeping past a real TTL; the lazy-expiry branch
+    only compares ``expires_at`` against the wall clock, so this exercises the
+    identical code path without adding seconds to the suite.
+    """
+    layer.cache[key].expires_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+
+
+class TestEvictionReleasesAccessHistory:
+    """``delete()`` already drops a key's access history (see
+    ``test_delete_cleans_access_patterns``). ``_evict_if_needed`` must do the
+    same: an evicted key leaves no cache entry behind, so nothing else will ever
+    reclaim its history."""
+
+    async def test_evicted_key_history_is_released(self):
+        layer = InMemoryCacheLayer("evict_one", max_size=1, max_size_bytes=1024 * 1024)
+        await layer.set("first", "value")
+        await layer.get("first")
+        assert "first" in layer.access_patterns
+
+        # Inserting a second key evicts "first" (max_size=1).
+        await layer.set("second", "value")
+
+        assert "first" not in layer.cache
+        assert "first" not in layer.access_patterns, (
+            "history for an evicted key was retained; nothing will ever "
+            "reclaim it because the cache entry is already gone"
+        )
+
+    async def test_eviction_churn_leaves_no_orphaned_histories(self):
+        """The accumulating case: many keys cycle through a small cache. Every
+        key that is evicted must take its history with it, so the number of
+        tracked histories stays proportional to the number of resident keys."""
+        layer = InMemoryCacheLayer("churn", max_size=5, max_size_bytes=1024 * 1024)
+
+        for i in range(200):
+            key = f"k{i}"
+            await layer.set(key, "value")
+            await layer.get(key)
+
+        orphans = set(layer.access_patterns) - set(layer.cache)
+        assert not orphans, (
+            f"{len(orphans)} evicted keys still have access history retained "
+            f"while only {len(layer.cache)} entries are resident; this memory "
+            "is invisible to stats.total_size_bytes so the max_size_bytes "
+            "budget can never reclaim it"
+        )
+
+    async def test_resident_keys_keep_their_history(self):
+        """Releasing evicted histories must not disturb keys still in the
+        cache — the fix must be a narrow cleanup, not a blanket clear."""
+        layer = InMemoryCacheLayer("keep", max_size=3, max_size_bytes=1024 * 1024)
+
+        for i in range(10):
+            await layer.set(f"k{i}", "value")
+            await layer.get(f"k{i}")
+
+        for key in layer.cache:
+            assert layer.access_patterns.get(key), (
+                f"resident key {key!r} lost its access history; adaptive TTL "
+                "would fall back to the base value for a live key"
+            )
+
+
+class TestExpiryReleasesEntryBookkeeping:
+    """Lazy expiry in ``get()`` is the only place expired entries are ever
+    removed — there is no background sweeper — so it must release exactly what
+    ``delete()`` releases. Dropping the entry alone left the counters and the
+    access history describing an entry that no longer exists."""
+
+    async def test_expired_key_history_is_released(self):
+        layer = InMemoryCacheLayer(
+            "expiry_hist", max_size=100, max_size_bytes=1024 * 1024
+        )
+        await layer.set("k", "value", ttl=60)
+
+        # History only accrues on a hit, so read the key while it is still
+        # live — otherwise there would be nothing to orphan.
+        await layer.get("k")
+        assert layer.access_patterns["k"], "precondition: history was recorded"
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        assert "k" not in layer.access_patterns, (
+            "access history survived the entry it describes; with no sweeper "
+            "and no cache entry left, nothing can ever reclaim it"
+        )
+
+    async def test_expired_key_releases_size_accounting(self):
+        """``total_size_bytes`` is not merely reported — ``_evict_if_needed``
+        budgets against it, so bytes left behind by expiry permanently reduce
+        the layer's usable capacity."""
+        layer = InMemoryCacheLayer(
+            "expiry_bytes", max_size=100, max_size_bytes=1024 * 1024
+        )
+        await layer.set("k", "x" * 500, ttl=60)
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        assert layer.stats.total_size_bytes == 0, (
+            f"cache holds {len(layer.cache)} entries but still reports "
+            f"{layer.stats.total_size_bytes} bytes in use; these phantom bytes "
+            "are charged against max_size_bytes forever"
+        )
+
+    async def test_expired_key_releases_entry_count(self):
+        layer = InMemoryCacheLayer(
+            "expiry_count", max_size=100, max_size_bytes=1024 * 1024
+        )
+        await layer.set("k", "value", ttl=60)
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        assert (
+            layer.stats.total_entries == 0
+        ), f"cache is empty but reports {layer.stats.total_entries} entries"
+
+    async def test_reused_key_does_not_inherit_expired_history(self):
+        """A key that expires and is later written again is a *new* entry. If
+        the dead entry's timestamps survive, ``_calculate_adaptive_ttl`` reads
+        them as the new entry's access frequency and over-extends its TTL."""
+        layer = InMemoryCacheLayer("reuse", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value", ttl=60)
+        for _ in range(5):
+            await layer.get("k")
+        assert len(layer.access_patterns["k"]) == 5
+
+        _expire_now(layer, "k")
+        assert await layer.get("k") is None
+
+        # Same key, brand-new entry.
+        await layer.set("k", "fresh", ttl=60)
+
+        assert len(layer.access_patterns.get("k", [])) == 0, (
+            "a freshly written entry inherited its expired predecessor's "
+            "access timestamps, so it is treated as an established hot key "
+            "from the moment it is created"
+        )
+
+
+class TestExpiredBytesDoNotConsumeCapacity:
+    """The user-visible consequence of the accounting leak: because
+    ``_evict_if_needed`` evicts while ``total_size_bytes`` exceeds the budget,
+    bytes that expiry never released push live entries out of the cache."""
+
+    async def test_capacity_survives_expiry_churn(self):
+        payload = "x" * 900
+
+        async def fill_and_count(with_expiry_churn: bool) -> int:
+            layer = InMemoryCacheLayer("cap", max_size=10_000, max_size_bytes=100_000)
+            if with_expiry_churn:
+                for i in range(50):
+                    await layer.set(f"gone{i}", payload, ttl=60)
+                    _expire_now(layer, f"gone{i}")
+                    await layer.get(f"gone{i}")
+            for i in range(200):
+                await layer.set(f"live{i}", payload)
+            return sum(1 for key in layer.cache if key.startswith("live"))
+
+        baseline = await fill_and_count(with_expiry_churn=False)
+        after_churn = await fill_and_count(with_expiry_churn=True)
+
+        # Control: eviction is still doing its job in both runs, so this is a
+        # test of correct accounting and not of a disabled size limit.
+        assert baseline < 200, "precondition: the byte budget must force eviction"
+
+        assert after_churn == baseline, (
+            f"a layer that has seen expiry churn holds only {after_churn} live "
+            f"entries where a fresh layer of the same size holds {baseline}; "
+            "the expired entries' bytes are still charged against the budget"
+        )
+
+
+# ----------------------------------------------------------------------------
+# set() replacing an already-expired key
+# ----------------------------------------------------------------------------
+
+
+class TestResetOfExpiredKeyStartsCleanHistory:
+    """``set()`` is a fourth way an entry stops existing.
+
+    ``delete()``, eviction and lazy expiry all free the slot, so they route
+    through ``_release_entry``. ``set()`` instead *reuses* the slot, which is
+    why it needs its own handling: if the resident entry has already expired,
+    the value being installed is a brand-new entry that happens to share a key,
+    and it must not inherit the dead entry's access history.
+
+    The distinction matters because ``access_patterns`` is the frequency signal
+    behind adaptive TTL -- inherited timestamps make a cold key look hot.
+    """
+
+    async def test_reset_after_expiry_drops_dead_history(self):
+        layer = InMemoryCacheLayer("reset_hist", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        for _ in range(5):
+            await layer.get("k")
+
+        # Precondition: the live entry really did accumulate history, so a
+        # later empty result is the fix and not an artefact of never recording.
+        assert (
+            len(layer.access_patterns["k"]) == 5
+        ), "precondition: reads on a live entry must record access timestamps"
+
+        _expire_now(layer, "k")
+        # Deliberately no get() and no delete() in between: this is the path
+        # where the caller overwrites a dead entry directly.
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        assert len(layer.access_patterns["k"]) == 0, (
+            "a value written over an expired entry inherited "
+            f"{len(layer.access_patterns['k'])} timestamps from its dead "
+            "predecessor; the successor is a new entry and starts cold"
+        )
+
+    async def test_reset_of_live_key_keeps_history(self):
+        """Control: re-writing a *live* key is a genuine update, not a reuse."""
+        layer = InMemoryCacheLayer("reset_live", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        for _ in range(5):
+            await layer.get("k")
+
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        assert len(layer.access_patterns["k"]) == 5, (
+            "overwriting a live key discarded its access history; only expired "
+            "entries should reset the frequency signal"
+        )
+
+    async def test_reset_after_expiry_keeps_entry_count_stable(self):
+        """The slot is reused, so the entry count must not move."""
+        layer = InMemoryCacheLayer("reset_count", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        _expire_now(layer, "k")
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        assert layer.stats.total_entries == 1, (
+            f"replacing an expired entry reported {layer.stats.total_entries} "
+            "entries for a single resident key"
+        )
+
+    async def test_adaptive_ttl_does_not_treat_reused_key_as_hot(self):
+        """End-to-end: the inherited history reached the TTL calculation."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
+
+        layer = InMemoryCacheLayer("reset_ttl", max_size=100)
+        await layer.set("k", {"v": 1}, ttl=300)
+        # 20 reads in a tight loop is the frequency profile that earns the
+        # hot-key TTL, so the inherited history is unambiguously load-bearing.
+        for _ in range(20):
+            await layer.get("k")
+        _expire_now(layer, "k")
+        await layer.set("k", {"v": 2}, ttl=300)
+
+        system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
+        system.layers = [layer]
+        system.adaptive_ttl_enabled = True
+        system.cache_warming_enabled = False
+        system.auto_invalidation_enabled = False
+        system.performance_history = []
+        system.optimization_suggestions = []
+
+        ttl = system._calculate_adaptive_ttl("k")
+
+        assert ttl == 3600, (
+            f"a key with no accesses since it was rewritten was given a {ttl}s "
+            "TTL instead of the 3600s base; it inherited its expired "
+            "predecessor's access timestamps and was scored as a hot key"
+        )
+
+
+# ---------------------------------------------------------------------------
+# InMemoryCacheLayer — access-history retention is bounded
+# ---------------------------------------------------------------------------
+
+
+class TestAccessHistoryRetentionIsBounded:
+    """A key that is read repeatedly must not accumulate one timestamp per hit
+    forever. Before this was bounded, ``access_patterns[key]`` was a plain list
+    appended to on every cache hit and never trimmed, so a hot key's history
+    grew without limit for as long as the key stayed resident."""
+
+    async def test_hot_key_history_stays_within_window(self):
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("hot", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("hot", "value")
+
+        hits = ACCESS_HISTORY_WINDOW * 20
+        for _ in range(hits):
+            await layer.get("hot")
+
+        # Precondition: the key is still resident, so nothing released its
+        # history behind our back and the count below is the retention policy.
+        assert "hot" in layer.cache, "key was evicted; this is not a retention test"
+
+        retained = len(layer.access_patterns["hot"])
+        assert retained <= ACCESS_HISTORY_WINDOW, (
+            f"history for a single resident key grew to {retained} entries "
+            f"after {hits} hits; expected it to stay within "
+            f"ACCESS_HISTORY_WINDOW={ACCESS_HISTORY_WINDOW}"
+        )
+
+    async def test_window_retains_the_most_recent_timestamps(self):
+        """Bounding must drop the oldest samples, not the newest, so the
+        retained window still describes current behaviour."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("recent", max_size=100, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+
+        for _ in range(ACCESS_HISTORY_WINDOW):
+            await layer.get("k")
+        boundary = time.time()
+        for _ in range(ACCESS_HISTORY_WINDOW):
+            await layer.get("k")
+
+        retained = list(layer.access_patterns["k"])
+        assert retained == sorted(retained), "retained timestamps lost their ordering"
+        assert all(ts >= boundary for ts in retained), (
+            "history retained samples recorded before the most recent "
+            f"{ACCESS_HISTORY_WINDOW} hits; the window is dropping the wrong end"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Adaptive TTL still consumes the bounded history
+# ---------------------------------------------------------------------------
+
+
+class TestAdaptiveTtlOverBoundedHistory:
+    """``_calculate_adaptive_ttl`` reads ``accesses[0]``, ``accesses[-1]`` and
+    ``len(accesses)``. Those must keep working over the bounded container, and
+    a saturated window must still classify a hot key as high-frequency."""
+
+    def _make_system(self, layer):
+        from youtube_extension.backend.services.intelligent_cache import (
+            IntelligentCacheSystem,
+        )
+
+        system = IntelligentCacheSystem.__new__(IntelligentCacheSystem)
+        system.layers = [layer]
+        system.adaptive_ttl_enabled = True
+        system.cache_warming_enabled = False
+        system.auto_invalidation_enabled = False
+        system.performance_history = []
+        system.optimization_suggestions = []
+        return system
+
+    async def test_saturated_window_still_yields_high_frequency_ttl(self):
+        """The window holds only the tail of a burst, but that tail is itself a
+        tight burst, so the frequency estimate must still read as hot."""
+        from youtube_extension.backend.services.intelligent_cache import (
+            ACCESS_HISTORY_WINDOW,
+        )
+
+        layer = InMemoryCacheLayer("ttl", max_size=10, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+        # Far more hits than the window holds, all in a tight burst.
+        for _ in range(ACCESS_HISTORY_WINDOW * 5):
+            await layer.get("k")
+
+        system = self._make_system(layer)
+        ttl = system._calculate_adaptive_ttl("k")
+        assert ttl == 3600 * 4, (
+            f"a saturated access window produced a {ttl}s TTL; a key read "
+            f"{ACCESS_HISTORY_WINDOW * 5} times in a burst should still be "
+            "classified as high-frequency"
+        )
+
+    async def test_indexing_and_len_work_over_bounded_history(self):
+        """Guards the three container operations _calculate_adaptive_ttl uses.
+        A container that bounded retention but broke indexing would silently
+        send every key back to the base TTL."""
+        layer = InMemoryCacheLayer("idx", max_size=10, max_size_bytes=1024 * 1024)
+        await layer.set("k", "value")
+        for _ in range(5):
+            await layer.get("k")
+
+        accesses = layer.access_patterns["k"]
+        assert len(accesses) == 5, "len() over the history container is wrong"
+        assert accesses[0] <= accesses[-1], "first/last indexing is not ordered"
+
+
+# ---------------------------------------------------------------------------
+# RedisCacheLayer event-loop ownership contract — issue #1162 / GRV-212
+# ---------------------------------------------------------------------------
+import contextlib
+import logging
+import threading
+
+
+@contextlib.contextmanager
+def _foreign_owner_loop(layer):
+    """Hand ``layer`` to an owner that is a *different, still running* loop.
+
+    The loop runs on a background thread and stays alive for the duration of
+    the ``with`` block, so the ownership check inside the test's own loop hits
+    the "owner is still live" branch rather than the closed-loop branch.
+    """
+
+    async def _claim():
+        layer._require_pool_loop()
+
+    loop = asyncio.new_event_loop()
+    ready = threading.Event()
+
+    def _run():
+        asyncio.set_event_loop(loop)
+        loop.call_soon(ready.set)
+        loop.run_forever()
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    assert ready.wait(5), "owner loop failed to start"
+    asyncio.run_coroutine_threadsafe(_claim(), loop).result(5)
+    assert layer._pool_loop is loop
+
+    try:
+        yield loop
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        thread.join(5)
+        loop.close()
+
+
+class TestRedisCacheLayerLoopOwnership:
+    """RedisCacheLayer + its ConnectionPool are owned by one event loop.
+
+    redis.asyncio.ConnectionPool caches connections whose transports are bound
+    to the loop that opened them, so a pool reached from a second live loop
+    hands out connections that loop cannot drive. This module also builds an
+    IntelligentCacheSystem singleton at import time, outside any loop, so a
+    single layer instance really is reachable from several loops in one
+    process. See issue #1162.
+    """
+
+    def _connected_layer(self):
+        layer = RedisCacheLayer("L2")
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+        return layer
+
+    # -- rejection from a second live loop, at every pool call site ---------
+
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda layer: layer.connect(), id="connect"),
+            pytest.param(lambda layer: layer.disconnect(), id="disconnect"),
+            pytest.param(lambda layer: layer.get("k"), id="get"),
+            pytest.param(lambda layer: layer.set("k", "v"), id="set"),
+            pytest.param(lambda layer: layer.delete("k"), id="delete"),
+            pytest.param(lambda layer: layer.clear(), id="clear"),
+            pytest.param(lambda layer: layer.invalidate_by_tags(["t"]), id="invalidate_by_tags"),
+        ],
+    )
+    async def test_live_foreign_loop_is_rejected(self, call):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _foreign_owner_loop(layer):
+            with _patch_redis(conn):
+                with pytest.raises(CacheLoopOwnershipError):
+                    await call(layer)
+
+    async def test_rejection_is_not_swallowed_into_a_fallback_value(self):
+        """Every pool method wraps its body in ``except Exception``.
+
+        If the guard ran inside that block the ownership error would surface as
+        an ordinary cache miss (None / False / 0) and the bug would stay
+        invisible. Assert the error escapes instead.
+        """
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        with _foreign_owner_loop(layer):
+            with _patch_redis(conn):
+                for coro_factory in (
+                    lambda: layer.get("k"),
+                    lambda: layer.set("k", "v"),
+                    lambda: layer.delete("k"),
+                    lambda: layer.clear(),
+                    lambda: layer.invalidate_by_tags(["t"]),
+                ):
+                    with pytest.raises(CacheLoopOwnershipError):
+                        await coro_factory()
+
+    async def test_rejection_leaves_the_layer_untouched(self):
+        """A rejected access must not tear down the owner's working pool."""
+        layer = self._connected_layer()
+        pool = layer.redis_pool
+
+        with _foreign_owner_loop(layer) as owner:
+            with pytest.raises(CacheLoopOwnershipError):
+                await layer.get("k")
+
+            assert layer.redis_pool is pool
+            assert layer._connected is True
+            assert layer._pool_loop is owner
+
+    async def test_no_pool_means_no_ownership_to_violate(self):
+        """A layer that never connected is claimed by nobody."""
+        layer = RedisCacheLayer("L2")
+
+        assert layer._pool_loop is None
+        assert await layer.get("k") is None
+        # Reading a pool-less layer must not claim it for this loop, or the
+        # next loop to call connect() would be locked out.
+        assert layer._pool_loop is None
+
+    # -- ownership transitions are serialized --------------------------------
+
+    def test_simultaneous_first_connect_from_two_loops_is_serialized(self):
+        """Two loops racing their first connect() must not both build a pool.
+
+        Ownership is claimed under a lock *before* the pool is created, so the
+        second loop is rejected while the first is still mid-connect, instead
+        of overwriting self.redis_pool and leaking the loser's pool.
+        """
+        import types as _types
+
+        layer = RedisCacheLayer("L2")
+        conn = _make_redis_conn()
+        pool_a = _make_pool()
+
+        entered = threading.Event()
+        release = threading.Event()
+
+        def _blocking_from_url(url, **kwargs):
+            entered.set()
+            assert release.wait(5), "test deadlock: from_url never released"
+            return pool_a
+
+        mock_redis_mod = _types.ModuleType("redis.asyncio")
+        pool_cls = MagicMock()
+        pool_cls.from_url = MagicMock(side_effect=_blocking_from_url)
+        mock_redis_mod.ConnectionPool = pool_cls
+        mock_redis_mod.Redis = MagicMock(return_value=conn)
+
+        owner_loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=owner_loop.run_forever, daemon=True)
+        thread.start()
+        try:
+            with patch(
+                "youtube_extension.backend.services.intelligent_cache.redis",
+                mock_redis_mod,
+            ):
+                fut = asyncio.run_coroutine_threadsafe(layer.connect(), owner_loop)
+                assert entered.wait(5), "owner connect() never started"
+
+                # The owner loop holds the claim but has not finished building
+                # its pool; the second loop must be rejected, not allowed to
+                # race it and overwrite the winner.
+                with pytest.raises(CacheLoopOwnershipError):
+                    asyncio.run(layer.connect())
+
+                release.set()
+                fut.result(5)
+        finally:
+            release.set()
+            owner_loop.call_soon_threadsafe(owner_loop.stop)
+            thread.join(5)
+            owner_loop.close()
+
+        assert layer._connected is True
+        assert layer.redis_pool is pool_a
+
+    def test_reconnect_on_the_owner_loop_closes_the_previous_pool(self):
+        """connect() on the owning loop must not abandon the pool it replaces."""
+        layer = RedisCacheLayer("L2")
+        old_pool = AsyncMock()
+        layer.redis_pool = old_pool
+        layer._connected = True
+        conn = _make_redis_conn()
+
+        async def _reconnect():
+            layer._require_pool_loop()
+            with _patch_redis(conn):
+                await layer.connect()
+
+        asyncio.run(_reconnect())
+
+        old_pool.disconnect.assert_awaited_once()
+        assert layer._connected is True
+        assert layer.redis_pool is not old_pool
+
+    # -- closed owner loop ---------------------------------------------------
+
+    def test_closed_owner_loop_releases_the_pool(self, caplog):
+        """The pool dies with its loop, so drop it instead of reusing it.
+
+        We deliberately do not ``await pool.disconnect()`` here: that would
+        touch the very transports bound to the dead loop.
+        """
+        layer = self._connected_layer()
+        pool = layer.redis_pool
+
+        async def _claim():
+            layer._require_pool_loop()
+
+        asyncio.run(_claim())
+        first_loop = layer._pool_loop
+        assert first_loop is not None and first_loop.is_closed()
+        assert layer.redis_pool is pool
+
+        with caplog.at_level(logging.WARNING):
+            asyncio.run(_claim())
+
+        assert layer.redis_pool is None
+        assert layer._connected is False
+        assert layer._pool_loop is None
+        assert any(
+            "closed without disconnect()" in r.getMessage() for r in caplog.records
+        ), "the discarded pool must be reported, not dropped silently"
+
+    def test_new_loop_can_reconnect_after_the_owner_closed(self):
+        layer = self._connected_layer()
+        conn = _make_redis_conn()
+
+        async def _use():
+            with _patch_redis(conn):
+                return await layer.get("k")
+
+        async def _reconnect_and_use():
+            with _patch_redis(conn):
+                await layer.connect()
+                return await layer.get("k")
+
+        asyncio.run(_use())
+        assert asyncio.run(_reconnect_and_use()) is None  # miss, but no raise
+        assert layer._connected is True
+
+    # -- disconnect() is the supported handoff -------------------------------
+
+    def test_disconnect_releases_ownership_for_the_next_loop(self):
+        layer = self._connected_layer()
+        pool = AsyncMock()
+        layer.redis_pool = pool
+        conn = _make_redis_conn()
+
+        async def _own_then_release():
+            layer._require_pool_loop()
+            await layer.disconnect()
+
+        asyncio.run(_own_then_release())
+
+        pool.disconnect.assert_awaited_once()
+        assert layer.redis_pool is None
+        assert layer._connected is False
+        assert layer._pool_loop is None
+
+        async def _adopt():
+            with _patch_redis(conn):
+                await layer.connect()
+                return layer._connected
+
+        # No warning path, no error: this is the clean handoff.
+        assert asyncio.run(_adopt()) is True
+
+    def test_disconnect_failure_propagates_and_keeps_the_pool(self):
+        """A failed teardown must be loud and must not release the live pool.
+
+        Clearing ownership before the disconnect succeeds — or swallowing its
+        failure — would leave a still-live pool unreachable: a silent leak.
+        State is released only once the pool has actually closed, so the
+        caller can retry.
+        """
+        layer = RedisCacheLayer("L2")
+        layer._connected = True
+        pool = AsyncMock()
+        pool.disconnect = AsyncMock(side_effect=RuntimeError("teardown failed"))
+        layer.redis_pool = pool
+
+        async def _own_then_fail_then_retry():
+            layer._require_pool_loop()
+            loop = asyncio.get_running_loop()
+
+            with pytest.raises(RuntimeError, match="teardown failed"):
+                await layer.disconnect()
+
+            # Ownership and the pool survive the failure, so it can be retried.
+            assert layer.redis_pool is pool
+            assert layer._connected is True
+            assert layer._pool_loop is loop
+
+            pool.disconnect = AsyncMock()
+            await layer.disconnect()
+            assert layer.redis_pool is None
+            assert layer._connected is False
+            assert layer._pool_loop is None
+
+        asyncio.run(_own_then_fail_then_retry())
+
+    async def test_disconnect_without_a_pool_is_a_noop(self):
+        layer = RedisCacheLayer("L2")
+        await layer.disconnect()
+        assert layer.redis_pool is None
+        assert layer._pool_loop is None
+
+    # -- the import-time singleton is the real-world trigger ------------------
+
+    async def test_import_time_singleton_honours_the_contract(self):
+        """`intelligent_cache` is built at import time, outside any loop.
+
+        That single instance is reachable from every loop in the process, which
+        is precisely the situation issue #1162 describes.
+        """
+        from youtube_extension.backend.services import intelligent_cache as ic_module
+
+        layer = ic_module.intelligent_cache.layers[1]
+        assert isinstance(layer, RedisCacheLayer)
+
+        original_pool, original_connected, original_loop = (
+            layer.redis_pool,
+            layer._connected,
+            layer._pool_loop,
+        )
+        try:
+            layer.redis_pool = _make_pool()
+            layer._connected = True
+            layer._pool_loop = None
+
+            with _foreign_owner_loop(layer):
+                with pytest.raises(CacheLoopOwnershipError):
+                    await ic_module.intelligent_cache.get("k")
+        finally:
+            layer.redis_pool = original_pool
+            layer._connected = original_connected
+            layer._pool_loop = original_loop
+
+    async def test_facade_does_not_swallow_the_ownership_error(self):
+        """IntelligentCacheSystem must surface the error, not mask it."""
+        system = IntelligentCacheSystem()
+        layer = system.layers[1]
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+
+        with _foreign_owner_loop(layer):
+            with pytest.raises(CacheLoopOwnershipError):
+                await system.set("k", "v")
+
+    async def test_warm_cache_does_not_swallow_the_ownership_error(self):
+        """warm_cache() gathers set() calls with return_exceptions=True.
+
+        Without a re-raise, an ownership violation would be silently dropped
+        from the success count and warming would report a partial success
+        instead of surfacing the programming error.
+        """
+        system = IntelligentCacheSystem()
+        layer = system.layers[1]
+        layer._connected = True
+        layer.redis_pool = _make_pool()
+
+        with _foreign_owner_loop(layer):
+            with pytest.raises(CacheLoopOwnershipError):
+                await system.warm_cache([("k", "v"), ("k2", "v2")])
+
+    async def test_system_shutdown_releases_the_redis_layer(self):
+        """`shutdown()` is how a process performs the clean handoff.
+
+        Without it the documented recovery path would only be reachable by
+        reaching into `system.layers[1]`.
+        """
+        system = IntelligentCacheSystem()
+        layer = system.layers[1]
+        pool = AsyncMock()
+        layer._connected = True
+        layer.redis_pool = pool
+        layer._require_pool_loop()
+
+        await system.shutdown()
+
+        pool.disconnect.assert_awaited_once()
+        assert layer.redis_pool is None
+        assert layer._connected is False
+        assert layer._pool_loop is None

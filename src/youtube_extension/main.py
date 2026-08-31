@@ -30,7 +30,9 @@ if _sentry_dsn:
 
         sentry_sdk.init(
             dsn=_sentry_dsn,
-            environment=os.getenv("ENVIRONMENT", os.getenv("VERCEL_ENV", "development")),
+            environment=os.getenv(
+                "ENVIRONMENT", os.getenv("VERCEL_ENV", "development")
+            ),
             traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")),
             integrations=[StarletteIntegration(), FastApiIntegration()],
             # Do not attach request headers/cookies/body/user IP to events.
@@ -111,14 +113,17 @@ for _origin in os.getenv("CORS_ALLOWED_ORIGINS", "").split(","):
         continue
     if _IS_PRODUCTION and _is_loopback_origin(_origin):
         logger.warning(
-            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production", _origin
+            "Ignoring loopback origin %r from CORS_ALLOWED_ORIGINS in production",
+            _origin,
         )
         continue
     _EXTRA_ORIGINS.append(_origin)
 
-_allowed_origins = list(dict.fromkeys(
-    _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
-))
+_allowed_origins = list(
+    dict.fromkeys(
+        _PRODUCTION_ORIGINS + _EXTRA_ORIGINS + ([] if _IS_PRODUCTION else _DEV_ORIGINS)
+    )
+)
 logger.info("CORS allow_origins configured for %s: %s", _ENVIRONMENT, _allowed_origins)
 
 app.add_middleware(
@@ -152,7 +157,9 @@ app.add_middleware(SecurityHeadersMiddleware)
 
 # API key auth middleware
 try:
-    from .backend.middleware.api_key_auth import APIKeyAuthMiddleware as APIKeyMiddleware
+    from .backend.middleware.api_key_auth import (
+        APIKeyAuthMiddleware as APIKeyMiddleware,
+    )
 
     app.add_middleware(APIKeyMiddleware)
     logger.info("API key auth middleware loaded")
@@ -178,20 +185,83 @@ except ImportError as e:
     logger.error(f"Failed to load event routes: {e}")
 
 # Include API v1 Router (production endpoints - transcript-action, health, etc.)
+_API_V1_ROUTER_LOADED = False
 try:
     from .backend.api.v1.router import router as api_v1_router
 
     app.include_router(api_v1_router)
+    _API_V1_ROUTER_LOADED = True
     logger.info("API v1 router loaded successfully")
 except Exception as e:
     logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
 
 
+def _auth_mode() -> str:
+    """Report how APIKeyAuthMiddleware will treat non-public routes (F6)."""
+    if os.getenv("ALLOW_UNAUTHENTICATED", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }:
+        return "open_dev"
+    # Mirror APIKeyAuthMiddleware, which treats ANY non-empty EVENTRELAY_API_KEY
+    # (whitespace included) as configured. Do not .strip() here: a whitespace-only
+    # key makes the middleware require that key on protected routes, so reporting
+    # "fail_closed" would contradict actual request handling.
+    if os.getenv("EVENTRELAY_API_KEY"):
+        return "api_key"
+    return "fail_closed"
+
+
+def _video_dep_status() -> dict[str, bool]:
+    """Whether optional full-video-path packages import cleanly (F7)."""
+    status: dict[str, bool] = {}
+    for name in ("yt_dlp", "youtube_transcript_api"):
+        try:
+            __import__(name)
+            status[name] = True
+        except ImportError:
+            status[name] = False
+    return status
+
+
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "uvai-youtube-extension"}
+    """Health check endpoint with local full-pipeline readiness hints."""
+    video_deps = _video_dep_status()
+    return {
+        "status": "healthy",
+        "service": "uvai-youtube-extension",
+        # fail_closed → non-public routes 503 until EVENTRELAY_API_KEY or ALLOW_UNAUTHENTICATED=1
+        "auth_mode": _auth_mode(),
+        "video_deps": video_deps,
+        "video_path_ready": all(video_deps.values()),
+    }
+
+
+async def ensure_api_cost_ready() -> None:
+    """Validate the shared API-cost schema and runtime DML permissions."""
+    from .backend.services.api_cost_monitor import ensure_api_cost_database_ready
+
+    await ensure_api_cost_database_ready()
+
+
+@app.get("/readyz")
+async def readiness_check():
+    """Traffic readiness includes the shared PostgreSQL substrate."""
+    if not _API_V1_ROUTER_LOADED:
+        raise HTTPException(status_code=503, detail="API v1 router is not ready")
+    try:
+        await ensure_api_cost_ready()
+    except Exception:
+        logger.exception("API cost database readiness check failed")
+        raise HTTPException(
+            status_code=503,
+            detail="API cost database is not ready",
+        ) from None
+    return {"status": "ready", "service": "uvai-backend"}
 
 
 @app.post("/test-sentry")

@@ -21,7 +21,6 @@ from youtube_extension.backend.middleware.error_handling_middleware import (
     RequestTracker,
 )
 
-
 # ===========================================================================
 # ErrorResponse
 # ===========================================================================
@@ -387,38 +386,48 @@ class TestRequestTracker:
 # ErrorHandlingMiddleware — basic init and synchronous methods
 # ===========================================================================
 
+
 import pytest
-from unittest.mock import AsyncMock
 from fastapi import FastAPI
 
 
 class TestErrorHandlingMiddlewareInit:
     def test_init_stores_debug_flag(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         middleware = ErrorHandlingMiddleware(app, debug=True)
         assert middleware.debug is True
 
     def test_init_default_not_debug(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         middleware = ErrorHandlingMiddleware(app)
         assert middleware.debug is False
 
     def test_request_tracker_created_when_enabled(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         middleware = ErrorHandlingMiddleware(app, enable_request_tracking=True)
         assert middleware.request_tracker is not None
 
     def test_request_tracker_none_when_disabled(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         middleware = ErrorHandlingMiddleware(app, enable_request_tracking=False)
         assert middleware.request_tracker is None
 
     def test_error_counts_starts_empty(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         middleware = ErrorHandlingMiddleware(app)
         assert middleware.error_counts == {}
@@ -427,7 +436,9 @@ class TestErrorHandlingMiddlewareInit:
 class TestErrorHandlingMiddlewareUpdateTracking:
     @pytest.fixture
     def middleware(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         return ErrorHandlingMiddleware(app)
 
@@ -458,7 +469,9 @@ class TestErrorHandlingMiddlewareUpdateTracking:
         assert stats["total_errors"] == 2
 
     def test_get_error_stats_active_requests_zero_when_no_tracker(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         middleware = ErrorHandlingMiddleware(app, enable_request_tracking=False)
         stats = middleware.get_error_stats()
@@ -468,7 +481,9 @@ class TestErrorHandlingMiddlewareUpdateTracking:
 class TestErrorHandlingMiddlewareHandleException:
     @pytest.fixture
     def middleware(self):
-        from youtube_extension.backend.middleware.error_handling_middleware import ErrorHandlingMiddleware
+        from youtube_extension.backend.middleware.error_handling_middleware import (
+            ErrorHandlingMiddleware,
+        )
         app = FastAPI()
         return ErrorHandlingMiddleware(app, debug=True)
 

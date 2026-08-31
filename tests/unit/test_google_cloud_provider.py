@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import builtins
 import sys
+import threading
 import types as _types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,7 +18,6 @@ sys.path.insert(0, str(_SRC))
 from youtube_extension.integrations.cloud_ai.base import (
     AnalysisType,
     CloudAIProvider,
-    DetectionResult,
     VideoAnalysisResult,
 )
 from youtube_extension.integrations.cloud_ai.exceptions import (
@@ -26,7 +27,6 @@ from youtube_extension.integrations.cloud_ai.exceptions import (
     RateLimitError,
 )
 from youtube_extension.integrations.cloud_ai.providers.google_cloud import GoogleCloudAI
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1117,3 +1117,146 @@ class TestGoogleCloudAIEstimateCost:
         provider = _make_provider()
         cost = provider.estimate_cost(0.0, [AnalysisType.LABEL_DETECTION])
         assert cost == pytest.approx(0.0)
+
+
+# ===========================================================================
+# Local image reads must not block the event loop
+# ===========================================================================
+
+
+class _ThreadRecordingHandle:
+    """File-object proxy that records the calling thread on every ``read``."""
+
+    def __init__(self, handle, threads):
+        self._handle = handle
+        self._threads = threads
+
+    def read(self, *args, **kwargs):
+        self._threads.append(threading.get_ident())
+        return self._handle.read(*args, **kwargs)
+
+    def __enter__(self):
+        self._handle.__enter__()
+        return self
+
+    def __exit__(self, *exc_info):
+        return self._handle.__exit__(*exc_info)
+
+    def __getattr__(self, name):
+        return getattr(self._handle, name)
+
+
+class _ThreadRecordingOpen:
+    """Wrap ``builtins.open`` and record which thread *reads* a target path.
+
+    Off-loop execution is asserted by *thread identity* rather than elapsed
+    wall-clock time, which is flaky on loaded CI runners. The recording hooks
+    ``read()`` on the returned handle rather than ``open()`` itself, so a
+    regression that opens the file on a worker thread but reads its bytes back
+    on the event loop is still caught. Only the target path is wrapped so
+    unrelated ``open`` traffic (logging, coverage) cannot contaminate the
+    result.
+    """
+
+    def __init__(self, target):
+        self._real_open = builtins.open
+        self._target = str(target)
+        self.threads: list[int] = []
+
+    def __call__(self, file, *args, **kwargs):
+        handle = self._real_open(file, *args, **kwargs)
+        if str(file) == self._target:
+            return _ThreadRecordingHandle(handle, self.threads)
+        return handle
+
+
+class TestGoogleCloudImageReadOffEventLoop:
+    def _vision_modules(self):
+        mock_image_instance = MagicMock()
+        mock_image_instance.source = MagicMock()
+        mock_image_cls = MagicMock(return_value=mock_image_instance)
+        mock_feature_type = MagicMock()
+        mock_feature_type.LABEL_DETECTION = "LABEL_DETECTION"
+        mock_feature_cls = MagicMock()
+        mock_feature_cls.Type = mock_feature_type
+        mock_vision = MagicMock()
+        mock_vision.Image = mock_image_cls
+        mock_vision.Feature = mock_feature_cls
+        return mock_vision
+
+    def _patched_modules(self, mock_vision):
+        return patch.dict("sys.modules", {
+            "google": _types.ModuleType("google"),
+            "google.cloud": _types.ModuleType("google.cloud"),
+            "google.cloud.vision": mock_vision,
+        })
+
+    def _client(self):
+        client = AsyncMock()
+        client.annotate_image = AsyncMock(return_value=_make_vision_response())
+        return client
+
+    async def test_local_file_read_runs_on_worker_thread(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        img_file = tmp_path / "frame.jpg"
+        img_file.write_bytes(b"\x89PNG\r\n")
+        mock_vision = self._vision_modules()
+        recorder = _ThreadRecordingOpen(img_file)
+        loop_thread = threading.get_ident()
+
+        with self._patched_modules(mock_vision), patch("builtins.open", recorder):
+            await provider.analyze_image(str(img_file), [AnalysisType.LABEL_DETECTION])
+
+        assert mock_vision.Image.return_value.content == b"\x89PNG\r\n"
+        assert recorder.threads, "expected the provider to read the local image file"
+        assert loop_thread not in recorder.threads, (
+            "local image bytes were read on the event loop thread; the read must "
+            "be offloaded to a worker thread"
+        )
+
+    async def test_http_url_performs_no_disk_read(self, tmp_path):
+        """The URI branch must remain untouched: Vision fetches it directly."""
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        decoy = tmp_path / "unused.jpg"
+        decoy.write_bytes(b"\x00")
+        mock_vision = self._vision_modules()
+        recorder = _ThreadRecordingOpen(decoy)
+
+        with self._patched_modules(mock_vision), patch("builtins.open", recorder):
+            await provider.analyze_image(
+                "https://example.com/img.jpg", [AnalysisType.LABEL_DETECTION]
+            )
+
+        assert recorder.threads == []
+        assert mock_vision.Image.return_value.source.image_uri == "https://example.com/img.jpg"
+
+    async def test_missing_local_file_wrapped_in_cloud_ai_error(self, tmp_path, monkeypatch):
+        """A missing local image surfaces as ``CloudAIError`` from the public API.
+
+        Unlike Azure's private ``_prepare_image_input`` (which propagates
+        ``FileNotFoundError``), Google's public ``analyze_image`` catches it in
+        its broad ``except Exception`` and re-raises as ``CloudAIError``. Pin
+        that wrapper contract so moving the read off the loop cannot silently
+        alter how a missing file is reported.
+        """
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        missing = tmp_path / "does-not-exist.jpg"
+        mock_vision = self._vision_modules()
+
+        with self._patched_modules(mock_vision):
+            with pytest.raises(CloudAIError) as exc_info:
+                await provider.analyze_image(
+                    str(missing), [AnalysisType.LABEL_DETECTION]
+                )
+
+        # The provider re-raises without ``from e``, so the original error is
+        # carried on ``__context__`` (implicit chaining), not ``__cause__``.
+        assert isinstance(exc_info.value.__context__, FileNotFoundError), (
+            "offloading must preserve the underlying I/O error in the exception chain"
+        )
+        assert "No such file or directory" in str(exc_info.value)

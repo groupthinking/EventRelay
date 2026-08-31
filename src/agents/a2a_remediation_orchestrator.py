@@ -15,7 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from a2a_framework import A2AMessage, BaseAgent, message_bus
+from agents.a2a_framework import A2AMessage, BaseAgent, message_bus
 
 logging.basicConfig(
     level=logging.INFO,

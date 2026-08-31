@@ -4,6 +4,7 @@ Cloud AI API Routes
 FastAPI routes for cloud AI video analysis services.
 """
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -228,8 +229,8 @@ async def get_provider_status():
             )
 
     except Exception as e:
-        logger.error(f"Failed to get provider status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get provider status: {str(e)}")
+        logger.error(f"Failed to get provider status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/analyze/video", response_model=VideoAnalysisResponse)
@@ -255,20 +256,24 @@ async def analyze_video(request: VideoAnalysisRequest):
             # Format and return response
             return format_analysis_result(result)
 
-    except CloudAIError as e:
-        logger.error(f"Cloud AI analysis failed: {e}")
-        raise HTTPException(status_code=503, detail=f"AI analysis failed: {str(e)}")
     except RateLimitError as e:
+        # Must precede CloudAIError: RateLimitError subclasses it, so catching
+        # the base first would shadow this handler and return a 503 instead.
         logger.warning(f"Rate limit exceeded: {e}")
         raise HTTPException(status_code=429, detail=f"Rate limit exceeded: {str(e)}")
     except ConfigurationError as e:
-        logger.error(f"Configuration error: {e}")
-        raise HTTPException(status_code=500, detail=f"Configuration error: {str(e)}")
+        # Must precede CloudAIError (same subclassing reason) so configuration
+        # failures reach this sanitized 500 rather than the dynamic 503 below.
+        logger.error(f"Configuration error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+    except CloudAIError as e:
+        logger.error(f"Cloud AI analysis failed: {e}", exc_info=True)
+        raise HTTPException(status_code=503, detail="AI service temporarily unavailable. Please retry in a few moments.")
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Unexpected error during video analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        logger.error(f"Unexpected error during video analysis: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/analyze/batch")
@@ -300,8 +305,8 @@ async def analyze_batch_videos(request: BatchAnalysisRequest, background_tasks: 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to start batch analysis: {e}")
-        raise HTTPException(status_code=500, detail=f"Batch analysis failed: {str(e)}")
+        logger.error(f"Failed to start batch analysis: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/analyze/multi-provider", response_model=list[VideoAnalysisResponse])
@@ -323,9 +328,11 @@ async def analyze_video_multi_provider(request: VideoAnalysisRequest):
 
             return formatted_results
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Multi-provider analysis failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Multi-provider analysis failed: {str(e)}")
+        logger.error(f"Multi-provider analysis failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/analysis-types")
@@ -371,23 +378,51 @@ async def process_batch_videos(video_urls: list[str], analysis_types: list[Analy
             for i in range(0, len(video_urls), batch_size):
                 batch = video_urls[i:i+batch_size]
 
-                for video_url in batch:
-                    try:
-                        result = await ai.analyze_video(
+                # Analyse the batch concurrently. batch_size is the intended
+                # concurrency bound against the shared upstream AI providers,
+                # so the batch is exactly the right unit to run in parallel.
+                # Awaiting each video in turn made batch_size control nothing
+                # but the cadence of the pause below, while the wall-clock cost
+                # stayed the full sum of every per-video analysis.
+                batch_results = await asyncio.gather(
+                    *(
+                        ai.analyze_video(
                             video_url=video_url,
                             analysis_types=analysis_types,
                             preferred_provider=preferred_provider,
-                            use_fallback=True
+                            use_fallback=True,
                         )
-                        results.append(format_analysis_result(result))
+                        for video_url in batch
+                    ),
+                    return_exceptions=True,
+                )
 
-                    except Exception as e:
-                        logger.error(f"Failed to analyze video {video_url}: {e}")
+                # `return_exceptions=True` also captures BaseException-only
+                # failures (most notably CancelledError) as *values*, so an
+                # `isinstance(..., Exception)` test alone would let a cancelled
+                # child fall through to format_analysis_result. Re-raise those
+                # to preserve the previous `await`/`except Exception` semantics,
+                # where cancellation propagated out of the loop.
+                cancellations = [
+                    result
+                    for result in batch_results
+                    if isinstance(result, BaseException)
+                    and not isinstance(result, Exception)
+                ]
+                if cancellations:
+                    raise cancellations[0]
+
+                # isinstance(..., Exception) mirrors the previous
+                # `except Exception ... continue`: one failing video is logged
+                # and skipped without aborting the rest of the batch.
+                for video_url, result in zip(batch, batch_results, strict=True):
+                    if isinstance(result, Exception):
+                        logger.error(f"Failed to analyze video {video_url}: {result}")
                         continue
+                    results.append(format_analysis_result(result))
 
                 # Brief pause between batches
                 if i + batch_size < len(video_urls):
-                    import asyncio
                     await asyncio.sleep(1)
 
         # Store results (in production, save to database or cache)

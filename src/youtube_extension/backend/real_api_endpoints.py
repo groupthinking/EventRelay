@@ -7,13 +7,15 @@ FastAPI endpoints that integrate real YouTube Data API, AI processing,
 and cost monitoring instead of mock data.
 """
 
+import asyncio
 import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, Final, Optional
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from .services.api_cost_monitor import cost_monitor
@@ -25,6 +27,155 @@ from .services.real_youtube_api import get_youtube_service
 
 # Configure logging
 logger = logging.getLogger(__name__)
+
+# Distinguishes "no cache entry" from any entry content. The read helper returns
+# raw bytes today, but its historical contract returned parsed JSON, where a file
+# holding the literal ``null`` yields ``None`` -- a plain ``None`` return conflates
+# that with absence and turns a stored ``null`` analysis into a 404. The sentinel
+# keeps "miss" impossible to confuse with any payload, parsed or raw.
+_CACHE_MISS: Final = object()
+
+# Cache entries at or below this size are JSON-validated (parsed and discarded)
+# before being served, so a damaged small entry still surfaces as a 500. The
+# validation parse holds the GIL at roughly 3 ms/MB, so this threshold *is* the
+# event-loop stall bound: ~6 ms worst case, independent of video duration. Real
+# entries sit well under it (~0.15 MB for an hour of video, ~1.6 MB long-form).
+_VALIDATION_MAX_BYTES: Final = 2 * 1024 * 1024
+
+
+def _collect_processed_videos_sync(cache_dir: Path) -> list[dict[str, Any]]:
+    """Scan the processing cache directory and parse every cached result.
+
+    This performs blocking filesystem work (directory stat, glob, and one
+    ``open()``/``json.load()`` per cache entry) and is therefore intended to be
+    executed in a worker thread via :func:`asyncio.to_thread` rather than
+    directly on the event loop.
+
+    Malformed or unreadable entries are skipped individually so that a single
+    corrupt file cannot fail the whole listing.
+    """
+    processed_videos: list[dict[str, Any]] = []
+
+    if not cache_dir.exists():
+        return processed_videos
+
+    for cache_file in cache_dir.glob("*_processed.json"):
+        try:
+            with open(cache_file, encoding="utf-8") as f:
+                video_data = json.load(f)
+
+            processed_videos.append(
+                {
+                    "id": video_data.get("video_id"),
+                    "video_url": video_data.get("video_url"),
+                    "title": video_data.get("metadata", {}).get("title", "Unknown"),
+                    "channel": video_data.get("metadata", {}).get(
+                        "channel_title", "Unknown"
+                    ),
+                    "duration": video_data.get("metadata", {}).get(
+                        "duration", "Unknown"
+                    ),
+                    "processed_at": video_data.get("timestamp"),
+                    "has_transcript": video_data.get("transcript", {}).get(
+                        "has_transcript", False
+                    ),
+                    "ai_analysis_success": video_data.get("ai_analysis", {}).get(
+                        "success", False
+                    ),
+                    "total_cost": video_data.get("cost_breakdown", {}).get(
+                        "total_cost", 0.0
+                    ),
+                    "analysis": video_data.get("ai_analysis", {}),
+                    "createdAt": video_data.get("timestamp"),
+                    "updatedAt": video_data.get("timestamp"),
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Error loading cached video {cache_file}: {e}")
+
+    # Sort by processing timestamp
+    processed_videos.sort(key=lambda x: x.get("processed_at", ""), reverse=True)
+
+    return processed_videos
+
+
+def _read_video_analysis_sync(cache_path: Path) -> Any:
+    """Read a single cached video analysis and return its raw JSON bytes.
+
+    This performs blocking filesystem work (``open()`` and a full ``read()``
+    of the analysis payload) and is therefore intended to be executed in a
+    worker thread via :func:`asyncio.to_thread` rather than directly on the
+    event loop.
+
+    Guarantee: the event-loop stall this read can cause is *bounded and
+    independent of payload size*. That holds because of two decisions:
+
+    * ``open()``/``read()`` release the GIL, so the loop is shielded from
+      filesystem latency entirely -- a cold page cache, a networked mount or a
+      contended disk can stall this thread for hundreds of milliseconds
+      without the loop noticing, at any payload size.
+    * The payload is *not* parsed into Python objects. ``json.load()`` is
+      CPU-bound C code that holds the GIL for its whole duration (~3 ms/MB),
+      so relocating it to a worker thread only moved the stall, and entry size
+      is unbounded -- it tracks video duration because the full transcript is
+      persisted into the cache entry. The only consumer of this helper streams
+      the bytes back to the client verbatim, which also removes FastAPI's
+      re-serialisation of the parsed object -- work that ran *on* the loop and
+      likewise scaled with payload size. The parse/re-encode round-trip was
+      pure overhead: the cache entry already is the response body.
+
+    Entries at or below :data:`_VALIDATION_MAX_BYTES` are still parse-validated
+    here (the parsed result is discarded) so a damaged entry keeps surfacing as
+    a 500 rather than being handed to clients as garbage. That validation is
+    the sole remaining GIL-held, size-proportional work, and the threshold caps
+    it at ~6 ms. Larger entries skip validation: the writer
+    (``RealVideoProcessor._write_cache_file``) publishes atomically via a temp
+    file and ``os.replace``, so a torn half-written entry cannot be observed;
+    only out-of-band corruption of an oversized entry would reach a client
+    unflagged, and that is accepted in exchange for the bounded stall.
+
+    The executor dispatch hop (~0.5 ms) still costs more than a warm-cache
+    read of a small entry. That fixed overhead is accepted deliberately: it is
+    the insurance premium against unbounded filesystem latency, which cannot
+    be predicted from inside the handler -- and unlike before, no deferred
+    parse or on-loop re-serialisation is added on top of it.
+
+    Opening directly and treating :class:`FileNotFoundError` as the miss
+    replaces a separate ``Path.exists()`` probe. That is one syscall instead of
+    two, and it closes the window in which the entry could be removed between
+    the check and the open. Every other ``OSError`` still propagates, so a
+    directory or an unreadable entry keeps surfacing as a 500 rather than being
+    silently reported as a missing video.
+
+    :class:`ValueError` is also treated as a miss. ``Path.exists()`` swallows it
+    and reports the entry as absent, so a ``video_id`` carrying an embedded null
+    byte used to yield a 404; letting the bare ``open()`` raise would turn that
+    malformed-identifier case into a 500.
+
+    Deliberately does *not* apply the processor's cache TTL. This endpoint has
+    always served a cached analysis regardless of age, whereas
+    ``RealVideoProcessor._read_cache_file`` in ``services/real_video_processor.py``
+    treats anything older than ``_CACHE_TTL_SECONDS`` (24 hours) as a miss;
+    reusing it here would turn every analysis over a day old into a 404.
+
+    Returns the entry's UTF-8 JSON bytes -- ``b"null"`` for an entry holding
+    the literal ``null``, which must still be served as a 200. Absence is
+    reported as the distinct :data:`_CACHE_MISS` sentinel so the two cannot be
+    confused.
+    """
+    try:
+        handle = open(cache_path, "rb")
+    except (FileNotFoundError, ValueError):
+        return _CACHE_MISS
+
+    with handle as f:
+        raw = f.read()
+
+    if len(raw) <= _VALIDATION_MAX_BYTES:
+        json.loads(raw)
+
+    return raw
+
 
 # Pydantic models for API requests/responses
 class VideoProcessingRequest(BaseModel):
@@ -117,19 +268,12 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return response
 
+        except HTTPException:
+            raise
         except Exception as e:
-            error_msg = f"Real API processing failed: {str(e)}"
-            logger.error(error_msg)
-
-            raise HTTPException(
-                status_code=500,
-                detail={
-                    "error": "video_processing_failed",
-                    "message": error_msg,
-                    "video_url": request.video_url,
-                    "timestamp": datetime.now(timezone.utc).isoformat()
-                }
-            )
+            # Exception text is logged server-side only; never returned to the client.
+            logger.error(f"Real API processing failed: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Internal server error")
 
     @app.post("/api/v2/validate-video")
     async def validate_video_url(request: VideoValidationRequest):
@@ -150,9 +294,10 @@ def setup_real_api_endpoints(app: FastAPI):
             }
 
         except Exception as e:
+            logger.error(f"Unhandled error in validate_video_url: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Validation failed: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.post("/api/v2/batch-process")
@@ -176,10 +321,14 @@ def setup_real_api_endpoints(app: FastAPI):
 
             return result
 
+        except HTTPException:
+            # Preserve explicit 4xx responses (e.g. the 400 batch-size guard above).
+            raise
         except Exception as e:
+            logger.error(f"Unhandled error in batch_process_videos: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Batch processing failed: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.get("/api/v2/videos/list")
@@ -190,40 +339,13 @@ def setup_real_api_endpoints(app: FastAPI):
         try:
             processor = get_real_video_processor()
 
-            # Get cached processed videos
-            cache_dir = processor.cache_dir
-            processed_videos = []
-
-            if cache_dir.exists():
-                for cache_file in cache_dir.glob("*_processed.json"):
-                    try:
-                        with open(cache_file, encoding='utf-8') as f:
-                            video_data = json.load(f)
-
-                        processed_videos.append({
-                            "id": video_data.get('video_id'),
-                            "video_url": video_data.get('video_url'),
-                            "title": video_data.get('metadata', {}).get('title', 'Unknown'),
-                            "channel": video_data.get('metadata', {}).get('channel_title', 'Unknown'),
-                            "duration": video_data.get('metadata', {}).get('duration', 'Unknown'),
-                            "processed_at": video_data.get('timestamp'),
-                            "has_transcript": video_data.get('transcript', {}).get('has_transcript', False),
-                            "ai_analysis_success": video_data.get('ai_analysis', {}).get('success', False),
-                            "total_cost": video_data.get('cost_breakdown', {}).get('total_cost', 0.0),
-                            "analysis": video_data.get('ai_analysis', {}),
-                            "createdAt": video_data.get('timestamp'),
-                            "updatedAt": video_data.get('timestamp')
-                        })
-                    except Exception as e:
-                        logger.warning(f"Error loading cached video {cache_file}: {e}")
-
-            # Sort by processing timestamp
-            processed_videos.sort(
-                key=lambda x: x.get('processed_at', ''),
-                reverse=True
+            # The cache scan stats a directory, globs it, and reads/parses one
+            # JSON file per cached video. That is unbounded blocking I/O which
+            # would otherwise stall the event loop for every concurrent request,
+            # so it runs in a worker thread.
+            return await asyncio.to_thread(
+                _collect_processed_videos_sync, processor.cache_dir
             )
-
-            return processed_videos
 
         except Exception as e:
             logger.error(f"Error getting processed videos list: {e}")
@@ -238,23 +360,36 @@ def setup_real_api_endpoints(app: FastAPI):
             processor = get_real_video_processor()
             cache_path = processor._get_cache_path(video_id)
 
-            if not cache_path.exists():
+            # The entry is read in a worker thread; ``open()``/``read()``
+            # release the GIL, so the loop is shielded from filesystem latency
+            # at any payload size. The bytes come back *unparsed* -- see
+            # _read_video_analysis_sync for why that bounds the loop stall
+            # independently of video duration. Building the path stays here:
+            # it is pure string arithmetic and touches no filesystem.
+            video_data = await asyncio.to_thread(_read_video_analysis_sync, cache_path)
+
+            # Identity check against the sentinel, not a truthiness test: an
+            # entry holding the JSON literal ``null`` comes back as ``b"null"``
+            # and has always been served as a 200, so it must not 404 here.
+            if video_data is _CACHE_MISS:
                 raise HTTPException(
                     status_code=404,
                     detail=f"Video analysis not found: {video_id}"
                 )
 
-            with open(cache_path, encoding='utf-8') as f:
-                video_data = json.load(f)
-
-            return video_data
+            # Raw passthrough: the cache entry already is the response JSON.
+            # Returning a Response skips FastAPI's jsonable_encoder/json.dumps
+            # round-trip, which would otherwise re-serialise the payload on
+            # the event loop in proportion to its size.
+            return Response(content=video_data, media_type="application/json")
 
         except HTTPException:
             raise
         except Exception as e:
+            logger.error(f"Unhandled error in get_video_analysis: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Error retrieving video analysis: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.get("/api/v2/cost-dashboard")
@@ -384,9 +519,10 @@ def setup_real_api_endpoints(app: FastAPI):
             }
 
         except Exception as e:
+            logger.error(f"Unhandled error in clear_processing_cache: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Failed to clear cache: {str(e)}"
+                detail="Internal server error"
             )
 
     @app.post("/api/v2/search-videos")
@@ -431,10 +567,14 @@ def setup_real_api_endpoints(app: FastAPI):
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
+        except HTTPException:
+            # Preserve explicit 4xx responses (e.g. the 400 max-results guard above).
+            raise
         except Exception as e:
+            logger.error(f"Unhandled error in search_youtube_videos: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
-                detail=f"Search failed: {str(e)}"
+                detail="Internal server error"
             )
 
     logger.info("🚀 Real API endpoints setup complete")

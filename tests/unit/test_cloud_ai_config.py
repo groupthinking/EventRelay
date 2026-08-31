@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 from youtube_extension.integrations.cloud_ai.config import CloudAIConfig, ProviderConfig
 from youtube_extension.integrations.cloud_ai.exceptions import ConfigurationError
 
-
 # ===========================================================================
 # ProviderConfig
 # ===========================================================================

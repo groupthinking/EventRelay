@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-import asyncio
 import uuid
 from datetime import datetime
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from youtube_extension.services.agents.dto import AgentRequest, AgentResult
 from youtube_extension.services.agents.adapters.agent_orchestrator import (
     A2AContextMessage,
     AgentOrchestrator,
     OrchestrationResult,
 )
 from youtube_extension.services.agents.base_agent import BaseAgent
-
+from youtube_extension.services.agents.dto import AgentRequest, AgentResult
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -140,7 +135,7 @@ class TestAgentOrchestratorInit:
 
     def test_a2a_log_starts_empty(self):
         orch = AgentOrchestrator()
-        assert orch._a2a_log == []
+        assert list(orch._a2a_log) == []
 
     def test_default_task_mappings_present(self):
         orch = AgentOrchestrator()
@@ -600,6 +595,166 @@ class TestGetA2aLog:
         assert entry["sender"] == "sender_x"
         assert entry["recipient"] == "receiver_y"
         assert entry["content"] == {"hello": "world"}
+
+
+# ===========================================================================
+# execute_single
+# ===========================================================================
+
+
+class TestExecuteSingle:
+    async def test_returns_output_on_success(self):
+        orch = AgentOrchestrator()
+        agent = _make_ok_agent("analyzer", output={"findings": ["issue_1"]})
+        orch._agents["analyzer"] = agent
+
+        result = await orch.execute_single(agent_type="analyzer", context={"event": "test"})
+        assert result == {"findings": ["issue_1"]}
+
+    async def test_returns_error_for_unknown_agent(self):
+        orch = AgentOrchestrator()
+        result = await orch.execute_single(agent_type="nonexistent", context={})
+        assert "error" in result
+        assert "not found" in result["error"]
+
+    async def test_unknown_agent_dispatch_is_logged(self):
+        orch = AgentOrchestrator()
+        await orch.execute_single(agent_type="nonexistent", context={"job": "x"})
+        # Failed "agent not found" dispatches must appear in the session audit trail
+        logs = orch.get_session_logs()
+        assert len(logs) == 1
+        assert logs[0]["agent_type"] == "nonexistent"
+        assert logs[0]["status"] == "error"
+
+    async def test_returns_error_on_agent_failure(self):
+        orch = AgentOrchestrator()
+        agent = _make_error_agent("bad_analyzer")
+        orch._agents["bad_analyzer"] = agent
+
+        result = await orch.execute_single(agent_type="bad_analyzer", context={"event": "x"})
+        assert "error" in result
+
+    async def test_returns_error_on_exception(self):
+        orch = AgentOrchestrator()
+        agent = _make_raising_agent("crash_analyzer")
+        orch._agents["crash_analyzer"] = agent
+
+        result = await orch.execute_single(agent_type="crash_analyzer", context={})
+        assert "error" in result
+        assert "agent exploded" in result["error"]
+        # Exception dispatches are also logged for session tracking
+        assert len(orch._a2a_log) == 1
+        assert orch._a2a_log[0].content["status"] == "error"
+
+    async def test_logs_dispatch_to_a2a_log(self):
+        orch = AgentOrchestrator()
+        agent = _make_ok_agent("tracked", output={"ok": True})
+        orch._agents["tracked"] = agent
+
+        await orch.execute_single(agent_type="tracked", context={"job": "123"})
+        assert len(orch._a2a_log) == 1
+        msg = orch._a2a_log[0]
+        assert msg.content["type"] == "agent_dispatch"
+        assert msg.content["agent_type"] == "tracked"
+        assert msg.content["status"] == "ok"
+
+    async def test_uses_registered_type(self):
+        orch = AgentOrchestrator()
+        orch.register_agent_type("simple", _SimpleAgent)
+
+        result = await orch.execute_single(agent_type="simple", context={"data": "value"})
+        assert result == {"task": "simple"}
+
+    async def test_passes_config_to_agent(self):
+        orch = AgentOrchestrator()
+
+        class ConfigAgent(BaseAgent):
+            name = "cfgagent"
+
+            def __init__(self, config=None):
+                self._cfg = config
+
+            async def run(self, req):
+                return AgentResult(status="ok", output={"cfg": self._cfg})
+
+        orch.register_agent_type("cfgagent", ConfigAgent)
+        result = await orch.execute_single(
+            agent_type="cfgagent",
+            context={},
+            config={"key": "val"},
+        )
+        assert result == {"cfg": {"key": "val"}}
+
+
+# ===========================================================================
+# get_session_logs
+# ===========================================================================
+
+
+class TestGetSessionLogs:
+    async def test_empty_when_no_dispatches(self):
+        orch = AgentOrchestrator()
+        assert orch.get_session_logs() == []
+
+    async def test_returns_dispatch_logs_after_execute_single(self):
+        orch = AgentOrchestrator()
+        agent = _make_ok_agent("analyzer", output={"result": "done"})
+        orch._agents["analyzer"] = agent
+
+        await orch.execute_single(agent_type="analyzer", context={"event_id": "evt1"})
+        logs = orch.get_session_logs()
+        assert len(logs) == 1
+        assert logs[0]["agent_type"] == "analyzer"
+        assert logs[0]["status"] == "ok"
+        assert logs[0]["context"] == {"event_id": "evt1"}
+
+    async def test_filters_by_agent_type(self):
+        orch = AgentOrchestrator()
+        agent_a = _make_ok_agent("type_a", output={"a": 1})
+        agent_b = _make_ok_agent("type_b", output={"b": 2})
+        orch._agents["type_a"] = agent_a
+        orch._agents["type_b"] = agent_b
+
+        await orch.execute_single(agent_type="type_a", context={})
+        await orch.execute_single(agent_type="type_b", context={})
+
+        logs_a = orch.get_session_logs(agent_type="type_a")
+        assert len(logs_a) == 1
+        assert logs_a[0]["agent_type"] == "type_a"
+
+    async def test_respects_limit(self):
+        orch = AgentOrchestrator()
+        agent = _make_ok_agent("repeater", output={})
+        orch._agents["repeater"] = agent
+
+        for _ in range(5):
+            await orch.execute_single(agent_type="repeater", context={})
+
+        logs = orch.get_session_logs(limit=3)
+        assert len(logs) == 3
+
+    async def test_does_not_include_non_dispatch_a2a_messages(self):
+        orch = AgentOrchestrator()
+        # Add a regular A2A message
+        await orch.send_a2a_message("alice", "bob", {"hello": True})
+
+        logs = orch.get_session_logs()
+        assert len(logs) == 0
+
+    async def test_log_entry_has_expected_keys(self):
+        orch = AgentOrchestrator()
+        agent = _make_ok_agent("checker", output={"x": 1})
+        orch._agents["checker"] = agent
+
+        await orch.execute_single(agent_type="checker", context={"evt": "e1"})
+        entry = orch.get_session_logs()[0]
+        assert "sender" in entry
+        assert "recipient" in entry
+        assert "agent_type" in entry
+        assert "context" in entry
+        assert "status" in entry
+        assert "timestamp" in entry
+        assert "conversation_id" in entry
 
 
 # ===========================================================================

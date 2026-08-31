@@ -113,7 +113,21 @@ workflow_results/
 .poc-venv/
 .poc-runtime.db
 .venv_prod_verify/
-.vscode/
+# Shared editor config is versioned by exception; everything else in
+# .vscode/ (mcp.json, tasks.json, IDE-fork state) stays local.
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+# Agent-IDE skill caches materialized into the working tree (Antigravity/dak
+# plugin skills under .agents/). Same drift class as the .vscode rule above:
+# tool state, not project source — never commit.
+.agent/
+.agents/
+ai-speech-demo/
+apps/sales_dashboard/
+strategy/
+*.egg-info/
+src/*.egg-info/
 .webassets-cache
 .yarn/
 Desktop.ini
@@ -201,3 +215,20 @@ docs/gemini_reference/
 data/audit/*.jsonl
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Stray developer scratch artifacts that must never be committed at the repo root.
+# (PR diff dumps, one-off rewrite/commit helper scripts, ad-hoc import probes.)
+/*.diff
+/*.patch
+/rewrite.py
+/commit_script.sh
+/test_*.py
+# Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
+/.verification-gate-pass
+
+# Local AI session artifacts
+*.rtf
+.gemini/extensions/
+
+# Local verification and native-module quarantine artifacts
+/work/

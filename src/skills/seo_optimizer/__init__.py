@@ -1,0 +1,1 @@
+"""SEO Optimizer skill module."""
