@@ -14,6 +14,11 @@ export const WORKFLOW_PRO_PRODUCT_NAME = 'UVAI Workflow Pro';
 export const FALLBACK_STRIPE_PRICE_PRO_MONTHLY = 'price_1U9AbLAmTgsI2zgNEZD4Kwed';
 export const FALLBACK_STRIPE_PRICE_PRO_ANNUAL = 'price_1U9AbLAmTgsI2zgN0SM70JN9';
 
+export function workflowProPriceLabel(annual: boolean): string {
+  const cents = annual ? WORKFLOW_PRO_ANNUAL_CENTS : WORKFLOW_PRO_MONTHLY_CENTS;
+  return `$${cents / 100}${annual ? '/yr' : '/mo'}`;
+}
+
 const PRODUCTION_APP_URL = 'https://uvai.io';
 const LOCAL_APP_URL = 'http://localhost:3000';
 

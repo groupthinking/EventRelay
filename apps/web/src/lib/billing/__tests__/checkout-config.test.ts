@@ -6,6 +6,7 @@ import {
   resolveProCheckoutParams,
   resolveStripePriceId,
   requireStripePriceId,
+  workflowProPriceLabel,
   WORKFLOW_PRO_ANNUAL_CENTS,
   WORKFLOW_PRO_MONTHLY_CENTS,
   WORKFLOW_PRO_PRODUCT_NAME,
@@ -70,6 +71,15 @@ describe('resolveProCheckoutParams', () => {
     expect(annual.unitAmountCents).not.toBe(18_000);
     expect(monthly.productName).not.toBe('EventRelay Pro');
     expect(annual.productName).not.toBe('EventRelay Pro');
+  });
+});
+
+describe('workflowProPriceLabel', () => {
+  it('says $39/mo and $390/yr for UVAI Workflow Pro', () => {
+    expect(workflowProPriceLabel(false)).toBe('$39/mo');
+    expect(workflowProPriceLabel(true)).toBe('$390/yr');
+    expect(workflowProPriceLabel(false)).not.toBe('$19/mo');
+    expect(workflowProPriceLabel(true)).not.toBe('$180/yr');
   });
 });
 
