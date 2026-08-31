@@ -1,6 +1,10 @@
 import Stripe from 'stripe';
 import { billingLeadMetadata } from './grok-lead';
-import { resolveProCheckoutParams, requireStripePriceId } from './checkout-config';
+import {
+  resolveCheckoutAppUrl,
+  resolveProCheckoutParams,
+  requireStripePriceId,
+} from './checkout-config';
 import { kaizenObserve } from './kaizen-trace';
 
 export function getStripeClient(): Stripe {
@@ -27,7 +31,7 @@ export async function createProCheckoutSession(
   input: CreateCheckoutInput,
 ): Promise<CreateCheckoutResult> {
   const stripe = getStripeClient();
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const appUrl = resolveCheckoutAppUrl();
   const params = resolveProCheckoutParams({ annual: input.annual, appUrl });
   const priceId = requireStripePriceId(input.annual);
 

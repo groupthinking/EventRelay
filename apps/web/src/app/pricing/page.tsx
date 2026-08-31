@@ -8,6 +8,10 @@ import Footer from '@/components/Footer';
 import ProCheckoutButton from '@/components/billing/ProCheckoutButton';
 import ProRenewPanel from '@/components/billing/ProRenewPanel';
 import CheckoutSuccessActivator from '@/components/billing/CheckoutSuccessActivator';
+import {
+  workflowProPriceLabel,
+  WORKFLOW_PRO_PRODUCT_NAME,
+} from '@/lib/billing/checkout-config';
 
 const CORE_CAPABILITIES = [
   'Evidence-gated YouTube analysis',
@@ -114,8 +118,19 @@ export default function PricingPage() {
         </article>
 
         <article className="flex flex-col rounded-3xl border border-teal-400/35 bg-teal-400/[0.06] p-8 shadow-2xl shadow-teal-500/10">
-          <p className="text-sm font-bold uppercase tracking-wider text-teal-300">Pro</p>
-          <h2 className="mt-3 font-heading text-3xl font-black">Confirm external work</h2>
+          <p className="text-sm font-bold uppercase tracking-wider text-teal-300">
+            {WORKFLOW_PRO_PRODUCT_NAME}
+          </p>
+          <p
+            data-testid="workflow-pro-selected-price"
+            className="mt-3 font-heading text-4xl font-black tracking-tight"
+          >
+            {workflowProPriceLabel(annual)}
+          </p>
+          <p data-testid="workflow-pro-catalog" className="mt-1 text-xs text-white/35">
+            {WORKFLOW_PRO_PRODUCT_NAME} · {workflowProPriceLabel(false)} or {workflowProPriceLabel(true)}
+          </p>
+          <h2 className="mt-4 font-heading text-3xl font-black">Confirm external work</h2>
           <p className="mt-4 text-sm leading-7 text-white/45">
             Adds the entitlement required when a reviewed plan dispatches backend agents or writes to the knowledge store.
           </p>
@@ -130,7 +145,7 @@ export default function PricingPage() {
           <div className="mt-8">
             <ProCheckoutButton
               annual={annual}
-              label={`Continue to ${annual ? 'annual' : 'monthly'} Stripe checkout`}
+              label={`Continue to ${WORKFLOW_PRO_PRODUCT_NAME} ${workflowProPriceLabel(annual)} checkout`}
             />
           </div>
           <p className="mt-3 text-center text-xs leading-5 text-white/30">
@@ -168,7 +183,7 @@ export default function PricingPage() {
           <div className="grid grid-cols-4 border-b border-white/[0.07] bg-white/[0.03] text-sm font-semibold">
             <div className="p-4 text-white/45">Capability</div>
             <div className="p-4 text-center">Core</div>
-            <div className="p-4 text-center text-teal-300">Pro</div>
+            <div className="p-4 text-center text-teal-300">{WORKFLOW_PRO_PRODUCT_NAME}</div>
             <div className="p-4 text-center text-cyan-300">Self-hosted</div>
           </div>
           {COMPARISON.map(([label, core, pro, selfHosted], index) => (

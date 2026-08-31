@@ -21,6 +21,8 @@ beforeEach(() => {
   process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
   process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_monthly_env';
   process.env.STRIPE_PRICE_PRO_ANNUAL = 'price_annual_env';
+  delete process.env.NEXT_PUBLIC_APP_URL;
+  process.env.NODE_ENV = 'test';
 });
 
 describe('createProCheckoutSession', () => {
@@ -40,12 +42,41 @@ describe('createProCheckoutSession', () => {
     expect(args.metadata.lead_model).toBeTruthy();
   });
 
-  it('throws when monthly price id is missing', async () => {
+  it('throws in production when monthly price id is missing', async () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
+    process.env.NODE_ENV = 'production';
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await expect(
       createProCheckoutSession({ annual: false, flow: 'acquisition' }),
     ).rejects.toThrow('STRIPE_PRICE_PRO_MONTHLY missing');
+  });
+
+  it('never falls back to dead EventRelay Pro $19/$180 price IDs', async () => {
+    delete process.env.STRIPE_PRICE_PRO_MONTHLY;
+    delete process.env.STRIPE_PRICE_PRO_ANNUAL;
+    process.env.NODE_ENV = 'test';
+    const { createProCheckoutSession } = await import('../stripe-checkout');
+    await createProCheckoutSession({ annual: false, flow: 'acquisition' });
+    await createProCheckoutSession({ annual: true, flow: 'acquisition' });
+    const prices = createMock.mock.calls.map((call) => call[0].line_items[0].price);
+    expect(prices).toEqual([
+      'price_1U9AbLAmTgsI2zgNEZD4Kwed',
+      'price_1U9AbLAmTgsI2zgN0SM70JN9',
+    ]);
+    expect(prices).not.toContain('price_1Tos02AmTgsI2zgNWx7onroJ');
+    expect(prices).not.toContain('price_1Tos0AAmTgsI2zgNSu5lwBv6');
+  });
+
+  it('sends production success and cancel URLs to https://uvai.io/pricing', async () => {
+    delete process.env.NEXT_PUBLIC_APP_URL;
+    process.env.NODE_ENV = 'production';
+    const { createProCheckoutSession } = await import('../stripe-checkout');
+    await createProCheckoutSession({ annual: false, flow: 'acquisition' });
+    const args = createMock.mock.calls[createMock.mock.calls.length - 1][0];
+    expect(args.success_url).toBe(
+      'https://uvai.io/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+    );
+    expect(args.cancel_url).toBe('https://uvai.io/pricing?checkout=cancelled');
   });
 
   it('uses env price id for annual renewal', async () => {
