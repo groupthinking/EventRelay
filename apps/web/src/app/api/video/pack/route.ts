@@ -38,5 +38,14 @@ export async function POST(request: Request) {
   }
 
   const pack = getOrCreatePack(videoId, url || undefined);
+  if (!pack.source_url.startsWith('http') || !pack.provenance.source_hash) {
+    return NextResponse.json(
+      {
+        status: 'error',
+        error: 'Video pack verification failed: source_url and source_hash are required.',
+      },
+      { status: 500 },
+    );
+  }
   return NextResponse.json({ status: 'success', data: pack });
 }

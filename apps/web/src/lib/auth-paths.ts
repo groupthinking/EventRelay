@@ -35,6 +35,11 @@ const PUBLIC_API_EXACT = new Set([
   // Must be accessible without a session so anonymous users can run the
   // pipeline; the route handler applies its own rate limiting via proxy.ts.
   '/api/pipeline/stream',
+  // Home paste-URL identity pack. Hash is version+video_id only; no login
+  // and no speech evidence. Exact paths so /api/video and /api/video/generate
+  // stay gated (live 401 after #1609).
+  '/api/video/pack',
+  '/api/v1/video/pack',
 ]);
 
 /** App routes that require a session when NEXTAUTH_SECRET is configured. */
@@ -120,6 +125,9 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
   '/api/workflows': new Set(['GET', 'HEAD']),
 };
 
+/** Identity hash only — not model work. Keep /api/video siblings on the AI budget. */
+const IDENTITY_PACK_PATHS = new Set(['/api/video/pack', '/api/v1/video/pack']);
+
 /**
  * Whether a request should be metered against the AI budget rather than the
  * general one.
@@ -128,6 +136,8 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
  * limit) rather than silently widening the budget.
  */
 export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
+  if (IDENTITY_PACK_PATHS.has(pathname)) return false;
+
   const prefix = AI_ROUTE_PREFIXES.find((candidate) =>
     pathname.startsWith(candidate),
   );

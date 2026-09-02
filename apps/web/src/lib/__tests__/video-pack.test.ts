@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
+  buildIdentityPack,
   identityHash,
   identityPayload,
   resolveYouTubeVideoId,
@@ -43,5 +44,15 @@ describe('video-pack identity', () => {
 
   it('rejects a non-YouTube URL', () => {
     expect(resolveYouTubeVideoId('https://example.com/watch')).toBeNull();
+  });
+
+  it('emits an identity pack without extracted speech', () => {
+    const pack = buildIdentityPack(CANON_B);
+    expect(pack.version).toBe('v0');
+    expect(pack.video_id).toBe(CANON_B);
+    expect(pack.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(pack.source_url).toBe(`https://www.youtube.com/watch?v=${CANON_B}`);
+    expect(pack.transcript.full_text).toBe(`cite:youtube:${CANON_B}`);
+    expect(pack.transcript.segments).toEqual([]);
   });
 });

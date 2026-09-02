@@ -22,7 +22,10 @@ import {
   startVideoToActions,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
+import { identityPackJson } from '@/lib/emit-video-pack';
 import {
+  studioPackCitation,
+  studioPasteOutcomeMessage,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
@@ -196,9 +199,10 @@ export default function OneLoopStudio() {
       const ready =
         (video?.transcript?.trim().length ?? 0) >= 40 || (video?.events?.length ?? 0) > 0;
       setMessage(
-        ready
-          ? 'Ready — run tools, export, or save from this page.'
-          : 'No usable transcript. Try another public video.',
+        studioPasteOutcomeMessage({
+          hasUsableTranscript: ready,
+          packCitation: video?.videoPack ? studioPackCitation(video.videoPack) : null,
+        }),
       );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Analysis failed.');
@@ -416,6 +420,14 @@ export default function OneLoopStudio() {
           <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
             {statusText}
           </p>
+          {selected?.videoPack && (
+            <p
+              data-testid="video-pack-citation"
+              className="break-all font-mono text-[11px] text-white/55"
+            >
+              {studioPackCitation(selected.videoPack)}
+            </p>
+          )}
           {(busy || selected?.status === 'processing') && (
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <div
@@ -632,6 +644,36 @@ export default function OneLoopStudio() {
                 </ul>
               </>
             )}
+          </section>
+        )}
+
+        {selected?.videoPack && (
+          <section
+            data-testid="video-pack"
+            className="rounded-xl border border-white/10 bg-[#11131a] p-4 lg:col-span-2"
+          >
+            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
+              Video pack
+            </h2>
+            <p className="mt-3 break-all font-mono text-sm text-white/80">
+              {studioPackCitation(selected.videoPack)}
+            </p>
+            <dl className="mt-3 grid gap-2 font-mono text-[11px] text-white/55 sm:grid-cols-2">
+              <div>
+                <dt className="uppercase tracking-[0.16em] text-white/35">source_url</dt>
+                <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceUrl}</dd>
+              </div>
+              <div>
+                <dt className="uppercase tracking-[0.16em] text-white/35">source_hash</dt>
+                <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceHash}</dd>
+              </div>
+            </dl>
+            <pre
+              data-testid="video-pack-json"
+              className="mt-3 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/75"
+            >
+              {identityPackJson(selected.videoPack)}
+            </pre>
           </section>
         )}
 

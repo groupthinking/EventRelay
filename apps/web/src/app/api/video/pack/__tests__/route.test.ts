@@ -42,6 +42,7 @@ describe('POST /api/video/pack', () => {
     expect(a.data.version).toBe('v0');
     expect(a.data.video_id).toBe(CANON_A);
     expect(a.data.id).toBe(`vp:v0:${CANON_A}`);
+    expect(a.data.source_url).toBe('https://www.youtube.com/watch?v=auJzb1D-fag');
     expect(hashA).toBe(GOLDEN_IDENTITY_HASHES[CANON_A]);
     expect(hashA).toBe(identityHash(CANON_A));
     expect(hashA).toBe(hashB);
