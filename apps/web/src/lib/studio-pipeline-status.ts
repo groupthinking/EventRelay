@@ -1,3 +1,5 @@
+import type { VideoPackCitation } from '@/lib/emit-video-pack';
+
 export type StudioRunQuality = 'idle' | 'live' | 'draft';
 
 export interface StudioPipelineCheck {
@@ -57,4 +59,21 @@ export function studioStatusMessage(
     return `No usable transcript or events came back. Try another public video or sign in if the enrich path is gated.`;
   }
   return 'Paste a YouTube URL. UVAI transcribes it, extracts events, then you can act.';
+}
+
+export function studioPackCitation(pack: VideoPackCitation): string {
+  return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash}`;
+}
+
+export function studioPasteOutcomeMessage(input: {
+  hasUsableTranscript: boolean;
+  packCitation?: string | null;
+}): string {
+  if (input.hasUsableTranscript) {
+    return 'Ready — run tools, export, or save from this page.';
+  }
+  if (input.packCitation) {
+    return `Identity pack ${input.packCitation}. No usable transcript.`;
+  }
+  return 'No usable transcript. Try another public video.';
 }

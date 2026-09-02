@@ -352,6 +352,44 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     expect(video.title).toContain('Analysis blocked');
   });
 
+  it('emits the identity pack even when the workflow has no transcript', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_no_speech',
+        statusUrl: '/api/workflows/video-to-actions/wrun_no_speech',
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_no_speech',
+        runStatus: 'failed',
+        error: 'No usable transcript. Try another public video.',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl);
+    const video = store().videos.find((item) => item.id === id)!;
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/video/pack',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(video.videoPack).toEqual({
+      version: 'v0',
+      videoId: 'auJzb1D-fag',
+      packId: 'vp:v0:auJzb1D-fag',
+      sourceHash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    });
+    expect(video.transcript).toBeUndefined();
+    expect(video.status).toBe('failed');
+    expect(video.insights?.summary).toBe(
+      'Analysis was not generated because source evidence could not be verified.',
+    );
+  });
+
   it('fails closed when no durable run id is created', async () => {
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  studioPackCitation,
+  studioPasteOutcomeMessage,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
@@ -40,6 +42,30 @@ describe('studio-pipeline-status', () => {
   it('uses no-transcript label when ready without payload', () => {
     expect(studioStatusLabel('draft', 'ready')).toBe('No transcript yet');
     expect(studioStatusLabel('live', 'ready')).toBe('Analysis ready');
+  });
+
+  it('shows the identity pack cite when transcript evidence is missing', () => {
+    const citation = studioPackCitation({
+      version: 'v0',
+      videoId: 'jNQXAC9IVRw',
+      packId: 'vp:v0:jNQXAC9IVRw',
+      sourceHash: '97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d',
+    });
+    expect(citation).toBe(
+      'cite:youtube:jNQXAC9IVRw · v0 · 97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d',
+    );
+    expect(
+      studioPasteOutcomeMessage({
+        hasUsableTranscript: false,
+        packCitation: citation,
+      }),
+    ).toContain('cite:youtube:jNQXAC9IVRw');
+    expect(
+      studioPasteOutcomeMessage({
+        hasUsableTranscript: false,
+        packCitation: citation,
+      }),
+    ).toContain('97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d');
   });
 
   it('does not send the user to a second product when ready', () => {

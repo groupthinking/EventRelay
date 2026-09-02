@@ -67,6 +67,20 @@ describe('auth path policy', () => {
     expect(isProtectedPagePath('/dashboard/agents')).toBe(true);
   });
 
+  it('does not require a session for the public identity pack emit path', () => {
+    // Home paste is anonymous. Middleware 401 on these paths is the live
+    // uvai.io failure after #1609: pack never emits, UI shows no source_hash.
+    expect(isPublicApiPath('/api/video/pack')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video/pack')).toBe(true);
+    expect(needsAuthentication('/api/video/pack')).toBe(false);
+    expect(needsAuthentication('/api/v1/video/pack')).toBe(false);
+    // Exact allowlist only — siblings stay gated.
+    expect(isPublicApiPath('/api/video')).toBe(false);
+    expect(isPublicApiPath('/api/video/generate')).toBe(false);
+    expect(needsAuthentication('/api/video/generate')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video')).toBe(false);
+  });
+
   it('does not gate marketing pages', () => {
     expect(needsAuthentication('/')).toBe(false);
     expect(needsAuthentication('/pricing')).toBe(false);
@@ -142,6 +156,13 @@ describe('AI route classification (rate-limit budget)', () => {
     ]) {
       expect(isAiRoute(path, 'POST')).toBe(true);
     }
+  });
+
+  it('does not meter identity pack emit as AI work', () => {
+    expect(isAiRoute('/api/video/pack', 'POST')).toBe(false);
+    expect(isAiRoute('/api/v1/video/pack', 'POST')).toBe(false);
+    expect(isAiRoute('/api/video', 'POST')).toBe(true);
+    expect(isAiRoute('/api/video/generate', 'POST')).toBe(true);
   });
 
   it('leaves non-AI API routes on the general budget', () => {

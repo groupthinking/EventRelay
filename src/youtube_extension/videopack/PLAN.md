@@ -1,31 +1,31 @@
-# TASK: UVAI Step 2 — paste-URL emits a hashed Video Pack
+# TASK: Public identity Video Pack emit after #1609 401
 
 ## 1. Goal & Scope
-* **Objective:** Pasting a YouTube URL (or calling the existing pack API) produces a real VideoPack v0 with a stable hash/version tied to that video ID. Retries of the same URL reuse the same pack; a different video ID gets a different hash.
-* **Context:** Step 1 (Workflow Pro checkout) is done. `src/youtube_extension/videopack` already defines VideoPackV0 + `stable_hash`. Live `POST /api/v1/video/pack` is a shell: new UUID, `datetime.now()`, no `source_hash`, no persist. The uvai.io paste path (`processVideo`) never calls it.
+* **Objective:** Anonymous paste-URL on uvai.io emits a hashed Video Pack v0 even when transcript fetch fails. `POST /api/video/pack` must return 200 without sign-in.
+* **Context:** PR 1609 (`5ccbdf7`) added identity helpers and wired `processVideo` → `emitVideoPack`. Live uvai.io still 401s both pack URLs because `needsAuthentication('/api/video/pack')` is true. Home then shows "No transcript yet" / "source evidence could not be verified" with no `source_hash` or `cite:youtube`.
 * **Scope:**
-  * Use existing VideoPackV0. Do not invent a second pack format.
-  * Hash = SHA-256 of compact canonical JSON `{"version":"v0","video_id":"<id>"}` stored on `provenance.source_hash`.
-  * Persist under `storage/video_packs/<video_id>/pack.json` via existing `write_pack` / `read_pack`.
-  * Wire FastAPI `POST /api/v1/video/pack` and the existing uvai.io paste surface (`POST /api/video/pack` + `processVideo`).
-  * Tests: same video ID → same hash; different video ID → different hash; URL variants collapse to one video ID.
-* **Out of scope:** Qwen/Qwen3.8-27B extract, vLLM, Origin wasm, new public brand, FORGE/slingshot/ClipToAction.
+  * Allowlist `/api/video/pack` and `/api/v1/video/pack` in Next.js auth-paths (exact paths only; do not open `/api/video` or `/api/video/generate`).
+  * Alias `POST /api/v1/video/pack` on the Next.js surface to the existing 1609 handler.
+  * Allowlist FastAPI `/api/v1/video/pack` so a backend hit is not API-key gated.
+  * Persist and show the identity citation on home paste+Run when speech evidence is missing.
+  * Tests: 401-not-required, hash stability, emit-without-transcript.
+* **Initial check:** Modify existing `auth-paths.ts`, `OneLoopStudio.tsx`, `dashboard-store` tests, and 1609 videopack helpers. Do not invent a second pack format.
+* **Out of scope:** Qwen/Qwen3.8-27B, vLLM, Origin wasm, FORGE, slingshot, reach, ClipToAction.
 
 ## 2. Execution Plan
-- [x] Confirm existing videopack schema/hash and the live paste-URL gap
-- [x] Lock failing hash-stability tests (Python identity/store + Next.js route)
-- [x] Implement identity hash, get-or-create store, and wire both APIs
-- [x] Attach the returned pack citation on dashboard `processVideo`
-- [x] Verify tests; open PR against main (issue create returned 403)
+- [x] Lock failing tests (auth-paths public pack, FastAPI public pack, processVideo emit-without-transcript, citation label)
+- [x] Allowlist exact pack paths; add Next.js `/api/v1/video/pack` alias
+- [x] Show persisted pack citation on home even when transcript is missing
+- [x] Verify tests; open PR against main (Closes #1611; #1610 already closed)
 
 ## 3. Definition of Done (Success Verification)
-* **Expected Outcome:** Paste or `POST` of a YouTube URL returns VideoPack v0 whose `provenance.source_hash` is stable for that video ID and different for another video ID. A second request for the same ID reuses the stored pack.
+* **Expected Outcome:** Anonymous `POST /api/video/pack` with `{"url":"https://www.youtube.com/watch?v=jNQXAC9IVRw"}` returns 200 Video Pack v0 (`video_id`, `version`, `source_hash`). Same URL retry same hash; different video ID different hash. Home paste+Run shows/persists that citation if transcript is missing.
 * **Verification Method:**
-  * `PYTHONPATH=src pytest tests/unit/test_videopack_identity.py tests/unit/test_videopack_store.py -v`
-  * `cd apps/web && npx vitest run src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/store/__tests__/dashboard-store.test.ts`
-* **Proof Artifact:** Python 102 passed (`test_videopack_*`); frontend 47 passed (video-pack + `/api/video/pack` + dashboard-store). Live hashes: `auJzb1D-fag` → `2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea`; `jNQXAC9IVRw` → `97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d`.
+  * `cd apps/web && npx vitest run src/lib/__tests__/auth-paths.test.ts src/lib/__tests__/video-pack.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/store/__tests__/dashboard-store.test.ts`
+  * `PYTHONPATH=src pytest tests/unit/test_api_key_auth.py tests/unit/test_videopack_identity.py tests/unit/test_videopack_store.py -o addopts=`
+* **Proof Artifact:** Frontend 71 passed (6 files). Python 23 passed. Live production still 401 until this branch deploys: `curl POST https://uvai.io/api/video/pack` → `{"error":"Authentication required"}`. Golden hashes unchanged: `auJzb1D-fag` → `2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea`; `jNQXAC9IVRw` → `97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d`.
 
 ## 4. Post-Task Reflection
-* **What was done:** Wired existing VideoPackV0 so paste-URL / `POST /api/v1/video/pack` / `POST /api/video/pack` emit a v0 identity pack with a stable `provenance.source_hash` and persist/reuse by video ID.
-* **Why it was needed:** The library existed; the live path synthesized a new unhashed pack on every call and the uvai.io paste path never called it.
-* **How it was tested:** TDD hash-stability tests (same ID / URL variants / different ID), store reuse on `pack.json`, Next.js route tests, dashboard `processVideo` attaches the citation. GitHub `issue_write` returned 403 so no `Closes #` issue could be opened from this agent.
+* **What was done:** Ungated exact `/api/video/pack` and `/api/v1/video/pack` from Next.js login wall and FastAPI API-key wall; aliased the v1 Next.js path to the 1609 identity handler; home paste now shows `cite:youtube:<id> · v0 · <source_hash>` even when the workflow has no transcript.
+* **Why it was needed:** After #1609, anonymous paste called `emitVideoPack`, middleware 401'd, and the UI never persisted a pack citation.
+* **How it was tested:** TDD red (auth-paths public=false, FastAPI 401, missing v1 route, missing citation helper) then green. Hash-stability and emit-without-transcript tests remain locked.
