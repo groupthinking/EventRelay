@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto';
+import { NextResponse } from 'next/server';
+import { resolveVideoUrl } from '@/lib/video-url-request';
 
 export const IDENTITY_VERSION = 'v0' as const;
 
@@ -93,4 +95,50 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
       notes: 'Identity pack. Content extract is a later step.',
     },
   };
+}
+
+const packs = new Map<string, VideoPackV0Json>();
+
+function getOrCreatePack(videoId: string, sourceUrl?: string): VideoPackV0Json {
+  const existing = packs.get(videoId);
+  if (existing) {
+    return existing;
+  }
+  const pack = buildIdentityPack(videoId, sourceUrl);
+  packs.set(videoId, pack);
+  return pack;
+}
+
+export async function handleIdentityPackPost(request: Request): Promise<Response> {
+  let body: Record<string, unknown> | null = null;
+  try {
+    const parsed: unknown = await request.json();
+    body = parsed !== null && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+  } catch {
+    return NextResponse.json({ status: 'error', error: 'Invalid request body' }, { status: 400 });
+  }
+
+  const url = resolveVideoUrl(body);
+  const rawId = body?.video_id ?? body?.videoId;
+  const fromField = typeof rawId === 'string' ? resolveYouTubeVideoId(rawId) : null;
+  const videoId = fromField || (url ? resolveYouTubeVideoId(url) : null);
+
+  if (!videoId) {
+    return NextResponse.json(
+      { status: 'error', error: 'A YouTube URL or video id is required' },
+      { status: 400 },
+    );
+  }
+
+  const pack = getOrCreatePack(videoId, url || undefined);
+  if (!pack.source_url.startsWith('http') || !pack.provenance.source_hash) {
+    return NextResponse.json(
+      {
+        status: 'error',
+        error: 'Video pack verification failed: source_url and source_hash are required.',
+      },
+      { status: 500 },
+    );
+  }
+  return NextResponse.json({ status: 'success', data: pack });
 }
