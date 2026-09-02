@@ -196,6 +196,25 @@ const VIDEO_PACK_BODY = {
     version: 'v0',
     id: 'vp:v0:auJzb1D-fag',
     video_id: 'auJzb1D-fag',
+    source_url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+    transcript: { full_text: 'cite:youtube:auJzb1D-fag', segments: [] },
+    provenance: {
+      source_hash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    },
+  },
+};
+
+const VIDEO_PACK_CITATION = {
+  version: 'v0',
+  videoId: 'auJzb1D-fag',
+  packId: 'vp:v0:auJzb1D-fag',
+  sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+  sourceHash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+  pack: {
+    version: 'v0',
+    id: 'vp:v0:auJzb1D-fag',
+    video_id: 'auJzb1D-fag',
+    source_url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
     provenance: {
       source_hash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
     },
@@ -295,12 +314,7 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
       '/api/workflows/video-to-actions/wrun_verified',
       expect.objectContaining({ method: 'GET' }),
     );
-    expect(video.videoPack).toEqual({
-      version: 'v0',
-      videoId: 'auJzb1D-fag',
-      packId: 'vp:v0:auJzb1D-fag',
-      sourceHash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
-    });
+    expect(video.videoPack).toEqual(VIDEO_PACK_CITATION);
     expect(video.status).toBe('complete');
     expect(video.runId).toBe('wrun_verified');
     expect(video.quality?.passed).toBe(true);
@@ -377,12 +391,8 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
       '/api/video/pack',
       expect.objectContaining({ method: 'POST' }),
     );
-    expect(video.videoPack).toEqual({
-      version: 'v0',
-      videoId: 'auJzb1D-fag',
-      packId: 'vp:v0:auJzb1D-fag',
-      sourceHash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
-    });
+    expect(video.videoPack).toEqual(VIDEO_PACK_CITATION);
+    expect(video.videoPack?.sourceUrl).toBe('https://www.youtube.com/watch?v=auJzb1D-fag');
     expect(video.transcript).toBeUndefined();
     expect(video.status).toBe('failed');
     expect(video.insights?.summary).toBe(

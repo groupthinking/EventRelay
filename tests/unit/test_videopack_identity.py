@@ -88,6 +88,7 @@ class TestBuildIdentityPack:
         assert pack.video_id == CANON_A
         assert pack.id == f"vp:v0:{CANON_A}"
         assert pack.provenance.source_hash == GOLDEN_A
+        assert str(pack.source_url) == f"https://www.youtube.com/watch?v={CANON_A}"
 
     def test_different_video_ids_get_different_pack_hashes(self):
         a = build_identity_pack(CANON_A)

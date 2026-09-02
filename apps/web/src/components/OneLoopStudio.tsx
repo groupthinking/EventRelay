@@ -22,6 +22,7 @@ import {
   startVideoToActions,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
+import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioPackCitation,
   studioPasteOutcomeMessage,
@@ -657,20 +658,22 @@ export default function OneLoopStudio() {
             <p className="mt-3 break-all font-mono text-sm text-white/80">
               {studioPackCitation(selected.videoPack)}
             </p>
-            <dl className="mt-3 grid gap-2 font-mono text-[11px] text-white/55 sm:grid-cols-3">
+            <dl className="mt-3 grid gap-2 font-mono text-[11px] text-white/55 sm:grid-cols-2">
               <div>
-                <dt className="uppercase tracking-[0.16em] text-white/35">video_id</dt>
-                <dd className="mt-1 text-white/80">{selected.videoPack.videoId}</dd>
-              </div>
-              <div>
-                <dt className="uppercase tracking-[0.16em] text-white/35">version</dt>
-                <dd className="mt-1 text-white/80">{selected.videoPack.version}</dd>
+                <dt className="uppercase tracking-[0.16em] text-white/35">source_url</dt>
+                <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceUrl}</dd>
               </div>
               <div>
                 <dt className="uppercase tracking-[0.16em] text-white/35">source_hash</dt>
                 <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceHash}</dd>
               </div>
             </dl>
+            <pre
+              data-testid="video-pack-json"
+              className="mt-3 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/75"
+            >
+              {identityPackJson(selected.videoPack)}
+            </pre>
           </section>
         )}
 

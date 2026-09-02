@@ -1,7 +1,7 @@
 # TASK: Public identity Video Pack emit after #1609 401
 
 ## 1. Goal & Scope
-* **Objective:** Anonymous paste-URL on uvai.io emits a hashed Video Pack v0 even when transcript fetch fails. `POST /api/video/pack` must return 200 without sign-in.
+* **Objective:** Anonymous paste-URL on uvai.io emits a hashed Video Pack v0 even when transcript fetch fails. Pack JSON must include `source_url` + `source_hash`. Fail closed on verification — not a silent empty UI. `POST /api/video/pack` must return 200 without sign-in.
 * **Context:** PR 1609 (`5ccbdf7`) added identity helpers and wired `processVideo` → `emitVideoPack`. Live uvai.io still 401s both pack URLs because `needsAuthentication('/api/video/pack')` is true. Home then shows "No transcript yet" / "source evidence could not be verified" with no `source_hash` or `cite:youtube`.
 * **Scope:**
   * Allowlist `/api/video/pack` and `/api/v1/video/pack` in Next.js auth-paths (exact paths only; do not open `/api/video` or `/api/video/generate`).
@@ -23,7 +23,7 @@
 * **Verification Method:**
   * `cd apps/web && npx vitest run src/lib/__tests__/auth-paths.test.ts src/lib/__tests__/video-pack.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/store/__tests__/dashboard-store.test.ts`
   * `PYTHONPATH=src pytest tests/unit/test_api_key_auth.py tests/unit/test_videopack_identity.py tests/unit/test_videopack_store.py -o addopts=`
-* **Proof Artifact:** Frontend 71 passed (6 files). Python 23 passed. Live production still 401 until this branch deploys: `curl POST https://uvai.io/api/video/pack` → `{"error":"Authentication required"}`. Golden hashes unchanged: `auJzb1D-fag` → `2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea`; `jNQXAC9IVRw` → `97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d`.
+* **Proof Artifact:** Frontend 76 passed (7 files, including emit-video-pack fail-closed). Python 23 passed. Pack JSON locks `source_url` + `source_hash`. Missing either field throws verification failed (not a silent empty UI). Live production still 401 until this branch deploys. Golden hashes unchanged.
 
 ## 4. Post-Task Reflection
 * **What was done:** Ungated exact `/api/video/pack` and `/api/v1/video/pack` from Next.js login wall and FastAPI API-key wall; aliased the v1 Next.js path to the 1609 identity handler; home paste now shows `cite:youtube:<id> · v0 · <source_hash>` even when the workflow has no transcript.

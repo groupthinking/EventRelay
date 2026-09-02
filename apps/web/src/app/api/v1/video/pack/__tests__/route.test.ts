@@ -28,6 +28,7 @@ describe('POST /api/v1/video/pack', () => {
       data: {
         version: string;
         video_id: string;
+        source_url: string;
         transcript: { full_text: string; segments: unknown[] };
         provenance: { source_hash: string };
       };
@@ -35,6 +36,7 @@ describe('POST /api/v1/video/pack', () => {
     expect(body.status).toBe('success');
     expect(body.data.version).toBe('v0');
     expect(body.data.video_id).toBe(CANON_B);
+    expect(body.data.source_url).toBe('https://www.youtube.com/watch?v=jNQXAC9IVRw');
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     expect(body.data.transcript.full_text).toBe(`cite:youtube:${CANON_B}`);
     expect(body.data.transcript.segments).toEqual([]);

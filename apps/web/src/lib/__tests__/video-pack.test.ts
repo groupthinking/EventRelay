@@ -51,6 +51,7 @@ describe('video-pack identity', () => {
     expect(pack.version).toBe('v0');
     expect(pack.video_id).toBe(CANON_B);
     expect(pack.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(pack.source_url).toBe(`https://www.youtube.com/watch?v=${CANON_B}`);
     expect(pack.transcript.full_text).toBe(`cite:youtube:${CANON_B}`);
     expect(pack.transcript.segments).toEqual([]);
   });

@@ -62,7 +62,7 @@ export function studioStatusMessage(
 }
 
 export function studioPackCitation(pack: VideoPackCitation): string {
-  return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash}`;
+  return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash} · ${pack.sourceUrl}`;
 }
 
 export function studioPasteOutcomeMessage(input: {
@@ -75,5 +75,5 @@ export function studioPasteOutcomeMessage(input: {
   if (input.packCitation) {
     return `Identity pack ${input.packCitation}. No usable transcript.`;
   }
-  return 'No usable transcript. Try another public video.';
+  return 'Pack emit failed: verification failed (source_url + source_hash required).';
 }
