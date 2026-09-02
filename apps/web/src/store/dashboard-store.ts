@@ -25,6 +25,7 @@ import type {
   Video,
 } from '@/store/dashboard-types';
 import { formatSeconds } from '@/lib/timestamp';
+import { emitVideoPack } from '@/lib/emit-video-pack';
 import {
   pollVideoToActions,
   startVideoToActions,
@@ -364,6 +365,10 @@ export const useDashboardStore = create<DashboardState>()(
     addActivity(`Processing started: ${truncate(url, 40)}`, 'info');
 
     try {
+      const videoPack = await emitVideoPack(url);
+      updateVideo(id, { videoPack, progress: 5 });
+      addActivity(`Video pack ${videoPack.version} ${videoPack.sourceHash.slice(0, 12)}`, 'success');
+
       const started = await startVideoToActions({ url });
       if (!started.ok || !started.runId) {
         throw new Error(

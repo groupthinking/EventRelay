@@ -232,3 +232,6 @@ data/audit/*.jsonl
 
 # Local verification and native-module quarantine artifacts
 /work/
+
+# Runtime Video Pack identity store (hashed v0 records)
+/storage/video_packs/

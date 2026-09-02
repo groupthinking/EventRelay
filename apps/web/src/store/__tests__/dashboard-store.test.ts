@@ -190,6 +190,18 @@ describe('dashboard-store · extractEvents', () => {
   });
 });
 
+const VIDEO_PACK_BODY = {
+  status: 'success',
+  data: {
+    version: 'v0',
+    id: 'vp:v0:auJzb1D-fag',
+    video_id: 'auJzb1D-fag',
+    provenance: {
+      source_hash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    },
+  },
+};
+
 describe('dashboard-store · processVideo (durable evidence workflow)', () => {
   const provenance = {
     sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag',
@@ -217,6 +229,7 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
   it('persists the run id and maps only a verified result to complete', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
       .mockResolvedValueOnce(jsonResponse({
         ok: true,
         runId: 'wrun_verified',
@@ -269,14 +282,25 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/workflows/video-to-actions',
+      '/api/video/pack',
       expect.objectContaining({ method: 'POST' }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      '/api/workflows/video-to-actions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       '/api/workflows/video-to-actions/wrun_verified',
       expect.objectContaining({ method: 'GET' }),
     );
+    expect(video.videoPack).toEqual({
+      version: 'v0',
+      videoId: 'auJzb1D-fag',
+      packId: 'vp:v0:auJzb1D-fag',
+      sourceHash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    });
     expect(video.status).toBe('complete');
     expect(video.runId).toBe('wrun_verified');
     expect(video.quality?.passed).toBe(true);
@@ -300,6 +324,7 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
   it('keeps a failed workflow failed and preserves a recovery record', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
       .mockResolvedValueOnce(jsonResponse({
         ok: true,
         runId: 'wrun_failed',
@@ -317,6 +342,9 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     const video = store().videos.find((item) => item.id === id)!;
 
     expect(video.status).toBe('failed');
+    expect(video.videoPack?.sourceHash).toBe(
+      '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    );
     expect(video.runId).toBe('wrun_failed');
     expect(video.failure?.stage).toBe('acquisition');
     expect(video.quality?.passed).toBe(false);
@@ -325,9 +353,11 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
   });
 
   it('fails closed when no durable run id is created', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
-      jsonResponse({ ok: false, error: 'world not configured' }, false, 500),
-    ));
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockResolvedValueOnce(
+        jsonResponse({ ok: false, error: 'world not configured' }, false, 500),
+      ));
 
     const id = await store().processVideo(provenance.sourceUrl);
     const video = store().videos.find((item) => item.id === id)!;
