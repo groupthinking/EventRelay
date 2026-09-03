@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GOLDEN_IDENTITY_HASHES } from '@/lib/video-pack';
-import { identityPackJson, verifyIdentityPack } from '@/lib/emit-video-pack';
+import { emitVideoPack, identityPackJson, verifyIdentityPack } from '@/lib/emit-video-pack';
 
 const CANON = 'jNQXAC9IVRw';
 const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
@@ -47,5 +47,85 @@ describe('verifyIdentityPack (CoS: fail closed)', () => {
   it('fails closed on an empty or 401 payload', () => {
     expect(() => verifyIdentityPack({ error: 'Authentication required' })).toThrow(/verif/i);
     expect(() => verifyIdentityPack(null)).toThrow(/verif/i);
+  });
+});
+
+describe('emitVideoPack', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('returns a cached pack from POST without polling', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => VALID,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const citation = await emitVideoPack(SOURCE_URL, { pollIntervalMs: 0 });
+    expect(citation.sourceHash).toBe(HASH);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/video/pack');
+  });
+
+  it('polls GET after a processing POST and returns the ready pack', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({
+          status: 'processing',
+          data: {
+            id: `vp:v0:${CANON}`,
+            video_id: CANON,
+            source_url: SOURCE_URL,
+            provenance: { source_hash: HASH },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => VALID,
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const citation = await emitVideoPack(SOURCE_URL, { pollIntervalMs: 0, timeoutMs: 5_000 });
+    expect(citation.sourceHash).toBe(HASH);
+    expect(citation.videoId).toBe(CANON);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(`source_hash=${HASH}`);
+  });
+
+  it('fails closed when the anonymous GET reports a visible extract error', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        json: async () => ({
+          status: 'processing',
+          data: {
+            id: `vp:v0:${CANON}`,
+            video_id: CANON,
+            source_url: SOURCE_URL,
+            provenance: { source_hash: HASH },
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        json: async () => ({
+          status: 'error',
+          error:
+            'Video pack spec extract requires AI Gateway (AI_GATEWAY_API_KEY or VERCEL_AI_GATEWAY_API_KEY) and model google/gemini-3.8-flash.',
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(emitVideoPack(SOURCE_URL, { pollIntervalMs: 0, timeoutMs: 5_000 })).rejects.toThrow(
+      /AI Gateway/i,
+    );
   });
 });

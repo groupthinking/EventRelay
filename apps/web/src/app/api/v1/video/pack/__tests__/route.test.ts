@@ -28,6 +28,24 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function loadV1Route() {
+  const scheduled: Promise<unknown>[] = [];
+  const videoPack = await import('@/lib/video-pack');
+  const store = await import('@/lib/video-pack-store');
+  store.resetVideoPackStoreForTests();
+  videoPack.setVideoPackSchedulerForTests((work) => {
+    scheduled.push(work);
+  });
+  const route = await import('../route');
+  return {
+    POST: route.POST,
+    GET: route.GET,
+    flush: async () => {
+      await Promise.all(scheduled.splice(0));
+    },
+  };
+}
+
 function postRequest(body: unknown) {
   return new Request('http://localhost:3000/api/v1/video/pack', {
     method: 'POST',
@@ -55,7 +73,18 @@ describe('POST /api/v1/video/pack', () => {
       code_snippets: [],
       visual_context: null,
     });
-    const { POST } = await import('../route');
+    const { POST, GET, flush } = await loadV1Route();
+    const accepted = await POST(
+      postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }),
+    );
+    expect(accepted.status).toBe(202);
+    await flush();
+    const byHash = await GET(
+      new Request(
+        `http://localhost:3000/api/v1/video/pack?source_hash=${GOLDEN_IDENTITY_HASHES[CANON_B]}`,
+      ),
+    );
+    expect(byHash.status).toBe(200);
     const res = await POST(
       postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }),
     );

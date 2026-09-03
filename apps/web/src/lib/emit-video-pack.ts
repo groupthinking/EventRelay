@@ -64,19 +64,79 @@ export function identityPackJson(pack: VideoPackCitation): string {
   return JSON.stringify(pack.pack, null, 2);
 }
 
-export async function emitVideoPack(url: string): Promise<VideoPackCitation> {
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function packErrorMessage(payload: unknown, fallback: string): string {
+  const envelope = asRecord(payload);
+  return typeof envelope?.error === 'string' ? envelope.error : fallback;
+}
+
+function processingQuery(payload: unknown, fallbackUrl: string): string {
+  const envelope = asRecord(payload);
+  const data = asRecord(envelope?.data);
+  const provenance = asRecord(data?.provenance);
+  const sourceHash = typeof provenance?.source_hash === 'string' ? provenance.source_hash.trim() : '';
+  if (SOURCE_HASH.test(sourceHash)) {
+    return `source_hash=${encodeURIComponent(sourceHash)}`;
+  }
+  const videoId = typeof data?.video_id === 'string' ? data.video_id : '';
+  if (videoId) {
+    return `video_id=${encodeURIComponent(videoId)}`;
+  }
+  return `url=${encodeURIComponent(fallbackUrl)}`;
+}
+
+async function pollReadyPack(
+  payload: unknown,
+  fallbackUrl: string,
+  options: { pollIntervalMs: number; timeoutMs: number },
+): Promise<VideoPackCitation> {
+  const deadline = Date.now() + options.timeoutMs;
+  const query = processingQuery(payload, fallbackUrl);
+  while (Date.now() <= deadline) {
+    if (options.pollIntervalMs > 0) {
+      await delay(options.pollIntervalMs);
+    }
+    const response = await fetch(`/api/video/pack?${query}`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      signal: AbortSignal.timeout(15_000),
+    });
+    const next: unknown = await response.json().catch(() => null);
+    if (response.status === 200) {
+      return verifyIdentityPack(next);
+    }
+    if (response.status === 202) {
+      continue;
+    }
+    throw new Error(packErrorMessage(next, 'Video pack emit failed.'));
+  }
+  throw new Error('Video pack emit timed out waiting for spec extract.');
+}
+
+export async function emitVideoPack(
+  url: string,
+  options: { pollIntervalMs?: number; timeoutMs?: number } = {},
+): Promise<VideoPackCitation> {
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+  const timeoutMs = options.timeoutMs ?? 120_000;
   const response = await fetch('/api/video/pack', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(15_000),
   });
   const payload: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const envelope = asRecord(payload);
-    const error = typeof envelope?.error === 'string' ? envelope.error : 'Video pack emit failed.';
-    throw new Error(error);
+  if (response.status === 200) {
+    return verifyIdentityPack(payload);
   }
-  return verifyIdentityPack(payload);
+  if (response.status === 202) {
+    return pollReadyPack(payload, url, { pollIntervalMs, timeoutMs });
+  }
+  throw new Error(packErrorMessage(payload, 'Video pack emit failed.'));
 }

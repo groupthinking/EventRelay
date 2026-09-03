@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 import {
@@ -7,6 +8,13 @@ import {
   extractVideoPackSpec,
   type ExtractedVideoPackSpec,
 } from '@/lib/video-pack-extractor';
+import {
+  claimPackProcessing,
+  getPackRecord,
+  isProcessingStale,
+  putPackRecord,
+  type VideoPackRecord,
+} from '@/lib/video-pack-store';
 
 export const IDENTITY_VERSION = 'v0' as const;
 
@@ -176,14 +184,136 @@ export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
   return pack.transcript.full_text === `cite:youtube:${pack.video_id}`;
 }
 
-const packs = new Map<string, VideoPackV0Json>();
+const SOURCE_HASH = /^[a-f0-9]{64}$/;
 
-function getCachedSpecPack(videoId: string): VideoPackV0Json | undefined {
-  const existing = packs.get(videoId);
-  if (existing && !isIdentityOnlyPack(existing)) {
-    return existing;
+type ScheduleExtract = (work: Promise<unknown>) => void;
+
+let scheduleExtract: ScheduleExtract = (work) => {
+  waitUntil(work);
+};
+
+export function setVideoPackSchedulerForTests(schedule: ScheduleExtract | null): void {
+  scheduleExtract = schedule ?? ((work) => {
+    waitUntil(work);
+  });
+}
+
+function missingIdentityResponse(): NextResponse {
+  return NextResponse.json(
+    {
+      status: 'error',
+      error: 'Video pack verification failed: source_url and source_hash are required.',
+    },
+    { status: 500 },
+  );
+}
+
+function processingEnvelope(identity: {
+  id: string;
+  video_id: string;
+  source_url: string;
+  source_hash: string;
+}) {
+  return {
+    status: 'processing' as const,
+    data: {
+      id: identity.id,
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      provenance: { source_hash: identity.source_hash },
+    },
+  };
+}
+
+function recordToResponse(record: VideoPackRecord): NextResponse {
+  switch (record.state) {
+    case 'ready':
+      if (isIdentityOnlyPack(record.pack)) {
+        return NextResponse.json(
+          { status: 'error', error: 'Gemini 3.8 Flash returned no extracted spec content.' },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json({ status: 'success', data: record.pack });
+    case 'processing':
+      return NextResponse.json(
+        processingEnvelope({
+          id: record.id,
+          video_id: record.video_id,
+          source_url: record.source_url,
+          source_hash: record.source_hash,
+        }),
+        { status: 202 },
+      );
+    case 'error':
+      return NextResponse.json({ status: 'error', error: record.error }, { status: 503 });
+    default: {
+      const _exhaustive: never = record;
+      return NextResponse.json(
+        { status: 'error', error: `Unhandled pack state: ${JSON.stringify(_exhaustive)}` },
+        { status: 500 },
+      );
+    }
   }
-  return undefined;
+}
+
+function resolveIdentityFromFields(
+  rawId: unknown,
+  url: string,
+): { identity: VideoPackV0Json } | NextResponse {
+  const fromField = typeof rawId === 'string' ? resolveYouTubeVideoId(rawId) : null;
+  const videoId = fromField || (url ? resolveYouTubeVideoId(url) : null);
+  if (!videoId) {
+    return NextResponse.json(
+      { status: 'error', error: 'A YouTube URL or video id is required' },
+      { status: 400 },
+    );
+  }
+  const identity = buildIdentityPack(videoId, url || undefined);
+  if (!identity.source_url.startsWith('http') || !identity.provenance.source_hash) {
+    return missingIdentityResponse();
+  }
+  return { identity };
+}
+
+async function persistExtract(identity: VideoPackV0Json): Promise<void> {
+  try {
+    const spec = await extractVideoPackSpec({
+      sourceUrl: identity.source_url,
+      videoId: identity.video_id,
+    });
+    const pack = applyExtractedSpec(identity, spec);
+    if (isIdentityOnlyPack(pack)) {
+      await putPackRecord({
+        state: 'error',
+        video_id: identity.video_id,
+        source_url: identity.source_url,
+        source_hash: identity.provenance.source_hash,
+        id: identity.id,
+        error: 'Gemini 3.8 Flash returned no extracted spec content.',
+        failed_at: new Date().toISOString(),
+      });
+      return;
+    }
+    await putPackRecord({ state: 'ready', pack });
+  } catch (error) {
+    const message =
+      error instanceof VideoPackExtractError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Video pack spec extract failed.';
+    console.error('[video-pack] spec extract failed:', message);
+    await putPackRecord({
+      state: 'error',
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: identity.provenance.source_hash,
+      id: identity.id,
+      error: message,
+      failed_at: new Date().toISOString(),
+    });
+  }
 }
 
 export async function handleIdentityPackPost(request: Request): Promise<Response> {
@@ -195,52 +325,78 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
     return NextResponse.json({ status: 'error', error: 'Invalid request body' }, { status: 400 });
   }
 
-  const url = resolveVideoUrl(body);
-  const rawId = body?.video_id ?? body?.videoId;
-  const fromField = typeof rawId === 'string' ? resolveYouTubeVideoId(rawId) : null;
-  const videoId = fromField || (url ? resolveYouTubeVideoId(url) : null);
+  const resolved = resolveIdentityFromFields(body?.video_id ?? body?.videoId, resolveVideoUrl(body));
+  if (resolved instanceof NextResponse) {
+    return resolved;
+  }
+  const { identity } = resolved;
+  const sourceHash = identity.provenance.source_hash;
 
-  if (!videoId) {
-    return NextResponse.json(
-      { status: 'error', error: 'A YouTube URL or video id is required' },
-      { status: 400 },
-    );
+  const existing = await getPackRecord(sourceHash);
+  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack)) {
+    return recordToResponse(existing);
+  }
+  if (existing?.state === 'processing' && !isProcessingStale(existing)) {
+    return recordToResponse(existing);
+  }
+  if (existing?.state === 'error') {
+    // A new POST retries after a visible failure; GET keeps serving the error.
   }
 
-  const identity = buildIdentityPack(videoId, url || undefined);
-  if (!identity.source_url.startsWith('http') || !identity.provenance.source_hash) {
-    return NextResponse.json(
-      {
-        status: 'error',
-        error: 'Video pack verification failed: source_url and source_hash are required.',
-      },
-      { status: 500 },
-    );
+  const claimed = await claimPackProcessing({
+    video_id: identity.video_id,
+    source_url: identity.source_url,
+    source_hash: sourceHash,
+    id: identity.id,
+  });
+  if (claimed !== 'claimed') {
+    return recordToResponse(claimed);
   }
 
-  const cached = getCachedSpecPack(videoId);
-  if (cached) {
-    return NextResponse.json({ status: 'success', data: cached });
+  scheduleExtract(persistExtract(identity));
+  return NextResponse.json(
+    processingEnvelope({
+      id: identity.id,
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: sourceHash,
+    }),
+    { status: 202 },
+  );
+}
+
+export async function handleIdentityPackGet(request: Request): Promise<Response> {
+  const url = new URL(request.url);
+  const sourceHash = url.searchParams.get('source_hash')?.trim() ?? '';
+  const rawId = url.searchParams.get('video_id') ?? url.searchParams.get('videoId');
+  const rawUrl =
+    url.searchParams.get('url') ??
+    url.searchParams.get('youtubeUrl') ??
+    url.searchParams.get('video_url') ??
+    url.searchParams.get('videoUrl') ??
+    '';
+
+  if (sourceHash) {
+    if (!SOURCE_HASH.test(sourceHash)) {
+      return NextResponse.json(
+        { status: 'error', error: 'source_hash must be a 64-character hex digest' },
+        { status: 400 },
+      );
+    }
+    const record = await getPackRecord(sourceHash);
+    if (!record) {
+      return NextResponse.json({ status: 'error', error: 'Video pack not found' }, { status: 404 });
+    }
+    return recordToResponse(record);
   }
 
-  let spec: ExtractedVideoPackSpec;
-  try {
-    spec = await extractVideoPackSpec({
-      sourceUrl: identity.source_url,
-      videoId,
-    });
-  } catch (error) {
-    const message =
-      error instanceof VideoPackExtractError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : 'Video pack spec extract failed.';
-    console.error('[video-pack] spec extract failed:', message);
-    return NextResponse.json({ status: 'error', error: message }, { status: 503 });
+  const resolved = resolveIdentityFromFields(rawId, rawUrl);
+  if (resolved instanceof NextResponse) {
+    return resolved;
   }
-
-  const pack = applyExtractedSpec(identity, spec);
-  packs.set(videoId, pack);
-  return NextResponse.json({ status: 'success', data: pack });
+  const record = await getPackRecord(resolved.identity.provenance.source_hash);
+  if (!record) {
+    return NextResponse.json({ status: 'error', error: 'Video pack not found' }, { status: 404 });
+  }
+  return recordToResponse(record);
 }
