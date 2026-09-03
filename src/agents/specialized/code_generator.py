@@ -43,7 +43,8 @@ class CodeGeneratorAgent:
                     except ValidationError as e:
                         raise HTTPException(status_code=400, detail=str(e))
                     except Exception as e:
-                        raise HTTPException(status_code=500, detail=str(e))
+                        logger.error(f"Unexpected error: {{e}}", exc_info=True)
+                        raise HTTPException(status_code=500, detail="Internal server error")
             """
             ),
             "rest_api": textwrap.dedent(
@@ -52,9 +53,12 @@ class CodeGeneratorAgent:
                 # Generated API endpoint
 
                 from fastapi import FastAPI, HTTPException
-                from pydantic import BaseModel
+                import logging
+                from pydantic import BaseModel, ValidationError
                 from datetime import datetime
                 from typing import Optional, List
+
+                logger = logging.getLogger(__name__)
 
                 {models}
 
