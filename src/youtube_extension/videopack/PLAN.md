@@ -22,7 +22,7 @@
 * **Expected Outcome:** Anonymous POST with a YouTube URL returns v0 with identity hash plus non-empty extracted spec (not only `cite:youtube:`). Missing Gateway key returns a visible error status. Extractor call uses `google/gemini-3.8-flash`.
 * **Verification Method:**
   * `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts`
-* **Proof Artifact:** `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts` — 5 files, 22 passed. Pack-related `tsc --noEmit` is clean.
+* **Proof Artifact:** `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts` — 5 files, 22 passed. Pack-related `tsc --noEmit` is clean. PR: https://github.com/groupthinking/EventRelay/pull/1616
 
 ## 4. Post-Task Reflection
 * **What was done:** Added a Gemini 3.8 Flash spec extractor (`google/gemini-3.8-flash` via AI SDK `generateText`) and merged extracted fields onto the existing v0 identity pack. POST `/api/video/pack` now fail-closes with 503 if Gateway/model extract is missing or empty.
