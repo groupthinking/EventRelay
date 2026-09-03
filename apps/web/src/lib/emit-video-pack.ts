@@ -70,7 +70,7 @@ export async function emitVideoPack(url: string): Promise<VideoPackCitation> {
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(120_000),
   });
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
