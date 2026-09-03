@@ -1,10 +1,6 @@
+import type { Redis } from '@upstash/redis';
 import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
 import type { VideoPackV0Json } from '@/lib/video-pack';
-
-export type VideoPackRedisClient = {
-  get: <T = unknown>(key: string) => Promise<T | null>;
-  set: (key: string, value: unknown, opts?: { nx?: boolean }) => Promise<unknown>;
-};
 
 export const VIDEO_PACK_STORE_PREFIX = 'er:videopack:v0:';
 export const PROCESSING_STALE_MS = 180_000;
@@ -41,7 +37,7 @@ export type VideoPackRecord =
 
 const memoryStore = new Map<string, VideoPackRecord>();
 
-let redisPromise: Promise<VideoPackRedisClient | null> | null = null;
+let redisPromise: Promise<Redis | null> | null = null;
 
 export function packStoreKey(sourceHash: string): string {
   return `${VIDEO_PACK_STORE_PREFIX}${sourceHash}`;
@@ -61,7 +57,7 @@ function recordHash(record: VideoPackRecord): string {
   return record.state === 'ready' ? record.pack.provenance.source_hash : record.source_hash;
 }
 
-async function getRedis(): Promise<VideoPackRedisClient | null> {
+async function getRedis(): Promise<Redis | null> {
   if (redisPromise) return redisPromise;
   redisPromise = (async () => {
     const creds = resolveUpstashRedisCredentials();
@@ -70,15 +66,10 @@ async function getRedis(): Promise<VideoPackRedisClient | null> {
     }
     try {
       const { Redis } = await import('@upstash/redis');
-      const client = new Redis({
+      return new Redis({
         url: creds.url,
         token: creds.token,
       });
-      return {
-        get: <T = unknown>(key: string) => client.get<T>(key),
-        set: (key: string, value: unknown, opts?: { nx?: boolean }) =>
-          opts?.nx ? client.set(key, value, { nx: true }) : client.set(key, value),
-      };
     } catch (error) {
       console.error('[video-pack-store] Redis client init failed:', error);
       return null;
@@ -87,29 +78,9 @@ async function getRedis(): Promise<VideoPackRedisClient | null> {
   return redisPromise;
 }
 
-function decodeStoreValue(value: unknown): unknown {
-  let current = value;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (typeof current !== 'string') {
-      return current;
-    }
-    const trimmed = current.trim();
-    if (!trimmed.startsWith('{') && !trimmed.startsWith('"')) {
-      return current;
-    }
-    try {
-      current = JSON.parse(trimmed) as unknown;
-    } catch {
-      return value;
-    }
-  }
-  return current;
-}
-
 function asRecord(value: unknown): VideoPackRecord | null {
-  const decoded = decodeStoreValue(value);
-  if (decoded === null || typeof decoded !== 'object') return null;
-  const row = decoded as VideoPackRecord;
+  if (value === null || typeof value !== 'object') return null;
+  const row = value as VideoPackRecord;
   if (row.state === 'ready' && row.pack && typeof row.pack === 'object') {
     return row;
   }
@@ -123,38 +94,13 @@ function asRecord(value: unknown): VideoPackRecord | null {
   return null;
 }
 
-function readyPersistErrorRecord(
-  pack: VideoPackV0Json,
-  failedAt: string = new Date().toISOString(),
-): Extract<VideoPackRecord, { state: 'error' }> {
-  return {
-    state: 'error',
-    video_id: pack.video_id,
-    source_url: pack.source_url,
-    source_hash: pack.provenance.source_hash,
-    id: pack.id,
-    error: 'Video pack persist failed: Redis write of ready pack failed.',
-    failed_at: failedAt,
-  };
-}
-
-async function readRedisRecord(
-  redis: VideoPackRedisClient,
-  key: string,
-): Promise<VideoPackRecord | null> {
-  const first = asRecord(await redis.get(key));
-  if (first) {
-    return first;
-  }
-  return asRecord(await redis.get(key));
-}
-
 export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord | null> {
   const key = packStoreKey(sourceHash);
   const redis = await getRedis();
   if (redis) {
     try {
-      const parsed = await readRedisRecord(redis, key);
+      const raw = await redis.get<VideoPackRecord>(key);
+      const parsed = asRecord(raw);
       if (parsed) {
         memoryStore.set(key, parsed);
         return parsed;
@@ -168,27 +114,14 @@ export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord
 
 export async function putPackRecord(record: VideoPackRecord): Promise<void> {
   const key = packStoreKey(recordHash(record));
+  memoryStore.set(key, record);
   const redis = await getRedis();
-  if (!redis) {
-    memoryStore.set(key, record);
-    return;
-  }
-  try {
-    await redis.set(key, record);
-    memoryStore.set(key, record);
-  } catch (error) {
-    console.error('[video-pack-store] Redis set failed:', error);
-    if (record.state === 'ready') {
-      const errorRecord = readyPersistErrorRecord(record.pack);
-      try {
-        await redis.set(key, errorRecord);
-      } catch (persistError) {
-        console.error('[video-pack-store] Redis error-record persist failed:', persistError);
-      }
-      memoryStore.set(key, errorRecord);
-      throw new Error('Video pack persist failed: Redis write of ready pack failed.');
+  if (redis) {
+    try {
+      await redis.set(key, record);
+    } catch (error) {
+      console.error('[video-pack-store] Redis set failed:', error);
     }
-    memoryStore.set(key, record);
   }
 }
 
@@ -223,41 +156,24 @@ export async function claimPackProcessing(
         return 'claimed';
       }
       const current = (await getPackRecord(identity.source_hash)) ?? existing;
-      if (current?.state === 'ready') {
-        return current;
-      }
-      if (current?.state === 'processing' && !isProcessingStale(current, now.getTime())) {
-        return current;
-      }
-      if (current?.state === 'error' || (current != null && isProcessingStale(current, now.getTime()))) {
-        const latest = await getPackRecord(identity.source_hash);
-        if (latest?.state === 'ready') {
-          return latest;
-        }
-        if (latest?.state === 'processing' && !isProcessingStale(latest, now.getTime())) {
-          return latest;
-        }
+      if (!current || current.state === 'error' || isProcessingStale(current, now.getTime())) {
         await redis.set(key, processing);
         memoryStore.set(key, processing);
         return 'claimed';
       }
-      // NX lost and the existing value could not be parsed. Leave Redis untouched.
-      return current ?? existing ?? processing;
+      return current;
     } catch (error) {
       console.error('[video-pack-store] Redis claim failed:', error);
-      const localAfterFailure = memoryStore.get(key);
-      if (localAfterFailure) {
-        return localAfterFailure;
-      }
-      return processing;
     }
   }
 
   const local = memoryStore.get(key);
-  if (local?.state === 'ready') {
-    return local;
-  }
-  if (local?.state === 'processing' && !isProcessingStale(local, now.getTime())) {
+  if (
+    local &&
+    local.state === 'processing' &&
+    !isProcessingStale(local, now.getTime()) &&
+    local !== existing
+  ) {
     return local;
   }
   memoryStore.set(key, processing);
@@ -266,15 +182,7 @@ export async function claimPackProcessing(
 
 export function resetVideoPackStoreForTests(): void {
   memoryStore.clear();
-  redisPromise = Promise.resolve(null);
-}
-
-export function clearVideoPackMemoryForTests(): void {
-  memoryStore.clear();
-}
-
-export function setVideoPackRedisForTests(redis: VideoPackRedisClient | null): void {
-  redisPromise = Promise.resolve(redis);
+  redisPromise = null;
 }
 
 export function seedVideoPackRecordForTests(record: VideoPackRecord): void {
