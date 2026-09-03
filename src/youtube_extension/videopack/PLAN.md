@@ -1,30 +1,33 @@
-# TASK: Fix Next.js static parse of /api/v1/video/pack runtime
+# TASK: Gemini 3.8 Flash spec extract on identity Video Pack
 
 ## 1. Goal & Scope
-* **Objective:** Restore a passing Vercel `v0-uvai` `next build` after PR 1612. The v1 pack alias must declare a literal `export const runtime = 'nodejs'` (or omit it) and must not re-export route-segment config. Anonymous POST `/api/video/pack` and `/api/v1/video/pack` keep emitting hashed Video Pack v0 with `source_url` + `source_hash` even without a transcript.
-* **Context:** Commit `25b4de4552030dd0e00e41f11ad7bfda72a3ec4f` added `apps/web/src/app/api/v1/video/pack/route.ts` as `export { POST, runtime } from '../../../video/pack/route'`. Next.js cannot statically parse a re-exported `runtime`. Production uvai.io is not serving that commit.
+* **Objective:** POST `/api/video/pack` (and `/api/v1/video/pack`) returns a v0 spec pack: keep `source_url` + `source_hash`, fill extracted spec content via `google/gemini-3.8-flash` on the existing Vercel AI Gateway. Fail closed if Gateway/model is missing.
+* **Context:** Hayden 2026-09-02 lock. Identity Video Pack (hashed cite) is done. Qwen wait is dead. Do not self-host vLLM, bounce to Origin/forge, or default this extractor to `google/gemini-2.5-flash`. Ride Gemini for frames/audio/transcript; do not compete on STT.
 * **Scope:**
-  * `apps/web/src/app/api/v1/video/pack/route.ts` — literal runtime + POST that calls the same identity-pack handler.
-  * Shared handler extracted into existing `apps/web/src/lib/video-pack.ts` so neither route re-exports config or imports a sibling route file.
-  * `apps/web/src/app/api/video/pack/route.ts` — call the shared handler; keep literal runtime.
-  * Regression test: v1 route source is statically parseable (literal `runtime`, no `export { … runtime }`).
-  * Existing CoS tests remain locked.
- * *Initial Check: Existing v1 route file is the defect; do not add a second pack format or a new route tree.*
+  * `apps/web/src/lib/video-pack-extractor.ts` — new extractor (AI SDK `generateText`, model pin `google/gemini-3.8-flash`).
+  * `apps/web/src/lib/video-pack.ts` — merge extracted spec onto the identity pack; fail closed on Gateway miss.
+  * Pack routes — same handler; raise `maxDuration` for video ingest.
+  * `apps/web/src/lib/emit-video-pack.ts` — client timeout must cover Gateway video extract.
+  * Tests mock `generateText` / Gateway. No live billing.
+ * *Initial Check: Reuse identity pack + VideoPackV0 fields. Do not add a second pack format.*
 
 ## 2. Execution Plan
-- [x] Lock failing source-format test on the v1 route
-- [x] Extract identity-pack POST handler; give v1 a literal `runtime` + wrapper POST
-- [x] Verify CoS pack tests + `next build` no longer fails on this file
-- [x] Open PR against main with Closes #1613 (issue create returned 403; reuse the open pack-emit issue)
+- [x] Confirm identity contract (`source_url` + `source_hash`) and existing Gateway helpers
+- [x] Lock failing extractor + pack POST tests (RED)
+- [x] Implement extractor + merge; fail closed without Gateway key
+- [x] Update route / emit tests to expect spec content under mocked Gateway
+- [x] Verify focused Vitest; open PR against main
 
 ## 3. Definition of Done (Success Verification)
-* **Expected Outcome:** `next build` does not report a route-segment-config parse error at `apps/web/src/app/api/v1/video/pack/route.ts`. Anonymous POSTs still return 200 Video Pack v0 with `source_url` + `source_hash`.
+* **Expected Outcome:** Anonymous POST with a YouTube URL returns v0 with identity hash plus non-empty extracted spec (not only `cite:youtube:`). Missing Gateway key returns a visible error status. Extractor call uses `google/gemini-3.8-flash`.
 * **Verification Method:**
-  * `cd apps/web && npx vitest run src/app/api/v1/video/pack src/app/api/video/pack src/lib/__tests__/video-pack.test.ts src/lib/__tests__/emit-video-pack.test.ts src/lib/__tests__/auth-paths.test.ts`
-  * `cd apps/web && npm run build`
-* **Proof Artifact:** Head `346b276f8`. Vitest 42 passed (5 files). `next build` compiled successfully and listed `ƒ /api/v1/video/pack` and `ƒ /api/video/pack`. No route-segment-config parse error.
+  * `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts`
+* **Proof Artifact:** `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts` — 5 files, 22 passed. Pack-related `tsc --noEmit` is clean. PR: https://github.com/groupthinking/EventRelay/pull/1616
 
 ## 4. Post-Task Reflection
-* **What was done:** Replaced `export { POST, runtime }` on the v1 pack alias with a literal `export const runtime = 'nodejs'` and a POST wrapper that calls shared `handleIdentityPackPost`. Moved that handler into `apps/web/src/lib/video-pack.ts` so neither route re-exports config.
-* **Why it was needed:** After #1612, Vercel `v0-uvai` `next build` failed because Next cannot statically parse a re-exported `runtime`. uvai.io is not serving `25b4de455`.
-* **How it was tested:** Source-format test failed on the re-export (RED), then passed after the literal runtime (GREEN). CoS emit tests still return hashed v0 packs with `source_url` + `source_hash`. `npm run build` in `apps/web` exited 0.
+* **What was done:** Added a Gemini 3.8 Flash spec extractor (`google/gemini-3.8-flash` via AI SDK `generateText`) and merged extracted fields onto the existing v0 identity pack. POST `/api/video/pack` now fail-closes with 503 if Gateway/model extract is missing or empty.
+* **Why it was needed:** Identity cite (`cite:youtube:` + hash) was done; paste-URL still did not produce a spec pack. Qwen wait is dead; Gateway Gemini is the plug.
+* **How it was tested:** Unit tests inject/mocks `generateText`. No live Gateway billing. Identity `source_hash` golden values unchanged.
+
+## Environment note
+`AI_GATEWAY_API_KEY` / `VERCEL_AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` are unset in this agent VM. Fail-closed is the production path. Unit tests mock Gateway and do not hit live billing. GitHub `issue_write` returned 403 (same as #1613); PR will state that governance issue create is blocked.

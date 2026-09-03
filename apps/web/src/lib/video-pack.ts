@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
+import {
+  VIDEO_PACK_EXTRACTOR_MODEL,
+  VideoPackExtractError,
+  extractVideoPackSpec,
+  type ExtractedVideoPackSpec,
+} from '@/lib/video-pack-extractor';
 
 export const IDENTITY_VERSION = 'v0' as const;
 
@@ -16,19 +22,65 @@ export interface VideoPackProvenance {
   notes: string;
 }
 
+export interface VideoPackTranscriptSegment {
+  idx: number;
+  start_s: number;
+  end_s: number;
+  text: string;
+}
+
+export interface VideoPackKeyframe {
+  t_s: number;
+  image_path?: string | null;
+  desc?: string | null;
+}
+
+export interface VideoPackRequirement {
+  id: string;
+  title: string;
+  detail?: string | null;
+  priority?: string | null;
+  tags?: string[];
+}
+
+export interface VideoPackCodeSnippet {
+  path_hint?: string | null;
+  lang?: string | null;
+  content: string;
+}
+
+export interface VideoPackVisualElement {
+  timestamp: number;
+  element_type: string;
+  content: string;
+  confidence?: number;
+  frame_path?: string | null;
+}
+
+export interface VideoPackVisualContext {
+  visual_elements: VideoPackVisualElement[];
+  summary?: string | null;
+  frame_analysis_count?: number;
+  processing_timestamp?: string | null;
+}
+
 export interface VideoPackV0Json {
   version: typeof IDENTITY_VERSION;
   id: string;
   video_id: string;
   source_url: string;
-  transcript: { language: string | null; full_text: string; segments: [] };
-  keyframes: [];
-  concepts: [];
-  requirements: [];
-  code_snippets: [];
-  artifacts: [];
-  visual_context: null;
-  metrics: Record<string, never>;
+  transcript: {
+    language: string | null;
+    full_text: string;
+    segments: VideoPackTranscriptSegment[];
+  };
+  keyframes: VideoPackKeyframe[];
+  concepts: string[];
+  requirements: VideoPackRequirement[];
+  code_snippets: VideoPackCodeSnippet[];
+  artifacts: Array<Record<string, unknown>>;
+  visual_context: VideoPackVisualContext | null;
+  metrics: Record<string, number | string>;
   provenance: VideoPackProvenance;
 }
 
@@ -97,16 +149,41 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
   };
 }
 
+export function applyExtractedSpec(
+  identity: VideoPackV0Json,
+  spec: ExtractedVideoPackSpec,
+): VideoPackV0Json {
+  return {
+    ...identity,
+    transcript: spec.transcript,
+    keyframes: spec.keyframes,
+    concepts: spec.concepts,
+    requirements: spec.requirements,
+    code_snippets: spec.code_snippets,
+    visual_context: spec.visual_context,
+    provenance: {
+      ...identity.provenance,
+      tool_versions: {
+        ...identity.provenance.tool_versions,
+        extractor: VIDEO_PACK_EXTRACTOR_MODEL,
+      },
+      notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+    },
+  };
+}
+
+export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
+  return pack.transcript.full_text === `cite:youtube:${pack.video_id}`;
+}
+
 const packs = new Map<string, VideoPackV0Json>();
 
-function getOrCreatePack(videoId: string, sourceUrl?: string): VideoPackV0Json {
+function getCachedSpecPack(videoId: string): VideoPackV0Json | undefined {
   const existing = packs.get(videoId);
-  if (existing) {
+  if (existing && !isIdentityOnlyPack(existing)) {
     return existing;
   }
-  const pack = buildIdentityPack(videoId, sourceUrl);
-  packs.set(videoId, pack);
-  return pack;
+  return undefined;
 }
 
 export async function handleIdentityPackPost(request: Request): Promise<Response> {
@@ -130,8 +207,8 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
     );
   }
 
-  const pack = getOrCreatePack(videoId, url || undefined);
-  if (!pack.source_url.startsWith('http') || !pack.provenance.source_hash) {
+  const identity = buildIdentityPack(videoId, url || undefined);
+  if (!identity.source_url.startsWith('http') || !identity.provenance.source_hash) {
     return NextResponse.json(
       {
         status: 'error',
@@ -140,5 +217,30 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
       { status: 500 },
     );
   }
+
+  const cached = getCachedSpecPack(videoId);
+  if (cached) {
+    return NextResponse.json({ status: 'success', data: cached });
+  }
+
+  let spec: ExtractedVideoPackSpec;
+  try {
+    spec = await extractVideoPackSpec({
+      sourceUrl: identity.source_url,
+      videoId,
+    });
+  } catch (error) {
+    const message =
+      error instanceof VideoPackExtractError
+        ? error.message
+        : error instanceof Error
+          ? error.message
+          : 'Video pack spec extract failed.';
+    console.error('[video-pack] spec extract failed:', message);
+    return NextResponse.json({ status: 'error', error: message }, { status: 503 });
+  }
+
+  const pack = applyExtractedSpec(identity, spec);
+  packs.set(videoId, pack);
   return NextResponse.json({ status: 'success', data: pack });
 }

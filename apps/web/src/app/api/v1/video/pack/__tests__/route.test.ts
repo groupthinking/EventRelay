@@ -10,7 +10,20 @@ const V1_ROUTE_SOURCE = readFileSync(
   'utf8',
 );
 
+const { extractVideoPackSpec } = vi.hoisted(() => ({
+  extractVideoPackSpec: vi.fn(),
+}));
+
+vi.mock('@/lib/video-pack-extractor', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/video-pack-extractor')>();
+  return {
+    ...actual,
+    extractVideoPackSpec,
+  };
+});
+
 afterEach(() => {
+  extractVideoPackSpec.mockReset();
   vi.resetModules();
   vi.unstubAllGlobals();
 });
@@ -25,15 +38,23 @@ function postRequest(body: unknown) {
 
 describe('POST /api/v1/video/pack', () => {
   it('declares a literal runtime so Next can statically parse route-segment config', () => {
-    // Re-exporting `runtime` from the sibling pack route is what failed
-    // v0-uvai `next build` after #1612 (`25b4de455`):
-    // "The exported configuration object in a source file needs to have a
-    // very specific format from which some properties can be statically parsed"
     expect(V1_ROUTE_SOURCE).toMatch(/export const runtime = ['"]nodejs['"]/);
     expect(V1_ROUTE_SOURCE).not.toMatch(/export\s*\{[^}]*\bruntime\b/);
   });
 
-  it('emits the same identity pack as /api/video/pack without a transcript', async () => {
+  it('emits the same spec pack as /api/video/pack while keeping the identity hash', async () => {
+    extractVideoPackSpec.mockResolvedValue({
+      transcript: {
+        language: 'en',
+        full_text: 'Elephants at the zoo, extracted from the video.',
+        segments: [{ idx: 0, start_s: 0, end_s: 5, text: 'Elephants at the zoo.' }],
+      },
+      keyframes: [{ t_s: 1, desc: 'Elephants' }],
+      concepts: ['zoo'],
+      requirements: [],
+      code_snippets: [],
+      visual_context: null,
+    });
     const { POST } = await import('../route');
     const res = await POST(
       postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }),
@@ -46,6 +67,7 @@ describe('POST /api/v1/video/pack', () => {
         video_id: string;
         source_url: string;
         transcript: { full_text: string; segments: unknown[] };
+        concepts: string[];
         provenance: { source_hash: string };
       };
     };
@@ -54,7 +76,7 @@ describe('POST /api/v1/video/pack', () => {
     expect(body.data.video_id).toBe(CANON_B);
     expect(body.data.source_url).toBe('https://www.youtube.com/watch?v=jNQXAC9IVRw');
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
-    expect(body.data.transcript.full_text).toBe(`cite:youtube:${CANON_B}`);
-    expect(body.data.transcript.segments).toEqual([]);
+    expect(body.data.transcript.full_text).not.toBe(`cite:youtube:${CANON_B}`);
+    expect(body.data.concepts).toEqual(['zoo']);
   });
 });
