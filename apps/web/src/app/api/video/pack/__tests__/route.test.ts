@@ -75,6 +75,9 @@ async function loadPackRoute() {
       await Promise.all(scheduled.splice(0));
     },
     seedVideoPackRecordForTests: store.seedVideoPackRecordForTests,
+    setVideoPackRedisForTests: store.setVideoPackRedisForTests,
+    clearVideoPackMemoryForTests: store.clearVideoPackMemoryForTests,
+    packStoreKey: store.packStoreKey,
     buildIdentityPack: videoPack.buildIdentityPack,
     applyExtractedSpec: videoPack.applyExtractedSpec,
   };
@@ -149,6 +152,57 @@ describe('POST /api/video/pack', () => {
     expect(body.status).toBe('success');
     expect(body.data.concepts).toEqual([`topic-${CANON_B}`]);
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(extractVideoPackSpec).not.toHaveBeenCalled();
+    expect(loaded.scheduled).toHaveLength(0);
+  });
+
+  it('returns 200 with the same created_at across two isolates when Redis holds ready', async () => {
+    const createdAt = '2026-09-03T20:44:23.910Z';
+    const loaded = await loadPackRoute();
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      createdAt,
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    const redis = {
+      store: new Map<string, unknown>([
+        [loaded.packStoreKey(GOLDEN_IDENTITY_HASHES[CANON_B]), { state: 'ready' as const, pack }],
+      ]),
+      async get<T = unknown>(key: string): Promise<T | null> {
+        return (this.store.get(key) as T | undefined) ?? null;
+      },
+      async set(key: string, value: unknown, opts?: { nx?: boolean }): Promise<unknown> {
+        if (opts?.nx && this.store.has(key)) {
+          return null;
+        }
+        this.store.set(key, value);
+        return 'OK';
+      },
+    };
+    loaded.setVideoPackRedisForTests(redis);
+
+    const first = await loaded.POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+    expect(first.status).toBe(200);
+    const firstBody = (await first.json()) as {
+      status: string;
+      data: { provenance: { source_hash: string; created_at: string } };
+    };
+    expect(firstBody.status).toBe('success');
+    expect(firstBody.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(firstBody.data.provenance.created_at).toBe(createdAt);
+
+    loaded.clearVideoPackMemoryForTests();
+
+    const second = await loaded.POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+    expect(second.status).toBe(200);
+    const secondBody = (await second.json()) as {
+      status: string;
+      data: { provenance: { source_hash: string; created_at: string } };
+    };
+    expect(secondBody.status).toBe('success');
+    expect(secondBody.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(secondBody.data.provenance.created_at).toBe(createdAt);
     expect(extractVideoPackSpec).not.toHaveBeenCalled();
     expect(loaded.scheduled).toHaveLength(0);
   });
