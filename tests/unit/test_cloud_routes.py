@@ -11,10 +11,12 @@ Covers:
 
 from __future__ import annotations
 
+import ipaddress
 import sys
 import types as _types
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 
@@ -101,7 +103,11 @@ with warnings.catch_warnings():
     from youtube_extension.backend.cloud_ai_routes import (
         router as cloud_ai_router,
     )
-    from youtube_extension.backend.cloud_api_endpoints import setup_cloud_api_endpoints
+    from youtube_extension.backend.cloud_api_endpoints import (
+        setup_cloud_api_endpoints,
+        _is_safe_callback_url,
+        _sanitize_log_value,
+    )
 
 # The modules under test are now imported and hold their own references to the
 # leaf stubs above. Remove those import-time stubs from sys.modules so they do
@@ -1502,3 +1508,273 @@ class TestReportingRoutes:
         assert ok_response.json() == {
             "embed_url": "https://looker.example.com/embed/dashboards/2?sig=def"
         }
+
+
+# ===========================================================================
+# Regression tests for the callback SSRF guard + log sanitizer
+# ===========================================================================
+
+import youtube_extension.backend.cloud_api_endpoints as _cae
+
+
+class TestCallbackUrlSafety:
+    """Direct unit tests for _is_safe_callback_url / _sanitize_log_value."""
+
+    @pytest.mark.parametrize(
+        "value,expected",
+        [
+            ("plain", "plain"),
+            ("a\r\nb", "ab"),
+            ("line1\nline2", "line1line2"),
+            ("carriage\rreturn", "carriagereturn"),
+            ("forged\n2026 [ERROR] injected", "forged2026 [ERROR] injected"),
+            (123, "123"),
+        ],
+    )
+    def test_sanitize_log_value_strips_crlf(self, value, expected):
+        assert _sanitize_log_value(value) == expected
+
+    def test_allows_public_ip_literal(self):
+        assert _is_safe_callback_url("https://93.184.216.34/callback") is True
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://127.0.0.1/x",                   # loopback literal
+            "http://10.0.0.5/x",                    # private
+            "http://192.168.1.1/x",                 # private
+            "http://169.254.169.254/meta",          # link-local / GCP metadata
+            "http://100.64.0.1/x",                  # CGNAT: neither private nor global
+            "http://[fec0::1]/x",                   # deprecated IPv6 site-local
+            "https://metadata.google.internal/x",   # blocklisted hostname
+            "https://metadata.google.internal./x",  # trailing-dot bypass attempt
+            "http://LOCALHOST/x",                   # case-insensitive blocklist
+            "ftp://example.com/x",                  # non-http scheme
+            "file:///etc/passwd",                   # non-http scheme
+            "not a url",                            # malformed / no host
+            "",                                     # empty
+        ],
+    )
+    def test_rejects_unsafe_without_dns(self, url):
+        # resolve=False path must reject all of these without any DNS lookup.
+        assert _is_safe_callback_url(url, resolve=False) is False
+
+    def test_resolve_false_allows_nonliteral_host_without_dns(self):
+        # Cheap gate lets a plain DNS name through; full resolution happens
+        # later at dispatch. Guard against accidental DNS on the acceptance path.
+        with patch.object(_cae.socket, "getaddrinfo",
+                          side_effect=AssertionError("no DNS on cheap path")):
+            assert _is_safe_callback_url("https://example.com/x", resolve=False) is True
+
+    def test_rejects_obfuscated_ip_resolving_to_loopback(self):
+        with patch.object(_cae.socket, "getaddrinfo",
+                          return_value=[(2, 1, 6, "", ("127.0.0.1", 0))]):
+            assert _is_safe_callback_url("http://2130706433/x") is False
+
+    def test_rejects_dns_alias_to_private(self):
+        with patch.object(_cae.socket, "getaddrinfo",
+                          return_value=[(2, 1, 6, "", ("10.0.0.5", 0))]):
+            assert _is_safe_callback_url("http://127.0.0.1.nip.io/x") is False
+
+    def test_rejects_when_any_resolved_address_blocked(self):
+        with patch.object(_cae.socket, "getaddrinfo",
+                          return_value=[
+                              (2, 1, 6, "", ("93.184.216.34", 0)),
+                              (2, 1, 6, "", ("127.0.0.1", 0)),
+                          ]):
+            assert _is_safe_callback_url("http://mixed.example/x") is False
+
+    def test_allows_hostname_resolving_public(self):
+        with patch.object(_cae.socket, "getaddrinfo",
+                          return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]):
+            assert _is_safe_callback_url("https://example.com/x") is True
+
+    def test_rejects_unresolvable_hostname(self):
+        with patch.object(_cae.socket, "getaddrinfo",
+                          side_effect=_cae.socket.gaierror("nope")):
+            assert _is_safe_callback_url("https://no-such-host.invalid/x") is False
+
+
+class TestCallbackSsrfEndToEnd:
+    """End-to-end: unsafe callbacks are rejected at acceptance and never POSTed."""
+
+    @staticmethod
+    def _state():
+        state = MagicMock()
+        state.video_id = "auJzb1D-fag"
+        state.video_url = "https://yt.com/watch?v=auJzb1D-fag"
+        state.processing_time = 1.0
+        state.success = True
+        return state
+
+    def _post_task(self, callback_url, mock_client_cls):
+        mock_processor = AsyncMock()
+        mock_processor.process_video_sync = AsyncMock(return_value=self._state())
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ), patch("httpx.AsyncClient", mock_client_cls):
+            return TestClient(_make_cloud_api_app()).post(
+                "/api/v3/process-video-task",
+                json={
+                    "video_id": "auJzb1D-fag",
+                    "video_url": "https://yt.com/watch?v=auJzb1D-fag",
+                    "callback_url": callback_url,
+                },
+                headers={"X-CloudTasks-TaskName": "task-1"},
+            )
+
+    def test_acceptance_rejects_unsafe_callback_with_400(self):
+        # process-video validates the callback up front (no DNS) and 400s.
+        mock_processor = AsyncMock()
+        mock_processor._extract_video_id = MagicMock(return_value="auJzb1D-fag")
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ):
+            response = TestClient(_make_cloud_api_app()).post(
+                "/api/v3/process-video",
+                json={
+                    "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "callback_url": "http://127.0.0.1/steal",
+                },
+            )
+        assert response.status_code == 400
+
+    def test_task_handler_never_posts_to_unsafe_callback(self):
+        mock_client_cls = MagicMock()  # httpx.AsyncClient must not be constructed
+        response = self._post_task("http://169.254.169.254/steal", mock_client_cls)
+        assert response.status_code == 200
+        mock_client_cls.assert_not_called()
+
+    def test_task_handler_posts_to_safe_callback(self):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock()
+        mock_client_cls = MagicMock(return_value=mock_client)
+
+        # Public IP literal -> guard allows without DNS; redirects disabled.
+        response = self._post_task("https://93.184.216.34/cb", mock_client_cls)
+        assert response.status_code == 200
+        mock_client_cls.assert_called_once()
+        assert mock_client_cls.call_args.kwargs.get("follow_redirects") is False
+        mock_client.post.assert_awaited_once()
+
+    def test_task_handler_falls_back_only_to_prevalidated_public_address(self):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(
+            side_effect=[_httpx_real.ConnectError("first address down"), None]
+        )
+        mock_client_cls = MagicMock(return_value=mock_client)
+
+        with patch.object(
+            _cae.socket,
+            "getaddrinfo",
+            return_value=[
+                (2, _cae.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443)),
+                (2, _cae.socket.SOCK_STREAM, 6, "", ("8.8.8.8", 443)),
+            ],
+        ):
+            response = self._post_task("https://callbacks.example/cb", mock_client_cls)
+
+        assert response.status_code == 200
+        assert [
+            str(awaited.args[0]) for awaited in mock_client.post.await_args_list
+        ] == ["https://93.184.216.34/cb", "https://8.8.8.8/cb"]
+        assert all(
+            awaited.kwargs["headers"]["Host"] == "callbacks.example"
+            and awaited.kwargs["extensions"]["sni_hostname"] == "callbacks.example"
+            for awaited in mock_client.post.await_args_list
+        )
+
+    @pytest.mark.parametrize(
+        "callback_url,pinned_url,host_header",
+        [
+            (
+                "http://callbacks.example:8080/cb?job=1",
+                "http://93.184.216.34:8080/cb?job=1",
+                "callbacks.example:8080",
+            ),
+            (
+                "https://callbacks.example:8443/cb?job=1",
+                "https://93.184.216.34:8443/cb?job=1",
+                "callbacks.example:8443",
+            ),
+        ],
+    )
+    def test_task_handler_pins_validated_address_against_dns_rebind(
+        self, callback_url, pinned_url, host_header
+    ):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        connected_addresses = []
+
+        async def observe_connect_target(url, **kwargs):
+            parsed = urlparse(str(url))
+            host = parsed.hostname
+            try:
+                connected_addresses.append(str(ipaddress.ip_address(host)))
+            except ValueError:
+                # Model httpx's independent connect-time resolution. A vulnerable
+                # implementation passes the attacker-controlled name here and sees
+                # the rebound private address from the second DNS response.
+                connected_addresses.append(
+                    _cae.socket.getaddrinfo(
+                        host, parsed.port, type=_cae.socket.SOCK_STREAM
+                    )[0][4][0]
+                )
+
+        mock_client.post = AsyncMock(side_effect=observe_connect_target)
+        mock_client_cls = MagicMock(return_value=mock_client)
+        public_answer = [(2, _cae.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))]
+        rebound_answer = [(2, _cae.socket.SOCK_STREAM, 6, "", ("127.0.0.1", 443))]
+
+        with patch.object(
+            _cae.socket,
+            "getaddrinfo",
+            side_effect=[public_answer, rebound_answer],
+        ):
+            response = self._post_task(callback_url, mock_client_cls)
+
+        assert response.status_code == 200
+        assert connected_addresses == ["93.184.216.34"]
+        call_args, call_kwargs = mock_client.post.await_args
+        assert str(call_args[0]) == pinned_url
+        assert call_kwargs["headers"]["Host"] == host_header
+        assert call_kwargs["extensions"]["sni_hostname"] == "callbacks.example"
+        assert call_kwargs["json"]["status"] == "completed"
+
+    def test_task_handler_caps_black_holing_address_attempts(self):
+        # A hostname resolving to many black-holing public addresses must not
+        # exceed the attempt cap, bounding worst-case task-worker time.
+        addresses = tuple(f"203.0.113.{i}" for i in range(1, 6))  # 5 public IPs
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(side_effect=_httpx_real.ConnectError("down"))
+        mock_client_cls = MagicMock(return_value=mock_client)
+
+        mock_processor = AsyncMock()
+        mock_processor.process_video_sync = AsyncMock(return_value=self._state())
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ), patch(
+            "youtube_extension.backend.cloud_api_endpoints._validated_callback_addresses",
+            return_value=addresses,
+        ), patch("httpx.AsyncClient", mock_client_cls):
+            response = TestClient(_make_cloud_api_app()).post(
+                "/api/v3/process-video-task",
+                json={
+                    "video_id": "auJzb1D-fag",
+                    "video_url": "https://yt.com/watch?v=auJzb1D-fag",
+                    "callback_url": "https://many.example/cb",
+                },
+                headers={"X-CloudTasks-TaskName": "task-cap"},
+            )
+        assert response.status_code == 200
+        assert mock_client.post.await_count == _cae._MAX_CALLBACK_ADDRESS_ATTEMPTS
