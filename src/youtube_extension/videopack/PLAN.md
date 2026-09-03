@@ -1,33 +1,35 @@
-# TASK: Gemini 3.8 Flash spec extract on identity Video Pack
+# TASK: Persist Video Pack specs by source_hash (off the request wall)
 
 ## 1. Goal & Scope
-* **Objective:** POST `/api/video/pack` (and `/api/v1/video/pack`) returns a v0 spec pack: keep `source_url` + `source_hash`, fill extracted spec content via `google/gemini-3.8-flash` on the existing Vercel AI Gateway. Fail closed if Gateway/model is missing.
-* **Context:** Hayden 2026-09-02 lock. Identity Video Pack (hashed cite) is done. Qwen wait is dead. Do not self-host vLLM, bounce to Origin/forge, or default this extractor to `google/gemini-2.5-flash`. Ride Gemini for frames/audio/transcript; do not compete on STT.
+* **Objective:** Anonymous POST `/api/video/pack` returns immediately (`processing` or a cached spec). Extraction runs after the response via existing Vercel `waitUntil`. Finished packs persist keyed by identity `source_hash` and are readable without login on the same route (GET).
+* **Context:** Live uvai.io (dpl_43XkviiJUCuC1vN85iLTTd3nARy4 / 25e6fbb / PR 1616) extracts a real Gemini 3.8 Flash spec but (1) blocks 74–92s and 503s with `Delay was aborted`, (2) re-extracts every time (in-process Map dies with the lambda), (3) has no anonymous read path.
+* **Chosen mechanism (fits this repo + Vercel, no new surface):**
+  * **Store:** Upstash Redis via already-wired `KV_REST_API_URL`/`KV_REST_API_TOKEN` (and `UPSTASH_REDIS_REST_*`) using existing `@upstash/redis` + `resolveUpstashRedisCredentials`. Memory fallback for tests/dev. Not Blob (unwired), not Postgres, not Python `storage/video_packs/` (ephemeral on Vercel).
+  * **Background:** `@vercel/functions` `waitUntil` — already used by `/api/pipeline` and `/api/video`. First POST claims `processing` (SET NX), schedules extract, returns 202. Client polls GET on the same public path.
+  * **Anonymous read:** GET `/api/video/pack?source_hash=` or `?video_id=` (path already on `PUBLIC_API_EXACT`). Listing `/api/video/packs` stays gated / unbuilt.
+* **Rejected alternatives:** Vercel Blob (not imported in `apps/web`); Vercel Workflow (new surface); new `/api/video/packs/[hash]` route (new surface).
 * **Scope:**
-  * `apps/web/src/lib/video-pack-extractor.ts` — new extractor (AI SDK `generateText`, model pin `google/gemini-3.8-flash`).
-  * `apps/web/src/lib/video-pack.ts` — merge extracted spec onto the identity pack; fail closed on Gateway miss.
-  * Pack routes — same handler; raise `maxDuration` for video ingest.
-  * `apps/web/src/lib/emit-video-pack.ts` — client timeout must cover Gateway video extract.
-  * Tests mock `generateText` / Gateway. No live billing.
- * *Initial Check: Reuse identity pack + VideoPackV0 fields. Do not add a second pack format.*
+  * `apps/web/src/lib/video-pack-store.ts` — durable record keyed by `source_hash`
+  * `apps/web/src/lib/video-pack.ts` — POST returns cache/processing; GET reads; extract via `waitUntil`
+  * `apps/web/src/lib/video-pack-extractor.ts` — raise abort to 110s so waitUntil can finish under `maxDuration=120`
+  * `apps/web/src/lib/emit-video-pack.ts` — poll GET when POST is processing
+  * Pack routes export GET; auth-paths unchanged
+ * *Initial Check: Reuse identity hash, extractor, Redis credentials helper. Do not add a second pack format.*
 
 ## 2. Execution Plan
-- [x] Confirm identity contract (`source_url` + `source_hash`) and existing Gateway helpers
-- [x] Lock failing extractor + pack POST tests (RED)
-- [x] Implement extractor + merge; fail closed without Gateway key
-- [x] Update route / emit tests to expect spec content under mocked Gateway
-- [x] Verify focused Vitest; open PR against main
+- [x] Confirm hash contract, Redis wiring, waitUntil usage, public path allowlist
+- [x] Lock failing store + route + emit tests (RED)
+- [x] Implement store + async handler + anonymous GET + client poll
+- [x] Verify focused Vitest (Gateway mocked, no live billing)
+- [ ] Open ready PR against main (issue create 403)
 
 ## 3. Definition of Done (Success Verification)
-* **Expected Outcome:** Anonymous POST with a YouTube URL returns v0 with identity hash plus non-empty extracted spec (not only `cite:youtube:`). Missing Gateway key returns a visible error status. Extractor call uses `google/gemini-3.8-flash`.
+* **Expected Outcome:** Repeat URL is a cache hit (no model call). First request returns fast processing. GET by hash/video_id is anonymous. Fail-closed still 503s with a visible error, never an identity-only success pack. Golden `jNQXAC9IVRw` hash unchanged.
 * **Verification Method:**
-  * `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts`
-* **Proof Artifact:** `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/emit-video-pack.test.ts` — 5 files, 22 passed. Pack-related `tsc --noEmit` is clean. PR: https://github.com/groupthinking/EventRelay/pull/1616
+  * `cd apps/web && npx vitest run src/lib/__tests__/video-pack-store.test.ts src/lib/__tests__/video-pack.test.ts src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/emit-video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/auth-paths.test.ts`
+* **Proof Artifact:** `cd apps/web && npx vitest run src/lib/__tests__/video-pack-store.test.ts src/lib/__tests__/video-pack.test.ts src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/emit-video-pack.test.ts src/app/api/video/pack src/app/api/v1/video/pack src/lib/__tests__/auth-paths.test.ts src/store/__tests__/dashboard-store.test.ts` — 8 files, 87 passed. Pack-related `tsc --noEmit` is clean. GitHub `issue_write` returned 403.
 
 ## 4. Post-Task Reflection
-* **What was done:** Added a Gemini 3.8 Flash spec extractor (`google/gemini-3.8-flash` via AI SDK `generateText`) and merged extracted fields onto the existing v0 identity pack. POST `/api/video/pack` now fail-closes with 503 if Gateway/model extract is missing or empty.
-* **Why it was needed:** Identity cite (`cite:youtube:` + hash) was done; paste-URL still did not produce a spec pack. Qwen wait is dead; Gateway Gemini is the plug.
-* **How it was tested:** Unit tests inject/mocks `generateText`. No live Gateway billing. Identity `source_hash` golden values unchanged.
-
-## Environment note
-`AI_GATEWAY_API_KEY` / `VERCEL_AI_GATEWAY_API_KEY` / `VERCEL_OIDC_TOKEN` are unset in this agent VM. Fail-closed is the production path. Unit tests mock Gateway and do not hit live billing. GitHub `issue_write` returned 403 (same as #1613); PR will state that governance issue create is blocked.
+* **What was done:** Replaced the in-process Map with an Upstash/KV Redis store keyed by identity `source_hash`. POST `/api/video/pack` now returns 202 `processing` (or a cache hit) and runs Gemini 3.8 Flash extract via existing `waitUntil`. GET on the same public path reads the pack without auth.
+* **Why it was needed:** Live extract blocked 74–92s and 503'd (`Delay was aborted`); repeats re-paid Gateway; anonymous callers could not read the finished pack.
+* **How it was tested:** Vitest mocks `extractVideoPackSpec`. Cache hit does not call the model. Hash golden for `jNQXAC9IVRw` unchanged. Anonymous GET works. Cite-only / Gateway errors stay 503 with no identity-only success body.

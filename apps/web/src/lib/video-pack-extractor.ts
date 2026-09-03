@@ -276,7 +276,7 @@ export async function extractVideoPackSpec(
   const generateText = deps.generateText ?? defaultGenerateText;
   const result = await generateText({
     model: VIDEO_PACK_EXTRACTOR_MODEL,
-    abortSignal: AbortSignal.timeout(90_000),
+    abortSignal: AbortSignal.timeout(110_000),
     messages: [
       {
         role: 'user',

@@ -35,9 +35,8 @@ const PUBLIC_API_EXACT = new Set([
   // Must be accessible without a session so anonymous users can run the
   // pipeline; the route handler applies its own rate limiting via proxy.ts.
   '/api/pipeline/stream',
-  // Home paste-URL identity pack. Hash is version+video_id only; no login
-  // and no speech evidence. Exact paths so /api/video and /api/video/generate
-  // stay gated (live 401 after #1609).
+  // Home paste-URL pack emit + anonymous per-hash/per-video GET.
+  // Exact paths so /api/video, /api/video/generate, and a packs listing stay gated.
   '/api/video/pack',
   '/api/v1/video/pack',
 ]);

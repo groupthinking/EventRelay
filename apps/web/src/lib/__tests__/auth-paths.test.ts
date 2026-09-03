@@ -78,6 +78,8 @@ describe('auth path policy', () => {
     expect(isPublicApiPath('/api/video')).toBe(false);
     expect(isPublicApiPath('/api/video/generate')).toBe(false);
     expect(needsAuthentication('/api/video/generate')).toBe(true);
+    expect(isPublicApiPath('/api/video/packs')).toBe(false);
+    expect(needsAuthentication('/api/video/packs')).toBe(true);
     expect(isPublicApiPath('/api/v1/video')).toBe(false);
   });
 
