@@ -19,7 +19,7 @@
 - [x] Bind studio on `/` to pack formation (architecture, artifacts, checks)
 - [x] Verify focused Vitest + identity goldens; hashed persist contract
 - [x] Address Copilot review: catalog-only check hrefs, mermaid/summary count as spec, trim whitespace cards, required artifacts/stack, shared 800-char signature budget
-- [ ] Ready PR (GitHub issue_write 403 — no `Closes #<n>` available)
+- [x] Ready PR bound to #1618 (`Closes #1618`; issue create still 403, so no narrower child issue)
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Cloudflare/x402 evidence yields Cloudflare/x402 tools and checks, never Shopify CLI. Pack includes architecture stages and artifact shapes (path/purpose/interface). `source_hash` goldens unchanged. Studio checks unlock on `/`.
