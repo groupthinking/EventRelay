@@ -113,13 +113,13 @@ export const authOptions: NextAuthOptions = {
 
     /**
      * Prevent open redirects after OAuth. Only same-origin absolute URLs or
-     * root-relative paths are allowed; everything else lands on /dashboard.
+     * root-relative paths are allowed; everything else lands on the studio.
      */
     async redirect({ url, baseUrl }) {
       try {
         if (url.startsWith('/')) {
           // protocol-relative //evil.com
-          if (url.startsWith('//')) return `${baseUrl}/dashboard`;
+          if (url.startsWith('//')) return `${baseUrl}/`;
           return `${baseUrl}${url}`;
         }
         const target = new URL(url);
@@ -130,7 +130,7 @@ export const authOptions: NextAuthOptions = {
       } catch {
         // fall through
       }
-      return `${baseUrl}/dashboard`;
+      return `${baseUrl}/`;
     },
   },
   events: {

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import {
+  canonicalStudioPath,
   isAiRoute,
+  isLegacyDashboardPath,
   needsAuthentication,
   resolveAuthGateMode,
   safeCallbackPath,
@@ -18,8 +20,9 @@ import {
  * anonymously (issue #1058). Set AUTH_ALLOW_UNAUTHENTICATED=1 to deliberately
  * run a public production deployment.
  *
- * When enforcing, /dashboard and non-public /api/* require a valid NextAuth
- * session. Server-to-server loopback calls carrying a matching
+ * When enforcing, non-public /api/* require a valid NextAuth session.
+ * `/dashboard` is a retired skin and 308s to the public studio — it is not
+ * a login gate. Server-to-server loopback calls carrying a matching
  * `x-eventrelay-internal` header (INTERNAL_REQUEST_TOKEN) bypass both.
  *
  * Path policy lives in `@/lib/auth-paths` so unit tests can cover it offline.
@@ -270,6 +273,14 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     return NextResponse.next();
   }
 
+  // Retired library skin: stay in OneLoopStudio instead of login or the
+  // old dashboard chrome. Query (e.g. ?video=) is preserved.
+  if (isLegacyDashboardPath(pathname)) {
+    const dest = request.nextUrl.clone();
+    dest.pathname = canonicalStudioPath();
+    return NextResponse.redirect(dest, 308);
+  }
+
   // Fail closed: in production without NEXTAUTH_SECRET a session cannot be
   // verified, so protected routes must not be served anonymously (issue #1058).
   // 503 (not 401/redirect) is deliberate — sign-in also cannot succeed without
@@ -312,7 +323,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     (process.env.UVAI_RATE_LIMIT_DISABLED === '1' &&
       (process.env.NODE_ENV !== 'production' || !isAiRoute(pathname, request.method))) ||
     request.method === 'OPTIONS' ||
-    // Page routes (e.g. /dashboard) are matched only for auth gating above.
+    // Page routes under the matcher are handled above (legacy dashboard 308).
     // They must not be rate-limited: a JSON 429 would render as a raw blob in
     // the browser and page navigation would burn the shared api:<ip> quota.
     !pathname.startsWith('/api/') ||
