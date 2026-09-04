@@ -8,10 +8,11 @@ import {
 } from '@/lib/official-templates';
 
 describe('official templates', () => {
-  it('picks the create-next-app starter when Vercel/Next is in the speech', () => {
+  it('picks the create-next-app starter when Vercel/Next is in pack.stack.tools', () => {
     const sop = compileLinkedSop({
       transcript: 'Deploy this Next.js app on Vercel.',
       segments: [{ start: 4, duration: 3, text: 'Deploy this Next.js app on Vercel.' }],
+      packTools: [{ name: 'Next.js' }, { name: 'Vercel' }],
     });
     const picked = pickOfficialTemplate(sop);
     expect(picked?.id).toBe('vercel-next');
@@ -23,10 +24,11 @@ describe('official templates', () => {
     expect(files['package.json']).toContain('"next"');
   });
 
-  it('picks Shopify CLI init when Shopify is named and Next is not', () => {
+  it('picks Shopify CLI init only when Shopify CLI is in pack.stack.tools', () => {
     const sop = compileLinkedSop({
       transcript: 'Use the Shopify CLI, not the plugin.',
       segments: [{ start: 10, duration: 2, text: 'Use the Shopify CLI, not the plugin.' }],
+      packTools: [{ name: 'Shopify CLI' }],
     });
     const picked = pickOfficialTemplate(sop);
     expect(picked?.id).toBe('shopify-cli');
@@ -51,6 +53,7 @@ describe('deployHoldReason', () => {
     const sop = compileLinkedSop({
       transcript: 'Ship on Vercel after GitHub checks.',
       segments: [{ start: 1, duration: 2, text: 'Ship on Vercel after GitHub checks.' }],
+      packTools: [{ name: 'Vercel' }, { name: 'GitHub' }],
     });
     const stack = stackCheckItems(sop);
     expect(stack.length).toBeGreaterThan(0);

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyPackStackChecks,
   compileLinkedSop,
   renderDeployMarkdown,
+  stackChecksFromPackTools,
   type LinkedSop,
 } from '@/lib/linked-sop';
 
@@ -39,20 +41,46 @@ describe('compileLinkedSop', () => {
     expect(sop.steps.some((s) => /shopify cli/i.test(s.title))).toBe(true);
   });
 
-  it('appends the Vercel deployment-check list only when Vercel is in the speech', () => {
+  it('appends Vercel deployment checks only from pack.stack.tools, not from speech alone', () => {
     const withVercel = compileLinkedSop({
       transcript: 'Deploy the Next.js app on Vercel after GitHub checks pass.',
       segments: [{ start: 10, duration: 4, text: 'Deploy the Next.js app on Vercel after GitHub checks pass.' }],
+      packTools: [{ name: 'Vercel' }, { name: 'Next.js' }, { name: 'GitHub' }],
     });
     expect(withVercel.entities.map((e) => e.name)).toEqual(expect.arrayContaining(['Vercel', 'Next.js', 'GitHub']));
     expect(withVercel.checklist.some((item) => item.source === 'stack' && item.stack === 'vercel')).toBe(true);
     expect(withVercel.checklist.some((item) => item.href?.includes('deployment-checks'))).toBe(true);
+
+    const speechOnly = compileLinkedSop({
+      transcript: 'Deploy the Next.js app on Vercel after GitHub checks pass.',
+      segments: [{ start: 10, duration: 4, text: 'Deploy the Next.js app on Vercel after GitHub checks pass.' }],
+    });
+    expect(speechOnly.checklist.some((item) => item.source === 'stack')).toBe(false);
 
     const without = compileLinkedSop({
       transcript: GROK_TRANSCRIPT,
       segments: [{ start: 0, duration: 5, text: GROK_TRANSCRIPT }],
     });
     expect(without.checklist.some((item) => item.stack === 'vercel')).toBe(false);
+  });
+
+  it('does not force Shopify CLI on Cloudflare/x402 evidence even if topics hallucinate Shopify', () => {
+    const sop = compileLinkedSop({
+      transcript: 'Cloudflare Workers pay via x402 and expose MCP tools.',
+      segments: [
+        { start: 8, duration: 5, text: 'Cloudflare Workers pay via x402 and expose MCP tools.' },
+      ],
+      topics: ['Shopify', 'Cloudflare'],
+      packTools: [
+        { name: 'Cloudflare', evidence: 'spoken' },
+        { name: 'x402', evidence: 'on-screen rail' },
+        { name: 'MCP', evidence: 'gateway' },
+      ],
+    });
+    const stackTitles = sop.checklist.filter((item) => item.source === 'stack').map((item) => item.title);
+    expect(stackTitles.join(' ')).not.toMatch(/shopify/i);
+    expect(stackTitles.some((title) => /cloudflare|x402|mcp/i.test(title))).toBe(true);
+    expect(sop.entities.map((entity) => entity.name)).toEqual(expect.arrayContaining(['Cloudflare']));
   });
 
   it('does not invent a URL for an unknown product name', () => {
@@ -85,6 +113,56 @@ describe('compileLinkedSop', () => {
       'Create the preview',
       'Attach the checklist',
     ]);
+  });
+});
+
+describe('stackChecksFromPackTools', () => {
+  it('emits checks only for named pack tools and never invents Shopify', () => {
+    const checks = stackChecksFromPackTools([
+      { name: 'Cloudflare' },
+      { name: 'x402' },
+      { name: 'MCP' },
+    ]);
+    expect(checks.every((item) => item.source === 'stack')).toBe(true);
+    expect(checks.map((item) => item.title).join(' ')).not.toMatch(/shopify/i);
+    expect(checks.some((item) => /cloudflare/i.test(item.title))).toBe(true);
+    expect(checks.some((item) => /x402/i.test(item.title))).toBe(true);
+    expect(stackChecksFromPackTools([])).toEqual([]);
+    expect(stackChecksFromPackTools(undefined)).toEqual([]);
+  });
+
+  it('links only official catalog docs and ignores model-supplied hrefs', () => {
+    const checks = stackChecksFromPackTools([
+      { name: 'Cloudflare', docs_url: 'https://evil.example/phish' },
+      { name: 'Zorpify', docs_url: 'https://evil.example/zorp' },
+    ]);
+    const hrefs = checks.map((item) => item.href ?? '');
+    expect(hrefs.some((href) => href.includes('evil.example'))).toBe(false);
+    expect(checks.find((item) => item.title.toLowerCase().includes('cloudflare'))?.href).toBe(
+      'https://developers.cloudflare.com',
+    );
+    expect(checks.find((item) => item.title.toLowerCase().includes('zorpify'))?.href).toBeUndefined();
+  });
+
+  it('replaces leftover catalog stack checks with pack-grounded ones', () => {
+    const leftover: LinkedSop = {
+      entities: [],
+      steps: [],
+      checklist: [
+        {
+          id: 'chk_shopify_1',
+          source: 'stack',
+          stack: 'shopify',
+          title: 'Use Shopify CLI, not a storefront plugin, for store work',
+          href: 'https://shopify.dev/docs/api/shopify-cli',
+        },
+      ],
+    };
+    const next = applyPackStackChecks(leftover, [{ name: 'Cloudflare' }, { name: 'x402' }]);
+    expect(next.checklist.some((item) => /shopify/i.test(item.title))).toBe(false);
+    expect(next.checklist.some((item) => item.source === 'stack' && /cloudflare|x402/i.test(item.title))).toBe(
+      true,
+    );
   });
 });
 

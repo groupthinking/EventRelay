@@ -23,6 +23,8 @@ function readyPack() {
     concepts: ['zoo'],
     requirements: [],
     code_snippets: [],
+    artifacts: [],
+    stack: { tools: [] },
     visual_context: null,
   });
 }

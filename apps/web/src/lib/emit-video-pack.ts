@@ -1,9 +1,14 @@
+import { readPackFormation, type VideoPackArchitecture, type VideoPackArtifact, type VideoPackStack } from '@/lib/video-pack-types';
+
 export interface EmittedVideoPack {
   version: string;
   id: string;
   video_id: string;
   source_url: string;
   provenance: { source_hash: string };
+  architecture?: VideoPackArchitecture | null;
+  artifacts?: VideoPackArtifact[];
+  stack?: VideoPackStack;
 }
 
 export interface VideoPackCitation {
@@ -44,6 +49,8 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
     );
   }
 
+  const formation = data ? readPackFormation(data) : { architecture: null, artifacts: [], stack: { tools: [] } };
+
   return {
     version,
     videoId,
@@ -56,6 +63,9 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       video_id: videoId,
       source_url: sourceUrl,
       provenance: { source_hash: sourceHash },
+      ...(formation.architecture ? { architecture: formation.architecture } : {}),
+      ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
+      ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
     },
   };
 }
