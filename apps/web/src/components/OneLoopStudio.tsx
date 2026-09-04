@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket, Save } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
-import { compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
+import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
@@ -25,6 +25,7 @@ import {
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioPackCitation,
+  studioPackFormation,
   studioPasteOutcomeMessage,
   studioRunQuality,
   studioStatusLabel,
@@ -112,26 +113,37 @@ export default function OneLoopStudio() {
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
+  const packFormation = useMemo(
+    () => studioPackFormation(selected?.videoPack),
+    [selected?.videoPack],
+  );
   const linkedSop: LinkedSop | null = useMemo(() => {
-    if (selected?.insights?.linkedSop) return selected.insights.linkedSop;
-    if (!selected?.transcript && !(selected?.events?.length)) return null;
+    const packTools = packFormation.tools;
+    if (selected?.insights?.linkedSop) {
+      return applyPackStackChecks(selected.insights.linkedSop, packTools);
+    }
+    if (!selected?.transcript && !(selected?.events?.length) && packTools.length === 0) return null;
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
       }
       return action.title?.trim() ? [{ title: action.title, description: action.description, category: action.category }] : [];
     });
-    return compileLinkedSop({
-      transcript: selected?.transcript,
-      events: (selected?.events || []).map((event) => ({
-        timestamp: parseTimestampToSeconds(event.timestamp) ?? undefined,
-        label: event.title,
-        description: event.description,
-      })),
-      actions: insightActions,
-      topics: selected?.insights?.topics,
-    });
-  }, [selected]);
+    return applyPackStackChecks(
+      compileLinkedSop({
+        transcript: selected?.transcript,
+        events: (selected?.events || []).map((event) => ({
+          timestamp: parseTimestampToSeconds(event.timestamp) ?? undefined,
+          label: event.title,
+          description: event.description,
+        })),
+        actions: insightActions,
+        topics: selected?.insights?.topics,
+        packTools,
+      }),
+      packTools,
+    );
+  }, [selected, packFormation.tools]);
 
   useEffect(() => {
     setCompletedChecks([]);
@@ -518,7 +530,7 @@ export default function OneLoopStudio() {
           </ul>
         </section>
 
-        {linkedSop && (linkedSop.entities.length > 0 || linkedSop.steps.length > 0) && (
+        {linkedSop && (linkedSop.entities.length > 0 || linkedSop.steps.length > 0 || packFormation.tools.length > 0) && (
           <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
             <div className="border-b border-white/10 px-4 py-3">
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -526,10 +538,25 @@ export default function OneLoopStudio() {
               </h2>
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
-              {linkedSop.entities.length === 0 && (
+              {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
                 <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
               )}
-              {linkedSop.entities.map((entity) => (
+              {packFormation.tools.map((tool) => (
+                <span
+                  key={`pack-${tool.name}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#e8b86d]/30 bg-[#e8b86d]/10 px-3 py-1.5 text-sm"
+                >
+                  <span className="font-medium text-white">{tool.name}</span>
+                </span>
+              ))}
+              {linkedSop.entities
+                .filter(
+                  (entity) =>
+                    !packFormation.tools.some(
+                      (tool) => tool.name.toLowerCase() === entity.name.toLowerCase(),
+                    ),
+                )
+                .map((entity) => (
                 <span
                   key={entity.name}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
@@ -668,6 +695,45 @@ export default function OneLoopStudio() {
                 <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceHash}</dd>
               </div>
             </dl>
+            {packFormation.architecture && (
+              <div data-testid="pack-architecture" className="mt-4">
+                <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">
+                  Architecture
+                </h3>
+                {packFormation.architecture.summary && (
+                  <p className="mt-2 text-sm text-white/70">{packFormation.architecture.summary}</p>
+                )}
+                {packFormation.architecture.stages.length > 0 && (
+                  <ol className="mt-2 space-y-1 text-sm text-white/80">
+                    {packFormation.architecture.stages.map((stage) => (
+                      <li key={stage.id}>
+                        <span className="font-medium text-white">{stage.name}</span>
+                        {stage.description ? ` — ${stage.description}` : ''}
+                      </li>
+                    ))}
+                  </ol>
+                )}
+                {packFormation.architecture.mermaid && (
+                  <pre className="mt-2 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/65">
+                    {packFormation.architecture.mermaid}
+                  </pre>
+                )}
+              </div>
+            )}
+            {packFormation.artifacts.length > 0 && (
+              <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
+                {packFormation.artifacts.map((artifact) => (
+                  <li
+                    key={artifact.path_hint}
+                    className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+                  >
+                    <div className="font-mono text-[12px] text-[#e8b86d]">{artifact.path_hint}</div>
+                    <div className="mt-1 text-white/80">{artifact.purpose}</div>
+                    <div className="mt-1 font-mono text-[11px] text-white/55">{artifact.interface}</div>
+                  </li>
+                ))}
+              </ul>
+            )}
             <pre
               data-testid="video-pack-json"
               className="mt-3 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/75"

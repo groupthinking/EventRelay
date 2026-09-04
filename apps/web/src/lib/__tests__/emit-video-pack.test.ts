@@ -30,6 +30,43 @@ describe('verifyIdentityPack (CoS: fail closed)', () => {
     expect(identityPackJson(citation)).toContain(HASH);
   });
 
+  it('passes architecture, artifacts, and stack.tools through a ready pack', () => {
+    const citation = verifyIdentityPack({
+      status: 'success',
+      data: {
+        ...VALID.data,
+        transcript: {
+          language: 'en',
+          full_text: 'Cloudflare Workers pay via x402.',
+          segments: [],
+        },
+        architecture: {
+          summary: 'decode to rails',
+          stages: [{ id: 'decode', name: 'decode', description: 'frames' }],
+          mermaid: 'flowchart LR\ndecode-->rails',
+        },
+        artifacts: [
+          {
+            path_hint: 'src/mcp_x402_gateway.ts',
+            purpose: 'Paid MCP gateway',
+            interface: 'createGateway(config: GatewayConfig): Gateway',
+          },
+        ],
+        stack: {
+          tools: [
+            { name: 'Cloudflare', evidence: 'spoken' },
+            { name: 'x402', evidence: 'rail' },
+          ],
+        },
+      },
+    });
+    expect(citation.pack.stack?.tools.map((tool) => tool.name)).toEqual(['Cloudflare', 'x402']);
+    expect(citation.pack.architecture?.stages[0]?.id).toBe('decode');
+    expect(citation.pack.artifacts?.[0]?.path_hint).toBe('src/mcp_x402_gateway.ts');
+    expect(JSON.stringify(citation.pack)).not.toMatch(/shopify/i);
+    expect(citation.sourceHash).toBe(HASH);
+  });
+
   it('fails closed when source_url is missing', () => {
     const { source_url: _omit, ...data } = VALID.data;
     expect(() => verifyIdentityPack({ status: 'success', data })).toThrow(/source_url/i);

@@ -1,4 +1,10 @@
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
+import { stackChecksFromPackTools, type ChecklistItem } from '@/lib/linked-sop';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
 
 export type StudioRunQuality = 'idle' | 'live' | 'draft';
 
@@ -63,6 +69,21 @@ export function studioStatusMessage(
 
 export function studioPackCitation(pack: VideoPackCitation): string {
   return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash} · ${pack.sourceUrl}`;
+}
+
+export function studioPackFormation(pack: VideoPackCitation | null | undefined): {
+  tools: VideoPackStackTool[];
+  checks: ChecklistItem[];
+  architecture: VideoPackArchitecture | null;
+  artifacts: VideoPackArtifact[];
+} {
+  const tools = pack?.pack.stack?.tools ?? [];
+  return {
+    tools,
+    checks: stackChecksFromPackTools(tools),
+    architecture: pack?.pack.architecture ?? null,
+    artifacts: pack?.pack.artifacts ?? [],
+  };
 }
 
 export function studioPasteOutcomeMessage(input: {

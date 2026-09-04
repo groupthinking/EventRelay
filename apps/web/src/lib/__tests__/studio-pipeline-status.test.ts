@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   studioPackCitation,
+  studioPackFormation,
   studioPasteOutcomeMessage,
   studioRunQuality,
   studioStatusLabel,
@@ -86,5 +89,53 @@ describe('studio-pipeline-status', () => {
     const live = studioStatusMessage('live', 'ready', 'App', false);
     expect(draft.toLowerCase()).not.toContain('planning draft');
     expect(live.toLowerCase()).not.toContain('dashboard');
+  });
+
+  it('binds stack checks to pack.stack.tools and keeps studio on /', () => {
+    const formation = studioPackFormation({
+      version: 'v0',
+      videoId: 'MNNfat_QP0E',
+      packId: 'vp:v0:MNNfat_QP0E',
+      sourceUrl: 'https://www.youtube.com/watch?v=MNNfat_QP0E',
+      sourceHash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      pack: {
+        version: 'v0',
+        id: 'vp:v0:MNNfat_QP0E',
+        video_id: 'MNNfat_QP0E',
+        source_url: 'https://www.youtube.com/watch?v=MNNfat_QP0E',
+        provenance: {
+          source_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        },
+        architecture: {
+          summary: 'decode to rails',
+          stages: [
+            { id: 'decode', name: 'decode', description: 'frames' },
+            { id: 'rails', name: 'monetization rails', description: 'x402' },
+          ],
+          mermaid: 'flowchart LR\ndecode-->rails',
+        },
+        artifacts: [
+          {
+            path_hint: 'src/mcp_x402_gateway.ts',
+            purpose: 'Paid MCP gateway',
+            interface: 'createGateway(config: GatewayConfig): Gateway',
+          },
+        ],
+        stack: {
+          tools: [{ name: 'Cloudflare' }, { name: 'x402' }],
+        },
+      },
+    });
+    expect(formation.tools.map((tool) => tool.name)).toEqual(['Cloudflare', 'x402']);
+    expect(formation.checks.map((item) => item.title).join(' ')).not.toMatch(/shopify/i);
+    expect(formation.checks.some((item) => /cloudflare|x402/i.test(item.title))).toBe(true);
+    expect(formation.architecture?.stages).toHaveLength(2);
+    expect(formation.artifacts[0]?.path_hint).toBe('src/mcp_x402_gateway.ts');
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioPackFormation');
+    expect(studio).toContain('data-testid="pack-architecture"');
+    expect(studio).toContain('data-testid="pack-artifacts"');
+    expect(studio).not.toMatch(/router\.(push|replace)\(['"]\/dashboard/);
   });
 });

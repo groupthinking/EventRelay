@@ -1,6 +1,16 @@
 import 'server-only';
 
 import { hasAiGatewayKey, stripJsonCodeFence } from '@/lib/vercel-ai-gateway';
+import {
+  parseArchitecture,
+  parseArtifacts,
+  parseStack,
+  truncatePackText,
+  type VideoPackArchitecture,
+  type VideoPackArtifact,
+  type VideoPackStack,
+  type VideoPackStackTool,
+} from '@/lib/video-pack-types';
 
 /** Verified Vercel AI Gateway id — do not substitute gemini-2.5-flash. */
 export const VIDEO_PACK_EXTRACTOR_MODEL = 'google/gemini-3.8-flash';
@@ -39,6 +49,11 @@ export interface ExtractedCodeSnippet {
   content: string;
 }
 
+export type ExtractedArchitecture = VideoPackArchitecture;
+export type ExtractedArtifact = VideoPackArtifact;
+export type ExtractedStack = VideoPackStack;
+export type ExtractedStackTool = VideoPackStackTool;
+
 export interface ExtractedVisualElement {
   timestamp: number;
   element_type: string;
@@ -65,6 +80,9 @@ export interface ExtractedVideoPackSpec {
   requirements: ExtractedRequirement[];
   code_snippets: ExtractedCodeSnippet[];
   visual_context: ExtractedVisualContext | null;
+  architecture?: ExtractedArchitecture | null;
+  artifacts?: ExtractedArtifact[];
+  stack?: ExtractedStack;
 }
 
 export interface VideoPackGenerateTextArgs {
@@ -101,8 +119,13 @@ function buildExtractPrompt(sourceUrl: string, videoId: string): string {
     'keyframes: [{ t_s, desc }]',
     'concepts: string[]',
     'requirements: [{ id, title, detail, priority, tags }]',
-    'code_snippets: [{ path_hint, lang, content }]',
+    'code_snippets: [{ path_hint, lang, content }] — signatures only, never a full source dump',
+    'architecture: { summary, stages: [{ id, name, description }], mermaid } — pipeline/graph grounded in the video (decode → multimodal temporal Q/A → agentic build/verify → monetization rails when those appear)',
+    'artifacts: [{ path_hint, purpose, interface, signatures?, stubs? }] — buildable shapes, not chat code dumps',
+    'stack: { tools: [{ name, kind, evidence, docs_url, check }] } — named tools/frameworks actually grounded in spoken or on-screen evidence',
     'visual_context: { visual_elements: [{ timestamp, element_type, content, confidence }], summary, frame_analysis_count } | null',
+    'Do not invent Shopify, Vercel, GitHub, or any other stack that the video does not name.',
+    'If the video is Cloudflare / x402 / MCP, stack.tools must name those rails — not a storefront CLI.',
   ].join('\n');
 }
 
@@ -207,10 +230,13 @@ function parseSpecJson(raw: string): ExtractedVideoPackSpec {
         {
           path_hint: typeof row.path_hint === 'string' ? row.path_hint : null,
           lang: typeof row.lang === 'string' ? row.lang : null,
-          content,
+          content: truncatePackText(content),
         },
       ];
     }),
+    architecture: parseArchitecture(root.architecture),
+    artifacts: parseArtifacts(root.artifacts),
+    stack: parseStack(root.stack),
     visual_context: visual
       ? {
           visual_elements: visualElementsRaw.flatMap((item) => {
@@ -244,7 +270,10 @@ function isIdentityOnlySpec(spec: ExtractedVideoPackSpec, videoId: string): bool
     spec.requirements.length > 0 ||
     spec.keyframes.length > 0 ||
     spec.transcript.segments.length > 0 ||
-    (spec.visual_context?.visual_elements.length ?? 0) > 0;
+    (spec.visual_context?.visual_elements.length ?? 0) > 0 ||
+    (spec.architecture?.stages.length ?? 0) > 0 ||
+    (spec.artifacts?.length ?? 0) > 0 ||
+    (spec.stack?.tools.length ?? 0) > 0;
   return !hasSpeech && !hasSpec;
 }
 
