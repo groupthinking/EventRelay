@@ -18,6 +18,7 @@
 - [x] Generate stack checks only from `stack.tools[]`
 - [x] Bind studio on `/` to pack formation (architecture, artifacts, checks)
 - [x] Verify focused Vitest + identity goldens; hashed persist contract
+- [x] Address Copilot review: catalog-only check hrefs, mermaid/summary count as spec, trim whitespace cards, required artifacts/stack, shared 800-char signature budget
 - [ ] Ready PR (GitHub issue_write 403 — no `Closes #<n>` available)
 
 ## 3. Definition of Done (Success Verification)

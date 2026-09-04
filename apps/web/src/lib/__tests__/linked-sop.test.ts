@@ -131,6 +131,19 @@ describe('stackChecksFromPackTools', () => {
     expect(stackChecksFromPackTools(undefined)).toEqual([]);
   });
 
+  it('links only official catalog docs and ignores model-supplied hrefs', () => {
+    const checks = stackChecksFromPackTools([
+      { name: 'Cloudflare', docs_url: 'https://evil.example/phish' },
+      { name: 'Zorpify', docs_url: 'https://evil.example/zorp' },
+    ]);
+    const hrefs = checks.map((item) => item.href ?? '');
+    expect(hrefs.join(' ')).not.toMatch(/evil\.example/);
+    expect(checks.find((item) => /cloudflare/i.test(item.title))?.href).toMatch(
+      /developers\.cloudflare\.com/,
+    );
+    expect(checks.find((item) => /zorpify/i.test(item.title))?.href).toBeUndefined();
+  });
+
   it('replaces leftover catalog stack checks with pack-grounded ones', () => {
     const leftover: LinkedSop = {
       entities: [],

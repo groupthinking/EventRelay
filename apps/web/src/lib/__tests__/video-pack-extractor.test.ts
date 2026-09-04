@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GOLDEN_IDENTITY_HASHES, applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
+import { parseArchitecture, parseArtifacts } from '@/lib/video-pack-types';
 import {
   VIDEO_PACK_EXTRACTOR_MODEL,
   VideoPackExtractError,
@@ -28,6 +29,8 @@ const SPEC_JSON = {
     },
   ],
   code_snippets: [],
+  artifacts: [],
+  stack: { tools: [] },
   visual_context: {
     visual_elements: [
       {
@@ -270,6 +273,67 @@ describe('extractVideoPackSpec', () => {
     );
     expect(spec.code_snippets[0]?.content.length).toBeLessThanOrEqual(800);
     expect(spec.artifacts[0]?.stubs?.join('\n').length ?? 0).toBeLessThanOrEqual(800);
+  });
+
+  it('keeps a mermaid-only architecture as real spec content, not identity-only cite', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: JSON.stringify({
+        transcript: { language: null, full_text: `cite:youtube:${MNNFAT_ID}`, segments: [] },
+        keyframes: [],
+        concepts: [],
+        requirements: [],
+        code_snippets: [],
+        architecture: {
+          summary: 'On-screen pipeline',
+          mermaid: 'flowchart LR\ndecode-->rails',
+        },
+        artifacts: [],
+        stack: { tools: [] },
+        visual_context: null,
+      }),
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: MNNFAT_URL, videoId: MNNFAT_ID },
+      { generateText },
+    );
+    expect(spec.architecture?.mermaid).toMatch(/decode-->rails/);
+    expect(spec.architecture?.summary).toBe('On-screen pipeline');
+    expect(spec.artifacts).toEqual([]);
+    expect(spec.stack.tools).toEqual([]);
+  });
+});
+
+describe('formation parsers', () => {
+  it('rejects whitespace-only artifact cards', () => {
+    expect(
+      parseArtifacts([
+        { path_hint: '   ', purpose: 'real', interface: 'run(): void' },
+        { path_hint: 'src/ok.ts', purpose: '  ', interface: 'run(): void' },
+        { path_hint: 'src/ok.ts', purpose: 'decode', interface: '   ' },
+        { path_hint: 'src/ok.ts', purpose: 'decode', interface: 'run(): void' },
+      ]),
+    ).toEqual([
+      { path_hint: 'src/ok.ts', purpose: 'decode', interface: 'run(): void' },
+    ]);
+  });
+
+  it('caps signatures to one shared 800-character budget', () => {
+    const lines = Array.from({ length: 40 }, (_, i) => `sig_${String(i).padStart(2, '0')} ${'x'.repeat(40)}`);
+    const [artifact] = parseArtifacts([
+      {
+        path_hint: 'src/ok.ts',
+        purpose: 'decode',
+        interface: 'run(): void',
+        signatures: lines,
+      },
+    ]);
+    const total = artifact?.signatures?.join('').length ?? 0;
+    expect(total).toBeLessThanOrEqual(800);
+    expect(parseArchitecture({ summary: '  pipeline  ', mermaid: 'flowchart LR\na-->b' })?.summary).toBe(
+      'pipeline',
+    );
   });
 });
 

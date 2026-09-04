@@ -410,7 +410,7 @@ export function stackChecksFromPackTools(
       source: 'stack',
       stack: entry?.stack || slugTool(name),
       title: tool.check?.trim() || `Use ${name} as named in the video`,
-      href: tool.docs_url || entry?.docsUrl || entry?.officialUrl,
+      href: entry?.docsUrl || entry?.officialUrl,
     });
   }
 

@@ -28,6 +28,8 @@ function specFor(videoId: string) {
     concepts: [`topic-${videoId}`],
     requirements: [{ id: 'req-1', title: 'Watch the clip', detail: null, priority: 'normal', tags: [] }],
     code_snippets: [],
+    artifacts: [],
+    stack: { tools: [] },
     visual_context: {
       visual_elements: [
         { timestamp: 1, element_type: 'scene', content: `Visual from ${videoId}`, confidence: 0.9 },

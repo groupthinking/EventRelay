@@ -71,6 +71,8 @@ describe('POST /api/v1/video/pack', () => {
       concepts: ['zoo'],
       requirements: [],
       code_snippets: [],
+      artifacts: [],
+      stack: { tools: [] },
       visual_context: null,
     });
     const { POST, GET, flush } = await loadV1Route();

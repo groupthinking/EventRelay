@@ -81,8 +81,8 @@ export interface ExtractedVideoPackSpec {
   code_snippets: ExtractedCodeSnippet[];
   visual_context: ExtractedVisualContext | null;
   architecture?: ExtractedArchitecture | null;
-  artifacts?: ExtractedArtifact[];
-  stack?: ExtractedStack;
+  artifacts: ExtractedArtifact[];
+  stack: ExtractedStack;
 }
 
 export interface VideoPackGenerateTextArgs {
@@ -122,7 +122,7 @@ function buildExtractPrompt(sourceUrl: string, videoId: string): string {
     'code_snippets: [{ path_hint, lang, content }] — signatures only, never a full source dump',
     'architecture: { summary, stages: [{ id, name, description }], mermaid } — pipeline/graph grounded in the video (decode → multimodal temporal Q/A → agentic build/verify → monetization rails when those appear)',
     'artifacts: [{ path_hint, purpose, interface, signatures?, stubs? }] — buildable shapes, not chat code dumps',
-    'stack: { tools: [{ name, kind, evidence, docs_url, check }] } — named tools/frameworks actually grounded in spoken or on-screen evidence',
+    'stack: { tools: [{ name, kind, evidence, check }] } — named tools/frameworks actually grounded in spoken or on-screen evidence. Do not emit docs_url; UVAI attaches official catalog links only.',
     'visual_context: { visual_elements: [{ timestamp, element_type, content, confidence }], summary, frame_analysis_count } | null',
     'Do not invent Shopify, Vercel, GitHub, or any other stack that the video does not name.',
     'If the video is Cloudflare / x402 / MCP, stack.tools must name those rails — not a storefront CLI.',
@@ -271,9 +271,11 @@ function isIdentityOnlySpec(spec: ExtractedVideoPackSpec, videoId: string): bool
     spec.keyframes.length > 0 ||
     spec.transcript.segments.length > 0 ||
     (spec.visual_context?.visual_elements.length ?? 0) > 0 ||
+    Boolean(spec.architecture?.summary?.trim()) ||
+    Boolean(spec.architecture?.mermaid?.trim()) ||
     (spec.architecture?.stages.length ?? 0) > 0 ||
-    (spec.artifacts?.length ?? 0) > 0 ||
-    (spec.stack?.tools.length ?? 0) > 0;
+    spec.artifacts.length > 0 ||
+    spec.stack.tools.length > 0;
   return !hasSpeech && !hasSpec;
 }
 
