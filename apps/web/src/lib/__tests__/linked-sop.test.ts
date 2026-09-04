@@ -137,11 +137,11 @@ describe('stackChecksFromPackTools', () => {
       { name: 'Zorpify', docs_url: 'https://evil.example/zorp' },
     ]);
     const hrefs = checks.map((item) => item.href ?? '');
-    expect(hrefs.join(' ')).not.toMatch(/evil\.example/);
-    expect(checks.find((item) => /cloudflare/i.test(item.title))?.href).toMatch(
-      /developers\.cloudflare\.com/,
+    expect(hrefs.some((href) => href.includes('evil.example'))).toBe(false);
+    expect(checks.find((item) => item.title.toLowerCase().includes('cloudflare'))?.href).toBe(
+      'https://developers.cloudflare.com',
     );
-    expect(checks.find((item) => /zorpify/i.test(item.title))?.href).toBeUndefined();
+    expect(checks.find((item) => item.title.toLowerCase().includes('zorpify'))?.href).toBeUndefined();
   });
 
   it('replaces leftover catalog stack checks with pack-grounded ones', () => {
