@@ -71,10 +71,6 @@ export function truncatePackText(value: string, max: number = VIDEO_PACK_SNIPPET
   return value.length <= max ? value : value.slice(0, max);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
-}
-
 export function parseArchitecture(value: unknown): VideoPackArchitecture | null {
   const parsed = architectureSchema.safeParse(value);
   if (!parsed.success) return null;
@@ -159,8 +155,4 @@ export function emptyPackFormation(): {
   stack: VideoPackStack;
 } {
   return { architecture: null, artifacts: [], stack: { tools: [] } };
-}
-
-export function asFormationRecord(value: unknown): Record<string, unknown> | null {
-  return asRecord(value);
 }
