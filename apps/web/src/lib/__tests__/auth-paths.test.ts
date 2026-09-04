@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CANONICAL_STUDIO_PATH,
+  canonicalStudioPath,
   isAiRoute,
+  isLegacyDashboardPath,
   isPublicApiPath,
   isProtectedPagePath,
   needsAuthentication,
@@ -58,13 +61,20 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/billing/manage')).toBe(true);
   });
 
-  it('requires auth for product APIs and dashboard pages', () => {
+  it('requires auth for product APIs but not the retired dashboard skin', () => {
     expect(needsAuthentication('/api/chat')).toBe(true);
     expect(needsAuthentication('/api/pipeline')).toBe(true);
     expect(needsAuthentication('/api/video')).toBe(true);
-    expect(needsAuthentication('/dashboard')).toBe(true);
-    expect(needsAuthentication('/dashboard/agents')).toBe(true);
-    expect(isProtectedPagePath('/dashboard/agents')).toBe(true);
+    expect(needsAuthentication('/dashboard')).toBe(false);
+    expect(needsAuthentication('/dashboard/agents')).toBe(false);
+    expect(isProtectedPagePath('/dashboard/agents')).toBe(false);
+    expect(isLegacyDashboardPath('/dashboard')).toBe(true);
+    expect(isLegacyDashboardPath('/dashboard/agents')).toBe(true);
+    expect(isLegacyDashboardPath('/api/dashboard')).toBe(false);
+    expect(canonicalStudioPath('?video=https://www.youtube.com/watch?v=auJzb1D-fag')).toBe(
+      '/?video=https://www.youtube.com/watch?v=auJzb1D-fag',
+    );
+    expect(CANONICAL_STUDIO_PATH).toBe('/');
   });
 
   it('does not require a session for the public identity pack emit path', () => {
@@ -90,11 +100,12 @@ describe('auth path policy', () => {
   });
 
   it('sanitizes callback paths against open redirects', () => {
+    expect(safeCallbackPath('/')).toBe('/');
     expect(safeCallbackPath('/dashboard')).toBe('/dashboard');
     expect(safeCallbackPath('/dashboard', '?tab=agents')).toBe('/dashboard?tab=agents');
-    expect(safeCallbackPath('//evil.com')).toBe('/dashboard');
-    expect(safeCallbackPath('https://evil.com')).toBe('/dashboard');
-    expect(safeCallbackPath('/\\evil.com')).toBe('/dashboard');
+    expect(safeCallbackPath('//evil.com')).toBe('/');
+    expect(safeCallbackPath('https://evil.com')).toBe('/');
+    expect(safeCallbackPath('/\\evil.com')).toBe('/');
   });
 
   it('skips rate limits for the auth handshake', () => {

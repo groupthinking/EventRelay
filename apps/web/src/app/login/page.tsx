@@ -4,7 +4,7 @@ import { GoogleSignInButton } from './GoogleSignInButton';
 
 export const metadata: Metadata = {
   title: 'Sign in',
-  description: 'Sign in to UVAI with Google to open your dashboard.',
+  description: 'Sign in to UVAI with Google to open your studio.',
   alternates: { canonical: '/login' },
   robots: { index: false, follow: true },
 };
@@ -17,7 +17,7 @@ export default async function LoginPage({
   const params = await searchParams;
   const rawParam = params?.callbackUrl;
   const raw = Array.isArray(rawParam) ? rawParam[0] : rawParam;
-  const callbackUrl = safeCallbackPath(raw ?? '/dashboard');
+  const callbackUrl = safeCallbackPath(raw ?? '/');
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
@@ -25,7 +25,7 @@ export default async function LoginPage({
         <p className="text-sm font-semibold tracking-[0.2em] text-teal-300">UVAI</p>
         <h1 className="mt-4 text-3xl font-bold text-white">Sign in to your workspace</h1>
         <p className="mt-3 text-sm leading-6 text-slate-300">
-          Use your Google account to access your dashboard and saved workflows.
+          Use your Google account to access your studio and saved workflows.
         </p>
         <div className="mt-8">
           <GoogleSignInButton callbackUrl={callbackUrl} />

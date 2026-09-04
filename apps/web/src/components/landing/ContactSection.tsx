@@ -32,11 +32,11 @@ export default function ContactSection() {
 
             <div className="flex flex-wrap gap-3">
               <Link
-                href="/dashboard"
+                href="/"
                 className="px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
                 style={{ background: '#6af2de', color: '#021a18' }}
               >
-                Open dashboard
+                Open studio
               </Link>
               <a
                 href={REPO_URL}

@@ -90,12 +90,24 @@ const nextConfig = {
       'www.uvai.io',
     ];
 
-    return legacyHosts.map((host) => ({
-      source: '/:path*',
-      has: [{ type: 'host', value: host }],
-      destination: 'https://uvai.io/:path*',
-      permanent: true,
-    }));
+    return [
+      {
+        source: '/dashboard',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/:path*',
+        destination: '/',
+        permanent: true,
+      },
+      ...legacyHosts.map((host) => ({
+        source: '/:path*',
+        has: [{ type: 'host', value: host }],
+        destination: 'https://uvai.io/:path*',
+        permanent: true,
+      })),
+    ];
   },
   async headers() {
     return [

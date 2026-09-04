@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Download, Play, Rocket, Save } from 'lucide-react';
+import { Download, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
 import { compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
@@ -757,13 +757,6 @@ export default function OneLoopStudio() {
               {holdReason}
             </p>
           )}
-          <Link
-            href="/dashboard"
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm"
-          >
-            <Save className="h-4 w-4" aria-hidden />
-            Library
-          </Link>
         </div>
       </footer>
     </div>
