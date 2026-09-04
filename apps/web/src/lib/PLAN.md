@@ -26,7 +26,7 @@
 * **Verification Method:**
   * `cd apps/web && npx vitest run src/lib/__tests__/video-pack-extractor.test.ts src/lib/__tests__/video-pack.test.ts src/lib/__tests__/linked-sop.test.ts src/lib/__tests__/official-templates.test.ts src/lib/__tests__/emit-video-pack.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/video-pack-store.test.ts src/lib/__tests__/action-surface.test.ts src/store/__tests__/dashboard-store.test.ts src/app/api/video/pack src/app/api/v1/video/pack`
   * Identity goldens: `auJzb1D-fag`, `jNQXAC9IVRw`
-* **Proof Artifact:** 11 files, 92 passed. Live GET `https://uvai.io/api/video/pack?video_id=MNNfat_QP0E` and GET `?source_hash=c63de3de992d40b4ba2147ef441324f2bda8030a7b63dc260b1fa33bdcf1b666` both 200 with the same identity hash. Current live pack has Cloudflare/x402/MCP concepts, no Shopify, but `architecture`/`stack.tools`/`artifacts` are empty until re-extract after merge.
+* **Proof Artifact:** 11 files, 96 passed after Copilot review hardening (`01d4237b4`). Live GET `https://uvai.io/api/video/pack?video_id=MNNfat_QP0E` and GET `?source_hash=c63de3de992d40b4ba2147ef441324f2bda8030a7b63dc260b1fa33bdcf1b666` both 200 with the same identity hash. Current live pack has Cloudflare/x402/MCP concepts, no Shopify, but `architecture`/`stack.tools`/`artifacts` are empty until re-extract after merge.
 
 ## 4. Post-Task Reflection
 * **What was done:** Extended Video Pack v0 extract with Zod-parsed `architecture`, `artifacts[]`, and `stack.tools[]`. Stack checks now come only from pack tools. Studio on `/` renders formation and unlocks those checks in place.
