@@ -69,12 +69,14 @@ function createRedis(initial: unknown = null) {
       evalCalls += 1;
       const processing = JSON.parse(String(args[0])) as VideoPackRecord;
       const staleBefore = String(args[1]);
+      const sourceHash = String(args[2]);
       const current = decodeStored(stored);
-      if (current?.state === 'ready') {
+      if (current?.state === 'ready' && current.pack.provenance.source_hash === sourceHash) {
         return ['existing', JSON.stringify(current)] as unknown as TResult;
       }
       if (
         current?.state === 'processing' &&
+        current.source_hash === sourceHash &&
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(current.started_at) &&
         current.started_at > staleBefore
       ) {
@@ -150,6 +152,23 @@ describe('video-pack store', () => {
     expect(decodeStored(redis.getStored())).toEqual(ready);
     expect(redis.getEvalCalls()).toBe(1);
     expect(redis.getSetCalls()).toBe(0);
+  });
+
+  it('replaces a ready-shaped value whose provenance does not match its key', async () => {
+    const pack = readyPack();
+    pack.provenance.source_hash = 'f'.repeat(64);
+    const redis = createRedis({ state: 'ready', pack });
+    setVideoPackRedisForTests(redis.client);
+
+    expect(
+      await claimPackProcessing(IDENTITY, new Date('2026-09-05T06:00:00.000Z')),
+    ).toBe('claimed');
+    const stored = decodeStored(redis.getStored());
+    expect(stored?.state).toBe('processing');
+    if (stored?.state !== 'processing') {
+      throw new Error('expected mismatched ready value to be replaced');
+    }
+    expect(stored.source_hash).toBe(HASH);
   });
 
   it('returns an active cross-isolate processing claim without scheduling duplicate work', async () => {
