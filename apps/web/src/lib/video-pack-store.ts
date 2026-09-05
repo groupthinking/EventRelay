@@ -72,7 +72,7 @@ if current['state'] == 'ready'
   and type(current['pack']) == 'table'
   and type(current['pack']['provenance']) == 'table'
   and current['pack']['provenance']['source_hash'] == source_hash then
-  return { 'existing', cjson.encode(current) }
+  return { 'existing', raw }
 end
 
 if current['state'] == 'processing' and current['source_hash'] == source_hash then
@@ -80,7 +80,7 @@ if current['state'] == 'processing' and current['source_hash'] == source_hash th
   local valid_iso = type(started_at) == 'string'
     and string.match(started_at, '^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%d%.%d%d%dZ$')
   if valid_iso and started_at > stale_before then
-    return { 'existing', cjson.encode(current) }
+    return { 'existing', raw }
   end
 end
 
