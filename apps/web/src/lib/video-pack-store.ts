@@ -44,7 +44,7 @@ export type VideoPackRedisClient = {
   ): Promise<TResult>;
 };
 
-const CLAIM_PROCESSING_SCRIPT = `
+export const CLAIM_PROCESSING_SCRIPT = `
 local key = KEYS[1]
 local processing = ARGV[1]
 local stale_before = ARGV[2]
@@ -71,6 +71,8 @@ end
 if current['state'] == 'ready'
   and type(current['pack']) == 'table'
   and type(current['pack']['provenance']) == 'table'
+  and type(current['pack']['transcript']) == 'table'
+  and type(current['pack']['transcript']['full_text']) == 'string'
   and current['pack']['provenance']['source_hash'] == source_hash then
   return { 'existing', raw }
 end
@@ -145,7 +147,10 @@ function asRecord(value: unknown): VideoPackRecord | null {
     row.pack &&
     typeof row.pack === 'object' &&
     typeof row.pack.provenance?.source_hash === 'string' &&
-    row.pack.provenance.source_hash.length === 64
+    row.pack.provenance.source_hash.length === 64 &&
+    row.pack.transcript &&
+    typeof row.pack.transcript === 'object' &&
+    typeof row.pack.transcript.full_text === 'string'
   ) {
     return row;
   }
@@ -178,7 +183,7 @@ export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord
     try {
       const raw = await redis.get<unknown>(key);
       const parsed = decodeRecord(raw);
-      if (parsed) {
+      if (parsed && recordHash(parsed) === sourceHash) {
         memoryStore.set(key, parsed);
         return parsed;
       }

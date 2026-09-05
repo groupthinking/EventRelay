@@ -1,4 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import net from 'node:net';
+import { createClient, type RedisClientType } from 'redis';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { GOLDEN_IDENTITY_HASHES, applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
 import {
   PROCESSING_STALE_MS,
@@ -20,6 +23,15 @@ const IDENTITY = {
   source_hash: HASH,
   id: `vp:v0:${CANON}`,
 };
+
+const hasRedisServer = (() => {
+  try {
+    execFileSync('redis-server', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 function readyPack() {
   const identity = buildIdentityPack(CANON, SOURCE_URL, '2026-09-03T00:00:00.000Z');
@@ -65,13 +77,21 @@ function createRedis(initial: unknown = null) {
       stored = value;
       return 'OK';
     },
-    async eval<TResult>(_script, _keys, args) {
+    async eval<TResult>(
+      _script: string,
+      _keys: string[],
+      args: Array<string | number>,
+    ) {
       evalCalls += 1;
       const processing = JSON.parse(String(args[0])) as VideoPackRecord;
       const staleBefore = String(args[1]);
       const sourceHash = String(args[2]);
       const current = decodeStored(stored);
-      if (current?.state === 'ready' && current.pack.provenance.source_hash === sourceHash) {
+      if (
+        current?.state === 'ready' &&
+        current.pack.provenance.source_hash === sourceHash &&
+        typeof current.pack.transcript?.full_text === 'string'
+      ) {
         return ['existing', JSON.stringify(current)] as unknown as TResult;
       }
       if (
@@ -171,6 +191,28 @@ describe('video-pack store', () => {
     expect(stored.source_hash).toBe(HASH);
   });
 
+  it('reclaims a ready value missing the transcript shape', async () => {
+    const malformed = {
+      state: 'ready',
+      pack: { provenance: { source_hash: HASH } },
+    };
+    const redis = createRedis(malformed);
+    setVideoPackRedisForTests(redis.client);
+
+    expect(
+      await claimPackProcessing(IDENTITY, new Date('2026-09-05T06:00:00.000Z')),
+    ).toBe('claimed');
+  });
+
+  it('does not return a ready record whose hash differs from the requested key', async () => {
+    const pack = readyPack();
+    pack.provenance.source_hash = 'f'.repeat(64);
+    const redis = createRedis({ state: 'ready', pack });
+    setVideoPackRedisForTests(redis.client);
+
+    expect(await getPackRecord(HASH)).toBeNull();
+  });
+
   it('returns an active cross-isolate processing claim without scheduling duplicate work', async () => {
     const processing: VideoPackRecord = {
       state: 'processing',
@@ -227,5 +269,67 @@ describe('video-pack store', () => {
     setVideoPackRedisForTests(redis.client);
 
     await expect(claimPackProcessing(IDENTITY)).rejects.toThrow('eval unavailable');
+  });
+});
+
+describe.skipIf(!hasRedisServer)('video-pack store Redis integration', () => {
+  let server: ChildProcess;
+  let client: RedisClientType;
+
+  beforeAll(async () => {
+    const port = await new Promise<number>((resolve, reject) => {
+      const listener = net.createServer();
+      listener.once('error', reject);
+      listener.listen(0, '127.0.0.1', () => {
+        const address = listener.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('Could not allocate a Redis test port.'));
+          return;
+        }
+        listener.close(() => resolve(address.port));
+      });
+    });
+    server = spawn(
+      'redis-server',
+      ['--port', String(port), '--save', '', '--appendonly', 'no', '--bind', '127.0.0.1'],
+      { stdio: 'ignore' },
+    );
+    client = createClient({ url: `redis://127.0.0.1:${port}` });
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+      try {
+        await client.connect();
+        return;
+      } catch {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    }
+    throw new Error('Could not connect to the Redis test server.');
+  });
+
+  afterAll(async () => {
+    if (client?.isOpen) await client.quit();
+    server?.kill();
+  });
+
+  it('executes the atomic claim script against Redis', async () => {
+    const key = `video-pack-test:${HASH}`;
+    await client.set(
+      key,
+      JSON.stringify({ state: 'ready', pack: { provenance: { source_hash: HASH } } }),
+    );
+    setVideoPackRedisForTests({
+      async get<TData>() {
+        return (await client.get(key)) as TData | null;
+      },
+      async set(_key, value) {
+        return client.set(key, JSON.stringify(value));
+      },
+      async eval<TResult>(script: string, keys: string[], args: Array<string | number>) {
+        return client.eval(script, { keys, arguments: args.map(String) }) as Promise<TResult>;
+      },
+    });
+
+    expect(await claimPackProcessing(IDENTITY)).toBe('claimed');
+    expect(JSON.parse((await client.get(key)) ?? '{}').state).toBe('processing');
   });
 });
