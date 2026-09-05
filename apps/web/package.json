@@ -22,7 +22,7 @@
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
     "@opentelemetry/instrumentation": "0.221.0",
     "@opentelemetry/resources": "2.10.0",
-    "@opentelemetry/sdk-trace-base": "2.10.0",
+    "@opentelemetry/sdk-trace-base": "2.11.0",
     "@opentelemetry/semantic-conventions": "1.43.0",
     "@sentry/nextjs": "^10.69.0",
     "@stripe/stripe-js": "^9.13.0",
