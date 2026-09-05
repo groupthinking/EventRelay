@@ -111,7 +111,7 @@ function recordHash(record: VideoPackRecord): string {
 
 async function getRedis(): Promise<VideoPackRedisClient | null> {
   if (redisPromise) return redisPromise;
-  redisPromise = (async () => {
+  const promise = (async () => {
     const creds = resolveUpstashRedisCredentials();
     if (!creds) {
       return null;
@@ -124,10 +124,16 @@ async function getRedis(): Promise<VideoPackRedisClient | null> {
       }) as unknown as VideoPackRedisClient;
     } catch (error) {
       console.error('[video-pack-store] Redis client init failed:', error);
-      throw error;
+      // Clear the memoized promise so a transient init failure does not
+      // permanently poison the client, and fall back to the in-memory store.
+      if (redisPromise === promise) {
+        redisPromise = null;
+      }
+      return null;
     }
   })();
-  return redisPromise;
+  redisPromise = promise;
+  return promise;
 }
 
 function asRecord(value: unknown): VideoPackRecord | null {
