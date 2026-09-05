@@ -111,7 +111,8 @@ function recordHash(record: VideoPackRecord): string {
 
 async function getRedis(): Promise<VideoPackRedisClient | null> {
   if (redisPromise) return redisPromise;
-  const promise = (async () => {
+  let promise: Promise<VideoPackRedisClient | null>;
+  promise = (async () => {
     const creds = resolveUpstashRedisCredentials();
     if (!creds) {
       return null;
