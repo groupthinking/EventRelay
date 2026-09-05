@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { GOLDEN_IDENTITY_HASHES, applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
 import {
   PROCESSING_STALE_MS,
+  CLAIM_PROCESSING_SCRIPT,
   claimPackProcessing,
   getPackRecord,
   putPackRecord,
@@ -317,19 +318,21 @@ describe.skipIf(!hasRedisServer)('video-pack store Redis integration', () => {
       key,
       JSON.stringify({ state: 'ready', pack: { provenance: { source_hash: HASH } } }),
     );
-    setVideoPackRedisForTests({
-      async get<TData>() {
-        return (await client.get(key)) as TData | null;
-      },
-      async set(_key, value) {
-        return client.set(key, JSON.stringify(value));
-      },
-      async eval<TResult>(script: string, keys: string[], args: Array<string | number>) {
-        return client.eval(script, { keys, arguments: args.map(String) }) as Promise<TResult>;
-      },
+    const processing = {
+      state: 'processing',
+      ...IDENTITY,
+      started_at: '2026-09-05T06:00:00.000Z',
+    };
+    const result = await client.eval(CLAIM_PROCESSING_SCRIPT, {
+      keys: [key],
+      arguments: [
+        JSON.stringify(processing),
+        '2026-09-05T01:00:00.000Z',
+        HASH,
+      ],
     });
 
-    expect(await claimPackProcessing(IDENTITY)).toBe('claimed');
+    expect(result).toEqual(['claimed', JSON.stringify(processing)]);
     expect(JSON.parse((await client.get(key)) ?? '{}').state).toBe('processing');
   });
 });
