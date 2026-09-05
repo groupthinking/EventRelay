@@ -48,6 +48,7 @@ const CLAIM_PROCESSING_SCRIPT = `
 local key = KEYS[1]
 local processing = ARGV[1]
 local stale_before = ARGV[2]
+local source_hash = ARGV[3]
 local raw = redis.call('GET', key)
 
 local function claim()
@@ -67,11 +68,14 @@ if not ok or type(current) ~= 'table' then
   return claim()
 end
 
-if current['state'] == 'ready' and type(current['pack']) == 'table' then
+if current['state'] == 'ready'
+  and type(current['pack']) == 'table'
+  and type(current['pack']['provenance']) == 'table'
+  and current['pack']['provenance']['source_hash'] == source_hash then
   return { 'existing', cjson.encode(current) }
 end
 
-if current['state'] == 'processing' then
+if current['state'] == 'processing' and current['source_hash'] == source_hash then
   local started_at = current['started_at']
   local valid_iso = type(started_at) == 'string'
     and string.match(started_at, '^%d%d%d%d%-%d%d%-%d%dT%d%d:%d%d:%d%d%.%d%d%dZ$')
@@ -129,7 +133,13 @@ async function getRedis(): Promise<VideoPackRedisClient | null> {
 function asRecord(value: unknown): VideoPackRecord | null {
   if (value === null || typeof value !== 'object') return null;
   const row = value as VideoPackRecord;
-  if (row.state === 'ready' && row.pack && typeof row.pack === 'object') {
+  if (
+    row.state === 'ready' &&
+    row.pack &&
+    typeof row.pack === 'object' &&
+    typeof row.pack.provenance?.source_hash === 'string' &&
+    row.pack.provenance.source_hash.length === 64
+  ) {
     return row;
   }
   if (
@@ -206,7 +216,11 @@ export async function claimPackProcessing(
       const result = await redis.eval<unknown>(
         CLAIM_PROCESSING_SCRIPT,
         [key],
-        [JSON.stringify(processing), new Date(now.getTime() - PROCESSING_STALE_MS).toISOString()],
+        [
+          JSON.stringify(processing),
+          new Date(now.getTime() - PROCESSING_STALE_MS).toISOString(),
+          identity.source_hash,
+        ],
       );
       if (!Array.isArray(result) || result.length < 2) {
         throw new Error('Redis claim script returned an invalid result.');
