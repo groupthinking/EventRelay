@@ -125,6 +125,8 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm install --legacy-peer-deps
+      - name: Install Redis for Video Pack integration tests
+        run: sudo apt-get update && sudo apt-get install -y redis-server
       - name: Unit tests (apps/web)
         # Hermetic: do not inject ambient AI/billing keys (see #1230).
         env:
