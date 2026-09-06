@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 
 
 ANTIGRAVITY_AGENT = "antigravity-preview-05-2026"
-_MCP_NAME = re.compile(r"^[a-z0-9_-]+$")
+_MCP_NAME = re.compile(r"^[a-z0-9]+$")
 
 
 class AntigravityConfigurationError(ValueError):
@@ -51,7 +51,7 @@ class AntigravityMCPServer:
     def validate(self, read_only_tools: frozenset[str]) -> None:
         if not _MCP_NAME.fullmatch(self.name):
             raise AntigravityConfigurationError(
-                "MCP server name must match ^[a-z0-9_-]+$"
+                "MCP server name must contain lowercase ASCII letters and digits only"
             )
         parsed = urlparse(self.url)
         if parsed.scheme != "https" or not parsed.netloc:
@@ -171,12 +171,17 @@ class AntigravityBackend:
             "video_uri",
             "audio",
             "audio_file",
+            "image",
+            "images",
+            "image_bytes",
+            "image_file",
+            "image_uri",
             "document",
         }
         present = sorted(forbidden.intersection(context))
         if present:
             raise AntigravityConfigurationError(
-                "Antigravity accepts normalized text/image context, not direct media: "
+                "This adapter accepts normalized text context, not direct media: "
                 + ", ".join(present)
             )
 
