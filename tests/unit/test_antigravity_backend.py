@@ -107,17 +107,18 @@ async def test_live_transport_requires_two_explicit_gates() -> None:
         await backend.execute("do work")
 
 
+@pytest.mark.parametrize("media_key", ["video_uri", "image_uri"])
 @pytest.mark.asyncio
-async def test_direct_media_is_rejected_before_transport() -> None:
+async def test_direct_media_is_rejected_before_transport(media_key: str) -> None:
     transport = FakeTransport()
     backend = AntigravityBackend(config(), transport)
 
     with pytest.raises(AntigravityConfigurationError, match="direct media"):
-        await backend.execute("analyze", {"video_uri": "gs://bucket/video.mp4"})
+        await backend.execute("analyze", {media_key: "gs://bucket/media"})
     assert transport.payloads == []
 
 
-@pytest.mark.parametrize("name", ["EventRelay", "event relay", "eventrelay!"])
+@pytest.mark.parametrize("name", ["EventRelay", "event relay", "eventrelay!", "event-relay", "event_relay"])
 def test_mcp_name_must_match_provider_contract(name: str) -> None:
     invalid = config(
         mcp_servers=(
