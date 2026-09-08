@@ -97,7 +97,7 @@ export default function TemplatesSection() {
 
       <div className="flex justify-center">
         <Link
-          href="/"
+          href="/studio"
           className="group inline-flex items-center gap-2 text-sm font-bold"
           style={{ color: '#6af2de' }}
         >

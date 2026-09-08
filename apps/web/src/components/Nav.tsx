@@ -15,15 +15,15 @@ interface NavProps {
   fixed?: boolean;
 }
 
-/** Primary product navigation — one studio chrome. */
+/** Primary product navigation — Home sells; Studio is the workbench. */
 const NAV_LINKS = [
-  { href: '/', label: 'Studio' },
-  { href: '/features', label: 'Features' },
+  { href: '/', label: 'Home' },
+  { href: '/studio', label: 'Studio' },
   { href: '/pricing', label: 'Pricing' },
 ];
 
 function isNavActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/' || pathname === '/studio';
+  if (href === '/') return pathname === '/';
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -97,8 +97,8 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/" className="btn btn-primary py-2 px-5 text-sm">
-            Analyze
+          <Link href="/pricing" className="btn btn-primary py-2 px-5 text-sm">
+            Get Pro
           </Link>
         )}
         <button

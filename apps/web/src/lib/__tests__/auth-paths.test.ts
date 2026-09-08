@@ -72,9 +72,9 @@ describe('auth path policy', () => {
     expect(isLegacyDashboardPath('/dashboard/agents')).toBe(true);
     expect(isLegacyDashboardPath('/api/dashboard')).toBe(false);
     expect(canonicalStudioPath('?video=https://www.youtube.com/watch?v=auJzb1D-fag')).toBe(
-      '/?video=https://www.youtube.com/watch?v=auJzb1D-fag',
+      '/studio?video=https://www.youtube.com/watch?v=auJzb1D-fag',
     );
-    expect(CANONICAL_STUDIO_PATH).toBe('/');
+    expect(CANONICAL_STUDIO_PATH).toBe('/studio');
   });
 
   it('does not require a session for the public identity pack emit path', () => {
@@ -103,9 +103,9 @@ describe('auth path policy', () => {
     expect(safeCallbackPath('/')).toBe('/');
     expect(safeCallbackPath('/dashboard')).toBe('/dashboard');
     expect(safeCallbackPath('/dashboard', '?tab=agents')).toBe('/dashboard?tab=agents');
-    expect(safeCallbackPath('//evil.com')).toBe('/');
-    expect(safeCallbackPath('https://evil.com')).toBe('/');
-    expect(safeCallbackPath('/\\evil.com')).toBe('/');
+    expect(safeCallbackPath('//evil.com')).toBe('/studio');
+    expect(safeCallbackPath('https://evil.com')).toBe('/studio');
+    expect(safeCallbackPath('/\\evil.com')).toBe('/studio');
   });
 
   it('skips rate limits for the auth handshake', () => {

@@ -163,9 +163,9 @@ function getYouTubeId(url: string) {
 
 function currentVideoUrlForLink(videoUrl: string) {
   const id = getYouTubeId(videoUrl);
-  if (!id) return '/';
+  if (!id) return '/studio';
   const normalized = videoUrl.trim() || `https://www.youtube.com/watch?v=${id}`;
-  return `/?video=${encodeURIComponent(normalized)}`;
+  return `/studio?video=${encodeURIComponent(normalized)}`;
 }
 
 function isUnsafeRequest(text: string) {
@@ -771,11 +771,11 @@ export default function VideoWorkflowStudio() {
           </Link>
 
           <nav className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 text-sm text-slate-600 md:flex">
-            <Link href="/" className="rounded-full bg-white px-4 py-1.5 font-medium text-slate-950 shadow-sm">
+            <Link href="/studio" className="rounded-full bg-white px-4 py-1.5 font-medium text-slate-950 shadow-sm">
               Studio
             </Link>
-            <Link href="/features" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Verified capabilities
+            <Link href="/" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Home
             </Link>
             <Link href="/pricing" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
               Pricing
@@ -1143,7 +1143,7 @@ export default function VideoWorkflowStudio() {
                             <div>
                               Job:{' '}
                               <Link
-                                href={`/?video=${encodeURIComponent(videoUrl || '')}`}
+                                href={`/studio?video=${encodeURIComponent(videoUrl || '')}`}
                                 className="font-mono text-blue-700 underline"
                               >
                                 {deployJobId}

@@ -30,10 +30,10 @@ export default function LandingFooter() {
         {/* Links */}
         <nav className="flex flex-wrap gap-6" aria-label="Footer navigation">
           <Link href="/" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
-            Studio
+            Home
           </Link>
-          <Link href="/features" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
-            Features
+          <Link href="/studio" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
+            Studio
           </Link>
           <Link href="/pricing" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
             Pricing

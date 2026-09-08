@@ -112,7 +112,7 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <Link href="/" className="btn btn-secondary mt-8 justify-center py-3 text-sm">
+          <Link href="/studio" className="btn btn-secondary mt-8 justify-center py-3 text-sm">
             Open Core studio
           </Link>
         </article>

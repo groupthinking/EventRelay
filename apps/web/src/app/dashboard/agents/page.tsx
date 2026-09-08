@@ -5,7 +5,7 @@ import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 export const metadata: Metadata = {
   title: 'Studio',
   description: 'Redirect to the UVAI workbench.',
-  alternates: { canonical: '/' },
+  alternates: { canonical: '/studio' },
   robots: { index: false, follow: true },
 };
 

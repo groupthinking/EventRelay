@@ -101,10 +101,10 @@ export default function ApiDocsPage() {
           <h2 className="font-heading text-2xl font-bold text-ink">Try it</h2>
           <p className="mt-2 text-ink/60">
             The{' '}
-            <Link href="/playground" className="text-teal-400 hover:underline">
-              playground
+            <Link href="/studio" className="text-teal-400 hover:underline">
+              studio
             </Link>{' '}
-            exercises these endpoints end-to-end against a real YouTube URL.
+            runs these endpoints end-to-end against a real YouTube URL.
           </p>
         </section>
       </main>
