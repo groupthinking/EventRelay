@@ -59,4 +59,19 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(config).toContain("source: '/dashboard'");
     expect(config).toContain("destination: '/studio'");
   });
+
+  it('keeps Get Pro checkout on /pricing (CoS: do not fold onto Home this PR)', () => {
+    const home = readSource('app/page.tsx');
+    const nav = readSource('components/Nav.tsx');
+    const pricing = readSource('app/pricing/page.tsx');
+    const config = readWebFile('next.config.js');
+    expect(home).toContain('href="/pricing"');
+    expect(home).toContain('Get Pro');
+    expect(home).not.toContain('ProCheckoutButton');
+    expect(home).not.toContain('turnstile');
+    expect(nav).toContain("href: '/pricing'");
+    expect(pricing).toContain('ProCheckoutButton');
+    expect(pricing).toContain('turnstile');
+    expect(config).not.toMatch(/source: '\/pricing'/);
+  });
 });
