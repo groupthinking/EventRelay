@@ -72,8 +72,9 @@ jobs:
                 .map(match => Number(match[1]));
               // Restrict to validated issue references only.
               const validUnique = [...new Set(issues)].filter(n => validIssues.has(n));
-              // Drafts mirror the governance workflow's deferred-enforcement rule and are excluded.
-              if (validUnique.length !== 1 && !pr.draft) untracked.push(pr);
+              const isDependabot = pr.user?.login === "dependabot[bot]";
+              // Drafts and Dependabot PRs cannot satisfy the canonical-issue contract and are excluded.
+              if (validUnique.length !== 1 && !pr.draft && !isDependabot) untracked.push(pr);
               for (const issue of validUnique) {
                 const existing = issueToPulls.get(issue) || [];
                 existing.push(pr.number);

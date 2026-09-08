@@ -55,6 +55,14 @@ def test_reconciliation_workflow_excludes_draft_prs_from_untracked() -> None:
     )
 
 
+def test_reconciliation_workflow_excludes_dependabot_prs_from_untracked() -> None:
+    """Dependabot cannot satisfy the canonical-issue contract and must be exempt."""
+    script = _get_script(_load_workflow())
+    assert "dependabot[bot]" in script, (
+        "Dependabot PRs must be excluded from canonical-issue enforcement instead of being reported as drift."
+    )
+
+
 def test_reconciliation_workflow_validates_issue_numbers_via_api() -> None:
     """Issue numbers referenced in PR bodies must be validated through the Issues API."""
     script = _get_script(_load_workflow())
