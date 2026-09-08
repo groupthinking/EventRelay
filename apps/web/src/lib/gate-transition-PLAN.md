@@ -15,14 +15,14 @@
 - [x] Step 2: `studioGateReceiptView` + attempt transition id
 - [x] Step 3: OneLoopStudio evaluates G.A.T.E. on backend-fail and catch paths
 - [x] Step 4: Render decision chip in Studio header
-- [ ] Step 5: Verify vitest; open ready PR to main
+- [x] Step 5: Verify vitest; open ready PR to main
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Anon Attempt deploy always shows a G.A.T.E. chip. Missing BACKEND_URL → HOLD + backend reason + receipt hash. No “Deploy completed” overclaim.
 * **Verification Method:** `cd apps/web && npx vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts`
-* **Proof Artifact:** (filled after test run)
+* **Proof Artifact:** focused **2 files / 33 passed**; full frontend `npx vitest run` → **89 files, 596 passed, 1 skipped**. PR: https://github.com/groupthinking/EventRelay/pull/1717
 
 ## 4. Post-Task Reflection
-* **What was done:**
-* **Why it was needed:**
-* **How it was tested:**
+* **What was done:** Visible G.A.T.E. chip on Attempt deploy; HOLD cites BACKEND_URL; receipt id/hash from `eventrelay.gate-receipt.v1`.
+* **Why it was needed:** #1713 evaluated only after a successful runId; prod showed backend text with no gate UI.
+* **How it was tested:** `cd apps/web && npx vitest run` (596 passed, 1 skipped).
