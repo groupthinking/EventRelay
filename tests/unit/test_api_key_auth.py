@@ -74,7 +74,16 @@ def test_protected_post_requires_key(monkeypatch):
     )
 
 
-def test_fails_closed_when_key_unset(monkeypatch):
+def test_local_dev_defaults_to_open_when_key_unset(monkeypatch):
+    monkeypatch.delenv("NODE_ENV", raising=False)
+    c = _make_client(monkeypatch, api_key=None)  # ALLOW_UNAUTHENTICATED also unset
+    assert c.get("/health").status_code == 200
+    assert c.get("/api/v1/videos/abc").status_code == 200
+    assert c.post("/api/v1/agents/dispatch").status_code == 200
+
+
+def test_production_fails_closed_when_key_unset(monkeypatch):
+    monkeypatch.setenv("NODE_ENV", "production")
     c = _make_client(monkeypatch, api_key=None)  # ALLOW_UNAUTHENTICATED also unset
     assert c.get("/health").status_code == 200  # public route still open
     assert c.get("/api/v1/videos/abc").status_code == 503  # protected fails closed

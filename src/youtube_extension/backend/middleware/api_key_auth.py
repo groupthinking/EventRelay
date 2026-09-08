@@ -12,9 +12,9 @@ unauthenticated.
 Configuration
 -------------
 - ``EVENTRELAY_API_KEY`` set    -> every non-public route (all methods) requires it.
-- ``EVENTRELAY_API_KEY`` unset  -> the app FAILS CLOSED (HTTP 503) on non-public
-  routes, UNLESS ``ALLOW_UNAUTHENTICATED=1`` is set as an explicit local-dev
-  opt-in (requests then pass through with a loud warning).
+- ``EVENTRELAY_API_KEY`` unset  -> outside production, local auth is disabled by
+  default (opt-in auth: set a key). In production, non-public routes FAIL CLOSED
+  (HTTP 503) unless ``ALLOW_UNAUTHENTICATED=1`` is set intentionally.
 
 The key comparison uses :func:`hmac.compare_digest` (constant-time) to avoid a
 timing side-channel.
@@ -44,6 +44,14 @@ PUBLIC_PREFIXES: tuple[str, ...] = (
 
 _TRUTHY = {"1", "true", "yes", "on"}
 
+
+def _is_production_env() -> bool:
+    return any(
+        (os.getenv(name) or "").strip().lower() == "production"
+        for name in ("ENVIRONMENT", "VERCEL_ENV", "NODE_ENV")
+    )
+
+
 _UNAUTHORIZED_BODY = (
     b'{"error":"Authentication required",' b'"hint":"Send a valid X-API-Key header"}'
 )
@@ -62,16 +70,24 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         self.api_key = (
             api_key if api_key is not None else os.getenv("EVENTRELAY_API_KEY")
         )
+        is_production = _is_production_env()
+        explicit_open = os.getenv("ALLOW_UNAUTHENTICATED", "").strip().lower() in _TRUTHY
         self.allow_unauthenticated = (
-            os.getenv("ALLOW_UNAUTHENTICATED", "").strip().lower() in _TRUTHY
+            explicit_open or (not self.api_key and not is_production)
         )
         if self.api_key:
             logger.info("🔐 API key authentication enabled (deny-by-default).")
         elif self.allow_unauthenticated:
-            logger.warning(
-                "⚠️ EVENTRELAY_API_KEY is unset and ALLOW_UNAUTHENTICATED=1 — "
-                "ALL endpoints are OPEN. Never use this configuration in production."
-            )
+            if explicit_open:
+                logger.warning(
+                    "⚠️ EVENTRELAY_API_KEY is unset and ALLOW_UNAUTHENTICATED=1 — "
+                    "ALL endpoints are OPEN. Never use this configuration in production."
+                )
+            else:
+                logger.info(
+                    "🔓 EVENTRELAY_API_KEY is unset outside production — "
+                    "local auth is disabled by default."
+                )
         else:
             logger.error(
                 "🚫 EVENTRELAY_API_KEY is unset — non-public endpoints will return "

@@ -69,27 +69,26 @@ npm install
 export GEMINI_API_KEY="your-key"
 export OPENAI_API_KEY="your-key"
 
-# Local full pipeline auth (pick ONE):
-#   A) Dev escape hatch (never in production):
-export ALLOW_UNAUTHENTICATED=1
-#   B) Shared key (frontend Next also needs this for BACKEND_URL calls):
+# Local auth is opt-in: leave EVENTRELAY_API_KEY unset for open local dev.
+# To require auth locally, set a shared key (frontend Next also needs this):
 # export EVENTRELAY_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-# Without either, non-public FastAPI routes return HTTP 503 (fail closed).
+# Production still fails closed with HTTP 503 if neither EVENTRELAY_API_KEY nor
+# ALLOW_UNAUTHENTICATED=1 is configured.
 ```
 
 ### Run
 
 ```bash
-# Terminal 1: Backend (script sets ALLOW_UNAUTHENTICATED=1 if unset)
+# Terminal 1: Backend
 ./scripts/dev_backend.sh
 # Or manually:
-# ALLOW_UNAUTHENTICATED=1 PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
+# PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
 
 # Terminal 2: Frontend
 cd apps/web && BACKEND_URL=http://localhost:8000 npx next dev --port 3000
 ```
 
-Check readiness: `curl -s localhost:8000/health` should show `"auth_mode":"open_dev"` (or `"api_key"`) and `"video_path_ready":true`.
+Check readiness: `curl -s localhost:8000/health` should show `"auth_mode":"open_dev"` (or `"api_key"`) and include dependency fields like `"yt_dlp_executable_ready"` / `"ffmpeg_ready"` / `"ffprobe_ready"`.
 
 Open http://localhost:3000 — paste a YouTube URL and run the studio workflow. The older dashboard remains available at http://localhost:3000/dashboard.
 

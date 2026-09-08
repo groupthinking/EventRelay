@@ -5,16 +5,26 @@ from __future__ import annotations
 from youtube_extension import main as app_main
 
 
-def test_auth_mode_fail_closed_by_default(monkeypatch):
+def test_auth_mode_open_dev_by_default(monkeypatch):
     monkeypatch.delenv("EVENTRELAY_API_KEY", raising=False)
     monkeypatch.delenv("ALLOW_UNAUTHENTICATED", raising=False)
-    assert app_main._auth_mode() == "fail_closed"
+    monkeypatch.delenv("NODE_ENV", raising=False)
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    assert app_main._auth_mode() == "open_dev"
 
 
 def test_auth_mode_open_dev_when_allow_unauthenticated(monkeypatch):
     monkeypatch.delenv("EVENTRELAY_API_KEY", raising=False)
     monkeypatch.setenv("ALLOW_UNAUTHENTICATED", "1")
     assert app_main._auth_mode() == "open_dev"
+
+
+def test_auth_mode_fail_closed_in_production_without_key(monkeypatch):
+    monkeypatch.delenv("EVENTRELAY_API_KEY", raising=False)
+    monkeypatch.delenv("ALLOW_UNAUTHENTICATED", raising=False)
+    monkeypatch.setenv("NODE_ENV", "production")
+    assert app_main._auth_mode() == "fail_closed"
 
 
 def test_auth_mode_api_key_when_configured(monkeypatch):
@@ -34,7 +44,13 @@ def test_auth_mode_api_key_when_whitespace_only(monkeypatch):
 
 def test_video_dep_status_keys(monkeypatch):
     status = app_main._video_dep_status()
-    assert set(status) == {"yt_dlp", "youtube_transcript_api"}
+    assert set(status) == {
+        "yt_dlp",
+        "youtube_transcript_api",
+        "yt_dlp_executable",
+        "ffmpeg",
+        "ffprobe",
+    }
     assert all(isinstance(v, bool) for v in status.values())
 
 
@@ -42,7 +58,13 @@ async def test_health_check_contract_when_video_ready(monkeypatch):
     monkeypatch.setattr(
         app_main,
         "_video_dep_status",
-        lambda: {"yt_dlp": True, "youtube_transcript_api": True},
+        lambda: {
+            "yt_dlp": True,
+            "youtube_transcript_api": True,
+            "yt_dlp_executable": True,
+            "ffmpeg": True,
+            "ffprobe": True,
+        },
     )
     monkeypatch.delenv("EVENTRELAY_API_KEY", raising=False)
     monkeypatch.setenv("ALLOW_UNAUTHENTICATED", "1")
@@ -55,23 +77,53 @@ async def test_health_check_contract_when_video_ready(monkeypatch):
         "auth_mode",
         "video_deps",
         "video_path_ready",
+        "yt_dlp_ready",
+        "youtube_transcript_api_ready",
+        "yt_dlp_executable_ready",
+        "ffmpeg_ready",
+        "ffprobe_ready",
     }
     assert payload["status"] == "healthy"
     assert payload["service"] == "uvai-youtube-extension"
     assert payload["auth_mode"] == "open_dev"
-    assert payload["video_deps"] == {"yt_dlp": True, "youtube_transcript_api": True}
+    assert payload["video_deps"] == {
+        "yt_dlp": True,
+        "youtube_transcript_api": True,
+        "yt_dlp_executable": True,
+        "ffmpeg": True,
+        "ffprobe": True,
+    }
     assert payload["video_path_ready"] is True
+    assert payload["yt_dlp_ready"] is True
+    assert payload["youtube_transcript_api_ready"] is True
+    assert payload["yt_dlp_executable_ready"] is True
+    assert payload["ffmpeg_ready"] is True
+    assert payload["ffprobe_ready"] is True
 
 
 async def test_health_check_contract_when_video_not_ready(monkeypatch):
     monkeypatch.setattr(
         app_main,
         "_video_dep_status",
-        lambda: {"yt_dlp": True, "youtube_transcript_api": False},
+        lambda: {
+            "yt_dlp": True,
+            "youtube_transcript_api": False,
+            "yt_dlp_executable": True,
+            "ffmpeg": True,
+            "ffprobe": False,
+        },
     )
 
     payload = await app_main.health_check()
 
     # A single missing dependency must flip the aggregate to not-ready.
-    assert payload["video_deps"] == {"yt_dlp": True, "youtube_transcript_api": False}
+    assert payload["video_deps"] == {
+        "yt_dlp": True,
+        "youtube_transcript_api": False,
+        "yt_dlp_executable": True,
+        "ffmpeg": True,
+        "ffprobe": False,
+    }
     assert payload["video_path_ready"] is False
+    assert payload["youtube_transcript_api_ready"] is False
+    assert payload["ffprobe_ready"] is False
