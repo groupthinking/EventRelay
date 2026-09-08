@@ -13,7 +13,24 @@ logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
 _DEFAULT_IO_WORKERS = max(1, min(8, (os.cpu_count() or 1)))
-_IO_MAX_WORKERS = max(1, int(os.environ.get("CLOUD_AI_IO_MAX_WORKERS", _DEFAULT_IO_WORKERS)))
+
+
+def _io_max_workers_from_env() -> int:
+    raw = os.environ.get("CLOUD_AI_IO_MAX_WORKERS")
+    if raw is None or not raw.strip():
+        return _DEFAULT_IO_WORKERS
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        logger.warning(
+            "Invalid CLOUD_AI_IO_MAX_WORKERS=%r; using default=%d",
+            raw,
+            _DEFAULT_IO_WORKERS,
+        )
+        return _DEFAULT_IO_WORKERS
+
+
+_IO_MAX_WORKERS = _io_max_workers_from_env()
 _IO_EXECUTOR = ThreadPoolExecutor(
     max_workers=_IO_MAX_WORKERS,
     thread_name_prefix="cloud-ai-io",
