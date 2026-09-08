@@ -26,6 +26,7 @@ STATELESS_RESULT_META = {
     "ttlMs": 0,
     "cacheScope": "private",
 }
+ALLOWED_PROTOCOL_VERSIONS = {"2025-11-25", "2026-07-28"}
 
 
 def _jsonrpc_result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
@@ -46,6 +47,18 @@ def _jsonrpc_error(
 
 def _stateless_result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
     return _jsonrpc_result(request_id, {**STATELESS_RESULT_META, **result})
+
+
+def _normalize_protocol_version(value: Any) -> str:
+    if isinstance(value, str) and value in ALLOWED_PROTOCOL_VERSIONS:
+        return value
+    return "2025-11-25"
+
+
+def _safe_header_part(value: str) -> str:
+    if "\r" in value or "\n" in value:
+        raise ValueError("invalid header value")
+    return value
 
 
 class ConformanceFixtureHandler(BaseHTTPRequestHandler):
@@ -78,7 +91,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
             return
 
         if method == "initialize":
-            protocol_version = params.get("protocolVersion") or "2025-11-25"
+            protocol_version = _normalize_protocol_version(params.get("protocolVersion"))
             self._write_json(
                 HTTPStatus.OK,
                 _jsonrpc_result(
@@ -197,7 +210,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(encoded)))
         for name, value in (headers or {}).items():
-            self.send_header(name, value)
+            self.send_header(_safe_header_part(name), _safe_header_part(value))
         self.end_headers()
         self.wfile.write(encoded)
 

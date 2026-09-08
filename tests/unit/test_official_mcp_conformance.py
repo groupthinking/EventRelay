@@ -169,3 +169,42 @@ def test_fixture_server_returns_202_for_initialized_notification() -> None:
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+
+
+def test_fixture_server_does_not_reflect_invalid_protocol_version_header() -> None:
+    port = _free_port()
+    proc = subprocess.Popen(
+        [sys.executable, str(_FIXTURE_SERVER_PATH), "--port", str(port)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        _wait_for_port(port)
+        with httpx.Client(timeout=5.0) as client:
+            response = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "MCP-Protocol-Version": "2025-11-25",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-11-25\r\nX-Injected: yes",
+                        "capabilities": {},
+                        "clientInfo": {"name": "pytest", "version": "1.0.0"},
+                    },
+                },
+            )
+
+        assert response.status_code == 200
+        assert response.headers["MCP-Protocol-Version"] == "2025-11-25"
+        assert response.json()["result"]["protocolVersion"] == "2025-11-25"
+        assert "X-Injected" not in response.headers
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
