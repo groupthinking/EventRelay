@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'UVAI turns verified video evidence into durable workflows';
+export const alt = 'UVAI — paste a YouTube URL and open the Studio workbench';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -49,22 +49,22 @@ export default function OpenGraphImage() {
               textTransform: 'uppercase',
             }}
           >
-            Evidence first
+            Studio workbench
           </div>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 920 }}>
           <div style={{ color: '#6af2de', display: 'flex', fontSize: 20, fontWeight: 700, letterSpacing: 4, marginBottom: 20, textTransform: 'uppercase' }}>
-            Video, verified transcript, durable workflow
+            Paste a YouTube URL. Open Studio.
           </div>
-          <div style={{ display: 'flex', fontSize: 70, fontWeight: 800, letterSpacing: -3, lineHeight: 1.04 }}>
-            Build from source evidence, not a model&apos;s best guess.
+          <div style={{ display: 'flex', fontSize: 48, fontWeight: 800, letterSpacing: -2, lineHeight: 1.12 }}>
+            Start a hashed Video Pack run. Transcript quality varies by source.
           </div>
         </div>
 
         <div style={{ alignItems: 'center', borderTop: '1px solid rgba(248,245,253,0.14)', display: 'flex', justifyContent: 'space-between', paddingTop: 24 }}>
           <div style={{ color: 'rgba(248,245,253,0.62)', display: 'flex', fontSize: 18 }}>
-            Captions or speech-to-text required. Provenance included.
+            Not a guaranteed production E2E.
           </div>
           <div style={{ color: '#f8f5fd', display: 'flex', fontSize: 18, fontWeight: 700 }}>
             uvai.io
