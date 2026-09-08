@@ -32,7 +32,8 @@ class RetrievalLab:
         for document in self.documents:
             content = (document.content or "").lower()
             score = sum(1 for token in query.split() if token in content)
-            scored.append((score, document))
+            if score > 0:
+                scored.append((score, document))
         scored.sort(key=lambda pair: pair[0], reverse=True)
         return [document for _, document in scored[:limit]]
 
