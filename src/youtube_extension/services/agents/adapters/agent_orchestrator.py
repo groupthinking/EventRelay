@@ -9,6 +9,7 @@ parallel processing, and intelligent routing.
 
 import asyncio
 import logging
+import os
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
@@ -16,6 +17,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from ..base_agent import AgentRequest, AgentResult, BaseAgent
+from ...shared_sql_state import SharedSQLStateStore
 
 
 @dataclass
@@ -56,7 +58,7 @@ class AgentOrchestrator:
     Handles task delegation, parallel processing, and result aggregation.
     """
 
-    def __init__(self):
+    def __init__(self, *, database_url: Optional[str] = None):
         """Initialize agent orchestrator"""
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: dict[str, BaseAgent] = {}
@@ -65,6 +67,21 @@ class AgentOrchestrator:
         # process and every dispatch appends here, so an unbounded list would
         # grow without limit. maxlen evicts the oldest entries automatically.
         self._a2a_log: deque[A2AContextMessage] = deque(maxlen=1000)
+        shared_database_url = (
+            database_url
+            or os.getenv("EVENTRELAY_SHARED_STATE_DATABASE_URL")
+            or os.getenv("DATABASE_URL")
+        )
+        if shared_database_url:
+            try:
+                self._shared_state = SharedSQLStateStore(
+                    database_url=shared_database_url
+                )
+            except Exception as exc:
+                self.logger.warning("Shared A2A SQL state unavailable: %s", exc)
+                self._shared_state = None
+        else:
+            self._shared_state = None
         self._task_mappings: dict[str, list[str]] = {
             "video_analysis": [
                 "video_master",
@@ -78,6 +95,27 @@ class AgentOrchestrator:
             "strategic_analysis": ["personality_agent", "strategy_agent"],
             "chat_assistance": ["transcript_action"],
         }
+        self._hydrate_a2a_log()
+
+    def _hydrate_a2a_log(self) -> None:
+        if self._shared_state is None:
+            return
+        self._a2a_log.clear()
+        for message in self._shared_state.get_a2a_messages(limit=1000):
+            self._a2a_log.append(A2AContextMessage(**message))
+
+    def _record_a2a_message(self, message: A2AContextMessage) -> None:
+        self._a2a_log.append(message)
+        if self._shared_state is not None:
+            self._shared_state.append_a2a_message(
+                {
+                    "sender": message.sender,
+                    "recipient": message.recipient,
+                    "content": message.content,
+                    "conversation_id": message.conversation_id,
+                    "timestamp": message.timestamp,
+                }
+            )
 
     def register_agent_type(self, name: str, agent_class: type[BaseAgent]):
         """
@@ -219,7 +257,7 @@ class AgentOrchestrator:
                                 content={"type": "context_share", "output": sender_result.output},
                                 conversation_id=conv_id,
                             )
-                            self._a2a_log.append(msg)
+                            self._record_a2a_message(msg)
                 self.logger.debug(
                     "A2A context shared across %d agents (conv=%s)",
                     len(orchestration_result.results),
@@ -340,7 +378,7 @@ class AgentOrchestrator:
             )
             # Record the failed dispatch so the session/audit trail is complete
             # (matches the success, agent-failure, and exception paths below).
-            self._a2a_log.append(
+            self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
                     recipient=agent_type,
@@ -360,7 +398,7 @@ class AgentOrchestrator:
             result = await agent.run(request)
 
             # Log execution in A2A log for session tracking
-            self._a2a_log.append(
+            self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
                     recipient=agent_type,
@@ -382,7 +420,7 @@ class AgentOrchestrator:
                 return {"error": error_msg, "output": result.output}
         except Exception as e:
             self.logger.error("execute_single failed for %s: %s", agent_type, e)
-            self._a2a_log.append(
+            self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
                     recipient=agent_type,
@@ -416,7 +454,15 @@ class AgentOrchestrator:
             List of session log entries.
         """
         dispatch_msgs = [
-            m for m in self._a2a_log
+            m
+            for m in (
+                [
+                    A2AContextMessage(**entry)
+                    for entry in self.get_a2a_log(limit=max(limit, 1000))
+                ]
+                if self._shared_state is not None
+                else list(self._a2a_log)
+            )
             if m.content.get("type") == "agent_dispatch"
         ]
         if agent_type:
@@ -453,7 +499,7 @@ class AgentOrchestrator:
             content=content,
             conversation_id=conversation_id or str(uuid.uuid4()),
         )
-        self._a2a_log.append(msg)
+        self._record_a2a_message(msg)
 
         # Deliver to recipient agent if it exists
         agent = self._agents.get(recipient)
@@ -473,6 +519,12 @@ class AgentOrchestrator:
         """Return recent A2A messages, optionally filtered by conversation."""
         # Materialize to a list so `[-limit:]` slicing works (deque is not
         # sliceable).
+        if self._shared_state is not None:
+            return self._shared_state.get_a2a_messages(
+                conversation_id=conversation_id,
+                limit=limit,
+            )
+
         msgs = list(self._a2a_log)
         if conversation_id:
             msgs = [m for m in msgs if m.conversation_id == conversation_id]
@@ -502,7 +554,7 @@ class AgentOrchestrator:
         never the input context or provider credentials.
         """
         receipt = await backend.execute(task=task, context=context or {})
-        self._a2a_log.append(
+        self._record_a2a_message(
             A2AContextMessage(
                 sender="orchestrator",
                 recipient="google_antigravity",
