@@ -123,12 +123,12 @@ const nextConfig = {
       },
       {
         source: '/features',
-        destination: '/',
+        destination: '/studio',
         permanent: true,
       },
       {
         source: '/playground',
-        destination: '/',
+        destination: '/studio',
         permanent: true,
       },
       ...legacyHosts.map((host) => ({

@@ -3,11 +3,11 @@ import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
   title: 'UVAI',
-  description: 'Redirect to UVAI home.',
-  alternates: { canonical: '/' },
+  description: 'Redirect to the UVAI workbench.',
+  alternates: { canonical: '/studio' },
   robots: { index: false, follow: true },
 };
 
 export default function PlaygroundRedirect() {
-  redirect('/');
+  redirect('/studio');
 }

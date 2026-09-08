@@ -60,15 +60,13 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page.getByTestId('turnstile-widget')).toBeVisible();
   });
 
-  test('Features and playground fold into Home', async ({ page }) => {
-    const features = await page.goto('/features');
-    expect(features?.status()).toBeLessThan(400);
-    await expect(page).toHaveURL(/\/(\?.*)?$/);
-    await expect(page.getByText('Universal Video Action Intelligence')).toBeVisible();
-
-    const playground = await page.goto('/playground');
-    expect(playground?.status()).toBeLessThan(400);
-    await expect(page).toHaveURL(/\/(\?.*)?$/);
+  test('Features and playground fold into the Studio workbench', async ({ page }) => {
+    for (const path of ['/features', '/playground'] as const) {
+      const response = await page.goto(path);
+      expect(response?.status()).toBeLessThan(400);
+      await expect(page).toHaveURL(/\/studio(\?.*)?$/);
+    }
+    await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
   });
 
   test('Pricing page keeps Workflow Pro checkout at $39', async ({ page }) => {

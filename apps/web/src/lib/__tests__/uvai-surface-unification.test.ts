@@ -49,11 +49,14 @@ describe('UVAI is one product surface', () => {
     expect(config).not.toMatch(/source: '\/prototype'[\s\S]{0,80}destination: '\/'/);
   });
 
-  it('points sell-page CTAs at Home or Studio, not a second skin', () => {
+  it('points retired sell-page surfaces at Studio, not a second skin', () => {
     const features = readSource('app/features/page.tsx');
+    const playground = readSource('app/playground/page.tsx');
     const pricing = readSource('app/pricing/page.tsx');
     const landingNav = readSource('components/landing/LandingNav.tsx');
     expect(features).toContain('redirect(');
+    expect(features).toContain("redirect('/studio')");
+    expect(playground).toContain("redirect('/studio')");
     expect(pricing).toContain("from '@/components/Nav'");
     expect(features).not.toContain('href="/dashboard"');
     expect(pricing).not.toContain('href="/dashboard"');

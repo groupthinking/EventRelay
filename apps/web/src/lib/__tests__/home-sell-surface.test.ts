@@ -80,12 +80,12 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(sitemap).not.toContain("'/playground'");
   });
 
-  it('308s retired marketing surfaces into Home and dashboard skins into Studio', () => {
+  it('308s every retired surface into the canonical Studio workbench', () => {
     const config = readWebFile('next.config.js');
     expect(config).toContain("source: '/features'");
     expect(config).toContain("source: '/playground'");
-    expect(config).toMatch(/source: '\/features'[\s\S]*destination: '\/'/);
-    expect(config).toMatch(/source: '\/playground'[\s\S]*destination: '\/'/);
+    expect(config).toMatch(/source: '\/features'[\s\S]*destination: '\/studio'/);
+    expect(config).toMatch(/source: '\/playground'[\s\S]*destination: '\/studio'/);
     expect(config).toContain("source: '/dashboard'");
     expect(config).toContain("destination: '/studio'");
     expect(config).toContain("source: '/app'");
