@@ -485,7 +485,6 @@ export default function OneLoopStudio() {
     ) {
       const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
       setExportToast(toast);
-      setMessage(toast.text);
       return;
     }
     try {
@@ -508,20 +507,19 @@ export default function OneLoopStudio() {
           : linkedSop
             ? 'sop'
             : 'scaffold';
-      const toast = studioExportToastMessage({ ok: true, kind, filename });
+      const toast = officialTemplate
+        ? {
+            tone: 'success' as const,
+            text: `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md. ${filename}`,
+          }
+        : studioExportToastMessage({ ok: true, kind, filename });
       setExportToast(toast);
-      setMessage(
-        officialTemplate
-          ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
-          : toast.text,
-      );
     } catch (err) {
       const toast = studioExportToastMessage({
         ok: false,
         error: err instanceof Error ? err.message : 'Export failed.',
       });
       setExportToast(toast);
-      setMessage(toast.text);
     }
   };
 
@@ -1089,7 +1087,7 @@ export default function OneLoopStudio() {
       {exportToast ? (
         <div
           data-testid="studio-export-toast"
-          role="status"
+          role={exportToast.tone === 'error' ? 'alert' : 'status'}
           className={clsx(
             'fixed bottom-20 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
             exportToast.tone === 'success'

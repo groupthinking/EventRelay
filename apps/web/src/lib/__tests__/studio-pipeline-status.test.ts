@@ -347,6 +347,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioExportToastMessage');
     expect(studio).toContain('studioExportFilename');
     expect(studio).toContain('data-testid="studio-export-toast"');
+    expect(studio).not.toMatch(/setExportToast\(toast\);\s*setMessage\(/);
+    expect(studio).toMatch(/role=\{exportToast\.tone === 'error' \? 'alert' : 'status'\}/);
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {
