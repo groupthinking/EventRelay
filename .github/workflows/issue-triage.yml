@@ -28,12 +28,17 @@ jobs:
           script: |
             const issue = context.payload.issue;
             const body = (issue.body || '').trim();
+            const bodyWithoutLinearLinkback = body
+              .replace(/<!--\s*linear-linkback\s*-->/gi, '')
+              .replace(/<p>\s*<a\s+href="https:\/\/linear\.app\/[^"]+">[^<]*<\/a>\s*<\/p>/gi, '')
+              .trim();
+            const linearLinkbackOnly = body !== '' && bodyWithoutLinearLinkback === '';
 
             // Bot-opened issues with no body are agent-session artifacts (e.g. the
             // recurring empty "Addressing Issues" shells from Jules/Linear sessions,
             // #1548/#1553/#1568). Labeling them for triage just manufactures noise
             // that syncs back into Linear, so close them instead.
-            if (issue.user && issue.user.type === 'Bot' && body === '') {
+            if (issue.user && issue.user.type === 'Bot' && (body === '' || linearLinkbackOnly)) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
