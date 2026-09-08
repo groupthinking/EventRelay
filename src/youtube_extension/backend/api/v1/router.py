@@ -625,7 +625,9 @@ async def chat_v1(
                 video_id = match.group(1)
 
         if video_id:
-            logger.info("Adding video context for video_id: %s", _safe_log_value(video_id))
+            logger.info(
+                "Adding video context for video_id: %s", _safe_log_value(video_id)
+            )
             detail = data_service.get_video_detail(video_id)
 
             # If video not found, trigger real-time processing
@@ -781,7 +783,9 @@ async def process_video_markdown_v1(
     health_service.increment_metric("process_video_markdown_total")
 
     try:
-        logger.info("Markdown processing request: %s", _safe_log_value(request.video_url))
+        logger.info(
+            "Markdown processing request: %s", _safe_log_value(request.video_url)
+        )
 
         result = await video_processing_service.process_video_for_markdown(
             request.video_url, request.force_regenerate
@@ -1102,7 +1106,9 @@ async def get_video_detail_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("Error getting video detail: %s", _safe_log_value(e), exc_info=True)
+        logger.error(
+            "Error getting video detail: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1128,7 +1134,9 @@ async def get_learning_log_v1(data_service: DataService = Depends(get_data_servi
             learning_log = await asyncio.to_thread(data_service.get_learning_log)
         return learning_log
     except Exception as e:
-        logger.error("Error getting learning log: %s", _safe_log_value(e), exc_info=True)
+        logger.error(
+            "Error getting learning log: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
