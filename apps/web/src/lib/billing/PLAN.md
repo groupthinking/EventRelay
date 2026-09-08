@@ -16,6 +16,7 @@
 - [x] Playwright: Home has checkout controls; paste handoff still works
 - [x] Focused vitest; commit; PR
 - [x] CoS AMBER: honest Home copy — no arbitrary-video production E2E / guaranteed transcript claim
+- [x] Align layout OG, JSON-LD, and opengraph-image alt with the same Home truth
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Cold `/` still sell hero + paste + $39/$390/$199. User completes Turnstile → Stripe Checkout $39 from Home. `/pricing` still checkouts. Paste still goes to `/studio?video=`.
