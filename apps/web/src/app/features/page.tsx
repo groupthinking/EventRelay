@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
-import LandingNav from '@/components/landing/LandingNav';
+import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 
 const capabilities = [
@@ -77,9 +77,9 @@ const runtimeRows = [
 export default function FeaturesPage() {
   return (
     <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
-      <LandingNav />
+      <Nav />
 
-      <section className="px-6 pb-16 pt-36 md:pt-44">
+      <section className="px-6 pb-16 pt-12 md:pt-16">
         <div className="mx-auto max-w-6xl">
           <div className="max-w-3xl">
             <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.26em] text-teal-300/80">
@@ -93,7 +93,7 @@ export default function FeaturesPage() {
               and puts a deliberate review boundary in front of external execution.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/dashboard" className="btn btn-primary justify-center px-7 py-3 text-sm">
+              <Link href="/" className="btn btn-primary justify-center px-7 py-3 text-sm">
                 Analyze a YouTube video
               </Link>
               <Link href="/docs/api" className="btn btn-secondary justify-center px-7 py-3 text-sm">
@@ -186,8 +186,8 @@ export default function FeaturesPage() {
           <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/50">
             Paste a public YouTube URL. UVAI will either return a verified analysis or show the exact stage that blocked it.
           </p>
-          <Link href="/dashboard" className="btn btn-primary mt-8 inline-flex justify-center px-8 py-3 text-sm">
-            Open dashboard
+          <Link href="/" className="btn btn-primary mt-8 inline-flex justify-center px-8 py-3 text-sm">
+            Open studio
           </Link>
         </div>
       </section>

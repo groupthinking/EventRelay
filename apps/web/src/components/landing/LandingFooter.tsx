@@ -29,8 +29,8 @@ export default function LandingFooter() {
 
         {/* Links */}
         <nav className="flex flex-wrap gap-6" aria-label="Footer navigation">
-          <Link href="/dashboard" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
-            Dashboard
+          <Link href="/" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
+            Studio
           </Link>
           <Link href="/features" className="text-sm text-ink/35 hover:text-ink/70 transition-colors">
             Features

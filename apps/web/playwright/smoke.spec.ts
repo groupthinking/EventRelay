@@ -46,10 +46,10 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
 
     // Assert key product heading is visible
     const heading = page.locator('h1');
-    await expect(heading).toContainText(/Turn any video into actions/i);
+    await expect(heading).toContainText(/Paste a YouTube URL/i);
 
     // Assert the primary CTA exists
-    const cta = page.locator('text=Analyze a video');
+    const cta = page.locator('text=Run');
     await expect(cta).toBeVisible();
   });
 
@@ -74,12 +74,11 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page.locator('text=Annual')).toBeVisible();
   });
 
-  test('Dashboard path is handled gracefully', async ({ page }) => {
+  test('Dashboard path folds into the studio workbench', async ({ page }) => {
     const response = await page.goto('/dashboard');
     const status = response?.status();
-
-    // The dashboard is gated; it must redirect to login/auth, or render if authenticated.
-    // In either case, the deployment must handle it gracefully without returning a 5xx error.
-    expect(status).toBeLessThan(500);
+    expect(status).toBeLessThan(400);
+    await expect(page).toHaveURL(/\/(\?.*)?$/);
+    await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
   });
 });

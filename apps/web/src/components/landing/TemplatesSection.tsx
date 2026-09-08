@@ -97,11 +97,11 @@ export default function TemplatesSection() {
 
       <div className="flex justify-center">
         <Link
-          href="/dashboard"
+          href="/"
           className="group inline-flex items-center gap-2 text-sm font-bold"
           style={{ color: '#6af2de' }}
         >
-          See all 9 templates in the dashboard
+          See all 9 templates in the studio
           <svg
             width="14"
             height="14"

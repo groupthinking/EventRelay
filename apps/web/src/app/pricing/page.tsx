@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Suspense, useState } from 'react';
 import { Check, CreditCard, GitFork, Minus, ShieldCheck } from 'lucide-react';
-import LandingNav from '@/components/landing/LandingNav';
+import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import ProCheckoutButton from '@/components/billing/ProCheckoutButton';
 import ProRenewPanel from '@/components/billing/ProRenewPanel';
@@ -49,7 +49,7 @@ export default function PricingPage() {
 
   return (
     <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
-      <LandingNav />
+      <Nav />
 
       <p id="billing-surface-markers" className="sr-only" aria-hidden>
         billing:ProCheckoutButton,ProRenewPanel,CheckoutSuccessActivator,turnstile
@@ -58,7 +58,7 @@ export default function PricingPage() {
         turnstile:challenges.cloudflare.com/turnstile/v0
       </p>
 
-      <section className="px-6 pb-14 pt-36 text-center md:pt-44">
+      <section className="px-6 pb-14 pt-12 text-center md:pt-16">
         <div className="mx-auto max-w-4xl">
           <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.26em] text-teal-300/80">
             Plans and access
@@ -112,8 +112,8 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          <Link href="/dashboard" className="btn btn-secondary mt-8 justify-center py-3 text-sm">
-            Open Core dashboard
+          <Link href="/" className="btn btn-secondary mt-8 justify-center py-3 text-sm">
+            Open Core studio
           </Link>
         </article>
 

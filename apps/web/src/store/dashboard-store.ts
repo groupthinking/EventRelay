@@ -25,6 +25,7 @@ import type {
   Video,
 } from '@/store/dashboard-types';
 import { formatSeconds } from '@/lib/timestamp';
+import { emitVideoPack, type VideoPackCitation } from '@/lib/emit-video-pack';
 import {
   pollVideoToActions,
   startVideoToActions,
@@ -126,6 +127,7 @@ function verifiedResultPatch(
   id: string,
   runId: string,
   result: VideoToActionsResult | undefined,
+  pack?: VideoPackCitation,
 ): Partial<Video> {
   const analysis = result?.analysis;
   const provenance = result?.provenance;
@@ -148,6 +150,7 @@ function verifiedResultPatch(
     })),
     actions,
     topics: analysis.topics || [],
+    packTools: pack?.pack.stack?.tools,
   });
   const events: ExtractedEvent[] = (analysis.events || []).map((event, index) => ({
     id: `evt_${id}_${index}`,
@@ -364,6 +367,10 @@ export const useDashboardStore = create<DashboardState>()(
     addActivity(`Processing started: ${truncate(url, 40)}`, 'info');
 
     try {
+      const videoPack = await emitVideoPack(url);
+      updateVideo(id, { videoPack, progress: 5 });
+      addActivity(`Video pack ${videoPack.version} ${videoPack.sourceHash.slice(0, 12)}`, 'success');
+
       const started = await startVideoToActions({ url });
       if (!started.ok || !started.runId) {
         throw new Error(
@@ -392,7 +399,7 @@ export const useDashboardStore = create<DashboardState>()(
         throw new Error(terminal.error || terminal.message || `Workflow ${terminal.runStatus || 'failed'}.`);
       }
 
-      updateVideo(id, verifiedResultPatch(id, started.runId, terminal.result));
+      updateVideo(id, verifiedResultPatch(id, started.runId, terminal.result, videoPack));
       addActivity('Verified analysis persisted by the durable workflow', 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Analysis failed.';
@@ -419,7 +426,7 @@ export const useDashboardStore = create<DashboardState>()(
           delayMs: 2000,
         });
         if (terminal.runStatus === 'completed') {
-          get().updateVideo(video.id, verifiedResultPatch(video.id, runId, terminal.result));
+          get().updateVideo(video.id, verifiedResultPatch(video.id, runId, terminal.result, video.videoPack));
           get().addActivity(`Recovered verified durable run: ${runId}`, 'success');
           return;
         }

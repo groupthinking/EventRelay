@@ -16,6 +16,7 @@ import uuid as _uuid
 import weakref
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import (
@@ -51,6 +52,9 @@ from youtube_extension.services.pipeline_job_store import get_job_store
 from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
+from youtube_extension.utils.video_utils import extract_video_id
+from youtube_extension.videopack.identity import emit_video_pack
+from youtube_extension.videopack.store import VideoPackStore
 
 # CloudEvents integration (optional — falls back to file sink)
 try:
@@ -1794,6 +1798,9 @@ async def list_pipeline_audit_runs(limit: int = 20):
 # ============================================================
 
 
+_VIDEO_PACK_STORE = VideoPackStore(Path("storage/video_packs"))
+
+
 @router.post(
     "/video/pack",
     response_model=ApiResponse,
@@ -1801,51 +1808,33 @@ async def list_pipeline_audit_runs(limit: int = 20):
     tags=["Jobs"],
 )
 async def get_or_create_videopack(request: VideoPackRequest):
-    """Retrieve an existing VideoPack or create one from a job/URL."""
-    # This implementation is a shell that leverages existing fixtures and
-    # job outputs to satisfy the Phase 4 MVP contract.
+    """Get or create the hashed VideoPack v0 identity record for a video ID."""
     video_id = request.video_id
     if not video_id and request.video_url:
-        import re
-        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", request.video_url)
-        video_id = match.group(1) if match else None
+        try:
+            video_id = extract_video_id(request.video_url)
+        except ValueError:
+            video_id = None
 
     if not video_id and request.job_id:
         job = _load_video_job(request.job_id)
         if job and job.metadata:
-            video_id = job.metadata.get("video_id")
+            raw_id = job.metadata.get("video_id")
+            video_id = raw_id if isinstance(raw_id, str) else None
 
     if not video_id:
         raise HTTPException(status_code=400, detail="Could not determine video_id")
 
-    # In a real implementation, this would look up in a VideoPackStore.
-    # For MVP, we return a synthesized pack from the job or a 404.
     try:
-        from youtube_extension.videopack.schema import (
-            Provenance,
-            Transcript,
-            VideoPackV0,
-        )
-
-        # Check if we have a job with results
-        job = None
-        if request.job_id:
-            job = _load_video_job(request.job_id)
-
-        pack = VideoPackV0(
+        pack = emit_video_pack(
             video_id=video_id,
-            transcript=Transcript(
-                full_text=(
-                    job.transcript
-                    if job and job.transcript
-                    else "Transcript extraction pending or unavailable"
-                )
-            ),
-            provenance=Provenance(
-                created_at=datetime.now(timezone.utc), tool_versions={"api": "v1"}
-            ),
+            video_url=request.video_url,
+            store=_VIDEO_PACK_STORE,
         )
-        return ApiResponse.success(pack.model_dump())
+        return ApiResponse.success(pack.model_dump(mode="json"))
+    except ValueError as exc:
+        logger.error("VideoPack identity rejected: %s", exc, exc_info=True)
+        raise HTTPException(status_code=400, detail="Could not determine video_id") from exc
     except Exception as e:
         logger.error(f"Failed to create VideoPack: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")

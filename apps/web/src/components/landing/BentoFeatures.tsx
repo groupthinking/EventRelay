@@ -238,16 +238,16 @@ export default function BentoFeatures() {
               Ready to process your first video?
             </h3>
             <p className="text-sm text-ink/50">
-              Paste any YouTube URL into the dashboard. Results in seconds.
+              Paste any YouTube URL into the studio. Results in seconds.
             </p>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <Link
-              href="/dashboard"
+              href="/"
               className="px-7 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95 whitespace-nowrap"
               style={{ background: '#6af2de', color: '#021a18' }}
             >
-              Open dashboard
+              Open studio
             </Link>
             <a
               href="https://github.com/groupthinking/EventRelay"

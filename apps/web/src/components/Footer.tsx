@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 const PRODUCT_LINKS = [
-  { label: 'Dashboard', href: '/dashboard' },
+  { label: 'Studio', href: '/' },
   { label: 'Features', href: '/features' },
   { label: 'Pricing', href: '/pricing' },
   { label: 'API Docs', href: '/playground' },

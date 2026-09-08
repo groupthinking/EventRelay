@@ -35,10 +35,35 @@ const PUBLIC_API_EXACT = new Set([
   // Must be accessible without a session so anonymous users can run the
   // pipeline; the route handler applies its own rate limiting via proxy.ts.
   '/api/pipeline/stream',
+  // Home paste-URL pack emit + anonymous per-hash/per-video GET.
+  // Exact paths so /api/video, /api/video/generate, and a packs listing stay gated.
+  '/api/video/pack',
+  '/api/v1/video/pack',
 ]);
 
-/** App routes that require a session when NEXTAUTH_SECRET is configured. */
-const PROTECTED_PAGE_PREFIXES = ['/dashboard'] as const;
+/** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
+export const CANONICAL_STUDIO_PATH = '/';
+
+/**
+ * App routes that require a session when NEXTAUTH_SECRET is configured.
+ * Product pages (home, studio, features, pricing) stay public so anonymous
+ * pack emit and stack-check unlock do not teleport through login.
+ * APIs remain gated via needsAuthentication().
+ */
+const PROTECTED_PAGE_PREFIXES: readonly string[] = [];
+
+/** Retired library / agents skins — never a second product chrome. */
+export function isLegacyDashboardPath(pathname: string): boolean {
+  return pathname === '/dashboard' || pathname.startsWith('/dashboard/');
+}
+
+/** Keep ?video= (and other query) when folding /dashboard into the studio. */
+export function canonicalStudioPath(search = ''): string {
+  if (!search) return CANONICAL_STUDIO_PATH;
+  return search.startsWith('?')
+    ? `${CANONICAL_STUDIO_PATH}${search}`
+    : `${CANONICAL_STUDIO_PATH}?${search}`;
+}
 
 export function isPublicApiPath(pathname: string): boolean {
   if (PUBLIC_API_EXACT.has(pathname)) return true;
@@ -67,11 +92,11 @@ export function needsAuthentication(pathname: string): boolean {
 export function safeCallbackPath(pathname: string, search = ''): string {
   const candidate = `${pathname}${search}`;
   if (!candidate.startsWith('/') || candidate.startsWith('//')) {
-    return '/dashboard';
+    return CANONICAL_STUDIO_PATH;
   }
   // Block backslash tricks and encoded schemes
   if (candidate.includes('\\') || /^\/[a-z]+:/i.test(candidate)) {
-    return '/dashboard';
+    return CANONICAL_STUDIO_PATH;
   }
   return candidate;
 }
@@ -120,6 +145,9 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
   '/api/workflows': new Set(['GET', 'HEAD']),
 };
 
+/** Identity hash only — not model work. Keep /api/video siblings on the AI budget. */
+const IDENTITY_PACK_PATHS = new Set(['/api/video/pack', '/api/v1/video/pack']);
+
 /**
  * Whether a request should be metered against the AI budget rather than the
  * general one.
@@ -128,6 +156,8 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
  * limit) rather than silently widening the budget.
  */
 export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
+  if (IDENTITY_PACK_PATHS.has(pathname)) return false;
+
   const prefix = AI_ROUTE_PREFIXES.find((candidate) =>
     pathname.startsWith(candidate),
   );

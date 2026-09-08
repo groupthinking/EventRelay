@@ -57,7 +57,7 @@ async function loadProxy(env: Partial<Record<EnvKey, string | undefined>>) {
 }
 
 describe('login gate must fail closed (issue #1058)', () => {
-  it('does not serve a protected page unauthenticated when NEXTAUTH_SECRET is missing in production', async () => {
+  it('folds /dashboard into the public studio when NEXTAUTH_SECRET is missing in production', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: undefined,
       NODE_ENV: 'production',
@@ -66,10 +66,9 @@ describe('login gate must fail closed (issue #1058)', () => {
 
     const response = await proxy(new NextRequest('https://app.example.com/dashboard'));
 
-    // The vulnerability: before the fix this is a pass-through
-    // (NextResponse.next()), meaning /dashboard renders for an anonymous visitor.
-    expect(response.headers.get('x-middleware-next')).not.toBe('1');
-    expect(response.status).toBe(503);
+    // Retired skin: fold into the public studio instead of 503 or login.
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('https://app.example.com/');
   });
 
   it('does not serve a protected API route unauthenticated when NEXTAUTH_SECRET is missing in production', async () => {
@@ -95,9 +94,11 @@ describe('login gate must fail closed (issue #1058)', () => {
     const api = await proxy(new NextRequest('https://app.example.com/api/agents/dispatch'));
     expect(api.status).toBe(401);
 
-    const page = await proxy(new NextRequest('https://app.example.com/dashboard'));
-    expect(page.status).toBe(307);
-    expect(page.headers.get('location')).toContain('/login');
+    const page = await proxy(new NextRequest('https://app.example.com/dashboard?video=https://www.youtube.com/watch?v=auJzb1D-fag'));
+    expect(page.status).toBe(308);
+    expect(page.headers.get('location')).toBe(
+      'https://app.example.com/?video=https://www.youtube.com/watch?v=auJzb1D-fag',
+    );
   });
 
   it('keeps public auth routes reachable while the app is misconfigured', async () => {
@@ -121,7 +122,8 @@ describe('login gate must fail closed (issue #1058)', () => {
     });
 
     const response = await proxy(new NextRequest('https://app.example.com/dashboard'));
-    expect(response.status).not.toBe(503);
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('https://app.example.com/');
   });
 
   it('lets public Studio Act on findings through when the secret IS configured', async () => {
@@ -204,6 +206,7 @@ describe('login gate must fail closed (issue #1058)', () => {
     });
 
     const response = await proxy(new NextRequest('http://localhost:3000/dashboard'));
-    expect(response.status).not.toBe(503);
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('http://localhost:3000/');
   });
 });

@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 PUBLIC_PREFIXES: tuple[str, ...] = (
     "/health",
     "/api/v1/health",
+    # Identity Video Pack v0: version + video_id hash. Public home paste
+    # must emit this without an API key and without speech evidence.
+    "/api/v1/video/pack",
     "/docs",
     "/redoc",
     "/openapi.json",

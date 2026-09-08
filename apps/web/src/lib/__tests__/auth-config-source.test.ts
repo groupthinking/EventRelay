@@ -38,4 +38,12 @@ describe('auth configuration source safety', () => {
     expect(source).not.toContain("redirect('/dashboard')");
     expect(source).toContain('OneLoopStudio');
   });
+
+  it('folds the retired dashboard skin into the studio', () => {
+    const dashboard = readSource('app/dashboard/page.tsx');
+    expect(dashboard).toContain('canonicalStudioPath');
+    expect(dashboard).toContain('redirect(');
+    expect(dashboard).not.toContain('DashboardSplitView');
+    expect(dashboard).not.toContain('VideoCard');
+  });
 });
