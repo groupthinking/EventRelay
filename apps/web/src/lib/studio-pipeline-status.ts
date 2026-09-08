@@ -218,9 +218,37 @@ export function studioCanRetryTranscript(input: {
   return Boolean(input.hasFailed && input.retryable !== false);
 }
 
+const STUDIO_IN_FLIGHT_DEPLOY_STATUSES = new Set(['pending', 'running', 'queued', 'in_progress']);
+
+/** A real deploy receipt is a parseable https URL with a hostname. */
+export function studioVerifiedLiveUrl(liveUrl?: string | null): string | null {
+  const raw = liveUrl?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname || !/[a-z0-9]/i.test(parsed.hostname)) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
 /** A real deploy receipt is an https live URL. Workflow "completed" is not. */
 export function studioHasDeployReceipt(liveUrl?: string | null): boolean {
-  return Boolean(liveUrl && /^https:\/\//i.test(liveUrl));
+  return studioVerifiedLiveUrl(liveUrl) !== null;
+}
+
+/** Receipts stay on the video that produced them. Switching videos or a malformed URL clears them. */
+export function studioDeployReceiptForSelection(input: {
+  selectedVideoId?: string | null;
+  receiptVideoId?: string | null;
+  liveUrl?: string | null;
+}): string | null {
+  if (!input.selectedVideoId || input.selectedVideoId !== input.receiptVideoId) {
+    return null;
+  }
+  return studioVerifiedLiveUrl(input.liveUrl);
 }
 
 export function studioDeployOutcomeMessage(input: {
@@ -232,16 +260,20 @@ export function studioDeployOutcomeMessage(input: {
 }): string {
   const error = input.error?.trim();
   if (error) return error;
-  if (studioHasDeployReceipt(input.liveUrl)) {
-    return `Deploy receipt: ${input.liveUrl}`;
+  const receipt = studioVerifiedLiveUrl(input.liveUrl);
+  if (receipt) {
+    return `Deploy receipt: ${receipt}`;
   }
   const status = (input.runStatus || '').toLowerCase();
+  if (STUDIO_IN_FLIGHT_DEPLOY_STATUSES.has(status)) {
+    return `Deploy still ${status}. No verified deploy receipt — UNKNOWN checks are not a live URL.`;
+  }
   if (status === 'failed' || status === 'cancelled' || status === 'error') {
     return `Deploy ${status}. No verified live URL.`;
   }
   const handoff = input.message?.trim();
   if (input.kind === 'handoff' && handoff) return handoff;
-  return 'Deploy attempt finished. No verified deploy receipt — UNKNOWN checks are not a live URL.';
+  return 'Deploy attempt ended. No verified deploy receipt — UNKNOWN checks are not a live URL.';
 }
 
 export function studioDeployButtonLabel(_hasReceipt: boolean): string {

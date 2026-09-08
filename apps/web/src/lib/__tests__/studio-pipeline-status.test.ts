@@ -7,8 +7,10 @@ import {
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
+  studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
   studioHasDeployReceipt,
+  studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -264,6 +266,10 @@ describe('studio-pipeline-status', () => {
     expect(completedNoUrl).toMatch(/no verified deploy receipt/i);
     expect(studioHasDeployReceipt(null)).toBe(false);
     expect(studioHasDeployReceipt('http://example.vercel.app')).toBe(false);
+    expect(studioHasDeployReceipt('https://')).toBe(false);
+    expect(studioHasDeployReceipt('https:///')).toBe(false);
+    expect(studioVerifiedLiveUrl('https://')).toBeNull();
+    expect(studioVerifiedLiveUrl('https://example.vercel.app')).toBe('https://example.vercel.app');
 
     const withReceipt = studioDeployOutcomeMessage({
       runStatus: 'completed',
@@ -273,6 +279,35 @@ describe('studio-pipeline-status', () => {
     expect(withReceipt.toLowerCase()).not.toMatch(/deploy completed/);
     expect(studioHasDeployReceipt('https://example.vercel.app')).toBe(true);
 
+    for (const runStatus of ['pending', 'running', 'queued'] as const) {
+      const inFlight = studioDeployOutcomeMessage({ runStatus });
+      expect(inFlight.toLowerCase()).not.toMatch(/finished|completed|success/);
+      expect(inFlight).toMatch(/no verified deploy receipt/i);
+      expect(inFlight.toLowerCase()).toMatch(/still|pending|running|queued/);
+    }
+
+    expect(
+      studioDeployReceiptForSelection({
+        selectedVideoId: 'pBsT6v-ciO8',
+        receiptVideoId: 'other-id',
+        liveUrl: 'https://example.vercel.app',
+      }),
+    ).toBeNull();
+    expect(
+      studioDeployReceiptForSelection({
+        selectedVideoId: 'pBsT6v-ciO8',
+        receiptVideoId: 'pBsT6v-ciO8',
+        liveUrl: 'https://example.vercel.app',
+      }),
+    ).toBe('https://example.vercel.app');
+    expect(
+      studioDeployReceiptForSelection({
+        selectedVideoId: 'pBsT6v-ciO8',
+        receiptVideoId: 'pBsT6v-ciO8',
+        liveUrl: 'https://',
+      }),
+    ).toBeNull();
+
     expect(studioDeployButtonLabel(false)).toBe('Attempt deploy');
     expect(studioDeployButtonLabel(true)).toBe('Attempt deploy');
     expect(studioDeployEnabledHint(false)).toMatch(/unknown checks are not a deploy receipt/i);
@@ -280,6 +315,9 @@ describe('studio-pipeline-status', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioDeployOutcomeMessage');
     expect(studio).toContain('studioDeployButtonLabel');
+    expect(studio).toContain('studioDeployReceiptForSelection');
+    expect(studio).toContain('studioVerifiedLiveUrl');
+    expect(studio).toContain('setDeployReceiptUrl(null)');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');
