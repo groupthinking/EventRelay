@@ -50,6 +50,7 @@ import {
   studioTranscriptStage,
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
+import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
@@ -195,11 +196,7 @@ export default function OneLoopStudio() {
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
-  const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
-  const [playerLoaded, setPlayerLoaded] = useState(false);
-  const [playerFailed, setPlayerFailed] = useState(false);
-  const [playerTimedOut, setPlayerTimedOut] = useState(false);
   const [playerEpoch, setPlayerEpoch] = useState(0);
   const autoStartedKey = useRef<string | null>(null);
 
@@ -338,23 +335,12 @@ export default function OneLoopStudio() {
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
-
-  useEffect(() => {
-    setPlayerLoaded(false);
-    setPlayerFailed(false);
-    setPlayerTimedOut(false);
-    if (!videoId) return;
-    const timer = window.setTimeout(() => {
-      setPlayerTimedOut(true);
-    }, 8000);
-    return () => window.clearTimeout(timer);
-  }, [videoId, playerEpoch]);
+  const ytPlayer = useYouTubePlayer(videoId);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
-    loaded: playerLoaded,
-    failed: playerFailed,
-    timedOut: playerTimedOut,
+    loaded: ytPlayer.ready,
+    failed: ytPlayer.failed,
   });
   const playerOverlay = studioPlayerOverlay(playerPhase);
   const eventCount = selected?.events?.length ?? 0;
@@ -649,20 +635,14 @@ export default function OneLoopStudio() {
         <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
             <>
-              <iframe
-                key={`${videoId}-${playerEpoch}-${seekSeconds ?? 'start'}`}
-                title="YouTube source"
-                className="aspect-video w-full"
-                src={
-                  seekSeconds != null
-                    ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
-                    : `https://www.youtube.com/embed/${videoId}`
-                }
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                onLoad={() => setPlayerLoaded(true)}
-                onError={() => setPlayerFailed(true)}
-              />
+              <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
+                <div
+                  ref={ytPlayer.containerRef}
+                  className="h-full w-full"
+                  data-testid="studio-player"
+                  title="YouTube source"
+                />
+              </div>
               {playerOverlay ? (
                 <div
                   data-testid="studio-player-overlay"
@@ -780,7 +760,7 @@ export default function OneLoopStudio() {
                 {seconds != null ? (
                   <button
                     type="button"
-                    onClick={() => setSeekSeconds(seconds)}
+                    onClick={() => ytPlayer.seekTo(seconds)}
                     className="text-left font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]"
                   >
                     {formatSeconds(seconds)}
@@ -854,7 +834,7 @@ export default function OneLoopStudio() {
                   {entity.timestamps[0] != null && (
                     <button
                       type="button"
-                      onClick={() => setSeekSeconds(entity.timestamps[0])}
+                      onClick={() => ytPlayer.seekTo(entity.timestamps[0])}
                       className="font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(entity.timestamps[0])}
@@ -878,7 +858,7 @@ export default function OneLoopStudio() {
                   {step.timestamp != null ? (
                     <button
                       type="button"
-                      onClick={() => setSeekSeconds(step.timestamp!)}
+                      onClick={() => ytPlayer.seekTo(step.timestamp!)}
                       className="text-left font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(step.timestamp)}
