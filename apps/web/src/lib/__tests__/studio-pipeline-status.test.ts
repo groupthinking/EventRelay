@@ -4,7 +4,11 @@ import { join } from 'node:path';
 import {
   studioCanExport,
   studioCanRetryTranscript,
+  studioDeployButtonLabel,
+  studioDeployEnabledHint,
+  studioDeployOutcomeMessage,
   studioEventsEmptyMessage,
+  studioHasDeployReceipt,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -251,6 +255,34 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioTranscriptEtaLabel');
     expect(studio).toContain('data-testid="studio-transcript-stage"');
     expect(studio).toContain('data-testid="studio-transcript-retry"');
+  });
+
+  it('does not claim Deploy completed without a verified live receipt', () => {
+    const completedNoUrl = studioDeployOutcomeMessage({ runStatus: 'completed' });
+    expect(completedNoUrl.toLowerCase()).not.toMatch(/deploy completed/);
+    expect(completedNoUrl.toLowerCase()).not.toMatch(/\bsuccess(?:ful|fully)?\b/);
+    expect(completedNoUrl).toMatch(/no verified deploy receipt/i);
+    expect(studioHasDeployReceipt(null)).toBe(false);
+    expect(studioHasDeployReceipt('http://example.vercel.app')).toBe(false);
+
+    const withReceipt = studioDeployOutcomeMessage({
+      runStatus: 'completed',
+      liveUrl: 'https://example.vercel.app',
+    });
+    expect(withReceipt).toContain('https://example.vercel.app');
+    expect(withReceipt.toLowerCase()).not.toMatch(/deploy completed/);
+    expect(studioHasDeployReceipt('https://example.vercel.app')).toBe(true);
+
+    expect(studioDeployButtonLabel(false)).toBe('Attempt deploy');
+    expect(studioDeployButtonLabel(true)).toBe('Attempt deploy');
+    expect(studioDeployEnabledHint(false)).toMatch(/unknown checks are not a deploy receipt/i);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioDeployOutcomeMessage');
+    expect(studio).toContain('studioDeployButtonLabel');
+    expect(studio).not.toContain('Deploy ${polled.runStatus');
+    expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
+    expect(studio).not.toContain('>Deploy<');
   });
 
   it('does not map keyframes or concepts into Studio events', () => {

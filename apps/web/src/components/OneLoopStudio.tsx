@@ -31,7 +31,11 @@ import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioCanExport,
   studioCanRetryTranscript,
+  studioDeployButtonLabel,
+  studioDeployEnabledHint,
+  studioDeployOutcomeMessage,
   studioEventsEmptyMessage,
+  studioHasDeployReceipt,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -186,6 +190,7 @@ export default function OneLoopStudio() {
   const [actRunId, setActRunId] = useState<string | null>(null);
   const [usedSameRun, setUsedSameRun] = useState(false);
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
+  const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const autoStartedKey = useRef<string | null>(null);
@@ -492,11 +497,18 @@ export default function OneLoopStudio() {
       }
       setDeployRunId(started.runId);
       const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
-      if (polled.result?.live_url) {
-        setMessage(`Deploy ready: ${polled.result.live_url}`);
-      } else {
-        setMessage(polled.error || `Deploy ${polled.runStatus || 'started'}.`);
+      if (studioHasDeployReceipt(polled.result?.live_url)) {
+        setDeployReceiptUrl(polled.result?.live_url ?? null);
       }
+      setMessage(
+        studioDeployOutcomeMessage({
+          liveUrl: polled.result?.live_url,
+          runStatus: polled.runStatus,
+          error: polled.error,
+          kind: polled.result?.kind,
+          message: polled.result?.message,
+        }),
+      );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Deploy failed.');
     } finally {
@@ -1005,13 +1017,14 @@ export default function OneLoopStudio() {
           </button>
           <button
             type="button"
+            data-testid="studio-deploy-button"
             onClick={() => void deploy()}
             disabled={deployBusy || !hasPayload || Boolean(holdReason)}
-            title={holdReason || undefined}
+            title={holdReason || studioDeployEnabledHint(Boolean(deployReceiptUrl))}
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
-            Deploy
+            {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(deployReceiptUrl))}
           </button>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">

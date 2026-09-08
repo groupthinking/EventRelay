@@ -217,3 +217,38 @@ export function studioCanRetryTranscript(input: {
   }
   return Boolean(input.hasFailed && input.retryable !== false);
 }
+
+/** A real deploy receipt is an https live URL. Workflow "completed" is not. */
+export function studioHasDeployReceipt(liveUrl?: string | null): boolean {
+  return Boolean(liveUrl && /^https:\/\//i.test(liveUrl));
+}
+
+export function studioDeployOutcomeMessage(input: {
+  liveUrl?: string | null;
+  runStatus?: string | null;
+  error?: string | null;
+  kind?: string | null;
+  message?: string | null;
+}): string {
+  const error = input.error?.trim();
+  if (error) return error;
+  if (studioHasDeployReceipt(input.liveUrl)) {
+    return `Deploy receipt: ${input.liveUrl}`;
+  }
+  const status = (input.runStatus || '').toLowerCase();
+  if (status === 'failed' || status === 'cancelled' || status === 'error') {
+    return `Deploy ${status}. No verified live URL.`;
+  }
+  const handoff = input.message?.trim();
+  if (input.kind === 'handoff' && handoff) return handoff;
+  return 'Deploy attempt finished. No verified deploy receipt — UNKNOWN checks are not a live URL.';
+}
+
+export function studioDeployButtonLabel(_hasReceipt: boolean): string {
+  return 'Attempt deploy';
+}
+
+export function studioDeployEnabledHint(hasReceipt: boolean): string {
+  if (hasReceipt) return 'A live URL was returned. That is the receipt — not the enabled button.';
+  return 'Starts an attempt. UNKNOWN checks are not a deploy receipt.';
+}
