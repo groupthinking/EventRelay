@@ -79,6 +79,7 @@ jobs:
           gh aw compile \
             canonical-pr-remediator \
             focused-coverage-controller \
+            repo-assist \
             --validate \
             --approve
 
@@ -87,6 +88,7 @@ jobs:
           gh aw compile \
             canonical-pr-remediator \
             focused-coverage-controller \
+            repo-assist \
             --actionlint \
             --zizmor \
             --poutine \
@@ -96,4 +98,5 @@ jobs:
         run: |
           git diff --exit-code -- \
             .github/workflows/canonical-pr-remediator.lock.yml \
-            .github/workflows/focused-coverage-controller.lock.yml
+            .github/workflows/focused-coverage-controller.lock.yml \
+            .github/workflows/repo-assist.lock.yml
