@@ -33,9 +33,18 @@ describe('auth configuration source safety', () => {
     expect(source).toContain('GOOGLE_CLIENT_SECRET');
   });
 
-  it('keeps the root route as a landing page instead of redirecting to the app', () => {
+  it('keeps the root route as a sell Home instead of redirecting to the dashboard', () => {
     const source = readSource('app/page.tsx');
     expect(source).not.toContain("redirect('/dashboard')");
-    expect(source).toContain('Turn YouTube videos into evidence, findings, and reviewable actions.');
+    expect(source).not.toContain('OneLoopStudio');
+    expect(source).toContain('HomePasteForm');
+  });
+
+  it('folds the retired dashboard skin into the studio', () => {
+    const dashboard = readSource('app/dashboard/page.tsx');
+    expect(dashboard).toContain('canonicalStudioPath');
+    expect(dashboard).toContain('redirect(');
+    expect(dashboard).not.toContain('DashboardSplitView');
+    expect(dashboard).not.toContain('VideoCard');
   });
 });

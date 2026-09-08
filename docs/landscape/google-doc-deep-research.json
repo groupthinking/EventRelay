@@ -1,0 +1,29 @@
+{
+  "source": "https://docs.google.com/document/d/1tReeINr2mtiWKgry3NFaLLXA-Ug0lJrSr5pQRchr3PI/edit",
+  "workflow": "uvai-deep-research",
+  "run": "wf_019fff839da37f0299f991c15fa141e1",
+  "intent_match": false,
+  "verdict": "Dump is a research scrapbook. Product intent is Digital Refinery (YouTube → structured action) on EventRelay apps/web. Do not build ADK/LWP/Ultron.",
+  "keep": [
+    "Digital Refinery: video/image/text → structured executable actions, not summaries",
+    "YouTube URL as the input gate",
+    "Sequential ingest: video → timestamped transcript → downstream",
+    "Speech + visual, time-aligned; public URL; Gemini can take a public YouTube URI",
+    "Existing stack: Gemini, FastAPI, Next.js, Supabase — extend EventRelay"
+  ],
+  "ignore": [
+    "Google ADK hierarchy, Bidi-streaming, Loop/Router/Compliance, Tiramisu tools",
+    "LWP Common Header, Virtual Port IDs, Command Fate",
+    "Ultron Agentic Platform as name or architecture",
+    "OPA/Rego, Device Action Language, canvas glyphs",
+    "Antigravity newsletter, Cloudflare DNS, agency/CFO theater",
+    "90-day four-microservice rewrite, UnifiedCoordinator, Pub/Sub bus",
+    "HF/NVIDIA AV-Skills trainer (separate source, noncommercial)"
+  ],
+  "gaps_vs_dump": [
+    "Dump never specifies one-face paste-YouTube then transcript+events on the same page — that is EventRelay P1, not the dump",
+    "Dump ‘events’ are LWP ports or SSE progress, not extract-events",
+    "Dump ‘act’ is ADK tools, not WDK Act"
+  ],
+  "action": "No architecture change. P1 already implements the keep list. Continue P2/P3."
+}

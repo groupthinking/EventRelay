@@ -21,7 +21,7 @@ describe('studio-deploy (F5)', () => {
       }),
     );
 
-    const result = await kickoffStudioDeploy({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+    const result = await kickoffStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' });
     expect(result.ok).toBe(true);
     expect(result.jobId).toBe('job_abc');
     expect(result.statusUrl).toBe('/api/jobs/job_abc');
@@ -42,7 +42,7 @@ describe('studio-deploy (F5)', () => {
       }),
     );
 
-    const result = await kickoffStudioDeploy({ url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' });
+    const result = await kickoffStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' });
     expect(result.ok).toBe(false);
     expect(result.handoff).toBe(true);
     expect(result.message).toContain('BACKEND_URL');

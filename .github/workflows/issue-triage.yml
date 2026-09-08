@@ -27,8 +27,31 @@ jobs:
         with:
           script: |
             const issue = context.payload.issue;
+            const body = (issue.body || '').trim();
+
+            // Bot-opened issues with no body are agent-session artifacts (e.g. the
+            // recurring empty "Addressing Issues" shells from Jules/Linear sessions,
+            // #1548/#1553/#1568). Labeling them for triage just manufactures noise
+            // that syncs back into Linear, so close them instead.
+            if (issue.user && issue.user.type === 'Bot' && body === '') {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: '🤖 Closing automatically: this issue was opened by a bot with no description. If it tracks real work, reopen it and add a description of the problem or task.'
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'not_planned'
+              });
+              return;
+            }
+
             const labels = [];
-            const text = `${issue.title} ${issue.body}`.toLowerCase();
+            const text = `${issue.title} ${body}`.toLowerCase();
 
             if (text.includes('bug') || text.includes('error')) labels.push('bug');
             if (text.includes('feature') || text.includes('enhancement')) labels.push('enhancement');

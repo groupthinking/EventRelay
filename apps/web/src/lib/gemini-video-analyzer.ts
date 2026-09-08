@@ -274,7 +274,11 @@ export async function analyzeVideoWithGemini(
       const { fetchTranscript } = await import('./transcription-service');
       const result = await fetchTranscript({ url: videoUrl });
       const segments = normalizeTranscriptSegments(result.segments);
-      const transcript = result.transcript?.trim() || transcriptTextFromSegments(segments);
+      const transcript = (
+        result.transcript?.trim() ||
+        result.derivedContent?.trim() ||
+        transcriptTextFromSegments(segments)
+      );
       const timedSegmentCount = segments.filter((segment) => segment.duration > 0).length;
       const sourceUrl = result.sourceUrl || videoUrl;
       evidence = {

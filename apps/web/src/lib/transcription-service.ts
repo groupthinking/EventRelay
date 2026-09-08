@@ -6,7 +6,8 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
-import { isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { hasTranscriptAdvice, isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { fetchYouTubeCaptions } from '@/lib/youtube-captions';
 import { backendHeaders, resolveLegacyBackend } from '@/lib/backend/capability';
 
 let _openai: OpenAI | null = null;
@@ -180,6 +181,28 @@ export async function fetchTranscript({
     }
   }
 
+  // Strategy 1b: timed YouTube captions from the watch page (no FastAPI).
+  if (url && !audioUrl) {
+    try {
+      const captions = await fetchYouTubeCaptions(url, language);
+      if (captions) {
+        return {
+          success: true,
+          transcript: captions.transcript,
+          segments: captions.segments,
+          source: captions.source,
+          verified: true,
+          acquisitionMethod: 'youtube-captions',
+          sourceUrl: url,
+          acquiredAt: new Date().toISOString(),
+          wordCount: captions.transcript.split(/\s+/).length,
+        };
+      }
+    } catch (error) {
+      console.warn('Direct YouTube captions unavailable:', error);
+    }
+  }
+
   // Strategies 2 & 3: Run Gemini and OpenAI in parallel — first successful result wins.
   // This eliminates the worst-case sequential 30s + 30s wait when both providers
   // are available, cutting latency to the faster of the two.
@@ -227,7 +250,7 @@ INSTRUCTIONS:
                   },
                 })
               ).text ?? '';
-          if (text.length > 100) {
+          if (text.length > 100 && !hasTranscriptAdvice(text)) {
             return {
               success: false,
               transcript: '',
@@ -278,6 +301,7 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           const text = response.output_text || '';
           // Reject results that are just instructions rather than actual content
           const isGarbage =
+            hasTranscriptAdvice(text) ||
             text.toLowerCase().includes('click show transcript') ||
             text.toLowerCase().includes('click on the three dots') ||
             text.toLowerCase().includes('steps to find') ||

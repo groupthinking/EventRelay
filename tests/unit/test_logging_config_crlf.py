@@ -522,6 +522,61 @@ def test_describe_exception_survives_an_exception_that_cannot_be_stringified():
     assert _describe_exception(_NastyError()) == "_NastyError"
 
 
+# ---------------------------------------------------------------------------
+# #1576: the retreat from an unstringifiable exception is itself defeatable.
+#
+# `_NastyError` above has an ordinary metaclass, so it only exercises one of
+# the two ways naming an exception can raise. `__name__` on a class resolves
+# through its *metaclass*, so a metaclass can make the `except` branch raise
+# too — outside any guard, so it escapes even the constant-record tier.
+#
+# The tests below fail on 5473bcc.
+# ---------------------------------------------------------------------------
+
+
+class _HostileMeta(type):
+    """Makes `type(exc).__name__` raise — the usual retreat from a bad `__str__`."""
+
+    @property
+    def __name__(cls):  # noqa: ANN204 - the override is the point
+        raise RuntimeError("__name__ exploded")
+
+
+class _NamelessError(Exception, metaclass=_HostileMeta):
+    """Neither `str(exc)` nor `type(exc).__name__` can be rendered."""
+
+    def __str__(self) -> str:
+        raise RuntimeError("str() exploded too")
+
+
+class _RaisesNameless:
+    def __str__(self) -> str:
+        raise _NamelessError()
+
+
+def test_describe_exception_survives_a_hostile_metaclass():
+    # `object.__getattribute__(type(exc), "__name__")` also raises here; only
+    # binding the descriptor from `type.__dict__` bypasses the override.
+    assert _describe_exception(_NamelessError()) == "_NamelessError"
+
+
+def test_hostile_metaclass_exception_does_not_cost_the_record():
+    records = _emit_three("json-hostile-metaclass", _RaisesNameless())
+
+    assert len(records) == 3
+    poisoned = records[1]
+    assert poisoned["level"] == "INFO"
+    assert poisoned["message"] == "poisoned"
+    assert "correlation_id" not in poisoned
+    assert poisoned["serialization_error"] == "_NamelessError"
+
+
+def test_describe_exception_is_unchanged_for_ordinary_exceptions():
+    # The added tier must not alter the normal path, which the pre-existing
+    # fallback tests assert exact strings against.
+    assert _describe_exception(ValueError("msg")) == "ValueError: msg"
+
+
 @pytest.fixture
 def _restore_root_logging():
     """`setup_logging` calls dictConfig, which mutates global logging state."""

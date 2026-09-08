@@ -41,7 +41,8 @@ def test_reconciliation_workflow_minimum_permissions() -> None:
     workflow = _load_workflow()
     perms = workflow["permissions"]
     assert perms.get("contents") == "read"
-    assert perms.get("pull-requests") == "read"
+    # Comments on untracked PRs and closes superseded draft PRs via pulls.update.
+    assert perms.get("pull-requests") == "write"
     # Needs write to upsert the drift report issue.
     assert perms.get("issues") == "write"
 

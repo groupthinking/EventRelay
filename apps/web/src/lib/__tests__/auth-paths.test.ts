@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import {
+  CANONICAL_STUDIO_PATH,
+  canonicalStudioPath,
   isAiRoute,
+  isLegacyDashboardPath,
   isPublicApiPath,
   isProtectedPagePath,
   needsAuthentication,
@@ -58,13 +61,36 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/billing/manage')).toBe(true);
   });
 
-  it('requires auth for product APIs and dashboard pages', () => {
+  it('requires auth for product APIs but not the retired dashboard skin', () => {
     expect(needsAuthentication('/api/chat')).toBe(true);
     expect(needsAuthentication('/api/pipeline')).toBe(true);
     expect(needsAuthentication('/api/video')).toBe(true);
-    expect(needsAuthentication('/dashboard')).toBe(true);
-    expect(needsAuthentication('/dashboard/agents')).toBe(true);
-    expect(isProtectedPagePath('/dashboard/agents')).toBe(true);
+    expect(needsAuthentication('/dashboard')).toBe(false);
+    expect(needsAuthentication('/dashboard/agents')).toBe(false);
+    expect(isProtectedPagePath('/dashboard/agents')).toBe(false);
+    expect(isLegacyDashboardPath('/dashboard')).toBe(true);
+    expect(isLegacyDashboardPath('/dashboard/agents')).toBe(true);
+    expect(isLegacyDashboardPath('/api/dashboard')).toBe(false);
+    expect(canonicalStudioPath('?video=https://www.youtube.com/watch?v=auJzb1D-fag')).toBe(
+      '/studio?video=https://www.youtube.com/watch?v=auJzb1D-fag',
+    );
+    expect(CANONICAL_STUDIO_PATH).toBe('/studio');
+  });
+
+  it('does not require a session for the public identity pack emit path', () => {
+    // Home paste is anonymous. Middleware 401 on these paths is the live
+    // uvai.io failure after #1609: pack never emits, UI shows no source_hash.
+    expect(isPublicApiPath('/api/video/pack')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video/pack')).toBe(true);
+    expect(needsAuthentication('/api/video/pack')).toBe(false);
+    expect(needsAuthentication('/api/v1/video/pack')).toBe(false);
+    // Exact allowlist only — siblings stay gated.
+    expect(isPublicApiPath('/api/video')).toBe(false);
+    expect(isPublicApiPath('/api/video/generate')).toBe(false);
+    expect(needsAuthentication('/api/video/generate')).toBe(true);
+    expect(isPublicApiPath('/api/video/packs')).toBe(false);
+    expect(needsAuthentication('/api/video/packs')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video')).toBe(false);
   });
 
   it('does not gate marketing pages', () => {
@@ -74,11 +100,12 @@ describe('auth path policy', () => {
   });
 
   it('sanitizes callback paths against open redirects', () => {
+    expect(safeCallbackPath('/')).toBe('/');
     expect(safeCallbackPath('/dashboard')).toBe('/dashboard');
     expect(safeCallbackPath('/dashboard', '?tab=agents')).toBe('/dashboard?tab=agents');
-    expect(safeCallbackPath('//evil.com')).toBe('/dashboard');
-    expect(safeCallbackPath('https://evil.com')).toBe('/dashboard');
-    expect(safeCallbackPath('/\\evil.com')).toBe('/dashboard');
+    expect(safeCallbackPath('//evil.com')).toBe('/studio');
+    expect(safeCallbackPath('https://evil.com')).toBe('/studio');
+    expect(safeCallbackPath('/\\evil.com')).toBe('/studio');
   });
 
   it('skips rate limits for the auth handshake', () => {
@@ -142,6 +169,13 @@ describe('AI route classification (rate-limit budget)', () => {
     ]) {
       expect(isAiRoute(path, 'POST')).toBe(true);
     }
+  });
+
+  it('does not meter identity pack emit as AI work', () => {
+    expect(isAiRoute('/api/video/pack', 'POST')).toBe(false);
+    expect(isAiRoute('/api/v1/video/pack', 'POST')).toBe(false);
+    expect(isAiRoute('/api/video', 'POST')).toBe(true);
+    expect(isAiRoute('/api/video/generate', 'POST')).toBe(true);
   });
 
   it('leaves non-AI API routes on the general budget', () => {

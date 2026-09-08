@@ -703,6 +703,30 @@ class TestPerformanceEndpoints:
         assert [s["value"] for s in samples] == [1200.0, 30.0]
         assert {s["component"] for s in samples} == {"frontend"}
 
+    def test_performance_report_counts_only_persisted_samples(self, client):
+        """``metrics_recorded`` reports samples written, not keys submitted.
+
+        Non-numeric ``current`` values are skipped by the ingest loop, so a
+        mixed report must count only the numeric samples that were actually
+        handed to ``record_metrics``.
+        """
+        payload = {
+            "metrics": {
+                "lcp": {"current": 1200, "unit": "ms"},
+                "note": {"current": "n/a"},
+            }
+        }
+        with patch.object(
+            router_module.performance_monitor, "record_metrics", new_callable=AsyncMock
+        ) as mock_record:
+            resp = client.post("/api/v1/performance/report", json=payload)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["metrics_recorded"] == 1
+
+        (samples,) = mock_record.await_args.args
+        assert [s["metric_name"] for s in samples] == ["lcp"]
+
     def test_performance_report_empty(self, client):
         resp = client.post("/api/v1/performance/report", json={})
         assert resp.status_code == 200

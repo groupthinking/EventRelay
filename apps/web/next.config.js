@@ -25,9 +25,9 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https://uvai.io https://api.uvai.io https://img.youtube.com https://i.ytimg.com https://*.ytimg.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
-  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
-  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://challenges.cloudflare.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
+  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://challenges.cloudflare.com https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
@@ -90,12 +90,54 @@ const nextConfig = {
       'www.uvai.io',
     ];
 
-    return legacyHosts.map((host) => ({
-      source: '/:path*',
-      has: [{ type: 'host', value: host }],
-      destination: 'https://uvai.io/:path*',
-      permanent: true,
-    }));
+    return [
+      {
+        source: '/dashboard',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/app',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/app/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/prototype',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/prototype/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/features',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/playground',
+        destination: '/',
+        permanent: true,
+      },
+      ...legacyHosts.map((host) => ({
+        source: '/:path*',
+        has: [{ type: 'host', value: host }],
+        destination: 'https://uvai.io/:path*',
+        permanent: true,
+      })),
+    ];
   },
   async headers() {
     return [

@@ -1,5 +1,7 @@
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { VideoPackCitation } from '@/lib/emit-video-pack';
+import type { LinkedSop } from '@/lib/linked-sop';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -47,6 +49,8 @@ export interface Video {
   statusUrl?: string;
   /** Durable Workflow DevKit generation identity. */
   runId?: string;
+  /** Hashed VideoPack v0 citation emitted from paste-URL. */
+  videoPack?: VideoPackCitation;
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
   failure?: {
@@ -67,6 +71,8 @@ export interface Video {
      * Canonical plan surface for F3; paired with Act on findings tools.
      */
     project_scaffold?: unknown;
+    /** Tools the video named, SOP in speech order, plus stack deploy checks. */
+    linkedSop?: LinkedSop;
   };
 }
 

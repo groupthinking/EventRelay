@@ -44,10 +44,9 @@ Baseline pulse identified the following gaps between repo `main` and the live
 
 ### Notes / known follow-ups (not in this change)
 
-- `apps/web/next.config.js` contains duplicate `redirects()` / `headers()`
-  function declarations — only the last in source order is used at runtime.
-  Consolidation is a separate refactor and was intentionally left out of
-  this low-risk change.
+- ~~`apps/web/next.config.js` contains duplicate `redirects()` / `headers()`
+  function declarations~~ — resolved since: the file now contains exactly one
+  `redirects()` and one `headers()` declaration.
 - Live `uvai.io` title `UVAI — Video to Software` is stale vs `main`
   (`UVAI — The Action Layer for Video`). Resolving requires redeploy and is
   out of scope for this PR (no production / Vercel access used).

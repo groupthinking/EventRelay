@@ -112,7 +112,7 @@ export default function HeroSection() {
         {/* CTAs */}
         <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
           <Link
-            href="/dashboard"
+            href="/"
             className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
             style={{ background: '#6af2de', color: '#021a18' }}
           >

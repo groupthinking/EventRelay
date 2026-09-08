@@ -1,3 +1,11 @@
+import type { VideoPackCitation } from '@/lib/emit-video-pack';
+import { stackChecksFromPackTools, type ChecklistItem } from '@/lib/linked-sop';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
+
 export type StudioRunQuality = 'idle' | 'live' | 'draft';
 
 export interface StudioPipelineCheck {
@@ -10,15 +18,20 @@ export interface StudioPipelineCheck {
 
 const LIVE_PIPELINES = new Set(['backend-async', 'backend', 'gemini-only']);
 
+/** Live means we have analysis payload, not that a kickoff returned a job id. */
 export function studioRunQuality(
   check: StudioPipelineCheck | null,
   unsafe: boolean,
   hasVideo: boolean,
+  payload?: { transcript?: string | null; eventCount?: number },
 ): StudioRunQuality {
   if (!hasVideo || unsafe) return 'draft';
+  const transcript = payload?.transcript?.trim() ?? '';
+  const events = payload?.eventCount ?? 0;
+  if (transcript.length >= 40 || events > 0) return 'live';
   if (!check) return 'draft';
-  if (check.jobId) return 'live';
-  if (check.ok && check.pipeline && LIVE_PIPELINES.has(check.pipeline)) return 'live';
+  if (check.jobId) return 'draft';
+  if (check.ok && check.pipeline && LIVE_PIPELINES.has(check.pipeline)) return 'draft';
   return 'draft';
 }
 
@@ -28,8 +41,8 @@ export function studioStatusLabel(
 ): string {
   if (runState === 'working') return 'Working';
   if (runState === 'idle') return 'Idle';
-  if (runState === 'ready' && quality === 'live') return 'Backend connected';
-  if (runState === 'ready') return 'Draft only';
+  if (runState === 'ready' && quality === 'live') return 'Analysis ready';
+  if (runState === 'ready') return 'No transcript yet';
   return 'Idle';
 }
 
@@ -43,13 +56,45 @@ export function studioStatusMessage(
     return 'Safe alternative prepared. Harmful instructions stay out of the output.';
   }
   if (runState === 'working') {
-    return `Checking backend and preparing a ${outcomeLabel.toLowerCase()} draft.`;
+    return `Analyzing the video — transcript and events will appear here.`;
   }
   if (runState === 'ready' && quality === 'live') {
-    return `${outcomeLabel} draft ready. Open Dashboard for live transcript and agent analysis.`;
+    return `${outcomeLabel} ready. Act, export, or save from this same run.`;
   }
   if (runState === 'ready') {
-    return `${outcomeLabel} planning draft only — not a live pipeline result. Use Dashboard for real analysis.`;
+    return `No usable transcript or events came back. Try another public video or sign in if the enrich path is gated.`;
   }
-  return 'Studio builds local planning drafts. Dashboard runs the live agent pipeline.';
+  return 'Paste a YouTube URL. UVAI transcribes it, extracts events, then you can act.';
+}
+
+export function studioPackCitation(pack: VideoPackCitation): string {
+  return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash} · ${pack.sourceUrl}`;
+}
+
+export function studioPackFormation(pack: VideoPackCitation | null | undefined): {
+  tools: VideoPackStackTool[];
+  checks: ChecklistItem[];
+  architecture: VideoPackArchitecture | null;
+  artifacts: VideoPackArtifact[];
+} {
+  const tools = pack?.pack.stack?.tools ?? [];
+  return {
+    tools,
+    checks: stackChecksFromPackTools(tools),
+    architecture: pack?.pack.architecture ?? null,
+    artifacts: pack?.pack.artifacts ?? [],
+  };
+}
+
+export function studioPasteOutcomeMessage(input: {
+  hasUsableTranscript: boolean;
+  packCitation?: string | null;
+}): string {
+  if (input.hasUsableTranscript) {
+    return 'Ready — run tools, export, or save from this page.';
+  }
+  if (input.packCitation) {
+    return `Identity pack ${input.packCitation}. No usable transcript.`;
+  }
+  return 'Pack emit failed: verification failed (source_url + source_hash required).';
 }

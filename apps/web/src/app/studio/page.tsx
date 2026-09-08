@@ -1,17 +1,17 @@
+import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import RunConsole from '@/components/run/RunConsole';
+import OneLoopStudio from '@/components/OneLoopStudio';
 
 export const metadata: Metadata = {
-  title: 'Delivery run — EventRelay',
-  description:
-    'Source to shipped product with a gate report: requirements, human approval, build, tests, and a live URL that answered a request.',
+  title: 'Studio',
+  description: 'UVAI workbench — paste a YouTube URL, inspect the pack, export, and ship.',
+  alternates: { canonical: '/studio' },
 };
 
-/**
- * `/studio` is the single run surface. The former 1200-line video workflow
- * component still exists for the analysis-only path; this route is the
- * verified delivery pipeline.
- */
 export default function StudioPage() {
-  return <RunConsole />;
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-surface-950" />}>
+      <OneLoopStudio />
+    </Suspense>
+  );
 }

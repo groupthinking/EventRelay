@@ -487,7 +487,39 @@ class AgentOrchestrator:
             for m in msgs[-limit:]
         ]
 
-    # --- Antigravity SDK Workflows ---
+    # --- Managed execution backends ---
+
+    async def execute_antigravity_backend(
+        self,
+        backend: Any,
+        task: str,
+        context: Optional[dict[str, Any]] = None,
+    ) -> Any:
+        """Execute one task through the guarded Antigravity provider adapter.
+
+        The adapter owns feature flags, read-only MCP validation, token limits,
+        and live-call approval.  The orchestrator records only receipt metadata,
+        never the input context or provider credentials.
+        """
+        receipt = await backend.execute(task=task, context=context or {})
+        self._a2a_log.append(
+            A2AContextMessage(
+                sender="orchestrator",
+                recipient="google_antigravity",
+                content={
+                    "type": "managed_backend_dispatch",
+                    "backend": "google_antigravity",
+                    "status": receipt.status,
+                    "receipt_id": receipt.receipt_id,
+                    "interaction_id": receipt.interaction_id,
+                    "environment_id": receipt.environment_id,
+                    "budget_exceeded": receipt.budget_exceeded,
+                },
+            )
+        )
+        return receipt
+
+    # --- Legacy local Antigravity-pattern workflow ---
 
     async def execute_antigravity_delegation(
         self,

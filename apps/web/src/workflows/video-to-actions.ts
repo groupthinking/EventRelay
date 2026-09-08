@@ -1,22 +1,35 @@
 /**
  * Durable, evidence-gated video ETL workflow.
  *
- * Extract: acquire captions or speech-to-text from an accountable provider.
- * Transform: analyze only the verified transcript through AI Gateway/Gemini.
+ * Extract: acquire captions, speech-to-text, or usable derived speech.
+ * Transform: analyze that transcript through AI Gateway/Gemini.
  * Load: persist the typed return value in Workflow DevKit under its runId.
+ *
+ * Verified captions are preferred. Usable derived speech (quality.passed with
+ * state=degraded) is still a completed run — Vercel IPs often cannot fetch
+ * YouTube timedtext.
  */
 
 import { FatalError } from 'workflow';
-import type {
-  AnalysisProvenance,
-  EvidenceAssessment,
-  TranscriptSegment,
+import {
+  fatalQualityFailure,
+  type AnalysisProvenance,
+  type EvidenceAssessment,
+  type TranscriptSegment,
 } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
+
+export interface VideoToActionsEvent {
+  type?: string;
+  title: string;
+  description?: string;
+}
 
 export interface VideoToActionsInput {
   url: string;
   videoTitle?: string;
+  transcript?: string;
+  events?: VideoToActionsEvent[];
 }
 
 export interface VideoToActionsResult {
@@ -24,6 +37,7 @@ export interface VideoToActionsResult {
   transcriptChars: number;
   actionCount: number;
   provider?: string;
+  usedProvidedTranscript?: boolean;
   actions: Array<{ tool: string; status: string; result?: string }>;
   analysis: VideoAnalysisResult;
   provenance: AnalysisProvenance;
@@ -45,10 +59,13 @@ export async function videoToActionsWorkflow(
   const quality = analysis.quality;
   const provenance = analysis.provenance;
 
-  if (!quality?.passed || !provenance?.transcriptVerified) {
+  if (!quality?.passed) {
     throw new FatalError(
-      `Analysis quality gate failed: ${quality?.issues.join(' ') || 'missing provenance'}`,
+      fatalQualityFailure(quality) || 'Analysis quality gate failed: missing provenance',
     );
+  }
+  if (!provenance) {
+    throw new FatalError('Analysis quality gate failed: missing provenance');
   }
 
   const provider = await providerLabelStep();
@@ -82,9 +99,13 @@ async function transcribeStep(url: string): Promise<VerifiedVideoEvidence> {
   } = await import('@/lib/analysis-evidence');
   const result = await fetchTranscript({ url });
   const segments = normalizeTranscriptSegments(result.segments);
-  const transcript = result.transcript?.trim() || transcriptTextFromSegments(segments);
+  const transcript = (
+    result.transcript?.trim() ||
+    result.derivedContent?.trim() ||
+    transcriptTextFromSegments(segments)
+  );
 
-  if (!result.success || result.verified !== true || transcript.length < 40) {
+  if (transcript.length < 40) {
     throw new FatalError(
       result.error || 'Verified captions or speech-to-text were unavailable.',
     );
@@ -113,7 +134,7 @@ async function transcribeStep(url: string): Promise<VerifiedVideoEvidence> {
     sourceHost,
     acquisitionMethod: result.acquisitionMethod || 'unknown',
     transcriptSource: result.source || 'unknown',
-    transcriptVerified: true,
+    transcriptVerified: result.verified === true,
     acquiredAt: result.acquiredAt || new Date().toISOString(),
     segmentCount: authoritativeSegments.length,
     timedSegmentCount,

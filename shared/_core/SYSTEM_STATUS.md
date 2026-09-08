@@ -15,7 +15,7 @@
 | ----- | ------ |
 | Git status | ✅ Clean |
 | Open PRs | 33 |
-| Open issues | 3 (#808, #802, #153) |
+| Open issues | 3 (#808, #802, #153) — correction 2026-08-25: #802 was closed as a duplicate on 2026-07-17 (via PR #813), shortly after this snapshot; #808 and #153 have also since been closed |
 | Latest PR Checks run | ✅ Success |
 | Latest Security Scan run | ❌ Failure on `claude/determined-maxwell-ostftd` (run `29549151403`) |
 | Code/secret scanning alert API | ⚠️ Not accessible to integration (403) |

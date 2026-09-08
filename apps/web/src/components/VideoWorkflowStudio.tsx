@@ -31,6 +31,7 @@ import {
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
 import { kickoffStudioDeploy, pollStudioJob } from '@/lib/studio-deploy';
+import { pollStudioDeploy, startStudioDeploy } from '@/lib/studio-workflow';
 import {
   pollVideoToActions,
   startVideoToActions,
@@ -162,9 +163,9 @@ function getYouTubeId(url: string) {
 
 function currentVideoUrlForLink(videoUrl: string) {
   const id = getYouTubeId(videoUrl);
-  if (!id) return '/dashboard';
+  if (!id) return '/studio';
   const normalized = videoUrl.trim() || `https://www.youtube.com/watch?v=${id}`;
-  return `/dashboard?video=${encodeURIComponent(normalized)}`;
+  return `/studio?video=${encodeURIComponent(normalized)}`;
 }
 
 function isUnsafeRequest(text: string) {
@@ -378,6 +379,7 @@ export default function VideoWorkflowStudio() {
   const [deployJobId, setDeployJobId] = useState<string | null>(null);
   const [deployLiveUrl, setDeployLiveUrl] = useState<string | null>(null);
   const [deployRepo, setDeployRepo] = useState<string | null>(null);
+  const [deployRunId, setDeployRunId] = useState<string | null>(null);
   /** Durable WDK video→actions (Product v1) — separate from FastAPI pipeline jobs. */
   const [actionsBusy, setActionsBusy] = useState(false);
   const [workflowRunId, setWorkflowRunId] = useState<string | null>(null);
@@ -387,7 +389,14 @@ export default function VideoWorkflowStudio() {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const videoUrlRef = useRef('');
   const promptRef = useRef(DEFAULT_PROMPT);
+  const deployAbortRef = useRef<AbortController | null>(null);
   const realtime = useRealtimeVoice(audioRef);
+
+  useEffect(() => {
+    return () => {
+      deployAbortRef.current?.abort();
+    };
+  }, []);
 
   const videoId = useMemo(() => getYouTubeId(videoUrl), [videoUrl]);
   const frameUrls = useMemo(() => makeFrameUrls(videoId), [videoId]);
@@ -584,11 +593,69 @@ export default function VideoWorkflowStudio() {
       return;
     }
 
+    deployAbortRef.current?.abort();
+    const deployAbort = new AbortController();
+    deployAbortRef.current = deployAbort;
+
     setDeployBusy(true);
-    setActionMessage('Starting deploy handoff via /api/pipeline…');
+    setActionMessage('Starting durable Studio deploy…');
 
     try {
-      // Prefer reusing job from the last run when present.
+      const started = await startStudioDeploy({
+        url: currentVideoUrl,
+        projectType: selectedOutcome === 'app' ? 'web' : selectedOutcome,
+        outcome: selectedOutcome,
+        signal: deployAbort.signal,
+      });
+      if (started.status === 401 || started.status === 403) {
+        setActionMessage('Sign in to deploy. Redirecting to Google sign-in…');
+        window.location.assign('/login?callbackUrl=/studio');
+        return;
+      }
+      if (started.status === 400) {
+        setActionMessage(
+          started.error || 'Deploy rejected that URL. Use a public YouTube link.',
+        );
+        return;
+      }
+      if (started.ok && started.runId) {
+        setDeployRunId(started.runId);
+        setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
+        const polled = await pollStudioDeploy(started.runId, {
+          attempts: 24,
+          delayMs: 2000,
+          signal: deployAbort.signal,
+        });
+        const live = polled.result?.live_url;
+        if (live) setDeployLiveUrl(live);
+        if (polled.result?.github_repo) setDeployRepo(polled.result.github_repo);
+        if (polled.result?.jobId) setDeployJobId(polled.result.jobId);
+
+        if (live) {
+          setActionMessage(`Deploy ready: ${live} (run ${started.runId})`);
+          return;
+        }
+        if (polled.result?.kind === 'handoff') {
+          setActionMessage(
+            polled.result.message ||
+              'Backend returned a planning handoff. Export the package or set BACKEND_URL.',
+          );
+          return;
+        }
+        if (polled.runStatus === 'failed' || polled.runStatus === 'cancelled') {
+          setActionMessage(
+            `Deploy workflow ${started.runId} ${polled.runStatus}${polled.error ? `: ${polled.error}` : ''}. Export for manual Vercel handoff.`,
+          );
+          return;
+        }
+        setActionMessage(
+          `Deploy workflow ${started.runId} still ${polled.runStatus || 'running'}${polled.result?.jobId ? ` (job ${polled.result.jobId})` : ''}. Open Dashboard or Export.`,
+        );
+        return;
+      }
+
+      // Only when start() is down (5xx / network). 401/400 already returned.
+      setActionMessage('Durable deploy unavailable — falling back to /api/pipeline…');
       let jobId = lastPipelineCheck?.jobId || deployJobId || undefined;
 
       if (!jobId) {
@@ -704,20 +771,24 @@ export default function VideoWorkflowStudio() {
           </Link>
 
           <nav className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 text-sm text-slate-600 md:flex">
-            <Link href="/" className="rounded-full bg-white px-4 py-1.5 font-medium text-slate-950 shadow-sm">
+            <Link href="/studio" className="rounded-full bg-white px-4 py-1.5 font-medium text-slate-950 shadow-sm">
               Studio
             </Link>
-            <Link href="/dashboard" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Dashboard
+            <Link href="/" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Home
             </Link>
-            <Link href="/features" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Verified capabilities
-            </Link>
-            <Link href="/dashboard/agents" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Agents
+            <Link href="/pricing" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Pricing
             </Link>
           </nav>
 
+          <div className="flex items-center gap-2">
+            <Link
+              href="/login?callbackUrl=/studio"
+              className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
+            >
+              Sign in
+            </Link>
           <button
             type="button"
             onClick={() => runWorkflow()}
@@ -728,6 +799,7 @@ export default function VideoWorkflowStudio() {
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             Run workflow
           </button>
+          </div>
         </div>
       </header>
 
@@ -1056,17 +1128,22 @@ export default function VideoWorkflowStudio() {
                   {activeAction === 'deploy' && (
                     <div className="space-y-3">
                       <p className="leading-6">
-                        Deploy calls <code className="text-xs">POST /api/pipeline</code> with{' '}
-                        <code className="text-xs">deployment_target=vercel</code>
-                        {deployBusy ? ' (in progress…)' : '.'} If the backend is down, use Export for an offline handoff.
+                        Deploy starts a signed-in durable workflow, then falls back to{' '}
+                        <code className="text-xs">POST /api/pipeline</code> only if start() is unavailable.
+                        {deployBusy ? ' (in progress…)' : ''} Sign in first. If the backend is down, use Export.
                       </p>
-                      {(deployJobId || deployLiveUrl || deployRepo) && (
+                      {(deployRunId || deployJobId || deployLiveUrl || deployRepo) && (
                         <div className="space-y-1 rounded-lg border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs leading-5 text-slate-700">
+                          {deployRunId && (
+                            <div>
+                              Workflow: <span className="font-mono">{deployRunId}</span>
+                            </div>
+                          )}
                           {deployJobId && (
                             <div>
                               Job:{' '}
                               <Link
-                                href={`/dashboard?video=${encodeURIComponent(videoUrl || '')}`}
+                                href={`/studio?video=${encodeURIComponent(videoUrl || '')}`}
                                 className="font-mono text-blue-700 underline"
                               >
                                 {deployJobId}
