@@ -68,4 +68,14 @@ describe('deployHoldReason', () => {
     });
     expect(deployHoldReason(sop, [])).toBeNull();
   });
+
+  it('does not hold production for SeaDance/Cluely-style named tools', () => {
+    const sop = compileLinkedSop({
+      transcript: 'Use SeaDance 2.5 and Cluely Desktop for UGC ads.',
+      segments: [{ start: 2, duration: 3, text: 'Use SeaDance 2.5 and Cluely Desktop for UGC ads.' }],
+      packTools: [{ name: 'SeaDance 2.5' }, { name: 'Cluely Desktop' }],
+    });
+    expect(stackCheckItems(sop).some((item) => /seadance|cluely/i.test(item.title))).toBe(true);
+    expect(deployHoldReason(sop, [])).toBeNull();
+  });
 });

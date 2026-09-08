@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
-import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
+import { deployHoldReason, isDeployHoldStack, pickOfficialTemplate } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
@@ -24,8 +24,10 @@ import {
 } from '@/lib/studio-workflow';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
+  studioActActionLabel,
   studioCanExport,
   studioEventsEmptyMessage,
+  studioExportOutcomeMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -34,6 +36,7 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioWorkingMessage,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
 import {
@@ -43,7 +46,11 @@ import {
 } from '@/lib/studio-handoff';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
-import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -98,11 +105,13 @@ async function tryExtractEvents(input: {
 function PackWorkbench({
   architecture,
   artifacts,
+  tools,
   onExport,
   canExport,
 }: {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
+  tools: VideoPackStackTool[];
   onExport: () => void;
   canExport: boolean;
 }) {
@@ -125,6 +134,18 @@ function PackWorkbench({
           Export pack
         </button>
       </div>
+      {tools.length > 0 ? (
+        <div data-testid="pack-workbench-tools" className="mt-4 flex flex-wrap gap-2">
+          {tools.map((tool) => (
+            <span
+              key={`workbench-${tool.name}`}
+              className="inline-flex items-center rounded-full border border-[#e8b86d]/30 bg-[#e8b86d]/10 px-3 py-1.5 text-sm text-white"
+            >
+              {tool.name}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {architecture ? (
         <div data-testid="pack-architecture" className="mt-4">
           <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">Architecture</h3>
@@ -243,7 +264,7 @@ export default function OneLoopStudio() {
     setWorkflowActions(null);
     setActRunId(null);
     setUsedSameRun(false);
-    setMessage('Fetching transcript…');
+    setMessage(studioWorkingMessage({ elapsedSec: 0, hasPack: false, hasTranscript: false }));
     const tick = window.setInterval(() => {
       const matches = useDashboardStore
         .getState()
@@ -306,6 +327,18 @@ export default function OneLoopStudio() {
     }, 250);
     return () => window.clearInterval(timer);
   }, [busy]);
+
+  useEffect(() => {
+    if (!busy) return;
+    setMessage(
+      studioWorkingMessage({
+        elapsedSec: elapsed,
+        hasPack: Boolean(selected?.videoPack),
+        packCitation: selected?.videoPack ? studioPackCitation(selected.videoPack) : null,
+        hasTranscript: (selected?.transcript?.trim().length ?? 0) >= 40,
+      }),
+    );
+  }, [busy, elapsed, selected?.videoPack, selected?.transcript]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
   const eventCount = selected?.events?.length ?? 0;
@@ -449,13 +482,13 @@ export default function OneLoopStudio() {
     });
     downloadScaffoldPackage(pkg);
     setMessage(
-      officialTemplate
-        ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
-        : linkedSop
-          ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
-          : packFormation.architecture || packFormation.artifacts.length > 0
-            ? 'Exported architecture and artifacts from this pack.'
-            : 'Exported scaffold files (README, tasks.json).',
+      studioExportOutcomeMessage({
+        officialClone: officialTemplate?.clone,
+        hasLinkedSop: Boolean(linkedSop && (linkedSop.steps.length > 0 || linkedSop.entities.length > 0)),
+        hasArchitecture: Boolean(packFormation.architecture),
+        artifactCount: packFormation.artifacts.length,
+        toolCount: packFormation.tools.length,
+      }),
     );
   };
 
@@ -551,7 +584,11 @@ export default function OneLoopStudio() {
               </button>
             </div>
           </form>
-          <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
+          <p
+            data-testid="studio-working-state"
+            className="font-mono text-xs text-[#e8b86d]/90"
+            role="status"
+          >
             {statusText}
           </p>
           {selected?.videoPack && (
@@ -615,6 +652,7 @@ export default function OneLoopStudio() {
           <PackWorkbench
             architecture={packFormation.architecture}
             artifacts={packFormation.artifacts}
+            tools={packFormation.tools}
             onExport={exportPkg}
             canExport={hasPayload}
           />
@@ -631,7 +669,7 @@ export default function OneLoopStudio() {
               <li data-testid="studio-events-empty" className="px-4 py-4 text-sm text-white/40">
                 {studioEventsEmptyMessage({
                   busy: busy || selected?.status === 'processing',
-                  hasCompletedRun: selected != null && selected.status !== 'processing' && !busy,
+                  runStatus: selected?.status ?? null,
                   eventCount: 0,
                   hasArchitecture: Boolean(packFormation.architecture),
                   artifactCount: packFormation.artifacts.length,
@@ -677,7 +715,11 @@ export default function OneLoopStudio() {
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
               {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
-                <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
+                <p className="text-sm text-white/40">
+                  {packFormation.architecture || packFormation.artifacts.length > 0
+                    ? 'No catalogued tools. Architecture and artifacts from this pack are on this page.'
+                    : 'No catalogued tools in this transcript.'}
+                </p>
               )}
               {packFormation.tools.map((tool) => (
                 <span
@@ -762,7 +804,7 @@ export default function OneLoopStudio() {
               ))}
             </ol>
 
-            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+            {linkedSop.checklist.some((item) => item.source === 'stack' && isDeployHoldStack(item.stack)) && (
               <>
                 <div className="border-t border-white/10 px-4 py-3">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -771,7 +813,7 @@ export default function OneLoopStudio() {
                 </div>
                 <ul className="divide-y divide-white/5">
                   {linkedSop.checklist
-                    .filter((item) => item.source === 'stack')
+                    .filter((item) => item.source === 'stack' && isDeployHoldStack(item.stack))
                     .map((item) => {
                       const checked = completedChecks.includes(item.id);
                       return (
@@ -897,7 +939,7 @@ export default function OneLoopStudio() {
             className="rounded-xl border border-[#e8b86d]/30 bg-[#e8b86d]/5 p-4 lg:col-span-2"
           >
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
-              Tool results
+              Proposed actions
             </h2>
             {actRunId && (
               <p className="mt-2 font-mono text-[11px] text-white/40">
@@ -908,19 +950,23 @@ export default function OneLoopStudio() {
             {workflowActions ? (
               <ul className="mt-3 space-y-2 text-sm">
                 {workflowActions.actions.length === 0 && (
-                  <li className="text-white/50">No tool results from this run.</li>
+                  <li className="text-white/50">No proposed actions from this run.</li>
                 )}
-                {workflowActions.actions.map((action, i) => (
+                {workflowActions.actions.map((action, i) => {
+                  const labeled = studioActActionLabel(action);
+                  return (
                   <li key={`${action.tool}-${i}`}>
-                    <span className="font-medium">{action.tool}</span>
-                    <span className="text-white/50"> — {action.status}</span>
-                    {action.result && <div className="text-white/70">{action.result}</div>}
+                    <span className="font-medium">{labeled.title}</span>
+                    {labeled.detail ? (
+                      <div className="text-white/60">{labeled.detail}</div>
+                    ) : null}
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             ) : (
               <p className="mt-3 text-sm text-white/60">
-                {actBusy ? 'Running tools…' : 'Waiting for tool results.'}
+                {actBusy ? 'Acting on this run…' : 'Waiting for proposed actions.'}
               </p>
             )}
           </section>
@@ -935,7 +981,7 @@ export default function OneLoopStudio() {
             disabled={actBusy || !hasPayload}
             className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
           >
-            {actBusy ? 'Running tools…' : 'Run tools'}
+            {actBusy ? 'Acting on this run…' : 'Act on this run'}
           </button>
           <button
             type="button"

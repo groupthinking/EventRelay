@@ -44,8 +44,19 @@ export function detectedStacks(sop: LinkedSop | null | undefined): Set<string> {
   return stacks;
 }
 
+/** Only these stacks have a real production-promote checklist. */
+export const DEPLOY_HOLD_STACKS = new Set(['vercel', 'shopify', 'github']);
+
+export function isDeployHoldStack(stack: string | null | undefined): boolean {
+  return Boolean(stack && DEPLOY_HOLD_STACKS.has(stack));
+}
+
 export function stackCheckItems(sop: LinkedSop | null | undefined): ChecklistItem[] {
   return (sop?.checklist || []).filter((item) => item.source === 'stack');
+}
+
+export function gatingStackCheckItems(sop: LinkedSop | null | undefined): ChecklistItem[] {
+  return stackCheckItems(sop).filter((item) => isDeployHoldStack(item.stack));
 }
 
 export function pickOfficialTemplate(sop: LinkedSop | null | undefined): OfficialTemplate | null {
@@ -60,7 +71,7 @@ export function deployHoldReason(
   completedIds: Iterable<string>,
 ): string | null {
   const done = new Set(completedIds);
-  const pending = stackCheckItems(sop).filter((item) => !done.has(item.id));
+  const pending = gatingStackCheckItems(sop).filter((item) => !done.has(item.id));
   if (pending.length === 0) return null;
   return `Production is held until ${pending.length} stack check(s) pass. Next: ${pending[0].title}`;
 }
