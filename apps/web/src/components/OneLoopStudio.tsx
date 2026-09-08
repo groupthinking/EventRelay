@@ -39,6 +39,7 @@ import {
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportToastMessage,
+  studioFormationSupplementalEntities,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -273,6 +274,11 @@ export default function OneLoopStudio() {
       packTools,
     );
   }, [selected, packFormation.tools]);
+  const stackChecks = packFormation.checks;
+  const supplementalEntities = studioFormationSupplementalEntities(
+    packFormation.tools,
+    linkedSop?.entities,
+  );
 
   useEffect(() => {
     setCompletedChecks([]);
@@ -905,7 +911,7 @@ export default function OneLoopStudio() {
               </h2>
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
-              {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
+              {supplementalEntities.length === 0 && packFormation.tools.length === 0 && (
                 <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
               )}
               {packFormation.tools.map((tool) => (
@@ -916,14 +922,7 @@ export default function OneLoopStudio() {
                   <span className="font-medium text-white">{tool.name}</span>
                 </span>
               ))}
-              {linkedSop.entities
-                .filter(
-                  (entity) =>
-                    !packFormation.tools.some(
-                      (tool) => tool.name.toLowerCase() === entity.name.toLowerCase(),
-                    ),
-                )
-                .map((entity) => (
+              {supplementalEntities.map((entity) => (
                 <span
                   key={entity.name}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
@@ -991,7 +990,7 @@ export default function OneLoopStudio() {
               ))}
             </ol>
 
-            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+            {stackChecks.length > 0 && (
               <>
                 <div className="border-t border-white/10 px-4 py-3">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -999,9 +998,7 @@ export default function OneLoopStudio() {
                   </h2>
                 </div>
                 <ul className="divide-y divide-white/5">
-                  {linkedSop.checklist
-                    .filter((item) => item.source === 'stack')
-                    .map((item) => {
+                  {stackChecks.map((item) => {
                       const checked = completedChecks.includes(item.id);
                       const status = stackCheckStatus(item, completedChecks, 'anonymous');
                       return (
