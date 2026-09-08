@@ -30,6 +30,42 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _client_safe_error(error_message: Any) -> Optional[str]:
+    """Replace persisted diagnostics with a stable client-safe message."""
+    return "Internal server error" if error_message else None
+
+
+def _sanitize_error_list(value: Any) -> Any:
+    """Replace scalar diagnostics while preserving structured error records."""
+    if isinstance(value, list):
+        return [_sanitize_error_list(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_error_list(item) for item in value)
+    if isinstance(value, dict):
+        return _sanitize_response_errors(value)
+    return None if value is None else "Internal server error"
+
+
+def _sanitize_response_errors(value: Any) -> Any:
+    """Copy a response tree while replacing persisted diagnostic error values."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                _client_safe_error(item)
+                if key in {"error", "error_message"}
+                else _sanitize_error_list(item)
+                if key == "errors"
+                else _sanitize_response_errors(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_response_errors(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_response_errors(item) for item in value)
+    return value
+
+
 
 # Pydantic models for API requests/responses
 class CloudVideoProcessingRequest(BaseModel):
@@ -128,12 +164,12 @@ async def process_video_cloud(
                 video_url=result.video_url,
                 success=result.success,
                 status='completed' if result.success else 'failed',
-                metadata=result.metadata,
-                transcript=result.transcript,
-                ai_analysis=result.ai_analysis,
+                metadata=_sanitize_response_errors(result.metadata),
+                transcript=_sanitize_response_errors(result.transcript),
+                ai_analysis=_sanitize_response_errors(result.ai_analysis),
                 processing_time=result.processing_time,
                 from_cache=result.from_cache,
-                error=result.error_message,
+                error=_client_safe_error(result.error_message),
             )
 
     except Exception as e:
@@ -297,7 +333,7 @@ async def get_video_status(video_id: str):
             created_at=state.created_at,
             updated_at=state.updated_at,
             processing_time=state.processing_time,
-            error_message=state.error_message,
+            error_message=_client_safe_error(state.error_message),
         )
 
     except HTTPException:
@@ -329,13 +365,13 @@ async def get_video_result(video_id: str):
             "video_url": state.video_url,
             "status": state.status,
             "current_stage": state.current_stage,
-            "metadata": state.metadata,
-            "transcript": state.transcript,
-            "ai_analysis": state.ai_analysis,
+            "metadata": _sanitize_response_errors(state.metadata),
+            "transcript": _sanitize_response_errors(state.transcript),
+            "ai_analysis": _sanitize_response_errors(state.ai_analysis),
             "processing_time": state.processing_time,
             "created_at": state.created_at,
             "updated_at": state.updated_at,
-            "error_message": state.error_message,
+            "error_message": _client_safe_error(state.error_message),
         }
 
     except HTTPException:
@@ -362,11 +398,11 @@ async def get_queue_stats():
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
-    except Exception as e:
-        logger.error(f"Error getting queue stats: {e}")
+    except Exception:
+        logger.error("Error getting queue stats", exc_info=True)
         return {
             "success": False,
-            "error": str(e),
+            "error": "Internal server error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -389,10 +425,11 @@ async def get_cloud_status():
                 "status": "operational",
                 "enabled": True,
             }
-        except Exception as e:
+        except Exception:
+            logger.error("firestore status check failed", exc_info=True)
             status["services"]["firestore"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "Service unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -405,10 +442,11 @@ async def get_cloud_status():
                 "enabled": True,
                 "queue_stats": stats,
             }
-        except Exception as e:
+        except Exception:
+            logger.error("cloud tasks status check failed", exc_info=True)
             status["services"]["cloud_tasks"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "Service unavailable",
             }
             status["overall_status"] = "degraded"
 
@@ -419,20 +457,21 @@ async def get_cloud_status():
                 "status": "operational",
                 "enabled": True,
             }
-        except Exception as e:
+        except Exception:
+            logger.error("vertex AI status check failed", exc_info=True)
             status["services"]["vertex_ai"] = {
                 "status": "error",
-                "error": str(e),
+                "error": "Service unavailable",
             }
             status["overall_status"] = "degraded"
 
         return status
 
-    except Exception as e:
-        logger.error(f"Error getting cloud status: {e}")
+    except Exception:
+        logger.error("Error getting cloud status", exc_info=True)
         return {
             "overall_status": "error",
-            "error": str(e),
+            "error": "Internal server error",
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 

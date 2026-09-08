@@ -28,6 +28,45 @@ from .services.real_youtube_api import get_youtube_service
 # Configure logging
 logger = logging.getLogger(__name__)
 
+_PUBLIC_PROCESSING_ERROR = "Video processing failed"
+
+
+def _sanitize_public_error(value: Any) -> Optional[str]:
+    """Replace persisted processor diagnostics with a stable public message."""
+    return None if value is None else _PUBLIC_PROCESSING_ERROR
+
+
+def _sanitize_error_list(value: Any) -> Any:
+    """Replace scalar diagnostics while preserving structured error records."""
+    if isinstance(value, list):
+        return [_sanitize_error_list(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_error_list(item) for item in value)
+    if isinstance(value, dict):
+        return _sanitize_response_errors(value)
+    return None if value is None else _PUBLIC_PROCESSING_ERROR
+
+
+def _sanitize_response_errors(value: Any) -> Any:
+    """Copy a response tree while replacing persisted diagnostic error values."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                _sanitize_public_error(item)
+                if key in {"error", "error_message"}
+                else _sanitize_error_list(item)
+                if key == "errors"
+                else _sanitize_response_errors(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_sanitize_response_errors(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_response_errors(item) for item in value)
+    return value
+
+
 # Distinguishes "no cache entry" from any entry content. The read helper returns
 # raw bytes today, but its historical contract returned parsed JSON, where a file
 # holding the literal ``null`` yields ``None`` -- a plain ``None`` return conflates
@@ -246,22 +285,23 @@ def setup_real_api_endpoints(app: FastAPI):
                 video_url=request.video_url,
                 force_refresh=request.force_refresh
             )
+            safe_result = _sanitize_response_errors(result)
 
             # Track metrics
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
             # Format response
             response = VideoAnalysisResponse(
-                video_id=result.get('video_id', ''),
+                video_id=safe_result.get('video_id', ''),
                 video_url=request.video_url,
-                success=result.get('success', False),
-                metadata=result.get('metadata'),
-                transcript=result.get('transcript'),
-                ai_analysis=result.get('ai_analysis'),
-                cost_breakdown=result.get('cost_breakdown'),
+                success=safe_result.get('success', False),
+                metadata=safe_result.get('metadata'),
+                transcript=safe_result.get('transcript'),
+                ai_analysis=safe_result.get('ai_analysis'),
+                cost_breakdown=safe_result.get('cost_breakdown'),
                 processing_time=processing_time,
-                cached=result.get('cached', False),
-                error=result.get('error')
+                cached=safe_result.get('cached', False),
+                error=_sanitize_public_error(safe_result.get('error'))
             )
 
             logger.info(f"✅ Real API processing completed: {result.get('video_id')} - ${result.get('cost_breakdown', {}).get('total_cost', 0):.4f}")
@@ -319,7 +359,7 @@ def setup_real_api_endpoints(app: FastAPI):
                 max_concurrent=request.max_concurrent
             )
 
-            return result
+            return _sanitize_response_errors(result)
 
         except HTTPException:
             # Preserve explicit 4xx responses (e.g. the 400 batch-size guard above).
@@ -343,8 +383,8 @@ def setup_real_api_endpoints(app: FastAPI):
             # JSON file per cached video. That is unbounded blocking I/O which
             # would otherwise stall the event loop for every concurrent request,
             # so it runs in a worker thread.
-            return await asyncio.to_thread(
-                _collect_processed_videos_sync, processor.cache_dir
+            return _sanitize_response_errors(
+                await asyncio.to_thread(_collect_processed_videos_sync, processor.cache_dir)
             )
 
         except Exception as e:
@@ -381,7 +421,10 @@ def setup_real_api_endpoints(app: FastAPI):
             # Returning a Response skips FastAPI's jsonable_encoder/json.dumps
             # round-trip, which would otherwise re-serialise the payload on
             # the event loop in proportion to its size.
-            return Response(content=video_data, media_type="application/json")
+            return Response(
+                content=json.dumps(_sanitize_response_errors(json.loads(video_data))),
+                media_type="application/json",
+            )
 
         except HTTPException:
             raise
@@ -401,10 +444,10 @@ def setup_real_api_endpoints(app: FastAPI):
             dashboard = await cost_monitor.get_cost_dashboard()
             return dashboard
 
-        except Exception as e:
-            logger.error(f"Error getting cost dashboard: {e}")
+        except Exception:
+            logger.error("Error getting cost dashboard", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
@@ -425,10 +468,10 @@ def setup_real_api_endpoints(app: FastAPI):
 
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f"Error getting usage analytics: {e}")
+        except Exception:
+            logger.error("Error getting usage analytics", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
@@ -441,10 +484,10 @@ def setup_real_api_endpoints(app: FastAPI):
             recommendations = await cost_monitor.optimize_api_usage()
             return recommendations
 
-        except Exception as e:
-            logger.error(f"Error getting optimization recommendations: {e}")
+        except Exception:
+            logger.error("Error getting optimization recommendations", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "recommendations": [],
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -472,7 +515,7 @@ def setup_real_api_endpoints(app: FastAPI):
             return {
                 "overall_status": "operational" if processor_status.get('service_status') == 'operational' else "degraded",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "processor": processor_status,
+                "processor": _sanitize_response_errors(processor_status),
                 "cost_monitoring": {
                     "status": "operational",
                     "today_cost": cost_dashboard.get('today_summary', {}).get('total_cost', 0.0),
@@ -490,11 +533,11 @@ def setup_real_api_endpoints(app: FastAPI):
                 "version": "2.0.0-real-api-integration"
             }
 
-        except Exception as e:
-            logger.error(f"Error getting service status: {e}")
+        except Exception:
+            logger.error("Error getting service status", exc_info=True)
             return {
                 "overall_status": "error",
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
