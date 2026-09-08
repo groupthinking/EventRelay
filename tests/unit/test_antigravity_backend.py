@@ -39,6 +39,36 @@ class FakeTransport:
         return self.response
 
 
+class FakeAuditStore:
+    def __init__(self) -> None:
+        self.entries: list[dict[str, Any]] = []
+
+    def append(
+        self,
+        run_id: str,
+        *,
+        agent_id: str,
+        action: str,
+        success: bool,
+        duration_ms: float,
+        details: dict[str, Any] | None = None,
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+    ) -> None:
+        self.entries.append(
+            {
+                "run_id": run_id,
+                "agent_id": agent_id,
+                "action": action,
+                "success": success,
+                "duration_ms": duration_ms,
+                "details": details or {},
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+            }
+        )
+
+
 def config(**changes: Any) -> AntigravityBackendConfig:
     values = {
         "enabled": True,
@@ -211,6 +241,32 @@ async def test_orchestrator_records_managed_backend_dispatch() -> None:
     assert entry["backend"] == "google_antigravity"
     assert entry["receipt_id"] == receipt.receipt_id
     assert "context" not in entry
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_records_managed_backend_receipt_durably() -> None:
+    from youtube_extension.services.agents.adapters.agent_orchestrator import (
+        AgentOrchestrator,
+    )
+
+    audit_store = FakeAuditStore()
+    orchestrator = AgentOrchestrator(audit_store=audit_store)
+    receipt = await orchestrator.execute_antigravity_backend(
+        backend=AntigravityBackend(config(), FakeTransport()),
+        task="review",
+        context={"video_pack_id": "pack-3"},
+    )
+
+    assert len(audit_store.entries) == 1
+    entry = audit_store.entries[0]
+    assert entry["run_id"] == receipt.receipt_id
+    assert entry["agent_id"] == "google_antigravity"
+    assert entry["action"] == "managed_backend_dispatch"
+    assert entry["success"] is True
+    assert entry["duration_ms"] >= 0
+    assert entry["details"]["receipt_id"] == receipt.receipt_id
+    assert entry["details"]["request_sha256"] == receipt.request_sha256
+    assert "context" not in entry["details"]
 
 
 @pytest.mark.asyncio

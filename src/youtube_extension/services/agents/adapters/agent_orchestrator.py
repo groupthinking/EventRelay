@@ -56,11 +56,12 @@ class AgentOrchestrator:
     Handles task delegation, parallel processing, and result aggregation.
     """
 
-    def __init__(self):
+    def __init__(self, audit_store: Any | None = None):
         """Initialize agent orchestrator"""
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: dict[str, BaseAgent] = {}
         self._agent_types: dict[str, type[BaseAgent]] = {}
+        self._audit_store = audit_store
         # Bounded: the module-level `orchestrator` singleton lives for the whole
         # process and every dispatch appends here, so an unbounded list would
         # grow without limit. maxlen evicts the oldest entries automatically.
@@ -517,6 +518,38 @@ class AgentOrchestrator:
                 },
             )
         )
+        if self._audit_store is not None:
+            total_tokens = receipt.usage.get("total_tokens")
+            output_tokens = receipt.usage.get("output_tokens")
+            self._audit_store.append(
+                receipt.receipt_id,
+                agent_id="google_antigravity",
+                action="managed_backend_dispatch",
+                success=receipt.status == "completed" and receipt.error is None,
+                duration_ms=max(receipt.elapsed_seconds * 1000.0, 0.0),
+                details={
+                    "backend": "google_antigravity",
+                    "provider": receipt.provider,
+                    "agent": receipt.agent,
+                    "status": receipt.status,
+                    "receipt_id": receipt.receipt_id,
+                    "request_sha256": receipt.request_sha256,
+                    "interaction_id": receipt.interaction_id,
+                    "environment_id": receipt.environment_id,
+                    "budget_exceeded": receipt.budget_exceeded,
+                    "mcp_servers": list(receipt.mcp_servers),
+                    "policy": dict(receipt.policy),
+                    "error": receipt.error,
+                },
+                input_tokens=(
+                    int(total_tokens) if isinstance(total_tokens, (int, float)) else None
+                ),
+                output_tokens=(
+                    int(output_tokens)
+                    if isinstance(output_tokens, (int, float))
+                    else None
+                ),
+            )
         return receipt
 
     # --- Legacy local Antigravity-pattern workflow ---
