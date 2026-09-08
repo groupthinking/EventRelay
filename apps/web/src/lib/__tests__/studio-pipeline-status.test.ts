@@ -2,9 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  studioCanExport,
+  studioEventsEmptyMessage,
+  studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
+  studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
@@ -137,5 +141,84 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="pack-architecture"');
     expect(studio).toContain('data-testid="pack-artifacts"');
     expect(studio).not.toMatch(/router\.(push|replace)\(['"]\/dashboard/);
+  });
+
+  it('tells the truth when events[] is empty after a completed run', () => {
+    expect(
+      studioEventsEmptyMessage({
+        busy: true,
+        hasCompletedRun: false,
+        eventCount: 0,
+        hasArchitecture: true,
+        artifactCount: 2,
+        toolCount: 1,
+      }),
+    ).toMatch(/extracting events/i);
+    expect(
+      studioEventsEmptyMessage({
+        busy: false,
+        hasCompletedRun: false,
+        eventCount: 0,
+        hasArchitecture: false,
+        artifactCount: 0,
+        toolCount: 0,
+      }),
+    ).toBe('Events show up after Run.');
+
+    const emptyWithPack = studioEventsEmptyMessage({
+      busy: false,
+      hasCompletedRun: true,
+      eventCount: 0,
+      hasArchitecture: true,
+      artifactCount: 2,
+      toolCount: 1,
+    });
+    expect(emptyWithPack.toLowerCase()).not.toContain('show up after run');
+    expect(emptyWithPack.toLowerCase()).not.toContain('extracting');
+    expect(emptyWithPack.toLowerCase()).toMatch(/no extracted events/);
+    expect(emptyWithPack.toLowerCase()).toMatch(/architecture|artifacts|stack/);
+    expect(studioPromotePackWorkbench({ eventCount: 0, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
+      true,
+    );
+    expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
+      false,
+    );
+  });
+
+  it('enables export from pack formation when events[] is empty', () => {
+    expect(
+      studioCanExport({
+        transcript: 'x'.repeat(50),
+        eventCount: 0,
+        hasArchitecture: true,
+        artifactCount: 2,
+        toolCount: 1,
+      }),
+    ).toBe(true);
+    expect(
+      studioCanExport({
+        transcript: '',
+        eventCount: 0,
+        hasArchitecture: false,
+        artifactCount: 0,
+        toolCount: 0,
+      }),
+    ).toBe(false);
+  });
+
+  it('names an invalid ?video= handoff instead of staying silent', () => {
+    expect(studioInvalidHandoffMessage('https://www.youtube.com/watch')).toMatch(/valid youtube/i);
+  });
+
+  it('does not map keyframes or concepts into Studio events', () => {
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioEventsEmptyMessage');
+    expect(studio).toContain('studioQueryFromSearchParams');
+    expect(studio).toContain('studioCanExport');
+    expect(studio).toContain('data-testid="studio-events-empty"');
+    expect(studio).toContain('data-testid="pack-workbench"');
+    expect(studio).not.toMatch(/keyframes/);
+    expect(studio).not.toMatch(/code_snippets/);
+    expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
   });
 });

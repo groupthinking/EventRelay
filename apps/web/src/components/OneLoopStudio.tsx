@@ -24,17 +24,26 @@ import {
 } from '@/lib/studio-workflow';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
+  studioCanExport,
+  studioEventsEmptyMessage,
+  studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
+  studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
-import { applyStudioQueryAutoStart, resolveStudioHandoff } from '@/lib/studio-handoff';
+import {
+  applyStudioQueryAutoStart,
+  resolveStudioHandoff,
+  studioQueryFromSearchParams,
+} from '@/lib/studio-handoff';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
+import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -84,6 +93,77 @@ async function tryExtractEvents(input: {
   if (!extraction?.success || !Array.isArray(extraction.data?.events)) return null;
   const events = mapExtractedEvents(extraction.data.events, input.videoId);
   return events.length > 0 ? events : null;
+}
+
+function PackWorkbench({
+  architecture,
+  artifacts,
+  onExport,
+  canExport,
+}: {
+  architecture: VideoPackArchitecture | null;
+  artifacts: VideoPackArtifact[];
+  onExport: () => void;
+  canExport: boolean;
+}) {
+  return (
+    <section
+      data-testid="pack-workbench"
+      className="rounded-xl border border-[#e8b86d]/30 bg-[#11131a] p-4 lg:col-span-2"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
+          From this pack
+        </h2>
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={!canExport}
+          className="inline-flex items-center gap-2 rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d] disabled:opacity-40"
+        >
+          <Download className="h-4 w-4" aria-hidden />
+          Export pack
+        </button>
+      </div>
+      {architecture ? (
+        <div data-testid="pack-architecture" className="mt-4">
+          <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">Architecture</h3>
+          {architecture.summary ? (
+            <p className="mt-2 text-sm text-white/70">{architecture.summary}</p>
+          ) : null}
+          {architecture.stages.length > 0 ? (
+            <ol className="mt-2 space-y-1 text-sm text-white/80">
+              {architecture.stages.map((stage) => (
+                <li key={stage.id}>
+                  <span className="font-medium text-white">{stage.name}</span>
+                  {stage.description ? ` — ${stage.description}` : ''}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {architecture.mermaid ? (
+            <pre className="mt-2 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/65">
+              {architecture.mermaid}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+      {artifacts.length > 0 ? (
+        <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
+          {artifacts.map((artifact) => (
+            <li
+              key={artifact.path_hint}
+              className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+            >
+              <div className="font-mono text-[12px] text-[#e8b86d]">{artifact.path_hint}</div>
+              <div className="mt-1 text-white/80">{artifact.purpose}</div>
+              <div className="mt-1 font-mono text-[11px] text-white/55">{artifact.interface}</div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
 }
 
 export default function OneLoopStudio() {
@@ -193,7 +273,7 @@ export default function OneLoopStudio() {
 
   useEffect(() => {
     applyStudioQueryAutoStart({
-      query: searchParams.get('video') || searchParams.get('url'),
+      query: studioQueryFromSearchParams(searchParams),
       startedKey: autoStartedKey,
       start: (watchUrl) => {
         void runAnalysis(watchUrl);
@@ -203,6 +283,7 @@ export default function OneLoopStudio() {
       },
       onInvalidQuery: (raw) => {
         setUrl(raw);
+        setMessage(studioInvalidHandoffMessage(raw));
       },
     });
     // One-shot kick from ?video= so Home paste starts the live pack path.
@@ -226,9 +307,23 @@ export default function OneLoopStudio() {
     return () => window.clearInterval(timer);
   }, [busy]);
 
-  const videoId = useMemo(() => getYouTubeId(url), [url]);
-  const hasPayload =
-    (selected?.transcript?.trim().length ?? 0) >= 40 || (selected?.events?.length ?? 0) > 0;
+  const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+  const eventCount = selected?.events?.length ?? 0;
+  const promotePack = studioPromotePackWorkbench({
+    eventCount,
+    hasArchitecture: Boolean(packFormation.architecture),
+    artifactCount: packFormation.artifacts.length,
+    toolCount: packFormation.tools.length,
+  });
+  const hasPayload = studioCanExport({
+    transcript: selected?.transcript,
+    eventCount,
+    hasArchitecture: Boolean(packFormation.architecture),
+    artifactCount: packFormation.artifacts.length,
+    toolCount: packFormation.tools.length,
+    hasLinkedSopSteps: Boolean(linkedSop?.steps.length),
+    hasProjectScaffold: Boolean(selected?.insights?.project_scaffold),
+  });
   const runState = busy ? 'working' : selected ? 'ready' : 'idle';
   const quality = studioRunQuality(
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
@@ -330,7 +425,14 @@ export default function OneLoopStudio() {
       events: selected?.events,
       workflowActions: workflowActions?.actions,
     });
-    if (actions.length === 0 && !selected?.insights?.project_scaffold && !linkedSop?.steps.length) {
+    if (
+      actions.length === 0 &&
+      !selected?.insights?.project_scaffold &&
+      !linkedSop?.steps.length &&
+      !packFormation.architecture &&
+      packFormation.artifacts.length === 0 &&
+      packFormation.tools.length === 0
+    ) {
       setMessage('Nothing to export yet — analyze a video first.');
       return;
     }
@@ -339,6 +441,11 @@ export default function OneLoopStudio() {
       actions,
       projectScaffold: selected?.insights?.project_scaffold,
       linkedSop: linkedSop || undefined,
+      packFormation: {
+        architecture: packFormation.architecture,
+        artifacts: packFormation.artifacts,
+        tools: packFormation.tools,
+      },
     });
     downloadScaffoldPackage(pkg);
     setMessage(
@@ -346,7 +453,9 @@ export default function OneLoopStudio() {
         ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
         : linkedSop
           ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
-          : 'Exported scaffold files (README, tasks.json).',
+          : packFormation.architecture || packFormation.artifacts.length > 0
+            ? 'Exported architecture and artifacts from this pack.'
+            : 'Exported scaffold files (README, tasks.json).',
     );
   };
 
@@ -502,6 +611,15 @@ export default function OneLoopStudio() {
           </div>
         </section>
 
+        {promotePack ? (
+          <PackWorkbench
+            architecture={packFormation.architecture}
+            artifacts={packFormation.artifacts}
+            onExport={exportPkg}
+            canExport={hasPayload}
+          />
+        ) : null}
+
         <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
           <div className="border-b border-white/10 px-4 py-3">
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -510,8 +628,15 @@ export default function OneLoopStudio() {
           </div>
           <ul className="divide-y divide-white/5">
             {(selected?.events || []).length === 0 && (
-              <li className="px-4 py-4 text-sm text-white/40">
-                {busy ? 'Extracting events…' : 'Events show up after Run.'}
+              <li data-testid="studio-events-empty" className="px-4 py-4 text-sm text-white/40">
+                {studioEventsEmptyMessage({
+                  busy: busy || selected?.status === 'processing',
+                  hasCompletedRun: selected != null && selected.status !== 'processing' && !busy,
+                  eventCount: 0,
+                  hasArchitecture: Boolean(packFormation.architecture),
+                  artifactCount: packFormation.artifacts.length,
+                  toolCount: packFormation.tools.length,
+                })}
               </li>
             )}
             {(selected?.events || []).map((event) => {
@@ -708,7 +833,7 @@ export default function OneLoopStudio() {
                 <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceHash}</dd>
               </div>
             </dl>
-            {packFormation.architecture && (
+            {!promotePack && packFormation.architecture && (
               <div data-testid="pack-architecture" className="mt-4">
                 <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">
                   Architecture
@@ -733,7 +858,7 @@ export default function OneLoopStudio() {
                 )}
               </div>
             )}
-            {packFormation.artifacts.length > 0 && (
+            {!promotePack && packFormation.artifacts.length > 0 && (
               <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
                 {packFormation.artifacts.map((artifact) => (
                   <li
@@ -819,7 +944,7 @@ export default function OneLoopStudio() {
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Download className="h-4 w-4" aria-hidden />
-            Export
+            {promotePack ? 'Export pack' : 'Export'}
           </button>
           <button
             type="button"
