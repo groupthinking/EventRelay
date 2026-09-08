@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   resolveStudioHandoff,
   studioVideoHref,
+  submitHomePaste,
   youtubeWatchUrlFromInput,
 } from '@/lib/studio-handoff';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
@@ -31,5 +32,39 @@ describe('studio handoff from Home paste', () => {
     expect(resolveStudioHandoff('not a youtube url')).toBeNull();
     expect(resolveStudioHandoff('https://example.com/watch?v=nope')).toBeNull();
     expect(studioVideoHref('')).toBeNull();
+  });
+});
+
+describe('submitHomePaste kicks pack emit then hands off to Studio', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs the watch URL to /api/video/pack and returns /studio?video=', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ status: 'processing' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const href = submitHomePaste(FIXTURE_ID);
+    expect(href).toBe(`/studio?video=${encodeURIComponent(FIXTURE_WATCH)}`);
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/video/pack');
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toContain(FIXTURE_WATCH);
+  });
+
+  it('does not emit a pack for junk input', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    expect(submitHomePaste('not a youtube url')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

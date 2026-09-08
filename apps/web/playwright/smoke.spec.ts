@@ -71,11 +71,13 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page.getByText('Annual checkout')).toBeVisible();
   });
 
-  test('Dashboard path folds into the studio workbench', async ({ page }) => {
-    const response = await page.goto('/dashboard');
-    const status = response?.status();
-    expect(status).toBeLessThan(400);
-    await expect(page).toHaveURL(/\/studio(\?.*)?$/);
+  test('Dashboard, app, and prototype paths fold into the studio workbench', async ({ page }) => {
+    for (const path of ['/dashboard', '/app', '/prototype'] as const) {
+      const response = await page.goto(path);
+      const status = response?.status();
+      expect(status).toBeLessThan(400);
+      await expect(page).toHaveURL(/\/studio(\?.*)?$/);
+    }
     await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
   });
 

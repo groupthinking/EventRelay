@@ -34,12 +34,16 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(readSource('components/OneLoopStudio.tsx')).toContain('autoStartedKey');
   });
 
-  it('sends Home paste into /studio?video= via the shared handoff helper', () => {
+  it('sends Home paste into /studio?video= after kicking pack emit', () => {
     const paste = readSource('components/home/HomePasteForm.tsx');
-    expect(paste).toContain('studioVideoHref');
-    expect(paste).toContain("router.push");
+    const handoff = readSource('lib/studio-handoff.ts');
+    expect(paste).toContain('submitHomePaste');
+    expect(paste).toContain('router.push');
     expect(paste).not.toContain('processVideo');
     expect(paste).not.toContain('OneLoopStudio');
+    expect(paste).not.toContain('emitVideoPack');
+    expect(handoff).toContain('startVideoPackEmit');
+    expect(handoff).toContain('submitHomePaste');
   });
 
   it('prioritizes Home, Studio, and Pricing in the sitemap', () => {
@@ -58,6 +62,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(config).toMatch(/source: '\/playground'[\s\S]*destination: '\/'/);
     expect(config).toContain("source: '/dashboard'");
     expect(config).toContain("destination: '/studio'");
+    expect(config).toContain("source: '/app'");
+    expect(config).toContain("source: '/prototype'");
   });
 
   it('keeps Get Pro checkout on /pricing (CoS: do not fold onto Home this PR)', () => {

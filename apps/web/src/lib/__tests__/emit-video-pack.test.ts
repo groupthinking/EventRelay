@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GOLDEN_IDENTITY_HASHES } from '@/lib/video-pack';
-import { emitVideoPack, identityPackJson, verifyIdentityPack } from '@/lib/emit-video-pack';
+import {
+  emitVideoPack,
+  identityPackJson,
+  startVideoPackEmit,
+  verifyIdentityPack,
+} from '@/lib/emit-video-pack';
 
 const CANON = 'jNQXAC9IVRw';
 const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
@@ -164,5 +169,32 @@ describe('emitVideoPack', () => {
     await expect(emitVideoPack(SOURCE_URL, { pollIntervalMs: 0, timeoutMs: 5_000 })).rejects.toThrow(
       /AI Gateway/i,
     );
+  });
+});
+
+describe('startVideoPackEmit', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('POSTs the watch URL without waiting for spec-extract poll', async () => {
+    const fixtureUrl = 'https://www.youtube.com/watch?v=auJzb1D-fag';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 202,
+      json: async () => ({ status: 'processing' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    startVideoPackEmit(fixtureUrl);
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/video/pack');
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit;
+    expect(init.method).toBe('POST');
+    expect(String(init.body)).toBe(JSON.stringify({ url: fixtureUrl }));
   });
 });

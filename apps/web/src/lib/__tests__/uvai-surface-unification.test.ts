@@ -37,12 +37,16 @@ describe('UVAI is one product surface', () => {
     expect(studio).toContain('Stack checks');
   });
 
-  it('308s /dashboard into the canonical workbench in next.config', () => {
+  it('308s /dashboard, /app, and /prototype into the canonical workbench', () => {
     const config = readWebFile('next.config.js');
     expect(config).toContain("source: '/dashboard'");
     expect(config).toContain("destination: '/studio'");
     expect(config).toContain("source: '/dashboard/:path*'");
+    expect(config).toContain("source: '/app'");
+    expect(config).toContain("source: '/prototype'");
     expect(config).toContain('permanent: true');
+    expect(config).not.toMatch(/source: '\/app'[\s\S]{0,80}destination: '\/'/);
+    expect(config).not.toMatch(/source: '\/prototype'[\s\S]{0,80}destination: '\/'/);
   });
 
   it('points sell-page CTAs at Home or Studio, not a second skin', () => {

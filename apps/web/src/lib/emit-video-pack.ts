@@ -128,19 +128,45 @@ async function pollReadyPack(
   throw new Error('Video pack emit timed out waiting for spec extract.');
 }
 
-export async function emitVideoPack(
-  url: string,
-  options: { pollIntervalMs?: number; timeoutMs?: number } = {},
-): Promise<VideoPackCitation> {
-  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
-  const timeoutMs = options.timeoutMs ?? 120_000;
-  const response = await fetch('/api/video/pack', {
+function postVideoPack(url: string): Promise<Response> {
+  return fetch('/api/video/pack', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
     signal: AbortSignal.timeout(15_000),
   });
+}
+
+/**
+ * Kick the existing pack POST without waiting for spec-extract poll.
+ * Home paste uses this so navigation is not blocked by the 120s poll.
+ * Fail-closed: errors are logged; Studio retries via processVideo.
+ */
+export function startVideoPackEmit(watchUrl: string): void {
+  void postVideoPack(watchUrl)
+    .then(async (response) => {
+      if (response.status === 200 || response.status === 202) {
+        return;
+      }
+      const payload: unknown = await response.json().catch(() => null);
+      console.error(
+        '[emit-video-pack] home handoff emit failed closed',
+        packErrorMessage(payload, `Video pack emit failed (${response.status}).`),
+      );
+    })
+    .catch((error: unknown) => {
+      console.error('[emit-video-pack] home handoff emit failed closed', error);
+    });
+}
+
+export async function emitVideoPack(
+  url: string,
+  options: { pollIntervalMs?: number; timeoutMs?: number } = {},
+): Promise<VideoPackCitation> {
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+  const timeoutMs = options.timeoutMs ?? 120_000;
+  const response = await postVideoPack(url);
   const payload: unknown = await response.json().catch(() => null);
   if (response.status === 200) {
     return verifyIdentityPack(payload);

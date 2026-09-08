@@ -1,5 +1,6 @@
 import { extractYouTubeId } from '@/lib/timestamp';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
+import { startVideoPackEmit } from '@/lib/emit-video-pack';
 
 export type StudioHandoff = {
   videoId: string;
@@ -28,4 +29,15 @@ export function resolveStudioHandoff(raw: string): StudioHandoff | null {
 
 export function studioVideoHref(raw: string): string | null {
   return resolveStudioHandoff(raw)?.href ?? null;
+}
+
+/**
+ * Home paste: validate YouTube URL, kick pack emit, return /studio?video=.
+ * Does not wait for spec extract. Invalid input returns null and does not emit.
+ */
+export function submitHomePaste(raw: string): string | null {
+  const handoff = resolveStudioHandoff(raw);
+  if (!handoff) return null;
+  startVideoPackEmit(handoff.watchUrl);
+  return handoff.href;
 }

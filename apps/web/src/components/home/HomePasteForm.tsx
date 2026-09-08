@@ -2,11 +2,11 @@
 
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { studioVideoHref } from '@/lib/studio-handoff';
+import { submitHomePaste } from '@/lib/studio-handoff';
 
 /**
  * Sell-page paste field. Does not load the workbench bundle.
- * Submit navigates to /studio?video= so Studio kicks the live pack path.
+ * Validates a YouTube URL, kicks pack emit, then router.push('/studio?video=').
  */
 export default function HomePasteForm() {
   const router = useRouter();
@@ -15,7 +15,7 @@ export default function HomePasteForm() {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const href = studioVideoHref(value);
+    const href = submitHomePaste(value);
     if (!href) {
       setError('Need a valid YouTube URL.');
       return;
