@@ -72,6 +72,26 @@ describe('submitHomePaste kicks pack emit then hands off to Studio', () => {
 });
 
 describe('applyStudioQueryAutoStart (?video= one-shot, Strict Mode safe)', () => {
+  it('suppresses duplicate start when a Strict Mode remount gets a fresh ref object', () => {
+    const remountWatchUrl = 'https://www.youtube.com/watch?v=pBsT6v-ciO8';
+    const firstMountKey = { current: null as string | null };
+    const remountKey = { current: null as string | null };
+    const start = vi.fn();
+    const first = applyStudioQueryAutoStart({
+      query: remountWatchUrl,
+      startedKey: firstMountKey,
+      start,
+    });
+    const remount = applyStudioQueryAutoStart({
+      query: remountWatchUrl,
+      startedKey: remountKey,
+      start,
+    });
+    expect(first).toBe('started');
+    expect(remount).toBe('already');
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
   it('starts once with the canonical watch URL across a Strict Mode double effect', () => {
     const startedKey = { current: null as string | null };
     const start = vi.fn();

@@ -43,6 +43,7 @@ export function submitHomePaste(raw: string): string | null {
 }
 
 export type StudioQueryStartedKey = { current: string | null };
+let strictModeAutoStartedVideoId: string | null = null;
 
 /**
  * One-shot ?video= / ?url= kick. Safe under Strict Mode: the same startedKey
@@ -94,8 +95,14 @@ export function applyStudioQueryAutoStart(input: {
     return 'invalid';
   }
   input.onResolved?.(handoff.watchUrl);
-  if (input.startedKey.current === handoff.videoId) return 'already';
+  if (
+    input.startedKey.current === handoff.videoId ||
+    strictModeAutoStartedVideoId === handoff.videoId
+  ) {
+    return 'already';
+  }
   input.startedKey.current = handoff.videoId;
+  strictModeAutoStartedVideoId = handoff.videoId;
   input.start(handoff.watchUrl);
   return 'started';
 }
