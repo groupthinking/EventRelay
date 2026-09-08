@@ -10,14 +10,11 @@ Persists state inside `data/session_orchestration_state.json`.
 
 import argparse
 import asyncio
-import fnmatch
 import json
 import logging
-import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from youtube_extension.services.shared_sql_state import SharedSQLStateStore
@@ -44,7 +41,7 @@ class SessionOrchestrationManager:
         database_url: Optional[str] = None,
     ):
         self.state_path = state_path
-        self.state: Dict[str, Any] = {}
+        self.state: dict[str, Any] = {}
         self.load_state()
         self._shared_state = SharedSQLStateStore(
             database_url=database_url,
@@ -175,11 +172,11 @@ class SessionOrchestrationManager:
         self,
         prompt: str,
         playbook: str,
-        tags: List[str],
+        tags: list[str],
         acu_limit: int,
         origin: str = "user",
-        user: str = "jules-agent"
-    ) -> Dict[str, Any]:
+        user: str = "jules-agent",
+    ) -> dict[str, Any]:
         """Programmatically creates a new active agent session."""
         session_id = (
             f"session_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_"
@@ -217,8 +214,8 @@ class SessionOrchestrationManager:
         tag: Optional[str] = None,
         playbook: Optional[str] = None,
         origin: Optional[str] = None,
-        user: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        user: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
         """Filters across sessions by tags, playbook, origin, or user."""
         results = []
         for s in self._shared_state.list_sessions().values():
@@ -233,7 +230,9 @@ class SessionOrchestrationManager:
             results.append(s)
         return results
 
-    def inspect_timeline(self, session_id: str, search_text: Optional[str] = None) -> List[Dict[str, Any]]:
+    def inspect_timeline(
+        self, session_id: str, search_text: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         """Fetches the timeline event list for a session, optionally filtered by search text."""
         session = self._shared_state.get_session(session_id)
         if not session:
@@ -282,7 +281,9 @@ class SessionOrchestrationManager:
         logger.info(f"Session {session_id} {session['status']}.")
         return True
 
-    async def run_parallel_sessions(self, packages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def run_parallel_sessions(
+        self, packages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Launches multiple sessions in parallel and waits for all of them to complete
         in a single async call instead of individual polling.
@@ -321,11 +322,13 @@ class SessionOrchestrationManager:
     # Playbook Management API
     # ==========================================
 
-    def list_playbooks(self) -> Dict[str, Any]:
+    def list_playbooks(self) -> dict[str, Any]:
         """Lists all registered playbooks."""
         return self.state["playbooks"]
 
-    def create_playbook(self, name: str, description: str, macros: List[str] = None) -> Dict[str, Any]:
+    def create_playbook(
+        self, name: str, description: str, macros: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         """Creates a new automation playbook."""
         playbook = {
             "name": name,
@@ -336,7 +339,12 @@ class SessionOrchestrationManager:
         self.save_state()
         return playbook
 
-    def update_playbook(self, name: str, description: Optional[str] = None, macros: Optional[List[str]] = None) -> bool:
+    def update_playbook(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        macros: Optional[list[str]] = None,
+    ) -> bool:
         """Updates an existing playbook's properties and automation macros."""
         if name not in self.state["playbooks"]:
             return False
@@ -359,7 +367,15 @@ class SessionOrchestrationManager:
     # Knowledge Management API
     # ==========================================
 
-    def create_knowledge_note(self, note_id: str, repo: str, folder: str, name: str, trigger: str, content: str) -> Dict[str, Any]:
+    def create_knowledge_note(
+        self,
+        note_id: str,
+        repo: str,
+        folder: str,
+        name: str,
+        trigger: str,
+        content: str,
+    ) -> dict[str, Any]:
         """Creates a new knowledge note entry."""
         note = {
             "id": note_id,
@@ -373,7 +389,9 @@ class SessionOrchestrationManager:
         self.save_state()
         return note
 
-    def get_knowledge_notes(self, repo: Optional[str] = None, folder: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_knowledge_notes(
+        self, repo: Optional[str] = None, folder: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         """Filters and retrieves knowledge notes."""
         notes = list(self.state["knowledge_notes"].values())
         if repo:
@@ -390,7 +408,7 @@ class SessionOrchestrationManager:
             return True
         return False
 
-    def list_suggestions(self) -> List[Dict[str, Any]]:
+    def list_suggestions(self) -> list[dict[str, Any]]:
         """Lists pending knowledge suggestions generated from sessions."""
         return self.state["pending_suggestions"]
 
@@ -407,7 +425,9 @@ class SessionOrchestrationManager:
     # Schedule Management API
     # ==========================================
 
-    def create_schedule(self, schedule_id: str, cron: str, agent: str, active: bool = True) -> Dict[str, Any]:
+    def create_schedule(
+        self, schedule_id: str, cron: str, agent: str, active: bool = True
+    ) -> dict[str, Any]:
         """Creates a recurring or one-time scheduled session."""
         sched = {
             "id": schedule_id,
@@ -432,7 +452,7 @@ class SessionOrchestrationManager:
     # Integration Management API
     # ==========================================
 
-    def get_integrations(self) -> Dict[str, Any]:
+    def get_integrations(self) -> dict[str, Any]:
         """Returns the landscape of native integrations."""
         return self.state["integrations"]
 
@@ -440,7 +460,7 @@ class SessionOrchestrationManager:
     # Repository Documentation API
     # ==========================================
 
-    def search_repo_docs(self, query: str) -> List[Dict[str, str]]:
+    def search_repo_docs(self, query: str) -> list[dict[str, str]]:
         """Queries repository documentation markdown files."""
         docs_dir = _PROJECT_ROOT / "docs"
         matches = []
