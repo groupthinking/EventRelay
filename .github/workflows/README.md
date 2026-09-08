@@ -171,18 +171,16 @@ A full audit of this directory was performed (see
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
 
 
-| PR Governance | `pr-governance.yml` | `pull_request_target` (opened/edited/reopened/synchronize/ready_for_review) | Validates that every ready PR links exactly one real open canonical issue and contains non-empty delivery evidence sections; fails on competing PRs. |
 | Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Non-destructive daily report of ready PRs missing a canonical issue, issues with competing implementation PRs, and stale unattached branches. |
 
 ## Agent-completion enforcement
 
 Removed. The `agent-completion/truth-gate` status and the `Agent completion
 enforcement` Check were retired because they were unsatisfiable: the gate scored a
-pull request against an intent snapshot written only on `issues` events, so any
-pull request that satisfied `PR Governance` (which requires `Closes #<issue>`)
-necessarily armed the gate and then failed it. It was red on ~100% of pull
-requests, including merged ones such as #1368.
+pull request against an intent snapshot written only on `issues` events, so a pull
+request with a `Closes #<issue>` binding necessarily armed the gate and then
+failed it. It was red on ~100% of pull requests, including merged ones such as
+#1368.
 
-Binding a pull request to one focused issue is now owned solely by
-`pr-governance.yml`, which produces the `PR Governance` and `Canonical issue and
-evidence` Checks. See `MERGE_POLICY.md` at the repository root.
+Binding a pull request to one focused issue is now a policy-level requirement
+with no automated gate. See `MERGE_POLICY.md` at the repository root.

@@ -62,15 +62,14 @@ valid. Referenced paths were checked against the working tree:
   `gh issue edit` used a GraphQL mutation unsupported by GitHub App
   installation tokens; the workflow now calls the REST assignees endpoint.
 
-
+## Agent completion enforcement
 ## Agent completion enforcement
 
 
-The agent-lock trust policy and both agent-completion Checks were removed as unsatisfiable; `pr-governance.yml` is now the sole binding gate. See `MERGE_POLICY.md`.
-
+The agent-lock trust policy and both agent-completion Checks were removed as unsatisfiable; the governance workflow was later removed, and binding is no longer enforced by an automated check. See `MERGE_POLICY.md`.
+## Repository governance workflows
 ## Repository governance workflows
 
-| `pr-governance.yml` | **ADD** | Validates that every non-draft ready PR links exactly one real open issue (not a PR number) with non-empty delivery evidence sections (Outcome, Risk, Verification, Production evidence). Fails closed on competing implementation PRs. Triggers on `pull_request_target`. |
 | `repository-reconciliation.yml` | **ADD** | Scheduled (13:17 UTC daily) non-destructive reconciliation report: identifies ready PRs missing a canonical issue, issues with competing implementation PRs (references validated via Issues API), and stale unattached branches. Excludes draft PRs and fork-branch name collisions. Upserts a single issue titled "[automation] Repository drift report". |
 ## Multi-agent pipeline alignment (Phase 1)
 
