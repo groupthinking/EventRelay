@@ -236,6 +236,10 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-player-loading"');
     expect(studio).toContain('data-testid="studio-player-error"');
     expect(studio).toContain('useYouTubePlayer');
+    expect(studio).toMatch(
+      /const \{[^}]*containerRef[^}]*ready:[^}]*failed:[^}]*seekTo[^}]*\} = useYouTubePlayer\(videoId\)/,
+    );
+    expect(studio).not.toMatch(/player\.ready|player\.failed|player\.containerRef|player\.seekTo/);
     expect(studio).not.toMatch(/keyframes/);
     expect(studio).not.toMatch(/code_snippets/);
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);

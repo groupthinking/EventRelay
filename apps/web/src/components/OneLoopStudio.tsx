@@ -319,17 +319,22 @@ export default function OneLoopStudio() {
     () => extractYouTubeId(url || selected?.url || ''),
     [url, selected?.url],
   );
-  const player = useYouTubePlayer(videoId);
+  const {
+    containerRef,
+    ready: playerReady,
+    failed: playerFailed,
+    seekTo,
+  } = useYouTubePlayer(videoId);
   const playerPhase = studioPlayerPhase({
     videoId,
-    ready: player.ready,
-    failed: player.failed,
+    ready: playerReady,
+    failed: playerFailed,
   });
 
   useEffect(() => {
-    if (seekSeconds == null || !player.ready) return;
-    player.seekTo(seekSeconds);
-  }, [seekSeconds, player.ready, player.seekTo]);
+    if (seekSeconds == null || !playerReady) return;
+    seekTo(seekSeconds);
+  }, [seekSeconds, playerReady, seekTo]);
   const eventCount = selected?.events?.length ?? 0;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
@@ -615,7 +620,7 @@ export default function OneLoopStudio() {
                   allowFullScreen
                 />
               ) : (
-                <div ref={player.containerRef} className="aspect-video w-full" />
+                <div ref={containerRef} className="aspect-video w-full" />
               )}
               {playerPhase === 'loading' ? (
                 <div
