@@ -530,7 +530,7 @@ export default function VideoWorkflowStudio() {
 
     setActionsBusy(true);
     setWorkflowActions(null);
-    setActionMessage('Starting durable video-to-actions workflow…');
+    setActionMessage('Starting video-to-actions run…');
 
     try {
       const started = await startVideoToActions({
@@ -540,8 +540,8 @@ export default function VideoWorkflowStudio() {
       if (!started.ok || !started.runId) {
         setActionMessage(
           started.error
-            ? `Could not start durable workflow: ${started.error}`
-            : 'Could not start durable workflow. Check Workflow DevKit install and withWorkflow config.',
+            ? `Could not start the run: ${started.error}`
+            : 'Could not start the run. Check Workflow DevKit install and withWorkflow config.',
         );
         return;
       }
@@ -598,7 +598,7 @@ export default function VideoWorkflowStudio() {
     deployAbortRef.current = deployAbort;
 
     setDeployBusy(true);
-    setActionMessage('Starting durable Studio deploy…');
+    setActionMessage('Starting Studio deploy…');
 
     try {
       const started = await startStudioDeploy({
@@ -809,7 +809,7 @@ export default function VideoWorkflowStudio() {
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
               {' '}
-              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video-to-transcript-to-actions workflow.
+              <span className="font-semibold text-slate-950">Act on findings</span> runs a video-to-transcript-to-actions workflow.
               {' '}
               <span className="font-semibold text-slate-950">Dashboard</span> runs the live SSE agent pipeline.
               {' '}
@@ -1128,7 +1128,7 @@ export default function VideoWorkflowStudio() {
                   {activeAction === 'deploy' && (
                     <div className="space-y-3">
                       <p className="leading-6">
-                        Deploy starts a signed-in durable workflow, then falls back to{' '}
+                        Deploy starts a signed-in run, then falls back to{' '}
                         <code className="text-xs">POST /api/pipeline</code> only if start() is unavailable.
                         {deployBusy ? ' (in progress…)' : ''} Sign in first. If the backend is down, use Export.
                       </p>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  STUDIO_PRODUCT_TAGLINE,
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
@@ -326,6 +327,24 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');
+  });
+
+  it('softens reviewed/durable overclaim copy and pads the sticky footer', () => {
+    expect(STUDIO_PRODUCT_TAGLINE.toLowerCase()).not.toMatch(/reviewed actions|durable workflows/);
+    expect(STUDIO_PRODUCT_TAGLINE).toMatch(/video pack/i);
+
+    const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
+    expect(footer.toLowerCase()).not.toContain('reviewed actions');
+    expect(footer.toLowerCase()).not.toContain('durable workflows');
+    expect(studio).toContain('data-testid="studio-main"');
+    expect(studio).toMatch(/pb-20|padding-bottom/);
+    expect(retired).not.toMatch(/Starting durable/);
+    expect(retired).not.toMatch(/Could not start durable workflow/);
+    expect(retired).not.toMatch(/runs a durable video-to-transcript/);
+    expect(retired).not.toMatch(/signed-in durable workflow/);
   });
 
   it('renders review_action as a card with status, title, and detail', () => {

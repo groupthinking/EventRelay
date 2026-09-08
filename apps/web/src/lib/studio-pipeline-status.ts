@@ -154,6 +154,9 @@ export function studioPasteOutcomeMessage(input: {
   return 'Pack emit failed: verification failed (source_url + source_hash required).';
 }
 
+export const STUDIO_PRODUCT_TAGLINE =
+  'Paste a YouTube URL. UVAI builds a Video Pack you can export and act on.';
+
 export const STUDIO_TRANSCRIPT_TYPICAL_SECONDS = 45;
 
 export type StudioTranscriptStageId =
