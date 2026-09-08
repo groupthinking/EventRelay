@@ -9,9 +9,13 @@ FastAPI endpoints for cloud-native deployment with:
 - Cloud Tasks for async processing
 """
 
+import asyncio
+import ipaddress
 import logging
+import socket
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any, Optional, Union
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, BackgroundTasks, FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
@@ -28,6 +32,81 @@ from ..services.cloud.cloud_video_processor import get_cloud_video_processor
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+_BLOCKED_CALLBACK_HOSTS = frozenset(
+    {"localhost", "metadata", "metadata.google.internal"}
+)
+_MAX_CALLBACK_ADDRESS_ATTEMPTS = 3
+_CALLBACK_ATTEMPT_TIMEOUT = 10.0
+_CALLBACK_TOTAL_TIMEOUT = 15.0
+
+
+def _sanitize_log_value(value: Any) -> str:
+    """Strip CR/LF from untrusted values before logging."""
+    return str(value).replace("\r", "").replace("\n", "")
+
+
+def _is_blocked_ip(ip: Union[ipaddress.IPv4Address, ipaddress.IPv6Address]) -> bool:
+    """Return True unless the address is a globally routable public address."""
+    return ip.is_multicast or getattr(ip, "is_site_local", False) or not ip.is_global
+
+
+def _is_safe_callback_url(url: str, *, resolve: bool = True) -> bool:
+    """Return True only when a callback URL resolves exclusively to public IPs."""
+    return _validated_callback_addresses(url, resolve=resolve) is not None
+
+
+def _validated_callback_addresses(
+    url: str, *, resolve: bool = True
+) -> Optional[tuple[str, ...]]:
+    """Validate a callback and return the exact public addresses it resolved to."""
+    try:
+        parsed = urlparse(url)
+        port = parsed.port
+    except ValueError:
+        return None
+
+    hostname = parsed.hostname
+    if parsed.scheme not in ("http", "https") or not hostname:
+        return None
+    if hostname.rstrip(".").lower() in _BLOCKED_CALLBACK_HOSTS:
+        return None
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        ip = None
+    if ip is not None:
+        return None if _is_blocked_ip(ip) else (str(ip),)
+    if not resolve:
+        return ()
+
+    try:
+        addrinfos = socket.getaddrinfo(
+            hostname,
+            port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+    except (socket.gaierror, UnicodeError, ValueError):
+        return None
+
+    addresses = []
+    for info in addrinfos:
+        if info[0] not in (socket.AF_INET, socket.AF_INET6):
+            continue
+        resolved = str(info[4][0]).split("%", 1)[0]
+        try:
+            resolved_ip = ipaddress.ip_address(resolved)
+        except ValueError:
+            return None
+        if _is_blocked_ip(resolved_ip):
+            return None
+        normalized = str(resolved_ip)
+        if normalized not in addresses:
+            addresses.append(normalized)
+
+    return tuple(addresses) if addresses else None
 
 
 
@@ -91,13 +170,20 @@ async def process_video_cloud(
     - State tracked in Firestore
     - AI reasoning via Vertex AI Agent Builder
     """
+    if request.callback_url and not _is_safe_callback_url(
+        request.callback_url, resolve=False
+    ):
+        raise HTTPException(status_code=400, detail="Invalid callback_url")
+
     try:
         processor = get_cloud_video_processor()
         video_id = processor._extract_video_id(request.video_url)
 
         logger.info(
-            f"🎬 Cloud processing request: {request.video_url} "
-            f"(async={request.async_processing}, priority={request.priority})"
+            "🎬 Cloud processing request: %s (async=%s, priority=%s)",
+            _sanitize_log_value(request.video_url),
+            request.async_processing,
+            request.priority,
         )
 
         if request.async_processing:
@@ -137,8 +223,9 @@ async def process_video_cloud(
             )
 
     except Exception as e:
-        error_msg = f"Cloud processing failed: {str(e)}"
-        logger.error(error_msg, exc_info=True)
+        logger.error(
+            "Cloud processing failed: %s", _sanitize_log_value(e), exc_info=True
+        )
 
         # detail is a static string; error_msg (with the exception) is logged above only
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -186,8 +273,9 @@ async def process_video_task_handler(
         ) from exc
 
     logger.info(
-        f"📝 Processing Cloud Task: {x_cloudtasks_taskname} "
-        f"(video_id={payload.video_id})"
+        "📝 Processing Cloud Task: %s (video_id=%s)",
+        _sanitize_log_value(x_cloudtasks_taskname),
+        _sanitize_log_value(payload.video_id),
     )
 
     try:
@@ -199,23 +287,64 @@ async def process_video_task_handler(
             force_refresh=False,
         )
 
-        # Call callback URL if provided
+        # Resolve and validate off-loop, then pin the connection to its address.
         if payload.callback_url and result.success:
-            try:
-                import httpx
-                async with httpx.AsyncClient() as client:
-                    await client.post(
-                        payload.callback_url,
-                        json={
-                            'video_id': result.video_id,
-                            'status': 'completed',
-                            'processing_time': result.processing_time,
-                        },
-                        timeout=10.0
+            callback_addresses = await asyncio.to_thread(
+                _validated_callback_addresses, payload.callback_url
+            )
+            if not callback_addresses:
+                logger.warning(
+                    "⚠️ Refusing to call unsafe callback URL: %s",
+                    _sanitize_log_value(payload.callback_url),
+                )
+            else:
+                try:
+                    import httpx
+
+                    callback_url = httpx.URL(payload.callback_url)
+                    host_header = callback_url.netloc.decode("ascii")
+                    deadline = (
+                        asyncio.get_running_loop().time() + _CALLBACK_TOTAL_TIMEOUT
                     )
-                logger.info(f"✅ Callback sent to {payload.callback_url}")
-            except Exception as e:
-                logger.warning(f"⚠️ Callback failed: {e}")
+                    sent = False
+                    last_connect_error: Optional[Exception] = None
+                    async with httpx.AsyncClient(follow_redirects=False) as client:
+                        for address in callback_addresses[
+                            :_MAX_CALLBACK_ADDRESS_ATTEMPTS
+                        ]:
+                            remaining = deadline - asyncio.get_running_loop().time()
+                            if remaining <= 0:
+                                break
+                            try:
+                                await client.post(
+                                    callback_url.copy_with(host=address),
+                                    json={
+                                        "video_id": result.video_id,
+                                        "status": "completed",
+                                        "processing_time": result.processing_time,
+                                    },
+                                    headers={"Host": host_header},
+                                    extensions={"sni_hostname": callback_url.host},
+                                    timeout=min(_CALLBACK_ATTEMPT_TIMEOUT, remaining),
+                                )
+                                sent = True
+                                break
+                            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                                last_connect_error = exc
+                    if sent:
+                        logger.info(
+                            "✅ Callback sent to %s",
+                            _sanitize_log_value(payload.callback_url),
+                        )
+                    elif last_connect_error is not None:
+                        raise last_connect_error
+                    else:
+                        logger.warning(
+                            "⚠️ Callback abandoned (attempt/deadline bound) for %s",
+                            _sanitize_log_value(payload.callback_url),
+                        )
+                except Exception as e:
+                    logger.warning("⚠️ Callback failed: %s", _sanitize_log_value(e))
 
         return {
             "success": result.success,
@@ -225,7 +354,9 @@ async def process_video_task_handler(
         }
 
     except Exception as e:
-        logger.error(f"Task processing failed: {e}", exc_info=True)
+        logger.error(
+            "Task processing failed: %s", _sanitize_log_value(e), exc_info=True
+        )
 
         # Update state with a static error message; raw exception is logged above only
         try:
@@ -236,7 +367,11 @@ async def process_video_task_handler(
                 error_message="Task processing failed"
             )
         except Exception as state_error:
-            logger.error(f"Failed to update error state: {state_error}")
+            logger.error(
+                "Failed to update error state: %s",
+                _sanitize_log_value(state_error),
+                exc_info=True,
+            )
 
         raise HTTPException(status_code=500, detail="Internal server error")
 

@@ -1502,3 +1502,113 @@ class TestReportingRoutes:
         assert ok_response.json() == {
             "embed_url": "https://looker.example.com/embed/dashboards/2?sig=def"
         }
+
+
+import youtube_extension.backend.cloud_api_endpoints as _cae
+
+
+class TestCallbackUrlSafety:
+    @pytest.mark.parametrize(
+        "value,expected",
+        [("a\r\nb", "ab"), ("line1\nline2", "line1line2"), (123, "123")],
+    )
+    def test_sanitize_log_value_strips_crlf(self, value, expected):
+        assert _cae._sanitize_log_value(value) == expected
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://127.0.0.1/x",
+            "http://100.64.0.1/x",
+            "http://[fec0::1]/x",
+            "https://metadata.google.internal./x",
+            "ftp://example.com/x",
+        ],
+    )
+    def test_rejects_non_public_callback_destinations(self, url):
+        assert _cae._is_safe_callback_url(url, resolve=False) is False
+
+    def test_rejects_mixed_dns_results(self):
+        with patch.object(
+            _cae.socket,
+            "getaddrinfo",
+            return_value=[
+                (2, 1, 6, "", ("93.184.216.34", 0)),
+                (2, 1, 6, "", ("127.0.0.1", 0)),
+            ],
+        ):
+            assert _cae._is_safe_callback_url("https://mixed.example/x") is False
+
+
+class TestCallbackDispatch:
+    @staticmethod
+    def _state():
+        state = MagicMock()
+        state.video_id = "auJzb1D-fag"
+        state.processing_time = 1.0
+        state.success = True
+        return state
+
+    def test_pins_hostname_callback_to_validated_address(self):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock()
+        mock_processor = AsyncMock()
+        mock_processor.process_video_sync = AsyncMock(return_value=self._state())
+
+        with patch.object(
+            _cae.socket,
+            "getaddrinfo",
+            return_value=[
+                (2, _cae.socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))
+            ],
+        ), patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ), patch("httpx.AsyncClient", return_value=mock_client) as client:
+            response = TestClient(_make_cloud_api_app()).post(
+                "/api/v3/process-video-task",
+                json={
+                    "video_id": "auJzb1D-fag",
+                    "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "callback_url": "https://callbacks.example:8443/cb?job=1",
+                },
+                headers={"X-CloudTasks-TaskName": "task-1"},
+            )
+
+        assert response.status_code == 200
+        client.assert_called_once_with(follow_redirects=False)
+        url = mock_client.post.await_args.args[0]
+        kwargs = mock_client.post.await_args.kwargs
+        assert str(url) == "https://93.184.216.34:8443/cb?job=1"
+        assert kwargs["headers"]["Host"] == "callbacks.example:8443"
+        assert kwargs["extensions"]["sni_hostname"] == "callbacks.example"
+
+    def test_retries_only_untransmitted_connection_failures_up_to_three_addresses(self):
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(side_effect=_httpx_real.ConnectError("down"))
+        mock_processor = AsyncMock()
+        mock_processor.process_video_sync = AsyncMock(return_value=self._state())
+
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints._validated_callback_addresses",
+            return_value=tuple(f"8.8.8.{i}" for i in range(1, 6)),
+        ), patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ), patch("httpx.AsyncClient", return_value=mock_client):
+            response = TestClient(_make_cloud_api_app()).post(
+                "/api/v3/process-video-task",
+                json={
+                    "video_id": "auJzb1D-fag",
+                    "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "callback_url": "https://callbacks.example/cb",
+                },
+                headers={"X-CloudTasks-TaskName": "task-1"},
+            )
+
+        assert response.status_code == 200
+        assert mock_client.post.await_count == 3
