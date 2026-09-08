@@ -1,0 +1,9 @@
+{
+  "artifact_name": "adintelligence-app.zip",
+  "source": "ChatGPT-generated AdIntelligence app export",
+  "sha256": "3f6f2b7ab2617022ac46c9d2a0a34a31633b53bee46b73e2ab7170143865445a",
+  "size_bytes": 510,
+  "parts": [
+    "adintelligence-app.zip.b64.part-01"
+  ]
+}
