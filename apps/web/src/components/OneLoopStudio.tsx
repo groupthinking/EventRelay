@@ -4,7 +4,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket } from 'lucide-react';
-import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
+import { buildEmbedUrl, formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
+import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
   deployHoldReason,
@@ -35,6 +36,8 @@ import {
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
+  studioPlayerMessage,
+  studioPlayerPhase,
   studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
@@ -312,7 +315,21 @@ export default function OneLoopStudio() {
     return () => window.clearInterval(timer);
   }, [busy]);
 
-  const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+  const videoId = useMemo(
+    () => extractYouTubeId(url || selected?.url || ''),
+    [url, selected?.url],
+  );
+  const player = useYouTubePlayer(videoId);
+  const playerPhase = studioPlayerPhase({
+    videoId,
+    ready: player.ready,
+    failed: player.failed,
+  });
+
+  useEffect(() => {
+    if (seekSeconds == null || !player.ready) return;
+    player.seekTo(seekSeconds);
+  }, [seekSeconds, player.ready, player.seekTo]);
   const eventCount = selected?.events?.length ?? 0;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
@@ -579,23 +596,54 @@ export default function OneLoopStudio() {
       </header>
 
       <main className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-xl border border-white/10 bg-black">
-          {videoId ? (
-            <iframe
-              title="YouTube source"
-              className="aspect-video w-full"
-              src={
-                seekSeconds != null
-                  ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
-                  : `https://www.youtube.com/embed/${videoId}`
-              }
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          ) : (
+        <section
+          data-testid="studio-player"
+          className="relative overflow-hidden rounded-xl border border-white/10 bg-black"
+        >
+          {!videoId ? (
             <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
-              Paste a link. The video plays here while we pull the transcript.
+              {studioPlayerMessage('idle')}
             </div>
+          ) : (
+            <>
+              {playerPhase === 'error' ? (
+                <iframe
+                  title="YouTube source"
+                  className="aspect-video w-full"
+                  src={buildEmbedUrl(videoId)}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              ) : (
+                <div ref={player.containerRef} className="aspect-video w-full" />
+              )}
+              {playerPhase === 'loading' ? (
+                <div
+                  data-testid="studio-player-loading"
+                  className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm text-[#e8b86d]"
+                  role="status"
+                >
+                  {studioPlayerMessage('loading')}
+                </div>
+              ) : null}
+              {playerPhase === 'error' ? (
+                <div
+                  data-testid="studio-player-error"
+                  className="absolute inset-x-0 bottom-0 bg-black/80 px-4 py-3 text-sm text-[#e8b86d]"
+                  role="alert"
+                >
+                  <p>{studioPlayerMessage('error')}</p>
+                  <a
+                    href={`https://www.youtube.com/watch?v=${videoId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-white/70 underline hover:text-[#e8b86d]"
+                  >
+                    Open on YouTube
+                  </a>
+                </div>
+              ) : null}
+            </>
           )}
         </section>
 

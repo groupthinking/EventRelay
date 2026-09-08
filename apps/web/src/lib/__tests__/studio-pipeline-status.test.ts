@@ -11,6 +11,8 @@ import {
   studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
+  studioPlayerMessage,
+  studioPlayerPhase,
   studioStatusMessage,
 } from '../studio-pipeline-status';
 
@@ -210,6 +212,18 @@ describe('studio-pipeline-status', () => {
     expect(studioInvalidHandoffMessage('https://www.youtube.com/watch')).toMatch(/valid youtube/i);
   });
 
+  it('does not leave the player on a silent 0:00 clock', () => {
+    expect(studioPlayerPhase({ videoId: null, ready: false, failed: false })).toBe('idle');
+    expect(studioPlayerPhase({ videoId: 'auJzb1D-fag', ready: false, failed: false })).toBe('loading');
+    expect(studioPlayerPhase({ videoId: 'auJzb1D-fag', ready: true, failed: false })).toBe('ready');
+    expect(studioPlayerPhase({ videoId: 'auJzb1D-fag', ready: false, failed: true })).toBe('error');
+    expect(studioPlayerMessage('idle')).toMatch(/paste a link/i);
+    expect(studioPlayerMessage('loading')).toMatch(/loading player/i);
+    expect(studioPlayerMessage('loading')).not.toMatch(/0:00/);
+    expect(studioPlayerMessage('error')).toMatch(/failed to load/i);
+    expect(studioPlayerMessage('ready')).toBe('');
+  });
+
   it('does not map keyframes or concepts into Studio events', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioEventsEmptyMessage');
@@ -217,6 +231,11 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioCanExport');
     expect(studio).toContain('data-testid="studio-events-empty"');
     expect(studio).toContain('data-testid="pack-workbench"');
+    expect(studio).toContain('studioPlayerPhase');
+    expect(studio).toContain('data-testid="studio-player"');
+    expect(studio).toContain('data-testid="studio-player-loading"');
+    expect(studio).toContain('data-testid="studio-player-error"');
+    expect(studio).toContain('useYouTubePlayer');
     expect(studio).not.toMatch(/keyframes/);
     expect(studio).not.toMatch(/code_snippets/);
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);

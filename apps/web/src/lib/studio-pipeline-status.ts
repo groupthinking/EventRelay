@@ -141,6 +141,36 @@ export function studioInvalidHandoffMessage(raw: string): string {
   return `Need a valid YouTube URL. "${preview}" is not a watchable video.`;
 }
 
+export type StudioPlayerPhase = 'idle' | 'loading' | 'ready' | 'error';
+
+export function studioPlayerPhase(input: {
+  videoId?: string | null;
+  ready: boolean;
+  failed: boolean;
+}): StudioPlayerPhase {
+  if (!input.videoId) return 'idle';
+  if (input.failed) return 'error';
+  if (input.ready) return 'ready';
+  return 'loading';
+}
+
+export function studioPlayerMessage(phase: StudioPlayerPhase): string {
+  switch (phase) {
+    case 'idle':
+      return 'Paste a link. The video plays here while we pull the transcript.';
+    case 'loading':
+      return 'Loading player…';
+    case 'ready':
+      return '';
+    case 'error':
+      return 'Player failed to load. Retry or open the video on YouTube.';
+    default: {
+      const _exhaustive: never = phase;
+      return _exhaustive;
+    }
+  }
+}
+
 export function studioPasteOutcomeMessage(input: {
   hasUsableTranscript: boolean;
   packCitation?: string | null;
