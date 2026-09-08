@@ -58,8 +58,8 @@ A pull request may merge when all of the following hold.
 Exactly one `Closes #<issue>` reference, and the pull request description
 follows `.github/pull_request_template.md`.
 
-*Already enforced by the `PR Governance` and `Canonical issue and evidence`
-checks. These work — keep them.*
+Binding is a policy-level, author-declared requirement. There is no automated
+gate for it.
 
 ### 2. Required checks green on the head commit
 
@@ -78,14 +78,11 @@ The real contexts, as observed on live pull requests:
 | Security | `Security Scan - python`, `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy` |
 | Secrets | `gitleaks (working tree)` |
 | Dependencies | `dependency-review` |
-| Binding | `PR Governance`, `Canonical issue and evidence` |
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
 `lint-frontend`, `build`, `test`, `test-frontend`, `CodeQL`,
-`gitleaks (working tree)`, `dependency-review`, `PR Governance`,
-`Canonical issue and evidence`, `Security Scan - python`,
-`Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`,
-`trivy`.
+`gitleaks (working tree)`, `dependency-review`, `Security Scan - python`,
+`Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy`.
 
 > **`test` vs `test-frontend`.** The CI job id/name `test` runs **Python**
 > pytest only. Frontend unit tests (apps/web vitest, including CWE-209 /

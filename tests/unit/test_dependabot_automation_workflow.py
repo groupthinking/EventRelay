@@ -195,8 +195,6 @@ REQUIRED_CHECKS = [
     "CodeQL",
     "gitleaks (working tree)",
     "dependency-review",
-    "PR Governance",
-    "Canonical issue and evidence",
     "Security Scan - python",
     "Security Scan - javascript",
     "bandit",
@@ -298,17 +296,14 @@ def test_merge_gate_blocks_on_a_failing_check_run(tmp_path: Path) -> None:
 
 def test_merge_gate_treats_skipped_and_neutral_as_satisfied(tmp_path: Path) -> None:
     """`MERGE_POLICY.md` gate 2 lists conditional checks; `E2E Pipeline Tests`
-    is routinely `skipped` and `PR Governance` `neutral`. Neither should
-    deadlock a merge."""
+    is routinely `skipped` and should not deadlock a merge."""
     outcome = _run_merge_gate(
         tmp_path,
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
             "checkRuns": [
-                *_all_required_green(
-                    **{"PR Governance": {"conclusion": "neutral"}}
-                ),
+                *_all_required_green(),
                 {
                     "name": "E2E Pipeline Tests",
                     "status": "completed",

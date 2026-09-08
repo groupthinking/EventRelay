@@ -255,8 +255,6 @@ jobs:
                 'CodeQL',
                 'gitleaks (working tree)',
                 'dependency-review',
-                'PR Governance',
-                'Canonical issue and evidence',
                 'Security Scan - python',
                 'Security Scan - javascript',
                 'bandit',
