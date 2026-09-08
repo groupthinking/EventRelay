@@ -241,6 +241,111 @@ Google Cloud toolkit for building and deploying production-ready Generative AI a
 
 ---
 
+## 4. GitHub Copilot app
+
+### Overview
+Desktop application for directing Copilot agent sessions across isolated local
+worktrees or cloud sandboxes, with issue/PR context, CI check visibility,
+session modes, model/reasoning controls, skills, MCP servers, quick chats,
+canvases, and scheduled/on-demand automations.
+
+### Relevance to EventRelay
+**High developer-workflow relevance** ✅
+- EventRelay already relies on Copilot/agent host instructions, skills, MCP
+  configuration, and gh-aw workflow governance.
+- The app's issue-to-session and PR review loops match the repository's
+  canonical issue/PR discipline without adding an end-user product workflow.
+- Parallel isolated sessions fit branch-scoped maintenance and audit work, but
+  they must not create competing PRs for the same issue.
+
+### Value Add
+- **Parallel agent sessions** for independent repository maintenance tasks.
+- **Plan mode** before code changes, matching the repository's evidence-first
+  approach for ambiguous work.
+- **Issue/PR surface** for reviewing diffs, CI checks, and review comments
+  without claiming success until checks finish.
+- **Skills and MCP reuse** from existing repository customization.
+
+### Fit Guardrails
+- **No demo/mock adoption path**: do not use fabricated issues, demo branches,
+  hard-coded inputs, or generated positive examples as adoption evidence.
+- Require **first-hand evidence before fit claims**: record the issue number,
+  session mode, branch/PR, tests run, CI run ID, and final check conclusion.
+- Use Plan or Interactive mode for production-impacting work until maintainers
+  have measured at least one successful full issue-to-PR loop.
+- Keep EventRelay's product flow unchanged: the app is a contributor tool, not
+  a new user-facing workflow.
+
+### Decision
+**🟡 PILOT - Fit for contributor workflow evaluation, not automatic rollout**
+
+**Rationale:**
+- The documented capabilities map well to EventRelay's agentic maintenance
+  style, but repository-specific throughput, cost, and CI reliability are not
+  proven by docs alone.
+- A measured pilot can validate whether parallel sessions reduce cycle time
+  without increasing duplicate PRs or unverified success claims.
+
+**Action Items:**
+1. Run one real paid-user session from an EventRelay issue in Plan mode.
+2. Capture concrete receipts: branch, PR, tests, CI run ID, review outcome, and
+   whether any human rework was needed.
+3. Promote to standard contributor guidance only after the receipts prove a
+   completed issue-to-PR loop with passing checks.
+
+---
+
+## 5. GitHub Agentic Workflows
+
+### Overview
+GitHub Agentic Workflows (`gh aw`) define recurring AI-powered repository tasks
+as workflow markdown compiled to locked GitHub Actions YAML. GitHub's app-level
+automations also support manual, hourly, daily, weekly, CRON, issue, and pull
+request triggers, with cloud execution gated by Copilot cloud agent access and
+selected tool permissions.
+
+### Relevance to EventRelay
+**Medium-High operations relevance** ⚠️
+- EventRelay already has gh-aw validation and read-only/report-only workflow
+  governance in `.github/workflows/README.md`.
+- Scheduled repository audits align with the existing reconciliation, coverage,
+  and security workflows when outputs are evidence records rather than claims.
+- Workflows are risky if they can mutate issues, branches, labels, or PRs
+  without narrow permissions and receipt-based reporting.
+
+### Value Add
+- **Repeatable audits** for issue/PR hygiene, coverage targets, and workflow
+  drift.
+- **Compiled lock files** that make agentic workflow changes reviewable.
+- **Scheduled/on-demand execution** for maintenance tasks that do not require a
+  human to keep a desktop session open.
+
+### Fit Guardrails
+- **No demo/mock adoption path**: pilot only against real EventRelay repository
+  state and real workflow outputs.
+- Keep first pilots read-only/report-only with explicit `permissions:` blocks.
+- Every run must print measurable outputs: workflow run ID, input filters,
+  files examined, produced artifact/comment/issue URL, and final conclusion.
+- Missing receipts or inconclusive outputs mean HOLD, not PASS.
+
+### Decision
+**🟡 PILOT - Continue read-only/report-only workflows before write automation**
+
+**Rationale:**
+- Existing repository governance already validates gh-aw lock files and keeps
+  agentic workflows constrained.
+- The next safe step is not another broad automation; it is a measured pilot
+  that proves real output quality and avoids false positives.
+
+**Action Items:**
+1. Select one low-risk recurring audit already represented in the repository
+   docs, such as repo status or reconciliation reporting.
+2. Run it on real repository state and store the run ID plus output URL.
+3. Only consider write-capable tools after at least one read-only pilot produces
+   useful, reviewed, non-duplicative output.
+
+---
+
 ## Summary & Recommendations
 
 | Resource | Decision | Priority | Integration Effort |
@@ -248,6 +353,8 @@ Google Cloud toolkit for building and deploying production-ready Generative AI a
 | **better-agents** | 🟡 Defer | Future Enhancement | Medium (2-3 days) |
 | **github-mcp-server** | 🟢 Integrate | Optional Developer Tool | Very Low (< 1 hour) |
 | **agent-starter-pack** | 🟡 Defer | Reference Only | High (2-3 weeks) |
+| **GitHub Copilot app** | 🟡 Pilot | Contributor Workflow | Low (measured pilot) |
+| **GitHub Agentic Workflows** | 🟡 Pilot | Read-only Automation | Low-Medium (measured pilot) |
 
 ### Immediate Actions (This PR)
 1. ✅ **Integrate github-mcp-server** as optional developer tool
@@ -259,6 +366,15 @@ Google Cloud toolkit for building and deploying production-ready Generative AI a
    - Add this evaluation to `.github/RESOURCE_EVALUATION.md`
    - Reference in `.github/copilot-instructions.md`
    - Update `.github/README.md` with resource links
+
+### 2026-09-08 Addendum Actions
+1. 🟡 **Pilot GitHub Copilot app**
+   - Use a real EventRelay issue; capture branch, PR, tests, CI run ID, and review outcome.
+   - Do not claim fit from documentation or demo/mock runs.
+
+2. 🟡 **Pilot GitHub Agentic Workflows**
+   - Keep the next workflow read-only/report-only until a real run prints receipts.
+   - Treat missing run IDs, output URLs, or final conclusions as HOLD.
 
 ### Future Enhancements
 1. **better-agents** (Q2 2025)
@@ -317,9 +433,9 @@ Google Cloud toolkit for building and deploying production-ready Generative AI a
 ---
 
 ## Evaluation Completed
-**Date:** 2025-12-03  
+**Date:** 2025-12-03; Copilot app / Agentic Workflows addendum: 2026-09-08  
 **Evaluator:** GitHub Copilot Coding Agent  
-**Status:** Ready for implementation
+**Status:** GitHub MCP server ready for optional developer-tool implementation; Copilot app and Agentic Workflows require measured pilots before adoption claims
 
 **Next Steps:**
 1. Integrate github-mcp-server

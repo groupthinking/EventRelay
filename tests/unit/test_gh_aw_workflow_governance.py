@@ -172,3 +172,14 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
+
+
+def test_resource_evaluation_covers_copilot_app_and_agentic_workflows() -> None:
+    source = (ROOT / ".github/RESOURCE_EVALUATION.md").read_text()
+
+    assert "## 4. GitHub Copilot app" in source
+    assert "## 5. GitHub Agentic Workflows" in source
+    assert "No demo/mock adoption path" in source
+    assert "first-hand evidence before fit claims" in source
+    assert "| **GitHub Copilot app** | 🟡 Pilot |" in source
+    assert "| **GitHub Agentic Workflows** | 🟡 Pilot |" in source
