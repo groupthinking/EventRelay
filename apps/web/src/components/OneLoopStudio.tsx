@@ -489,6 +489,7 @@ export default function OneLoopStudio() {
   };
 
   const exportPkg = () => {
+    const filename = studioExportFilename(selected?.title || 'uvai-project');
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -508,7 +509,7 @@ export default function OneLoopStudio() {
       packFormation.artifacts.length === 0 &&
       packFormation.tools.length === 0
     ) {
-      const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty', filename });
       setExportToast(toast);
       return;
     }
@@ -525,7 +526,6 @@ export default function OneLoopStudio() {
         },
       });
       downloadScaffoldPackage(pkg);
-      const filename = studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
@@ -543,6 +543,7 @@ export default function OneLoopStudio() {
       const toast = studioExportToastMessage({
         ok: false,
         error: err instanceof Error ? err.message : 'Export failed.',
+        filename,
       });
       setExportToast(toast);
     }
