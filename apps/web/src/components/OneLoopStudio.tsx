@@ -862,10 +862,10 @@ export default function OneLoopStudio() {
                   busy: busy || selected?.status === 'processing',
                   hasCompletedRun: selected != null && selected.status !== 'processing' && !busy,
                   eventCount: 0,
-                   hasTranscript: Boolean(selected?.transcript?.trim()),
-                   hasArchitecture: Boolean(packFormation.architecture),
-                   artifactCount: packFormation.artifacts.length,
-                   toolCount: packFormation.tools.length,
+                  hasTranscript: Boolean(selected?.transcript?.trim()),
+                  hasArchitecture: Boolean(packFormation.architecture),
+                  artifactCount: packFormation.artifacts.length,
+                  toolCount: packFormation.tools.length,
                 })}
               </li>
             )}
