@@ -16,6 +16,8 @@ network: defaults
 safe-outputs:
   add-comment:
     max: 1
+  noop:
+    report-as-issue: false
   report-incomplete: false
   threat-detection: true
 

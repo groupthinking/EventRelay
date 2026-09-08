@@ -172,3 +172,16 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
+
+
+def test_agentic_workflows_do_not_report_noop_runs_as_issues() -> None:
+    for workflow_name in (
+        "canonical-pr-remediator",
+        "focused-coverage-controller",
+        "repo-assist",
+    ):
+        workflow = _load_frontmatter(
+            ROOT / f".github/workflows/{workflow_name}.md"
+        )
+
+        assert workflow["safe-outputs"]["noop"]["report-as-issue"] is False
