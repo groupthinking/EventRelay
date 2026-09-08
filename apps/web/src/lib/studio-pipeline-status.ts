@@ -153,3 +153,67 @@ export function studioPasteOutcomeMessage(input: {
   }
   return 'Pack emit failed: verification failed (source_url + source_hash required).';
 }
+
+export const STUDIO_TRANSCRIPT_TYPICAL_SECONDS = 45;
+
+export type StudioTranscriptStageId =
+  | 'idle'
+  | 'pack'
+  | 'captions'
+  | 'transcript'
+  | 'events'
+  | 'ready'
+  | 'failed';
+
+export function studioTranscriptStage(input: {
+  busy: boolean;
+  elapsedSeconds: number;
+  progress?: number;
+  hasPack?: boolean;
+  hasTranscript?: boolean;
+  hasFailed?: boolean;
+}): { id: StudioTranscriptStageId; label: string } {
+  if (input.hasFailed) {
+    return { id: 'failed', label: 'Transcript failed' };
+  }
+  if (input.hasTranscript && !input.busy) {
+    return { id: 'ready', label: 'Transcript ready' };
+  }
+  if (!input.busy) {
+    return { id: 'idle', label: 'Waiting for a video' };
+  }
+  if (input.hasTranscript) {
+    return { id: 'events', label: 'Extracting events' };
+  }
+  const progress = input.progress ?? 0;
+  if (progress >= 10 || input.elapsedSeconds >= 18) {
+    return { id: 'transcript', label: 'Building transcript' };
+  }
+  if (input.hasPack || progress >= 5 || input.elapsedSeconds >= 6) {
+    return { id: 'captions', label: 'Fetching captions' };
+  }
+  return { id: 'pack', label: 'Pack identity' };
+}
+
+export function studioTranscriptEtaLabel(
+  elapsedSeconds: number,
+  typicalSeconds = STUDIO_TRANSCRIPT_TYPICAL_SECONDS,
+): string {
+  const remaining = Math.max(0, typicalSeconds - Math.max(0, elapsedSeconds));
+  if (remaining === 0) {
+    return 'Still working — typical run is about 45s';
+  }
+  return `About ${remaining}s left (typical ~45s)`;
+}
+
+export function studioCanRetryTranscript(input: {
+  busy: boolean;
+  hasFailed?: boolean;
+  retryable?: boolean;
+  elapsedSeconds?: number;
+}): boolean {
+  if (input.busy) {
+    return (input.elapsedSeconds ?? 0) >= 90;
+  }
+  return Boolean(input.hasFailed && input.retryable !== false);
+}
