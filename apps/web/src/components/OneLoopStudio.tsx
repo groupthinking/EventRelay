@@ -60,12 +60,35 @@ import {
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
-import { evaluateStudioDeployTransition } from '@/lib/gate-transition';
+import {
+  evaluateStudioDeployTransition,
+  studioDeployAttemptTransitionId,
+  studioGateReceiptView,
+  type GateDecision,
+  type StudioGateReceiptView,
+} from '@/lib/gate-transition';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
+
+function gateDecisionChipClass(decision: GateDecision): string {
+  switch (decision) {
+    case 'PASS':
+      return 'border-emerald-400/40 bg-emerald-950/50 text-emerald-200';
+    case 'HOLD':
+      return 'border-[#e8b86d]/40 bg-[#1a1408] text-[#e8b86d]';
+    case 'REJECT':
+      return 'border-red-400/40 bg-[#2a1212] text-red-100';
+    case 'ESCALATE':
+      return 'border-violet-400/40 bg-violet-950/40 text-violet-200';
+    default: {
+      const _exhaustive: never = decision;
+      return _exhaustive;
+    }
+  }
+}
 
 function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
@@ -200,6 +223,7 @@ export default function OneLoopStudio() {
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
+  const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [playerEpoch, setPlayerEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
@@ -545,11 +569,20 @@ export default function OneLoopStudio() {
         return;
       }
       if (!started.ok || !started.runId) {
-        setMessage(started.error || 'Deploy needs sign-in.');
+        const backendReason = started.error || started.message || 'Deploy needs sign-in.';
+        const gated = evaluateStudioDeployTransition({
+          transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+          kind: 'handoff',
+          backendReason,
+          authority: { actor: 'anonymous' },
+        });
+        setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+        setMessage(backendReason);
         return;
       }
       setDeployRunId(started.runId);
       const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
+      const backendReason = polled.error || polled.result?.message || null;
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
         runId: started.runId,
@@ -557,8 +590,10 @@ export default function OneLoopStudio() {
         liveUrl: polled.result?.live_url,
         runStatus: polled.runStatus,
         kind: polled.result?.kind,
+        backendReason,
         authority: { actor: 'anonymous' },
       });
+      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
       const liveUrl = gated.decision === 'PASS' ? polled.result?.live_url : undefined;
       setDeployReceiptUrl(studioVerifiedLiveUrl(liveUrl));
       setDeployReceiptVideoId(attemptVideoId);
@@ -572,7 +607,15 @@ export default function OneLoopStudio() {
         }),
       );
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Deploy failed.');
+      const backendReason = err instanceof Error ? err.message : 'Deploy failed.';
+      const gated = evaluateStudioDeployTransition({
+        transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+        kind: 'handoff',
+        backendReason,
+        authority: { actor: 'anonymous' },
+      });
+      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+      setMessage(backendReason);
     } finally {
       setDeployBusy(false);
     }
@@ -652,6 +695,35 @@ export default function OneLoopStudio() {
           <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
             {statusText}
           </p>
+          {gateReceipt ? (
+            <div
+              data-testid="studio-gate-receipt"
+              role="status"
+              className="mt-2 flex flex-wrap items-start gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+            >
+              <span
+                data-testid="studio-gate-decision"
+                className={clsx(
+                  'inline-flex rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em]',
+                  gateDecisionChipClass(gateReceipt.decision),
+                )}
+              >
+                {gateReceipt.decision}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p data-testid="studio-gate-reason" className="text-sm text-white/80">
+                  {gateReceipt.reason}
+                </p>
+                <p className="mt-1 break-all font-mono text-[11px] text-white/45">
+                  <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
+                  {' · '}
+                  <span data-testid="studio-gate-receipt-hash">{gateReceipt.receiptHash}</span>
+                  {' · '}
+                  {gateReceipt.version}
+                </p>
+              </div>
+            </div>
+          ) : null}
           {selected?.videoPack && (
             <p
               data-testid="video-pack-citation"

@@ -1,28 +1,28 @@
-# TASK: G.A.T.E. transition contract (PR1)
+# TASK: Studio G.A.T.E. receipt chip after Attempt deploy
 
 ## 1. Goal & Scope
-* **Objective:** Add a typed Governed Acceptance & Transition Engine contract that returns exactly one of PASS | HOLD | REJECT | ESCALATE, emits a versioned EventRelay receipt, and gates Studio deploy success claims.
-* **Context:** Authorized next cut is Origin G.A.T.E. only. Zero-Sim asks if evidence is real; G.A.T.E. asks whether verified evidence + authority permit the transition. This is not a second product DB and does not build artifacts.
+* **Objective:** After anonymous Attempt deploy, Studio shows a visible G.A.T.E. decision (PASS | HOLD | REJECT | ESCALATE), a short reason, and a citable `eventrelay.gate-receipt.v1` id/hash — including when BACKEND_URL is missing.
+* **Context:** Residual after #1713. Prod claimed a soft PASS with no receipt UI; anon Attempt deploy only showed `BACKEND_URL is not configured`.
 * **Scope:**
-  * `apps/web/src/lib/gate-transition.ts` (new)
-  * `apps/web/src/lib/__tests__/gate-transition.test.ts` (new)
-  * `apps/web/src/components/OneLoopStudio.tsx` (one deploy claim site)
-  * `docs/gate-transition-contract.md` + short `AGENTS.md` section
- * *Initial Check:* No existing G.A.T.E. module. Reuse `#1707`/`#1710` `studioVerifiedLiveUrl` as the locked live-receipt bar. Do not rebuild Mission Workspace.
+  * `apps/web/src/lib/gate-transition.ts` — view + attempt id + cite backend_reason
+  * `apps/web/src/lib/__tests__/gate-transition.test.ts`
+  * `apps/web/src/components/OneLoopStudio.tsx` — evaluate on start-fail/catch; render chip
+  * `docs/gate-transition-contract.md` — Studio must surface the receipt
+ * *Initial Check:* Reuse `evaluateStudioDeployTransition`. Do not persist receipts in Upstash. Do not revive “Deploy completed”.
 
 ## 2. Execution Plan
-- [x] Step 1: Write failing unit tests for PASS / HOLD / REJECT / ESCALATE + receipt hash
-- [x] Step 2: Implement contract + Zero-Sim assessor (no invented evidence)
-- [x] Step 3: Wire OneLoopStudio deploy to evaluate G.A.T.E. before claiming a live receipt
-- [x] Step 4: Document the four decisions and Zero-Sim vs G.A.T.E. split
-- [x] Step 5: Verify focused vitest + source-guard; open ready PR to main
+- [x] Step 1: Failing tests for HOLD+BACKEND_URL view and Studio chip testids
+- [x] Step 2: `studioGateReceiptView` + attempt transition id
+- [x] Step 3: OneLoopStudio evaluates G.A.T.E. on backend-fail and catch paths
+- [x] Step 4: Render decision chip in Studio header
+- [x] Step 5: Verify vitest; open ready PR to main
 
 ## 3. Definition of Done (Success Verification)
-* **Expected Outcome:** Studio deploy cannot claim live success unless G.A.T.E. returns PASS with a verified https live URL. Missing evidence HOLDs; unreal/malformed live claims REJECT; unknown authority ESCALATES. Receipts are versioned and SHA-256 hashable.
+* **Expected Outcome:** Anon Attempt deploy always shows a G.A.T.E. chip. Missing BACKEND_URL → HOLD + backend reason + receipt hash. No “Deploy completed” overclaim.
 * **Verification Method:** `cd apps/web && npx vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts`
-* **Proof Artifact:** `cd apps/web && npx vitest run` → 89 files, 591 passed, 1 skipped.
+* **Proof Artifact:** focused **2 files / 33 passed**; full frontend `npx vitest run` → **89 files, 596 passed, 1 skipped**. PR: https://github.com/groupthinking/EventRelay/pull/1717
 
 ## 4. Post-Task Reflection
-* **What was done:** Typed `evaluateTransition` / `evaluateStudioDeployTransition` contract with EventRelay receipts; Studio deploy claims live success only after G.A.T.E. PASS.
-* **Why it was needed:** Authorized Origin G.A.T.E. cut. Copy-only #1707 honesty is not a transition contract.
-* **How it was tested:** `cd apps/web && npx vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts`
+* **What was done:** Visible G.A.T.E. chip on Attempt deploy; HOLD cites BACKEND_URL; receipt id/hash from `eventrelay.gate-receipt.v1`.
+* **Why it was needed:** #1713 evaluated only after a successful runId; prod showed backend text with no gate UI.
+* **How it was tested:** `cd apps/web && npx vitest run` (596 passed, 1 skipped).

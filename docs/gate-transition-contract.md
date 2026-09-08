@@ -61,7 +61,8 @@ The Studio adapter may assert Zero-Sim `real` only after `studioVerifiedLiveUrl`
 **`studio.deploy`**: `proposed` → `live` on the OneLoopStudio Deploy attempt.
 
 - Anonymous Deploy remains an **attempt** (button: Attempt deploy). Enabled ≠ receipt.
-- G.A.T.E. runs after the workflow poll and **before** `studioDeployOutcomeMessage`.
+- G.A.T.E. runs on every Attempt deploy that is not an auth redirect — including when `startStudioDeploy` fails (e.g. `BACKEND_URL is not configured`) — and **before** `studioDeployOutcomeMessage`.
+- Studio **must** render a visible decision chip (`data-testid="studio-gate-receipt"`): **PASS | HOLD | REJECT | ESCALATE**, the short reason, and `receipt.id` / `receipt_hash` (`eventrelay.gate-receipt.v1`). Missing backend config is **HOLD** (`GATE_HOLD_MISSING_EVIDENCE`) plus the backend reason — not a silent/no-chip failure.
 - **PASS** only with a verified `https://` live URL that has a hostname.
 - Workflow `completed` without that URL → **HOLD**. Copy must not say “Deploy completed”.
 - Presented live URL that fails the hostname bar → **REJECT**.
