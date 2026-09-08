@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   studioCanExport,
+  studioCanRetryTranscript,
   studioEventsEmptyMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
@@ -12,6 +13,8 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioTranscriptEtaLabel,
+  studioTranscriptStage,
 } from '../studio-pipeline-status';
 
 describe('studio-pipeline-status', () => {
@@ -208,6 +211,46 @@ describe('studio-pipeline-status', () => {
 
   it('names an invalid ?video= handoff instead of staying silent', () => {
     expect(studioInvalidHandoffMessage('https://www.youtube.com/watch')).toMatch(/valid youtube/i);
+  });
+
+  it('names transcript stages, ETA, and when retry is available', () => {
+    expect(studioTranscriptStage({ busy: true, elapsedSeconds: 2 }).id).toBe('pack');
+    expect(studioTranscriptStage({ busy: true, elapsedSeconds: 2 }).label).toMatch(/pack identity/i);
+    expect(
+      studioTranscriptStage({ busy: true, elapsedSeconds: 12, hasPack: true, progress: 8 }).id,
+    ).toBe('captions');
+    expect(
+      studioTranscriptStage({
+        busy: true,
+        elapsedSeconds: 20,
+        hasPack: true,
+        progress: 12,
+      }).id,
+    ).toBe('transcript');
+    expect(
+      studioTranscriptStage({
+        busy: true,
+        elapsedSeconds: 30,
+        hasTranscript: true,
+      }).id,
+    ).toBe('events');
+    expect(studioTranscriptStage({ busy: false, elapsedSeconds: 40, hasTranscript: true }).id).toBe(
+      'ready',
+    );
+    expect(studioTranscriptStage({ busy: false, elapsedSeconds: 12, hasFailed: true }).id).toBe(
+      'failed',
+    );
+    expect(studioTranscriptEtaLabel(10)).toMatch(/about 35s left/i);
+    expect(studioTranscriptEtaLabel(45)).toMatch(/typical/i);
+    expect(studioCanRetryTranscript({ busy: false, hasFailed: true, retryable: true })).toBe(true);
+    expect(studioCanRetryTranscript({ busy: true, elapsedSeconds: 20 })).toBe(false);
+    expect(studioCanRetryTranscript({ busy: true, elapsedSeconds: 90 })).toBe(true);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioTranscriptStage');
+    expect(studio).toContain('studioTranscriptEtaLabel');
+    expect(studio).toContain('data-testid="studio-transcript-stage"');
+    expect(studio).toContain('data-testid="studio-transcript-retry"');
   });
 
   it('does not map keyframes or concepts into Studio events', () => {

@@ -30,6 +30,7 @@ import {
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioCanExport,
+  studioCanRetryTranscript,
   studioEventsEmptyMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
@@ -39,6 +40,8 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioTranscriptEtaLabel,
+  studioTranscriptStage,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
 import {
@@ -300,8 +303,10 @@ export default function OneLoopStudio() {
     void runAnalysis(url);
   };
 
+  const transcriptWorking = busy || selected?.status === 'processing';
+
   useEffect(() => {
-    if (!busy) {
+    if (!transcriptWorking) {
       setElapsed(0);
       return;
     }
@@ -310,7 +315,7 @@ export default function OneLoopStudio() {
       setElapsed(Math.floor((Date.now() - started) / 1000));
     }, 250);
     return () => window.clearInterval(timer);
-  }, [busy]);
+  }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
   const eventCount = selected?.events?.length ?? 0;
@@ -499,8 +504,22 @@ export default function OneLoopStudio() {
     }
   };
 
-  const statusText = busy
-    ? `Working · ${elapsed}s — ${message}`
+  const transcriptStage = studioTranscriptStage({
+    busy: transcriptWorking,
+    elapsedSeconds: elapsed,
+    progress: selected?.progress,
+    hasPack: Boolean(selected?.videoPack),
+    hasTranscript: Boolean(selected?.transcript?.trim()),
+    hasFailed: selected?.status === 'failed',
+  });
+  const showTranscriptRetry = studioCanRetryTranscript({
+    busy: transcriptWorking,
+    hasFailed: selected?.status === 'failed',
+    retryable: selected?.failure?.retryable !== false,
+    elapsedSeconds: elapsed,
+  });
+  const statusText = transcriptWorking
+    ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
     : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
 
   return (
@@ -567,7 +586,7 @@ export default function OneLoopStudio() {
               {studioPackCitation(selected.videoPack)}
             </p>
           )}
-          {(busy || selected?.status === 'processing') && (
+          {transcriptWorking && (
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-[#e8b86d] transition-all"
@@ -610,9 +629,38 @@ export default function OneLoopStudio() {
               </span>
             ) : null}
           </div>
+          {(transcriptStage.id !== 'idle' || showTranscriptRetry) && (
+            <div
+              data-testid="studio-transcript-stage"
+              className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2"
+            >
+              <div>
+                <p className="text-sm text-white/80">{transcriptStage.label}</p>
+                {transcriptWorking && !selected?.transcript && (
+                  <p className="font-mono text-[11px] text-white/40">
+                    {studioTranscriptEtaLabel(elapsed)}
+                  </p>
+                )}
+              </div>
+              {showTranscriptRetry ? (
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                >
+                  Retry transcript
+                </button>
+              ) : null}
+            </div>
+          )}
           <div className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80">
             {selected?.transcript?.trim() ||
-              (busy ? 'Waiting on captions…' : 'Nothing yet.')}
+              (transcriptWorking
+                ? 'Waiting on captions — no invented text.'
+                : selected?.status === 'failed'
+                  ? selected.failure?.message || 'Transcript failed.'
+                  : 'Nothing yet.')}
           </div>
         </section>
 
