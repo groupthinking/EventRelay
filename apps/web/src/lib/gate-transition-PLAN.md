@@ -15,12 +15,12 @@
 - [x] Step 2: Implement contract + Zero-Sim assessor (no invented evidence)
 - [x] Step 3: Wire OneLoopStudio deploy to evaluate G.A.T.E. before claiming a live receipt
 - [x] Step 4: Document the four decisions and Zero-Sim vs G.A.T.E. split
-- [ ] Step 5: Verify focused vitest + source-guard; open ready PR to main
+- [x] Step 5: Verify focused vitest + source-guard; open ready PR to main
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Studio deploy cannot claim live success unless G.A.T.E. returns PASS with a verified https live URL. Missing evidence HOLDs; unreal/malformed live claims REJECT; unknown authority ESCALATES. Receipts are versioned and SHA-256 hashable.
 * **Verification Method:** `cd apps/web && npx vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts`
-* **Proof Artifact:** Test command output on this branch.
+* **Proof Artifact:** `cd apps/web && npx vitest run` → 89 files, 591 passed, 1 skipped.
 
 ## 4. Post-Task Reflection
 * **What was done:** Typed `evaluateTransition` / `evaluateStudioDeployTransition` contract with EventRelay receipts; Studio deploy claims live success only after G.A.T.E. PASS.
