@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
+import HomeProCheckout from '@/components/home/HomeProCheckout';
 import {
   WORKFLOW_PRO_PRODUCT_NAME,
   workflowProPriceLabel,
@@ -71,9 +71,9 @@ export default function HomePage() {
             ))}
           </div>
 
-          <Link href="/pricing" className="btn btn-primary mt-8 px-8 py-3 text-sm">
-            Get Pro
-          </Link>
+          <div id="get-pro" className="mt-10 w-full max-w-lg" aria-label="Get Pro">
+            <HomeProCheckout />
+          </div>
         </div>
       </section>
 

@@ -97,7 +97,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/pricing" className="btn btn-primary py-2 px-5 text-sm">
+          <Link href="/#get-pro" className="btn btn-primary py-2 px-5 text-sm">
             Get Pro
           </Link>
         )}

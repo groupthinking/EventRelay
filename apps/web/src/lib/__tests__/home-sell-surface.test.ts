@@ -22,6 +22,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Universal Video Action Intelligence');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
+    expect(home).toContain('HomeProCheckout');
     expect(home).toContain('Get Pro');
     expect(home).not.toContain('$19/mo');
     expect(home).not.toContain('$180');
@@ -66,15 +67,29 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(config).toContain("source: '/prototype'");
   });
 
-  it('keeps Get Pro checkout on /pricing (CoS: do not fold onto Home this PR)', () => {
+  it('folds Get Pro checkout onto Home via the existing ProCheckoutButton path', () => {
     const home = readSource('app/page.tsx');
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const button = readSource('components/billing/ProCheckoutButton.tsx');
     const nav = readSource('components/Nav.tsx');
     const pricing = readSource('app/pricing/page.tsx');
     const config = readWebFile('next.config.js');
-    expect(home).toContain('href="/pricing"');
-    expect(home).toContain('Get Pro');
-    expect(home).not.toContain('ProCheckoutButton');
-    expect(home).not.toContain('turnstile');
+    expect(home).toContain('HomeProCheckout');
+    expect(home).toContain('id="get-pro"');
+    expect(home).not.toMatch(/href="\/pricing"[\s\S]{0,80}Get Pro/);
+    expect(checkout).toContain("from '@/components/billing/ProCheckoutButton'");
+    expect(checkout).toContain('ProCheckoutButton');
+    expect(checkout).toContain('Monthly checkout');
+    expect(checkout).toContain('Annual checkout');
+    expect(checkout).toContain('workflowProPriceLabel');
+    expect(checkout).toContain('WORKFLOW_PRO_PRODUCT_NAME');
+    expect(checkout).toContain('href="/pricing"');
+    expect(checkout).not.toContain('/api/billing/checkout');
+    expect(checkout).not.toContain('Maintain');
+    expect(checkout).not.toContain('Ship');
+    expect(button).toContain("fetch('/api/billing/checkout'");
+    expect(button).toContain('turnstileToken');
+    expect(nav).toContain('href="/#get-pro"');
     expect(nav).toContain("href: '/pricing'");
     expect(pricing).toContain('ProCheckoutButton');
     expect(pricing).toContain('turnstile');

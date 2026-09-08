@@ -1,30 +1,27 @@
-# TASK: UVAI Workflow Pro Stripe checkout (slice 1)
+# TASK: Fold Get Pro checkout onto Home
 
 ## 1. Goal & Scope
-* **Objective:** Point EventRelay web checkout at UVAI Workflow Pro $39/mo and $390/yr, with Turnstile still fail-closed.
-* **Context:** Live Stripe (UVAI account) already has product `prod_V9TYXeVHLQGrVW` and prices `price_1U9AbLAmTgsI2zgNEZD4Kwed` / `price_1U9AbLAmTgsI2zgN0SM70JN9`. Checkout-config still encodes stale EventRelay Pro $19/$180 amounts.
+* **Objective:** Put the live Workflow Pro checkout (Turnstile + Continue to UVAI Workflow Pro $39/mo, monthly/annual) on Home (`/`), reusing `ProCheckoutButton` / `POST /api/billing/checkout`. Keep `/pricing` as the deeper plans page that still checkouts.
+* **Context:** PR #1668 made Home a sell shell with Get Pro linking to `/pricing`. CoS authorized folding checkout onto Home (2026-09-08 after HOME SIGNED). Live checkout already works on `/pricing`.
 * **Scope:**
-  * Modify: `checkout-config.ts`, `stripe-checkout.ts`, billing tests, `REVENUE-PROCESS.md`, `LAUNCH_CHECKLIST.md`, `.env.example` comments, revenue-spine helper amounts.
-  * Do not touch Video Pack, Mission Workspace, Agent Factory, Origin G.A.T.E., Chrome/mobile/desktop, FORGE, VIZUL, Workbench, Living Notebook, ClipToAction, or the cancelled contest.
-  * Do not add Maintain $199/mo or Ship per-job.
-  * Do not hardcode `STRIPE_SECRET_KEY`.
- * *Initial check:* Existing files cover this. No new production modules.
+  * Modify: Home page, new Home checkout island, Nav Get Pro target, home-sell tests, Playwright smoke.
+  * Reuse: `ProCheckoutButton`, Turnstile, existing Stripe price IDs. No new SKUs.
+  * Do not break paste → Studio handoff. Do not add Origin G.A.T.E., ClipToAction, or Maintain/Ship checkout.
+ * *Initial check:* `ProCheckoutButton` already exists. Add a Home client island instead of a second Stripe path.
 
 ## 2. Execution Plan
-- [x] Update unit tests to assert 3900 / 39000 cents and `UVAI Workflow Pro`
-- [x] Watch those tests fail against current 1900 / 18000 + EventRelay Pro
-- [x] Update `checkout-config.ts` amounts, product name, documented last-resort price IDs (env preferred; production still requires env)
-- [x] Default production success/cancel base URL to `https://uvai.io` so redirects stay on `/pricing`
-- [x] Sweep named docs and billing tests; keep Turnstile fail-closed tests
-- [x] Run focused billing tests; open PR against main
-- [x] Pricing UI shows UVAI Workflow Pro at $39/mo and $390/yr
+- [x] RED: Home-sell tests require `HomeProCheckout` + `ProCheckoutButton` on `/`
+- [x] GREEN: Mount Turnstile + monthly/annual checkout on Home; keep `/pricing`
+- [x] Nav Get Pro lands on `/#get-pro`; Pricing nav still goes to `/pricing`
+- [x] Playwright: Home has checkout controls; paste handoff still works
+- [x] Focused vitest; commit; PR
 
 ## 3. Definition of Done (Success Verification)
-* **Expected Outcome:** Checkout params and `/pricing` UI are Workflow Pro $39/$390. Production still throws if `STRIPE_PRICE_PRO_*` is missing. Turnstile still 403s checkout. Success/cancel stay on `/pricing` under `https://uvai.io`. Domain stays on Vercel project v0-uvai.
-* **Verification Method:** `cd apps/web && npx vitest run src/lib/billing src/app/api/__tests__/billing src/app/pricing`
-* **Proof Artifact:** 16 files, 59 passed (2026-08-31). PR: https://github.com/groupthinking/EventRelay/pull/1599
+* **Expected Outcome:** Cold `/` still sell hero + paste + $39/$390/$199. User completes Turnstile → Stripe Checkout $39 from Home. `/pricing` still checkouts. Paste still goes to `/studio?video=`.
+* **Verification Method:** `cd apps/web && npx vitest run src/lib/__tests__/home-sell-surface.test.ts src/app/pricing/__tests__/pricing-catalog.test.ts src/lib/__tests__/studio-handoff.test.ts`
+* **Proof Artifact:** `cd apps/web && npx vitest run` — 88 files, 558 passed / 1 skipped.
 
 ## 4. Post-Task Reflection
-* **What was done:** Replaced stale EventRelay Pro $19/$180 checkout amounts and `/pricing` copy with UVAI Workflow Pro $39/$390. Production still requires `STRIPE_PRICE_PRO_*`. Non-prod last-resort fallbacks are the live Workflow Pro Price IDs. Production success/cancel default to `https://uvai.io/pricing`. Turnstile fail-closed tests unchanged. No Origin/domain retarget.
-* **Why it was needed:** Live Stripe already sells Workflow Pro at $39/$390; UI and checkout-config still hid or encoded the cancelled $19/$180 catalog.
-* **How it was tested:** RED: catalog helper and pricing source tests failed. GREEN: 59 billing+pricing tests passed, including Turnstile 403 and production missing-env throw.
+* **What was done:** Added `HomeProCheckout` on `/` that reuses `ProCheckoutButton` (Turnstile → existing `/api/billing/checkout`). Nav Get Pro targets `/#get-pro`. `/pricing` remains the full plans page with the same checkout. Ship/Maintain stay copy-only.
+* **Why it was needed:** After #1668 Home sold Pro by linking away to `/pricing`. CoS authorized folding live Get Pro onto cold `/`.
+* **How it was tested:** RED: home-sell tests failed without `HomeProCheckout`. GREEN: 558 passed. Playwright smoke now asserts Home Turnstile + monthly/annual + paste handoff.

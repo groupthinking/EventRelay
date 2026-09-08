@@ -4,8 +4,8 @@ Recurring revenue is anchored on **UVAI Workflow Pro** ($39/mo or $390/yr) via S
 
 ## Entry point
 
-- **Pricing UI:** `src/app/pricing/page.tsx`
-- **Pro CTA:** `ProCheckoutButton` → `POST /api/billing/checkout` (Turnstile required)
+- **Home + Pricing UI:** `src/app/page.tsx` (`HomeProCheckout`) and `src/app/pricing/page.tsx`
+- **Pro CTA:** `ProCheckoutButton` → `POST /api/billing/checkout` (Turnstile required). Same button on Home and Pricing — no second Stripe path.
 - **Renewal:** `POST /api/billing/renew` (no Turnstile; for returning subscribers)
 
 ## Environment
@@ -18,7 +18,7 @@ Copy from Vercel or use test values in `.env.local`:
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Client Stripe.js (future portal) |
 | `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_ANNUAL` | **Required in production.** Last-resort documented fallbacks (non-prod only): `price_1U9AbLAmTgsI2zgNEZD4Kwed` ($39/mo, lookup `uvai-workflow-pro-monthly`) and `price_1U9AbLAmTgsI2zgN0SM70JN9` ($390/yr, lookup `uvai-workflow-pro-annual`). Product `prod_V9TYXeVHLQGrVW`. Never reuse dead EventRelay Pro $19/$180 IDs. |
 | `STRIPE_WEBHOOK_SECRET` | Required for `/api/billing/webhook` (checkout.session.completed) |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget on pricing |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget on Home and Pricing |
 | `TURNSTILE_SECRET_KEY` | Server siteverify |
 | `GROK_BILLING_LEAD_MODEL` | Metadata on subscriptions (`grok-4-1-fast` default) |
 | `NEXT_PUBLIC_APP_URL` | Checkout success/cancel URLs |

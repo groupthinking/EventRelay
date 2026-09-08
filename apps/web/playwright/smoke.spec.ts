@@ -49,6 +49,11 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page.getByText('$39')).toBeVisible();
     await expect(page.getByText('$199/mo')).toBeVisible();
     await expect(page.getByRole('link', { name: /Get Pro/i }).first()).toBeVisible();
+    await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Monthly checkout/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Annual checkout/i })).toBeVisible();
+    await expect(page.getByTestId('pro-checkout-button')).toBeVisible();
+    await expect(page.getByTestId('turnstile-widget')).toBeVisible();
   });
 
   test('Features and playground fold into Home', async ({ page }) => {
