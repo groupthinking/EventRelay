@@ -366,8 +366,6 @@ class TestCloudAIRoutes:
         assert response.status_code == 503
 
     def test_analyze_video_rate_limit_error(self):
-        # RateLimitError is a subclass of CloudAIError, so it's caught by the
-        # CloudAIError except clause first and returns 503 (not 429).
         mock_ai = AsyncMock()
         mock_ai.__aenter__ = AsyncMock(return_value=mock_ai)
         mock_ai.__aexit__ = AsyncMock(return_value=False)
@@ -379,7 +377,9 @@ class TestCloudAIRoutes:
                 "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
                 "analysis_types": ["label_detection"],
             })
-        assert response.status_code in (429, 503)
+        assert response.status_code == 429
+        assert response.json()["detail"] == "Rate limit exceeded"
+        assert "too many requests" not in response.json()["detail"]
 
     def test_analyze_video_configuration_error(self):
         # ConfigurationError is a subclass of CloudAIError, so it's caught by
@@ -395,7 +395,9 @@ class TestCloudAIRoutes:
                 "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
                 "analysis_types": ["label_detection"],
             })
-        assert response.status_code in (500, 503)
+        assert response.status_code == 500
+        assert response.json()["detail"] == "Internal server error"
+        assert "missing key" not in response.json()["detail"]
 
     def test_analyze_video_generic_error(self):
         mock_ai = AsyncMock()
@@ -564,7 +566,7 @@ class TestCloudApiEndpoints:
     def test_process_video_sync_failed(self):
         state = self._make_state(status="failed")
         state.success = False
-        state.error_message = "something went wrong"
+        state.error_message = "db_password=legacy-secret"
 
         mock_processor = AsyncMock()
         mock_processor._extract_video_id = MagicMock(return_value="auJzb1D-fag")
@@ -580,7 +582,55 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "failed"
-        assert data["error"] == "something went wrong"
+        assert data["error"] == "Internal server error"
+        assert "legacy-secret" not in data["error"]
+
+    def test_process_video_sync_sanitizes_complete_result_tree(self):
+        state = self._make_state(status="failed")
+        state.success = False
+        state.metadata = {
+            "error": "metadata-secret",
+            "nested": {"error_message": "nested-secret"},
+        }
+        state.transcript = {"errors": ["transcript-secret"]}
+        state.ai_analysis = {"provider": {"error": "provider-secret"}}
+
+        mock_processor = AsyncMock()
+        mock_processor._extract_video_id = MagicMock(return_value="auJzb1D-fag")
+        mock_processor.process_video_sync = AsyncMock(return_value=state)
+
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ):
+            client = self._build_app()
+            response = client.post(
+                "/api/v3/process-video",
+                json={
+                    "video_url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "async_processing": False,
+                },
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["metadata"]["error"] == "Internal server error"
+        assert body["metadata"]["nested"]["error_message"] == (
+            "Internal server error"
+        )
+        assert body["transcript"]["errors"] == ["Internal server error"]
+        assert body["ai_analysis"]["provider"]["error"] == (
+            "Internal server error"
+        )
+        assert not any(
+            secret in response.text
+            for secret in (
+                "metadata-secret",
+                "nested-secret",
+                "transcript-secret",
+                "provider-secret",
+            )
+        )
 
     def test_process_video_exception(self):
         mock_processor = AsyncMock()
@@ -739,6 +789,21 @@ class TestCloudApiEndpoints:
         assert data["video_id"] == "auJzb1D-fag"
         assert data["status"] == "completed"
 
+    def test_get_video_status_sanitizes_legacy_persisted_error(self):
+        state = self._make_state(status="failed")
+        state.error_message = "redis://user:password@internal-host"
+        mock_processor = AsyncMock()
+        mock_processor.get_processing_status = AsyncMock(return_value=state)
+
+        with patch("youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+                   return_value=mock_processor):
+            client = self._build_app()
+            response = client.get("/api/v3/videos/auJzb1D-fag/status")
+
+        assert response.status_code == 200
+        assert response.json()["error_message"] == "Internal server error"
+        assert "internal-host" not in response.json()["error_message"]
+
     def test_get_video_status_not_found(self):
         mock_processor = AsyncMock()
         mock_processor.get_processing_status = AsyncMock(return_value=None)
@@ -774,6 +839,52 @@ class TestCloudApiEndpoints:
         data = response.json()
         assert data["video_id"] == "auJzb1D-fag"
         assert data["status"] == "completed"
+
+    def test_get_video_result_sanitizes_legacy_persisted_error(self):
+        state = self._make_state(status="failed")
+        state.error_message = "Traceback: connection to 10.0.0.5 refused"
+        mock_processor = AsyncMock()
+        mock_processor.get_processing_status = AsyncMock(return_value=state)
+
+        with patch("youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+                   return_value=mock_processor):
+            client = self._build_app()
+            response = client.get("/api/v3/videos/auJzb1D-fag/result")
+
+        assert response.status_code == 200
+        assert response.json()["error_message"] == "Internal server error"
+        assert "10.0.0.5" not in response.json()["error_message"]
+
+    def test_get_video_result_sanitizes_complete_persisted_tree(self):
+        state = self._make_state(status="failed")
+        state.metadata = {"error": "metadata-secret"}
+        state.transcript = {"nested": {"error_message": "transcript-secret"}}
+        state.ai_analysis = {"errors": ["provider-secret"]}
+        mock_processor = AsyncMock()
+        mock_processor.get_processing_status = AsyncMock(return_value=state)
+
+        with patch(
+            "youtube_extension.backend.cloud_api_endpoints.get_cloud_video_processor",
+            return_value=mock_processor,
+        ):
+            client = self._build_app()
+            response = client.get("/api/v3/videos/auJzb1D-fag/result")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["metadata"]["error"] == "Internal server error"
+        assert body["transcript"]["nested"]["error_message"] == (
+            "Internal server error"
+        )
+        assert body["ai_analysis"]["errors"] == ["Internal server error"]
+        assert not any(
+            secret in response.text
+            for secret in (
+                "metadata-secret",
+                "transcript-secret",
+                "provider-secret",
+            )
+        )
 
     def test_get_video_result_not_found(self):
         mock_processor = AsyncMock()

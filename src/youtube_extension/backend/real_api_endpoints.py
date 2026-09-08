@@ -177,6 +177,65 @@ def _read_video_analysis_sync(cache_path: Path) -> Any:
     return raw
 
 
+_PUBLIC_PROCESSING_ERROR = "Video processing failed"
+
+
+def _sanitize_public_error(value: Any) -> Optional[str]:
+    """Return a client-safe processing error without exposing provider details."""
+    return None if value is None else _PUBLIC_PROCESSING_ERROR
+
+
+def _sanitize_error_list(value: Any) -> Any:
+    """Sanitize a plural ``errors`` collection.
+
+    The AI processor records per-step failures as scalar strings that embed
+    exception text (e.g. ``"content_analysis: <exception>"`` in
+    ``real_ai_processor.analyze_video_content``).  Replace those scalar strings
+    with the public message, while preserving — and recursing into — structured
+    error records so batch result shapes stay intact.
+    """
+    if isinstance(value, list):
+        return [_sanitize_error_list(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_error_list(item) for item in value)
+    if isinstance(value, dict):
+        return _sanitize_response_errors(value)
+    # Every remaining leaf is a scalar diagnostic. Only ``None`` (absence of an
+    # error) is preserved; any other non-null leaf — including non-string types
+    # such as bytes, ints, or bools that FastAPI can still serialize — is
+    # replaced so it cannot bypass the scalar sanitization invariant.
+    if value is None:
+        return None
+    return _PUBLIC_PROCESSING_ERROR
+
+
+def _sanitize_response_errors(value: Any) -> Any:
+    """Copy a response tree while replacing every diagnostic error value.
+
+    Processor results can contain exception text at the top level and inside
+    batch, step, or provider records.  Sanitizing the complete response tree at
+    the HTTP boundary also protects cached legacy records without mutating the
+    processor's internal diagnostic value.  The plural ``errors`` collection is
+    handled by :func:`_sanitize_error_list` because it carries scalar exception
+    strings that a plain recursion would pass through unchanged.
+    """
+    if isinstance(value, dict):
+        sanitized: dict[Any, Any] = {}
+        for key, item in value.items():
+            if key in {"error", "error_message"}:
+                sanitized[key] = _sanitize_public_error(item)
+            elif key == "errors":
+                sanitized[key] = _sanitize_error_list(item)
+            else:
+                sanitized[key] = _sanitize_response_errors(item)
+        return sanitized
+    if isinstance(value, list):
+        return [_sanitize_response_errors(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_sanitize_response_errors(item) for item in value)
+    return value
+
+
 # Pydantic models for API requests/responses
 class VideoProcessingRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL or ID")
@@ -246,22 +305,23 @@ def setup_real_api_endpoints(app: FastAPI):
                 video_url=request.video_url,
                 force_refresh=request.force_refresh
             )
+            safe_result = _sanitize_response_errors(result)
 
             # Track metrics
             processing_time = (datetime.now(timezone.utc) - start_time).total_seconds()
 
             # Format response
             response = VideoAnalysisResponse(
-                video_id=result.get('video_id', ''),
+                video_id=safe_result.get('video_id', ''),
                 video_url=request.video_url,
-                success=result.get('success', False),
-                metadata=result.get('metadata'),
-                transcript=result.get('transcript'),
-                ai_analysis=result.get('ai_analysis'),
-                cost_breakdown=result.get('cost_breakdown'),
+                success=safe_result.get('success', False),
+                metadata=safe_result.get('metadata'),
+                transcript=safe_result.get('transcript'),
+                ai_analysis=safe_result.get('ai_analysis'),
+                cost_breakdown=safe_result.get('cost_breakdown'),
                 processing_time=processing_time,
-                cached=result.get('cached', False),
-                error=result.get('error')
+                cached=safe_result.get('cached', False),
+                error=_sanitize_public_error(safe_result.get('error'))
             )
 
             logger.info(f"✅ Real API processing completed: {result.get('video_id')} - ${result.get('cost_breakdown', {}).get('total_cost', 0):.4f}")
@@ -319,7 +379,7 @@ def setup_real_api_endpoints(app: FastAPI):
                 max_concurrent=request.max_concurrent
             )
 
-            return result
+            return _sanitize_response_errors(result)
 
         except HTTPException:
             # Preserve explicit 4xx responses (e.g. the 400 batch-size guard above).
@@ -377,10 +437,11 @@ def setup_real_api_endpoints(app: FastAPI):
                     detail=f"Video analysis not found: {video_id}"
                 )
 
-            # Raw passthrough: the cache entry already is the response JSON.
-            # Returning a Response skips FastAPI's jsonable_encoder/json.dumps
-            # round-trip, which would otherwise re-serialise the payload on
-            # the event loop in proportion to its size.
+            # The helper already parsed, sanitized, and re-encoded the entry in
+            # the worker thread. Returning a Response skips FastAPI's
+            # jsonable_encoder/json.dumps round-trip, which would otherwise
+            # re-serialise the payload on the event loop in proportion to its
+            # size.
             return Response(content=video_data, media_type="application/json")
 
         except HTTPException:
@@ -401,10 +462,10 @@ def setup_real_api_endpoints(app: FastAPI):
             dashboard = await cost_monitor.get_cost_dashboard()
             return dashboard
 
-        except Exception as e:
-            logger.error(f"Error getting cost dashboard: {e}")
+        except Exception:
+            logger.error("Error getting cost dashboard", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
@@ -425,10 +486,10 @@ def setup_real_api_endpoints(app: FastAPI):
 
         except HTTPException:
             raise
-        except Exception as e:
-            logger.error(f"Error getting usage analytics: {e}")
+        except Exception:
+            logger.error("Error getting usage analytics", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
@@ -441,10 +502,10 @@ def setup_real_api_endpoints(app: FastAPI):
             recommendations = await cost_monitor.optimize_api_usage()
             return recommendations
 
-        except Exception as e:
-            logger.error(f"Error getting optimization recommendations: {e}")
+        except Exception:
+            logger.error("Error getting optimization recommendations", exc_info=True)
             return {
-                "error": str(e),
+                "error": "Internal server error",
                 "recommendations": [],
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -472,7 +533,7 @@ def setup_real_api_endpoints(app: FastAPI):
             return {
                 "overall_status": "operational" if processor_status.get('service_status') == 'operational' else "degraded",
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "processor": processor_status,
+                "processor": _sanitize_response_errors(processor_status),
                 "cost_monitoring": {
                     "status": "operational",
                     "today_cost": cost_dashboard.get('today_summary', {}).get('total_cost', 0.0),
@@ -490,11 +551,11 @@ def setup_real_api_endpoints(app: FastAPI):
                 "version": "2.0.0-real-api-integration"
             }
 
-        except Exception as e:
-            logger.error(f"Error getting service status: {e}")
+        except Exception:
+            logger.error("Error getting service status", exc_info=True)
             return {
                 "overall_status": "error",
-                "error": str(e),
+                "error": "Internal server error",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
 
