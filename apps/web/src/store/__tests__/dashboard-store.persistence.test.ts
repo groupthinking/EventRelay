@@ -57,7 +57,7 @@ function resetStore() {
 function readStoredState(storage: ReturnType<typeof makeStorage>): StoredDashboardState {
   const raw = storage.getItem(STORAGE_KEY);
   assert.notEqual(raw, null);
-  return JSON.parse(raw) as StoredDashboardState;
+  return JSON.parse(raw as string) as StoredDashboardState;
 }
 
 let storage: ReturnType<typeof makeStorage>;
