@@ -120,6 +120,7 @@ from youtube_extension.backend.api.v1 import router as router_module  # noqa: E4
 from youtube_extension.backend.api.v1.models import (  # noqa: E402
     AgentExecution,
     AgentStatus,
+    ChatRequest,
     JobStatus,
     VideoJobStatusResponse,
 )
@@ -2182,6 +2183,49 @@ class TestChatExtraCoVerage:
             assert "response" in data
         finally:
             app.dependency_overrides[get_agent_orchestrator_service] = _make_orchestrator
+
+    def test_chat_video_detail_lookup_runs_on_worker_thread(self):
+        seen: dict[str, int] = {}
+
+        svc = _make_data_svc()
+        svc.get_video_detail.side_effect = lambda _video_id: seen.__setitem__(
+            "lookup", threading.get_ident()
+        ) or {
+            "video_id": "vid-1",
+            "metadata": {"title": "Test", "transcript_text": "hello world"},
+        }
+
+        agent_result = MagicMock()
+        agent_result.status = "ok"
+        agent_result.output = {"response": "ok"}
+
+        task_result = MagicMock()
+        task_result.success = True
+        task_result.results = {"transcript_action": agent_result}
+        task_result.errors = []
+
+        orchestrator = MagicMock()
+        orchestrator.execute_task = AsyncMock(return_value=task_result)
+
+        request = ChatRequest(query="hello", video_id="vid-1")
+
+        async def _run():
+            seen["loop"] = threading.get_ident()
+            return await router_module.chat_v1(
+                request=request,
+                orchestrator=orchestrator,
+                data_service=svc,
+                video_processing_service=_make_vps(),
+            )
+
+        response = asyncio.run(_run())
+
+        assert response.status == "success"
+        assert "lookup" in seen, "get_video_detail was never invoked"
+        assert seen["lookup"] != seen["loop"], (
+            "get_video_detail ran on the event loop thread in chat_v1; "
+            "it must be offloaded"
+        )
 
 
 # ===========================================================================

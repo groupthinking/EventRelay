@@ -609,7 +609,8 @@ async def chat_v1(
 
         if video_id:
             logger.info(f"Adding video context for video_id: {video_id}")
-            detail = data_service.get_video_detail(video_id)
+            async with _get_fs_walk_gate():
+                detail = await asyncio.to_thread(data_service.get_video_detail, video_id)
 
             # If video not found, trigger real-time processing
             if not detail and request.video_url:
@@ -623,7 +624,10 @@ async def chat_v1(
                         )
                     )
                     if proc_result and proc_result.get("status") == "success":
-                        detail = data_service.get_video_detail(video_id)
+                        async with _get_fs_walk_gate():
+                            detail = await asyncio.to_thread(
+                                data_service.get_video_detail, video_id
+                            )
                         logger.info(f"Real-time processing complete for {video_id}")
                 except Exception as e:
                     logger.error(f"Real-time video processing failed: {e}")
