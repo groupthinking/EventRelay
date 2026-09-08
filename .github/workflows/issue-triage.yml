@@ -27,13 +27,18 @@ jobs:
         with:
           script: |
             const issue = context.payload.issue;
+            const title = (issue.title || '').trim();
             const body = (issue.body || '').trim();
+            const isBlankAutomationIssue =
+              issue.user &&
+              issue.user.type === 'Bot' &&
+              (body === '' || /^addressing issues$/i.test(title));
 
-            // Bot-opened issues with no body are agent-session artifacts (e.g. the
-            // recurring empty "Addressing Issues" shells from Jules/Linear sessions,
-            // #1548/#1553/#1568). Labeling them for triage just manufactures noise
-            // that syncs back into Linear, so close them instead.
-            if (issue.user && issue.user.type === 'Bot' && body === '') {
+            // Bot-opened issues with no body or a generic "Addressing Issues"
+            // shell are agent-session artifacts. Labeling them for triage just
+            // manufactures noise that syncs back into Linear, so close them
+            // instead.
+            if (isBlankAutomationIssue) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
