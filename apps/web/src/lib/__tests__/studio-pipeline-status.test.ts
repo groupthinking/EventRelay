@@ -345,6 +345,7 @@ describe('studio-pipeline-status', () => {
     expect(retired).not.toMatch(/Could not start durable workflow/);
     expect(retired).not.toMatch(/runs a durable video-to-transcript/);
     expect(retired).not.toMatch(/signed-in durable workflow/);
+    expect(retired).not.toMatch(/durable Workflow DevKit/);
   });
 
   it('renders review_action as a card with status, title, and detail', () => {

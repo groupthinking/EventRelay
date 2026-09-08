@@ -516,7 +516,7 @@ export default function VideoWorkflowStudio() {
   };
 
   /**
-   * Act on findings — durable Workflow DevKit path (video → transcript → action agent).
+   * Act on findings — Workflow DevKit path (video → transcript → action agent).
    * Survives reloads better than a single long request; poll by runId.
    */
   const handleActOnFindings = async () => {
