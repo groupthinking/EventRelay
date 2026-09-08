@@ -550,6 +550,7 @@ export default function VideoWorkflowStudio() {
       setActionMessage(`Workflow ${started.runId} running — polling transcript + actions…`);
 
       const polled = await pollVideoToActions(started.runId, {
+        statusUrl: started.statusUrl,
         attempts: 24,
         delayMs: 2000,
       });

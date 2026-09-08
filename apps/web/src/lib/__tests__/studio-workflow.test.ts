@@ -160,6 +160,36 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('pollVideoToActions uses the durable statusUrl returned at start', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        runId: 'wrun_status_url',
+        runStatus: 'completed',
+        result: {
+          url: 'https://youtu.be/x',
+          transcriptChars: 50,
+          actionCount: 0,
+          actions: [],
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await pollVideoToActions('wrun_status_url', {
+      statusUrl: '/api/workflows/video-to-actions/wrun_status_url',
+      attempts: 1,
+      delayMs: 1,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/workflows/video-to-actions/wrun_status_url',
+      expect.any(Object),
+    );
+  });
+
   it('startStudioDeploy succeeds when the route returns a runId', async () => {
     vi.stubGlobal(
       'fetch',
