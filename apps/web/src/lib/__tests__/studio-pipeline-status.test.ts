@@ -9,14 +9,16 @@ import {
   studioDeployOutcomeMessage,
   studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
+  studioExportFilename,
+  studioExportToastMessage,
   studioHasDeployReceipt,
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
+  studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
-  studioPasteOutcomeMessage,
   studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
@@ -323,6 +325,28 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');
+  });
+
+  it('returns a toast for export success and failure including filename', () => {
+    expect(studioExportFilename('AI Gold Rushes')).toBe('AI Gold Rushes.zip');
+    const pack = studioExportToastMessage({
+      ok: true,
+      kind: 'pack',
+      filename: 'AI Gold Rushes.zip',
+    });
+    expect(pack.tone).toBe('success');
+    expect(pack.text).toMatch(/pack exported/i);
+    expect(pack.text).toContain('AI Gold Rushes.zip');
+    expect(studioExportToastMessage({ ok: true, kind: 'sop' }).tone).toBe('success');
+    const failed = studioExportToastMessage({ ok: false, error: 'Disk full' });
+    expect(failed.tone).toBe('error');
+    expect(failed.text).toBe('Disk full');
+    expect(studioExportToastMessage({ ok: false, kind: 'empty' }).tone).toBe('error');
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioExportToastMessage');
+    expect(studio).toContain('studioExportFilename');
+    expect(studio).toContain('data-testid="studio-export-toast"');
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {

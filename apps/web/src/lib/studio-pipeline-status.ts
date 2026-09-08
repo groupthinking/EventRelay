@@ -305,3 +305,36 @@ export function studioPlayerOverlay(phase: StudioPlayerPhase): string | null {
   if (phase === 'error') return 'Video did not load. Retry or open on YouTube.';
   return null;
 }
+
+export type StudioExportToastKind = 'pack' | 'sop' | 'scaffold' | 'empty';
+
+export function studioExportFilename(projectName?: string | null): string {
+  const base = (projectName || 'uvai-project').trim() || 'uvai-project';
+  return base.toLowerCase().endsWith('.zip') ? base : `${base}.zip`;
+}
+
+export function studioExportToastMessage(input: {
+  ok: boolean;
+  kind?: StudioExportToastKind;
+  error?: string;
+  filename?: string;
+}): { tone: 'success' | 'error'; text: string } {
+  const file = input.filename?.trim();
+  const fileBit = file ? ` (${file})` : '';
+  if (!input.ok || input.kind === 'empty') {
+    return {
+      tone: 'error',
+      text: input.error || 'Export failed — nothing to export yet.',
+    };
+  }
+  if (input.kind === 'pack') {
+    return { tone: 'success', text: `Pack exported${fileBit} — check your downloads.` };
+  }
+  if (input.kind === 'sop') {
+    return {
+      tone: 'success',
+      text: `SOP and deploy files exported${fileBit} — check your downloads.`,
+    };
+  }
+  return { tone: 'success', text: `Export downloaded${fileBit}.` };
+}
