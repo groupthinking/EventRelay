@@ -17,7 +17,7 @@ const CORE_CAPABILITIES = [
   'Evidence-gated YouTube analysis',
   'Timed caption transcript',
   'Visible source provenance',
-  'Durable workflow run history',
+  'Workflow run history',
   'Review-only action preparation',
   'Export after quality verification',
 ];
@@ -102,7 +102,7 @@ export default function PricingPage() {
           <p className="text-sm font-bold uppercase tracking-wider text-white/45">Core</p>
           <h2 className="mt-3 font-heading text-3xl font-black">Analyze and review</h2>
           <p className="mt-4 text-sm leading-7 text-white/45">
-            The public product path for turning a supported YouTube URL into verified evidence and proposed work.
+            The public product path for turning a supported YouTube URL into a Video Pack and proposed work.
           </p>
           <ul className="mt-7 flex-1 space-y-3">
             {CORE_CAPABILITIES.map((capability) => (
@@ -132,7 +132,7 @@ export default function PricingPage() {
           </p>
           <h2 className="mt-4 font-heading text-3xl font-black">Confirm external work</h2>
           <p className="mt-4 text-sm leading-7 text-white/45">
-            Adds the entitlement required when a reviewed plan dispatches backend agents or writes to the knowledge store.
+            Adds the entitlement required when a confirmed plan dispatches backend agents or writes to the knowledge store.
           </p>
           <ul className="mt-7 flex-1 space-y-3">
             {PRO_CAPABILITIES.map((capability) => (

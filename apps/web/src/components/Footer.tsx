@@ -62,7 +62,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
               <span className="font-bold text-sm">UVAI</span>
             </div>
             <p className="text-xs text-white/30 leading-relaxed">
-              Evidence-gated video intelligence with durable workflows and reviewed actions.
+              Paste a YouTube URL. UVAI builds a Video Pack you can act on from Studio.
             </p>
           </div>
           <div>

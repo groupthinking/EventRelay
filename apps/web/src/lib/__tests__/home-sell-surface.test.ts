@@ -129,4 +129,17 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(docs).toContain('/api/video/pack');
     expect(docs).toContain('/api/workflows/video-to-actions');
   });
+
+  it('does not overclaim reviewed actions or durable workflows on public pages', () => {
+    const footer = readSource('components/Footer.tsx');
+    const pricing = readSource('app/pricing/page.tsx');
+    const publicCopy = `${footer}\n${pricing}`;
+    expect(footer).toContain('Video Pack');
+    expect(publicCopy).not.toMatch(/reviewed actions/i);
+    expect(publicCopy).not.toMatch(/durable workflows/i);
+    expect(publicCopy).not.toMatch(/verified evidence/i);
+    expect(publicCopy).not.toMatch(/reviewed plan/i);
+    expect(pricing).toContain('Workflow run history');
+    expect(pricing).toContain('a confirmed plan');
+  });
 });
