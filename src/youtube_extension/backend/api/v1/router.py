@@ -832,9 +832,10 @@ async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_ser
         if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
             return CacheStats(**_stats_cache)
 
-        stats = cache_service.get_cache_statistics()
+        async with _get_fs_walk_gate():
+            stats = await asyncio.to_thread(cache_service.get_cache_statistics)
         _stats_cache = stats
-        _stats_cache_time = now
+        _stats_cache_time = time.time()
         return CacheStats(**stats)
     except Exception as e:
         logger.error(f"Error getting cache stats: {e}", exc_info=True)

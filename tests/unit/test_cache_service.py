@@ -6,6 +6,7 @@ import hashlib
 import sys
 import time
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -402,6 +403,29 @@ class TestGetCacheStatisticsTimestamps:
         (cat / "auJzb1D-fag_analysis.md").write_text("content")
         stats = cache.get_cache_statistics()
         assert stats["categories"]["coding"]["type"] == "legacy"
+
+    def test_legacy_scan_stats_each_file_once(self, cache):
+        cat = cache.cache_dir / "coding"
+        cat.mkdir()
+        first = cat / "auJzb1D-fag_analysis.md"
+        second = cat / "bbbbbbbbbbb_analysis.md"
+        first.write_text("alpha")
+        second.write_text("beta")
+
+        counts = {first: 0, second: 0}
+        path_type = type(first)
+        real_stat = path_type.stat
+
+        def counting_stat(self, *args, **kwargs):
+            if self in counts:
+                counts[self] += 1
+            return real_stat(self, *args, **kwargs)
+
+        with patch.object(path_type, "stat", counting_stat):
+            stats = cache.get_cache_statistics()
+
+        assert stats["categories"]["coding"]["count"] == 2
+        assert counts == {first: 1, second: 1}
 
 
 # ===========================================================================

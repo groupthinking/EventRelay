@@ -500,6 +500,113 @@ class TestCacheEndpoints:
             app.dependency_overrides[get_cache_service] = _make_cache_svc
 
 
+class TestCacheStatsOffloading:
+    PAYLOAD = {
+        "total_cached_videos": 5,
+        "categories": {"test": {"count": 5, "size_mb": 1.0, "type": "legacy"}},
+        "total_size_mb": 1.0,
+        "oldest_cache": None,
+        "newest_cache": None,
+    }
+
+    @classmethod
+    def _service(cls, on_call=None):
+        svc = MagicMock()
+
+        def _stats():
+            if on_call is not None:
+                on_call()
+            return dict(cls.PAYLOAD)
+
+        svc.get_cache_statistics.side_effect = _stats
+        return svc
+
+    @staticmethod
+    def _reset_stats_cache():
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
+
+    def test_refresh_runs_on_a_worker_thread(self):
+        self._reset_stats_cache()
+        seen: dict[str, int] = {}
+        svc = self._service(
+            on_call=lambda: seen.__setitem__("walk", threading.get_ident())
+        )
+
+        async def _run():
+            seen["loop"] = threading.get_ident()
+            return await router_module.get_cache_stats_v1(cache_service=svc)
+
+        result = asyncio.run(_run())
+
+        assert "walk" in seen, "get_cache_statistics was never invoked"
+        assert result.total_cached_videos == self.PAYLOAD["total_cached_videos"]
+        assert seen["walk"] != seen["loop"], (
+            "get_cache_statistics ran on the event loop thread; it must be offloaded"
+        )
+
+    def test_event_loop_stays_responsive_while_refresh_is_in_flight(self):
+        import time
+
+        self._reset_stats_cache()
+        release = threading.Event()
+        finished_at: dict[str, float] = {}
+
+        def _block():
+            release.wait(timeout=5.0)
+            finished_at["walk"] = time.monotonic()
+
+        svc = self._service(on_call=_block)
+
+        async def _run():
+            task = asyncio.create_task(router_module.get_cache_stats_v1(cache_service=svc))
+            tick_times: list[float] = []
+            for _ in range(20):
+                await asyncio.sleep(0.005)
+                tick_times.append(time.monotonic())
+                if len(tick_times) >= 3:
+                    break
+            release.set()
+            return tick_times, await task
+
+        tick_times, result = asyncio.run(_run())
+
+        assert result.total_cached_videos == self.PAYLOAD["total_cached_videos"]
+        assert "walk" in finished_at, "get_cache_statistics never completed"
+
+        walk_end = finished_at["walk"]
+        concurrent = [tick for tick in tick_times if tick < walk_end]
+        assert len(concurrent) >= 3, (
+            "event loop was blocked during the refresh: only "
+            f"{len(concurrent)} of {len(tick_times)} tick(s) completed before "
+            "the walk finished"
+        )
+
+    def test_ttl_hit_skips_the_gate_and_worker_hop(self):
+        router_module._stats_cache = dict(self.PAYLOAD)
+        router_module._stats_cache_time = router_module.time.time()
+        svc = self._service(on_call=lambda: pytest.fail("cache refresh should not run"))
+
+        async def _unexpected_to_thread(*args, **kwargs):
+            raise AssertionError("TTL hit should not dispatch work to a thread")
+
+        async def _run():
+            with patch.object(
+                router_module,
+                "_get_fs_walk_gate",
+                side_effect=AssertionError("TTL hit should not wait on the gate"),
+            ):
+                with patch.object(
+                    router_module.asyncio, "to_thread", _unexpected_to_thread
+                ):
+                    return await router_module.get_cache_stats_v1(cache_service=svc)
+
+        result = asyncio.run(_run())
+
+        assert result.total_cached_videos == self.PAYLOAD["total_cached_videos"]
+        svc.get_cache_statistics.assert_not_called()
+
+
 # ===========================================================================
 # Data / Video List Endpoints
 # ===========================================================================
