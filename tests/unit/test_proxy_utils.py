@@ -20,7 +20,7 @@ import sys
 
 import pytest
 
-from youtube_extension.utils.proxy import redact_proxy_credentials
+from youtube_extension.utils.proxy import get_proxy_url, redact_proxy_credentials
 
 _PROXY_ENV_VAR = "WEBSHARE_PROXY_URL"
 _CONFIGURED = "http://user:s3cr3t@proxy.internal:8080"
@@ -58,6 +58,14 @@ def redact(request):
     if request.param == "canonical":
         return redact_proxy_credentials
     return _load_shared_copy()._redact_proxy_credentials
+
+
+@pytest.fixture(params=["canonical", "shared"])
+def get_proxy(request):
+    """Both implementations, so malformed proxy handling cannot drift."""
+    if request.param == "canonical":
+        return get_proxy_url
+    return _load_shared_copy()._get_webshare_proxy_url
 
 
 @pytest.fixture(autouse=True)
@@ -173,3 +181,28 @@ def test_non_string_input_is_stringified(redact):
 def test_exception_object_is_accepted(redact):
     """The common call shape is redact(str(error)) -- accept the error too."""
     assert "s3cr3t" not in redact(RuntimeError(f"boom via {_CONFIGURED}"))
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(
+            "http://" + "user" + ":" + "s3cr3t" + "@" + "proxy.internal:notaport",
+            id="non-numeric-port",
+        ),
+        pytest.param(
+            "http://" + "user" + ":" + "s3cr3t" + "@" + "proxy.internal:99999",
+            id="out-of-range-port",
+        ),
+    ],
+)
+def test_malformed_proxy_ports_are_rejected_without_logging_secrets(
+    get_proxy, monkeypatch, caplog, value
+):
+    monkeypatch.setenv(_PROXY_ENV_VAR, value)
+
+    with caplog.at_level("WARNING"):
+        assert get_proxy() is None
+
+    assert "WEBSHARE_PROXY_URL is set but malformed" in caplog.text
+    assert "s3cr3t" not in caplog.text
