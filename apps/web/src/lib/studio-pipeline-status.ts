@@ -86,6 +86,61 @@ export function studioPackFormation(pack: VideoPackCitation | null | undefined):
   };
 }
 
+export function studioEventsEmptyMessage(input: {
+  busy: boolean;
+  hasCompletedRun: boolean;
+  eventCount: number;
+  hasArchitecture: boolean;
+  artifactCount: number;
+  toolCount: number;
+}): string {
+  if (input.eventCount > 0) return '';
+  if (input.busy) return 'Extracting events…';
+  if (!input.hasCompletedRun) return 'Events show up after Run.';
+  const packReady =
+    input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
+  if (packReady) {
+    return 'This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page.';
+  }
+  return 'This run has no extracted events. Transcript and pack identity stay on this page.';
+}
+
+export function studioPromotePackWorkbench(input: {
+  eventCount: number;
+  hasArchitecture: boolean;
+  artifactCount: number;
+  toolCount: number;
+}): boolean {
+  if (input.eventCount > 0) return false;
+  return input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
+}
+
+export function studioCanExport(input: {
+  transcript?: string | null;
+  eventCount?: number;
+  hasArchitecture?: boolean;
+  artifactCount?: number;
+  toolCount?: number;
+  hasLinkedSopSteps?: boolean;
+  hasProjectScaffold?: boolean;
+}): boolean {
+  const transcript = input.transcript?.trim() ?? '';
+  return (
+    transcript.length >= 40 ||
+    (input.eventCount ?? 0) > 0 ||
+    Boolean(input.hasArchitecture) ||
+    (input.artifactCount ?? 0) > 0 ||
+    (input.toolCount ?? 0) > 0 ||
+    Boolean(input.hasLinkedSopSteps) ||
+    Boolean(input.hasProjectScaffold)
+  );
+}
+
+export function studioInvalidHandoffMessage(raw: string): string {
+  const preview = raw.trim() || 'that input';
+  return `Need a valid YouTube URL. "${preview}" is not a watchable video.`;
+}
+
 export function studioPasteOutcomeMessage(input: {
   hasUsableTranscript: boolean;
   packCitation?: string | null;

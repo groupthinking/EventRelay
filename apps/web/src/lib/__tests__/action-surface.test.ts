@@ -66,6 +66,39 @@ describe('action-surface (F3)', () => {
     );
   });
 
+  it('exports architecture and artifacts when events[] is empty', () => {
+    const pkg = buildScaffoldPackage({
+      projectName: 'empty-events-pack',
+      actions: [],
+      packFormation: {
+        architecture: {
+          summary: 'decode to rails',
+          stages: [{ id: 'decode', name: 'decode', description: 'frames' }],
+          mermaid: 'flowchart LR\ndecode-->rails',
+        },
+        artifacts: [
+          {
+            path_hint: 'src/mcp_x402_gateway.ts',
+            purpose: 'Paid MCP gateway',
+            interface: 'createGateway(config: GatewayConfig): Gateway',
+          },
+          {
+            path_hint: 'src/agent_loop.ts',
+            purpose: 'Agent verify loop',
+            interface: 'runLoop(input: LoopInput): Promise<LoopResult>',
+          },
+        ],
+        tools: [{ name: 'Cloudflare' }, { name: 'x402' }],
+      },
+    });
+    expect(pkg.files['ARCHITECTURE.md']).toContain('decode to rails');
+    expect(pkg.files['ARCHITECTURE.md']).toContain('decode');
+    expect(pkg.files['artifacts.json']).toContain('src/mcp_x402_gateway.ts');
+    expect(pkg.files['artifacts.json']).toContain('src/agent_loop.ts');
+    expect(pkg.files['README.md']).toContain('Cloudflare');
+    expect(pkg.files['README.md']).toContain('x402');
+  });
+
   it('includes project_scaffold.json when Gemini scaffold is present', () => {
     const scaffold = {
       repository_structure: [{ path: 'src/app.ts', purpose: 'entry' }],
