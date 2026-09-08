@@ -16,6 +16,8 @@
 - [x] Honest Events empty state + promote architecture/artifacts/stack
 - [x] Export pack files from formation when events[] is empty
 - [x] Verify focused Vitest
+- [x] Copilot: failed-run copy, tools in workbench, export copy, position-neutral empty
+- [x] AXIOM: pack progress while waiting, non-gate stack hold, arch when tools empty, Act CTA
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Studio for `pBsT6v-ciO8` loads the player from `?video=`, shows transcript, honest empty Events, prominent architecture/artifacts/stack, and Export is usable. No fake events.

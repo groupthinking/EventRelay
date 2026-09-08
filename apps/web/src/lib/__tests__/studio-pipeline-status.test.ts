@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  studioActActionLabel,
   studioCanExport,
   studioCanRetryTranscript,
   studioEventsEmptyMessage,
+  studioExportOutcomeMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -15,6 +17,7 @@ import {
   studioStatusMessage,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
+  studioWorkingMessage,
 } from '../studio-pipeline-status';
 
 describe('studio-pipeline-status', () => {
@@ -150,7 +153,7 @@ describe('studio-pipeline-status', () => {
     expect(
       studioEventsEmptyMessage({
         busy: true,
-        hasCompletedRun: false,
+        runStatus: 'processing',
         eventCount: 0,
         hasArchitecture: true,
         artifactCount: 2,
@@ -160,7 +163,7 @@ describe('studio-pipeline-status', () => {
     expect(
       studioEventsEmptyMessage({
         busy: false,
-        hasCompletedRun: false,
+        runStatus: null,
         eventCount: 0,
         hasArchitecture: false,
         artifactCount: 0,
@@ -170,7 +173,7 @@ describe('studio-pipeline-status', () => {
 
     const emptyWithPack = studioEventsEmptyMessage({
       busy: false,
-      hasCompletedRun: true,
+      runStatus: 'complete',
       eventCount: 0,
       hasArchitecture: true,
       artifactCount: 2,
@@ -178,14 +181,80 @@ describe('studio-pipeline-status', () => {
     });
     expect(emptyWithPack.toLowerCase()).not.toContain('show up after run');
     expect(emptyWithPack.toLowerCase()).not.toContain('extracting');
+    expect(emptyWithPack.toLowerCase()).not.toMatch(/\bbelow\b/);
     expect(emptyWithPack.toLowerCase()).toMatch(/no extracted events/);
     expect(emptyWithPack.toLowerCase()).toMatch(/architecture|artifacts|stack/);
+    expect(
+      studioEventsEmptyMessage({
+        busy: false,
+        runStatus: 'failed',
+        eventCount: 0,
+        hasArchitecture: false,
+        artifactCount: 0,
+        toolCount: 0,
+      }),
+    ).toMatch(/analysis failed/i);
     expect(studioPromotePackWorkbench({ eventCount: 0, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
+      true,
+    );
+    expect(studioPromotePackWorkbench({ eventCount: 0, hasArchitecture: false, artifactCount: 0, toolCount: 2 })).toBe(
       true,
     );
     expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
       false,
     );
+    expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 0 })).toBe(
+      true,
+    );
+  });
+
+  it('shows pack progress while waiting on transcript', () => {
+    expect(
+      studioWorkingMessage({
+        elapsedSec: 12,
+        hasPack: false,
+        hasTranscript: false,
+      }),
+    ).toMatch(/fetching pack and transcript/i);
+    const packed = studioWorkingMessage({
+      elapsedSec: 45,
+      hasPack: true,
+      packCitation: 'cite:youtube:pBsT6v-ciO8 · v0',
+      hasTranscript: false,
+    });
+    expect(packed).toMatch(/pack ready/i);
+    expect(packed).toContain('45s');
+    expect(packed).not.toBe('Fetching transcript…');
+  });
+
+  it('labels review_action as a proposed finding, not an executed tool', () => {
+    expect(
+      studioActActionLabel({
+        tool: 'review_action',
+        status: 'proposed',
+        result: 'Draft the SeaDance ad loop',
+      }),
+    ).toEqual({
+      title: 'Draft the SeaDance ad loop',
+      detail: 'Proposed from this run — not an executed tool.',
+    });
+  });
+
+  it('describes tools-only export without claiming architecture', () => {
+    expect(
+      studioExportOutcomeMessage({
+        toolCount: 2,
+        hasArchitecture: false,
+        artifactCount: 0,
+      }),
+    ).toMatch(/named tools/i);
+    expect(
+      studioExportOutcomeMessage({
+        toolCount: 2,
+        hasArchitecture: false,
+        artifactCount: 0,
+      }),
+    ).not.toMatch(/architecture|artifacts/i);
   });
 
   it('enables export from pack formation when events[] is empty', () => {
@@ -260,6 +329,12 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioCanExport');
     expect(studio).toContain('data-testid="studio-events-empty"');
     expect(studio).toContain('data-testid="pack-workbench"');
+    expect(studio).toContain('data-testid="pack-workbench-tools"');
+    expect(studio).toContain('data-testid="studio-working-state"');
+    expect(studio).toContain('studioWorkingMessage');
+    expect(studio).toContain('Act on this run');
+    expect(studio).toContain('stackCheckStatus');
+    expect(studio).toContain('stackCheckStatusLabel');
     expect(studio).not.toMatch(/keyframes/);
     expect(studio).not.toMatch(/code_snippets/);
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);

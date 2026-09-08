@@ -86,21 +86,26 @@ export function studioPackFormation(pack: VideoPackCitation | null | undefined):
   };
 }
 
+export type StudioRunStatus = 'processing' | 'complete' | 'failed';
+
 export function studioEventsEmptyMessage(input: {
   busy: boolean;
-  hasCompletedRun: boolean;
+  runStatus?: StudioRunStatus | null;
   eventCount: number;
   hasArchitecture: boolean;
   artifactCount: number;
   toolCount: number;
 }): string {
   if (input.eventCount > 0) return '';
-  if (input.busy) return 'Extracting events…';
-  if (!input.hasCompletedRun) return 'Events show up after Run.';
+  if (input.busy || input.runStatus === 'processing') return 'Extracting events…';
+  if (input.runStatus === 'failed') {
+    return 'Analysis failed. No events were extracted. Transcript or pack identity may still be on this page.';
+  }
+  if (input.runStatus !== 'complete') return 'Events show up after Run.';
   const packReady =
     input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
   if (packReady) {
-    return 'This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page.';
+    return 'This pack has no extracted events. Architecture, artifacts, and stack from the video are on this page — export them here.';
   }
   return 'This run has no extracted events. Transcript and pack identity stay on this page.';
 }
@@ -111,8 +116,70 @@ export function studioPromotePackWorkbench(input: {
   artifactCount: number;
   toolCount: number;
 }): boolean {
-  if (input.eventCount > 0) return false;
-  return input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
+  const hasFormation =
+    input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
+  if (!hasFormation) return false;
+  if (input.eventCount === 0) return true;
+  // Named tools empty + architecture/artifacts: still promote the workbench.
+  return input.toolCount === 0 && (input.hasArchitecture || input.artifactCount > 0);
+}
+
+export function studioWorkingMessage(input: {
+  elapsedSec: number;
+  hasPack: boolean;
+  packCitation?: string | null;
+  hasTranscript: boolean;
+}): string {
+  if (input.hasTranscript) return 'Transcript landed — finishing analysis…';
+  if (input.hasPack) {
+    const cite = input.packCitation?.trim();
+    return cite
+      ? `Pack ready · ${cite}. Waiting on transcript (${input.elapsedSec}s)…`
+      : `Pack ready. Waiting on transcript (${input.elapsedSec}s)…`;
+  }
+  return `Fetching pack and transcript (${input.elapsedSec}s)…`;
+}
+
+export function studioActActionLabel(action: {
+  tool?: string;
+  status?: string;
+  result?: string;
+}): { title: string; detail?: string } {
+  if ((action.tool || '') === 'review_action') {
+    return {
+      title: action.result?.trim() || 'Review this finding',
+      detail:
+        action.status === 'proposed'
+          ? 'Proposed from this run — not an executed tool.'
+          : action.status || undefined,
+    };
+  }
+  const title = action.tool?.trim() || 'Action';
+  const detail = [action.status, action.result].filter(Boolean).join(' — ') || undefined;
+  return { title, detail };
+}
+
+export function studioExportOutcomeMessage(input: {
+  officialClone?: string | null;
+  hasLinkedSop?: boolean;
+  hasArchitecture?: boolean;
+  artifactCount?: number;
+  toolCount?: number;
+}): string {
+  if (input.officialClone) {
+    return `Exported ${input.officialClone} plus SOP and DEPLOY.md.`;
+  }
+  if (input.hasLinkedSop) {
+    return 'Exported SOP, named tools, and DEPLOY.md from this run.';
+  }
+  const parts: string[] = [];
+  if (input.hasArchitecture) parts.push('architecture');
+  if ((input.artifactCount ?? 0) > 0) parts.push('artifacts');
+  if ((input.toolCount ?? 0) > 0) parts.push('named tools');
+  if (parts.length > 0) {
+    return `Exported ${parts.join(', ')} from this pack.`;
+  }
+  return 'Exported scaffold files (README, tasks.json).';
 }
 
 export function studioCanExport(input: {
@@ -146,7 +213,7 @@ export function studioPasteOutcomeMessage(input: {
   packCitation?: string | null;
 }): string {
   if (input.hasUsableTranscript) {
-    return 'Ready — run tools, export, or save from this page.';
+    return 'Ready — act on this run, export, or save from this page.';
   }
   if (input.packCitation) {
     return `Identity pack ${input.packCitation}. No usable transcript.`;
