@@ -253,7 +253,7 @@ export default function OneLoopStudio() {
     setCompletedChecks([]);
   }, [selectedVideoId]);
 
-  const holdReason = deployHoldReason(linkedSop, completedChecks);
+  const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
   const officialTemplate = pickOfficialTemplate(linkedSop);
 
   useEffect(() => {
