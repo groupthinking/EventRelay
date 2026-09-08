@@ -18,6 +18,10 @@
 - [x] Verify focused Vitest
 - [x] Copilot: failed-run copy, tools in workbench, export copy, position-neutral empty
 - [x] AXIOM: pack progress while waiting, non-gate stack hold, arch when tools empty, Act CTA
+- [x] AXIOM: honest skip/unknown on SeaDance/Cluely (do not hide; do not hold Deploy)
+- [x] B: transcript stages 1/3–3/3 + ETA + Retry after 45s / failed run
+- [x] Copilot: no elapsed dup, export tools gated on count, auJzb1D-fag fixture
+- [x] Rebased onto main after #1695 (F) so skip/unknown stays the hold source of truth
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Studio for `pBsT6v-ciO8` loads the player from `?video=`, shows transcript, honest empty Events, prominent architecture/artifacts/stack, and Export is usable. No fake events.
