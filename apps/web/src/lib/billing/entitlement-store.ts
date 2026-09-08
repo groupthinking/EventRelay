@@ -34,7 +34,8 @@ export function assertEntitlementDurability(): void {
 
 async function getRedis(): Promise<Redis | null> {
   if (redisPromise) return redisPromise;
-  redisPromise = (async () => {
+
+  const promise = (async (): Promise<Redis | null> => {
     const creds = resolveUpstashRedisCredentials();
     if (!creds) {
       return null;
@@ -49,7 +50,9 @@ async function getRedis(): Promise<Redis | null> {
       return null;
     }
   })();
-  return redisPromise;
+
+  redisPromise = promise;
+  return promise;
 }
 
 export function normalizeBillingEmail(email: string): string {

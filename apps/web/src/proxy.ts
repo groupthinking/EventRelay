@@ -101,7 +101,7 @@ function getRedisClient(): Promise<DistributedRedisClient | null> {
     return redisClientPromise;
   }
 
-  redisClientPromise = (async () => {
+  const promise = (async (): Promise<DistributedRedisClient | null> => {
     if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
       try {
         const { Redis } = await import('@upstash/redis');
@@ -132,7 +132,8 @@ function getRedisClient(): Promise<DistributedRedisClient | null> {
     return null;
   })();
 
-  return redisClientPromise;
+  redisClientPromise = promise;
+  return promise;
 }
 
 function getClientIp(request: NextRequest): string {

@@ -6,7 +6,8 @@ let redisPromise: Promise<Redis | null> | null = null;
 
 async function getRedis(): Promise<Redis | null> {
   if (redisPromise) return redisPromise;
-  redisPromise = (async () => {
+
+  const promise = (async (): Promise<Redis | null> => {
     if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
       return null;
     }
@@ -20,7 +21,9 @@ async function getRedis(): Promise<Redis | null> {
       return null;
     }
   })();
-  return redisPromise;
+
+  redisPromise = promise;
+  return promise;
 }
 
 function dayKey(subject: string): string {
