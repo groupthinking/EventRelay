@@ -42,11 +42,11 @@ const PUBLIC_API_EXACT = new Set([
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
-export const CANONICAL_STUDIO_PATH = '/';
+export const CANONICAL_STUDIO_PATH = '/studio';
 
 /**
  * App routes that require a session when NEXTAUTH_SECRET is configured.
- * Product pages (home, studio, features, pricing) stay public so anonymous
+ * Product pages (home, studio, pricing) stay public so anonymous
  * pack emit and stack-check unlock do not teleport through login.
  * APIs remain gated via needsAuthentication().
  */

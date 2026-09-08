@@ -1,10 +1,10 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket } from 'lucide-react';
-import { formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
+import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
 import { clsx } from 'clsx';
@@ -32,20 +32,14 @@ import {
   studioStatusMessage,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
+import { resolveStudioHandoff } from '@/lib/studio-handoff';
+import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
-function isValidYouTubeId(id: string) {
-  return /^[A-Za-z0-9_-]{11}$/.test(id);
-}
-
 function getYouTubeId(url: string) {
-  const match = url.match(
-    /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=|shorts\/))([^&?/]+)/,
-  );
-  const candidate = match?.[1] || '';
-  return isValidYouTubeId(candidate) ? candidate : '';
+  return extractYouTubeId(url) || '';
 }
 
 function mapExtractedEvents(raw: unknown[], videoId: string): ExtractedEvent[] {
@@ -106,6 +100,7 @@ export default function OneLoopStudio() {
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
@@ -156,10 +151,66 @@ export default function OneLoopStudio() {
     useDashboardStore.persist.rehydrate();
   }, []);
 
+  const runAnalysis = async (raw: string) => {
+    const handoff = resolveStudioHandoff(raw);
+    if (!handoff) {
+      setMessage('Need a valid YouTube URL.');
+      return;
+    }
+    const next = handoff.watchUrl;
+    setUrl(next);
+    setBusy(true);
+    setWorkflowActions(null);
+    setActRunId(null);
+    setUsedSameRun(false);
+    setMessage('Fetching transcript…');
+    const tick = window.setInterval(() => {
+      const matches = useDashboardStore
+        .getState()
+        .videos.filter((v) => v.url === next || v.url.includes(handoff.videoId));
+      if (matches.length === 0) return;
+      selectVideo(matches[0].id);
+    }, 250);
+    try {
+      const id = await processVideo(next);
+      selectVideo(id);
+      const video = useDashboardStore.getState().videos.find((v) => v.id === id);
+      const ready =
+        (video?.transcript?.trim().length ?? 0) >= 40 || (video?.events?.length ?? 0) > 0;
+      setMessage(
+        studioPasteOutcomeMessage({
+          hasUsableTranscript: ready,
+          packCitation: video?.videoPack ? studioPackCitation(video.videoPack) : null,
+        }),
+      );
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Analysis failed.');
+    } finally {
+      window.clearInterval(tick);
+      setBusy(false);
+    }
+  };
+
   useEffect(() => {
     const q = searchParams.get('video') || searchParams.get('url');
-    if (q) setUrl(q);
+    if (!q) return;
+    const handoff = resolveStudioHandoff(q);
+    if (!handoff) {
+      setUrl(q);
+      return;
+    }
+    setUrl(handoff.watchUrl);
+    if (autoStartedKey.current === handoff.videoId) return;
+    autoStartedKey.current = handoff.videoId;
+    void runAnalysis(handoff.watchUrl);
+    // One-shot kick from ?video= so Home paste starts the live pack path.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  const analyze = (event?: FormEvent) => {
+    event?.preventDefault();
+    void runAnalysis(url);
+  };
 
   useEffect(() => {
     if (!busy) {
@@ -183,46 +234,6 @@ export default function OneLoopStudio() {
     Boolean(videoId || selected),
     { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
   );
-
-  const analyze = async (event?: FormEvent) => {
-    event?.preventDefault();
-    const next = url.trim();
-    if (!getYouTubeId(next)) {
-      setMessage('Need a valid YouTube URL.');
-      return;
-    }
-    setBusy(true);
-    setWorkflowActions(null);
-    setActRunId(null);
-    setUsedSameRun(false);
-    setMessage('Fetching transcript…');
-    const tick = window.setInterval(() => {
-      const id = getYouTubeId(next);
-      const matches = useDashboardStore
-        .getState()
-        .videos.filter((v) => v.url === next || (id !== '' && v.url.includes(id)));
-      if (matches.length === 0) return;
-      selectVideo(matches[0].id);
-    }, 250);
-    try {
-      const id = await processVideo(next);
-      selectVideo(id);
-      const video = useDashboardStore.getState().videos.find((v) => v.id === id);
-      const ready =
-        (video?.transcript?.trim().length ?? 0) >= 40 || (video?.events?.length ?? 0) > 0;
-      setMessage(
-        studioPasteOutcomeMessage({
-          hasUsableTranscript: ready,
-          packCitation: video?.videoPack ? studioPackCitation(video.videoPack) : null,
-        }),
-      );
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Analysis failed.');
-    } finally {
-      window.clearInterval(tick);
-      setBusy(false);
-    }
-  };
 
   const act = async () => {
     const next = (selected?.url || url).trim();
@@ -270,7 +281,7 @@ export default function OneLoopStudio() {
       const started = await startVideoToActions(payload);
       if (!started.ok || !started.runId) {
         if (started.status === 401 || started.status === 403) {
-          window.location.href = `/login?callbackUrl=${encodeURIComponent('/')}`;
+          window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
           return;
         }
         setMessage(started.error || started.message || 'Could not start Act.');
@@ -351,7 +362,7 @@ export default function OneLoopStudio() {
     try {
       const started = await startStudioDeploy({ url: next });
       if (started.status === 401 || started.status === 403) {
-        window.location.href = `/login?callbackUrl=${encodeURIComponent('/')}`;
+        window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;
       }
       if (!started.ok || !started.runId) {
@@ -381,7 +392,7 @@ export default function OneLoopStudio() {
       <Nav
         rightSlot={
           <Link
-            href={`/login?callbackUrl=${encodeURIComponent('/')}`}
+            href={`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`}
             className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/5"
           >
             Sign in

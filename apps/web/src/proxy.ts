@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getToken } from 'next-auth/jwt';
 import {
-  canonicalStudioPath,
+  CANONICAL_STUDIO_PATH,
   isAiRoute,
   isLegacyDashboardPath,
   needsAuthentication,
@@ -277,7 +277,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   // old dashboard chrome. Query (e.g. ?video=) is preserved.
   if (isLegacyDashboardPath(pathname)) {
     const dest = request.nextUrl.clone();
-    dest.pathname = canonicalStudioPath();
+    dest.pathname = CANONICAL_STUDIO_PATH;
     return NextResponse.redirect(dest, 308);
   }
 

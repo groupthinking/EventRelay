@@ -243,7 +243,7 @@ export default function BentoFeatures() {
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <Link
-              href="/"
+              href="/studio"
               className="px-7 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95 whitespace-nowrap"
               style={{ background: '#6af2de', color: '#021a18' }}
             >

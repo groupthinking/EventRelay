@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { safeCallbackPath } from '@/lib/auth-paths';
+import { CANONICAL_STUDIO_PATH, safeCallbackPath } from '@/lib/auth-paths';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default async function LoginPage({
   const params = await searchParams;
   const rawParam = params?.callbackUrl;
   const raw = Array.isArray(rawParam) ? rawParam[0] : rawParam;
-  const callbackUrl = safeCallbackPath(raw ?? '/');
+  const callbackUrl = safeCallbackPath(raw ?? CANONICAL_STUDIO_PATH);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">

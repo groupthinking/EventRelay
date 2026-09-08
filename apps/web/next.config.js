@@ -93,11 +93,21 @@ const nextConfig = {
     return [
       {
         source: '/dashboard',
-        destination: '/',
+        destination: '/studio',
         permanent: true,
       },
       {
         source: '/dashboard/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/features',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/playground',
         destination: '/',
         permanent: true,
       },

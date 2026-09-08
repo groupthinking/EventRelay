@@ -15,10 +15,10 @@ function readWebFile(relativePath: string) {
 }
 
 describe('UVAI is one product surface', () => {
-  it('keeps home as OneLoopStudio (sell entry + workbench)', () => {
+  it('keeps Home as a sell page and Studio as the sole workbench', () => {
     const home = readSource('app/page.tsx');
     const studio = readSource('app/studio/page.tsx');
-    expect(home).toContain('OneLoopStudio');
+    expect(home).not.toContain('OneLoopStudio');
     expect(studio).toContain('OneLoopStudio');
     expect(home).not.toContain("redirect('/dashboard')");
   });
@@ -28,8 +28,10 @@ describe('UVAI is one product surface', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
     expect(nav).not.toContain("href: '/dashboard'");
     expect(nav).toContain("href: '/'");
+    expect(nav).toContain("label: 'Home'");
+    expect(nav).toContain("href: '/studio'");
     expect(nav).toContain("label: 'Studio'");
-    expect(nav).toContain("href: '/features'");
+    expect(nav).not.toContain("href: '/features'");
     expect(nav).toContain("href: '/pricing'");
     expect(studio).not.toContain('href="/dashboard"');
     expect(studio).toContain('Stack checks');
@@ -38,21 +40,21 @@ describe('UVAI is one product surface', () => {
   it('308s /dashboard into the canonical workbench in next.config', () => {
     const config = readWebFile('next.config.js');
     expect(config).toContain("source: '/dashboard'");
-    expect(config).toContain("destination: '/'");
+    expect(config).toContain("destination: '/studio'");
     expect(config).toContain("source: '/dashboard/:path*'");
     expect(config).toContain('permanent: true');
   });
 
-  it('points sell-page CTAs at the studio, not a second skin', () => {
+  it('points sell-page CTAs at Home or Studio, not a second skin', () => {
     const features = readSource('app/features/page.tsx');
     const pricing = readSource('app/pricing/page.tsx');
     const landingNav = readSource('components/landing/LandingNav.tsx');
-    expect(features).toContain("from '@/components/Nav'");
+    expect(features).toContain('redirect(');
     expect(pricing).toContain("from '@/components/Nav'");
     expect(features).not.toContain('href="/dashboard"');
     expect(pricing).not.toContain('href="/dashboard"');
     expect(landingNav).not.toContain('href="/dashboard"');
-    expect(landingNav).toContain('href="/"');
+    expect(landingNav).toContain("href: '/studio'");
   });
 
   it('keeps stack-check unlock on the same OneLoopStudio page', () => {
