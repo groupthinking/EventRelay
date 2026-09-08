@@ -107,7 +107,7 @@ turbo run test
 - **Multi-provider AI**: Routes to Gemini, OpenAI, Anthropic, or Grok
 - **MCP integration**: Agent orchestration via Model Context Protocol
 - **Database**: SQLite (dev), PostgreSQL (prod); migrations via Alembic
-- **Auth**: NextAuth.js (frontend), python-jose (backend)
+- **Auth**: NextAuth.js (frontend), PyJWT-backed generated auth scaffolding
 - **Monorepo**: Turbo for JS workspaces (`apps/*`, `packages/*`, `mcp-servers/*`)
 
 ## Key Policies

@@ -149,7 +149,7 @@
 | Component            | Technology                |
 | -------------------- | ------------------------- |
 | **Frontend**         | NextAuth.js               |
-| **Backend**          | python-jose (JWT)         |
+| **Backend**          | PyJWT                     |
 | **Password Hashing** | passlib[bcrypt]           |
 | **Database**         | Supabase (via client SDK) |
 
