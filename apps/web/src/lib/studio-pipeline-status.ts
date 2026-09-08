@@ -284,3 +284,24 @@ export function studioDeployEnabledHint(hasReceipt: boolean): string {
   if (hasReceipt) return 'A live URL was returned. That is the receipt — not the enabled button.';
   return 'Starts an attempt. UNKNOWN checks are not a deploy receipt.';
 }
+
+export type StudioPlayerPhase = 'empty' | 'loading' | 'ready' | 'error';
+
+export function studioPlayerPhase(input: {
+  videoId?: string | null;
+  loaded?: boolean;
+  failed?: boolean;
+  timedOut?: boolean;
+}): StudioPlayerPhase {
+  if (!input.videoId) return 'empty';
+  if (input.failed) return 'error';
+  if (input.loaded) return 'ready';
+  if (input.timedOut) return 'error';
+  return 'loading';
+}
+
+export function studioPlayerOverlay(phase: StudioPlayerPhase): string | null {
+  if (phase === 'loading') return 'Loading video…';
+  if (phase === 'error') return 'Video did not load. Retry or open on YouTube.';
+  return null;
+}

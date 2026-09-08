@@ -40,6 +40,8 @@ import {
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
+  studioPlayerOverlay,
+  studioPlayerPhase,
   studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
@@ -48,6 +50,7 @@ import {
   studioTranscriptStage,
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
+import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
@@ -193,8 +196,8 @@ export default function OneLoopStudio() {
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
-  const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const [playerEpoch, setPlayerEpoch] = useState(0);
   const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
@@ -332,6 +335,17 @@ export default function OneLoopStudio() {
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+  // Destructure at the hook call so render reads booleans + a callback ref,
+  // not properties of an object that also carries refs (react-hooks/refs).
+  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
+    useYouTubePlayer(videoId);
+
+  const playerPhase = studioPlayerPhase({
+    videoId: videoId || null,
+    loaded: playerReady,
+    failed: playerFailed,
+  });
+  const playerOverlay = studioPlayerOverlay(playerPhase);
   const eventCount = selected?.events?.length ?? 0;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
@@ -621,19 +635,46 @@ export default function OneLoopStudio() {
       </header>
 
       <main className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-xl border border-white/10 bg-black">
+        <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
-            <iframe
-              title="YouTube source"
-              className="aspect-video w-full"
-              src={
-                seekSeconds != null
-                  ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
-                  : `https://www.youtube.com/embed/${videoId}`
-              }
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <>
+              <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
+                <div
+                  ref={containerRef}
+                  className="h-full w-full"
+                  data-testid="studio-player"
+                  title="YouTube source"
+                />
+              </div>
+              {playerOverlay ? (
+                <div
+                  data-testid="studio-player-overlay"
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#14151c] px-6 text-center"
+                >
+                  <p className="text-sm text-white/80">{playerOverlay}</p>
+                  {playerPhase === 'error' ? (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        data-testid="studio-player-retry"
+                        onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
+                        className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                      >
+                        Retry player
+                      </button>
+                      <a
+                        href={`https://www.youtube.com/watch?v=${videoId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70"
+                      >
+                        Open on YouTube
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
               Paste a link. The video plays here while we pull the transcript.
@@ -722,7 +763,7 @@ export default function OneLoopStudio() {
                 {seconds != null ? (
                   <button
                     type="button"
-                    onClick={() => setSeekSeconds(seconds)}
+                    onClick={() => seekTo(seconds)}
                     className="text-left font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]"
                   >
                     {formatSeconds(seconds)}
@@ -796,7 +837,7 @@ export default function OneLoopStudio() {
                   {entity.timestamps[0] != null && (
                     <button
                       type="button"
-                      onClick={() => setSeekSeconds(entity.timestamps[0])}
+                      onClick={() => seekTo(entity.timestamps[0])}
                       className="font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(entity.timestamps[0])}
@@ -820,7 +861,7 @@ export default function OneLoopStudio() {
                   {step.timestamp != null ? (
                     <button
                       type="button"
-                      onClick={() => setSeekSeconds(step.timestamp!)}
+                      onClick={() => seekTo(step.timestamp!)}
                       className="text-left font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(step.timestamp)}

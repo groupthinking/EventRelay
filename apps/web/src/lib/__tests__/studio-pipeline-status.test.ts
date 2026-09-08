@@ -14,6 +14,8 @@ import {
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
+  studioPlayerOverlay,
+  studioPlayerPhase,
   studioPasteOutcomeMessage,
   studioPromotePackWorkbench,
   studioRunQuality,
@@ -321,6 +323,27 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');
+  });
+
+  it('covers the player until load and names a load error instead of silent 0:00', () => {
+    expect(studioPlayerPhase({ videoId: null })).toBe('empty');
+    expect(studioPlayerPhase({ videoId: 'pBsT6v-ciO8' })).toBe('loading');
+    expect(studioPlayerPhase({ videoId: 'pBsT6v-ciO8', loaded: true })).toBe('ready');
+    expect(studioPlayerPhase({ videoId: 'pBsT6v-ciO8', failed: true })).toBe('error');
+    expect(studioPlayerPhase({ videoId: 'pBsT6v-ciO8', timedOut: true })).toBe('error');
+    expect(studioPlayerOverlay('loading')).toMatch(/loading video/i);
+    expect(studioPlayerOverlay('error')).toMatch(/did not load/i);
+    expect(studioPlayerOverlay('ready')).toBeNull();
+    expect(studioPlayerOverlay('empty')).toBeNull();
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioPlayerPhase');
+    expect(studio).toContain('data-testid="studio-player-overlay"');
+    expect(studio).toContain('data-testid="studio-player-retry"');
+    expect(studio).toContain('useYouTubePlayer');
+    expect(studio).toMatch(/seekTo\(/);
+    expect(studio).not.toMatch(/onLoad=\{\(\) => setPlayerLoaded/);
+    expect(studio).not.toMatch(/0:00/);
   });
 
   it('does not map keyframes or concepts into Studio events', () => {
