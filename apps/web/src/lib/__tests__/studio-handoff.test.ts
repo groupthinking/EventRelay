@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  applyStudioQueryAutoStart,
   resolveStudioHandoff,
   studioVideoHref,
   submitHomePaste,
@@ -66,5 +67,60 @@ describe('submitHomePaste kicks pack emit then hands off to Studio', () => {
     vi.stubGlobal('fetch', fetchMock);
     expect(submitHomePaste('not a youtube url')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyStudioQueryAutoStart (?video= one-shot, Strict Mode safe)', () => {
+  it('starts once with the canonical watch URL across a Strict Mode double effect', () => {
+    const startedKey = { current: null as string | null };
+    const start = vi.fn();
+    const onResolved = vi.fn();
+
+    const first = applyStudioQueryAutoStart({
+      query: FIXTURE_ID,
+      startedKey,
+      start,
+      onResolved,
+    });
+    const remount = applyStudioQueryAutoStart({
+      query: FIXTURE_ID,
+      startedKey,
+      start,
+      onResolved,
+    });
+    const sameQueryRerender = applyStudioQueryAutoStart({
+      query: FIXTURE_WATCH,
+      startedKey,
+      start,
+      onResolved,
+    });
+
+    expect(first).toBe('started');
+    expect(remount).toBe('already');
+    expect(sameQueryRerender).toBe('already');
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start).toHaveBeenCalledWith(FIXTURE_WATCH);
+    expect(onResolved).toHaveBeenCalledWith(FIXTURE_WATCH);
+    expect(startedKey.current).toBe(FIXTURE_ID);
+  });
+
+  it('does not start analysis for junk or empty query', () => {
+    const startedKey = { current: null as string | null };
+    const start = vi.fn();
+    const onInvalidQuery = vi.fn();
+
+    expect(
+      applyStudioQueryAutoStart({ query: null, startedKey, start, onInvalidQuery }),
+    ).toBe('skipped');
+    expect(
+      applyStudioQueryAutoStart({
+        query: 'not a youtube url',
+        startedKey,
+        start,
+        onInvalidQuery,
+      }),
+    ).toBe('invalid');
+    expect(start).not.toHaveBeenCalled();
+    expect(onInvalidQuery).toHaveBeenCalledWith('not a youtube url');
   });
 });

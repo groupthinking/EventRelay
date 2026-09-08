@@ -33,6 +33,8 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/dashboard', summary: 'Mutate dashboard state (pin, archive, etc.).' },
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
+  { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'POST', path: '/api/workflows/video-to-actions', summary: 'Start the durable Studio analysis workflow.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
 ];
 
 const METHOD_COLOR: Record<Endpoint['method'], string> = {
@@ -104,7 +106,9 @@ export default function ApiDocsPage() {
             <Link href="/studio" className="text-teal-400 hover:underline">
               studio
             </Link>{' '}
-            runs these endpoints end-to-end against a real YouTube URL.
+            runs the end-to-end YouTube workflow against a real URL: hashed Video
+            Pack via <code className="text-teal-300">/api/video/pack</code>, then{' '}
+            <code className="text-teal-300">/api/workflows/video-to-actions</code>.
           </p>
         </section>
       </main>

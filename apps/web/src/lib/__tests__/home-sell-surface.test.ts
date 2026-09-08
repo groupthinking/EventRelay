@@ -55,9 +55,10 @@ describe('Home is a sell page; Studio is the workbench', () => {
 
   it('keeps the live workbench only on /studio', () => {
     const studio = readSource('app/studio/page.tsx');
+    const workbench = readSource('components/OneLoopStudio.tsx');
     expect(studio).toContain('OneLoopStudio');
-    expect(readSource('components/OneLoopStudio.tsx')).toContain('resolveStudioHandoff');
-    expect(readSource('components/OneLoopStudio.tsx')).toContain('autoStartedKey');
+    expect(workbench).toContain('applyStudioQueryAutoStart');
+    expect(workbench).toContain('processVideo');
   });
 
   it('sends Home paste into /studio?video= after kicking pack emit', () => {
@@ -119,5 +120,13 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(pricing).toContain('ProCheckoutButton');
     expect(pricing).toContain('turnstile');
     expect(config).not.toMatch(/source: '\/pricing'/);
+  });
+
+  it('describes Studio as the YouTube workflow, not the REST catalog', () => {
+    const docs = readSource('app/docs/api/page.tsx');
+    expect(docs).not.toContain('runs these endpoints');
+    expect(docs).toContain('end-to-end YouTube workflow');
+    expect(docs).toContain('/api/video/pack');
+    expect(docs).toContain('/api/workflows/video-to-actions');
   });
 });
