@@ -341,7 +341,7 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-player-overlay"');
     expect(studio).toContain('data-testid="studio-player-retry"');
     expect(studio).toContain('useYouTubePlayer');
-    expect(studio).toMatch(/ytPlayer\.seekTo|player\.seekTo/);
+    expect(studio).toMatch(/seekTo\(/);
     expect(studio).not.toMatch(/onLoad=\{\(\) => setPlayerLoaded/);
     expect(studio).not.toMatch(/0:00/);
   });

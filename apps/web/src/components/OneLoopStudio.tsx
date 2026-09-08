@@ -335,12 +335,15 @@ export default function OneLoopStudio() {
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
-  const ytPlayer = useYouTubePlayer(videoId);
+  // Destructure at the hook call so render reads booleans + a callback ref,
+  // not properties of an object that also carries refs (react-hooks/refs).
+  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
+    useYouTubePlayer(videoId);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
-    loaded: ytPlayer.ready,
-    failed: ytPlayer.failed,
+    loaded: playerReady,
+    failed: playerFailed,
   });
   const playerOverlay = studioPlayerOverlay(playerPhase);
   const eventCount = selected?.events?.length ?? 0;
@@ -637,7 +640,7 @@ export default function OneLoopStudio() {
             <>
               <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
                 <div
-                  ref={ytPlayer.containerRef}
+                  ref={containerRef}
                   className="h-full w-full"
                   data-testid="studio-player"
                   title="YouTube source"
@@ -760,7 +763,7 @@ export default function OneLoopStudio() {
                 {seconds != null ? (
                   <button
                     type="button"
-                    onClick={() => ytPlayer.seekTo(seconds)}
+                    onClick={() => seekTo(seconds)}
                     className="text-left font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]"
                   >
                     {formatSeconds(seconds)}
@@ -834,7 +837,7 @@ export default function OneLoopStudio() {
                   {entity.timestamps[0] != null && (
                     <button
                       type="button"
-                      onClick={() => ytPlayer.seekTo(entity.timestamps[0])}
+                      onClick={() => seekTo(entity.timestamps[0])}
                       className="font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(entity.timestamps[0])}
@@ -858,7 +861,7 @@ export default function OneLoopStudio() {
                   {step.timestamp != null ? (
                     <button
                       type="button"
-                      onClick={() => ytPlayer.seekTo(step.timestamp!)}
+                      onClick={() => seekTo(step.timestamp!)}
                       className="text-left font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(step.timestamp)}
