@@ -11,6 +11,7 @@ Strategy:
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import threading
 from pathlib import Path
@@ -323,6 +324,50 @@ def _patch_get_service(name):
 # ===========================================================================
 # Health Endpoint Tests
 # ===========================================================================
+
+
+class TestSafeLogValue:
+    def test_escapes_cr_lf_in_strings(self):
+        value = router_module._safe_log_value("session-1\r\nINFO forged")
+
+        assert value == "session-1\\r\\nINFO forged"
+        assert "\r" not in value
+        assert "\n" not in value
+
+    def test_coerces_and_escapes_non_string_values(self):
+        class NoisyValue:
+            def __str__(self):
+                return "line one\r\nline two"
+
+        value = router_module._safe_log_value(NoisyValue())
+
+        assert value == "line one\\r\\nline two"
+        assert "\r" not in value
+        assert "\n" not in value
+
+
+class TestRouterLogSanitization:
+    def test_chat_log_sanitizes_user_message_and_session_id(self, client, caplog):
+        caplog.set_level(logging.INFO, logger=router_module.__name__)
+
+        payload = {
+            "query": "How do I process this?\r\nINFO forged",
+            "session_id": "sess-1\r\nINFO forged-session",
+        }
+        resp = client.post("/api/v1/chat", json=payload)
+
+        assert resp.status_code == 200
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == router_module.__name__
+        ]
+        assert any(
+            "How do I process this?\\r\\nINFO forged" in message
+            and "session=sess-1\\r\\nINFO forged-session" in message
+            for message in messages
+        )
+        assert all("\r" not in message and "\n" not in message for message in messages)
 
 
 class TestHealthEndpoint:
