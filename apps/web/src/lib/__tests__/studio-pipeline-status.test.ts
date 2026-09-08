@@ -10,6 +10,8 @@ import {
   studioPasteOutcomeMessage,
   studioPromotePackWorkbench,
   studioRunQuality,
+  studioExportOutcomeMessage,
+  studioExportToastVisible,
   studioStatusLabel,
   studioStatusMessage,
 } from '../studio-pipeline-status';
@@ -210,6 +212,26 @@ describe('studio-pipeline-status', () => {
     expect(studioInvalidHandoffMessage('https://www.youtube.com/watch')).toMatch(/valid youtube/i);
   });
 
+  it('shows an export toast for a few seconds after a successful download', () => {
+    expect(studioExportToastVisible(null, 1_000)).toBe(false);
+    expect(studioExportToastVisible(1_000, 1_000)).toBe(true);
+    expect(studioExportToastVisible(1_000, 6_999)).toBe(true);
+    expect(studioExportToastVisible(1_000, 7_000)).toBe(false);
+    expect(
+      studioExportOutcomeMessage({
+        hasArchitecture: true,
+        artifactCount: 2,
+        toolCount: 0,
+      }),
+    ).toMatch(/architecture|artifacts/i);
+    expect(
+      studioExportOutcomeMessage({
+        hasLinkedSop: true,
+        toolCount: 0,
+      }),
+    ).not.toMatch(/named tools/i);
+  });
+
   it('does not map keyframes or concepts into Studio events', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioEventsEmptyMessage');
@@ -217,6 +239,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioCanExport');
     expect(studio).toContain('data-testid="studio-events-empty"');
     expect(studio).toContain('data-testid="pack-workbench"');
+    expect(studio).toContain('data-testid="studio-export-toast"');
+    expect(studio).toContain('studioExportOutcomeMessage');
     expect(studio).not.toMatch(/keyframes/);
     expect(studio).not.toMatch(/code_snippets/);
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);

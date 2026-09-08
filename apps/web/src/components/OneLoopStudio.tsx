@@ -31,6 +31,8 @@ import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioCanExport,
   studioEventsEmptyMessage,
+  studioExportOutcomeMessage,
+  studioExportToastVisible,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -185,6 +187,8 @@ export default function OneLoopStudio() {
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const [exportToast, setExportToast] = useState<{ text: string; shownAtMs: number } | null>(null);
+  const [toastNow, setToastNow] = useState(0);
   const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
@@ -311,6 +315,15 @@ export default function OneLoopStudio() {
     }, 250);
     return () => window.clearInterval(timer);
   }, [busy]);
+
+  useEffect(() => {
+    if (!exportToast) return;
+    setToastNow(Date.now());
+    const timer = window.setInterval(() => {
+      setToastNow(Date.now());
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, [exportToast]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
   const eventCount = selected?.events?.length ?? 0;
@@ -453,15 +466,17 @@ export default function OneLoopStudio() {
       },
     });
     downloadScaffoldPackage(pkg);
-    setMessage(
-      officialTemplate
-        ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
-        : linkedSop
-          ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
-          : packFormation.architecture || packFormation.artifacts.length > 0
-            ? 'Exported architecture and artifacts from this pack.'
-            : 'Exported scaffold files (README, tasks.json).',
-    );
+    const outcome = studioExportOutcomeMessage({
+      officialClone: officialTemplate?.clone,
+      hasLinkedSop: Boolean(linkedSop && (linkedSop.steps.length > 0 || linkedSop.entities.length > 0)),
+      hasArchitecture: Boolean(packFormation.architecture),
+      artifactCount: packFormation.artifacts.length,
+      toolCount: packFormation.tools.length,
+    });
+    setMessage(outcome);
+    const now = Date.now();
+    setExportToast({ text: outcome, shownAtMs: now });
+    setToastNow(now);
   };
 
   const deploy = async () => {
@@ -935,6 +950,16 @@ export default function OneLoopStudio() {
           </section>
         )}
       </main>
+
+      {exportToast && studioExportToastVisible(exportToast.shownAtMs, toastNow) ? (
+        <div
+          data-testid="studio-export-toast"
+          role="status"
+          className="fixed bottom-20 right-4 z-20 max-w-sm rounded-lg border border-[#e8b86d]/40 bg-[#1a1408] px-4 py-3 text-sm text-[#e8b86d] shadow-lg"
+        >
+          {exportToast.text}
+        </div>
+      ) : null}
 
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">

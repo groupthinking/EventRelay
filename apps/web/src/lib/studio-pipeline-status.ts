@@ -141,6 +141,43 @@ export function studioInvalidHandoffMessage(raw: string): string {
   return `Need a valid YouTube URL. "${preview}" is not a watchable video.`;
 }
 
+export const STUDIO_EXPORT_TOAST_MS = 6000;
+
+export function studioExportToastVisible(
+  shownAtMs: number | null,
+  nowMs: number,
+  ttlMs: number = STUDIO_EXPORT_TOAST_MS,
+): boolean {
+  if (shownAtMs == null) return false;
+  return nowMs - shownAtMs < ttlMs;
+}
+
+export function studioExportOutcomeMessage(input: {
+  officialClone?: string | null;
+  hasLinkedSop?: boolean;
+  hasArchitecture?: boolean;
+  artifactCount?: number;
+  toolCount?: number;
+}): string {
+  if (input.officialClone) {
+    return `Exported ${input.officialClone} plus SOP and DEPLOY.md.`;
+  }
+  if (input.hasLinkedSop) {
+    const parts = ['SOP'];
+    if ((input.toolCount ?? 0) > 0) parts.push('named tools');
+    parts.push('DEPLOY.md');
+    return `Exported ${parts.join(', ')} from this run.`;
+  }
+  const parts: string[] = [];
+  if (input.hasArchitecture) parts.push('architecture');
+  if ((input.artifactCount ?? 0) > 0) parts.push('artifacts');
+  if ((input.toolCount ?? 0) > 0) parts.push('named tools');
+  if (parts.length > 0) {
+    return `Exported ${parts.join(', ')} from this pack.`;
+  }
+  return 'Exported scaffold files (README, tasks.json).';
+}
+
 export function studioPasteOutcomeMessage(input: {
   hasUsableTranscript: boolean;
   packCitation?: string | null;
