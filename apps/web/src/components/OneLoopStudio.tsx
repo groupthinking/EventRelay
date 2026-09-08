@@ -57,6 +57,7 @@ import {
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
+import { evaluateStudioDeployTransition } from '@/lib/gate-transition';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
@@ -523,11 +524,21 @@ export default function OneLoopStudio() {
       }
       setDeployRunId(started.runId);
       const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
-      setDeployReceiptUrl(studioVerifiedLiveUrl(polled.result?.live_url));
+      const gated = evaluateStudioDeployTransition({
+        transitionId: started.runId,
+        runId: started.runId,
+        jobId: polled.result?.jobId,
+        liveUrl: polled.result?.live_url,
+        runStatus: polled.runStatus,
+        kind: polled.result?.kind,
+        authority: { actor: 'anonymous' },
+      });
+      const liveUrl = gated.decision === 'PASS' ? polled.result?.live_url : undefined;
+      setDeployReceiptUrl(studioVerifiedLiveUrl(liveUrl));
       setDeployReceiptVideoId(attemptVideoId);
       setMessage(
         studioDeployOutcomeMessage({
-          liveUrl: polled.result?.live_url,
+          liveUrl,
           runStatus: polled.runStatus,
           error: polled.error,
           kind: polled.result?.kind,
