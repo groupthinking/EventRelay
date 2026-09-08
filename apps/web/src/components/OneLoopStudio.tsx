@@ -36,6 +36,8 @@ import {
   studioDeployOutcomeMessage,
   studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
+  studioExportFilename,
+  studioExportToastMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -199,6 +201,9 @@ export default function OneLoopStudio() {
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [playerEpoch, setPlayerEpoch] = useState(0);
+  const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
+    null,
+  );
   const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
@@ -249,6 +254,12 @@ export default function OneLoopStudio() {
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(null);
   }, [selectedVideoId]);
+
+  useEffect(() => {
+    if (!exportToast) return;
+    const timer = window.setTimeout(() => setExportToast(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [exportToast]);
 
   const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
   const officialTemplate = pickOfficialTemplate(linkedSop);
@@ -472,30 +483,44 @@ export default function OneLoopStudio() {
       packFormation.artifacts.length === 0 &&
       packFormation.tools.length === 0
     ) {
-      setMessage('Nothing to export yet — analyze a video first.');
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
+      setExportToast(toast);
       return;
     }
-    const pkg = buildScaffoldPackage({
-      projectName: selected?.title || 'uvai-project',
-      actions,
-      projectScaffold: selected?.insights?.project_scaffold,
-      linkedSop: linkedSop || undefined,
-      packFormation: {
-        architecture: packFormation.architecture,
-        artifacts: packFormation.artifacts,
-        tools: packFormation.tools,
-      },
-    });
-    downloadScaffoldPackage(pkg);
-    setMessage(
-      officialTemplate
-        ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
-        : linkedSop
-          ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
-          : packFormation.architecture || packFormation.artifacts.length > 0
-            ? 'Exported architecture and artifacts from this pack.'
-            : 'Exported scaffold files (README, tasks.json).',
-    );
+    try {
+      const pkg = buildScaffoldPackage({
+        projectName: selected?.title || 'uvai-project',
+        actions,
+        projectScaffold: selected?.insights?.project_scaffold,
+        linkedSop: linkedSop || undefined,
+        packFormation: {
+          architecture: packFormation.architecture,
+          artifacts: packFormation.artifacts,
+          tools: packFormation.tools,
+        },
+      });
+      downloadScaffoldPackage(pkg);
+      const filename = studioExportFilename(pkg.projectName);
+      const kind =
+        packFormation.architecture || packFormation.artifacts.length > 0
+          ? 'pack'
+          : linkedSop
+            ? 'sop'
+            : 'scaffold';
+      const toast = officialTemplate
+        ? {
+            tone: 'success' as const,
+            text: `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md. ${filename}`,
+          }
+        : studioExportToastMessage({ ok: true, kind, filename });
+      setExportToast(toast);
+    } catch (err) {
+      const toast = studioExportToastMessage({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Export failed.',
+      });
+      setExportToast(toast);
+    }
   };
 
   const deploy = async () => {
@@ -1058,6 +1083,21 @@ export default function OneLoopStudio() {
           </section>
         )}
       </main>
+
+      {exportToast ? (
+        <div
+          data-testid="studio-export-toast"
+          role={exportToast.tone === 'error' ? 'alert' : 'status'}
+          className={clsx(
+            'fixed bottom-20 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
+            exportToast.tone === 'success'
+              ? 'border-[#e8b86d]/40 bg-[#1a1408] text-[#e8b86d]'
+              : 'border-red-400/40 bg-[#2a1212] text-red-100',
+          )}
+        >
+          {exportToast.text}
+        </div>
+      ) : null}
 
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
