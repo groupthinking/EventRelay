@@ -631,7 +631,7 @@ export default function OneLoopStudio() {
               <li data-testid="studio-events-empty" className="px-4 py-4 text-sm text-white/40">
                 {studioEventsEmptyMessage({
                   busy: busy || selected?.status === 'processing',
-                  hasCompletedRun: Boolean(selected) && selected.status !== 'processing' && !busy,
+                  hasCompletedRun: selected != null && selected.status !== 'processing' && !busy,
                   eventCount: 0,
                   hasArchitecture: Boolean(packFormation.architecture),
                   artifactCount: packFormation.artifacts.length,
