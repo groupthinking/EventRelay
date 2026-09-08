@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { STUDIO_PRODUCT_TAGLINE } from '@/lib/studio-pipeline-status';
 
 const PRODUCT_LINKS = [
   { label: 'Home', href: '/' },
@@ -62,7 +63,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
               <span className="font-bold text-sm">UVAI</span>
             </div>
             <p className="text-xs text-white/30 leading-relaxed">
-              Evidence-gated video intelligence with durable workflows and reviewed actions.
+              {STUDIO_PRODUCT_TAGLINE}
             </p>
           </div>
           <div>
