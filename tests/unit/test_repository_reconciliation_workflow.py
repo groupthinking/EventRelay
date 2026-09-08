@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
+import pytest
 import yaml
 
 WORKFLOW_PATH = (
@@ -22,6 +26,127 @@ def _get_script(workflow: dict) -> str:
     return script_step["with"]["script"]
 
 
+def _run_reconciliation(tmp_path: Path, scenario: dict) -> dict:
+    """Execute the workflow's real reconciliation script against stubbed GitHub APIs."""
+    node = shutil.which("node")
+    if node is None:  # pragma: no cover - depends on the runner image
+        pytest.skip("node is required to execute the workflow's inline script")
+
+    script_path = tmp_path / "repository_reconciliation.js"
+    script_path.write_text(_get_script(_load_workflow()), encoding="utf-8")
+    scenario_path = tmp_path / "scenario.json"
+    scenario_path.write_text(json.dumps(scenario), encoding="utf-8")
+    driver_path = tmp_path / "driver.js"
+    driver_path.write_text(
+        """
+const fs = require("fs");
+const vm = require("vm");
+
+const [scriptPath, scenarioPath] = process.argv.slice(2);
+const script = fs.readFileSync(scriptPath, "utf8");
+const scenario = JSON.parse(fs.readFileSync(scenarioPath, "utf8"));
+const actions = { issueUpdates: [], issueCreates: [], comments: [], pullUpdates: [], infos: [] };
+
+const pullsList = async () => ({ data: scenario.pulls || [] });
+pullsList.__tag = "pulls.list";
+const listBranches = async () => ({ data: scenario.branches || [] });
+listBranches.__tag = "repos.listBranches";
+const listComments = async ({ issue_number }) => ({ data: (scenario.commentsByIssue || {})[issue_number] || [] });
+listComments.__tag = "issues.listComments";
+
+const github = {
+  paginate: async (fn, params) => {
+    switch (fn.__tag) {
+      case "pulls.list":
+        return scenario.pulls || [];
+      case "repos.listBranches":
+        return scenario.branches || [];
+      case "issues.listComments":
+        return ((scenario.commentsByIssue || {})[params.issue_number]) || [];
+      default:
+        throw new Error(`Unsupported paginate call: ${fn.__tag}`);
+    }
+  },
+  rest: {
+    pulls: {
+      list: pullsList,
+      update: async (payload) => {
+        actions.pullUpdates.push(payload);
+        return { data: payload };
+      },
+    },
+    repos: {
+      listBranches,
+      getCommit: async ({ ref }) => ({
+        data: {
+          commit: {
+            committer: { date: ((scenario.commitsBySha || {})[ref]) || "2026-07-01T00:00:00Z" },
+          },
+        },
+      }),
+    },
+    issues: {
+      get: async ({ issue_number }) => {
+        const issue = (scenario.issuesByNumber || {})[issue_number];
+        if (!issue) {
+          const err = new Error(`Missing issue ${issue_number}`);
+          err.status = 404;
+          throw err;
+        }
+        return { data: issue };
+      },
+      update: async (payload) => {
+        actions.issueUpdates.push(payload);
+        return { data: payload };
+      },
+      create: async (payload) => {
+        actions.issueCreates.push(payload);
+        return { data: { number: scenario.createdReportNumber || 999 } };
+      },
+      listComments,
+      createComment: async (payload) => {
+        actions.comments.push(payload);
+        return { data: payload };
+      },
+    },
+    search: {
+      issuesAndPullRequests: async () => ({
+        data: {
+          items: scenario.existingReport ? [scenario.existingReport] : [],
+        },
+      }),
+    },
+  },
+};
+
+const context = { repo: { owner: "groupthinking", repo: "EventRelay" } };
+const core = { info: (message) => actions.infos.push(message) };
+
+(async () => {
+  await vm.runInNewContext(
+    `(async () => {${script}\\n})()`,
+    { context, github, core, console, Date, Set, Map, Number, Error },
+  );
+  process.stdout.write(JSON.stringify(actions));
+})().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});
+""",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [node, str(driver_path), str(script_path), str(scenario_path)],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, f"driver failed: {result.stderr}"
+    return json.loads(result.stdout)
+
+
 def test_reconciliation_workflow_file_is_valid_yaml() -> None:
     workflow = _load_workflow()
     assert workflow["name"] == "Repository Reconciliation"
@@ -35,6 +160,23 @@ def test_reconciliation_workflow_triggers_on_schedule_and_dispatch() -> None:
     assert "workflow_dispatch" in triggers
     crons = [entry["cron"] for entry in triggers["schedule"]]
     assert len(crons) >= 1
+
+
+def test_reconciliation_workflow_reacts_to_repo_state_changes() -> None:
+    """The report must refresh when PR, issue, or branch state changes."""
+    triggers = _load_workflow()[True]
+    assert triggers["pull_request_target"]["types"] == [
+        "opened",
+        "reopened",
+        "edited",
+        "synchronize",
+        "ready_for_review",
+        "converted_to_draft",
+        "closed",
+    ]
+    assert triggers["issues"]["types"] == ["opened", "reopened", "closed"]
+    assert "create" in triggers
+    assert "delete" in triggers
 
 
 def test_reconciliation_workflow_minimum_permissions() -> None:
@@ -102,3 +244,63 @@ def test_reconciliation_workflow_report_is_idempotent() -> None:
     # Should update the existing issue if found, otherwise create a new one.
     assert "issues.update" in script
     assert "issues.create" in script
+
+
+def test_reconciliation_accepts_repo_qualified_issue_references(tmp_path: Path) -> None:
+    """Canonical references like owner/repo#123 must not be reported missing."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 903,
+                    "title": "fix(auth): restore Google OAuth configuration in Vercel production",
+                    "body": "## Canonical issue\\n\\nCloses groupthinking/EventRelay#900",
+                    "draft": False,
+                    "head": {
+                        "ref": "jules-15243187445261469621-ffdb089e",
+                        "repo": {"full_name": "groupthinking/EventRelay"},
+                    },
+                }
+            ],
+            "branches": [],
+            "issuesByNumber": {"900": {"state": "open"}},
+            "existingReport": {"number": 1584, "title": "[automation] Repository drift report"},
+        },
+    )
+
+    assert outcome["comments"] == []
+    assert (
+        "- Ready PRs without exactly one canonical issue: **0**"
+        in outcome["issueUpdates"][0]["body"]
+    )
+
+
+def test_reconciliation_keeps_closed_canonical_issues_tracked(tmp_path: Path) -> None:
+    """A PR linked to one real issue stays canonical even after that issue closes."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 1673,
+                    "title": "Canonicalize retired routes into the Studio workbench",
+                    "body": "## Canonical issue\\n\\nCloses #1669",
+                    "draft": False,
+                    "head": {
+                        "ref": "copilot/make-home-sell-page-and-route-studio",
+                        "repo": {"full_name": "groupthinking/EventRelay"},
+                    },
+                }
+            ],
+            "branches": [],
+            "issuesByNumber": {"1669": {"state": "closed"}},
+            "existingReport": {"number": 1584, "title": "[automation] Repository drift report"},
+        },
+    )
+
+    assert outcome["comments"] == []
+    assert (
+        "- Ready PRs without exactly one canonical issue: **0**"
+        in outcome["issueUpdates"][0]["body"]
+    )
