@@ -7,8 +7,8 @@
 
 | Role | Owner |
 |------|--------|
-| **Canonical product frontend** | **`apps/web`** in this repository |
-| **Production domain `https://uvai.io`** | Vercel project **`v0-uvai`** (rootDirectory `apps/web`) |
+| **Sole product frontend** | **`apps/web`** in this repository |
+| **Production domain `https://uvai.io`** | Served by Vercel project **`v0-uvai`** from root directory **`apps/web`** |
 | **GitHub `groupthinking/uvai.io`** (`package.json` name `next-enterprise`) | **Non-canonical** — freeze; no product feature work |
 
 Root `vercel.json` already permanent-redirects `v0-uvai.vercel.app` and `event-relay-web.vercel.app` to `https://uvai.io`. The EventRelay GitHub homepage is `https://uvai.io`.
