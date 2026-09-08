@@ -32,7 +32,7 @@ import {
   studioStatusMessage,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
-import { resolveStudioHandoff } from '@/lib/studio-handoff';
+import { applyStudioQueryAutoStart, resolveStudioHandoff } from '@/lib/studio-handoff';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 
@@ -192,17 +192,19 @@ export default function OneLoopStudio() {
   };
 
   useEffect(() => {
-    const q = searchParams.get('video') || searchParams.get('url');
-    if (!q) return;
-    const handoff = resolveStudioHandoff(q);
-    if (!handoff) {
-      setUrl(q);
-      return;
-    }
-    setUrl(handoff.watchUrl);
-    if (autoStartedKey.current === handoff.videoId) return;
-    autoStartedKey.current = handoff.videoId;
-    void runAnalysis(handoff.watchUrl);
+    applyStudioQueryAutoStart({
+      query: searchParams.get('video') || searchParams.get('url'),
+      startedKey: autoStartedKey,
+      start: (watchUrl) => {
+        void runAnalysis(watchUrl);
+      },
+      onResolved: (watchUrl) => {
+        setUrl(watchUrl);
+      },
+      onInvalidQuery: (raw) => {
+        setUrl(raw);
+      },
+    });
     // One-shot kick from ?video= so Home paste starts the live pack path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
