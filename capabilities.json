@@ -1,5 +1,15 @@
 {
   "version": 1,
+  "network": {
+    "available": true,
+    "description": "Core custom networking capabilities shipped as real SKILL.md artifacts.",
+    "skills": [
+      "network-configuration",
+      "network-diagnostics",
+      "network-performance",
+      "network-security"
+    ]
+  },
   "skills": [
     {
       "id": "network-configuration",
