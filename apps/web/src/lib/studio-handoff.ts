@@ -46,8 +46,8 @@ export type StudioQueryStartedKey = { current: string | null };
 let strictModeAutoStartedVideoId: string | null = null;
 
 /**
- * One-shot ?video= / ?url= kick. Safe under Strict Mode: the same startedKey
- * ref suppresses a second start() for the same video id.
+ * One-shot ?video= / ?url= kick. Safe under Strict Mode remounts: both the
+ * caller ref and a module-level key suppress duplicate start() calls.
  */
 export type StudioSearchParams = {
   get(name: string): string | null;
