@@ -43,6 +43,10 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
 
     await expect(page).toHaveTitle(/UVAI/i);
     await expect(page.getByText('Universal Video Action Intelligence')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Paste a YouTube URL\. Open the Studio workbench\./i })
+    ).toBeVisible();
+    await expect(page.getByText(/Transcript quality varies by source/i)).toBeVisible();
     await expect(page.getByText('Loading studio')).toHaveCount(0);
     await expect(page.getByLabel(/YouTube URL/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /Run in Studio/i })).toBeVisible();

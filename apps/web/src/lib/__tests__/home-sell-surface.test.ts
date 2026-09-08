@@ -28,6 +28,22 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('$180');
   });
 
+  it('does not claim arbitrary-video production E2E or a guaranteed transcript', () => {
+    const home = readSource('app/page.tsx');
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const nav = readSource('components/Nav.tsx');
+    const sellCopy = `${home}\n${checkout}\n${nav}`;
+    expect(home).toContain('Paste a YouTube URL. Open the Studio workbench.');
+    expect(home).toContain('Starts a hashed Video Pack run in Studio (player, events, exports).');
+    expect(home).toContain('Transcript quality varies by source');
+    expect(home).toContain('not a guaranteed production E2E');
+    expect(sellCopy).not.toContain('Ship the work.');
+    expect(sellCopy).not.toContain('Not a demo.');
+    expect(sellCopy).not.toMatch(/any video/i);
+    expect(sellCopy).not.toMatch(/reliable.{0,40}transcript/i);
+    expect(sellCopy).not.toMatch(/grounded transcript/i);
+  });
+
   it('keeps the live workbench only on /studio', () => {
     const studio = readSource('app/studio/page.tsx');
     expect(studio).toContain('OneLoopStudio');

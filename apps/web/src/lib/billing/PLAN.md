@@ -15,6 +15,7 @@
 - [x] Nav Get Pro lands on `/#get-pro`; Pricing nav still goes to `/pricing`
 - [x] Playwright: Home has checkout controls; paste handoff still works
 - [x] Focused vitest; commit; PR
+- [x] CoS AMBER: honest Home copy — no arbitrary-video production E2E / guaranteed transcript claim
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Cold `/` still sell hero + paste + $39/$390/$199. User completes Turnstile → Stripe Checkout $39 from Home. `/pricing` still checkouts. Paste still goes to `/studio?video=`.
@@ -22,6 +23,6 @@
 * **Proof Artifact:** `cd apps/web && npx vitest run` — 88 files, 558 passed / 1 skipped.
 
 ## 4. Post-Task Reflection
-* **What was done:** Added `HomeProCheckout` on `/` that reuses `ProCheckoutButton` (Turnstile → existing `/api/billing/checkout`). Nav Get Pro targets `/#get-pro`. `/pricing` remains the full plans page with the same checkout. Ship/Maintain stay copy-only.
-* **Why it was needed:** After #1668 Home sold Pro by linking away to `/pricing`. CoS authorized folding live Get Pro onto cold `/`.
-* **How it was tested:** RED: home-sell tests failed without `HomeProCheckout`. GREEN: 558 passed. Playwright smoke now asserts Home Turnstile + monthly/annual + paste handoff.
+* **What was done:** Added `HomeProCheckout` on `/` that reuses `ProCheckoutButton` (Turnstile → existing `/api/billing/checkout`). Nav Get Pro targets `/#get-pro`. `/pricing` remains the full plans page with the same checkout. Ship/Maintain stay copy-only. Home hero now says Studio workbench + variable transcript quality, not “Ship the work” / “Not a demo.”
+* **Why it was needed:** After #1668 Home sold Pro by linking away to `/pricing`. CoS authorized folding live Get Pro onto cold `/`, then AMBER-guarded Home copy so it does not claim production E2E or a guaranteed transcript.
+* **How it was tested:** RED: home-sell tests failed without `HomeProCheckout`. GREEN: vitest + Playwright smoke for checkout island, paste handoff, and honest Home copy.

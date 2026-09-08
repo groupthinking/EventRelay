@@ -11,7 +11,7 @@ import {
 export const metadata: Metadata = {
   title: 'UVAI — Universal Video Action Intelligence',
   description:
-    'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+    'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
   alternates: { canonical: '/' },
 };
 
@@ -47,10 +47,11 @@ export default function HomePage() {
             Universal Video Action Intelligence
           </p>
           <h1 className="mt-8 max-w-3xl font-heading text-4xl font-black leading-tight tracking-tight md:text-6xl">
-            Paste a YouTube URL. Ship the work.
+            Paste a YouTube URL. Open the Studio workbench.
           </h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-white/50 md:text-lg">
-            Hashed Video Pack, transcript, events, and exports on one Studio workbench. Not a demo.
+            Starts a hashed Video Pack run in Studio (player, events, exports). Transcript quality
+            varies by source — not a guaranteed production E2E.
           </p>
 
           <div className="mt-10 w-full">
