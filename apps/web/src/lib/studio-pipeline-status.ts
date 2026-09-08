@@ -313,6 +313,43 @@ export function studioExportFilename(projectName?: string | null): string {
   return base.toLowerCase().endsWith('.zip') ? base : `${base}.zip`;
 }
 
+export function studioActionCard(action: {
+  tool: string;
+  status: string;
+  result?: string;
+}): {
+  title: string;
+  statusLabel: string;
+  detail: string;
+  kind: 'review' | 'tool';
+} {
+  const isReview = action.tool === 'review_action';
+  const statusLabel =
+    action.status === 'proposed'
+      ? 'Needs review'
+      : action.status === 'completed'
+        ? 'Done'
+        : action.status === 'failed'
+          ? 'Failed'
+          : action.status;
+  const title = isReview
+    ? 'Review this result'
+    : action.tool
+        .split('_')
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+  const detail =
+    action.result?.trim() ||
+    (isReview ? 'Open the evidence on this page before you act.' : 'No detail from this tool.');
+  return {
+    title,
+    statusLabel,
+    detail,
+    kind: isReview ? 'review' : 'tool',
+  };
+}
+
 export function studioExportToastMessage(input: {
   ok: boolean;
   kind?: StudioExportToastKind;

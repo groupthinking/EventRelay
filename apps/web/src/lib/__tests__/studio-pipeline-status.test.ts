@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
   studioDeployButtonLabel,
@@ -325,6 +326,28 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');
+  });
+
+  it('renders review_action as a card with status, title, and detail', () => {
+    const review = studioActionCard({
+      tool: 'review_action',
+      status: 'proposed',
+      result: 'Review evidence',
+    });
+    expect(review.kind).toBe('review');
+    expect(review.title).toMatch(/review this result/i);
+    expect(review.statusLabel).toBe('Needs review');
+    expect(review.detail).toBe('Review evidence');
+
+    const tool = studioActionCard({ tool: 'persist_insight', status: 'completed' });
+    expect(tool.kind).toBe('tool');
+    expect(tool.title).toMatch(/persist insight/i);
+    expect(tool.statusLabel).toBe('Done');
+    expect(tool.detail).toMatch(/no detail/i);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioActionCard');
+    expect(studio).toContain('data-testid="studio-action-card"');
   });
 
   it('returns a toast for export success and failure including filename', () => {

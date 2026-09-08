@@ -29,6 +29,7 @@ import {
 } from '@/lib/studio-workflow';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
+  studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
   studioDeployButtonLabel,
@@ -1067,13 +1068,24 @@ export default function OneLoopStudio() {
                 {workflowActions.actions.length === 0 && (
                   <li className="text-white/50">No tool results from this run.</li>
                 )}
-                {workflowActions.actions.map((action, i) => (
-                  <li key={`${action.tool}-${i}`}>
-                    <span className="font-medium">{action.tool}</span>
-                    <span className="text-white/50"> — {action.status}</span>
-                    {action.result && <div className="text-white/70">{action.result}</div>}
-                  </li>
-                ))}
+                {workflowActions.actions.map((action, i) => {
+                  const card = studioActionCard(action);
+                  return (
+                    <li
+                      key={`${action.tool}-${i}`}
+                      data-testid="studio-action-card"
+                      className="rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-white">{card.title}</span>
+                        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#e8b86d]">
+                          {card.statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-white/70">{card.detail}</p>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="mt-3 text-sm text-white/60">
