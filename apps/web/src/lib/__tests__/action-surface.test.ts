@@ -1,12 +1,48 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   actionsFromStudioRun,
   buildScaffoldPackage,
+  downloadScaffoldPackage,
   summarizeProjectScaffold,
 } from '@/lib/action-surface';
 import { zipEntryNames, zipUtf8Files } from '@/lib/zip-store';
 
 describe('action-surface (F3)', () => {
+  const fetchMock = vi.fn();
+  const clickMock = vi.fn();
+  const appendChildMock = vi.fn();
+  const removeMock = vi.fn();
+  const createObjectURLMock = vi.fn(() => 'blob:zip');
+  const revokeObjectURLMock = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('URL', {
+      createObjectURL: createObjectURLMock,
+      revokeObjectURL: revokeObjectURLMock,
+    });
+    vi.stubGlobal('document', {
+      body: { appendChild: appendChildMock },
+      createElement: vi.fn(() => ({
+        click: clickMock,
+        remove: removeMock,
+        href: '',
+        download: '',
+        rel: '',
+      })),
+    });
+  });
+
+  afterEach(() => {
+    fetchMock.mockReset();
+    clickMock.mockReset();
+    appendChildMock.mockReset();
+    removeMock.mockReset();
+    createObjectURLMock.mockClear();
+    revokeObjectURLMock.mockClear();
+    vi.unstubAllGlobals();
+  });
+
   it('buildScaffoldPackage emits README, tasks.json, and stub index', () => {
     const pkg = buildScaffoldPackage({
       projectName: 'My Cool App!',
@@ -155,5 +191,90 @@ describe('action-surface (F3)', () => {
     ).toEqual([{ title: 'save_resource', description: 'wrote file', category: 'act' }]);
 
     expect(actionsFromStudioRun({ insightActions: [{ title: '  ' }], events: [] })).toEqual([]);
+  });
+
+  it('surfaces payment-required export responses without triggering a download', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: 'Workspace ZIP exports require Pro. Upgrade to continue.',
+          code: 'payment_required',
+          upgradeRequired: true,
+          checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_export',
+          retryable: true,
+        }),
+        {
+          status: 402,
+          headers: { 'content-type': 'application/json' },
+        },
+      ),
+    );
+
+    const result = await downloadScaffoldPackage({
+      projectName: 'paid-pack',
+      files: { 'README.md': '# paid-pack\n' },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      status: 402,
+      error: 'Workspace ZIP exports require Pro. Upgrade to continue.',
+      code: 'payment_required',
+      upgradeRequired: true,
+      checkoutUrl: 'https://checkout.stripe.com/c/pay/cs_test_export',
+      retryable: true,
+    });
+    expect(clickMock).not.toHaveBeenCalled();
+    expect(createObjectURLMock).not.toHaveBeenCalled();
+  });
+
+  it('downloads ZIP bytes returned by the workspace export API', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+        status: 200,
+        headers: {
+          'content-type': 'application/zip',
+          'content-disposition': 'attachment; filename="studio-pack.zip"',
+        },
+      }),
+    );
+
+    const result = await downloadScaffoldPackage({
+      projectName: 'studio-pack',
+      files: { 'README.md': '# studio-pack\n' },
+    });
+
+    expect(result).toEqual({ ok: true, status: 200, filename: 'studio-pack.zip' });
+    expect(clickMock).toHaveBeenCalledTimes(1);
+    expect(createObjectURLMock).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURLMock).toHaveBeenCalledWith('blob:zip');
+  });
+
+  it('retries transient workspace export failures before downloading', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'temporary' }), {
+          status: 503,
+          headers: { 'content-type': 'application/json' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
+          status: 200,
+          headers: {
+            'content-type': 'application/zip',
+            'content-disposition': 'attachment; filename="retry-pack.zip"',
+          },
+        }),
+      );
+
+    const result = await downloadScaffoldPackage({
+      projectName: 'retry-pack',
+      files: { 'README.md': '# retry-pack\n' },
+    });
+
+    expect(result).toEqual({ ok: true, status: 200, filename: 'retry-pack.zip' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(clickMock).toHaveBeenCalledTimes(1);
   });
 });

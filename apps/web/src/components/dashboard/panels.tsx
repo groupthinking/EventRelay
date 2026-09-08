@@ -222,7 +222,7 @@ export function ActionsPanel({
   const projectScaffold = video.insights?.project_scaffold;
   const scaffoldPreview = summarizeProjectScaffold(projectScaffold);
 
-  const exportScaffold = () => {
+  const exportScaffold = async () => {
     // Prefer tool-fulfilled titles; fall back to planned analysis actions.
     const fromTools: ActionCardLike[] = fulfilled
       .filter((a) => typeof a.input?.title === 'string' || a.tool)
@@ -252,7 +252,10 @@ export function ActionsPanel({
       actions,
       projectScaffold,
     });
-    downloadScaffoldPackage(pkg);
+    const result = await downloadScaffoldPackage(pkg);
+    if (!result.ok && result.checkoutUrl) {
+      window.location.href = result.checkoutUrl;
+    }
   };
 
   const canExport =
