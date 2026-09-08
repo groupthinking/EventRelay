@@ -6,7 +6,12 @@ import { useSearchParams } from 'next/navigation';
 import { Download, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
-import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
+import {
+  deployHoldReason,
+  pickOfficialTemplate,
+  stackCheckStatus,
+  stackCheckStatusLabel,
+} from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
@@ -224,7 +229,7 @@ export default function OneLoopStudio() {
     setCompletedChecks([]);
   }, [selectedVideoId]);
 
-  const holdReason = deployHoldReason(linkedSop, completedChecks);
+  const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
   const officialTemplate = pickOfficialTemplate(linkedSop);
 
   useEffect(() => {
@@ -774,6 +779,7 @@ export default function OneLoopStudio() {
                     .filter((item) => item.source === 'stack')
                     .map((item) => {
                       const checked = completedChecks.includes(item.id);
+                      const status = stackCheckStatus(item, completedChecks, 'anonymous');
                       return (
                       <li key={item.id} className="flex items-start gap-3 px-4 py-3 text-sm">
                         <input
@@ -802,6 +808,9 @@ export default function OneLoopStudio() {
                           ) : (
                             <span className="text-white">{item.title}</span>
                           )}
+                          <div className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-white/40">
+                            {stackCheckStatusLabel(status)}
+                          </div>
                         </label>
                       </li>
                       );

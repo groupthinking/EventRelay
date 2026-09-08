@@ -68,4 +68,12 @@ describe('UVAI is one product surface', () => {
     expect(studio).not.toMatch(/window\.location\.(href|assign).*dashboard/);
     expect(studio).not.toMatch(/router\.push\(['"`]\/dashboard/);
   });
+
+  it('does not hold anonymous Deploy behind non-runnable stack checks', () => {
+    const studio = readSource('components/OneLoopStudio.tsx');
+    expect(studio).toContain("deployHoldReason(linkedSop, completedChecks, 'anonymous')");
+    expect(studio).toContain('stackCheckStatus');
+    expect(studio).toContain('stackCheckStatusLabel');
+    expect(studio).not.toContain('href="/ship"');
+  });
 });
