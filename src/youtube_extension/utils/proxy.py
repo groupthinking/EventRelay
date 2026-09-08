@@ -67,8 +67,18 @@ def get_proxy_url() -> str | None:
     url = os.getenv(_PROXY_ENV_VAR, "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    parsed: urllib.parse.ParseResult | None = None
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError:
+        hostname = None
+    if (
+        parsed is None
+        or parsed.scheme not in ("http", "https", "socks5")
+        or not hostname
+    ):
         logger.warning(
             "%s is set but malformed — falling back to direct connection",
             _PROXY_ENV_VAR,

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.path_utils import select_readable_file, select_writable_dir
+from youtube_extension.utils.proxy import get_transcript_proxy_config
 
 # MCP integration imports
 try:
@@ -691,7 +692,9 @@ class MCPVideoProcessor:
             # executor — otherwise it stalls the event loop and defeats the
             # @timeout_protection / circuit-breaker hanging protection.
             loop = asyncio.get_event_loop()
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(
+                proxy_config=get_transcript_proxy_config()
+            )
             transcript = await loop.run_in_executor(
                 None,
                 lambda: yt_api.fetch(
@@ -715,7 +718,9 @@ class MCPVideoProcessor:
             # These are blocking network calls — run them in an executor to keep
             # the event loop free and let the timeout protection work.
             loop = asyncio.get_event_loop()
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(
+                proxy_config=get_transcript_proxy_config()
+            )
             transcript_list = await loop.run_in_executor(
                 None, lambda: yt_api.list(video_id)
             )
