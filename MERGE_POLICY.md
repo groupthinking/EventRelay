@@ -111,10 +111,10 @@ weakening introduced by the rewrite that set out to make this gate precise.
 > tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
 > not something the workflow decides.
 >
-> So gate 2 requires these checks to **run and complete** — which catches a scan
-> that crashed, timed out, or was silently dropped from the pipeline. It is
-> **not** vulnerability enforcement, and this policy should not be read as
-> claiming it is. Making findings actually block is a change to
+> So gate 2 requires these security scan jobs (check-runs) to **run and complete** —
+> which catches a scan that crashed, timed out, or was silently dropped from the
+> pipeline. It is not a findings gate, and this policy should not be read as
+> claiming vulnerability enforcement. Making findings actually block is a change to
 > `security.yml`, with its own diff and its own blast radius; see *What is
 > deliberately not here*.
 
