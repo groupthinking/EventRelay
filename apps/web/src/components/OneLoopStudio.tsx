@@ -41,6 +41,7 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioShowTranscriptRetry,
   studioWorkingMessage,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
@@ -362,6 +363,13 @@ export default function OneLoopStudio() {
     hasLinkedSopSteps: Boolean(linkedSop?.steps.length),
     hasProjectScaffold: Boolean(selected?.insights?.project_scaffold),
   });
+  const hasUsableTranscript = (selected?.transcript?.trim().length ?? 0) >= 40;
+  const showTranscriptRetry = studioShowTranscriptRetry({
+    busy,
+    elapsedSec: elapsed,
+    hasTranscript: hasUsableTranscript,
+    runStatus: selected?.status ?? null,
+  });
   const runState = busy ? 'working' : selected ? 'ready' : 'idle';
   const quality = studioRunQuality(
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
@@ -587,6 +595,16 @@ export default function OneLoopStudio() {
                 <Play className="h-4 w-4" aria-hidden />
                 {busy ? `Running ${elapsed}s` : 'Run'}
               </button>
+              {showTranscriptRetry ? (
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="rounded-lg border border-[#e8b86d]/50 px-3 py-3 text-sm text-[#e8b86d] hover:bg-[#e8b86d]/10"
+                >
+                  Retry transcript
+                </button>
+              ) : null}
             </div>
           </form>
           <p

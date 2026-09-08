@@ -13,7 +13,9 @@ import {
   studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
+  studioShowTranscriptRetry,
   studioStatusMessage,
+  studioTranscriptStage,
   studioWorkingMessage,
 } from '../studio-pipeline-status';
 
@@ -206,22 +208,72 @@ describe('studio-pipeline-status', () => {
   });
 
   it('shows pack progress while waiting on transcript', () => {
-    expect(
-      studioWorkingMessage({
-        elapsedSec: 12,
-        hasPack: false,
-        hasTranscript: false,
-      }),
-    ).toMatch(/fetching pack and transcript/i);
+    expect(studioTranscriptStage({ hasPack: false, hasTranscript: false })).toBe('pack');
+    expect(studioTranscriptStage({ hasPack: true, hasTranscript: false })).toBe('transcript');
+    expect(studioTranscriptStage({ hasPack: true, hasTranscript: true })).toBe('analysis');
+    const fetching = studioWorkingMessage({
+      elapsedSec: 12,
+      hasPack: false,
+      hasTranscript: false,
+    });
+    expect(fetching).toMatch(/1\/3 pack/i);
+    expect(fetching).toMatch(/about 33s left/i);
+    expect(fetching).not.toMatch(/\(12s\)/);
     const packed = studioWorkingMessage({
       elapsedSec: 45,
       hasPack: true,
-      packCitation: 'cite:youtube:pBsT6v-ciO8 · v0',
+      packCitation: 'cite:youtube:auJzb1D-fag · v0',
       hasTranscript: false,
     });
+    expect(packed).toMatch(/2\/3 transcript/i);
     expect(packed).toMatch(/pack ready/i);
-    expect(packed).toContain('45s');
+    expect(packed).toContain('auJzb1D-fag');
+    expect(packed).not.toContain('pBsT6v-ciO8');
+    expect(packed).toMatch(/taking longer|retry/i);
+    expect(packed).not.toMatch(/\(45s\)/);
     expect(packed).not.toBe('Fetching transcript…');
+    expect(
+      studioWorkingMessage({
+        elapsedSec: 8,
+        hasPack: true,
+        hasTranscript: true,
+      }),
+    ).toMatch(/3\/3 analysis/i);
+  });
+
+  it('offers retry after the typical transcript wait or a failed run', () => {
+    expect(
+      studioShowTranscriptRetry({
+        busy: true,
+        elapsedSec: 44,
+        hasTranscript: false,
+        runStatus: 'processing',
+      }),
+    ).toBe(false);
+    expect(
+      studioShowTranscriptRetry({
+        busy: true,
+        elapsedSec: 45,
+        hasTranscript: false,
+        runStatus: 'processing',
+      }),
+    ).toBe(true);
+    expect(
+      studioShowTranscriptRetry({
+        busy: false,
+        elapsedSec: 10,
+        hasTranscript: false,
+        runStatus: 'failed',
+      }),
+    ).toBe(true);
+    expect(
+      studioShowTranscriptRetry({
+        busy: false,
+        elapsedSec: 45,
+        hasTranscript: true,
+        runStatus: 'complete',
+      }),
+    ).toBe(false);
   });
 
   it('labels review_action as a proposed finding, not an executed tool', () => {
@@ -252,6 +304,18 @@ describe('studio-pipeline-status', () => {
         artifactCount: 0,
       }),
     ).not.toMatch(/architecture|artifacts/i);
+    expect(
+      studioExportOutcomeMessage({
+        hasLinkedSop: true,
+        toolCount: 0,
+      }),
+    ).toMatch(/SOP/);
+    expect(
+      studioExportOutcomeMessage({
+        hasLinkedSop: true,
+        toolCount: 0,
+      }),
+    ).not.toMatch(/named tools/i);
   });
 
   it('enables export from pack formation when events[] is empty', () => {
@@ -289,6 +353,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="pack-workbench-tools"');
     expect(studio).toContain('data-testid="studio-working-state"');
     expect(studio).toContain('studioWorkingMessage');
+    expect(studio).toContain('studioShowTranscriptRetry');
+    expect(studio).toContain('data-testid="studio-transcript-retry"');
     expect(studio).toContain('Act on this run');
     expect(studio).toContain('stackCheckStatus');
     expect(studio).toContain('stackCheckStatusLabel');

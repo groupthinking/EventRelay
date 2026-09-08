@@ -124,20 +124,55 @@ export function studioPromotePackWorkbench(input: {
   return input.toolCount === 0 && (input.hasArchitecture || input.artifactCount > 0);
 }
 
+export type StudioTranscriptStage = 'pack' | 'transcript' | 'analysis';
+
+/** Typical paste→transcript wait on the live pack path. */
+export const STUDIO_TRANSCRIPT_ETA_SEC = 45;
+
+export function studioTranscriptStage(input: {
+  hasPack: boolean;
+  hasTranscript: boolean;
+}): StudioTranscriptStage {
+  if (input.hasTranscript) return 'analysis';
+  if (input.hasPack) return 'transcript';
+  return 'pack';
+}
+
+export function studioTranscriptEtaSeconds(elapsedSec: number): number {
+  return Math.max(0, STUDIO_TRANSCRIPT_ETA_SEC - elapsedSec);
+}
+
+export function studioShowTranscriptRetry(input: {
+  busy: boolean;
+  elapsedSec: number;
+  hasTranscript: boolean;
+  runStatus?: StudioRunStatus | null;
+}): boolean {
+  if (input.hasTranscript) return false;
+  if (input.runStatus === 'failed') return true;
+  return input.busy && input.elapsedSec >= STUDIO_TRANSCRIPT_ETA_SEC;
+}
+
 export function studioWorkingMessage(input: {
   elapsedSec: number;
   hasPack: boolean;
   packCitation?: string | null;
   hasTranscript: boolean;
 }): string {
-  if (input.hasTranscript) return 'Transcript landed — finishing analysis…';
-  if (input.hasPack) {
+  const stage = studioTranscriptStage(input);
+  const remaining = studioTranscriptEtaSeconds(input.elapsedSec);
+  const eta =
+    remaining > 0 ? `About ${remaining}s left` : 'Taking longer than usual — retry if this stalls';
+  if (stage === 'analysis') {
+    return `3/3 Analysis · Transcript landed — finishing analysis. ${eta}.`;
+  }
+  if (stage === 'transcript') {
     const cite = input.packCitation?.trim();
     return cite
-      ? `Pack ready · ${cite}. Waiting on transcript (${input.elapsedSec}s)…`
-      : `Pack ready. Waiting on transcript (${input.elapsedSec}s)…`;
+      ? `2/3 Transcript · Pack ready · ${cite}. Waiting on transcript. ${eta}.`
+      : `2/3 Transcript · Pack ready. Waiting on transcript. ${eta}.`;
   }
-  return `Fetching pack and transcript (${input.elapsedSec}s)…`;
+  return `1/3 Pack · Fetching pack. ${eta}.`;
 }
 
 export function studioActActionLabel(action: {
@@ -170,7 +205,10 @@ export function studioExportOutcomeMessage(input: {
     return `Exported ${input.officialClone} plus SOP and DEPLOY.md.`;
   }
   if (input.hasLinkedSop) {
-    return 'Exported SOP, named tools, and DEPLOY.md from this run.';
+    const parts = ['SOP'];
+    if ((input.toolCount ?? 0) > 0) parts.push('named tools');
+    parts.push('DEPLOY.md');
+    return `Exported ${parts.join(', ')} from this run.`;
   }
   const parts: string[] = [];
   if (input.hasArchitecture) parts.push('architecture');
