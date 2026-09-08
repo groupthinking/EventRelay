@@ -22,9 +22,35 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Universal Video Action Intelligence');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
+    expect(home).toContain('HomeProCheckout');
     expect(home).toContain('Get Pro');
     expect(home).not.toContain('$19/mo');
     expect(home).not.toContain('$180');
+  });
+
+  it('does not claim arbitrary-video production E2E or a guaranteed transcript', () => {
+    const home = readSource('app/page.tsx');
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const nav = readSource('components/Nav.tsx');
+    const layout = readSource('app/layout.tsx');
+    const structured = readSource('components/StructuredData.tsx');
+    const ogAlt = readSource('app/opengraph-image.tsx');
+    const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
+    expect(home).toContain('Paste a YouTube URL. Open the Studio workbench.');
+    expect(home).toContain('Starts a hashed Video Pack run in Studio (player, events, exports).');
+    expect(home).toContain('Transcript quality varies by source');
+    expect(home).toContain('not a guaranteed production E2E');
+    expect(layout).toContain('Transcript quality varies by source');
+    expect(structured).toContain('Transcript quality varies by source');
+    expect(sellCopy).not.toContain('Ship the work.');
+    expect(sellCopy).not.toContain('Not a demo.');
+    expect(sellCopy).not.toContain('turns video evidence into useful workflows');
+    expect(sellCopy).not.toContain('extract transcript and events');
+    expect(sellCopy).not.toContain('verified video evidence');
+    expect(sellCopy).not.toContain('verified transcript');
+    expect(sellCopy).not.toMatch(/any video/i);
+    expect(sellCopy).not.toMatch(/reliable.{0,40}transcript/i);
+    expect(sellCopy).not.toMatch(/grounded transcript/i);
   });
 
   it('keeps the live workbench only on /studio', () => {
@@ -66,15 +92,29 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(config).toContain("source: '/prototype'");
   });
 
-  it('keeps Get Pro checkout on /pricing (CoS: do not fold onto Home this PR)', () => {
+  it('folds Get Pro checkout onto Home via the existing ProCheckoutButton path', () => {
     const home = readSource('app/page.tsx');
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const button = readSource('components/billing/ProCheckoutButton.tsx');
     const nav = readSource('components/Nav.tsx');
     const pricing = readSource('app/pricing/page.tsx');
     const config = readWebFile('next.config.js');
-    expect(home).toContain('href="/pricing"');
-    expect(home).toContain('Get Pro');
-    expect(home).not.toContain('ProCheckoutButton');
-    expect(home).not.toContain('turnstile');
+    expect(home).toContain('HomeProCheckout');
+    expect(home).toContain('id="get-pro"');
+    expect(home).not.toMatch(/href="\/pricing"[\s\S]{0,80}Get Pro/);
+    expect(checkout).toContain("from '@/components/billing/ProCheckoutButton'");
+    expect(checkout).toContain('ProCheckoutButton');
+    expect(checkout).toContain('Monthly checkout');
+    expect(checkout).toContain('Annual checkout');
+    expect(checkout).toContain('workflowProPriceLabel');
+    expect(checkout).toContain('WORKFLOW_PRO_PRODUCT_NAME');
+    expect(checkout).toContain('href="/pricing"');
+    expect(checkout).not.toContain('/api/billing/checkout');
+    expect(checkout).not.toContain('Maintain');
+    expect(checkout).not.toContain('Ship');
+    expect(button).toContain("fetch('/api/billing/checkout'");
+    expect(button).toContain('turnstileToken');
+    expect(nav).toContain('href="/#get-pro"');
     expect(nav).toContain("href: '/pricing'");
     expect(pricing).toContain('ProCheckoutButton');
     expect(pricing).toContain('turnstile');

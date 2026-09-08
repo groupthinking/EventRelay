@@ -1,9 +1,9 @@
 const howToJsonLd = {
   '@context': 'https://schema.org',
   '@type': 'HowTo',
-  name: 'Turn a YouTube video into a workflow with UVAI',
+  name: 'Open the UVAI Studio workbench from a YouTube URL',
   description:
-    'Paste a YouTube URL, let UVAI extract transcript and events, then export or deploy actionable outputs.',
+    'Paste a YouTube URL to open Studio and start a hashed Video Pack run. Transcript quality varies by source.',
   step: [
     {
       '@type': 'HowToStep',
@@ -14,14 +14,14 @@ const howToJsonLd = {
     {
       '@type': 'HowToStep',
       position: 2,
-      name: 'Watch agents work',
-      text: 'UVAI transcribes, extracts events, and streams pipeline progress.',
+      name: 'Open Studio',
+      text: 'Studio starts a hashed Video Pack run (player, events, exports). Transcript quality varies by source.',
     },
     {
       '@type': 'HowToStep',
       position: 3,
-      name: 'Get results',
-      text: 'Download artifacts, handoff briefs, or deploy when adapters are configured.',
+      name: 'Use the workbench',
+      text: 'Review Studio outputs when the run produces them. Not a guaranteed production E2E.',
     },
   ],
 };
