@@ -13,14 +13,23 @@ import json
 import re
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 from urllib.parse import urlparse
 
-
 ANTIGRAVITY_AGENT = "antigravity-preview-05-2026"
-_MCP_NAME = re.compile(r"^[a-z0-9_-]+$")
+EVENTRELAY_MCP_SERVER = "eventrelay"
+PROVIDER_INDEPENDENT_CONTROL_PLANE = (
+    "approval_state",
+    "durable_receipts",
+    "portable_orchestration_contracts",
+    "provider_routing",
+    "provenance",
+    "replay",
+)
+_MCP_NAME = re.compile(r"^[a-z0-9]+$")
 
 
 class AntigravityConfigurationError(ValueError):
@@ -51,7 +60,7 @@ class AntigravityMCPServer:
     def validate(self, read_only_tools: frozenset[str]) -> None:
         if not _MCP_NAME.fullmatch(self.name):
             raise AntigravityConfigurationError(
-                "MCP server name must match ^[a-z0-9_-]+$"
+                "MCP server name must match ^[a-z0-9]+$"
             )
         parsed = urlparse(self.url)
         if parsed.scheme != "https" or not parsed.netloc:
@@ -91,9 +100,9 @@ class AntigravityBackendConfig:
             raise AntigravityConfigurationError(
                 "max_total_tokens must be between 1 and 1,000,000"
             )
-        if not self.mcp_servers:
+        if len(self.mcp_servers) != 1:
             raise AntigravityConfigurationError(
-                "at least one read-only MCP server is required"
+                "exactly one read-only EventRelay MCP server is required"
             )
         names: set[str] = set()
         for server in self.mcp_servers:
@@ -103,6 +112,10 @@ class AntigravityBackendConfig:
                     f"duplicate MCP server name: {server.name}"
                 )
             names.add(server.name)
+        if EVENTRELAY_MCP_SERVER not in names:
+            raise AntigravityConfigurationError(
+                "the configured MCP server must be named 'eventrelay'"
+            )
 
 
 @dataclass(frozen=True)
@@ -180,25 +193,34 @@ class AntigravityBackend:
                 + ", ".join(present)
             )
 
-        input_text = task
+        input_text = (
+            "Execute only this bounded build/test task for EventRelay. "
+            "Use the read-only EventRelay MCP server for receipts/provenance lookups. "
+            "Do not ingest direct media, start background work, or perform undeclared "
+            "code/filesystem side effects.\n\nTask:\n"
+            f"{task}"
+        )
         if context:
             input_text += "\n\nAgent Factory context:\n" + json.dumps(
                 context, sort_keys=True, separators=(",", ":"), default=str
             )
 
-        tools = [
-            {
-                "type": "mcp_server",
-                "name": server.name,
-                "url": server.url,
-                "allowed_tools": list(server.allowed_tools),
-            }
-            for server in self.config.mcp_servers
-        ]
+        tools = [{"type": "code_execution"}]
+        tools.extend(
+            [
+                {
+                    "type": "mcp_server",
+                    "name": server.name,
+                    "url": server.url,
+                    "allowed_tools": list(server.allowed_tools),
+                }
+                for server in self.config.mcp_servers
+            ]
+        )
         return {
             "agent": self.config.agent,
             "input": input_text,
-            "environment": "remote",
+            "environment": self._build_environment(),
             "tools": tools,
             "agent_config": {
                 "type": "antigravity",
@@ -206,6 +228,81 @@ class AntigravityBackend:
             },
             "background": False,
             "store": True,
+        }
+
+    def _build_environment(self) -> dict[str, Any]:
+        hooks = {
+            "side-effect-gate": {
+                "enabled": True,
+                "pre_tool_execution": [
+                    {
+                        "matcher": "code_execution",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "python3 /.agents/hooks-scripts/policy_gate.py",
+                                "timeout": 10,
+                            }
+                        ],
+                    },
+                    {
+                        "matcher": "write_file|delete_file",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": "python3 /.agents/hooks-scripts/policy_gate.py",
+                                "timeout": 10,
+                            }
+                        ],
+                    },
+                ],
+            }
+        }
+        gate_script = """#!/usr/bin/env python3
+import json
+import sys
+
+payload = json.load(sys.stdin)
+tool_call = payload.get("tool_call", {})
+name = str(tool_call.get("name", ""))
+args = tool_call.get("args") or {}
+command = str(args.get("code", ""))
+allowed_prefixes = (
+    "python -m pytest",
+    "pytest",
+    "npm test",
+    "npm run build",
+    "turbo run test",
+    "turbo run build",
+)
+
+if name in {"write_file", "delete_file"}:
+    print(json.dumps({
+        "decision": "deny",
+        "reason": "Filesystem side effects must be declared in EventRelay receipts first."
+    }))
+elif name == "code_execution" and not command.startswith(allowed_prefixes):
+    print(json.dumps({
+        "decision": "deny",
+        "reason": "Only bounded build/test commands are allowed for the Antigravity spike."
+    }))
+else:
+    print(json.dumps({"decision": "allow"}))
+"""
+        return {
+            "type": "remote",
+            "sources": [
+                {
+                    "type": "inline",
+                    "target": ".agents/hooks.json",
+                    "content": json.dumps(hooks, sort_keys=True, separators=(",", ":")),
+                },
+                {
+                    "type": "inline",
+                    "target": ".agents/hooks-scripts/policy_gate.py",
+                    "content": gate_script,
+                },
+            ],
         }
 
     async def execute(
@@ -260,7 +357,8 @@ class AntigravityBackend:
             mcp_servers=tuple(server.name for server in self.config.mcp_servers),
             policy={
                 "mcp_access": "explicit_read_only_allowlist",
-                "provider_hooks": "fail_open",
+                "provider_hooks": "fail_open_acknowledged",
+                "synchronous_hooks": "inline_pre_tool_execution_guard",
                 "direct_media": "denied",
                 "automatic_continuation": "denied",
                 "live_execution": self.transport.is_live,
@@ -277,19 +375,58 @@ def compare_agent_factory_runs(
 ) -> dict[str, Any]:
     """Return a small provider-neutral comparison artifact for evaluation."""
     native_success = bool(native.get("success", native.get("status") == "ok"))
+    managed_success = managed.status == "completed" and managed.error is None
+    artifact_determinism = {
+        "native_sha256": native.get("artifact_sha256"),
+        "antigravity_request_sha256": managed.request_sha256,
+        "native_output_present": bool(native.get("output") or native.get("results")),
+        "antigravity_output_present": bool(managed.output_text),
+    }
+    provenance = {
+        "native": {
+            "receipt_id": native.get("receipt_id"),
+        },
+        "antigravity": {
+            "receipt_id": managed.receipt_id,
+            "interaction_id": managed.interaction_id,
+            "environment_id": managed.environment_id,
+        },
+    }
+    recovery = {
+        "native_retryable": native.get("retryable"),
+        "antigravity_can_resume": bool(
+            managed.interaction_id and managed.environment_id
+        ),
+    }
     return {
         "native": {
             "success": native_success,
             "elapsed_seconds": native.get("total_processing_time"),
-            "output_present": bool(native.get("output") or native.get("results")),
+            "output_present": artifact_determinism["native_output_present"],
         },
         "antigravity": {
-            "success": managed.status == "completed" and managed.error is None,
+            "success": managed_success,
             "elapsed_seconds": managed.elapsed_seconds,
             "total_tokens": managed.usage.get("total_tokens"),
             "budget_exceeded": managed.budget_exceeded,
-            "output_present": bool(managed.output_text),
+            "output_present": artifact_determinism["antigravity_output_present"],
             "receipt_id": managed.receipt_id,
+        },
+        "completion": {"native": native_success, "antigravity": managed_success},
+        "latency_seconds": {
+            "native": native.get("total_processing_time"),
+            "antigravity": managed.elapsed_seconds,
+        },
+        "cost": {
+            "native_usd": native.get("cost_usd"),
+            "antigravity_usd": managed.usage.get("cost_usd")
+            or managed.usage.get("estimated_cost_usd"),
+        },
+        "artifact_determinism": artifact_determinism,
+        "provenance": provenance,
+        "recovery": recovery,
+        "control_plane": {
+            "provider_independent": list(PROVIDER_INDEPENDENT_CONTROL_PLANE)
         },
     }
 

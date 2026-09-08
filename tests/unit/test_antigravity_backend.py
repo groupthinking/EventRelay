@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import pytest
 
@@ -68,7 +69,8 @@ async def test_execute_builds_bounded_request_and_receipt() -> None:
     assert receipt.environment_id == "environment-1"
     assert receipt.usage == {"total_tokens": 321}
     assert receipt.policy["mcp_access"] == "explicit_read_only_allowlist"
-    assert receipt.policy["provider_hooks"] == "fail_open"
+    assert receipt.policy["provider_hooks"] == "fail_open_acknowledged"
+    assert receipt.policy["synchronous_hooks"] == "inline_pre_tool_execution_guard"
     assert len(receipt.request_sha256) == 64
 
     payload = transport.payloads[0]
@@ -76,14 +78,26 @@ async def test_execute_builds_bounded_request_and_receipt() -> None:
     assert payload["agent_config"]["max_total_tokens"] == 1_000
     assert payload["tools"] == [
         {
+            "type": "code_execution",
+        },
+        {
             "type": "mcp_server",
             "name": "eventrelay",
             "url": "https://mcp.example.test/mcp",
             "allowed_tools": ["evidence_get"],
-        }
+        },
     ]
     assert "headers" not in payload["tools"][0]
+    assert payload["environment"]["type"] == "remote"
+    assert payload["environment"]["sources"][0]["target"] == ".agents/hooks.json"
+    assert "pre_tool_execution" in payload["environment"]["sources"][0]["content"]
+    assert "write_file|delete_file" in payload["environment"]["sources"][0]["content"]
+    assert (
+        payload["environment"]["sources"][1]["target"]
+        == ".agents/hooks-scripts/policy_gate.py"
+    )
     assert "pack-1" in payload["input"]
+    assert "bounded build/test task" in payload["input"]
 
 
 @pytest.mark.asyncio
@@ -117,7 +131,9 @@ async def test_direct_media_is_rejected_before_transport() -> None:
     assert transport.payloads == []
 
 
-@pytest.mark.parametrize("name", ["EventRelay", "event relay", "eventrelay!"])
+@pytest.mark.parametrize(
+    "name", ["EventRelay", "event relay", "eventrelay!", "event-relay", "event_relay"]
+)
 def test_mcp_name_must_match_provider_contract(name: str) -> None:
     invalid = config(
         mcp_servers=(
@@ -156,6 +172,26 @@ def test_mcp_transport_and_read_only_allowlist_are_enforced() -> None:
     )
     with pytest.raises(AntigravityConfigurationError, match="read-only"):
         undeclared.validate()
+
+
+def test_requires_exactly_one_eventrelay_mcp_server() -> None:
+    invalid = config(
+        mcp_servers=(
+            AntigravityMCPServer(
+                name="eventrelay",
+                url="https://mcp.example.test/mcp",
+                allowed_tools=("evidence_get",),
+            ),
+            AntigravityMCPServer(
+                name="shadow",
+                url="https://mcp-2.example.test/mcp",
+                allowed_tools=("evidence_get",),
+            ),
+        )
+    )
+
+    with pytest.raises(AntigravityConfigurationError, match="exactly one"):
+        invalid.validate()
 
 
 @pytest.mark.asyncio
@@ -219,8 +255,35 @@ async def test_comparison_artifact_is_provider_neutral() -> None:
     receipt = await AntigravityBackend(config(), transport).execute("compare")
 
     comparison = compare_agent_factory_runs(
-        {"success": True, "total_processing_time": 0.5, "results": {"a": "b"}},
+        {
+            "success": True,
+            "total_processing_time": 0.5,
+            "results": {"a": "b"},
+            "cost_usd": 0.02,
+            "artifact_sha256": "native-hash",
+            "receipt_id": "native-receipt",
+            "retryable": False,
+        },
         receipt,
     )
-    assert comparison["native"]["success"] is True
-    assert comparison["antigravity"]["total_tokens"] == 321
+    assert comparison["completion"] == {"native": True, "antigravity": True}
+    assert comparison["latency_seconds"]["native"] == 0.5
+    assert comparison["latency_seconds"]["antigravity"] == pytest.approx(
+        receipt.elapsed_seconds
+    )
+    assert comparison["cost"] == {"native_usd": 0.02, "antigravity_usd": None}
+    assert comparison["artifact_determinism"]["native_sha256"] == "native-hash"
+    assert len(comparison["artifact_determinism"]["antigravity_request_sha256"]) == 64
+    assert comparison["provenance"]["antigravity"]["interaction_id"] == "interaction-1"
+    assert comparison["recovery"] == {
+        "native_retryable": False,
+        "antigravity_can_resume": True,
+    }
+    assert comparison["control_plane"]["provider_independent"] == [
+        "approval_state",
+        "durable_receipts",
+        "portable_orchestration_contracts",
+        "provider_routing",
+        "provenance",
+        "replay",
+    ]
