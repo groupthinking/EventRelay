@@ -47,15 +47,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh extension remove aw || true
-          gh extension install github/gh-aw --pin v0.82.14
+          gh extension install github/gh-aw --pin v0.84.2
           ACTUAL_VERSION="$(gh aw version 2>&1 | awk '{print $NF}')"
-          if [ "$ACTUAL_VERSION" != "v0.82.14" ]; then
-            echo "Expected gh aw v0.82.14 but got $ACTUAL_VERSION"
+          if [ "$ACTUAL_VERSION" != "v0.84.2" ]; then
+            echo "Expected gh aw v0.84.2 but got $ACTUAL_VERSION"
             exit 1
           fi
-          PRERELEASE="$(gh api repos/github/gh-aw/releases/tags/v0.82.14 --jq '.prerelease')"
+          PRERELEASE="$(gh api repos/github/gh-aw/releases/tags/v0.84.2 --jq '.prerelease')"
           if [ "$PRERELEASE" != "false" ]; then
-            echo "v0.82.14 must remain a stable release"
+            echo "v0.84.2 must remain a stable release"
             exit 1
           fi
 
@@ -66,12 +66,12 @@ jobs:
           from pathlib import Path
 
           data = json.loads(Path('.github/aw/actions-lock.json').read_text())
-          key = 'github/gh-aw-actions/setup@v0.82.14'
+          key = 'github/gh-aw-actions/setup@v0.84.2'
           entry = data.get('entries', {}).get(key)
           if not entry:
               raise SystemExit(f'actions-lock.json missing required entry: {key}')
-          if entry.get('sha') != 'b6d1443e05b8716267fa19425b99aa4f12006b4a':
-              raise SystemExit('actions-lock.json has unexpected setup SHA for v0.82.14')
+          if entry.get('sha') != 'fd783ac87efde5e0c0e05d593f1906ea25b5d92e':
+              raise SystemExit('actions-lock.json has unexpected setup SHA for v0.84.2')
           PY
 
       - name: Compile and validate workflows

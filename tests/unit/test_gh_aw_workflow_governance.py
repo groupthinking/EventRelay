@@ -164,11 +164,11 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
 
     assert workflow["name"] == "gh-aw Validation"
-    entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.82.14"]
-    assert entry["sha"] == "b6d1443e05b8716267fa19425b99aa4f12006b4a"
+    entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.84.2"]
+    assert entry["sha"] == "fd783ac87efde5e0c0e05d593f1906ea25b5d92e"
     step_scripts = [step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]]
     combined = "\n".join(step_scripts)
-    assert "gh extension install github/gh-aw --pin v0.82.14" in combined
+    assert "gh extension install github/gh-aw --pin v0.84.2" in combined
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
