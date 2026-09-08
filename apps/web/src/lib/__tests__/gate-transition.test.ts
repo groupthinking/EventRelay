@@ -9,6 +9,8 @@ import {
   evaluateStudioDeployTransition,
   evaluateTransition,
   hashCanonical,
+  studioDeployAttemptTransitionId,
+  studioGateReceiptView,
   type GateTransitionRequest,
 } from '@/lib/gate-transition';
 
@@ -178,6 +180,75 @@ describe('evaluateStudioDeployTransition', () => {
     expect(result.decision).toBe('ESCALATE');
     expect(result.reason_code).toBe('GATE_ESCALATE_AUTHORITY_UNKNOWN');
   });
+
+  it('HOLD when BACKEND_URL is missing — cites backend reason, no live claim', () => {
+    const backendReason = 'BACKEND_URL is not configured';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'attempt:auJzb1D-fag',
+      authority: { actor: 'anonymous' },
+      kind: 'handoff',
+      backendReason,
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason_code).toBe('GATE_HOLD_MISSING_EVIDENCE');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    expect(result.receipt.evidence_refs.some((ref) => ref.id === backendReason)).toBe(true);
+
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.decision).toBe('HOLD');
+    expect(view.reason).toContain(backendReason);
+    expect(view.receiptId).toBe('er:gate:v1:attempt:auJzb1D-fag');
+    expect(view.receiptHash).toBe(result.receipt.receipt_hash);
+    expect(view.receiptHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(view.version).toBe(GATE_RECEIPT_VERSION);
+  });
+});
+
+describe('studioGateReceiptView', () => {
+  it('exposes PASS | HOLD | REJECT | ESCALATE plus receipt id/hash for the Studio chip', () => {
+    const pass = studioGateReceiptView(
+      evaluateStudioDeployTransition({
+        transitionId: 'wrun_live',
+        liveUrl: 'https://example.vercel.app',
+        authority: { actor: 'anonymous' },
+        issuedAt: ISSUED_AT,
+      }),
+    );
+    expect(pass.decision).toBe('PASS');
+    expect(pass.reason.length).toBeGreaterThan(0);
+    expect(pass.receiptId).toBe('er:gate:v1:wrun_live');
+    expect(pass.receiptHash).toMatch(/^[a-f0-9]{64}$/);
+
+    const reject = studioGateReceiptView(
+      evaluateStudioDeployTransition({
+        transitionId: 'wrun_fake',
+        liveUrl: 'https://',
+        authority: { actor: 'anonymous' },
+        issuedAt: ISSUED_AT,
+      }),
+    );
+    expect(reject.decision).toBe('REJECT');
+
+    const escalate = studioGateReceiptView(
+      evaluateStudioDeployTransition({
+        transitionId: 'wrun_esc',
+        liveUrl: 'https://example.vercel.app',
+        authority: { actor: 'contractor-bot' },
+        issuedAt: ISSUED_AT,
+      }),
+    );
+    expect(escalate.decision).toBe('ESCALATE');
+  });
+
+  it('uses attempt:{videoId} when the deploy backend never issued a runId', () => {
+    expect(studioDeployAttemptTransitionId({ videoId: 'auJzb1D-fag' })).toBe(
+      'attempt:auJzb1D-fag',
+    );
+    expect(studioDeployAttemptTransitionId({ runId: 'wrun_1', videoId: 'auJzb1D-fag' })).toBe(
+      'wrun_1',
+    );
+  });
 });
 
 describe('Studio deploy call site', () => {
@@ -193,5 +264,15 @@ describe('Studio deploy call site', () => {
     expect(gateIdx).toBeGreaterThan(-1);
     expect(claimIdx).toBeGreaterThan(gateIdx);
     expect(studio).not.toContain('Deploy ${polled.runStatus');
+    expect(studio).toContain('studioGateReceiptView');
+    expect(studio).toContain('data-testid="studio-gate-receipt"');
+    expect(studio).toContain('data-testid="studio-gate-decision"');
+    expect(studio).toContain('data-testid="studio-gate-reason"');
+    expect(studio).toContain('data-testid="studio-gate-receipt-hash"');
+    const failIdx = deployFn.indexOf('if (!started.ok || !started.runId)');
+    expect(failIdx).toBeGreaterThan(-1);
+    const failBlock = deployFn.slice(failIdx, deployFn.indexOf('return;', failIdx));
+    expect(failBlock).toContain('evaluateStudioDeployTransition');
+    expect(failBlock).toContain('studioGateReceiptView');
   });
 });

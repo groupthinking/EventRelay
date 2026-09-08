@@ -85,8 +85,19 @@ export interface StudioDeployGateInput {
   liveUrl?: string | null;
   runStatus?: string | null;
   kind?: string | null;
+  /** Caller-supplied backend/handoff text (e.g. missing BACKEND_URL). Cited, never invented. */
+  backendReason?: string | null;
   authority: GateAuthority;
   issuedAt?: string;
+}
+
+export interface StudioGateReceiptView {
+  decision: GateDecision;
+  reason: string;
+  reason_code: string;
+  receiptId: string;
+  receiptHash: string;
+  version: typeof GATE_RECEIPT_VERSION;
 }
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
@@ -381,6 +392,9 @@ export function evaluateStudioDeployTransition(
   if (input.kind?.trim()) {
     evidenceRefs.push({ kind: 'result_kind', id: input.kind.trim() });
   }
+  if (input.backendReason?.trim()) {
+    evidenceRefs.push({ kind: 'backend_reason', id: input.backendReason.trim() });
+  }
 
   const zeroSim: ZeroSimResult | undefined = verified
     ? { verdict: 'real', reason_code: 'ZERO_SIM_REAL' }
@@ -398,4 +412,35 @@ export function evaluateStudioDeployTransition(
     zeroSim,
     issuedAt: input.issuedAt,
   });
+}
+
+/** runId when the workflow started; otherwise a citable attempt id (no invented receipt). */
+export function studioDeployAttemptTransitionId(input: {
+  runId?: string | null;
+  videoId?: string | null;
+}): string {
+  const runId = input.runId?.trim();
+  if (runId) return runId;
+  const videoId = input.videoId?.trim();
+  return videoId ? `attempt:${videoId}` : 'attempt:unknown';
+}
+
+/** Visible Studio chip: decision + short reason + receipt id/hash. */
+export function studioGateReceiptView(
+  evaluation: GateEvaluation,
+  input?: { backendReason?: string | null },
+): StudioGateReceiptView {
+  const backend = input?.backendReason?.trim() ?? '';
+  const reason =
+    backend && !evaluation.reason.includes(backend)
+      ? `${evaluation.reason} ${backend}`
+      : evaluation.reason;
+  return {
+    decision: evaluation.decision,
+    reason,
+    reason_code: evaluation.reason_code,
+    receiptId: evaluation.receipt.id,
+    receiptHash: evaluation.receipt.receipt_hash,
+    version: evaluation.receipt.version,
+  };
 }
