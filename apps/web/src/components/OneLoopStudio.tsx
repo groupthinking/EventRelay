@@ -40,6 +40,8 @@ import {
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
+  studioPlayerOverlay,
+  studioPlayerPhase,
   studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
@@ -193,6 +195,10 @@ export default function OneLoopStudio() {
   const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const [playerLoaded, setPlayerLoaded] = useState(false);
+  const [playerFailed, setPlayerFailed] = useState(false);
+  const [playerTimedOut, setPlayerTimedOut] = useState(false);
+  const [playerEpoch, setPlayerEpoch] = useState(0);
   const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
@@ -323,6 +329,25 @@ export default function OneLoopStudio() {
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+
+  useEffect(() => {
+    setPlayerLoaded(false);
+    setPlayerFailed(false);
+    setPlayerTimedOut(false);
+    if (!videoId) return;
+    const timer = window.setTimeout(() => {
+      setPlayerTimedOut(true);
+    }, 8000);
+    return () => window.clearTimeout(timer);
+  }, [videoId, playerEpoch]);
+
+  const playerPhase = studioPlayerPhase({
+    videoId: videoId || null,
+    loaded: playerLoaded,
+    failed: playerFailed,
+    timedOut: playerTimedOut,
+  });
+  const playerOverlay = studioPlayerOverlay(playerPhase);
   const eventCount = selected?.events?.length ?? 0;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
@@ -610,19 +635,52 @@ export default function OneLoopStudio() {
       </header>
 
       <main className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-xl border border-white/10 bg-black">
+        <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
-            <iframe
-              title="YouTube source"
-              className="aspect-video w-full"
-              src={
-                seekSeconds != null
-                  ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
-                  : `https://www.youtube.com/embed/${videoId}`
-              }
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <>
+              <iframe
+                key={`${videoId}-${playerEpoch}-${seekSeconds ?? 'start'}`}
+                title="YouTube source"
+                className="aspect-video w-full"
+                src={
+                  seekSeconds != null
+                    ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
+                    : `https://www.youtube.com/embed/${videoId}`
+                }
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+                onLoad={() => setPlayerLoaded(true)}
+                onError={() => setPlayerFailed(true)}
+              />
+              {playerOverlay ? (
+                <div
+                  data-testid="studio-player-overlay"
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#14151c] px-6 text-center"
+                >
+                  <p className="text-sm text-white/80">{playerOverlay}</p>
+                  {playerPhase === 'error' ? (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        data-testid="studio-player-retry"
+                        onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
+                        className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                      >
+                        Retry player
+                      </button>
+                      <a
+                        href={`https://www.youtube.com/watch?v=${videoId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70"
+                      >
+                        Open on YouTube
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
               Paste a link. The video plays here while we pull the transcript.
