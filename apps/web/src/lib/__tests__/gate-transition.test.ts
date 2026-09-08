@@ -112,6 +112,13 @@ describe('G.A.T.E. transition contract', () => {
     const assessed = assessZeroSim({ evidenceRefs: [] });
     expect(assessed.verdict).toBe('unverified');
     expect(assessed.reason_code).toBe('ZERO_SIM_MISSING_EVIDENCE');
+
+    const forcedReal = assessZeroSim({
+      result: { verdict: 'real', reason_code: 'ZERO_SIM_REAL' },
+      evidenceRefs: [],
+    });
+    expect(forcedReal.verdict).toBe('unverified');
+    expect(forcedReal.reason_code).toBe('ZERO_SIM_MISSING_EVIDENCE');
   });
 
   it('emits a versioned receipt whose hash matches canonical JSON without the hash field', () => {
