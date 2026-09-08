@@ -34,8 +34,8 @@ import {
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
+  studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
-  studioHasDeployReceipt,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -46,6 +46,7 @@ import {
   studioStatusMessage,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
+  studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
 import {
@@ -191,6 +192,7 @@ export default function OneLoopStudio() {
   const [usedSameRun, setUsedSameRun] = useState(false);
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
+  const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const autoStartedKey = useRef<string | null>(null);
@@ -201,6 +203,11 @@ export default function OneLoopStudio() {
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
+  const scopedDeployReceipt = studioDeployReceiptForSelection({
+    selectedVideoId,
+    receiptVideoId: deployReceiptVideoId,
+    liveUrl: deployReceiptUrl,
+  });
   const packFormation = useMemo(
     () => studioPackFormation(selected?.videoPack),
     [selected?.videoPack],
@@ -235,6 +242,8 @@ export default function OneLoopStudio() {
 
   useEffect(() => {
     setCompletedChecks([]);
+    setDeployReceiptUrl(null);
+    setDeployReceiptVideoId(null);
   }, [selectedVideoId]);
 
   const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
@@ -485,6 +494,9 @@ export default function OneLoopStudio() {
       return;
     }
     setDeployBusy(true);
+    const attemptVideoId = selectedVideoId ?? null;
+    setDeployReceiptUrl(null);
+    setDeployReceiptVideoId(attemptVideoId);
     try {
       const started = await startStudioDeploy({ url: next });
       if (started.status === 401 || started.status === 403) {
@@ -497,9 +509,8 @@ export default function OneLoopStudio() {
       }
       setDeployRunId(started.runId);
       const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
-      if (studioHasDeployReceipt(polled.result?.live_url)) {
-        setDeployReceiptUrl(polled.result?.live_url ?? null);
-      }
+      setDeployReceiptUrl(studioVerifiedLiveUrl(polled.result?.live_url));
+      setDeployReceiptVideoId(attemptVideoId);
       setMessage(
         studioDeployOutcomeMessage({
           liveUrl: polled.result?.live_url,
@@ -1020,11 +1031,11 @@ export default function OneLoopStudio() {
             data-testid="studio-deploy-button"
             onClick={() => void deploy()}
             disabled={deployBusy || !hasPayload || Boolean(holdReason)}
-            title={holdReason || studioDeployEnabledHint(Boolean(deployReceiptUrl))}
+            title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
-            {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(deployReceiptUrl))}
+            {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
           </button>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
