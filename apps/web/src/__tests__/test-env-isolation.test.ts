@@ -42,4 +42,11 @@ describe('test environment isolation', () => {
     // frontend-only mode, which is what the suite asserts against.
     expect(process.env.BACKEND_URL ?? '').not.toMatch(/^http/);
   });
+
+  it.each(['NEXT_PUBLIC_BACKEND_URL', 'NEXT_PUBLIC_API_URL'] as const)(
+    'pins %s to a blank test default',
+    (key) => {
+      expect(process.env[key]).toBe('');
+    },
+  );
 });
