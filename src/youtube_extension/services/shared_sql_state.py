@@ -4,10 +4,21 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from sqlalchemy import DateTime, Integer, MetaData, String, Table, Text, create_engine
-from sqlalchemy import Column, insert, select, update
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    Text,
+    create_engine,
+    insert,
+    select,
+    update,
+)
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
@@ -34,9 +45,9 @@ def normalize_shared_storage_url(database_url: str) -> str:
 
 
 def resolve_shared_storage_url(
-    database_url: Optional[str] = None,
+    database_url: str | None = None,
     *,
-    sqlite_path: Optional[Path] = None,
+    sqlite_path: Path | None = None,
 ) -> str:
     """Resolve the shared state database URL from explicit, env, or local config."""
 
@@ -58,9 +69,9 @@ class SharedSQLStateStore:
 
     def __init__(
         self,
-        database_url: Optional[str] = None,
+        database_url: str | None = None,
         *,
-        sqlite_path: Optional[Path] = None,
+        sqlite_path: Path | None = None,
     ) -> None:
         self.database_url = resolve_shared_storage_url(
             database_url, sqlite_path=sqlite_path
@@ -183,7 +194,7 @@ class SharedSQLStateStore:
             for event in session.get("timeline", []):
                 self.append_timeline_event(session["id"], event)
 
-    def get_session(self, session_id: str) -> Optional[dict[str, Any]]:
+    def get_session(self, session_id: str) -> dict[str, Any] | None:
         with self.engine.begin() as conn:
             row = conn.execute(
                 select(self.sessions.c.payload).where(self.sessions.c.session_id == session_id)
@@ -243,7 +254,7 @@ class SharedSQLStateStore:
     def get_a2a_messages(
         self,
         *,
-        conversation_id: Optional[str] = None,
+        conversation_id: str | None = None,
         limit: int = 50,
     ) -> list[dict[str, Any]]:
         statement = (

@@ -16,8 +16,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
-from ..base_agent import AgentRequest, AgentResult, BaseAgent
 from ...shared_sql_state import SharedSQLStateStore
+from ..base_agent import AgentRequest, AgentResult, BaseAgent
+from ..registry import get as get_agent_class
 
 
 @dataclass
@@ -47,9 +48,6 @@ class OrchestrationResult:
     total_processing_time: float = 0.0
     agents_used: list[str] = field(default_factory=list)
     timestamp: datetime = field(default_factory=datetime.now)
-
-
-from ..registry import get as get_agent_class
 
 
 class AgentOrchestrator:
