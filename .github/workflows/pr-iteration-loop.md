@@ -1,7 +1,6 @@
 ---
 name: pr-iteration-loop
 description: Solve a problem through verified iterations on one long-running draft pull request.
-intent: Determine which agentic workflow pattern delivers the most operational value to EventRelay by advancing one verified repository problem at a time on a single draft pull request.
 on:
   issues:
     types: [opened]
@@ -26,6 +25,9 @@ network:
     - github
     - node
     - python
+checkout:
+  fetch: ["*"]
+  fetch-depth: 0
 engine: copilot
 lsp:
   python:
@@ -77,7 +79,7 @@ pre-agent-steps:
     run: |
       mkdir -p /tmp/gh-aw/{agent,python/data,python/charts,cache-memory/pr-iteration-loop}
   - name: Select deterministic checkpoint seed
-    uses: actions/github-script@v7
+    uses: actions/github-script@v9
     with:
       script: |
         const fs = require("fs");
@@ -205,7 +207,6 @@ safe-outputs:
     base-branch: main
     branch-prefix: pr-iteration/
     preserve-branch-name: true
-    allow-workflows: true
     allowed-files:
       - ".github/workflows/**"
       - ".github/aw/**"
@@ -228,7 +229,7 @@ safe-outputs:
       - "uv.lock"
   push-to-pull-request-branch:
     target: "*"
-    title-prefix: "[ai] "
+    required-title-prefix: "[ai] "
     if-no-changes: warn
     allowed-files:
       - ".github/workflows/**"
