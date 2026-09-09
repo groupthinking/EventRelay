@@ -6,3 +6,9 @@ export const customBadge = flag<boolean>({
   adapter: vercelAdapter(),
   description: 'Show a Vercel Flags-powered badge on the UVAI homepage',
 });
+
+export const agentWorkflowUi = flag<boolean>({
+  key: 'agent-workflow-ui',
+  adapter: vercelAdapter(),
+  description: 'Show the durable agent workflow controls and verified tool results in UVAI Studio',
+});

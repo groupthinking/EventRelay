@@ -209,7 +209,11 @@ function PackWorkbench({
   );
 }
 
-export default function OneLoopStudio() {
+export default function OneLoopStudio({
+  showAgentWorkflowUi,
+}: {
+  showAgentWorkflowUi: boolean;
+}) {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1123,7 +1127,7 @@ export default function OneLoopStudio() {
           </section>
         )}
 
-        {(actRunId || workflowActions) && (
+        {showAgentWorkflowUi && (actRunId || workflowActions) && (
           <section
             id="act-results"
             data-testid="act-results"
@@ -1188,14 +1192,16 @@ export default function OneLoopStudio() {
 
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={() => void act()}
-            disabled={actBusy || !hasPayload}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
-          >
-            {actBusy ? 'Running tools…' : 'Run tools'}
-          </button>
+          {showAgentWorkflowUi && (
+            <button
+              type="button"
+              onClick={() => void act()}
+              disabled={actBusy || !hasPayload}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
+            >
+              {actBusy ? 'Running tools…' : 'Run tools'}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportPkg}
