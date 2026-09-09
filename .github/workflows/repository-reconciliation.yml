@@ -25,9 +25,13 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const repoFullName = `${owner}/${repo}`;
+            const escapedRepoFullName = repoFullName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const now = Date.now();
             const staleAfterMs = 14 * 24 * 60 * 60 * 1000;
-            const closingPattern = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+#(\d+)/gi;
+            const closingPattern = new RegExp(
+              `(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+(?:${escapedRepoFullName})?#(\\d+)`,
+              "gi"
+            );
 
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
