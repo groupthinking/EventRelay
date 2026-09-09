@@ -121,7 +121,10 @@ async def test_async_tool_call_persists_pending_state_and_ready_output() -> None
         call_id="call_1",
     )
     assert stored is not None
-    assert stored.serialized_input_digest == receipt.pending_calls[0].serialized_input_digest
+    assert (
+        stored.serialized_input_digest
+        == receipt.pending_calls[0].serialized_input_digest
+    )
 
 
 @pytest.mark.asyncio
@@ -202,17 +205,26 @@ async def test_plaintext_go_cannot_grant_authority_or_cross_run_access() -> None
     assert blocked.pending_calls == ()
     assert blocked.policy_denials[0]["reason"] == "missing_control_record"
 
+    with pytest.raises(AstraExecutionBlocked, match="terminal"):
+        await backend.execute(
+            "Review evidence",
+            {"stable_run_id": "run-1"},
+            origin="video-pack",
+            task_id="task-1",
+            control_record=control_record(run_id="run-1"),
+        )
+
     await backend.execute(
         "Review evidence",
-        {"stable_run_id": "run-1"},
+        {"stable_run_id": "run-2"},
         origin="video-pack",
         task_id="task-1",
-        control_record=control_record(run_id="run-1"),
+        control_record=control_record(run_id="run-2"),
     )
     denied = backend.submit_tool_result(
         origin="other-origin",
         task_id="task-2",
-        run_id="run-1",
+        run_id="run-2",
         call_id="call_1",
         result={
             "method": "GET",
@@ -272,11 +284,16 @@ async def test_token_caps_direct_media_and_disabled_backend_fail_closed() -> Non
     with pytest.raises(AstraExecutionBlocked, match="disabled"):
         await backend.execute("Review evidence")
 
-    token_backend = AstraBackend(config(max_input_tokens=ASTRA_LARGE_INPUT_THRESHOLD + 1))
+    token_backend = AstraBackend(
+        config(max_input_tokens=ASTRA_LARGE_INPUT_THRESHOLD + 1)
+    )
     with pytest.raises(AstraExecutionBlocked, match="272,000"):
         await token_backend.execute(
             "Review evidence",
-            {"stable_run_id": "run-2", "input_token_estimate": ASTRA_LARGE_INPUT_THRESHOLD + 1},
+            {
+                "stable_run_id": "run-2",
+                "input_token_estimate": ASTRA_LARGE_INPUT_THRESHOLD + 1,
+            },
             origin="video-pack",
             task_id="task-2",
             control_record=control_record(run_id="run-2", task_id="task-2"),
@@ -353,7 +370,11 @@ async def test_comparison_artifact_is_machine_readable() -> None:
         control_record=control_record(run_id="run-1"),
     )
     comparison = compare_agent_factory_backends(
-        native={"success": True, "total_processing_time": 1.5, "results": {"done": True}},
+        native={
+            "success": True,
+            "total_processing_time": 1.5,
+            "results": {"done": True},
+        },
         antigravity={"success": True, "elapsed_seconds": 2.0, "receipt_id": "ant-1"},
         astra=receipt,
     )
