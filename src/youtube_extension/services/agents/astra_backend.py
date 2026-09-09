@@ -7,6 +7,7 @@ import json
 import time
 import uuid
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
@@ -222,7 +223,9 @@ class AstraFixturePendingCallStore:
             },
         )
 
-    def get_run(self, *, origin: str, task_id: str, run_id: str) -> dict[str, Any] | None:
+    def get_run(
+        self, *, origin: str, task_id: str, run_id: str
+    ) -> dict[str, Any] | None:
         return self._runs.get((origin, task_id, run_id))
 
     def set_run_status(
@@ -249,14 +252,29 @@ class AstraFixturePendingCallStore:
         )
         run["events"].append(dict(event))
 
-    def add_pending_call(self, pending_call: AstraPendingCall) -> None:
+    def add_pending_call(self, pending_call: AstraPendingCall) -> AstraPendingCall:
         key = (
             pending_call.origin,
             pending_call.task_id,
             pending_call.stable_run_id,
             pending_call.provider_call_id,
         )
+        existing = self._pending_calls.get(key)
+        if existing is not None:
+            if (
+                existing.tool_name != pending_call.tool_name
+                or existing.serialized_input_digest
+                != pending_call.serialized_input_digest
+                or existing.allowed_methods != pending_call.allowed_methods
+                or existing.allowed_destinations != pending_call.allowed_destinations
+            ):
+                raise AstraExecutionBlocked(
+                    "provider call_id reused with different input or policy"
+                )
+            # A provider retry must not erase completion, expiry, or the original deadline.
+            return existing
         self._pending_calls[key] = pending_call
+        return pending_call
 
     def get_pending_call(
         self, *, origin: str, task_id: str, run_id: str, call_id: str
@@ -284,11 +302,15 @@ class AstraBackend:
 
     config: AstraBackendConfig
     transport: AstraTransport = field(default_factory=_NullAstraTransport)
-    store: AstraFixturePendingCallStore = field(default_factory=AstraFixturePendingCallStore)
+    store: AstraFixturePendingCallStore = field(
+        default_factory=AstraFixturePendingCallStore
+    )
     _last_payload: dict[str, Any] | None = field(default=None, init=False, repr=False)
 
     def _tool_definitions(self) -> dict[str, AstraToolDefinition]:
-        return {definition.name: definition for definition in self.config.tool_definitions}
+        return {
+            definition.name: definition for definition in self.config.tool_definitions
+        }
 
     def _validate_execution(self) -> None:
         if not self.config.enabled:
@@ -299,7 +321,9 @@ class AstraBackend:
                 "live Astra execution requires explicit capped approval"
             )
 
-    def _build_payload(self, task: str, context: Mapping[str, Any] | None) -> dict[str, Any]:
+    def _build_payload(
+        self, task: str, context: Mapping[str, Any] | None
+    ) -> dict[str, Any]:
         if not task.strip():
             raise AstraExecutionBlocked("task must not be empty")
         context = dict(context or {})
@@ -343,9 +367,11 @@ class AstraBackend:
             "tools": tools,
             "store": True,
             "metadata": {
-                "context": json.dumps(context, sort_keys=True, separators=(",", ":"))
-                if context
-                else "{}"
+                "context": (
+                    json.dumps(context, sort_keys=True, separators=(",", ":"))
+                    if context
+                    else "{}"
+                )
             },
         }
         return payload
@@ -367,6 +393,14 @@ class AstraBackend:
         request_sha256 = hashlib.sha256(canonical.encode()).hexdigest()
         context_data = dict(context or {})
         run_id = str(context_data.get("stable_run_id") or uuid.uuid4())
+        existing_run = self.store.get_run(origin=origin, task_id=task_id, run_id=run_id)
+        if existing_run and existing_run.get("status") in {
+            "blocked",
+            "cancelled",
+            "failed",
+            "completed",
+        }:
+            raise AstraExecutionBlocked("terminal Astra run cannot be reopened")
         self.store.ensure_run(
             origin=origin, task_id=task_id, run_id=run_id, original_request=task
         )
@@ -467,10 +501,10 @@ class AstraBackend:
         if status in terminal_statuses:
             status = terminal_statuses[status]
 
-        for pending_call in pending_calls:
+        for index, pending_call in enumerate(pending_calls):
+            pending_calls[index] = self.store.add_pending_call(pending_call)
             if status in {"blocked", "cancelled"}:
-                pending_call.state = "revoked"
-            self.store.add_pending_call(pending_call)
+                pending_calls[index].state = "revoked"
 
         if status in {"blocked", "cancelled"}:
             self.store.set_run_status(
@@ -498,11 +532,14 @@ class AstraBackend:
             request_sha256=request_sha256,
             response_id=_optional_string(response.get("id")),
             output_text_segments=output_text_segments,
-            pending_calls=tuple(pending_calls),
+            pending_calls=tuple(deepcopy(pending_calls)),
             completed_receipts=tuple(
-                self.store.get_run(origin=origin, task_id=task_id, run_id=run_id) or {}
-            .get("completed_receipts", [])),
-            events=tuple(events),
+                (
+                    self.store.get_run(origin=origin, task_id=task_id, run_id=run_id)
+                    or {}
+                ).get("completed_receipts", [])
+            ),
+            events=tuple(deepcopy(events)),
             usage=usage,
             input_token_cap=self.config.max_input_tokens,
             output_token_cap=self.config.max_output_tokens,
@@ -564,6 +601,34 @@ class AstraBackend:
                 result_digest=result_digest,
             )
 
+        if pending_call.state != "pending":
+            return AstraToolResultReceipt(
+                applied=False, state="rejected", reason="pending_call_not_active"
+            )
+        try:
+            deadline = datetime.fromisoformat(pending_call.deadline_at)
+            if deadline.tzinfo is None:
+                raise ValueError("deadline must include a timezone")
+        except (TypeError, ValueError):
+            return AstraToolResultReceipt(
+                applied=False, state="rejected", reason="invalid_pending_deadline"
+            )
+        if deadline <= datetime.now(timezone.utc):
+            pending_call.state = "expired"
+            self.store.record_event(
+                origin=origin,
+                task_id=task_id,
+                run_id=run_id,
+                event={
+                    "type": "tool_result_rejected",
+                    "call_id": call_id,
+                    "reason": "pending_call_expired",
+                },
+            )
+            return AstraToolResultReceipt(
+                applied=False, state="rejected", reason="pending_call_expired"
+            )
+
         method = str(result.get("method") or "")
         destination = str(result.get("destination") or "")
         if method not in pending_call.allowed_methods:
@@ -618,7 +683,9 @@ class AstraBackend:
         if not control_record.allows(
             origin=origin, run_id=run_id, task_id=task_id, action="instruction_update"
         ):
-            raise AstraExecutionBlocked("instruction updates require a valid control record")
+            raise AstraExecutionBlocked(
+                "instruction updates require a valid control record"
+            )
         run = self.store.get_run(origin=origin, task_id=task_id, run_id=run_id)
         if run is None:
             raise AstraExecutionBlocked("unknown run")
@@ -630,7 +697,9 @@ class AstraBackend:
             "receipt_locator": control_record.receipt_locator,
             "nonce": control_record.nonce,
         }
-        self.store.record_event(origin=origin, task_id=task_id, run_id=run_id, event=event)
+        self.store.record_event(
+            origin=origin, task_id=task_id, run_id=run_id, event=event
+        )
         return event
 
 
@@ -661,9 +730,9 @@ def compare_agent_factory_backends(
             "wall_time_seconds": astra.elapsed_seconds,
             "serialized_idle_time_seconds": 0.0,
             "duplicate_tool_rate": 0.0,
-            "receipt_completeness": 1.0
-            if astra.output_text_segments or astra.completed_receipts
-            else 0.0,
+            "receipt_completeness": (
+                1.0 if astra.output_text_segments or astra.completed_receipts else 0.0
+            ),
             "token_usage": {
                 "input_tokens": astra.usage.get("input_tokens", 0),
                 "output_tokens": astra.usage.get("output_tokens", 0),
