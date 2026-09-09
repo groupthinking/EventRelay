@@ -67,6 +67,19 @@ def test_reconciliation_workflow_validates_issue_numbers_via_api() -> None:
     assert "404" in script
 
 
+def test_reconciliation_workflow_accepts_same_repo_qualified_closing_refs() -> None:
+    """Canonical issue detection must accept `Closes owner/repo#123` for this repo."""
+    script = _get_script(_load_workflow())
+    assert "escapedRepoFullName" in script, (
+        "Closing-reference parsing should escape the current repo name so fully qualified"
+        " same-repo references are accepted."
+    )
+    assert "repoFullName" in script, (
+        "Closing-reference parsing should derive the fully qualified repo prefix from"
+        " the current workflow repository context."
+    )
+
+
 def test_reconciliation_workflow_restricts_active_heads_to_same_repo() -> None:
     """activeHeads must only include branches from the same repository, not forks."""
     script = _get_script(_load_workflow())
