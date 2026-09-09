@@ -18,6 +18,7 @@ import {
   type TranscriptSegment,
 } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
+import { buildActionAgentSource, usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
 export interface VideoToActionsEvent {
   type?: string;
@@ -68,22 +69,55 @@ export async function videoToActionsWorkflow(
     throw new FatalError('Analysis quality gate failed: missing provenance');
   }
 
-  const provider = await providerLabelStep();
-  const actions = (analysis.actions || []).map((action) => ({
-    tool: 'review_action',
-    status: 'proposed',
-    result: action.title,
+  const providedTranscript = usableProvidedTranscript(input.transcript);
+  const actionAgent = await actionAgentStep(
+    providedTranscript || evidence.transcript,
+    input.videoTitle,
+    input.events,
+  );
+  const provider = actionAgent.provider || (await providerLabelStep());
+  const actions = actionAgent.actions.map((action) => ({
+    tool: action.tool,
+    status: action.status,
+    result: action.result,
   }));
 
   return {
     url,
     transcriptChars: evidence.transcript.length,
-    actionCount: analysis.actions?.length || 0,
+    actionCount: actions.length,
     provider,
+    usedProvidedTranscript: Boolean(providedTranscript),
     actions,
     analysis,
     provenance,
     quality,
+  };
+}
+
+async function actionAgentStep(
+  transcript: string,
+  videoTitle?: string,
+  events?: VideoToActionsEvent[],
+): Promise<{
+  provider: string;
+  actions: Array<{ tool: string; status: string; result?: string }>;
+}> {
+  'use step';
+
+  const { runActionAgent } = await import('@/lib/action-agent');
+  const result = await runActionAgent({
+    transcript: buildActionAgentSource(transcript, events),
+    videoTitle,
+    executeTools: false,
+  });
+  return {
+    provider: result.provider,
+    actions: result.actions.map((action) => ({
+      tool: action.tool,
+      status: action.status,
+      result: action.result,
+    })),
   };
 }
 

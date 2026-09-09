@@ -53,6 +53,12 @@ export interface VideoToActionsPoll {
   message?: string;
 }
 
+function videoToActionsStatusUrl(runId: string, statusUrl?: string): string {
+  return statusUrl?.startsWith('/api/workflows/video-to-actions/')
+    ? statusUrl
+    : `/api/workflows/video-to-actions/${encodeURIComponent(runId)}`;
+}
+
 function str(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v : undefined;
 }
@@ -226,10 +232,10 @@ export async function startVideoToActions(input: {
 /** Single status poll for a workflow run. */
 export async function getVideoToActionsStatus(
   runId: string,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; statusUrl?: string },
 ): Promise<VideoToActionsPoll> {
   const response = await fetch(
-    `/api/workflows/video-to-actions/${encodeURIComponent(runId)}`,
+    videoToActionsStatusUrl(runId, opts?.statusUrl),
     {
       method: 'GET',
       credentials: 'same-origin',
@@ -300,7 +306,7 @@ export async function getVideoToActionsStatus(
  */
 export async function pollVideoToActions(
   runId: string,
-  opts?: { attempts?: number; delayMs?: number; signal?: AbortSignal },
+  opts?: { attempts?: number; delayMs?: number; signal?: AbortSignal; statusUrl?: string },
 ): Promise<VideoToActionsPoll> {
   const attempts = opts?.attempts ?? 30;
   const delayMs = opts?.delayMs ?? 2000;
@@ -315,7 +321,10 @@ export async function pollVideoToActions(
     if (opts?.signal?.aborted) {
       return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
     }
-    last = await getVideoToActionsStatus(runId, { signal: opts?.signal });
+    last = await getVideoToActionsStatus(runId, {
+      signal: opts?.signal,
+      statusUrl: opts?.statusUrl,
+    });
     if (last.runStatus && TERMINAL.has(last.runStatus)) {
       return last;
     }

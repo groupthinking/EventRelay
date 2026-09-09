@@ -470,6 +470,7 @@ export default function OneLoopStudio({
           : `Act ${started.runId} started.`,
       );
       const polled = await pollVideoToActions(started.runId, {
+        statusUrl: started.statusUrl,
         attempts: 24,
         delayMs: 2000,
       });

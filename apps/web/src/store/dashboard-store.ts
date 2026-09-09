@@ -386,6 +386,7 @@ export const useDashboardStore = create<DashboardState>()(
       addActivity(`Durable run created: ${started.runId}`, 'success');
 
       const terminal = await pollVideoToActions(started.runId, {
+        statusUrl: started.statusUrl,
         attempts: 180,
         delayMs: 2000,
       });
@@ -422,6 +423,7 @@ export const useDashboardStore = create<DashboardState>()(
       activeRunResumptions.add(runId);
       try {
         const terminal = await pollVideoToActions(runId, {
+          statusUrl: video.statusUrl,
           attempts: 180,
           delayMs: 2000,
         });
