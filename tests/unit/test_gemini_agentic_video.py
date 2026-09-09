@@ -1,6 +1,8 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
+from google.genai._interactions.types import Interaction, TextContent, Usage
 
 from src.integration.gemini_agentic_video import (
     GeminiAgenticVideoService,
@@ -14,9 +16,13 @@ class FakeInteractions:
 
     def create(self, **kwargs):
         self.request = kwargs
-        return SimpleNamespace(
-            output_text="grounded result",
-            usage=SimpleNamespace(total_tokens=321),
+        return Interaction(
+            id="interaction-123",
+            created=datetime.now(timezone.utc),
+            status="completed",
+            updated=datetime.now(timezone.utc),
+            outputs=[TextContent(type="text", text="grounded result")],
+            usage=Usage(total_tokens=321),
         )
 
 
@@ -63,6 +69,15 @@ def test_mixed_mode_keeps_each_video_processing_policy():
     assert request_input[0]["processing"] == "agentic"
     assert request_input[1]["processing"] == "static"
     assert request_input[0]["mime_type"] == "video/mp4"
+
+
+@pytest.mark.parametrize(
+    "uri",
+    ["x", "https://example.com/video.mp4", "ftp://youtu.be/auJzb1D-fag"],
+)
+def test_malformed_video_uri_fails_before_calling_provider(uri):
+    with pytest.raises(ValueError):
+        GeminiAgenticVideoService.build_input([VideoInput(uri)], "question")
 
 
 @pytest.mark.parametrize(
