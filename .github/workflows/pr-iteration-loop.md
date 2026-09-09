@@ -1,6 +1,7 @@
 ---
 name: pr-iteration-loop
 description: Solve a problem through verified iterations on one long-running draft pull request.
+intent: Determine which agentic workflow pattern delivers the most operational value to EventRelay by advancing one verified repository problem at a time on a single draft pull request.
 on:
   issues:
     types: [opened]
@@ -55,6 +56,7 @@ tools:
   agentic-workflows: true
   playwright:
     mode: cli
+    browsers: [chromium]
 evals:
   - id: operational_value
     question: Does the agent output show that this run delivered an evidence-backed recommendation or accepted iteration proving which of Chopin, Continuous AI, Autoloop, or Agentic Workflows most helps one high-value EventRelay problem on a single long-running draft pull request?
@@ -73,8 +75,6 @@ pre-agent-steps:
       python -m pip install -e ".[dev,youtube]" pandas matplotlib seaborn
       npm install --legacy-peer-deps
       npm install -g pyright typescript-language-server typescript
-  - name: Install Playwright browser
-    run: npx playwright install --with-deps chromium
   - name: Prime loop workspaces
     run: |
       mkdir -p /tmp/gh-aw/{agent,python/data,python/charts,cache-memory/pr-iteration-loop}
@@ -192,6 +192,10 @@ pre-agent-steps:
           JSON.stringify(payload, null, 2),
         );
 safe-outputs:
+  github-app:
+    client-id: ${{ vars.GH_AW_APP_ID }}
+    private-key: ${{ secrets.GH_AW_APP_PRIVATE_KEY }}
+    ignore-if-missing: true
   create-issue:
     title-prefix: "[ai] "
     labels: [automation]
@@ -207,6 +211,7 @@ safe-outputs:
     base-branch: main
     branch-prefix: pr-iteration/
     preserve-branch-name: true
+    allow-workflows: true
     allowed-files:
       - ".github/workflows/**"
       - ".github/aw/**"
