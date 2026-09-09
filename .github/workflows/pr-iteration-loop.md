@@ -95,97 +95,93 @@ pre-agent-steps:
 
         if (context.eventName === "issues") {
           const issue = context.payload.issue;
-          payload.selected = {
+          payload.triggered = {
             kind: "issue",
             number: issue.number,
             title: issue.title,
             url: issue.html_url,
-            labels: issue.labels.map((label) => label.name),
           };
         } else if (context.eventName === "pull_request") {
           const pr = context.payload.pull_request;
-          payload.selected = {
+          payload.triggered = {
             kind: "pull_request",
             number: pr.number,
             title: pr.title,
             url: pr.html_url,
+          };
+        }
+
+        const [runs, pulls, issues] = await Promise.all([
+          github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+            owner,
+            repo,
+            per_page: 100,
+          }),
+          github.paginate(github.rest.pulls.list, {
+            owner,
+            repo,
+            state: "open",
+            per_page: 100,
+          }),
+          github.paginate(github.rest.issues.listForRepo, {
+            owner,
+            repo,
+            state: "open",
+            per_page: 100,
+          }),
+        ]);
+
+        const recentFailingRuns = runs
+          .filter((run) => run.conclusion === "failure")
+          .filter((run) => now - new Date(run.created_at).getTime() <= weekMs)
+          .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+          .slice(0, 10)
+          .map((run) => ({
+            kind: "workflow_failure",
+            id: run.id,
+            name: run.name,
+            created_at: run.created_at,
+            html_url: run.html_url,
+            head_branch: run.head_branch,
+            head_sha: run.head_sha,
+          }));
+
+        const stalePulls = pulls
+          .filter((pr) => now - new Date(pr.updated_at).getTime() > weekMs)
+          .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
+          .slice(0, 10)
+          .map((pr) => ({
+            kind: "stale_pull_request",
+            number: pr.number,
+            title: pr.title,
+            updated_at: pr.updated_at,
+            html_url: pr.html_url,
             draft: pr.draft,
             head: pr.head.ref,
-            base: pr.base.ref,
-          };
-        } else {
-          const [runs, pulls, issues] = await Promise.all([
-            github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
-              owner,
-              repo,
-              per_page: 100,
-            }),
-            github.paginate(github.rest.pulls.list, {
-              owner,
-              repo,
-              state: "open",
-              per_page: 100,
-            }),
-            github.paginate(github.rest.issues.listForRepo, {
-              owner,
-              repo,
-              state: "open",
-              per_page: 100,
-            }),
-          ]);
+            labels: pr.labels.map((label) => label.name),
+          }));
 
-          const recentFailingRuns = runs
-            .filter((run) => run.conclusion === "failure")
-            .filter((run) => now - new Date(run.created_at).getTime() <= weekMs)
-            .sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
-            .slice(0, 10)
-            .map((run) => ({
-              kind: "workflow_failure",
-              id: run.id,
-              name: run.name,
-              created_at: run.created_at,
-              html_url: run.html_url,
-              head_branch: run.head_branch,
-              head_sha: run.head_sha,
-            }));
+        const staleIssues = issues
+          .filter((item) => !item.pull_request)
+          .filter((item) => now - new Date(item.updated_at).getTime() > weekMs)
+          .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
+          .slice(0, 10)
+          .map((issue) => ({
+            kind: "stale_issue",
+            number: issue.number,
+            title: issue.title,
+            updated_at: issue.updated_at,
+            html_url: issue.html_url,
+            labels: issue.labels.map((label) => label.name),
+          }));
 
-          const stalePulls = pulls
-            .filter((pr) => now - new Date(pr.updated_at).getTime() > weekMs)
-            .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
-            .slice(0, 10)
-            .map((pr) => ({
-              kind: "stale_pull_request",
-              number: pr.number,
-              title: pr.title,
-              updated_at: pr.updated_at,
-              html_url: pr.html_url,
-              draft: pr.draft,
-              head: pr.head.ref,
-              labels: pr.labels.map((label) => label.name),
-            }));
-
-          const staleIssues = issues
-            .filter((item) => !item.pull_request)
-            .filter((item) => now - new Date(item.updated_at).getTime() > weekMs)
-            .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
-            .slice(0, 10)
-            .map((issue) => ({
-              kind: "stale_issue",
-              number: issue.number,
-              title: issue.title,
-              updated_at: issue.updated_at,
-              html_url: issue.html_url,
-              labels: issue.labels.map((label) => label.name),
-            }));
-
-          payload.candidates = {
-            recent_failing_workflow_runs: recentFailingRuns,
-            stale_pull_requests: stalePulls,
-            stale_issues: staleIssues,
-          };
-          payload.selected =
-            recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null;
-        }
+        payload.candidates = {
+          recent_failing_workflow_runs: recentFailingRuns,
+          stale_pull_requests: stalePulls,
+          stale_issues: staleIssues,
+        };
+        payload.selected =
+          recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null;
 
         fs.writeFileSync(
           "/tmp/gh-aw/pr-iteration-loop-context.json",

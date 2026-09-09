@@ -8,6 +8,7 @@ on:
       - ".github/workflows/*.lock.yml"
       - ".github/workflows/gh-aw-validation.yml"
       - ".github/aw/actions-lock.json"
+      - ".poutine.yml"
   pull_request:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - ".github/workflows/*.lock.yml"
       - ".github/workflows/gh-aw-validation.yml"
       - ".github/aw/actions-lock.json"
+      - ".poutine.yml"
   workflow_dispatch:
 
 permissions:
