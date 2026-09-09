@@ -375,7 +375,7 @@ function DockTabButton({
       onClick={onClick}
       className="relative min-h-11 whitespace-nowrap px-4 py-3 text-xs font-medium transition-colors"
       style={{
-        color: active ? accent : 'rgba(248,245,253,0.4)',
+        color: active ? accent : 'rgba(248,245,253,0.5)',
         borderBottom: active ? `2px solid ${accent}` : '2px solid transparent',
         background: active ? `${accent}0d` : 'transparent',
         fontWeight: active ? 650 : 500,
