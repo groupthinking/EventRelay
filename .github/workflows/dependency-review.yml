@@ -27,13 +27,28 @@ concurrency:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Submit dependency snapshots
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: advanced-security/component-detection-dependency-submission-action@31f25a8de68ae5ce2ca274bc28546a78683c15ce # v0.1.4
+        with:
+          snapshot-sha: ${{ github.event.pull_request.head.sha }}
+          snapshot-ref: ${{ format('refs/heads/{0}', github.event.pull_request.head.ref) }}
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v5
         with:
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 300
           fail-on-severity: moderate
           # GHSA-w5hq-g745-h8pq: transitive uuid@8.3.2 pulled by next-auth@4.24 (which pins uuid ^8.3.2).
           # The moderate advisory affects uuid v3/v5/v6 when a caller-provided buffer is passed; next-auth
