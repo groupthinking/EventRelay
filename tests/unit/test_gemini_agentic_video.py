@@ -1,8 +1,10 @@
-from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
-from google.genai._interactions.types import Interaction, TextContent, Usage
+from google.genai._gaos.types.interactions.interaction import Interaction
+from google.genai._gaos.types.interactions.modeloutputstep import ModelOutputStep
+from google.genai._gaos.types.interactions.textcontent import TextContent
+from google.genai._gaos.types.interactions.usage import Usage
 
 from src.integration.gemini_agentic_video import (
     GeminiAgenticVideoService,
@@ -18,10 +20,12 @@ class FakeInteractions:
         self.request = kwargs
         return Interaction(
             id="interaction-123",
-            created=datetime.now(timezone.utc),
+            created="2026-09-09T20:00:00Z",
             status="completed",
-            updated=datetime.now(timezone.utc),
-            outputs=[TextContent(type="text", text="grounded result")],
+            updated="2026-09-09T20:00:01Z",
+            steps=[
+                ModelOutputStep(content=[TextContent(text="grounded result")])
+            ],
             usage=Usage(total_tokens=321),
         )
 
