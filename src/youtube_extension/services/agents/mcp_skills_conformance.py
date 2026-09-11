@@ -30,6 +30,26 @@ class SkillsConformanceError(ValueError):
 
 
 @dataclass(frozen=True)
+class CacheMetadata:
+    """Validated freshness metadata from a 2026-07-28 CacheableResult."""
+
+    ttl_ms: int | float
+    cache_scope: str
+
+
+def _validate_cacheable_result(result: Mapping[str, Any], method: str) -> CacheMetadata:
+    if result.get("resultType") != "complete":
+        raise SkillsConformanceError(f"{method} resultType must be complete")
+    ttl_ms = result.get("ttlMs")
+    if isinstance(ttl_ms, bool) or not isinstance(ttl_ms, (int, float)) or ttl_ms < 0:
+        raise SkillsConformanceError(f"{method} ttlMs must be a nonnegative number")
+    cache_scope = result.get("cacheScope")
+    if cache_scope not in {"public", "private"}:
+        raise SkillsConformanceError(f"{method} cacheScope must be public or private")
+    return CacheMetadata(ttl_ms=ttl_ms, cache_scope=cache_scope)
+
+
+@dataclass(frozen=True)
 class SkillResource:
     uri: str
     digest: str
@@ -82,6 +102,7 @@ class SkillsConformanceHost:
     capabilities: Mapping[str, Any]
     entries: dict[tuple[str, str], SkillEntry] = field(default_factory=dict)
     approvals: dict[tuple[str, str], str] = field(default_factory=dict)
+    cache_metadata: dict[str, CacheMetadata] = field(default_factory=dict)
     receipts: list[SkillReceipt] = field(default_factory=list)
 
     def __post_init__(self) -> None:
@@ -140,6 +161,7 @@ class SkillsConformanceHost:
 
     def ingest_list(self, result: Mapping[str, Any]) -> tuple[SkillEntry, ...]:
         """Validate one complete listing and retain every compound identity."""
+        cache_metadata = _validate_cacheable_result(result, "skills/list")
         raw_skills = result.get("skills")
         if not isinstance(raw_skills, list):
             raise SkillsConformanceError("skills/list result must contain skills")
@@ -163,6 +185,7 @@ class SkillsConformanceHost:
                 self._record("approval", "REVOKED", old.uri, "manifest changed")
 
         self.entries = next_entries
+        self.cache_metadata["skills/list"] = cache_metadata
         for name, identities in names.items():
             if len(identities) > 1:
                 for identity in identities:
@@ -179,6 +202,7 @@ class SkillsConformanceHost:
         self, identity: tuple[str, str], result: Mapping[str, Any]
     ) -> SkillEntry:
         """Require skills/get to describe the same entry held from skills/list."""
+        cache_metadata = _validate_cacheable_result(result, "skills/get")
         if identity[0] != self.server_identity:
             raise SkillsConformanceError("cross-origin skills/get denied")
         entry = self._parse_entry(result.get("skill"))
@@ -187,6 +211,7 @@ class SkillsConformanceHost:
         listed = self.entries.get(identity)
         if listed is None or listed != entry:
             raise SkillsConformanceError("skills/get disagrees with skills/list")
+        self.cache_metadata[f"skills/get:{entry.uri}"] = cache_metadata
         self._record("skills/get", "VERIFIED", entry.uri, "entry matches listing")
         return entry
 
