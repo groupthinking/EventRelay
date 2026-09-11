@@ -49,6 +49,18 @@ def raw_skill(
     }
 
 
+
+
+def cacheable(
+    payload: dict, *, ttl_ms: int | float = 300_000, cache_scope: str = "private"
+) -> dict:
+    return {
+        "resultType": "complete",
+        **payload,
+        "ttlMs": ttl_ms,
+        "cacheScope": cache_scope,
+    }
+
 def host() -> SkillsConformanceHost:
     return SkillsConformanceHost("eventrelay-fixture", capabilities())
 
@@ -67,15 +79,50 @@ def test_capability_negotiation_and_request_shapes() -> None:
     )
 
 
+
+
+def test_skills_results_require_2026_07_28_cacheable_metadata() -> None:
+    current = host()
+    entry = current.ingest_list(
+        cacheable({"skills": [raw_skill()]}, ttl_ms=0, cache_scope="public")
+    )[0]
+    assert current.cache_metadata["skills/list"].ttl_ms == 0
+    assert current.cache_metadata["skills/list"].cache_scope == "public"
+
+    for invalid in (
+        {"skills": [raw_skill()], "ttlMs": 1, "cacheScope": "private"},
+        cacheable({"skills": [raw_skill()]}, ttl_ms=-1),
+        cacheable({"skills": [raw_skill()]}, ttl_ms=True),
+        cacheable({"skills": [raw_skill()]}, cache_scope="shared"),
+    ):
+        with pytest.raises(SkillsConformanceError):
+            host().ingest_list(invalid)
+
+    fetched = current.reconcile_get(
+        entry.identity,
+        cacheable({"skill": raw_skill()}, ttl_ms=12_000, cache_scope="private"),
+    )
+    assert fetched == entry
+    metadata = current.cache_metadata[f"skills/get:{entry.uri}"]
+    assert metadata.ttl_ms == 12_000
+    assert metadata.cache_scope == "private"
+
+    with pytest.raises(SkillsConformanceError, match="ttlMs"):
+        current.reconcile_get(
+            entry.identity,
+            {"resultType": "complete", "skill": raw_skill(), "cacheScope": "private"},
+        )
+
+
 def test_directory_read_is_not_called_without_capability() -> None:
     with pytest.raises(SkillsConformanceError, match="not declared"):
         host().directory_request(1, "skill://video-pack-review")
 
 
 def test_compound_identity_keeps_same_uri_from_two_origins_distinct() -> None:
-    first = host().ingest_list({"skills": [raw_skill()]})[0]
+    first = host().ingest_list(cacheable({"skills": [raw_skill()]}))[0]
     second_host = SkillsConformanceHost("other-server", capabilities())
-    second = second_host.ingest_list({"skills": [raw_skill()]})[0]
+    second = second_host.ingest_list(cacheable({"skills": [raw_skill()]}))[0]
     assert first.identity != second.identity
 
 
@@ -83,12 +130,12 @@ def test_manifest_validation_rejects_digest_and_path_failures() -> None:
     malformed = raw_skill()
     malformed["resources"][0]["digest"] = "sha256:not-a-digest"
     with pytest.raises(SkillsConformanceError, match="digest"):
-        host().ingest_list({"skills": [malformed]})
+        host().ingest_list(cacheable({"skills": [malformed]}))
 
     escaped = raw_skill()
     escaped["resources"][0]["uri"] = "skill://other/SKILL.md"
     with pytest.raises(SkillsConformanceError, match="outside"):
-        host().ingest_list({"skills": [escaped]})
+        host().ingest_list(cacheable({"skills": [escaped]}))
 
     traversal = raw_skill()
     traversal["resources"].append(
@@ -99,14 +146,14 @@ def test_manifest_validation_rejects_digest_and_path_failures() -> None:
         }
     )
     with pytest.raises(SkillsConformanceError, match="traversal"):
-        host().ingest_list({"skills": [traversal]})
+        host().ingest_list(cacheable({"skills": [traversal]}))
 
 
 def test_manifest_limits_are_enforced_before_reads() -> None:
     oversized = raw_skill()
     oversized["resources"][0]["size"] = 16 * 1024 * 1024 + 1
     with pytest.raises(SkillsConformanceError, match="16 MiB"):
-        host().ingest_list({"skills": [oversized]})
+        host().ingest_list(cacheable({"skills": [oversized]}))
 
     too_many = raw_skill()
     too_many["resources"].extend(
@@ -118,24 +165,24 @@ def test_manifest_limits_are_enforced_before_reads() -> None:
         for index in range(512)
     )
     with pytest.raises(SkillsConformanceError, match="512-resource"):
-        host().ingest_list({"skills": [too_many]})
+        host().ingest_list(cacheable({"skills": [too_many]}))
 
 
 def test_non_skill_scheme_is_allowed_but_name_rules_still_apply() -> None:
     github_uri = "github://groupthinking/EventRelay/skills/video-pack-review/SKILL.md"
     fixture = raw_skill(uri=github_uri)
-    assert host().ingest_list({"skills": [fixture]})[0].uri == github_uri
+    assert host().ingest_list(cacheable({"skills": [fixture]}))[0].uri == github_uri
 
     invalid_name = raw_skill()
     invalid_name["frontmatter"]["name"] = "Video Pack Review"
     with pytest.raises(SkillsConformanceError, match="Agent Skills"):
-        host().ingest_list({"skills": [invalid_name]})
+        host().ingest_list(cacheable({"skills": [invalid_name]}))
 
 
 def test_name_collision_is_recorded_without_discarding_entries() -> None:
     current = host()
     nested = raw_skill(uri="skill://team/video-pack-review/SKILL.md")
-    entries = current.ingest_list({"skills": [raw_skill(), nested]})
+    entries = current.ingest_list(cacheable({"skills": [raw_skill(), nested]}))
     assert len(entries) == 2
     assert len(current.entries) == 2
     assert [receipt.status for receipt in current.receipts].count("COLLISION") == 2
@@ -143,7 +190,7 @@ def test_name_collision_is_recorded_without_discarding_entries() -> None:
 
 def test_explicit_content_bound_approval_and_verified_read() -> None:
     current = host()
-    entry = current.ingest_list({"skills": [raw_skill()]})[0]
+    entry = current.ingest_list(cacheable({"skills": [raw_skill()]}))[0]
     assert current.approve(entry.identity, explicit=False).status == "DENIED"
     assert current.approve(entry.identity, explicit=True).status == "APPROVED"
     receipt = current.verify_resource(
@@ -158,7 +205,7 @@ def test_explicit_content_bound_approval_and_verified_read() -> None:
 
 def test_digest_drift_and_cross_origin_reads_are_denied() -> None:
     current = host()
-    entry = current.ingest_list({"skills": [raw_skill()]})[0]
+    entry = current.ingest_list(cacheable({"skills": [raw_skill()]}))[0]
     current.approve(entry.identity, explicit=True)
     drift = current.verify_resource(
         entry.identity,
@@ -182,7 +229,7 @@ def test_frontmatter_mismatch_is_denied_even_with_matching_manifest() -> None:
     changed = SKILL_BYTES.replace(b"Review a normalized", b"Execute an untrusted")
     fixture = raw_skill(content=changed)
     current = host()
-    entry = current.ingest_list({"skills": [fixture]})[0]
+    entry = current.ingest_list(cacheable({"skills": [fixture]}))[0]
     current.approve(entry.identity, explicit=True)
     receipt = current.verify_resource(
         entry.identity,
@@ -196,10 +243,10 @@ def test_frontmatter_mismatch_is_denied_even_with_matching_manifest() -> None:
 
 def test_manifest_change_revokes_prior_approval() -> None:
     current = host()
-    entry = current.ingest_list({"skills": [raw_skill()]})[0]
+    entry = current.ingest_list(cacheable({"skills": [raw_skill()]}))[0]
     current.approve(entry.identity, explicit=True)
     changed = raw_skill(content=SKILL_BYTES + b"\nUpdate")
-    current.ingest_list({"skills": [changed]})
+    current.ingest_list(cacheable({"skills": [changed]}))
     assert entry.identity not in current.approvals
     assert any(receipt.status == "REVOKED" for receipt in current.receipts)
 
@@ -208,7 +255,7 @@ def test_dynamic_skill_cannot_receive_persisted_approval() -> None:
     fixture = raw_skill()
     fixture["resources"] = "dynamic"
     current = host()
-    entry = current.ingest_list({"skills": [fixture]})[0]
+    entry = current.ingest_list(cacheable({"skills": [fixture]}))[0]
     receipt = current.approve(entry.identity, explicit=True)
     assert receipt.status == "DENIED"
     assert "content-bound" in receipt.reason
@@ -216,7 +263,7 @@ def test_dynamic_skill_cannot_receive_persisted_approval() -> None:
 
 def test_execution_requires_separate_tool_approval() -> None:
     current = host()
-    entry = current.ingest_list({"skills": [raw_skill()]})[0]
+    entry = current.ingest_list(cacheable({"skills": [raw_skill()]}))[0]
     current.approve(entry.identity, explicit=True)
     denied = current.authorize_execution(entry.identity, tool_name="shell")
     assert denied.status == "DENIED"
@@ -230,9 +277,9 @@ def test_execution_requires_separate_tool_approval() -> None:
 
 def test_skills_get_must_match_listed_entry() -> None:
     current = host()
-    entry = current.ingest_list({"skills": [raw_skill()]})[0]
-    assert current.reconcile_get(entry.identity, {"skill": raw_skill()}) == entry
+    entry = current.ingest_list(cacheable({"skills": [raw_skill()]}))[0]
+    assert current.reconcile_get(entry.identity, cacheable({"skill": raw_skill()})) == entry
     mismatched = raw_skill()
     mismatched["frontmatter"]["description"] = "Different"
     with pytest.raises(SkillsConformanceError, match="disagrees"):
-        current.reconcile_get(entry.identity, {"skill": mismatched})
+        current.reconcile_get(entry.identity, cacheable({"skill": mismatched}))
