@@ -231,7 +231,7 @@ async def process_video_cloud(
             "🎬 Cloud processing request: %s (async=%s, priority=%s)",
             _sanitize_log_value(request.video_url),
             request.async_processing,
-            request.priority,
+            _sanitize_log_value(request.priority),
         )
 
         if request.async_processing:
