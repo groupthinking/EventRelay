@@ -42,8 +42,8 @@ interface StudioDeployKickoff {
 /** Durable 10s gaps × 36 reads = 6 minutes after kickoff — not one 180s step. */
 const JOB_POLL_READS = 36;
 
-/** Kickoff abort/524 on wrun_01M2B5SRA5W5S4WQP2M4ZHY040 never received a job id. */
-const KICKOFF_RETRIES = 6;
+/** One durable retry after the initial kickoff — not 6 × 45s of silent running. */
+const KICKOFF_RETRIES = 1;
 
 export async function studioDeployWorkflow(
   input: StudioDeployInput,
@@ -61,7 +61,11 @@ export async function studioDeployWorkflow(
     kicked = await kickoffStep(url, input.transcript);
   }
   if (kicked.kind === 'failed') {
-    throw new FatalError(kicked.message || 'Backend refused the deploy kickoff');
+    return {
+      url,
+      kind: 'handoff',
+      message: kicked.message || 'Backend refused the deploy kickoff',
+    };
   }
   if (kicked.kind === 'live' && kicked.live_url) {
     return {

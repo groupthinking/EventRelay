@@ -418,6 +418,13 @@ describe('studio-pipeline-status', () => {
     expect(workflow).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(workflow).not.toMatch(/transcript\s*\n\s*\? STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
     expect(workflow).toMatch(/KICKOFF_RETRIES|kickoffRetries|for \(let i = 0; i < .*KICKOFF/);
+    const kickoffRetryMatch = workflow.match(/const KICKOFF_RETRIES\s*=\s*(\d+)/);
+    expect(kickoffRetryMatch).not.toBeNull();
+    expect(Number(kickoffRetryMatch?.[1])).toBeLessThanOrEqual(1);
+    const retryLoop = workflow.slice(workflow.indexOf('KICKOFF_RETRIES'));
+    const afterRetries = retryLoop.slice(0, retryLoop.indexOf('if (kicked.kind === \'live\''));
+    expect(afterRetries).toMatch(/kind:\s*['"]handoff['"]/);
+    expect(afterRetries).not.toMatch(/throw new FatalError\(kicked\.message/);
     expect(workflow).toMatch(/catch/);
     expect(workflow).toMatch(/import \{[^}]*sleep[^}]*\} from ['"]workflow['"]/);
     expect(workflow).toMatch(/await sleep\(['"]10s['"]\)/);
@@ -432,6 +439,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioDeployReceiptForSelection');
     expect(studio).toContain('studioVerifiedLiveUrl');
     expect(studio).toContain('setDeployReceiptUrl(null)');
+    expect(studio).toContain('setGateReceipt(null)');
+    expect(studio).toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');

@@ -2,9 +2,13 @@ import 'server-only';
 
 import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
-import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
+import {
+  STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
+  studioVerifiedLiveUrl,
+} from '@/lib/studio-pipeline-status';
 import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
+export { STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD };
 export { usableProvidedTranscript as usableKickoffTranscript };
 
 export interface AsyncJobKickoff {
@@ -160,10 +164,6 @@ export const STUDIO_ORIGIN_NO_LIVE_HOLD =
 /** Honest HOLD after reuse — no job id and no backend-supplied https hostname. */
 export const STUDIO_ORIGIN_NO_HOSTNAME_HOLD =
   'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
-
-/** Honest HOLD when kickoff abort/524 never returned a pollable job id. */
-export const STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD =
-  'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
 
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
