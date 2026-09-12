@@ -11,7 +11,7 @@
 - [x] Step 1: Failing tests for terminalization + stale-receipt clear + bounded kickoff retries
 - [x] Step 2: Implement workflow handoff + retry bound + client HOLD + Studio receipt bind
 - [x] Step 3: Focused Vitest GREEN (pytest N/A — no Python touched)
-- [ ] Step 4: PR off current main — do not merge
+- [x] Step 4: PR off current main — https://github.com/groupthinking/EventRelay/pull/1893 — do not merge
 
 ## 3. Definition of Done
 * **Expected Outcome:** Attempting deploy cannot stick indefinitely without a gate decision/receipt bound to the new run. Kickoff without a job id HOLDs `STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD`. Cleared residuals stay cleared.
