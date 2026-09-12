@@ -19,6 +19,7 @@ import {
   actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
+  safeProjectName,
 } from '@/lib/action-surface';
 import {
   pollStudioDeploy,
@@ -39,6 +40,7 @@ import {
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportToastMessage,
+  studioFormationSupplementalEntities,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -54,9 +56,14 @@ import {
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
-import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
+import {
+  buildSameRunActInput,
+  MIN_ACT_TRANSCRIPT_CHARS,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
@@ -219,7 +226,11 @@ function PackWorkbench({
   );
 }
 
-export default function OneLoopStudio() {
+export default function OneLoopStudio({
+  showAgentWorkflowUi,
+}: {
+  showAgentWorkflowUi: boolean;
+}) {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -285,6 +296,11 @@ export default function OneLoopStudio() {
       packTools,
     );
   }, [selected, packFormation.tools]);
+  const stackChecks = packFormation.checks;
+  const supplementalEntities = studioFormationSupplementalEntities(
+    packFormation.tools,
+    linkedSop?.entities,
+  );
 
   useEffect(() => {
     setCompletedChecks([]);
@@ -364,6 +380,16 @@ export default function OneLoopStudio() {
     // One-shot kick from ?video= so Home paste starts the live pack path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  useEffect(() => {
+    // Release the module-level Strict Mode guard when Studio truly unmounts so
+    // re-entering /studio?video= with the same id (re-paste, or retry after a
+    // failed run) auto-starts again. Deferred so React's synchronous Strict
+    // Mode unmount/remount still sees the guard and does not double-start.
+    return () => {
+      window.setTimeout(() => resetStudioQueryAutoStart(), 0);
+    };
+  }, []);
 
   const analyze = (event?: FormEvent) => {
     event?.preventDefault();
@@ -502,6 +528,9 @@ export default function OneLoopStudio() {
   };
 
   const exportPkg = () => {
+    const filename = studioExportFilename(
+      safeProjectName(selected?.title || 'uvai-project'),
+    );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -521,7 +550,7 @@ export default function OneLoopStudio() {
       packFormation.artifacts.length === 0 &&
       packFormation.tools.length === 0
     ) {
-      const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty', filename });
       setExportToast(toast);
       return;
     }
@@ -538,7 +567,6 @@ export default function OneLoopStudio() {
         },
       });
       downloadScaffoldPackage(pkg);
-      const filename = studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
@@ -556,6 +584,7 @@ export default function OneLoopStudio() {
       const toast = studioExportToastMessage({
         ok: false,
         error: err instanceof Error ? err.message : 'Export failed.',
+        filename,
       });
       setExportToast(toast);
     }
@@ -576,7 +605,10 @@ export default function OneLoopStudio() {
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(attemptVideoId);
     try {
-      const started = await startStudioDeploy({ url: next });
+      const started = await startStudioDeploy({
+        url: next,
+        transcript: usableProvidedTranscript(selected?.transcript),
+      });
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;
@@ -594,7 +626,7 @@ export default function OneLoopStudio() {
         return;
       }
       setDeployRunId(started.runId);
-      const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
+      const polled = await pollStudioDeploy(started.runId);
       const backendReason = polled.error || polled.result?.message || null;
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
@@ -617,6 +649,8 @@ export default function OneLoopStudio() {
           error: polled.error,
           kind: polled.result?.kind,
           message: polled.result?.message,
+          jobId: polled.result?.jobId,
+          jobStatus: polled.result?.jobStatus,
         }),
       );
     } catch (err) {
@@ -756,6 +790,19 @@ export default function OneLoopStudio() {
                 <p data-testid="studio-gate-reason" className="text-sm text-white/80">
                   {gateReceipt.reason}
                 </p>
+                {scopedDeployReceipt ? (
+                  <p className="mt-1">
+                    <a
+                      data-testid="studio-gate-live-url"
+                      href={scopedDeployReceipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-[#e8b86d] underline"
+                    >
+                      {scopedDeployReceipt}
+                    </a>
+                  </p>
+                ) : null}
                 <p className="mt-1 break-all font-mono text-[11px] text-white/45">
                   <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
                   {' · '}
@@ -787,7 +834,7 @@ export default function OneLoopStudio() {
 
       <main
         data-testid="studio-main"
-        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-20 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
+        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-28 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
       >
         <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
@@ -947,7 +994,7 @@ export default function OneLoopStudio() {
               </h2>
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
-              {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
+              {supplementalEntities.length === 0 && packFormation.tools.length === 0 && (
                 <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
               )}
               {packFormation.tools.map((tool) => (
@@ -958,14 +1005,7 @@ export default function OneLoopStudio() {
                   <span className="font-medium text-white">{tool.name}</span>
                 </span>
               ))}
-              {linkedSop.entities
-                .filter(
-                  (entity) =>
-                    !packFormation.tools.some(
-                      (tool) => tool.name.toLowerCase() === entity.name.toLowerCase(),
-                    ),
-                )
-                .map((entity) => (
+              {supplementalEntities.map((entity) => (
                 <span
                   key={entity.name}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
@@ -1051,7 +1091,7 @@ export default function OneLoopStudio() {
               })}
             </ol>
 
-            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+            {stackChecks.length > 0 && (
               <>
                 <div className="border-t border-white/10 px-4 py-3">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -1059,9 +1099,7 @@ export default function OneLoopStudio() {
                   </h2>
                 </div>
                 <ul className="divide-y divide-white/5">
-                  {linkedSop.checklist
-                    .filter((item) => item.source === 'stack')
-                    .map((item) => {
+                  {stackChecks.map((item) => {
                       const checked = completedChecks.includes(item.id);
                       const status = stackCheckStatus(item, completedChecks, 'anonymous');
                       return (
@@ -1183,7 +1221,7 @@ export default function OneLoopStudio() {
           </section>
         )}
 
-        {(actRunId || workflowActions) && (
+        {showAgentWorkflowUi && (actRunId || workflowActions) && (
           <section
             id="act-results"
             data-testid="act-results"
@@ -1248,14 +1286,16 @@ export default function OneLoopStudio() {
 
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={() => void act()}
-            disabled={actBusy || !hasPayload}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
-          >
-            {actBusy ? 'Running tools…' : 'Run tools'}
-          </button>
+          {showAgentWorkflowUi && (
+            <button
+              type="button"
+              onClick={() => void act()}
+              disabled={actBusy || !hasPayload}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
+            >
+              {actBusy ? 'Running tools…' : 'Run tools'}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportPkg}

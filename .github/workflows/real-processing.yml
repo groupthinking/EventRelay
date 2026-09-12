@@ -1,5 +1,10 @@
 name: Real Video Processing (Cloud)
 
+# Prevent concurrent runs to avoid resource exhaustion
+concurrency:
+  group: real-processing-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
     inputs:

@@ -5,22 +5,79 @@ import {
   parseBackendJson,
 } from '@/lib/pipeline-backend-health';
 
+const BACKEND_ENV_KEYS = [
+  'BACKEND_URL',
+  'NEXT_PUBLIC_BACKEND_URL',
+  'NEXT_PUBLIC_API_URL',
+] as const;
+
+function snapshotBackendEnv(): Record<(typeof BACKEND_ENV_KEYS)[number], string | undefined> {
+  return {
+    BACKEND_URL: process.env.BACKEND_URL,
+    NEXT_PUBLIC_BACKEND_URL: process.env.NEXT_PUBLIC_BACKEND_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+  };
+}
+
+function restoreBackendEnv(
+  snapshot: Record<(typeof BACKEND_ENV_KEYS)[number], string | undefined>,
+): void {
+  for (const key of BACKEND_ENV_KEYS) {
+    if (snapshot[key] === undefined) delete process.env[key];
+    else process.env[key] = snapshot[key];
+  }
+}
+
+function clearBackendEnv(): void {
+  for (const key of BACKEND_ENV_KEYS) {
+    delete process.env[key];
+  }
+}
+
 describe('getBackendConfig', () => {
-  const original = process.env.BACKEND_URL;
+  const original = snapshotBackendEnv();
 
   afterEach(() => {
-    if (original === undefined) delete process.env.BACKEND_URL;
-    else process.env.BACKEND_URL = original;
+    restoreBackendEnv(original);
     vi.unstubAllGlobals();
   });
 
-  it('reports unconfigured when BACKEND_URL is empty', () => {
-    delete process.env.BACKEND_URL;
+  it('reports unconfigured when every documented backend env name is empty', () => {
+    clearBackendEnv();
     expect(getBackendConfig()).toEqual({ configured: false, url: '' });
   });
 
   it('normalizes configured backend URL', () => {
+    clearBackendEnv();
     process.env.BACKEND_URL = 'https://api.uvai.io/';
+    expect(getBackendConfig()).toEqual({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+  });
+
+  it('falls back to NEXT_PUBLIC_BACKEND_URL when BACKEND_URL is unset', () => {
+    clearBackendEnv();
+    process.env.NEXT_PUBLIC_BACKEND_URL = 'https://api.uvai.io/';
+    expect(getBackendConfig()).toEqual({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+  });
+
+  it('falls back to NEXT_PUBLIC_API_URL (prod .env.production name)', () => {
+    clearBackendEnv();
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.uvai.io';
+    expect(getBackendConfig()).toEqual({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+  });
+
+  it('prefers BACKEND_URL over public aliases', () => {
+    clearBackendEnv();
+    process.env.BACKEND_URL = 'https://api.uvai.io';
+    process.env.NEXT_PUBLIC_API_URL = 'https://example.invalid';
     expect(getBackendConfig()).toEqual({
       configured: true,
       url: 'https://api.uvai.io',
@@ -29,11 +86,10 @@ describe('getBackendConfig', () => {
 });
 
 describe('checkBackendHealth', () => {
-  const original = process.env.BACKEND_URL;
+  const original = snapshotBackendEnv();
 
   afterEach(() => {
-    if (original === undefined) delete process.env.BACKEND_URL;
-    else process.env.BACKEND_URL = original;
+    restoreBackendEnv(original);
     vi.unstubAllGlobals();
   });
 
