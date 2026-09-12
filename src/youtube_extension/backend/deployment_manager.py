@@ -55,6 +55,20 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+
+def _read_and_encode_file(file_path: Path) -> str:
+    """Read a file and return its base64-encoded contents.
+
+    Both the disk read and the CPU-bound encode are performed here so a single
+    ``asyncio.to_thread`` hop covers the whole operation. Keeping them together
+    also means the raw ``bytes`` never cross back to the event loop — only the
+    encoded ``str`` does.
+    """
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    return base64.b64encode(content).decode('utf-8')
+
+
 class DeploymentManager:
     """
     Manages deployment of generated projects to various platforms
@@ -609,12 +623,13 @@ class DeploymentManager:
             async def upload_single_file(file_path: Path, relative_path: Path):
                 async with semaphore:
                     try:
-                        # Read file content
-                        with open(file_path, 'rb') as f:
-                            content = f.read()
-
-                        # Encode content
-                        encoded_content = base64.b64encode(content).decode('utf-8')
+                        # Read and encode off the event loop: this coroutine runs
+                        # concurrently with up to 9 siblings, and a synchronous read
+                        # here would serialise them all and stall the aiohttp
+                        # transport servicing the other in-flight uploads.
+                        encoded_content = await asyncio.to_thread(
+                            _read_and_encode_file, file_path
+                        )
 
                         # Upload file
                         file_data = {

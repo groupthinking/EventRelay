@@ -1196,7 +1196,8 @@ class TestGoogleCloudImageReadOffEventLoop:
         client.annotate_image = AsyncMock(return_value=_make_vision_response())
         return client
 
-    async def test_local_file_read_runs_on_worker_thread(self, tmp_path):
+    async def test_local_file_read_runs_on_worker_thread(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         provider._vision_client = self._client()
         img_file = tmp_path / "frame.jpg"
@@ -1232,7 +1233,7 @@ class TestGoogleCloudImageReadOffEventLoop:
         assert recorder.threads == []
         assert mock_vision.Image.return_value.source.image_uri == "https://example.com/img.jpg"
 
-    async def test_missing_local_file_wrapped_in_cloud_ai_error(self, tmp_path):
+    async def test_missing_local_file_wrapped_in_cloud_ai_error(self, tmp_path, monkeypatch):
         """A missing local image surfaces as ``CloudAIError`` from the public API.
 
         Unlike Azure's private ``_prepare_image_input`` (which propagates
@@ -1241,6 +1242,7 @@ class TestGoogleCloudImageReadOffEventLoop:
         that wrapper contract so moving the read off the loop cannot silently
         alter how a missing file is reported.
         """
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         provider._vision_client = self._client()
         missing = tmp_path / "does-not-exist.jpg"
@@ -1258,3 +1260,25 @@ class TestGoogleCloudImageReadOffEventLoop:
             "offloading must preserve the underlying I/O error in the exception chain"
         )
         assert "No such file or directory" in str(exc_info.value)
+
+    async def test_local_file_read_routes_through_run_blocking(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        img_file = tmp_path / "frame.jpg"
+        img_file.write_bytes(b"disk-bytes")
+        mock_vision = self._vision_modules()
+        method_globals = type(provider).analyze_image.__globals__
+        run_blocking = AsyncMock(return_value=b"worker-bytes")
+
+        with (
+            self._patched_modules(mock_vision),
+            patch.dict(method_globals, {"run_blocking": run_blocking}),
+        ):
+            await provider.analyze_image(str(img_file), [AnalysisType.LABEL_DETECTION])
+
+        assert mock_vision.Image.return_value.content == b"worker-bytes"
+        run_blocking.assert_awaited_once()
+        read_func, read_path = run_blocking.await_args.args
+        assert read_func is method_globals["_read_file_bytes"]
+        assert read_path == str(img_file)

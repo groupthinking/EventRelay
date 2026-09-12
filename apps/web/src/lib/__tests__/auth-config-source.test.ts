@@ -19,21 +19,34 @@ describe('auth configuration source safety', () => {
   it('keeps the Google sign-in asset local to avoid CSP-hosted icon failures', () => {
     const source = readSource('app/login/GoogleSignInButton.tsx');
     expect(source).toContain("signIn('google'");
-    expect(source).toContain('<svg');
+    expect(source).toContain("from 'lucide-react'");
+    expect(source).toContain('<LogIn');
+    expect(source).not.toContain('<svg');
     expect(source).not.toContain('<Image');
   });
 
-  it('accepts both project-specific and common Google OAuth env names', () => {
+  it('prefers canonical Google OAuth env names while retaining legacy fallbacks', () => {
     const source = readSource('lib/auth.ts');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_ID');
-    expect(source).toContain('GOOGLE_CLIENT_ID');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_SECRET');
-    expect(source).toContain('GOOGLE_CLIENT_SECRET');
+    expect(source.indexOf('process.env.GOOGLE_CLIENT_ID')).toBeLessThan(
+      source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_ID'),
+    );
+    expect(source.indexOf('process.env.GOOGLE_CLIENT_SECRET')).toBeLessThan(
+      source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_SECRET'),
+    );
   });
 
-  it('keeps the root route as a landing page instead of redirecting to the app', () => {
+  it('keeps the root route as a sell Home instead of redirecting to the dashboard', () => {
     const source = readSource('app/page.tsx');
     expect(source).not.toContain("redirect('/dashboard')");
-    expect(source).toContain('Turn any video into actions, insights, and agent workflows.');
+    expect(source).not.toContain('OneLoopStudio');
+    expect(source).toContain('HomePasteForm');
+  });
+
+  it('folds the retired dashboard skin into the studio', () => {
+    const dashboard = readSource('app/dashboard/page.tsx');
+    expect(dashboard).toContain('canonicalStudioPath');
+    expect(dashboard).toContain('redirect(');
+    expect(dashboard).not.toContain('DashboardSplitView');
+    expect(dashboard).not.toContain('VideoCard');
   });
 });

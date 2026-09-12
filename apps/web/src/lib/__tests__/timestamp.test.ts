@@ -70,6 +70,7 @@ describe('parseTranscriptSegments', () => {
     expect(hasTimings).toBe(false);
     expect(segments).toHaveLength(3);
     expect(segments[0].text).toBe('Welcome to the video.');
+    expect(segments.map((segment) => segment.speaker)).toEqual(['Caption', 'Caption', 'Caption']);
   });
 
   it('detects leading timestamps and enables timings', () => {
@@ -80,6 +81,7 @@ describe('parseTranscriptSegments', () => {
     expect(segments[0].startTime).toBe(0);
     expect(segments[1].startTime).toBe(12);
     expect(segments[2].startTime).toBe(65);
+    expect(segments.every((segment) => segment.speaker === 'Caption')).toBe(true);
     // end time flows to the next start
     expect(segments[0].endTime).toBe(12);
     expect(segments[2].endTime).toBe(70);

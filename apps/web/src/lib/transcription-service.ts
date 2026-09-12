@@ -6,6 +6,8 @@ import { getGeminiClient, hasGeminiKey } from '@/lib/gemini-client';
 import { GEMINI_SEARCH_MODEL } from '@/lib/gemini-models';
 import { gatewayChat, hasAiGatewayKey, toGatewayModelId } from '@/lib/vercel-ai-gateway';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
+import { hasTranscriptAdvice, isTrustedTranscriptSource } from '@/lib/analysis-evidence';
+import { fetchYouTubeCaptions } from '@/lib/youtube-captions';
 
 let _openai: OpenAI | null = null;
 function getOpenAI() {
@@ -15,7 +17,16 @@ function getOpenAI() {
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
 const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : 'http://localhost:8000';
-const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http');
+function isLoopbackHost(url: string): boolean {
+  try {
+    const host = new URL(url).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
+}
+/** Skip loopback backends — they hang Analyze for 8s on ECONNREFUSED. */
+const BACKEND_AVAILABLE = rawBackendUrl.startsWith('http') && !isLoopbackHost(BACKEND_URL);
 
 // Resolve with the first non-null candidate, or null once every candidate has
 // settled (resolved null or rejected). Unlike Promise.race() over null-swapped
@@ -54,9 +65,69 @@ export interface TranscriptionResult {
   transcript: string;
   segments?: any[];
   source?: string;
+  /** True only for captions or speech-to-text returned by an acquisition provider. */
+  verified?: boolean;
+  acquisitionMethod?: string;
+  sourceUrl?: string;
+  acquiredAt?: string;
+  /** Search/metadata reconstruction may be useful context, but is never a transcript. */
+  derivedContent?: string;
   wordCount?: number;
   metadata?: any;
   error?: string;
+}
+
+/**
+ * Convert the Python transcript envelope into trusted acquisition evidence.
+ * A backend success flag or non-empty string is not sufficient: the backend
+ * can also return model-derived text, which must never be relabelled captions.
+ */
+export function parseVerifiedBackendTranscript(
+  result: Record<string, any>,
+  sourceUrl: string,
+): TranscriptionResult | null {
+  if (result.success !== true) return null;
+
+  const envelope = result.transcript;
+  const segments = Array.isArray(envelope)
+    ? envelope
+    : Array.isArray(envelope?.segments)
+      ? envelope.segments
+      : [];
+  const transcript =
+    typeof envelope === 'string'
+      ? envelope.trim()
+      : typeof envelope?.text === 'string'
+        ? envelope.text.trim()
+        : segments
+            .map((segment: { text?: unknown }) =>
+              typeof segment?.text === 'string' ? segment.text.trim() : '',
+            )
+            .filter(Boolean)
+            .join(' ');
+  const source = String(
+    (envelope && !Array.isArray(envelope) && envelope.source) ||
+      result.transcript_source ||
+      'unknown',
+  );
+
+  if (transcript.length <= 50 || !isTrustedTranscriptSource(source)) {
+    return null;
+  }
+
+  return {
+    success: true,
+    transcript,
+    segments,
+    source,
+    verified: true,
+    acquisitionMethod: source.startsWith('speech_to_text')
+      ? 'backend-speech-to-text'
+      : 'backend-caption-api',
+    sourceUrl,
+    acquiredAt: new Date().toISOString(),
+    wordCount: transcript.split(/\s+/).length,
+  };
 }
 
 /**
@@ -72,7 +143,12 @@ export async function fetchTranscript({
   language = 'en',
 }: TranscriptionOptions): Promise<TranscriptionResult> {
   if (!url && !audioUrl) {
-    return { success: false, error: 'url or audioUrl is required', transcript: '' };
+    return {
+      success: false,
+      verified: false,
+      error: 'url or audioUrl is required',
+      transcript: '',
+    };
   }
 
   // Fetch YouTube metadata (description, chapters, title) — shared by all strategies
@@ -103,42 +179,33 @@ export async function fetchTranscript({
 
       if (ytResponse.ok) {
         const result = await ytResponse.json();
-
-        // Handle transcript as segments array
-        const segments = Array.isArray(result.transcript) ? result.transcript : [];
-        if (segments.length > 0) {
-          const fullText = segments
-            .map((s: { text?: string }) => s.text || '')
-            .join(' ')
-            .trim();
-
-          if (fullText.length > 50) {
-            return {
-              success: true,
-              transcript: fullText,
-              segments,
-              source: 'youtube',
-              wordCount: fullText.split(/\s+/).length,
-            } satisfies TranscriptionResult;
-          }
-        }
-
-        // Handle transcript as { text: string }
-        const transcriptText =
-          typeof result.transcript === 'string'
-            ? result.transcript
-            : result.transcript?.text;
-        if (typeof transcriptText === 'string' && transcriptText.length > 50) {
-          return {
-            success: true,
-            transcript: transcriptText,
-            source: 'youtube',
-            wordCount: transcriptText.split(/\s+/).length,
-          } satisfies TranscriptionResult;
-        }
+        const verifiedBackendResult = parseVerifiedBackendTranscript(result, url);
+        if (verifiedBackendResult) return verifiedBackendResult;
       }
     } catch (e) {
       console.log('YouTube backend transcript unavailable:', e);
+    }
+  }
+
+  // Strategy 1b: timed YouTube captions from the watch page (no FastAPI).
+  if (url && !audioUrl) {
+    try {
+      const captions = await fetchYouTubeCaptions(url, language);
+      if (captions) {
+        return {
+          success: true,
+          transcript: captions.transcript,
+          segments: captions.segments,
+          source: captions.source,
+          verified: true,
+          acquisitionMethod: 'youtube-captions',
+          sourceUrl: url,
+          acquiredAt: new Date().toISOString(),
+          wordCount: captions.transcript.split(/\s+/).length,
+        };
+      }
+    } catch (error) {
+      console.warn('Direct YouTube captions unavailable:', error);
     }
   }
 
@@ -189,12 +256,18 @@ INSTRUCTIONS:
                   },
                 })
               ).text ?? '';
-          if (text.length > 100) {
+          if (text.length > 100 && !hasTranscriptAdvice(text)) {
             return {
-              success: true,
-              transcript: text,
-              source: 'gemini-search',
+              success: false,
+              transcript: '',
+              derivedContent: text,
+              source: 'gemini-search-metadata',
+              verified: false,
+              acquisitionMethod: 'generative-search-context',
+              sourceUrl: url,
+              acquiredAt: new Date().toISOString(),
               wordCount: text.split(/\s+/).length,
+              error: 'No verified transcript was available; only derived context was found.',
               metadata: metadata
                 ? {
                     title: metadata.title,
@@ -234,16 +307,23 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
           const text = response.output_text || '';
           // Reject results that are just instructions rather than actual content
           const isGarbage =
+            hasTranscriptAdvice(text) ||
             text.toLowerCase().includes('click show transcript') ||
             text.toLowerCase().includes('click on the three dots') ||
             text.toLowerCase().includes('steps to find') ||
             (text.length < 300 && text.includes('transcript'));
           if (text.length > 100 && !isGarbage) {
             return {
-              success: true,
-              transcript: text,
-              source: 'openai-web-search',
+              success: false,
+              transcript: '',
+              derivedContent: text,
+              source: 'openai-web-search-metadata',
+              verified: false,
+              acquisitionMethod: 'generative-search-context',
+              sourceUrl: url,
+              acquiredAt: new Date().toISOString(),
               wordCount: text.split(/\s+/).length,
+              error: 'No verified transcript was available; only derived context was found.',
             } satisfies TranscriptionResult;
           }
           return null;
@@ -273,18 +353,35 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
       try {
         await assertPublicHttpUrl(audioUrl);
       } catch (guardErr) {
+        // The guard throws five distinguishable messages — `Invalid URL`,
+        // `Blocked URL scheme: <protocol>`, `Blocked host`, `Blocked private IP
+        // literal`, and `Host does not resolve to a public address`. Forwarding
+        // them told the caller WHICH rule fired: `Blocked host` confirms a
+        // hostname-blocklist match, while the resolution message confirms only
+        // that DNS gave nothing public. That difference is a policy oracle, and
+        // it sharpens as BLOCKED_HOSTNAMES grows. One fixed message for every
+        // rejection; the real reason goes to the log.
+        console.error('[transcription] audioUrl rejected by SSRF guard:', guardErr);
         return {
           success: false,
-          error: `Rejected audioUrl: ${guardErr instanceof Error ? guardErr.message : 'blocked'}`,
+          error: 'Rejected audioUrl',
           transcript: '',
         };
       }
 
       const audioResponse = await fetch(audioUrl, { signal: AbortSignal.timeout(30_000) });
       if (!audioResponse.ok) {
+        // The status belongs to a caller-supplied `audioUrl`. Echoing it turns
+        // this route into a probe: the caller learns 401 vs 403 vs 404 vs 500
+        // for any host the SSRF guard admits, which is a cross-origin read the
+        // browser same-origin policy would otherwise deny them. Log it, and
+        // report only that the fetch failed.
+        console.error(
+          `[transcription] audioUrl fetch failed with status ${audioResponse.status}`,
+        );
         return {
           success: false,
-          error: `Failed to fetch audio: ${audioResponse.status}`,
+          error: 'Could not retrieve the audio file',
           transcript: '',
         };
       }
@@ -349,6 +446,10 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
         success: true,
         transcript: transcription.text,
         source: 'openai-stt',
+        verified: true,
+        acquisitionMethod: 'openai-speech-to-text',
+        sourceUrl: audioUrl,
+        acquiredAt: new Date().toISOString(),
         wordCount: transcription.text.split(/\s+/).length,
       };
     } catch (e) {
@@ -356,13 +457,24 @@ ${metadataContext ? `\nKNOWN METADATA:\n${metadataContext}` : ''}`,
     }
   }
 
-  // No strategy succeeded
+  // No strategy succeeded.
+  //
+  // Which provider keys this deployment holds is server configuration, not
+  // caller-facing detail: branching the client message on `hasKeys` told any
+  // caller whether OPENAI_API_KEY/GEMINI_API_KEY were set, and named the
+  // variables and the hosting platform. Both outcomes now report the same
+  // string; the distinction survives in the operator log, which is the only
+  // place it was ever actionable.
   const hasKeys = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
+  console.error(
+    hasKeys
+      ? '[transcription] all strategies failed with provider keys configured'
+      : '[transcription] all strategies failed: no OPENAI_API_KEY or GEMINI_API_KEY configured',
+  );
   return {
     success: false,
-    error: hasKeys
-      ? 'Could not transcribe video — all strategies failed'
-      : 'No AI API key configured. Set OPENAI_API_KEY or GEMINI_API_KEY in Vercel environment variables.',
+    verified: false,
+    error: 'Could not transcribe video — all strategies failed',
     transcript: '',
   };
 }

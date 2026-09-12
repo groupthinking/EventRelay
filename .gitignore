@@ -175,6 +175,7 @@ youtube_processed_videos/
 UVAI_Digital_Refinery_Blueprint.pdf
 *.db
 .vercel
+vercel-debug.log*
 .env*.local
 .next/
 .env
@@ -225,3 +226,13 @@ data/audit/*.jsonl
 /test_*.py
 # Stale local verification marker (never a build input; see docs/MASTER_ROADMAP.md)
 /.verification-gate-pass
+
+# Local AI session artifacts
+*.rtf
+.gemini/extensions/
+
+# Local verification and native-module quarantine artifacts
+/work/
+
+# Runtime Video Pack identity store (hashed v0 records)
+/storage/video_packs/

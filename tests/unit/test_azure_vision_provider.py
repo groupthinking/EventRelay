@@ -301,12 +301,30 @@ class TestAzureVisionPrepareImageInput:
         result = await provider._prepare_image_input("https://example.com/img.jpg")
         assert result is None
 
-    async def test_local_file_reads_bytes_fixture(self, tmp_path):
+    async def test_local_file_reads_bytes_fixture(self, tmp_path, monkeypatch):
         provider = _make_provider()
         img_file = tmp_path / "test.jpg"
         img_file.write_bytes(b"\xff\xd8\xff")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         result = await provider._prepare_image_input(str(img_file))
         assert result == b"\xff\xd8\xff"
+
+    async def test_local_file_read_routes_through_run_blocking(self, tmp_path, monkeypatch):
+        provider = _make_provider()
+        img_file = tmp_path / "test.jpg"
+        img_file.write_bytes(b"\xff\xd8\xff")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        method_globals = type(provider)._prepare_image_input.__globals__
+        run_blocking = AsyncMock(return_value=b"worker-bytes")
+
+        with patch.dict(method_globals, {"run_blocking": run_blocking}):
+            result = await provider._prepare_image_input(str(img_file))
+
+        assert result == b"worker-bytes"
+        run_blocking.assert_awaited_once()
+        read_func, read_path = run_blocking.await_args.args
+        assert read_func is method_globals["_read_file_bytes"]
+        assert read_path == str(img_file)
 
 
 # ===========================================================================
@@ -1250,7 +1268,8 @@ class _ThreadRecordingOpen:
 
 
 class TestAzureVisionImageReadOffEventLoop:
-    async def test_local_file_read_runs_on_worker_thread(self, tmp_path):
+    async def test_local_file_read_runs_on_worker_thread(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         img_file = tmp_path / "frame.jpg"
         img_file.write_bytes(b"\xff\xd8\xff\xe0")
@@ -1280,8 +1299,9 @@ class TestAzureVisionImageReadOffEventLoop:
         assert result is None
         assert recorder.threads == []
 
-    async def test_missing_file_still_raises_file_not_found(self, tmp_path):
+    async def test_missing_file_still_raises_file_not_found(self, tmp_path, monkeypatch):
         """Offloading must not swallow or re-wrap I/O errors."""
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         with pytest.raises(FileNotFoundError):
             await provider._prepare_image_input(str(tmp_path / "does-not-exist.jpg"))

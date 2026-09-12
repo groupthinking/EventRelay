@@ -29,6 +29,13 @@ describe('action tool registry', () => {
       expect(t.parameters.type).toBe('object');
       expect(t.parameters.additionalProperties).toBe(false);
       expect(Array.isArray(t.parameters.required)).toBe(true);
+      // OpenAI strict function tools (toOpenAITools sets strict: true) reject
+      // a schema whose required[] omits any properties key. Production
+      // runActionsStep 400'd on get_agent_session_logs for missing agentType
+      // (wrun_01KZYCN3XJMP9ANBXEARCNM41F on dpl_7KGT).
+      expect([...t.parameters.required].sort()).toEqual(
+        Object.keys(t.parameters.properties).sort(),
+      );
     }
   });
 
@@ -217,17 +224,32 @@ describe('action tool registry', () => {
 });
 
 describe('resolveBackendBaseUrl', () => {
-  const original = process.env.BACKEND_URL;
+  const originalBackend = process.env.BACKEND_URL;
+  const originalPublicBackend = process.env.NEXT_PUBLIC_BACKEND_URL;
+  const originalPublicApi = process.env.NEXT_PUBLIC_API_URL;
   afterEach(() => {
-    if (original === undefined) delete process.env.BACKEND_URL;
-    else process.env.BACKEND_URL = original;
+    if (originalBackend === undefined) delete process.env.BACKEND_URL;
+    else process.env.BACKEND_URL = originalBackend;
+    if (originalPublicBackend === undefined) delete process.env.NEXT_PUBLIC_BACKEND_URL;
+    else process.env.NEXT_PUBLIC_BACKEND_URL = originalPublicBackend;
+    if (originalPublicApi === undefined) delete process.env.NEXT_PUBLIC_API_URL;
+    else process.env.NEXT_PUBLIC_API_URL = originalPublicApi;
   });
 
   it('returns null when unset or empty', () => {
     delete process.env.BACKEND_URL;
+    delete process.env.NEXT_PUBLIC_BACKEND_URL;
+    delete process.env.NEXT_PUBLIC_API_URL;
     expect(resolveBackendBaseUrl()).toBeNull();
     process.env.BACKEND_URL = '   ';
     expect(resolveBackendBaseUrl()).toBeNull();
+  });
+
+  it('falls back to NEXT_PUBLIC_API_URL when BACKEND_URL is unset', () => {
+    delete process.env.BACKEND_URL;
+    delete process.env.NEXT_PUBLIC_BACKEND_URL;
+    process.env.NEXT_PUBLIC_API_URL = 'https://api.uvai.io/';
+    expect(resolveBackendBaseUrl()).toBe('https://api.uvai.io');
   });
 
   it('returns null for non-http(s) or malformed values', () => {

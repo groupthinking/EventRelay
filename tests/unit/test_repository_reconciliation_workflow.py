@@ -41,7 +41,8 @@ def test_reconciliation_workflow_minimum_permissions() -> None:
     workflow = _load_workflow()
     perms = workflow["permissions"]
     assert perms.get("contents") == "read"
-    assert perms.get("pull-requests") == "read"
+    # Comments on untracked PRs and closes superseded draft PRs via pulls.update.
+    assert perms.get("pull-requests") == "write"
     # Needs write to upsert the drift report issue.
     assert perms.get("issues") == "write"
 
@@ -101,3 +102,10 @@ def test_reconciliation_workflow_report_is_idempotent() -> None:
     # Should update the existing issue if found, otherwise create a new one.
     assert "issues.update" in script
     assert "issues.create" in script
+
+
+def test_reconciliation_workflow_excludes_dependabot_from_untracked() -> None:
+    """Dependabot dependency PRs should not be counted as canonical-issue drift."""
+    script = _get_script(_load_workflow())
+    assert "dependabot[bot]" in script
+    assert "isDependencyAutomationPR" in script

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Compatibility shim for the Action Implementer agent.
+Compatibility shim for the Action Implementer agent (F4).
 
-The refactored implementation resides in
-``src.youtube_extension.services.agents.adapters.action_implementer_agent``.
-This module simply re-exports the public class so older imports remain valid.
+Canonical implementation:
+``youtube_extension.services.agents.adapters.action_implementer_agent``.
+
+There is only one registered agent class. Do not import
+``src.agents.action_implementer.ActionImplementer`` for orchestrator work —
+that module is the offline plan builder only.
 """
 
-from src.youtube_extension.services.agents.adapters.action_implementer_agent import (
+from .adapters.action_implementer_agent import (
     ActionImplementerAgent,
     ActionPlan,
 )

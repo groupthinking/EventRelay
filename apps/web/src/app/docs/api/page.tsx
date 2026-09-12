@@ -33,6 +33,8 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/dashboard', summary: 'Mutate dashboard state (pin, archive, etc.).' },
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
+  { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'POST', path: '/api/workflows/video-to-actions', summary: 'Start the Studio analysis workflow.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
 ];
 
 const METHOD_COLOR: Record<Endpoint['method'], string> = {
@@ -101,11 +103,19 @@ export default function ApiDocsPage() {
           <h2 className="font-heading text-2xl font-bold text-ink">Try it</h2>
           <p className="mt-2 text-ink/60">
             The{' '}
-            <Link href="/playground" className="text-teal-400 hover:underline">
-              playground
+            <Link href="/studio" className="text-teal-400 hover:underline">
+              studio
             </Link>{' '}
-            exercises these endpoints end-to-end against a real YouTube URL.
+            runs the end-to-end YouTube workflow against a real URL: hashed Video
+            Pack via <code className="text-teal-300">/api/video/pack</code>, then{' '}
+            <code className="text-teal-300">/api/workflows/video-to-actions</code>.
           </p>
+          <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-ink/60">
+            <li>Paste a YouTube URL on Home.</li>
+            <li>Home redirects to <code className="text-teal-300">/studio?video=...</code>.</li>
+            <li>Studio auto-starts analysis once for that handoff URL.</li>
+            <li>Transcript and events flow into actions and output publishing.</li>
+          </ol>
         </section>
       </main>
       <Footer />

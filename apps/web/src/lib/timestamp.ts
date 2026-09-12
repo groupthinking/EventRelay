@@ -139,15 +139,14 @@ export function parseTranscriptSegments(transcript: string | null | undefined): 
 
   const hasTimings = raw.length > 0 && timestamped >= Math.max(2, Math.ceil(raw.length * 0.25));
 
-  // Assign a stable speaker rotation so the transcript still shows speaker pills
-  // even when the source has no explicit labels.
-  const speakerPool = ['Speaker 1', 'Speaker 2', 'Speaker 3'];
+  // Never infer speakers from caption order. Caption APIs used by this path do
+  // not identify speakers, so an unlabeled line stays explicitly unattributed.
   let lastStart = 0;
 
   const segments: TranscriptSegment[] = raw.map((r, i) => {
     const start = hasTimings ? (r.start ?? lastStart) : i * 6;
     lastStart = start;
-    const speaker = r.speaker || speakerPool[i % speakerPool.length];
+    const speaker = r.speaker || 'Caption';
     return {
       id: `seg-${i}`,
       speaker,

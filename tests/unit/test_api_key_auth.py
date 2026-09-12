@@ -36,6 +36,10 @@ def _make_client(monkeypatch, *, api_key=None, allow_unauth=None):
     def dispatch():
         return {"dispatched": True}
 
+    @app.post("/api/v1/video/pack")
+    def video_pack():
+        return {"ok": True}
+
     return TestClient(app)
 
 
@@ -81,6 +85,18 @@ def test_dev_optin_opens_everything(monkeypatch):
     c = _make_client(monkeypatch, api_key=None, allow_unauth="1")
     assert c.get("/api/v1/videos/abc").status_code == 200
     assert c.post("/api/v1/agents/dispatch").status_code == 200
+
+
+def test_video_pack_identity_emit_does_not_require_api_key(monkeypatch):
+    c = _make_client(monkeypatch, api_key="secret")
+    r = c.post(
+        "/api/v1/video/pack",
+        json={"url": "https://www.youtube.com/watch?v=auJzb1D-fag"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+    # Sibling video routes stay deny-by-default.
+    assert c.get("/api/v1/videos/abc").status_code == 401
 
 
 def test_options_preflight_not_blocked_by_auth(monkeypatch):

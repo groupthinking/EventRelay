@@ -1388,21 +1388,26 @@ class TestCleanupDownloadArtifactsOffEventLoop:
     async def test_cleanup_is_total_for_non_oserror_failures(self):
         """A NUL byte in either path must not escape as ``ValueError``.
 
-        ``shutil.rmtree(..., ignore_errors=True)`` only suppresses ``OSError``:
-        a NUL byte makes its internal ``lstat`` raise ``ValueError``, and
-        ``Path.unlink`` raises the same directly. Because the helper runs from
-        a ``finally``, either escape would replace the in-flight exception --
-        the exact defect the removal of the ``exists()`` probes fixed. No
-        mocking is used, so this exercises the real stdlib behaviour.
+        A NUL byte makes ``rmtree``'s internal ``lstat`` raise ``ValueError``
+        and ``Path.unlink`` raise the same directly -- neither is an
+        ``OSError``, so an ``OSError``-only guard would let them through.
+        Because the helper runs from a ``finally``, either escape would
+        replace the in-flight exception -- the exact defect the removal of
+        the ``exists()`` probes fixed. No mocking is used, so this exercises
+        the real stdlib behaviour.
         """
         nul_video = pathlib.Path("/tmp/eventrelay-nul\x00.mp4")
         nul_root = pathlib.Path("/tmp/eventrelay-nul\x00-dir")
 
-        # Premise: the bare calls really are not OSError-total.
+        # Premise: the bare calls really are not OSError-total. Assert this
+        # against the unguarded calls -- whether ``rmtree``'s own
+        # ``ignore_errors=True`` also happens to absorb a non-OSError is a
+        # CPython implementation detail that has changed across versions, so
+        # the helper must not depend on it either way.
         with pytest.raises(ValueError, match="null"):
             nul_video.unlink()
         with pytest.raises(ValueError, match="null"):
-            shutil.rmtree(nul_root, ignore_errors=True)
+            shutil.rmtree(nul_root)
 
         # Contract: the helper swallows both and returns normally.
         await TranscriptActionWorkflow._cleanup_download_artifacts(

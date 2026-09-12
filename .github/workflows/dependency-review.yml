@@ -1,17 +1,33 @@
 name: 🔍 Dependency Review
 
 on:
+  # No base-branch filter — see the note in ci.yml.
   pull_request:
-    branches: [ main, develop ]
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
   pull-requests: write
 
+
+# Supersede superseded work instead of stacking it. Without this, every push
+# to a PR branch queued a brand-new full run alongside the ones it obsoleted;
+# with ~30 workflows and dozens of open PRs the Actions queue could not drain.
+#
+# PR runs are keyed by PR number and cancel their predecessors -- that is where
+# all the queue pressure comes from, since every `push:` trigger here is already
+# filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
+# land in singleton groups: keying them on github.ref would collide every merge
+# to main into one group, and GitHub cancels the *pending* run in a group, so a
+# burst of merges would silently drop the middle commits' verdicts.
+concurrency:
+  group: dependency-review-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
+
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -20,6 +36,11 @@ jobs:
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
+          # The dependency graph API can briefly report "no snapshots found for the
+          # head SHA" when a PR's dependency snapshot is submitted asynchronously and
+          # hasn't finished indexing yet. Retry instead of failing/warning on that race.
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 300
           # GHSA-w5hq-g745-h8pq: transitive uuid@8.3.2 pulled by next-auth@4.24 (which pins uuid ^8.3.2).
           # The moderate advisory affects uuid v3/v5/v6 when a caller-provided buffer is passed; next-auth
           # only calls v4(), so the vulnerable code path is unreachable here. The first patched uuid is

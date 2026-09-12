@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import random
+import re
 import time
 import urllib.parse
 from dataclasses import dataclass
@@ -38,14 +39,22 @@ except ImportError as e:
 
 logger = logging.getLogger("youtube_api_proxy")
 
+_ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
+
 
 def _get_webshare_proxy_url() -> str | None:
     """Return the validated WEBSHARE_PROXY_URL, or None for direct connection."""
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    try:
+        parsed = urllib.parse.urlparse(url)
+        valid = parsed.scheme in _ALLOWED_SCHEMES and bool(parsed.hostname)
+        if valid:
+            _ = parsed.port
+    except ValueError:
+        valid = False
+    if not valid:
         logger.warning(
             "WEBSHARE_PROXY_URL is set but malformed — falling back to direct connection"
         )
@@ -72,20 +81,71 @@ def _get_transcript_proxy_config() -> GenericProxyConfig | None:
     return GenericProxyConfig(http_url=url, https_url=url)
 
 
-def _redact_proxy_credentials(text: str) -> str:
-    """Strip user:pass credentials of the configured proxy URL from text."""
-    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
-    if not url or url not in text:
-        return text
+# Matches the ``user[:password]@`` userinfo segment of any URL. Kept byte-identical
+# to the canonical copy in ``src/youtube_extension/utils/proxy.py``; see that module
+# for the full rationale. In short: the classes exclude the authority delimiters
+# (whitespace, "/", "?", "#") so paths and query strings containing "@" are never
+# mistaken for credentials, but they permit a literal "@" so an unencoded one in
+# the password is consumed whole rather than leaving the tail behind.
+_USERINFO_RE = re.compile(
+    r"(?P<scheme>[A-Za-z][A-Za-z0-9+.\-]*://)"
+    r"(?P<user>[^\s/:?#]*)"
+    r"(?::(?P<password>[^\s/?#]*))?"
+    r"@"
+)
+
+_REDACTED = "***"
+_UNPRINTABLE = "<unprintable error>"
+_REDACTION_FAILED = "<redaction failed>"
+
+
+def _redact_proxy_credentials(text: Any) -> str:
+    """Strip URL userinfo (``user:pass@``) from ``text``.
+
+    Two passes: exact replacement of the configured ``WEBSHARE_PROXY_URL`` (which
+    preserves the host, so operators can still tell which proxy was in play),
+    then a generic ``scheme://user:pass@`` sweep that catches credentials never
+    matching the env value verbatim -- a normalised or percent-encoded form
+    echoed back by yt-dlp, a ``CalledProcessError`` repr of the argv, or a
+    different proxy variable such as ``HTTPS_PROXY``.
+
+    Never raises: every caller here is an exception handler, where a failure
+    would mask the original error.
+    """
+    if isinstance(text, str):
+        candidate = text
+    else:
+        try:
+            candidate = str(text)
+        except Exception:  # noqa: BLE001 - a hostile __str__ must not propagate
+            return _UNPRINTABLE
+
     try:
-        parsed = urllib.parse.urlparse(url)
-        netloc = parsed.hostname or ""
-        if parsed.port:
-            netloc = f"{netloc}:{parsed.port}"
-        redacted = parsed._replace(netloc=netloc).geturl()
-    except (ValueError, AttributeError):
-        redacted = "<proxy-url>"
-    return text.replace(url, redacted)
+        return _redact(candidate)
+    except Exception:  # noqa: BLE001 - never return text we cannot vouch for
+        return _REDACTION_FAILED
+
+
+def _redact(text: str) -> str:
+    """Run the two redaction passes over an already-stringified ``text``."""
+    url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
+    if url and url in text:
+        try:
+            parsed = urllib.parse.urlparse(url)
+            netloc = parsed.hostname or ""
+            if parsed.port:
+                netloc = f"{netloc}:{parsed.port}"
+            redacted = parsed._replace(netloc=netloc).geturl()
+        except (ValueError, AttributeError):
+            redacted = "<proxy-url>"
+        text = text.replace(url, redacted)
+
+    def _mask(match: re.Match[str]) -> str:
+        if match.group("password") is None:
+            return f"{match.group('scheme')}{_REDACTED}@"
+        return f"{match.group('scheme')}{_REDACTED}:{_REDACTED}@"
+
+    return _USERINFO_RE.sub(_mask, text)
 
 class YouTubeErrorType(Enum):
     """YouTube API specific error types"""
@@ -386,7 +446,9 @@ class YouTubeAPIProxy:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
             except Exception as e:
-                logger.debug(f"Direct transcript failed: {e}")
+                logger.debug(
+                    "Direct transcript failed: %s", _redact_proxy_credentials(e)
+                )
 
             # Method 2: Alternative language codes
             # ``list_transcripts`` class method is now the instance ``list``;
@@ -406,13 +468,19 @@ class YouTubeAPIProxy:
                             lambda item=transcript_item: item.fetch().to_raw_data(),
                         )
                     except Exception as item_e:
-                        logger.debug(f"Alternative language item failed: {item_e}")
+                        logger.debug(
+                            "Alternative language item failed: %s",
+                            _redact_proxy_credentials(item_e),
+                        )
                         continue
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
             except Exception as e:
-                logger.debug(f"Alternative transcript failed: {e}")
+                logger.debug(
+                    "Alternative transcript failed: %s",
+                    _redact_proxy_credentials(e),
+                )
 
             # Method 3: yt-dlp fallback
             try:
@@ -437,7 +505,9 @@ class YouTubeAPIProxy:
                         # Convert to transcript format
                         return [{'text': 'Transcript extracted via yt-dlp', 'start': 0, 'duration': 1}]
             except Exception as e:
-                logger.debug(f"yt-dlp extraction failed: {e}")
+                logger.debug(
+                    "yt-dlp extraction failed: %s", _redact_proxy_credentials(e)
+                )
 
             # CouldNotRetrieveTranscript(>=1.0) takes a bare video_id and builds
             # its own message/URL; passing a sentence corrupts the generated URL.

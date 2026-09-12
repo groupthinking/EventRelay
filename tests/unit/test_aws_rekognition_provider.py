@@ -337,12 +337,30 @@ class TestAWSRekognitionPrepareImageInput:
         result = await provider._prepare_image_input("s3://bucket/folder/image.jpg")
         assert result['S3Object']['Name'] == "folder/image.jpg"
 
-    async def test_local_file_returns_bytes(self, tmp_path):
+    async def test_local_file_returns_bytes(self, tmp_path, monkeypatch):
         img_file = tmp_path / "test.jpg"
         img_file.write_bytes(b"\xff\xd8\xff\xe0")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
         result = await provider._prepare_image_input(str(img_file))
         assert result == {'Bytes': b"\xff\xd8\xff\xe0"}
+
+    async def test_local_file_read_routes_through_run_blocking(self, tmp_path, monkeypatch):
+        img_file = tmp_path / "test.jpg"
+        img_file.write_bytes(b"\xff\xd8\xff\xe0")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        provider = _make_provider()
+        method_globals = type(provider)._prepare_image_input.__globals__
+        run_blocking = AsyncMock(return_value=b"worker-bytes")
+
+        with patch.dict(method_globals, {"run_blocking": run_blocking}):
+            result = await provider._prepare_image_input(str(img_file))
+
+        assert result == {'Bytes': b"worker-bytes"}
+        run_blocking.assert_awaited_once()
+        read_func, read_path = run_blocking.await_args.args
+        assert read_func is method_globals["_read_file_bytes"]
+        assert read_path == str(img_file)
 
     async def test_http_url_fetches_bytes(self):
         provider = _make_provider()
@@ -1163,7 +1181,9 @@ class TestRekognitionDoesNotBlockEventLoop:
             f"describe_collection in {provider_method} blocked the event loop"
         )
 
-    async def test_local_image_read_runs_off_the_event_loop_thread(self, tmp_path):
+    async def test_local_image_read_runs_off_the_event_loop_thread(
+        self, tmp_path, monkeypatch
+    ):
         """
         Deterministic counterpart to the heartbeat tests.
 
@@ -1176,6 +1196,7 @@ class TestRekognitionDoesNotBlockEventLoop:
 
         image = tmp_path / "frame.jpg"
         image.write_bytes(b"BINARY-IMAGE-PAYLOAD")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
 
         # Patch the exact namespace that _prepare_image_input resolves from.
@@ -1201,11 +1222,12 @@ class TestRekognitionDoesNotBlockEventLoop:
             "being dispatched to a worker thread"
         )
 
-    async def test_local_image_bytes_are_read_correctly(self, tmp_path):
+    async def test_local_image_bytes_are_read_correctly(self, tmp_path, monkeypatch):
         """Guard: offloading must not change what is returned."""
         image = tmp_path / "frame.png"
         payload = bytes(range(256)) * 8
         image.write_bytes(payload)
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
         provider = _make_provider()
 
         result = await provider._prepare_image_input(str(image))

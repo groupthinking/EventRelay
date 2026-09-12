@@ -15,7 +15,8 @@ except ImportError:
     from agents.process_video_with_mcp import RealVideoProcessor
 from datetime import datetime
 
-# Reuse existing implementer to turn actions into plans
+# Offline plan builder only (not ActionImplementerAgent — F4).
+# Product orchestrator path uses adapters.action_implementer_agent.
 try:
     from ..agents.action_implementer import ActionImplementer
 except ImportError:

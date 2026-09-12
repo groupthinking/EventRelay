@@ -4,10 +4,10 @@
  * Connects to `/api/pipeline/stream` (SSE) and maps incoming events into
  * PipelineState that drives the existing visualization components.
  *
- * Three modes:
+ * Runtime modes:
  *   - 'live'       — SSE backed by FastAPI backend (BACKEND_URL configured)
  *   - 'serverless' — SSE backed by Gemini (no backend, has GEMINI key)
- *   - 'demo'       — local simulation fallback (no keys at all)
+ *   - 'unavailable'— the real stream failed; no result is fabricated
  */
 
 'use client';
@@ -22,10 +22,9 @@ import type {
 import {
   createDefaultAgents,
   createDefaultConnections,
-  simulatePipeline,
 } from './agent-pipeline';
 
-export type PipelineMode = 'idle' | 'live' | 'serverless' | 'demo';
+export type PipelineMode = 'idle' | 'live' | 'serverless' | 'unavailable';
 
 export interface UseAgentPipelineReturn {
   state: PipelineState;
@@ -73,7 +72,6 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
   const [mode, setMode] = useState<PipelineMode>('idle');
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<number | null>(null);
-  const simulationRef = useRef<{ cancel: () => void } | null>(null);
 
   /** Apply an `agent_update` SSE event to the current PipelineState. */
   const applyAgentUpdate = useCallback(
@@ -207,13 +205,12 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
     }));
   }, []);
 
-  /** Start the pipeline. Tries SSE first, falls back to demo simulation. */
+  /** Start the real SSE pipeline. Fail closed when it is unavailable. */
   const startPipeline = useCallback(
     (url: string) => {
       // Abort any in-flight request
       if (abortRef.current) abortRef.current.abort();
       if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-      if (simulationRef.current) simulationRef.current.cancel();
 
       const controller = new AbortController();
       let timedOut = false;
@@ -243,27 +240,6 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
         connections: createDefaultConnections(),
         trace: [],
       });
-
-      const runDemoFallback = (reason: unknown) => {
-        console.warn('[AgentPipeline] SSE unavailable, falling back to demo:', reason);
-        setMode('demo');
-
-        const freshState: PipelineState = {
-          id: `pipeline_${Date.now()}`,
-          videoUrl: url,
-          videoTitle: url,
-          status: 'validating',
-          startedAt: new Date().toISOString(),
-          agents: createDefaultAgents(),
-          connections: createDefaultConnections(),
-          trace: [],
-        };
-        setState(freshState);
-
-        simulationRef.current = simulatePipeline(url, url, (newState) => {
-          setState(newState);
-        });
-      };
 
       // Try SSE endpoint
       fetch('/api/pipeline/stream', {
@@ -331,7 +307,19 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
         })
         .catch((err) => {
           if (controller.signal.aborted && !timedOut) return;
-          runDemoFallback(timedOut ? new Error('Pipeline stream timed out') : err);
+          const reason = timedOut
+            ? 'Pipeline stream timed out before a verified completion.'
+            : err instanceof Error
+              ? err.message
+              : 'Pipeline stream failed.';
+          console.error('[AgentPipeline] Real stream unavailable:', reason);
+          setMode('unavailable');
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            completedAt: new Date().toISOString(),
+            error: reason,
+          }));
         });
     },
     [applyAgentUpdate, applyConsensus, applyPipelineStatus, applyWorkflow],
@@ -341,9 +329,7 @@ export function useAgentPipeline(): UseAgentPipelineReturn {
   const resetPipeline = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
     if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    if (simulationRef.current) simulationRef.current.cancel();
     timeoutRef.current = null;
-    simulationRef.current = null;
     setState(makeInitialState());
     setMode('idle');
   }, []);

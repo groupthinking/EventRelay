@@ -67,14 +67,27 @@ def test_config_parses_as_valid_yaml():
 
 
 # ---------------------------------------------------------------------------
-# inheritance (new field)
+# inheritance
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.unit
-def test_inheritance_enabled(config):
-    """inheritance: true lets the org-level config layer underneath this file."""
-    assert config.get("inheritance") is True
+def test_inheritance_disabled(config):
+    """inheritance must stay false, or the label gate silently comes back.
+
+    This asserted ``is True`` until the setting was found to be the reason
+    auto-review never started. With inheritance on, the org/dashboard config
+    layers *underneath* this file, and a key set to an empty collection here
+    reads as unset rather than as an override — so #1425's
+    ``reviews.auto_review.labels: []`` did not clear the inherited
+    required-labels gate, and PRs kept landing "Review skipped: excluded by
+    label configuration".
+
+    Flipping this back to true re-breaks auto-review repo-wide, and does it
+    silently: nothing fails, PRs simply stop being reviewed. Pair any change
+    here with the label-gate comment in ``.coderabbit.yaml``.
+    """
+    assert config.get("inheritance") is False
 
 
 # ---------------------------------------------------------------------------

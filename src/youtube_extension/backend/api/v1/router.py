@@ -10,10 +10,13 @@ Provides versioned API endpoints with proper OpenAPI documentation.
 import asyncio
 import logging
 import os
+import threading
 import time
 import uuid as _uuid
+import weakref
 from dataclasses import asdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import (
@@ -49,6 +52,9 @@ from youtube_extension.services.pipeline_job_store import get_job_store
 from youtube_extension.services.workflows.transcript_action_workflow import (
     TranscriptActionWorkflow,
 )
+from youtube_extension.utils.video_utils import extract_video_id
+from youtube_extension.videopack.identity import emit_video_pack
+from youtube_extension.videopack.store import VideoPackStore
 
 # CloudEvents integration (optional — falls back to file sink)
 try:
@@ -120,6 +126,19 @@ performance_monitor = PerformanceMonitor()
 logger = logging.getLogger(__name__)
 
 
+def _safe_log_value(value: Any, max_length: int = 1000) -> str:
+    """Return a single-line representation safe for structured log messages."""
+    try:
+        text = value if isinstance(value, str) else str(value)
+    except Exception:
+        text = f"<unprintable {type(value).__name__}>"
+
+    text = text.replace("\r", "\\r").replace("\n", "\\n")
+    if len(text) > max_length:
+        return f"{text[:max_length - 1]}…"
+    return text
+
+
 async def _emit_event(event_type: str, data: dict, subject: str | None = None) -> None:
     """Emit a CloudEvent if the publisher is available."""
     if _ce_publisher is not None:
@@ -131,7 +150,7 @@ async def _emit_event(event_type: str, data: dict, subject: str | None = None) -
                 subject=subject,
             )
         except Exception as exc:
-            logger.debug("CloudEvent publish failed: %s", exc)
+            logger.debug("CloudEvent publish failed: %s", _safe_log_value(exc))
 
 
 def _normalize_tag_list(raw_tags: Any) -> list[str]:
@@ -257,7 +276,7 @@ async def health_check_v1(
         )
         return HealthResponse(**health_status)
     except Exception as e:
-        logger.error(f"Health check failed: {e}", exc_info=True)
+        logger.error("Health check failed: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -286,7 +305,9 @@ async def detailed_health_check_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Detailed health check failed: {e}", exc_info=True)
+        logger.error(
+            "Detailed health check failed: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -351,7 +372,7 @@ async def get_capabilities_v1(
             ],
         }
     except Exception as e:
-        logger.error(f"Capabilities check failed: {e}")
+        logger.error("Capabilities check failed: %s", _safe_log_value(e))
         return {"status": "error", "error": str(e)}
 
 
@@ -507,7 +528,7 @@ async def run_transcript_action(
     except Exception as exc:  # noqa: BLE001 - never surface a raw 500 for processing failures
         logger.exception(
             "transcript-action failed; returning graceful error response",
-            extra={"video_url": request.video_url},
+            extra={"video_url": _safe_log_value(request.video_url)},
         )
         await _emit_event(
             "com.eventrelay.transcript.failed",
@@ -581,7 +602,9 @@ async def chat_v1(
     """Chat endpoint with AI processing via AgentOrchestrator"""
     try:
         logger.info(
-            f"Chat request received: {request.message[:50]}... session={request.session_id}"
+            "Chat request received: %s... session=%s",
+            _safe_log_value(request.message[:50]),
+            _safe_log_value(request.session_id),
         )
 
         params = {
@@ -602,13 +625,16 @@ async def chat_v1(
                 video_id = match.group(1)
 
         if video_id:
-            logger.info(f"Adding video context for video_id: {video_id}")
+            logger.info(
+                "Adding video context for video_id: %s", _safe_log_value(video_id)
+            )
             detail = data_service.get_video_detail(video_id)
 
             # If video not found, trigger real-time processing
             if not detail and request.video_url:
                 logger.info(
-                    f"Video not found for {video_id}, triggering real-time processing"
+                    "Video not found for %s, triggering real-time processing",
+                    _safe_log_value(video_id),
                 )
                 try:
                     proc_result = (
@@ -618,9 +644,14 @@ async def chat_v1(
                     )
                     if proc_result and proc_result.get("status") == "success":
                         detail = data_service.get_video_detail(video_id)
-                        logger.info(f"Real-time processing complete for {video_id}")
+                        logger.info(
+                            "Real-time processing complete for %s",
+                            _safe_log_value(video_id),
+                        )
                 except Exception as e:
-                    logger.error(f"Real-time video processing failed: {e}")
+                    logger.error(
+                        "Real-time video processing failed: %s", _safe_log_value(e)
+                    )
 
             if detail:
                 params["video_id"] = video_id
@@ -665,7 +696,7 @@ async def chat_v1(
         return response
 
     except Exception as e:
-        logger.error(f"Error in chat endpoint: {e}", exc_info=True)
+        logger.error("Error in chat endpoint: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error") from e
 
 
@@ -683,7 +714,7 @@ async def process_video_v1(
 ):
     """Basic video processing endpoint"""
     try:
-        logger.info(f"Video processing request: {request.video_url}")
+        logger.info("Video processing request: %s", _safe_log_value(request.video_url))
         await _emit_event(
             "com.eventrelay.video.received",
             {"url": request.video_url},
@@ -719,7 +750,7 @@ async def process_video_v1(
         return result
 
     except Exception as e:
-        logger.error(f"Error in video processing: {e}")
+        logger.error("Error in video processing: %s", _safe_log_value(e))
         await _emit_event(
             "com.eventrelay.pipeline.failed",
             {"url": request.video_url, "error": str(e)},
@@ -752,7 +783,9 @@ async def process_video_markdown_v1(
     health_service.increment_metric("process_video_markdown_total")
 
     try:
-        logger.info(f"Markdown processing request: {request.video_url}")
+        logger.info(
+            "Markdown processing request: %s", _safe_log_value(request.video_url)
+        )
 
         result = await video_processing_service.process_video_for_markdown(
             request.video_url, request.force_regenerate
@@ -769,7 +802,9 @@ async def process_video_markdown_v1(
         health_service.increment_metric("error_total")
         raise
     except Exception as e:
-        logger.error(f"Error in markdown processing: {e}", exc_info=True)
+        logger.error(
+            "Error in markdown processing: %s", _safe_log_value(e), exc_info=True
+        )
         health_service.increment_metric("error_total")
         raise HTTPException(status_code=500, detail="Internal server error")
 
@@ -788,7 +823,7 @@ async def video_to_software_v1(
 ):
     """Convert YouTube video to deployed software"""
     try:
-        logger.info(f"Video-to-software request: {request.video_url}")
+        logger.info("Video-to-software request: %s", _safe_log_value(request.video_url))
         target_info = resolve_deployment_target(request.deployment_target)
 
         result = await video_processing_service.process_video_to_software(
@@ -796,6 +831,7 @@ async def video_to_software_v1(
             request.project_type,
             target_info["resolved"],
             request.features,
+            transcript=request.transcript,
         )
 
         result.setdefault("deployment", {})
@@ -807,7 +843,11 @@ async def video_to_software_v1(
         return VideoToSoftwareResponse(**result)
 
     except Exception as e:
-        logger.error(f"Video-to-software processing failed: {e}", exc_info=True)
+        logger.error(
+            "Video-to-software processing failed: %s",
+            _safe_log_value(e),
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -826,12 +866,22 @@ async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_ser
         if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
             return CacheStats(**_stats_cache)
 
-        stats = cache_service.get_cache_statistics()
-        _stats_cache = stats
-        _stats_cache_time = now
+        refresh, leader = _get_stats_refresh()
+        if not leader:
+            return CacheStats(**await refresh)
+
+        try:
+            async with _get_fs_walk_gate():
+                stats = await asyncio.to_thread(cache_service.get_cache_statistics)
+            _stats_cache = stats
+            _stats_cache_time = time.time()
+            _finish_stats_refresh(refresh, stats=stats)
+        except BaseException as exc:
+            _finish_stats_refresh(refresh, exc=exc)
+            raise
         return CacheStats(**stats)
     except Exception as e:
-        logger.error(f"Error getting cache stats: {e}", exc_info=True)
+        logger.error("Error getting cache stats: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -860,7 +910,9 @@ async def get_cached_video_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error retrieving cached video: {e}", exc_info=True)
+        logger.error(
+            "Error retrieving cached video: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -883,7 +935,9 @@ async def clear_video_cache_v1(
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing video cache: {e}", exc_info=True)
+        logger.error(
+            "Error clearing video cache: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -903,11 +957,38 @@ async def clear_all_cache_v1(cache_service: CacheService = Depends(get_cache_ser
             "timestamp": datetime.now().isoformat(),
         }
     except Exception as e:
-        logger.error(f"Error clearing all cache: {e}", exc_info=True)
+        logger.error("Error clearing all cache: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Data Endpoints
+def _collect_videos_page(
+    data_service: DataService, limit: int, offset: int
+) -> tuple[int, list[dict[str, Any]], bool]:
+    """Gather the total video count and one page of summaries.
+
+    Both ``count_videos`` and ``get_videos_summary`` perform blocking
+    filesystem work, so they are grouped into this single synchronous helper
+    and dispatched to a worker thread by the caller with one
+    ``asyncio.to_thread`` hop instead of two.
+
+    One hop is *not* an atomic snapshot. ``DataService`` backs both reads with
+    a TTL cache that holds no lock and exposes no snapshot object shared
+    between them, so the entry can still expire -- or be refreshed by another
+    worker -- in between. Grouping the calls narrows that window to a single
+    thread hand-off rather than eliminating it; callers must still treat the
+    count and the page as independently observed values.
+
+    Returns ``(total, page, past_end)``. ``page`` is empty when ``offset`` is
+    past the end, and ``past_end`` reports that condition so the caller does
+    not re-derive the bounds check.
+    """
+    total = data_service.count_videos()
+    if offset >= total:
+        return total, [], True
+    return total, data_service.get_videos_summary(limit=limit, offset=offset), False
+
+
 @router.get(
     "/videos",
     response_model=dict[str, Any],
@@ -921,8 +1002,11 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        total = data_service.count_videos()
-        if offset >= total:
+        async with _get_fs_walk_gate():
+            total, paginated_videos, past_end = await asyncio.to_thread(
+                _collect_videos_page, data_service, limit, offset
+            )
+        if past_end:
             return {
                 "videos": [],
                 "total": total,
@@ -930,7 +1014,6 @@ async def list_videos_v1(
                 "offset": offset,
                 "has_more": False,
             }
-        paginated_videos = data_service.get_videos_summary(limit=limit, offset=offset)
 
         return {
             "videos": paginated_videos,
@@ -941,8 +1024,69 @@ async def list_videos_v1(
         }
 
     except Exception as e:
-        logger.error(f"Error listing videos: {e}", exc_info=True)
+        logger.error("Error listing videos: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Shared concurrency gate for the uncached filesystem walks this router hands to
+# ``asyncio.to_thread``.
+#
+# A single module-level ``asyncio.Semaphore`` would be a latent landmine rather
+# than an obvious bug. ``Semaphore.acquire`` only reaches ``_get_loop()`` when it
+# has to wait -- the uncontended path decrements the counter and returns before
+# any loop is touched. So the semaphore stays unbound, and works fine across any
+# number of event loops, right up until the first time it is genuinely contended.
+# That acquisition pins it, and every later use from a different loop raises
+# ``RuntimeError: ... is bound to a different event loop``.
+#
+# The failure therefore cannot show up in low-concurrency tests; it waits for the
+# exact burst this gate exists to absorb. Building the gate per running loop
+# removes the trap outright -- each loop gets its own semaphore.
+#
+# The weak keying bounds growth; it is not a guarantee of collection, and the
+# same fast-path asymmetry is why. ``WeakKeyDictionary`` holds its *values*
+# strongly, and the waiting path above stores the loop on the semaphore, so a
+# gate that has ever been contended keeps its own weak key reachable and is
+# never evicted on its own. Uncontended gates still fall out by themselves;
+# contended ones are reclaimed by ``_discard_closed_fs_walk_gates`` below. Under
+# the production deployment -- one Uvicorn worker, one long-lived loop -- this is
+# a single entry either way, so it only matters where loops are created
+# repeatedly, as they are in tests.
+#
+# The budget is deliberately shared by every endpoint that performs one of these
+# walks, rather than one gate per endpoint. The resource being protected is the
+# single default ``ThreadPoolExecutor``, sized ``min(32, cpu_count + 4)`` and so
+# as small as five workers. Two independent gates of four would each be reasoning
+# locally about a global resource and could between them occupy every worker --
+# precisely the starvation a gate exists to prevent. One budget of four always
+# leaves at least one worker for unrelated ``to_thread`` callers.
+_FS_WALK_MAX_CONCURRENCY = 4
+# Maps a running event loop -> the ``asyncio.Semaphore`` bound to that loop.
+_fs_walk_gates: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_fs_walk_gates_lock = threading.Lock()
+
+
+def _discard_closed_fs_walk_gates() -> None:
+    """Drop registry entries whose event loop has been closed.
+
+    Callers must hold ``_fs_walk_gates_lock``. Deletions are applied only after
+    the comprehension has finished, because a ``WeakKeyDictionary`` must not
+    change size while it is being iterated.
+    """
+    for closed in [loop for loop in _fs_walk_gates if loop.is_closed()]:
+        del _fs_walk_gates[closed]
+
+
+def _get_fs_walk_gate() -> asyncio.Semaphore:
+    """Return the filesystem-walk concurrency gate bound to the running loop."""
+    loop = asyncio.get_running_loop()
+    with _fs_walk_gates_lock:
+        gate = _fs_walk_gates.get(loop)
+        if gate is None:
+            _discard_closed_fs_walk_gates()
+            gate = asyncio.Semaphore(_FS_WALK_MAX_CONCURRENCY)
+            _fs_walk_gates[loop] = gate
+        return gate
 
 
 @router.get(
@@ -955,7 +1099,16 @@ async def get_video_detail_v1(
 ):
     """Get detailed info for specific video"""
     try:
-        video_detail = data_service.get_video_detail(video_id)
+        # ``get_video_detail`` runs an uncached recursive glob over the
+        # enhanced-analysis tree, stats every match, then opens and reads a
+        # metadata file and the full markdown body. That is blocking I/O whose
+        # cost grows with the corpus, so it is dispatched to a worker thread
+        # instead of being run on the event loop, and it shares the router's
+        # filesystem-walk budget so a burst cannot monopolise the executor.
+        async with _get_fs_walk_gate():
+            video_detail = await asyncio.to_thread(
+                data_service.get_video_detail, video_id
+            )
 
         if not video_detail:
             raise HTTPException(status_code=404, detail=f"Video not found: {video_id}")
@@ -965,7 +1118,9 @@ async def get_video_detail_v1(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting video detail: {e}", exc_info=True)
+        logger.error(
+            "Error getting video detail: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -978,10 +1133,22 @@ async def get_video_detail_v1(
 async def get_learning_log_v1(data_service: DataService = Depends(get_data_service)):
     """Get learning log from enhanced analysis files"""
     try:
-        learning_log = data_service.get_learning_log()
+        # ``get_learning_log`` walks the enhanced-analysis tree and opens a
+        # metadata file per entry. That is unbounded blocking I/O, so it is
+        # dispatched to a worker thread rather than run on the event loop.
+        #
+        # The walk is also uncached, so every concurrent request starts its own.
+        # Without a bound those walks would be free to occupy every worker in
+        # the shared default executor and starve unrelated ``to_thread``
+        # callers. The gate caps how many walks may be in flight; requests over
+        # the cap wait here on the event loop, holding no worker thread.
+        async with _get_fs_walk_gate():
+            learning_log = await asyncio.to_thread(data_service.get_learning_log)
         return learning_log
     except Exception as e:
-        logger.error(f"Error getting learning log: {e}", exc_info=True)
+        logger.error(
+            "Error getting learning log: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1016,7 +1183,7 @@ async def ingest_knowledge_v1(
     except HTTPException:
         raise
     except Exception as exc:
-        logger.error(f"Error ingesting knowledge entry: {exc}")
+        logger.error("Error ingesting knowledge entry: %s", _safe_log_value(exc))
         raise HTTPException(status_code=500, detail="Failed to store insight")
 
 
@@ -1032,7 +1199,12 @@ async def get_actions_by_video_v1(video_id: str):
         actions = repo.get_by_video_id(video_id)
         return actions
     except Exception as e:
-        logger.error(f"Error retrieving actions for {video_id}: {e}", exc_info=True)
+        logger.error(
+            "Error retrieving actions for %s: %s",
+            _safe_log_value(video_id),
+            _safe_log_value(e),
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1080,7 +1252,12 @@ async def update_action_v1(action_id: str, payload: dict[str, Any]):
                     logger.debug("Action feedback recording failed", exc_info=True)
         return {"success": bool(success)}
     except Exception as e:
-        logger.error(f"Error updating action {action_id}: {e}", exc_info=True)
+        logger.error(
+            "Error updating action %s: %s",
+            _safe_log_value(action_id),
+            _safe_log_value(e),
+            exc_info=True,
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1127,7 +1304,7 @@ async def submit_feedback_v1(
             raise HTTPException(status_code=500, detail="Failed to save feedback")
 
     except Exception as e:
-        logger.error(f"Error saving feedback: {e}", exc_info=True)
+        logger.error("Error saving feedback: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1147,7 +1324,7 @@ async def get_metrics_v1(
         metrics_lines = health_service.get_metrics_prometheus_format()
         return Response(content="\n".join(metrics_lines), media_type="text/plain")
     except Exception as e:
-        logger.error(f"Metrics endpoint failed: {e}", exc_info=True)
+        logger.error("Metrics endpoint failed: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1167,7 +1344,9 @@ async def ingest_performance_alert_v1(payload: dict[str, Any]):
         )
         return {"status": "ok", "recorded": metric_name}
     except Exception as e:
-        logger.error(f"Failed to ingest performance alert: {e}", exc_info=True)
+        logger.error(
+            "Failed to ingest performance alert: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1177,15 +1356,25 @@ async def ingest_performance_report_v1(report: dict[str, Any]):
         metrics: dict[str, Any] = (
             report.get("metrics", {}) if isinstance(report, dict) else {}
         )
+        # Collect first, then write once. A report carries every web-vital the
+        # page gathered, and recording them one at a time cost one SQLite
+        # connection and one commit fsync each while the client waited.
+        samples: list[dict[str, Any]] = []
         for name, stats in metrics.items():
             value = stats.get("current") if isinstance(stats, dict) else None
             if isinstance(value, (int, float)):
-                await performance_monitor.record_metric(
-                    "frontend", name, float(value), unit=str(stats.get("unit", "ms"))
-                )
-        return {"status": "ok", "metrics_recorded": len(metrics)}
+                samples.append({
+                    "component": "frontend",
+                    "metric_name": name,
+                    "value": float(value),
+                    "unit": str(stats.get("unit", "ms")),
+                })
+        await performance_monitor.record_metrics(samples)
+        return {"status": "ok", "metrics_recorded": len(samples)}
     except Exception as e:
-        logger.error(f"Failed to ingest performance report: {e}", exc_info=True)
+        logger.error(
+            "Failed to ingest performance report: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1306,6 +1495,57 @@ _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _stats_cache: dict[str, Any] = {}
 _stats_cache_time: float = 0
 _stats_cache_ttl: float = 60
+_stats_refreshes: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_stats_refreshes_lock = threading.Lock()
+
+
+def _discard_closed_stats_refreshes() -> None:
+    """Drop cached refresh futures whose event loop has been closed."""
+    for closed in [loop for loop in _stats_refreshes if loop.is_closed()]:
+        del _stats_refreshes[closed]
+
+
+def _consume_stats_refresh_result(refresh: asyncio.Future) -> None:
+    """Silence asyncio warnings when a failed refresh had no external waiters."""
+    if refresh.cancelled():
+        return
+    refresh.exception()
+
+
+def _get_stats_refresh() -> tuple[asyncio.Future, bool]:
+    """Return the current loop's in-flight cache-stats refresh future."""
+    loop = asyncio.get_running_loop()
+    with _stats_refreshes_lock:
+        refresh = _stats_refreshes.get(loop)
+        if refresh is not None and refresh.done():
+            del _stats_refreshes[loop]
+            refresh = None
+        if refresh is None:
+            _discard_closed_stats_refreshes()
+            refresh = loop.create_future()
+            refresh.add_done_callback(_consume_stats_refresh_result)
+            _stats_refreshes[loop] = refresh
+            return refresh, True
+        return refresh, False
+
+
+def _finish_stats_refresh(
+    refresh: asyncio.Future,
+    *,
+    stats: dict[str, Any] | None = None,
+    exc: BaseException | None = None,
+) -> None:
+    """Resolve an in-flight cache-stats refresh and remove it from the registry."""
+    if not refresh.done():
+        if exc is None:
+            refresh.set_result(stats)
+        else:
+            refresh.set_exception(exc)
+
+    loop = refresh.get_loop()
+    with _stats_refreshes_lock:
+        if _stats_refreshes.get(loop) is refresh:
+            del _stats_refreshes[loop]
 
 
 async def _periodic_cleanup():
@@ -1316,7 +1556,7 @@ async def _periodic_cleanup():
             _agent_executions.evict_expired()
             _dispatches.evict_expired()
         except Exception as exc:
-            logger.debug("Periodic cleanup failed: %s", exc)
+            logger.debug("Periodic cleanup failed: %s", _safe_log_value(exc))
         await asyncio.sleep(300)  # Sweep every 5 minutes
 
 
@@ -1336,7 +1576,11 @@ def _persist_video_job(job: VideoJobStatusResponse) -> None:
             data = job.model_dump(mode="json")
             get_job_store().save(job.job_id, data)
         except Exception as exc:
-            logger.warning("Job persist failed for %s: %s", job.job_id, exc)
+            logger.warning(
+                "Job persist failed for %s: %s",
+                _safe_log_value(job.job_id),
+                _safe_log_value(exc),
+            )
 
     # If we are in an async loop, offload serialization and I/O to a thread
     try:
@@ -1433,8 +1677,8 @@ async def _queue_transcript_action_job(
     except Exception as exc:
         logger.info(
             "Cloud Tasks unavailable for %s, using local background task: %s",
-            job_id,
-            exc,
+            _safe_log_value(job_id),
+            _safe_log_value(exc),
         )
         asyncio.create_task(
             _run_video_job(
@@ -1500,16 +1744,102 @@ async def start_video_processing(request: VideoProcessJobRequest):
         status=JobStatus.pending,
         progress=0.0,
         video_url=request.video_url,
+        transcript=request.transcript,
     )
     _persist_video_job(job)
 
-    asyncio.create_task(_run_video_job(job_id, request))
+    asyncio.create_task(
+        _run_video_job(job_id, request, transcript_text=request.transcript)
+    )
 
     return ApiResponse.success(
         VideoProcessJobResponse(
             job_id=job_id, video_url=request.video_url, status=JobStatus.pending
         ).model_dump()
     )
+
+
+def _usable_job_transcript(*values: str | None) -> str | None:
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        trimmed = value.strip()
+        if len(trimmed) >= 40:
+            return trimmed[:24_000]
+    return None
+
+
+def _job_pipeline(options: dict[str, Any] | None) -> str:
+    if not isinstance(options, dict):
+        return ""
+    raw = options.get("pipeline")
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+async def _run_video_to_software_job(
+    job: VideoJobStatusResponse,
+    request: VideoProcessJobRequest,
+    transcript_text: str | None,
+) -> None:
+    """Run video-to-software in a background job and persist a real live_url only."""
+    job.status = JobStatus.transcribing
+    job.progress = 30.0
+    if transcript_text:
+        job.transcript = transcript_text
+    _persist_video_job(job)
+
+    options = request.options or {}
+    project_type = (
+        options.get("project_type")
+        if isinstance(options.get("project_type"), str)
+        else "web"
+    )
+    deployment_target = (
+        options.get("deployment_target")
+        if isinstance(options.get("deployment_target"), str)
+        else "vercel"
+    )
+    features = (
+        options.get("features")
+        if isinstance(options.get("features"), list)
+        else None
+    )
+
+    service = get_video_processing_service()
+    result = await service.process_video_to_software(
+        request.video_url,
+        project_type,
+        deployment_target,
+        features,
+        transcript=transcript_text,
+    )
+    live_url = result.get("live_url")
+    live_url = live_url.strip() if isinstance(live_url, str) else ""
+    deployment = result.get("deployment")
+    if not isinstance(deployment, dict):
+        deployment = {}
+    if live_url:
+        deployment = {**deployment, "live_url": live_url, "url": live_url}
+
+    job.progress = 100.0
+    job.metadata = {
+        "success": result.get("status") == "success",
+        "live_url": live_url or None,
+        "outputs": {"deployment": {"live_url": live_url or None, "url": live_url or None}},
+        "deployment": deployment,
+        "github_repo": result.get("github_repo"),
+        "build_status": result.get("build_status"),
+    }
+    if result.get("status") == "success" and live_url:
+        job.status = JobStatus.complete
+    else:
+        job.status = JobStatus.failed
+        job.error = (
+            "video-to-software job returned no verified live URL"
+            if result.get("status") == "success"
+            else str(result.get("error") or "video-to-software job failed")
+        )
+    _persist_video_job(job)
 
 
 async def _run_video_job(
@@ -1519,15 +1849,20 @@ async def _run_video_job(
     prefetched_metadata: RobustYouTubeMetadata | dict[str, Any] | None = None,
     transcript_text: str | None = None,
 ):
-    """Background coroutine that drives the transcript-action workflow."""
+    """Background coroutine that drives transcript-action or video-to-software."""
     job = _load_video_job(job_id)
     if job is None:
-        logger.error("Video job %s missing at run time", job_id)
+        logger.error("Video job %s missing at run time", _safe_log_value(job_id))
         return
     try:
         job.status = JobStatus.downloading
         job.progress = 10.0
         _persist_video_job(job)
+
+        provided = _usable_job_transcript(transcript_text, request.transcript)
+        if _job_pipeline(request.options) == "video-to-software":
+            await _run_video_to_software_job(job, request, provided)
+            return
 
         workflow = TranscriptActionWorkflow()
         job.status = JobStatus.transcribing
@@ -1537,7 +1872,7 @@ async def _run_video_job(
         result = await workflow.run(
             video_url=request.video_url,
             language=request.language or "en",
-            transcript_text=transcript_text,
+            transcript_text=provided or transcript_text,
             video_options=request.options,
             prefetched_metadata=prefetched_metadata,
         )
@@ -1568,7 +1903,9 @@ async def _run_video_job(
         job.status = JobStatus.failed
         job.error = str(exc)
         _persist_video_job(job)
-        logger.error(f"Video job {job_id} failed: {exc}")
+        logger.error(
+            "Video job %s failed: %s", _safe_log_value(job_id), _safe_log_value(exc)
+        )
 
 
 @router.post(
@@ -1624,9 +1961,24 @@ async def process_video_task(
             video_url=video_url,
             language=metadata.get("language", "en"),
             options=metadata.get("video_options") or {},
+            transcript=_usable_job_transcript(
+                metadata.get("transcript")
+                if isinstance(metadata.get("transcript"), str)
+                else None,
+                payload.get("transcript")
+                if isinstance(payload.get("transcript"), str)
+                else None,
+            ),
         ),
         prefetched_metadata=metadata.get("prefetched_metadata"),
-        transcript_text=metadata.get("transcript_text"),
+        transcript_text=_usable_job_transcript(
+            metadata.get("transcript_text")
+            if isinstance(metadata.get("transcript_text"), str)
+            else None,
+            payload.get("transcript")
+            if isinstance(payload.get("transcript"), str)
+            else None,
+        ),
     )
     return {
         "success": job.status == JobStatus.complete,
@@ -1676,6 +2028,9 @@ async def list_pipeline_audit_runs(limit: int = 20):
 # ============================================================
 
 
+_VIDEO_PACK_STORE = VideoPackStore(Path("storage/video_packs"))
+
+
 @router.post(
     "/video/pack",
     response_model=ApiResponse,
@@ -1683,53 +2038,37 @@ async def list_pipeline_audit_runs(limit: int = 20):
     tags=["Jobs"],
 )
 async def get_or_create_videopack(request: VideoPackRequest):
-    """Retrieve an existing VideoPack or create one from a job/URL."""
-    # This implementation is a shell that leverages existing fixtures and
-    # job outputs to satisfy the Phase 4 MVP contract.
+    """Get or create the hashed VideoPack v0 identity record for a video ID."""
     video_id = request.video_id
     if not video_id and request.video_url:
-        import re
-        match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", request.video_url)
-        video_id = match.group(1) if match else None
+        try:
+            video_id = extract_video_id(request.video_url)
+        except ValueError:
+            video_id = None
 
     if not video_id and request.job_id:
         job = _load_video_job(request.job_id)
         if job and job.metadata:
-            video_id = job.metadata.get("video_id")
+            raw_id = job.metadata.get("video_id")
+            video_id = raw_id if isinstance(raw_id, str) else None
 
     if not video_id:
         raise HTTPException(status_code=400, detail="Could not determine video_id")
 
-    # In a real implementation, this would look up in a VideoPackStore.
-    # For MVP, we return a synthesized pack from the job or a 404.
     try:
-        from youtube_extension.videopack.schema import (
-            Provenance,
-            Transcript,
-            VideoPackV0,
-        )
-
-        # Check if we have a job with results
-        job = None
-        if request.job_id:
-            job = _load_video_job(request.job_id)
-
-        pack = VideoPackV0(
+        pack = emit_video_pack(
             video_id=video_id,
-            transcript=Transcript(
-                full_text=(
-                    job.transcript
-                    if job and job.transcript
-                    else "Transcript extraction pending or unavailable"
-                )
-            ),
-            provenance=Provenance(
-                created_at=datetime.now(timezone.utc), tool_versions={"api": "v1"}
-            ),
+            video_url=request.video_url,
+            store=_VIDEO_PACK_STORE,
         )
-        return ApiResponse.success(pack.model_dump())
+        return ApiResponse.success(pack.model_dump(mode="json"))
+    except ValueError as exc:
+        logger.error(
+            "VideoPack identity rejected: %s", _safe_log_value(exc), exc_info=True
+        )
+        raise HTTPException(status_code=400, detail="Could not determine video_id") from exc
     except Exception as e:
-        logger.error(f"Failed to create VideoPack: {e}", exc_info=True)
+        logger.error("Failed to create VideoPack: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1778,7 +2117,9 @@ async def generate_blueprint(request: BlueprintRequest):
         )
         return ApiResponse.success(blueprint)
     except Exception as e:
-        logger.error(f"Failed to generate blueprint: {e}", exc_info=True)
+        logger.error(
+            "Failed to generate blueprint: %s", _safe_log_value(e), exc_info=True
+        )
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1804,7 +2145,7 @@ async def generate_project_code(request: GenerateCodeRequest):
         )
         return ApiResponse.success(result)
     except Exception as e:
-        logger.error(f"Code generation failed: {e}", exc_info=True)
+        logger.error("Code generation failed: %s", _safe_log_value(e), exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -1855,6 +2196,10 @@ async def extract_events(request: EventExtractRequest):
     _CHUNK_SIZE = 24_000
     _CHUNK_OVERLAP = 500
     _MAX_EVENTS = 50
+    # Chunks are extracted in bounded windows rather than one at a time.  Each
+    # chunk is an independent, *billed* Gemini round-trip, so the window is kept
+    # small and the _MAX_EVENTS budget is re-checked between windows.
+    _EXTRACT_CONCURRENCY = 4
 
     def _build_chunks(text: str) -> list[str]:
         if len(text) <= _CHUNK_SIZE:
@@ -1924,20 +2269,37 @@ async def extract_events(request: EventExtractRequest):
                         )
                     )
         except Exception as exc:
-            logger.warning(f"Direct Gemini extraction unavailable for chunk: {exc}")
+            logger.warning(
+                "Direct Gemini extraction unavailable for chunk: %s",
+                _safe_log_value(exc),
+            )
         return chunk_events
 
     try:
-        for chunk in transcript_chunks:
+        for window_start in range(0, len(transcript_chunks), _EXTRACT_CONCURRENCY):
             if len(events) >= _MAX_EVENTS:
                 break
-            chunk_events = await _extract_chunk(chunk)
-            for ev in chunk_events:
-                if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
-                    seen_titles.add(ev.title)
-                    events.append(ev)
+            window = transcript_chunks[
+                window_start : window_start + _EXTRACT_CONCURRENCY
+            ]
+            # asyncio.gather preserves input order, so results are merged in the
+            # same chunk order the serial loop used -- dedup and the _MAX_EVENTS
+            # cut-off therefore select exactly the same events.  _extract_chunk
+            # isolates every ordinary Exception (it catches Exception and returns
+            # []), so return_exceptions=False cannot abort a sibling chunk on a
+            # normal provider failure.  A BaseException such as CancelledError can
+            # still propagate -- that is intended: request cancellation should tear
+            # the whole fan-out down rather than be swallowed into a result value.
+            window_results = await asyncio.gather(
+                *(_extract_chunk(chunk) for chunk in window)
+            )
+            for chunk_events in window_results:
+                for ev in chunk_events:
+                    if ev.title not in seen_titles and len(events) < _MAX_EVENTS:
+                        seen_titles.add(ev.title)
+                        events.append(ev)
     except Exception as exc:
-        logger.warning(f"Chunked extraction failed: {exc}")
+        logger.warning("Chunked extraction failed: %s", _safe_log_value(exc))
 
     # Real-AI fallback: if no events yet, try the Vercel AI Gateway (uses
     # VERCEL_API_KEY, routes to Gemini/GPT/Claude). This keeps the AI path
@@ -1963,7 +2325,9 @@ async def extract_events(request: EventExtractRequest):
                         "Extracted %d events via Vercel AI Gateway", len(gw_events)
                     )
         except Exception as gw_exc:  # noqa: BLE001
-            logger.warning(f"Vercel AI Gateway extraction failed: {gw_exc}")
+            logger.warning(
+                "Vercel AI Gateway extraction failed: %s", _safe_log_value(gw_exc)
+            )
 
     if not events:
         logger.warning("Falling back to heuristic extraction")
@@ -2102,7 +2466,11 @@ async def _run_agent(execution: AgentExecution, events: list[dict[str, Any]]):
     except Exception as exc:
         execution.status = AgentStatus.failed
         execution.error = str(exc)
-        logger.error(f"Agent {execution.agent_id} failed: {exc}")
+        logger.error(
+            "Agent %s failed: %s",
+            _safe_log_value(execution.agent_id),
+            _safe_log_value(exc),
+        )
 
 
 @router.get(
