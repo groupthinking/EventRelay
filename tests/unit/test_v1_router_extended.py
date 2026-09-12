@@ -1857,6 +1857,53 @@ class TestRunVideoJobCoroutine:
         finally:
             _video_jobs.pop(job_id, None)
 
+    async def test_run_video_job_vts_pipeline_persists_live_url(self):
+        """pipeline=video-to-software + ready transcript persists a real live_url."""
+        from youtube_extension.backend.api.v1.models import VideoProcessJobRequest
+        from youtube_extension.backend.api.v1.router import _run_video_job
+
+        job_id = "job_vts_live"
+        ready = (
+            "Studio Video Pack for auJzb1D-fag already has a usable "
+            "transcript ready for deploy."
+        )
+        _video_jobs[job_id] = VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            progress=0.0,
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+        )
+        mock_svc = MagicMock()
+        mock_svc.process_video_to_software = AsyncMock(
+            return_value={
+                "status": "success",
+                "live_url": "https://xy.vercel.app",
+                "github_repo": "https://github.com/uvai-generated/xy",
+                "build_status": "completed",
+                "deployment": {"live_url": "https://xy.vercel.app"},
+            }
+        )
+        req = VideoProcessJobRequest(
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+            transcript=ready,
+            options={"pipeline": "video-to-software"},
+        )
+        try:
+            with patch(
+                "youtube_extension.backend.api.v1.router.get_video_processing_service",
+                return_value=mock_svc,
+            ):
+                await _run_video_job(job_id, req, transcript_text=ready)
+
+            job = _video_jobs[job_id]
+            assert job.status == JobStatus.complete
+            assert job.metadata["live_url"] == "https://xy.vercel.app"
+            assert job.metadata["outputs"]["deployment"]["live_url"] == "https://xy.vercel.app"
+            mock_svc.process_video_to_software.assert_awaited()
+            assert mock_svc.process_video_to_software.await_args.kwargs["transcript"] == ready
+        finally:
+            _video_jobs.pop(job_id, None)
+
 
 # ===========================================================================
 # Cloud Tasks Full Execution Path

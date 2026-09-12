@@ -831,6 +831,7 @@ async def video_to_software_v1(
             request.project_type,
             target_info["resolved"],
             request.features,
+            transcript=request.transcript,
         )
 
         result.setdefault("deployment", {})
@@ -1681,16 +1682,102 @@ async def start_video_processing(request: VideoProcessJobRequest):
         status=JobStatus.pending,
         progress=0.0,
         video_url=request.video_url,
+        transcript=request.transcript,
     )
     _persist_video_job(job)
 
-    asyncio.create_task(_run_video_job(job_id, request))
+    asyncio.create_task(
+        _run_video_job(job_id, request, transcript_text=request.transcript)
+    )
 
     return ApiResponse.success(
         VideoProcessJobResponse(
             job_id=job_id, video_url=request.video_url, status=JobStatus.pending
         ).model_dump()
     )
+
+
+def _usable_job_transcript(*values: str | None) -> str | None:
+    for value in values:
+        if not isinstance(value, str):
+            continue
+        trimmed = value.strip()
+        if len(trimmed) >= 40:
+            return trimmed[:24_000]
+    return None
+
+
+def _job_pipeline(options: dict[str, Any] | None) -> str:
+    if not isinstance(options, dict):
+        return ""
+    raw = options.get("pipeline")
+    return raw.strip() if isinstance(raw, str) else ""
+
+
+async def _run_video_to_software_job(
+    job: VideoJobStatusResponse,
+    request: VideoProcessJobRequest,
+    transcript_text: str | None,
+) -> None:
+    """Run video-to-software in a background job and persist a real live_url only."""
+    job.status = JobStatus.transcribing
+    job.progress = 30.0
+    if transcript_text:
+        job.transcript = transcript_text
+    _persist_video_job(job)
+
+    options = request.options or {}
+    project_type = (
+        options.get("project_type")
+        if isinstance(options.get("project_type"), str)
+        else "web"
+    )
+    deployment_target = (
+        options.get("deployment_target")
+        if isinstance(options.get("deployment_target"), str)
+        else "vercel"
+    )
+    features = (
+        options.get("features")
+        if isinstance(options.get("features"), list)
+        else None
+    )
+
+    service = get_video_processing_service()
+    result = await service.process_video_to_software(
+        request.video_url,
+        project_type,
+        deployment_target,
+        features,
+        transcript=transcript_text,
+    )
+    live_url = result.get("live_url")
+    live_url = live_url.strip() if isinstance(live_url, str) else ""
+    deployment = result.get("deployment")
+    if not isinstance(deployment, dict):
+        deployment = {}
+    if live_url:
+        deployment = {**deployment, "live_url": live_url, "url": live_url}
+
+    job.progress = 100.0
+    job.metadata = {
+        "success": result.get("status") == "success",
+        "live_url": live_url or None,
+        "outputs": {"deployment": {"live_url": live_url or None, "url": live_url or None}},
+        "deployment": deployment,
+        "github_repo": result.get("github_repo"),
+        "build_status": result.get("build_status"),
+    }
+    if result.get("status") == "success" and live_url:
+        job.status = JobStatus.complete
+    else:
+        job.status = JobStatus.failed
+        job.error = (
+            "video-to-software job returned no verified live URL"
+            if result.get("status") == "success"
+            else str(result.get("error") or "video-to-software job failed")
+        )
+    _persist_video_job(job)
 
 
 async def _run_video_job(
@@ -1700,7 +1787,7 @@ async def _run_video_job(
     prefetched_metadata: RobustYouTubeMetadata | dict[str, Any] | None = None,
     transcript_text: str | None = None,
 ):
-    """Background coroutine that drives the transcript-action workflow."""
+    """Background coroutine that drives transcript-action or video-to-software."""
     job = _load_video_job(job_id)
     if job is None:
         logger.error("Video job %s missing at run time", _safe_log_value(job_id))
@@ -1710,6 +1797,11 @@ async def _run_video_job(
         job.progress = 10.0
         _persist_video_job(job)
 
+        provided = _usable_job_transcript(transcript_text, request.transcript)
+        if _job_pipeline(request.options) == "video-to-software":
+            await _run_video_to_software_job(job, request, provided)
+            return
+
         workflow = TranscriptActionWorkflow()
         job.status = JobStatus.transcribing
         job.progress = 30.0
@@ -1718,7 +1810,7 @@ async def _run_video_job(
         result = await workflow.run(
             video_url=request.video_url,
             language=request.language or "en",
-            transcript_text=transcript_text,
+            transcript_text=provided or transcript_text,
             video_options=request.options,
             prefetched_metadata=prefetched_metadata,
         )
@@ -1807,9 +1899,24 @@ async def process_video_task(
             video_url=video_url,
             language=metadata.get("language", "en"),
             options=metadata.get("video_options") or {},
+            transcript=_usable_job_transcript(
+                metadata.get("transcript")
+                if isinstance(metadata.get("transcript"), str)
+                else None,
+                payload.get("transcript")
+                if isinstance(payload.get("transcript"), str)
+                else None,
+            ),
         ),
         prefetched_metadata=metadata.get("prefetched_metadata"),
-        transcript_text=metadata.get("transcript_text"),
+        transcript_text=_usable_job_transcript(
+            metadata.get("transcript_text")
+            if isinstance(metadata.get("transcript_text"), str)
+            else None,
+            payload.get("transcript")
+            if isinstance(payload.get("transcript"), str)
+            else None,
+        ),
     )
     return {
         "success": job.status == JobStatus.complete,
