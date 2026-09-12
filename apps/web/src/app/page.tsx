@@ -7,6 +7,7 @@ import {
   WORKFLOW_PRO_PRODUCT_NAME,
   workflowProPriceLabel,
 } from '@/lib/billing/checkout-config';
+import { customBadge } from '@/flags';
 
 export const metadata: Metadata = {
   title: 'UVAI — Universal Video Action Intelligence',
@@ -30,7 +31,9 @@ const OFFERS = [
   },
 ] as const;
 
-export default function HomePage() {
+export default async function HomePage() {
+  const showCustomBadge = await customBadge();
+
   return (
     <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
       <Nav />
@@ -46,6 +49,11 @@ export default function HomePage() {
           <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.28em] text-teal-300/80">
             Universal Video Action Intelligence
           </p>
+          {showCustomBadge && (
+            <p className="mt-4 rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-semibold text-teal-200">
+              New: configurable with Vercel Flags
+            </p>
+          )}
           <h1 className="mt-8 max-w-3xl font-heading text-4xl font-black leading-tight tracking-tight md:text-6xl">
             Paste a YouTube URL. Open the Studio workbench.
           </h1>

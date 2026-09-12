@@ -50,6 +50,7 @@ jobs:
       github.repository == 'groupthinking/EventRelay' &&
       github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Dependabot metadata
         id: metadata
@@ -106,6 +107,7 @@ jobs:
   dependabot-auto-merge-merge:
     if: vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true' && github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/github-script@v9
         with:

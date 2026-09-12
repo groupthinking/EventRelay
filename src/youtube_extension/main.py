@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+import shutil
 from urllib.parse import urlparse
 
 import uvicorn
@@ -130,8 +131,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+    allow_headers=["Accept", "Accept-Language", "Authorization", "Content-Language", "Content-Type", "Origin", "X-API-Key", "X-Requested-With"],
 )
 
 # Rate limiting
@@ -211,7 +212,12 @@ def _auth_mode() -> str:
     # "fail_closed" would contradict actual request handling.
     if os.getenv("EVENTRELAY_API_KEY"):
         return "api_key"
-    return "fail_closed"
+    if any(
+        (os.getenv(name) or "").strip().lower() == "production"
+        for name in ("ENVIRONMENT", "VERCEL_ENV", "NODE_ENV")
+    ):
+        return "fail_closed"
+    return "open_dev"
 
 
 def _video_dep_status() -> dict[str, bool]:
@@ -223,6 +229,9 @@ def _video_dep_status() -> dict[str, bool]:
             status[name] = True
         except ImportError:
             status[name] = False
+    status["yt_dlp_executable"] = shutil.which("yt-dlp") is not None
+    status["ffmpeg"] = shutil.which("ffmpeg") is not None
+    status["ffprobe"] = shutil.which("ffprobe") is not None
     return status
 
 
@@ -237,6 +246,11 @@ async def health_check():
         # fail_closed → non-public routes 503 until EVENTRELAY_API_KEY or ALLOW_UNAUTHENTICATED=1
         "auth_mode": _auth_mode(),
         "video_deps": video_deps,
+        "yt_dlp_ready": video_deps["yt_dlp"],
+        "youtube_transcript_api_ready": video_deps["youtube_transcript_api"],
+        "yt_dlp_executable_ready": video_deps["yt_dlp_executable"],
+        "ffmpeg_ready": video_deps["ffmpeg"],
+        "ffprobe_ready": video_deps["ffprobe"],
         "video_path_ready": all(video_deps.values()),
     }
 

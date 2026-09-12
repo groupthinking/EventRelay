@@ -164,3 +164,42 @@ def test_hosted_action_refuses_direct_cloud_egress(monkeypatch) -> None:
     assert body["success"] is False
     assert body["metadata"]["caption_transport"] == "direct"
     assert body["transcript"]["source"] == "unavailable"
+
+
+def test_generic_proxy_url_valid(monkeypatch) -> None:
+    monkeypatch.delenv("WEBSHARE_PROXY_USERNAME", raising=False)
+    monkeypatch.delenv("WEBSHARE_PROXY_PASSWORD", raising=False)
+    monkeypatch.setenv("WEBSHARE_PROXY_URL", "http://proxy.example.com:8080")
+
+    proxy_config, transport = backend._caption_transport()
+
+    assert isinstance(proxy_config, backend.GenericProxyConfig)
+    assert transport == "rotating_residential_proxy"
+    assert proxy_config.http_url == "http://proxy.example.com:8080"
+    assert proxy_config.https_url == "http://proxy.example.com:8080"
+
+
+def test_generic_proxy_url_invalid_port(monkeypatch) -> None:
+    monkeypatch.delenv("WEBSHARE_PROXY_USERNAME", raising=False)
+    monkeypatch.delenv("WEBSHARE_PROXY_PASSWORD", raising=False)
+    monkeypatch.setenv("WEBSHARE_PROXY_URL", "http://host:invalid_port")
+
+    with pytest.raises(backend.CaptionTransportConfigurationError, match="Caption proxy URL is invalid"):
+        backend._caption_transport()
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "ftp://host:80",
+        "http:///path",
+        "http://host",
+    ],
+)
+def test_generic_proxy_url_invalid_scheme_host_or_port(url: str, monkeypatch) -> None:
+    monkeypatch.delenv("WEBSHARE_PROXY_USERNAME", raising=False)
+    monkeypatch.delenv("WEBSHARE_PROXY_PASSWORD", raising=False)
+    monkeypatch.setenv("WEBSHARE_PROXY_URL", url)
+
+    with pytest.raises(backend.CaptionTransportConfigurationError, match="Caption proxy URL must be an HTTP\\(S\\) URL with a host and port"):
+        backend._caption_transport()

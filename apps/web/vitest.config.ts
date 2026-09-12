@@ -29,6 +29,8 @@ export default defineConfig({
     // a key set it explicitly in their own setup, so a blank default is safe.
     env: {
       BACKEND_URL: '',
+      NEXT_PUBLIC_BACKEND_URL: '',
+      NEXT_PUBLIC_API_URL: '',
       BILLING_COOKIE_SECRET: 'test-billing-cookie-secret',
       AI_GATEWAY_API_KEY: '',
       VERCEL_AI_GATEWAY_API_KEY: '',

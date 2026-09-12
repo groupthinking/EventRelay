@@ -10,8 +10,9 @@ workflow; this README is the index.
 |----------|------|---------|---------|
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
-| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.88.7`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
 | Repo Assist | `repo-assist.md` / `.lock.yml` | manual (`workflow_dispatch`) | Read-only status reporter: checks `docs/AGENT_CAPABILITIES_CHECKLIST.md` and `docs/REPO_MAP.md` against the current tree and posts a single summary comment; never writes to branches, labels, or pull requests |
+| PR Iteration Loop | `pr-iteration-loop.md` / `.lock.yml` | issue opened; PR opened/ready; weekdays + weekly; push to `main` | Long-running verified loop that selects one failing/stale repository checkpoint, iterates on one canonical draft PR, records durable memory, and can publish a discussion digest with chart assets |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
@@ -176,8 +177,7 @@ A full audit of this directory was performed (see
 
 ## Agent-completion enforcement
 
-Removed. The `agent-completion/truth-gate` status and the `Agent completion
-enforcement` Check were retired because they were unsatisfiable: the gate scored a
+Removed. The retired `Agent completion enforcement` checks were unsatisfiable: the gate scored a
 pull request against an intent snapshot written only on `issues` events, so a pull
 request with a `Closes #<issue>` binding necessarily armed the gate and then
 failed it. It was red on ~100% of pull requests, including merged ones such as
