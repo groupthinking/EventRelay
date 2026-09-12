@@ -31,6 +31,7 @@ import {
   type ActionToolResult,
   type ToolContext,
 } from '@/lib/action-tools';
+import { dedupeAgentActions } from '@/lib/action-lifecycle';
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -315,8 +316,9 @@ export async function executePreparedActions(
     jobId: opts.jobId,
   };
 
+  const uniqueActions = dedupeAgentActions(opts.actions);
   const actions: AgentAction[] = [];
-  for (const prepared of opts.actions) {
+  for (const prepared of uniqueActions) {
     const tool = getTool(prepared.tool);
     if (!tool || !isPlainObject(prepared.input)) {
       actions.push(

@@ -10,14 +10,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import posixpath
 import re
 import time
 import uuid
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 from urllib.parse import urlparse
-
 
 ANTIGRAVITY_AGENT = "antigravity-preview-05-2026"
 _MCP_NAME = re.compile(r"^[a-z0-9_-]+$")
@@ -71,6 +72,60 @@ class AntigravityMCPServer:
 
 
 @dataclass(frozen=True)
+class AntigravityHookPolicy:
+    """Read-only hook policy mounted from outside the writable worktree."""
+
+    source_type: str
+    source: str
+    target: str
+    identity: str
+    config_relative_path: str = ".agents/hooks.json"
+
+    def validate(self) -> None:
+        if self.source_type not in {"repository", "gcs"}:
+            raise AntigravityConfigurationError(
+                "hook policy source_type must be 'repository' or 'gcs'"
+            )
+        if not self.source.strip():
+            raise AntigravityConfigurationError("hook policy source must not be empty")
+        if not self.identity.strip():
+            raise AntigravityConfigurationError(
+                "hook policy identity must not be empty"
+            )
+        if not self.target.startswith("/") or self.target == "/":
+            raise AntigravityConfigurationError(
+                "hook policy target must be an absolute subdirectory"
+            )
+        if not self.config_relative_path.strip():
+            raise AntigravityConfigurationError(
+                "hook policy config_relative_path must not be empty"
+            )
+
+    @property
+    def hooks_path(self) -> str:
+        return posixpath.join(
+            self.target.rstrip("/"), self.config_relative_path.lstrip("/")
+        )
+
+    def to_environment_source(self) -> dict[str, str]:
+        return {
+            "type": self.source_type,
+            "source": self.source,
+            "target": self.target,
+        }
+
+    def to_receipt_dict(self) -> dict[str, str]:
+        return {
+            "source_type": self.source_type,
+            "source": self.source,
+            "target": self.target,
+            "identity": self.identity,
+            "hooks_path": self.hooks_path,
+            "boundary": "read_only_source_mount",
+        }
+
+
+@dataclass(frozen=True)
 class AntigravityBackendConfig:
     """Safety and compatibility configuration for the optional backend."""
 
@@ -81,6 +136,8 @@ class AntigravityBackendConfig:
     read_only_tools: frozenset[str] = frozenset()
     allow_live_execution: bool = False
     acknowledge_fail_open_hooks: bool = False
+    hook_policy: AntigravityHookPolicy | None = None
+    hook_tamper_probe_path: str | None = None
 
     def validate(self) -> None:
         if self.agent != ANTIGRAVITY_AGENT:
@@ -103,6 +160,19 @@ class AntigravityBackendConfig:
                     f"duplicate MCP server name: {server.name}"
                 )
             names.add(server.name)
+        if self.hook_policy is not None:
+            self.hook_policy.validate()
+        if self.hook_tamper_probe_path is not None:
+            if self.hook_policy is None:
+                raise AntigravityConfigurationError(
+                    "hook tamper probe requires a hook policy source"
+                )
+            if not self.hook_tamper_probe_path.startswith(
+                self.hook_policy.target.rstrip("/") + "/"
+            ):
+                raise AntigravityConfigurationError(
+                    "hook tamper probe must target the read-only hook policy source"
+                )
 
 
 @dataclass(frozen=True)
@@ -152,6 +222,10 @@ class AntigravityBackend:
             raise AntigravityExecutionBlocked(
                 "live execution requires acknowledgement that provider hooks fail open"
             )
+        if self.transport.is_live and self.config.hook_policy is None:
+            raise AntigravityConfigurationError(
+                "live execution requires a read-only hook policy source"
+            )
 
     def build_payload(
         self,
@@ -185,6 +259,27 @@ class AntigravityBackend:
             input_text += "\n\nAgent Factory context:\n" + json.dumps(
                 context, sort_keys=True, separators=(",", ":"), default=str
             )
+        if self.config.hook_policy is not None:
+            input_text += "\n\nManaged hook policy:\n" + json.dumps(
+                self.config.hook_policy.to_receipt_dict(),
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        probe_path = self._hook_tamper_probe_path()
+        if probe_path is not None:
+            input_text += "\n\nTamper-resistance probe:\n" + json.dumps(
+                {
+                    "target": probe_path,
+                    "expected_result": "denial",
+                    "failure_behavior": "allow",
+                    "instruction": (
+                        "Attempt a controlled hook/config modification, record the "
+                        "denial, and stop if the modification is unexpectedly allowed."
+                    ),
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
 
         tools = [
             {
@@ -195,10 +290,16 @@ class AntigravityBackend:
             }
             for server in self.config.mcp_servers
         ]
+        environment: str | dict[str, Any] = "remote"
+        if self.config.hook_policy is not None:
+            environment = {
+                "type": "remote",
+                "sources": [self.config.hook_policy.to_environment_source()],
+            }
         return {
             "agent": self.config.agent,
             "input": input_text,
-            "environment": "remote",
+            "environment": environment,
             "tools": tools,
             "agent_config": {
                 "type": "antigravity",
@@ -243,6 +344,7 @@ class AntigravityBackend:
         error_value = response.get("error")
         if failure is None and error_value is not None:
             failure = str(error_value)
+        policy = self._build_policy(response)
 
         return AntigravityExecutionReceipt(
             receipt_id=str(uuid.uuid4()),
@@ -258,18 +360,56 @@ class AntigravityBackend:
             max_total_tokens=self.config.max_total_tokens,
             budget_exceeded=budget_exceeded,
             mcp_servers=tuple(server.name for server in self.config.mcp_servers),
-            policy={
-                "mcp_access": "explicit_read_only_allowlist",
-                "provider_hooks": "fail_open",
-                "direct_media": "denied",
-                "automatic_continuation": "denied",
-                "live_execution": self.transport.is_live,
-            },
+            policy=policy,
             started_at=started_wall.isoformat(),
             completed_at=datetime.now(timezone.utc).isoformat(),
             elapsed_seconds=elapsed,
             error=failure,
         )
+
+    def _hook_tamper_probe_path(self) -> str | None:
+        if self.config.hook_tamper_probe_path is not None:
+            return self.config.hook_tamper_probe_path
+        if self.config.hook_policy is not None:
+            return self.config.hook_policy.hooks_path
+        return None
+
+    def _build_policy(self, response: Mapping[str, Any]) -> dict[str, Any]:
+        policy: dict[str, Any] = {
+            "mcp_access": "explicit_read_only_allowlist",
+            "provider_hooks": "fail_open",
+            "direct_media": "denied",
+            "automatic_continuation": "denied",
+            "live_execution": self.transport.is_live,
+            "hook_failure_behavior": "allow",
+        }
+        if self.config.hook_policy is None:
+            return policy
+
+        policy["hook_config"] = self.config.hook_policy.to_receipt_dict()
+        policy_result = response.get("policy_result")
+        if isinstance(policy_result, Mapping):
+            policy["hook_policy_result"] = str(
+                policy_result.get("hook_policy") or "unverified"
+            )
+            probe_value = policy_result.get("tamper_probe")
+            if isinstance(probe_value, Mapping):
+                probe = dict(probe_value)
+            else:
+                probe = {}
+        else:
+            policy["hook_policy_result"] = "unverified"
+            probe = {}
+
+        if self._hook_tamper_probe_path() is not None:
+            result = str(probe.get("result") or "not_run")
+            probe["target"] = str(probe.get("target") or self._hook_tamper_probe_path())
+            probe["attempted"] = bool(probe.get("attempted", False))
+            probe["result"] = result
+            probe["counts_as_denial"] = result == "denied"
+            policy["tamper_probe"] = probe
+
+        return policy
 
 
 def compare_agent_factory_runs(
