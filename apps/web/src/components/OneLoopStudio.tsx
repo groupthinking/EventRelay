@@ -19,6 +19,7 @@ import {
   actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
+  safeProjectName,
 } from '@/lib/action-surface';
 import {
   pollStudioDeploy,
@@ -489,7 +490,9 @@ export default function OneLoopStudio() {
   };
 
   const exportPkg = () => {
-    const filename = studioExportFilename(selected?.title || 'uvai-project');
+    const filename = studioExportFilename(
+      safeProjectName(selected?.title || 'uvai-project'),
+    );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
