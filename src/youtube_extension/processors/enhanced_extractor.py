@@ -22,7 +22,6 @@ try:
     import yt_dlp
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
-    from youtube_transcript_api import get_transcript
     from youtube_transcript_api._errors import (
         CouldNotRetrieveTranscript,
         NoTranscriptFound,

@@ -16,6 +16,8 @@ import aiohttp
 from dotenv import load_dotenv
 from youtube_transcript_api import YouTubeTranscriptApi
 
+from youtube_extension.utils.proxy import get_transcript_proxy_config
+
 load_dotenv()
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,10 @@ class InteractiveMetadataExtractor:
             # event loop free.
             loop = asyncio.get_event_loop()
             transcript = await loop.run_in_executor(
-                None, lambda: YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+                None,
+                lambda: YouTubeTranscriptApi(
+                    proxy_config=get_transcript_proxy_config()
+                ).fetch(video_id).to_raw_data(),
             )
 
             for i, entry in enumerate(transcript):

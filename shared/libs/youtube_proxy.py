@@ -45,8 +45,18 @@ def _get_webshare_proxy_url() -> str | None:
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    parsed: urllib.parse.ParseResult | None = None
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname
+        parsed.port
+    except ValueError:
+        hostname = None
+    if (
+        parsed is None
+        or parsed.scheme not in ("http", "https", "socks5")
+        or not hostname
+    ):
         logger.warning(
             "WEBSHARE_PROXY_URL is set but malformed — falling back to direct connection"
         )
@@ -438,7 +448,9 @@ class YouTubeAPIProxy:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
             except Exception as e:
-                logger.debug(f"Direct transcript failed: {e}")
+                logger.debug(
+                    f"Direct transcript failed: {_redact_proxy_credentials(e)}"
+                )
 
             # Method 2: Alternative language codes
             # ``list_transcripts`` class method is now the instance ``list``;
@@ -464,7 +476,9 @@ class YouTubeAPIProxy:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
             except Exception as e:
-                logger.debug(f"Alternative transcript failed: {e}")
+                logger.debug(
+                    f"Alternative transcript failed: {_redact_proxy_credentials(e)}"
+                )
 
             # Method 3: yt-dlp fallback
             try:
@@ -489,7 +503,9 @@ class YouTubeAPIProxy:
                         # Convert to transcript format
                         return [{'text': 'Transcript extracted via yt-dlp', 'start': 0, 'duration': 1}]
             except Exception as e:
-                logger.debug(f"yt-dlp extraction failed: {e}")
+                logger.debug(
+                    f"yt-dlp extraction failed: {_redact_proxy_credentials(e)}"
+                )
 
             # CouldNotRetrieveTranscript(>=1.0) takes a bare video_id and builds
             # its own message/URL; passing a sentence corrupts the generated URL.
