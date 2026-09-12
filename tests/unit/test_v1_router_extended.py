@@ -14,6 +14,7 @@ import asyncio
 import logging
 import sys
 import threading
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -2755,29 +2756,41 @@ class TestListVideosOffloading:
 
     def test_event_loop_stays_responsive_while_scan_is_in_flight(self):
         release = threading.Event()
-        svc = self._service(on_count=lambda: release.wait(timeout=2.0))
+        finished_at: dict[str, float] = {}
+
+        def _block():
+            release.wait(timeout=5.0)
+            finished_at["scan"] = time.monotonic()
+
+        svc = self._service(on_count=_block)
 
         async def _run():
-            ticks = 0
             task = asyncio.create_task(
                 router_module.list_videos_v1(limit=10, offset=0, data_service=svc)
             )
+            tick_times: list[float] = []
             # While the scan is parked in a worker thread the loop must remain
             # free to schedule unrelated coroutines.
             for _ in range(20):
-                if task.done():
-                    break
-                ticks += 1
                 await asyncio.sleep(0.005)
+                tick_times.append(time.monotonic())
+                if len(tick_times) >= 3:
+                    break
             release.set()
-            return ticks, await task
+            return tick_times, await task
 
-        ticks, result = asyncio.run(_run())
+        tick_times, result = asyncio.run(_run())
 
-        assert result["total"] == 1  # anti-vacuity
-        assert ticks >= 3, (
-            f"event loop only advanced {ticks} time(s) while the scan was "
-            "running; the blocking work is starving the loop"
+        # Anti-vacuity: the endpoint still returned its real payload, and the
+        # blocking scan really ran to completion.
+        assert result["total"] == 1
+        assert "scan" in finished_at, "count_videos never completed"
+
+        scan_end = finished_at["scan"]
+        concurrent = [t for t in tick_times if t < scan_end]
+        assert len(concurrent) >= 3, (
+            "no loop ticks were observed while the scan was in flight; the scan is "
+            "running inline on the event loop"
         )
 
     def test_offset_beyond_total_skips_the_page_read(self):
