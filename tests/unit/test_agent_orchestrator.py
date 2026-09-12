@@ -13,6 +13,7 @@ from youtube_extension.services.agents.adapters.agent_orchestrator import (
 )
 from youtube_extension.services.agents.base_agent import BaseAgent
 from youtube_extension.services.agents.dto import AgentRequest, AgentResult
+from youtube_extension.services.shared_sql_state import normalize_shared_storage_url
 
 # ---------------------------------------------------------------------------
 # Helpers / fakes
@@ -595,6 +596,43 @@ class TestGetA2aLog:
         assert entry["sender"] == "sender_x"
         assert entry["recipient"] == "receiver_y"
         assert entry["content"] == {"hello": "world"}
+
+    async def test_persists_messages_across_orchestrator_instances(self, tmp_path):
+        database_url = f"sqlite:///{tmp_path / 'shared-a2a.db'}"
+        sender = AgentOrchestrator(database_url=database_url)
+        receiver = AgentOrchestrator(database_url=database_url)
+
+        await sender.send_a2a_message(
+            "sender_x",
+            "receiver_y",
+            {"hello": "world"},
+            conversation_id="shared-conv",
+        )
+
+        log = receiver.get_a2a_log(conversation_id="shared-conv")
+
+        assert len(log) == 1
+        assert log[0]["content"] == {"hello": "world"}
+
+
+def test_normalize_shared_storage_url_uses_psycopg_for_postgres() -> None:
+    postgres_url = "postgres" + "://user:pass@db.example.com/app"
+    psycopg2_url = "postgresql+psycopg2" + "://user:pass@db.example.com/app"
+    asyncpg_url = "postgresql+asyncpg" + "://user:pass@db.example.com/app"
+    expected = "postgresql+psycopg" + "://user:pass@db.example.com/app"
+
+    assert (
+        normalize_shared_storage_url(postgres_url)
+        == expected
+    )
+    assert (
+        normalize_shared_storage_url(psycopg2_url)
+        == expected
+    )
+    assert (
+        normalize_shared_storage_url(asyncpg_url)
+        == expected
+    )
 
 
 # ===========================================================================
