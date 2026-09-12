@@ -146,23 +146,197 @@ function asStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
 }
 
+function jsonParsePosition(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = /position\s+(\d+)/i.exec(message);
+  return match ? Number(match[1]) : null;
+}
+
+function isTruncatedJsonMessage(message: string): boolean {
+  return /unterminated string|unexpected end of json|after property value|after array element|expected ',' or '}'|expected ',' or '\]'/i.test(
+    message,
+  );
+}
+
+function formatUnparseableSpecError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const position = jsonParsePosition(error);
+  if (position !== null && isTruncatedJsonMessage(message)) {
+    return `Gemini 3.8 Flash returned unparseable spec JSON at position ${position} (truncated mid-string).`;
+  }
+  if (position !== null) {
+    return `Gemini 3.8 Flash returned unparseable spec JSON at position ${position}: ${message}`;
+  }
+  return `Gemini 3.8 Flash returned unparseable spec JSON: ${message}`;
+}
+
+type JsonContainer = '{' | '[';
+
+interface JsonScan {
+  inString: boolean;
+  escape: boolean;
+  stack: JsonContainer[];
+  expectingValue: boolean;
+}
+
+function scanJson(source: string): JsonScan {
+  let inString = false;
+  let escape = false;
+  const stack: JsonContainer[] = [];
+  let expectingValue = false;
+
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i];
+    if (ch === undefined) {
+      break;
+    }
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inString = false;
+        const inObject = stack[stack.length - 1] === '{';
+        if (!inObject || expectingValue) {
+          expectingValue = false;
+        }
+      }
+      continue;
+    }
+
+    if (ch === ' ' || ch === '\n' || ch === '\r' || ch === '\t') {
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      stack.push('{');
+      expectingValue = false;
+      continue;
+    }
+    if (ch === '[') {
+      stack.push('[');
+      expectingValue = true;
+      continue;
+    }
+    if (ch === '}' || ch === ']') {
+      stack.pop();
+      expectingValue = false;
+      continue;
+    }
+    if (ch === ':') {
+      expectingValue = true;
+      continue;
+    }
+    if (ch === ',') {
+      expectingValue = stack[stack.length - 1] === '[';
+      continue;
+    }
+    expectingValue = false;
+  }
+
+  return { inString, escape, stack, expectingValue };
+}
+
+function dropIncompleteTail(source: string): string {
+  let out = source.replace(/\s+$/u, '');
+  for (let i = 0; i < 8; i++) {
+    const before = out;
+    out = out.replace(/,\s*$/u, '');
+    out = out.replace(/:\s*$/u, '');
+    out = out.replace(/([{,])\s*"[^"\\]*(?:\\.[^"\\]*)*"\s*$/u, '$1');
+    out = out.replace(/,\s*$/u, '');
+    if (out === before) {
+      break;
+    }
+  }
+  return out;
+}
+
+function closeContainers(stack: JsonContainer[]): string {
+  let suffix = '';
+  for (let i = stack.length - 1; i >= 0; i--) {
+    suffix += stack[i] === '{' ? '}' : ']';
+  }
+  return suffix;
+}
+
+/**
+ * Close a Gemini-truncated JSON object without inventing field values.
+ * Keeps the emitted prefix of a cut string; drops keys that never received a value.
+ */
+function repairTruncatedJson(source: string): string {
+  const start = source.indexOf('{');
+  if (start === -1) {
+    return source;
+  }
+  let out = source.slice(start);
+  const state = scanJson(out);
+  if (state.escape) {
+    out = out.slice(0, -1);
+  }
+  out = out.replace(/\\u[0-9a-fA-F]{0,3}$/u, '').replace(/\\$/u, '');
+  if (state.inString) {
+    out += '"';
+    const afterClose = scanJson(out);
+    const closedAKey = afterClose.stack[afterClose.stack.length - 1] === '{' && !afterClose.expectingValue;
+    if (closedAKey) {
+      out = dropIncompleteTail(out);
+    }
+  }
+  out = dropIncompleteTail(out);
+  return out + closeContainers(scanJson(out).stack);
+}
+
+function parseJsonValue(text: string): unknown {
+  return JSON.parse(text);
+}
+
 function parseSpecJson(raw: string): ExtractedVideoPackSpec {
   const cleaned = stripJsonCodeFence(raw);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    const start = cleaned.indexOf('{');
-    const end = cleaned.lastIndexOf('}');
-    if (start === -1 || end <= start) {
-      throw new VideoPackExtractError('Gemini 3.8 Flash returned unparseable spec JSON.');
+  let parsed: unknown | undefined;
+  let firstError: unknown;
+
+  const attempts: Array<() => unknown> = [
+    () => parseJsonValue(cleaned),
+    () => {
+      const start = cleaned.indexOf('{');
+      const end = cleaned.lastIndexOf('}');
+      if (start === -1 || end <= start) {
+        throw firstError instanceof Error ? firstError : new SyntaxError('No JSON object span');
+      }
+      return parseJsonValue(cleaned.slice(start, end + 1));
+    },
+    () => parseJsonValue(repairTruncatedJson(cleaned)),
+  ];
+
+  for (const attempt of attempts) {
+    try {
+      parsed = attempt();
+      break;
+    } catch (error) {
+      if (firstError === undefined) {
+        firstError = error;
+      }
     }
-    parsed = JSON.parse(cleaned.slice(start, end + 1));
+  }
+
+  if (parsed === undefined) {
+    throw new VideoPackExtractError(formatUnparseableSpecError(firstError));
   }
 
   const root = asRecord(parsed);
   if (!root) {
-    throw new VideoPackExtractError('Gemini 3.8 Flash returned unparseable spec JSON.');
+    throw new VideoPackExtractError(
+      formatUnparseableSpecError(firstError ?? new SyntaxError('Spec JSON root was not an object')),
+    );
   }
 
   const transcript = asRecord(root.transcript) ?? {};
@@ -331,8 +505,7 @@ export async function extractVideoPackSpec(
     spec = parseSpecJson(result.text);
   } catch (error) {
     if (error instanceof VideoPackExtractError) throw error;
-    const message = error instanceof Error ? error.message : String(error);
-    throw new VideoPackExtractError(`Gemini 3.8 Flash returned unparseable spec JSON: ${message}`);
+    throw new VideoPackExtractError(formatUnparseableSpecError(error));
   }
 
   if (isIdentityOnlySpec(spec, input.videoId)) {

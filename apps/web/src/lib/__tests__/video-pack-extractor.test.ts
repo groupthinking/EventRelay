@@ -11,6 +11,48 @@ import {
 const CANON = 'auJzb1D-fag';
 const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
 
+/** Live Eggs GET/pack failure class — Gemini cut mid-string around position 8050. */
+const EGGS_ID = 'vuLPccrooHU';
+const EGGS_URL = `https://www.youtube.com/watch?v=${EGGS_ID}`;
+const EGGS_SPOKEN =
+  'Eggs tutorial: function bake() { return omelette; } crack the shell then whisk. ';
+
+function jsonParseError(raw: string): string {
+  try {
+    JSON.parse(raw);
+    throw new Error('expected JSON.parse to fail');
+  } catch (error) {
+    if (error instanceof Error && error.message === 'expected JSON.parse to fail') {
+      throw error;
+    }
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+function jsonParsePosition(message: string): number | null {
+  const match = /position\s+(\d+)/i.exec(message);
+  return match ? Number(match[1]) : null;
+}
+
+/**
+ * Build the production failure class: unterminated string at ~8050 where the
+ * last `}` lives inside the cut string, so first-{ to last-} salvage also fails.
+ */
+function buildMidStringTruncationAt(cutAt = 8050): {
+  truncated: string;
+  spokenPrefix: string;
+  parseError: string;
+} {
+  const prefix = '{"transcript":{"language":"en","full_text":"';
+  let spoken = EGGS_SPOKEN;
+  while (prefix.length + spoken.length < cutAt + 400) {
+    spoken += EGGS_SPOKEN;
+  }
+  const truncated = (prefix + spoken).slice(0, cutAt);
+  const spokenPrefix = spoken.slice(0, cutAt - prefix.length);
+  return { truncated, spokenPrefix, parseError: jsonParseError(truncated) };
+}
+
 const SPEC_JSON = {
   transcript: {
     language: 'en',
@@ -302,6 +344,92 @@ describe('extractVideoPackSpec', () => {
     expect(spec.architecture?.summary).toBe('On-screen pipeline');
     expect(spec.artifacts).toEqual([]);
     expect(spec.stack.tools).toEqual([]);
+  });
+
+  it('salvages Gemini JSON truncated mid-string at position ~8050 (Eggs / vuLPccrooHU class)', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const { truncated, spokenPrefix, parseError } = buildMidStringTruncationAt(8050);
+
+    expect(truncated).toHaveLength(8050);
+    expect(parseError).toMatch(/Unterminated string in JSON at position 8050/i);
+    expect(jsonParsePosition(parseError)).toBe(8050);
+    const lastBrace = truncated.lastIndexOf('}');
+    expect(lastBrace).toBeGreaterThan(0);
+    expect(jsonParseError(truncated.slice(truncated.indexOf('{'), lastBrace + 1))).toMatch(
+      /Unterminated string in JSON/i,
+    );
+
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({ text: truncated }));
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: EGGS_URL, videoId: EGGS_ID },
+      { generateText },
+    );
+
+    expect(spec.transcript.language).toBe('en');
+    expect(spec.transcript.full_text).toBe(spokenPrefix);
+    expect(spec.transcript.full_text.startsWith('Eggs tutorial:')).toBe(true);
+    expect(spec.transcript.full_text.endsWith(spokenPrefix.slice(-16))).toBe(true);
+    expect(spec.concepts).toEqual([]);
+    expect(spec.requirements).toEqual([]);
+    expect(spec.stack.tools).toEqual([]);
+    expect(JSON.stringify(spec)).not.toMatch(/shopify/i);
+  });
+
+  it('keeps complete fields before a mid-string cut and does not invent later pack content', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const completePrefix = [
+      '{"transcript":{"language":"en","full_text":"Eggs spoken line about cracking a shell.",',
+      '"segments":[{"idx":0,"start_s":0,"end_s":4,"text":"Eggs spoken line about cracking a shell."}]},',
+      '"keyframes":[{"t_s":2,"desc":"Eggs on a counter"}],',
+      '"concepts":["eggs"],',
+      '"requirements":[],',
+      '"code_snippets":[{"path_hint":"src/bake.ts","lang":"ts","content":"',
+    ].join('');
+    const snippet = `${EGGS_SPOKEN.repeat(80)}later-invented-should-not-appear`;
+    const truncated = `${completePrefix}${snippet}`.slice(0, completePrefix.length + 1200);
+
+    expect(jsonParseError(truncated)).toMatch(/Unterminated string in JSON/i);
+
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: `\`\`\`json\n${truncated}`,
+    }));
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: EGGS_URL, videoId: EGGS_ID },
+      { generateText },
+    );
+
+    expect(spec.transcript.full_text).toBe('Eggs spoken line about cracking a shell.');
+    expect(spec.concepts).toEqual(['eggs']);
+    expect(spec.keyframes[0]?.desc).toBe('Eggs on a counter');
+    expect(spec.code_snippets[0]?.content.startsWith('Eggs tutorial:')).toBe(true);
+    expect(spec.code_snippets[0]?.content).not.toContain('later-invented-should-not-appear');
+    expect(spec.stack.tools).toEqual([]);
+    expect(spec.artifacts).toEqual([]);
+  });
+
+  it('fails closed with a position-bearing error when truncated JSON is not a spec object', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const garbage = `"not-a-spec-object ${'Eggs tutorial without braces. '.repeat(20)}`.slice(0, 200);
+    const parseError = jsonParseError(garbage);
+    expect(parseError).toMatch(/Unterminated string in JSON at position/i);
+
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({ text: garbage }));
+    await expect(
+      extractVideoPackSpec({ sourceUrl: EGGS_URL, videoId: EGGS_ID }, { generateText }),
+    ).rejects.toThrow(/unparseable spec JSON at position \d+/i);
+    await expect(
+      extractVideoPackSpec({ sourceUrl: EGGS_URL, videoId: EGGS_ID }, { generateText }),
+    ).rejects.toThrow(/truncated mid-string/i);
+  });
+
+  it('fails closed when a repaired payload is still identity-only cite text', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const truncated = `{"transcript":{"language":null,"full_text":"cite:youtube:${EGGS_ID}","segments":[]},"concepts":[`;
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({ text: truncated }));
+
+    await expect(
+      extractVideoPackSpec({ sourceUrl: EGGS_URL, videoId: EGGS_ID }, { generateText }),
+    ).rejects.toThrow(/no extracted spec content/i);
   });
 });
 
