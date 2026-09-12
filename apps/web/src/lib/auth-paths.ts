@@ -39,6 +39,9 @@ const PUBLIC_API_EXACT = new Set([
   // Exact paths so /api/video, /api/video/generate, and a packs listing stay gated.
   '/api/video/pack',
   '/api/v1/video/pack',
+  // Deterministic sandbox emit from a stored pack (no model work).
+  '/api/video/sandbox',
+  '/api/v1/video/sandbox',
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
@@ -146,7 +149,12 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
 };
 
 /** Identity hash only — not model work. Keep /api/video siblings on the AI budget. */
-const IDENTITY_PACK_PATHS = new Set(['/api/video/pack', '/api/v1/video/pack']);
+const IDENTITY_PACK_PATHS = new Set([
+  '/api/video/pack',
+  '/api/v1/video/pack',
+  '/api/video/sandbox',
+  '/api/v1/video/sandbox',
+]);
 
 /**
  * Whether a request should be metered against the AI budget rather than the

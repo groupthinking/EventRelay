@@ -17,7 +17,7 @@ import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
 import {
   actionsFromStudioRun,
-  buildScaffoldPackage,
+  buildStudioShipPackage,
   downloadScaffoldPackage,
   safeProjectName,
 } from '@/lib/action-surface';
@@ -556,16 +556,25 @@ export default function OneLoopStudio({
       return;
     }
     try {
-      const pkg = buildScaffoldPackage({
+      const pkg = buildStudioShipPackage({
         projectName: selected?.title || 'uvai-project',
         actions,
         projectScaffold: selected?.insights?.project_scaffold,
         linkedSop: linkedSop || undefined,
-        packFormation: {
-          architecture: packFormation.architecture,
-          artifacts: packFormation.artifacts,
-          tools: packFormation.tools,
-        },
+        videoPack: selected?.videoPack
+          ? {
+              videoId: selected.videoPack.videoId,
+              sourceUrl: selected.videoPack.sourceUrl,
+              sourceHash: selected.videoPack.sourceHash,
+              packId: selected.videoPack.packId,
+              visual: selected.videoPack.pack,
+              requirements: selected.videoPack.pack.requirements,
+            }
+          : null,
+        transcript: selected?.transcript
+          ? { full_text: selected.transcript }
+          : selected?.videoPack?.pack.transcript,
+        sopSteps: linkedSop?.steps,
       });
       downloadScaffoldPackage(pkg);
       const kind =
