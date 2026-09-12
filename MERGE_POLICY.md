@@ -123,6 +123,23 @@ weakening introduced by the rewrite that set out to make this gate precise.
 > above. Selecting the capitalised one requires a check that never passes —
 > precisely the trap the confirmation rule below exists to catch.
 
+> **`PR Governance` / `Canonical issue and evidence` (#1436).** Neither name
+> appears in the required list above, and that is deliberate, not an
+> omission. `pr-governance.yml` was the sole source of both check-run names,
+> and on its escape paths (draft PRs, Dependabot) only its own custom
+> `PR Governance` check reported the honest `neutral`; the job-level
+> `Canonical issue and evidence` check still reported `success`, because the
+> escape never called `core.setFailed`. Requiring the descriptive-sounding
+> `Canonical issue and evidence` name alone would have made every draft and
+> every Dependabot PR read as "contract satisfied" instead of "not
+> evaluated" — the exact trap the confirmation rule below exists to catch,
+> and worse here because nothing in the picker hints which of the two names
+> carries the real signal. The workflow was retired outright (#1665) rather
+> than fixed, so the trap no longer exists to fall into. If a canonical-issue
+> gate is reintroduced, whichever check carries the three-state signal must
+> be the one required, and that must be spelled out here before it is added
+> to branch protection — not discovered afterward on a green draft PR.
+
 **Conditionally required — never require these unconditionally:**
 
 - `Generate and Upload Coverage` — does not run on documentation-only changes.
