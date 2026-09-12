@@ -231,6 +231,22 @@ describe('studio-pipeline-status', () => {
     );
   });
 
+  it('does not claim a transcript exists when a completed run only has pack identity', () => {
+    const emptyNoTranscript = studioEventsEmptyMessage({
+      busy: false,
+      hasCompletedRun: true,
+      eventCount: 0,
+      hasArchitecture: false,
+      artifactCount: 0,
+      toolCount: 0,
+      hasTranscript: false,
+    });
+
+    expect(emptyNoTranscript.toLowerCase()).toMatch(/no extracted events/);
+    expect(emptyNoTranscript.toLowerCase()).not.toContain('transcript');
+    expect(emptyNoTranscript.toLowerCase()).toContain('pack identity');
+  });
+
   it('enables export from pack formation when events[] is empty', () => {
     expect(
       studioCanExport({
