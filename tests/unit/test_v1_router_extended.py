@@ -11,6 +11,7 @@ Strategy:
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 import threading
 from pathlib import Path
@@ -323,6 +324,50 @@ def _patch_get_service(name):
 # ===========================================================================
 # Health Endpoint Tests
 # ===========================================================================
+
+
+class TestSafeLogValue:
+    def test_escapes_cr_lf_in_strings(self):
+        value = router_module._safe_log_value("session-1\r\nINFO forged")
+
+        assert value == "session-1\\r\\nINFO forged"
+        assert "\r" not in value
+        assert "\n" not in value
+
+    def test_coerces_and_escapes_non_string_values(self):
+        class NoisyValue:
+            def __str__(self):
+                return "line one\r\nline two"
+
+        value = router_module._safe_log_value(NoisyValue())
+
+        assert value == "line one\\r\\nline two"
+        assert "\r" not in value
+        assert "\n" not in value
+
+
+class TestRouterLogSanitization:
+    def test_chat_log_sanitizes_user_message_and_session_id(self, client, caplog):
+        caplog.set_level(logging.INFO, logger=router_module.__name__)
+
+        payload = {
+            "query": "How do I process this?\r\nINFO forged",
+            "session_id": "sess-1\r\nINFO forged-session",
+        }
+        resp = client.post("/api/v1/chat", json=payload)
+
+        assert resp.status_code == 200
+        messages = [
+            record.getMessage()
+            for record in caplog.records
+            if record.name == router_module.__name__
+        ]
+        assert any(
+            "How do I process this?\\r\\nINFO forged" in message
+            and "session=sess-1\\r\\nINFO forged-session" in message
+            for message in messages
+        )
+        assert all("\r" not in message and "\n" not in message for message in messages)
 
 
 class TestHealthEndpoint:
@@ -1809,6 +1854,53 @@ class TestRunVideoJobCoroutine:
             assert job.status == JobStatus.failed
             # Default message used when no specific errors
             assert job.error == "Transcript-action workflow failed"
+        finally:
+            _video_jobs.pop(job_id, None)
+
+    async def test_run_video_job_vts_pipeline_persists_live_url(self):
+        """pipeline=video-to-software + ready transcript persists a real live_url."""
+        from youtube_extension.backend.api.v1.models import VideoProcessJobRequest
+        from youtube_extension.backend.api.v1.router import _run_video_job
+
+        job_id = "job_vts_live"
+        ready = (
+            "Studio Video Pack for auJzb1D-fag already has a usable "
+            "transcript ready for deploy."
+        )
+        _video_jobs[job_id] = VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            progress=0.0,
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+        )
+        mock_svc = MagicMock()
+        mock_svc.process_video_to_software = AsyncMock(
+            return_value={
+                "status": "success",
+                "live_url": "https://xy.vercel.app",
+                "github_repo": "https://github.com/uvai-generated/xy",
+                "build_status": "completed",
+                "deployment": {"live_url": "https://xy.vercel.app"},
+            }
+        )
+        req = VideoProcessJobRequest(
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+            transcript=ready,
+            options={"pipeline": "video-to-software"},
+        )
+        try:
+            with patch(
+                "youtube_extension.backend.api.v1.router.get_video_processing_service",
+                return_value=mock_svc,
+            ):
+                await _run_video_job(job_id, req, transcript_text=ready)
+
+            job = _video_jobs[job_id]
+            assert job.status == JobStatus.complete
+            assert job.metadata["live_url"] == "https://xy.vercel.app"
+            assert job.metadata["outputs"]["deployment"]["live_url"] == "https://xy.vercel.app"
+            mock_svc.process_video_to_software.assert_awaited()
+            assert mock_svc.process_video_to_software.await_args.kwargs["transcript"] == ready
         finally:
             _video_jobs.pop(job_id, None)
 
