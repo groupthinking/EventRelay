@@ -75,3 +75,14 @@ def test_push_trigger_stays_scoped_to_main(filename: str) -> None:
     assert set(branches) <= {"main", "develop"}, (
         f"{filename} push trigger widened to {branches!r}"
     )
+
+
+def test_e2e_job_does_not_skip_pull_requests_without_repo_var() -> None:
+    """PR E2E coverage must come from the trigger, not an opt-in repo variable."""
+    workflow = yaml.safe_load((WORKFLOWS / "e2e-tests.yml").read_text())
+    job_if = workflow["jobs"]["e2e"].get("if", "")
+
+    assert "vars.E2E_BASE_URL" not in job_if, (
+        "e2e-tests.yml gates the PR job on E2E_BASE_URL, so PRs without that "
+        "repository variable skip the E2E quality gate entirely"
+    )
