@@ -48,6 +48,14 @@ describe('Studio v2 provider boundary', () => {
       .toThrow(expect.objectContaining({ status: 502 }));
   });
 
+  it('gives resumed streams a bounded lifetime separate from ordinary API calls', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    fetchMock.mockResolvedValueOnce(reply({ id: 'upstream-chat' }));
+    await studioProvider({ streaming: true }).chats.get({ chatId: 'upstream-chat' });
+    expect(timeout).toHaveBeenCalledWith(240_000);
+    timeout.mockRestore();
+  });
+
   it('does not automatically follow provider redirects with credentials', async () => {
     fetchMock.mockImplementationOnce(async (input) => {
       expect((input as Request).redirect).toBe('error');

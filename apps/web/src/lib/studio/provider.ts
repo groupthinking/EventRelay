@@ -3,7 +3,7 @@ import 'server-only';
 import { createV0Client } from 'v0';
 import { StudioError } from './errors';
 
-export function studioProvider() {
+export function studioProvider(options: { streaming?: boolean } = {}) {
   const key = process.env.V0_API_KEY?.trim();
   if (!key) throw new StudioError(503, 'builder_unavailable', 'The app builder is not configured.');
   return createV0Client({
@@ -11,7 +11,7 @@ export function studioProvider() {
     throwOnError: true,
     fetch: async (input) => {
       const request = new Request(input);
-      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20_000)]);
+      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(options.streaming ? 240_000 : 20_000)]);
       try {
         const response = await fetch(new Request(request, { signal, cache: 'no-store', redirect: 'error' }));
         if (!response.ok) {
