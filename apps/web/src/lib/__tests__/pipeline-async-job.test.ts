@@ -13,6 +13,9 @@ import {
   fetchAsyncVideoJob,
   isTerminalJobStatus,
   kickoffAsyncVideoJob,
+  STUDIO_ORIGIN_NO_LIVE_HOLD,
+  STUDIO_READY_TRANSCRIPT_HOLD,
+  studioDeployReadyTranscriptHold,
 } from '@/lib/pipeline-async-job';
 
 describe('pipeline-async-job (WDK C)', () => {
@@ -424,7 +427,8 @@ describe('pipeline-async-job (WDK C)', () => {
     );
     expect(kicked.kind).toBe('failed');
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message ?? '').toMatch(/ready transcript|must not re-fetch YouTube|no verified deploy receipt/i);
+    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Ready transcript was not reused/i);
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
     expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
     expect(kicked.message ?? '').not.toMatch(/UNKNOWN checks are not a live URL/i);
@@ -521,7 +525,8 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(kicked.kind).toBe('failed');
     expect(kicked.retryable).toBe(true);
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message ?? '').toMatch(/ready transcript|must not re-fetch YouTube|no verified deploy receipt|origin job/i);
+    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Ready transcript was not reused/i);
     expect(kicked.message ?? '').not.toMatch(/aborted due to timeout/i);
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
     expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
@@ -612,6 +617,7 @@ describe('pipeline-async-job (WDK C)', () => {
       },
     );
     expect(decided.action).toBe('continue');
+    expect(JSON.stringify(decided)).not.toMatch(/Ready transcript was not reused/i);
     expect(JSON.stringify(decided)).not.toMatch(/aborted due to timeout/i);
     expect(JSON.stringify(decided)).not.toMatch(/HTTP 524/);
     expect(JSON.stringify(decided)).not.toMatch(/Sign in to confirm you’re not a bot/i);
@@ -619,6 +625,46 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow run/i);
     expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow return value/i);
     expect(JSON.stringify(decided)).not.toMatch(/BACKEND_URL is not configured/i);
+  });
+
+  it('does not label a pending ready-transcript poll as a reuse miss', () => {
+    const decided = decideStudioDeployPoll(
+      { ok: true, jobStatus: 'pending' },
+      {
+        jobId: 'job_01M2B05JJZNTD7MKANV0RN0J28',
+        transcript: READY_TRANSCRIPT,
+      },
+    );
+    expect(decided.action).toBe('continue');
+    expect(decided).toMatchObject({
+      action: 'continue',
+      jobStatus: 'pending',
+      message: 'Deploy job job_01M2B05JJZNTD7MKANV0RN0J28 still pending',
+    });
+    expect(JSON.stringify(decided)).not.toMatch(/Ready transcript was not reused/i);
+    expect(JSON.stringify(decided)).not.toMatch(/must not re-fetch YouTube/i);
+    expect(JSON.stringify(decided)).not.toMatch(/aborted due to timeout/i);
+    expect(JSON.stringify(decided)).not.toMatch(/HTTP 524/);
+    expect(JSON.stringify(decided)).not.toMatch(/Sign in to confirm you’re not a bot/i);
+    expect(JSON.stringify(decided)).not.toMatch(/UNKNOWN checks are not a live URL/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow run/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow return value/i);
+    expect(JSON.stringify(decided)).not.toMatch(/BACKEND_URL is not configured/i);
+  });
+
+  it('remaps a YouTube re-fetch to the reuse HOLD and leaves origin timeout as an honest miss', () => {
+    expect(
+      studioDeployReadyTranscriptHold(
+        'ERROR: [youtube] XYMcBrFSJ4c: Sign in to confirm you’re not a bot. Use --cookies-from-browser.',
+      ),
+    ).toBe(STUDIO_READY_TRANSCRIPT_HOLD);
+    expect(
+      studioDeployReadyTranscriptHold('video-to-software timed out before a verified live URL'),
+    ).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(studioDeployReadyTranscriptHold()).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(STUDIO_ORIGIN_NO_LIVE_HOLD).not.toMatch(/Ready transcript was not reused/i);
+    expect(STUDIO_ORIGIN_NO_LIVE_HOLD).not.toMatch(/aborted due to timeout/i);
+    expect(STUDIO_ORIGIN_NO_LIVE_HOLD).not.toMatch(/HTTP 524/);
   });
 
   it('returns a live poll decision only when the backend supplies a live URL', () => {

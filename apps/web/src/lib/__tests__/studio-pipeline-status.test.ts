@@ -414,6 +414,8 @@ describe('studio-pipeline-status', () => {
     const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
     expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
     expect(workflow).toMatch(/isAbortTimeout|retryable/);
+    expect(workflow).not.toMatch(/studioDeployReadyTranscriptHold\(\s*\)/);
+    expect(workflow).toMatch(/STUDIO_ORIGIN_NO_LIVE_HOLD/);
     expect(workflow).toMatch(/catch/);
     expect(workflow).toMatch(/import \{[^}]*sleep[^}]*\} from ['"]workflow['"]/);
     expect(workflow).toMatch(/await sleep\(['"]10s['"]\)/);

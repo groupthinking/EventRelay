@@ -906,6 +906,19 @@ async def video_to_software_v1(
                 raise
 
         task = asyncio.create_task(_run_and_persist())
+        if _usable_job_transcript(request.transcript):
+            # Ready transcript: skip the sync wait so Studio can poll job_id
+            # before Cloudflare 524 / the 20s vts abort. Work continues.
+            return JSONResponse(
+                status_code=202,
+                content=ApiResponse.success(
+                    VideoProcessJobResponse(
+                        job_id=job_id,
+                        video_url=request.video_url,
+                        status=JobStatus.pending,
+                    ).model_dump()
+                ).model_dump(mode="json"),
+            )
         try:
             result = await asyncio.wait_for(
                 asyncio.shield(task),

@@ -1145,6 +1145,57 @@ class TestVideoToSoftwareEndpoint:
         finally:
             app.dependency_overrides[get_video_processing_service] = _make_vps
 
+    def test_ready_transcript_video_to_software_returns_202_without_sync_wait(
+        self, client
+    ):
+        """Ready transcript must 202 immediately — do not sit in the 12s sync window."""
+        result = _make_vps().process_video_to_software.return_value
+        seen: dict[str, str | None] = {}
+
+        async def _quick(*_args, **kwargs):
+            seen["transcript"] = kwargs.get("transcript")
+            await asyncio.sleep(0.2)
+            return result
+
+        def _quick_svc():
+            svc = _make_vps()
+            svc.process_video_to_software = AsyncMock(side_effect=_quick)
+            return svc
+
+        app.dependency_overrides[get_video_processing_service] = _quick_svc
+        try:
+            with patch(
+                "youtube_extension.backend.api.v1.router.resolve_deployment_target",
+                return_value={
+                    "requested": "vercel",
+                    "resolved": "vercel",
+                    "alias_applied": False,
+                },
+            ):
+                payload = {
+                    "url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "project_type": "web",
+                    "deployment_target": "vercel",
+                    "transcript": (
+                        "Studio Video Pack for auJzb1D-fag already has a usable "
+                        "transcript ready for deploy."
+                    ),
+                }
+                started = time.perf_counter()
+                resp = client.post("/api/v1/video-to-software", json=payload)
+                elapsed = time.perf_counter() - started
+            assert resp.status_code == 202
+            assert elapsed < 0.15
+            body = resp.json()
+            assert body["data"]["job_id"].startswith("job_")
+            deadline = time.perf_counter() + 1.0
+            while "transcript" not in seen and time.perf_counter() < deadline:
+                time.sleep(0.01)
+            assert seen.get("transcript") == payload["transcript"]
+            assert "524" not in str(body).lower()
+        finally:
+            app.dependency_overrides[get_video_processing_service] = _make_vps
+
 
 # ===========================================================================
 # Async Video Jobs (start, status, events, dispatch, agents)
