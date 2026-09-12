@@ -177,8 +177,7 @@ A full audit of this directory was performed (see
 
 ## Agent-completion enforcement
 
-Removed. The `agent-completion/truth-gate` status and the `Agent completion
-enforcement` Check were retired because they were unsatisfiable: the gate scored a
+Removed. The retired `Agent completion enforcement` checks were unsatisfiable: the gate scored a
 pull request against an intent snapshot written only on `issues` events, so a pull
 request with a `Closes #<issue>` binding necessarily armed the gate and then
 failed it. It was red on ~100% of pull requests, including merged ones such as

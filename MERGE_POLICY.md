@@ -34,7 +34,7 @@ one quiet window could pass.
 SHA; previews are routinely canceled for reasons unrelated to the change. It
 required independent review approval; CodeRabbit skips any pull request without
 one of 26 labels, so an unlabeled pull request could never obtain the approval
-the gate demanded. `agent-completion/truth-gate` failed `invalid_payload` on
+the gate demanded. The retired agent-completion gate failed `invalid_payload` on
 every pull request that had no dispatch contract — including #1368, which
 merged and became the tip of `main` with that status red.
 
@@ -214,7 +214,7 @@ was written to remove.
 > issue is opened against its owner.**
 
 A check red on everything has zero signal and actively hides real failures.
-`agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
+The retired agent-completion gate was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
 ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
 this failure mode in its own comments while its sibling did exactly that. Both
