@@ -10,13 +10,13 @@
 ## 2. Execution Plan
 - [x] Step 1: Lock failing tests (524 + ready transcript must not call process)
 - [x] Step 2: Skip process on ready transcript; keep process for URL-only; origin 202 job_id
-- [ ] Step 3: Focused Vitest GREEN
+- [x] Step 3: Focused Vitest GREEN (89) + pytest vts 202
 - [ ] Step 4: New PR from current main → merge-when-core-green → prod READY `dpl_`
 
 ## 3. Definition of Done
 * **Expected Outcome:** Ready-transcript deploy does not HOLD bot wall or HTTP 524. PASS only with a verified https hostname URL + EventRelay receipt. Honest HOLD ≠ bot, ≠ 524, ≠ cleared residuals is allowed.
 * **Verification Method:** Focused Vitest + Vercel prod READY after merge. Cannot signed-in dogfood AXIOM here.
-* **Proof Artifact:** (filled after verification)
+* **Proof Artifact:** PR https://github.com/groupthinking/EventRelay/pull/1880 — Vitest 3 files 58 passed + 4 files 31 passed; pytest `test_video_to_software_returns_202_when_sync_budget_exceeded` PASSED.
 
 ## 4. Post-Task Reflection
 * **What was done:**
