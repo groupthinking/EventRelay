@@ -34,7 +34,7 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
   { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
-  { method: 'POST', path: '/api/workflows/video-to-actions', summary: 'Start the durable Studio analysis workflow.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'POST', path: '/api/workflows/video-to-actions', summary: 'Start the Studio analysis workflow.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
 ];
 
 const METHOD_COLOR: Record<Endpoint['method'], string> = {
