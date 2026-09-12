@@ -42,6 +42,7 @@ import {
   PIPELINE_GEMINI_TIMEOUT_MS,
   PIPELINE_RESPONSE_BUFFER_MS,
   PIPELINE_HEALTH_TIMEOUT_MS,
+  PIPELINE_RESPONSE_BUFFER_MS,
   PipelineDeadline,
   maxDuration,
 } from '@/app/api/pipeline/route';
@@ -68,6 +69,10 @@ describe('pipeline timeouts', () => {
     expect(PIPELINE_GEMINI_TIMEOUT_MS).toBeLessThanOrEqual(MAX_DURATION_MS);
     expect(PIPELINE_RESPONSE_BUFFER_MS).toBeGreaterThan(0);
     expect(PIPELINE_RESPONSE_BUFFER_MS).toBeLessThan(MAX_DURATION_MS);
+
+    expect(PIPELINE_BACKEND_TIMEOUT_MS).toBe(25_000);
+    expect(PIPELINE_RESPONSE_BUFFER_MS).toBe(2_000);
+    expect(PIPELINE_GEMINI_TIMEOUT_MS).toBe(15_000);
 
     const deadline = PipelineDeadline.fromMaxDuration();
     expect(deadline.budgetMs(PIPELINE_BACKEND_TIMEOUT_MS)).toBeGreaterThan(0);
