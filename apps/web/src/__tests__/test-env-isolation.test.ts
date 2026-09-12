@@ -41,5 +41,7 @@ describe('test environment isolation', () => {
     // Route handlers gate on `startsWith('http')`; anything else keeps them in
     // frontend-only mode, which is what the suite asserts against.
     expect(process.env.BACKEND_URL ?? '').not.toMatch(/^http/);
+    expect(process.env.NEXT_PUBLIC_BACKEND_URL ?? '').not.toMatch(/^http/);
+    expect(process.env.NEXT_PUBLIC_API_URL ?? '').not.toMatch(/^http/);
   });
 });
