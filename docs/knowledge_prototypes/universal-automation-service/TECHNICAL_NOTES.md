@@ -29,7 +29,7 @@ self.model = "gemini-2.0-flash-exp"
 ```bash
 curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent" \
   -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: REDACTED_GOOGLE_API_KEY_ROTATE' \
+  -H "X-goog-api-key: ${GEMINI_API_KEY}" \
   -X POST -d '{"contents": [{"parts": [{"text": "test"}]}]}'
 ```
 
@@ -200,7 +200,7 @@ EventRelay      : ❌ FAIL
 ```bash
 curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent" \
   -H 'Content-Type: application/json' \
-  -H 'X-goog-api-key: REDACTED_GOOGLE_API_KEY_ROTATE' \
+  -H "X-goog-api-key: ${GEMINI_API_KEY}" \
   -X POST \
   -d '{"contents": [{"parts": [{"text": "Hello"}]}]}'
 ```

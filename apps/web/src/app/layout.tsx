@@ -28,7 +28,8 @@ export const metadata: Metadata = {
     default: 'UVAI — Video to Workflow',
     template: '%s | UVAI',
   },
-  description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+  description:
+    'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
   keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
@@ -40,21 +41,14 @@ export const metadata: Metadata = {
     url: 'https://uvai.io',
     siteName: 'UVAI',
     title: 'UVAI — Video to Workflow',
-    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
-    images: [
-      {
-        url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'UVAI — Agentic Video Execution Platform',
-      },
-    ],
+    description:
+      'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'UVAI — Video to Workflow',
-    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
-    images: ['/og-image.png'],
+    description:
+      'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
     creator: '@groupthinking',
   },
   robots: {

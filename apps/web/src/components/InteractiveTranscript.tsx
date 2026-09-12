@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
 import { clsx } from 'clsx';
+import { Search } from 'lucide-react';
+import { filterSegments, type TranscriptSegment } from '@/lib/transcript-search';
 
 /* ═══════════════════════════════════════════
    Interactive Transcript Player
@@ -10,14 +12,11 @@ import { clsx } from 'clsx';
    highlight-as-you-play
    ═══════════════════════════════════════════ */
 
-export interface TranscriptSegment {
-  id: string;
-  speaker: string;
-  speakerColor: string;
-  startTime: number; // seconds
-  endTime: number;
-  text: string;
-}
+// Segment shape and the search predicate live in `@/lib/transcript-search` so
+// they are unit-testable in vitest's `node` environment. Re-exported here to
+// keep `import { type TranscriptSegment } from '@/components/InteractiveTranscript'`
+// working for existing consumers.
+export type { TranscriptSegment } from '@/lib/transcript-search';
 
 interface InteractiveTranscriptProps {
   segments: TranscriptSegment[];
@@ -28,6 +27,7 @@ interface InteractiveTranscriptProps {
 }
 
 const SPEAKER_COLORS: Record<string, string> = {
+  Caption: '#6af2de',
   'Speaker 1': '#6af2de',
   'Speaker 2': '#a78bfa',
   'Speaker 3': '#f59e0b',
@@ -57,24 +57,26 @@ const SegmentRow = memo(function SegmentRow({
   segment,
   isActive,
   isPast,
+  autoScroll,
   onSeek,
 }: {
   segment: TranscriptSegment;
   isActive: boolean;
   isPast: boolean;
+  autoScroll: boolean;
   onSeek: (time: number) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const color = segment.speakerColor || getSpeakerColor(segment.speaker);
 
   useEffect(() => {
-    if (isActive && ref.current) {
+    if (autoScroll && isActive && ref.current) {
       ref.current.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
     }
-  }, [isActive]);
+  }, [autoScroll, isActive]);
 
   return (
     <div
@@ -165,22 +167,12 @@ export default function InteractiveTranscript({
     [segments],
   );
 
-  const filteredSegments = useMemo(() => {
-    // ⚡ Bolt: Hoisting search string normalization out of the loop
-    // Expected impact: Removes N toLowerCase() allocations per keystroke update, saving ~15-20ms per render on long transcripts.
-    const lowerSearchQuery = searchQuery ? searchQuery.toLowerCase() : '';
-
-    return segments.filter((seg) => {
-      // ⚡ Bolt: Short-circuiting the speaker check avoids string manipulation entirely for non-matching rows.
-      const matchesSpeaker = !filterSpeaker || seg.speaker === filterSpeaker;
-      if (!matchesSpeaker) return false;
-
-      const matchesSearch =
-        !searchQuery ||
-        (seg.text ? seg.text.toLowerCase().includes(lowerSearchQuery) : false);
-      return matchesSearch;
-    });
-  }, [segments, filterSpeaker, searchQuery]);
+  const filteredSegments = useMemo(
+    // Normalization is hoisted out of the per-segment loop inside
+    // `filterSegments`; see `@/lib/transcript-search` and issue #908.
+    () => filterSegments(segments, { search: searchQuery, speaker: filterSpeaker }),
+    [segments, filterSpeaker, searchQuery],
+  );
 
   const activeSegmentId = useMemo(() => {
     // Optimization: Use binary search (O(log N)) instead of Array.find() (O(N))
@@ -307,18 +299,7 @@ export default function InteractiveTranscript({
         style={{ borderBottom: '1px solid rgba(72, 71, 77, 0.08)' }}
       >
         <div className="flex items-center gap-2">
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="rgba(248,245,253,0.25)"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <path d="m21 21-4.35-4.35" />
-          </svg>
+          <Search className="h-3 w-3 text-white/25" aria-hidden="true" />
           <input
             type="search"
             value={searchQuery}
@@ -331,6 +312,7 @@ export default function InteractiveTranscript({
             <button
               type="button"
               onClick={() => setSearchQuery('')}
+              aria-label="Clear search"
               className="text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#6af2de]/40 rounded"
               style={{ color: 'rgba(248, 245, 253, 0.3)' }}
             >
@@ -352,6 +334,7 @@ export default function InteractiveTranscript({
             segment={segment}
             isActive={segment.id === activeSegmentId}
             isPast={segment.endTime < currentTime}
+            autoScroll={isPlaying}
             onSeek={onSeek}
           />
         ))}

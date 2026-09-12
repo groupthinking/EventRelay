@@ -630,8 +630,9 @@ async def test_record_usage_offloads_sync_database_work(
 
     await monitor.record_usage("openai", "/chat", 100, model="gpt-4o")
 
-    assert "_record_usage_sync" in calls
-    assert "_get_daily_cost_sync" in calls
+    # Usage persistence and UTC-day aggregation now share one worker-thread
+    # transaction; a second daily-cost query would reopen the crash boundary.
+    assert calls == ["_record_usage_sync"]
 
 
 async def test_telemetry_database_failure_does_not_fail_paid_api_result(

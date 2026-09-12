@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
 """
-Action Implementer Agent Service
-=================================
+Action Implementer Agent Service (canonical product path — F4)
+==============================================================
 
-Extracted and refactored from development/agents/action_implementer.py
-Provides actionable task generation and implementation planning with clean service interfaces.
+Registered name: ``action_implementer`` (BaseAgent for the FastAPI orchestrator).
+
+This is the **only** agent implementation used by the service container and
+agent registry. The offline batch plan builder at
+``src/agents/action_implementer.py`` (class ``ActionImplementer``) is a
+separate, non-registered helper for continuous-runner style workflows; it is
+not a second agent.
+
+Shim re-export: ``youtube_extension.services.agents.action_implementer_agent``.
 """
 
 import asyncio

@@ -5,6 +5,21 @@
 
 ---
 
+## ✅ Resolution Status (re-verified against code, 2026-08-04)
+
+All P0/P1 security items in this plan are resolved in the current codebase.
+The entries below are retained for the historical record — do not re-remediate.
+
+| Item | Status | Evidence |
+|------|--------|----------|
+| REM-001 (pickle) | ✅ RESOLVED | `intelligent_cache.py` is JSON-based (`# pickle removed for security`) |
+| REM-002 (npm vulns) | ✅ RESOLVED | `devalue` chain gone from `package-lock.json`; `next` pinned `^16.2.11` via root `overrides` |
+| REM-003 (dangerouslySetInnerHTML) | ✅ RESOLVED | Old `frontend/` removed in `apps/web` migration; zero usages remain |
+| REM-004 (subprocess audit) | ✅ RESOLVED | List-form args throughout, with SECURITY comments |
+| REM-005..008 (code quality) | Tracked separately | Non-security hygiene items; see current issue tracker |
+
+---
+
 ## 🚨 P0 - Critical (Fix Immediately)
 
 ### REM-001: Fix Pickle Deserialization Vulnerability

@@ -31,6 +31,16 @@
   --color-error: 239 68 68; /* red-500 */
   --color-info: 59 130 246; /* blue-500 */
 
+  /* Evidence workspace */
+  --evidence-canvas: #090c10;
+  --evidence-surface: #0f1419;
+  --evidence-surface-raised: #151b21;
+  --evidence-border: rgba(232, 240, 236, 0.09);
+  --evidence-text: #f2f5f2;
+  --evidence-muted: #97a19d;
+  --evidence-accent: #6de1c6;
+  --evidence-accent-strong: #36bda1;
+
   /* Glass Effect */
   --glass-bg: rgba(15, 23, 42, 0.7);
   --glass-border: rgba(255, 255, 255, 0.1);
@@ -73,6 +83,55 @@ body {
   background: rgb(var(--color-surface-950));
   color: white;
   line-height: 1.6;
+}
+
+.evidence-workspace {
+  background: var(--evidence-canvas);
+  color: var(--evidence-text);
+}
+
+.evidence-command-bar,
+.evidence-context-panel {
+  background: var(--evidence-surface);
+  border-color: var(--evidence-border);
+}
+
+.evidence-context-panel {
+  border-left: 1px solid var(--evidence-border);
+}
+
+.evidence-primary-button {
+  background: var(--evidence-accent);
+  color: #06221d;
+  transition: background-color 160ms ease, transform 160ms ease;
+}
+
+.evidence-primary-button:hover:not(:disabled) {
+  background: #8aead4;
+}
+
+.evidence-primary-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.evidence-primary-button:focus-visible {
+  outline: 2px solid var(--evidence-accent);
+  outline-offset: 3px;
+}
+
+.evidence-tab-rail {
+  scrollbar-width: none;
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black 12px,
+    black calc(100% - 22px),
+    transparent 100%
+  );
+}
+
+.evidence-tab-rail::-webkit-scrollbar {
+  display: none;
 }
 
 /* ============================================
@@ -662,25 +721,6 @@ textarea.contact-form-input {
 .stitch-fade-in:nth-child(6) { animation-delay: 400ms; }
 
 /* ============================================
-   Mobile Responsive — Dashboard Split View
-   ============================================ */
-
-@media (max-width: 768px) {
-  /* Collapse split-view to vertical stack on mobile */
-  .flex.flex-1.overflow-hidden {
-    flex-direction: column !important;
-  }
-  .flex.flex-1.overflow-hidden > div:first-child {
-    width: 100% !important;
-    min-width: unset !important;
-    max-height: 45vh;
-  }
-  .flex.flex-1.overflow-hidden > div:last-child {
-    width: 100% !important;
-  }
-}
-
-/* ============================================
    Mobile Responsive — Landing Page
    ============================================ */
 
@@ -688,9 +728,5 @@ textarea.contact-form-input {
   /* Product mockup collapses to single column */
   .grid[style*="grid-template-columns: 45% 55%"] {
     grid-template-columns: 1fr !important;
-  }
-  /* Metrics bar wraps */
-  .grid-cols-4 {
-    grid-template-columns: repeat(2, 1fr) !important;
   }
 }

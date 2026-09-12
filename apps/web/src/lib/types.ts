@@ -70,7 +70,8 @@ export interface ExtractedEvent {
   title: string;
   description?: string;
   timestamp?: string;
-  confidence: number;
+  /** Provider-reported confidence only. Omitted when the pipeline did not supply one. */
+  confidence?: number;
   severity?: 'low' | 'medium' | 'high' | 'critical';
   sourceSegment?: string;
 }

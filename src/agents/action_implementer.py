@@ -1,13 +1,32 @@
 #!/usr/bin/env python3
 """
-ACTION IMPLEMENTER
-Helps users implement generated actions from video processing
+Offline action implementation plan builder (F4 — non-agent path)
+================================================================
+
+This module is **not** the FastAPI/orchestrator agent.
+
+Canonical product agent (registered as ``action_implementer``)::
+
+    from youtube_extension.services.agents.adapters.action_implementer_agent import (
+        ActionImplementerAgent,
+    )
+
+This file keeps the file-oriented batch helper used by continuous runners and
+``video_to_action_workflow`` (load processed JSON → write implementation plans
+under ``action_implementations/``). It intentionally does not register with
+the agent registry.
+
+``ActionImplementerAgent`` is re-exported below so callers that historically
+imported from ``agents.action_implementer`` can migrate without hunting paths.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
 import logging
 import sys
+import warnings
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -22,10 +41,42 @@ logging.basicConfig(
 )
 logger = logging.getLogger("action_implementer")
 
+# Product agent re-export (canonical orchestrator path). Optional import so this
+# offline helper still loads when youtube_extension is not on PYTHONPATH.
+try:
+    from youtube_extension.services.agents.adapters.action_implementer_agent import (  # noqa: E402
+        ActionImplementerAgent,
+        ActionPlan,
+    )
+except ImportError:  # pragma: no cover - standalone script path
+    try:
+        from src.youtube_extension.services.agents.adapters.action_implementer_agent import (
+            ActionImplementerAgent,
+            ActionPlan,
+        )
+    except ImportError:
+        ActionImplementerAgent = None  # type: ignore[misc, assignment]
+        ActionPlan = None  # type: ignore[misc, assignment]
+
+
 class ActionImplementer:
-    """Helps implement generated actions from video processing"""
+    """Offline batch builder for implementation plans from processed video JSON.
+
+    Not a BaseAgent. Prefer :class:`ActionImplementerAgent` for orchestrator /
+    registry workflows.
+    """
+
+    #: Marker so call sites and tests can distinguish offline vs agent path.
+    role = "offline_plan_builder"
 
     def __init__(self):
+        warnings.warn(
+            "ActionImplementer is the offline plan builder. For orchestrator/"
+            "agent registration use ActionImplementerAgent "
+            "(youtube_extension.services.agents.adapters.action_implementer_agent).",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.output_dir = Path('action_implementations')
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -408,7 +459,7 @@ class ActionImplementer:
                     print(f"        • ... and {len(implementation['next_steps']) - 3} more steps")
 
 async def main():
-    """Main execution function"""
+    """Main execution function (offline CLI; not the orchestrator agent)."""
 
     if len(sys.argv) < 2:
         print("Usage: python action_implementer.py <video_id>")
@@ -416,7 +467,9 @@ async def main():
         sys.exit(1)
 
     video_id = sys.argv[1]
-    implementer = ActionImplementer()
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        implementer = ActionImplementer()
 
     try:
         # Load processed video data

@@ -6,6 +6,7 @@ import json
 import sys
 import types as _types
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -102,6 +103,7 @@ def _make_gemini_result(
     model_name: str = "gemini-2.0-flash",
     backend: str = "api",
     error: str | None = None,
+    usage_metadata: object | None = None,
 ) -> GeminiResult:
     return GeminiResult(
         success=success,
@@ -110,6 +112,7 @@ def _make_gemini_result(
         model_name=model_name,
         backend=backend,
         error=error,
+        usage_metadata=usage_metadata,
     )
 
 
@@ -618,6 +621,56 @@ class TestProcessLiveGeminiPath:
         svc = self._svc()
         await svc.process("https://www.youtube.com/watch?v=abc", "summarize")
         svc.gemini.process_youtube.assert_awaited_once()
+
+    async def test_process_tracks_provider_reported_usage(self):
+        usage = SimpleNamespace(
+            prompt_token_count=125,
+            candidates_token_count=40,
+            thoughts_token_count=5,
+            total_token_count=170,
+        )
+        svc = self._svc(
+            _make_gemini_result(usage_metadata=usage)
+        )
+
+        with patch(
+            "youtube_extension.services.ai.hybrid_processor_service._record_api_usage",
+            new=AsyncMock(),
+        ) as track:
+            result = await svc.process(
+                "video.mp4",
+                "describe",
+                task_type=TaskType.VIDEO_UNDERSTANDING,
+            )
+
+        assert result.success is True
+        track.assert_awaited_once_with(
+            "google",
+            "hybrid/process",
+            125,
+            model="gemini-2.0-flash",
+            output_tokens=45,
+            request_type="video_understanding",
+            success=True,
+        )
+
+    async def test_usage_tracking_failure_does_not_discard_paid_result(self):
+        usage = SimpleNamespace(
+            prompt_token_count=25,
+            candidates_token_count=10,
+        )
+        svc = self._svc(
+            _make_gemini_result(usage_metadata=usage)
+        )
+
+        with patch(
+            "youtube_extension.services.ai.hybrid_processor_service._record_api_usage",
+            new=AsyncMock(side_effect=RuntimeError("database unavailable")),
+        ):
+            result = await svc.process("video.mp4", "describe")
+
+        assert result.success is True
+        assert result.response == "ok"
 
     async def test_process_routes_mp4_video(self):
         svc = self._svc()

@@ -21,6 +21,15 @@ import {
   stripJsonCodeFence,
   toGatewayModelId,
 } from './vercel-ai-gateway';
+import {
+  assessAnalysisEvidence,
+  calculateDurationCoverageSeconds,
+  normalizeTranscriptSegments,
+  transcriptTextFromSegments,
+  type AnalysisProvenance,
+  type EvidenceAssessment,
+  type TranscriptSegment,
+} from './analysis-evidence';
 
 export interface VideoAnalysisResult {
   title: string;
@@ -48,6 +57,16 @@ export interface VideoAnalysisResult {
     code: string;
     language: string;
   }[];
+  /** Optional TranscriptActionAgent project scaffold (backend path). */
+  project_scaffold?: unknown;
+  provenance?: AnalysisProvenance;
+  quality?: EvidenceAssessment;
+}
+
+export interface VerifiedVideoEvidence {
+  transcript: string;
+  segments: TranscriptSegment[];
+  provenance: AnalysisProvenance;
 }
 
 /**
@@ -143,24 +162,24 @@ function buildSystemInstruction(videoUrl: string, actualTranscript: string): str
   return `You are the Agentic Video Intelligence Engine.
 
 MISSION:
-1. WATCH the video (Video ID: ${videoId}). We have provided the ACTUAL spoken transcript below. Use it as your primary source of truth.
+1. ANALYZE video ${videoId} using only the verified spoken transcript below. Never reconstruct missing speech from search results, comments, or prior knowledge.
 2. THINK: Analyze the sequence of technical events described in the transcript.
-3. ACT: Reconstruct the timeline and generate Python 'ingest.py' logic that mimics the data patterns discussed in the video.
-4. OBSERVE & MAP: Extract specific "Action Events" from the video and provide a direct "E22 Mapping" (code logic) for each.
+3. ACT: Propose reviewable follow-up tasks without claiming they were executed.
+4. OBSERVE & MAP: Extract source-grounded milestones and concise implementation mappings.
 
 DATA STRUCTURE REQUIREMENTS:
-- title: Accurate video title. Feel free to use googleSearch to find exact title/metadata if needed.
-- summary: A high-level technical executive summary.
-- transcript: Return a structured array of {start, duration, text} representing the exact transcript provided below. Group the raw text into logical 30-120 second segments if timestamps aren't fully available.
+- title: A concise title grounded in the transcript. Do not use external search.
+- summary: A factual technical executive summary in 2-4 sentences.
+- transcript: Return an empty array. The application attaches the verified source segments after generation.
 - events: 3-5 key technical milestones with timestamp, label, description, and codeMapping.
 - actions: 3-8 concrete tasks a developer/learner should DO after watching.
 - topics: Key topics and technologies covered.
-- architectureCode: A Markdown-formatted cloud architecture blueprint.
-- ingestScript: A robust, modular Python script using Playwright for high-density ingestion.
-- e22Snippets: 3-5 production-ready code snippets for E22 cloud solutions.
+- architectureCode: A concise Markdown architecture outline grounded in the transcript; no invented services.
+- ingestScript: Empty string unless the transcript explicitly describes an ingestion implementation. Never generate browser automation for third-party services.
+- e22Snippets: Up to 3 short, clearly proposed implementation snippets; use an empty array when the transcript does not support them.
 
 === ACTUAL VIDEO TRANSCRIPT ===
-${actualTranscript ? actualTranscript : "(No transcript available, you MUST use googleSearch to reconstruct content from descriptions, chapters, and comments)"}
+${actualTranscript}
 === END TRANSCRIPT ===`;
 }
 
@@ -217,7 +236,7 @@ export function parseAnalysisResult(raw: string): VideoAnalysisResult {
 }
 
 /**
- * Executes a deep agentic analysis of a YouTube video using Gemini + Google Search.
+ * Executes a source-grounded analysis of a verified YouTube transcript through AI Gateway.
  * Performs exponential backoff for 503 overload and 429 quota errors.
  */
 async function analyzeVideoWithGateway(
@@ -236,34 +255,97 @@ async function analyzeVideoWithGateway(
           'Return ONLY a single JSON object matching the required schema. No markdown fences.',
       },
     ],
-    // 16k cap: production logs showed 8k truncating long analyses mid-string,
-    // which surfaced as "Unterminated string in JSON" parse failures.
-    max_tokens: 16_384,
+    max_tokens: 8_192,
     temperature: 0.2,
-    timeoutMs: 55_000,
+    timeoutMs: 90_000,
   });
   return parseAnalysisResult(result.content);
 }
 
 export async function analyzeVideoWithGemini(
   videoUrl: string,
+  suppliedEvidence?: VerifiedVideoEvidence,
 ): Promise<VideoAnalysisResult> {
-  // 1. Fetch the absolute real transcript FIRST (bypasses Gemini hallucination)
-  let actualTranscript = '';
-  try {
-    const { fetchTranscript } = await import('./transcription-service');
-    const result = await fetchTranscript({ url: videoUrl });
-    if (result.success && result.transcript) {
-      actualTranscript = result.transcript;
-      console.log(`[Video Analyzer] Successfully fetched real transcript (${result.wordCount} words)`);
-    } else {
-      console.warn(`[Video Analyzer] Could not fetch real transcript: ${result.error}`);
+  // 1. Acquire evidence before generation. Search-generated prose is explicitly
+  // not accepted as a transcript; callers must provide verified captions/STT.
+  let evidence = suppliedEvidence;
+  if (!evidence) {
+    try {
+      const { fetchTranscript } = await import('./transcription-service');
+      const result = await fetchTranscript({ url: videoUrl });
+      const segments = normalizeTranscriptSegments(result.segments);
+      const transcript = (
+        result.transcript?.trim() ||
+        result.derivedContent?.trim() ||
+        transcriptTextFromSegments(segments)
+      );
+      const timedSegmentCount = segments.filter((segment) => segment.duration > 0).length;
+      const sourceUrl = result.sourceUrl || videoUrl;
+      evidence = {
+        transcript,
+        segments,
+        provenance: {
+          sourceUrl,
+          sourceHost: (() => {
+            try { return new URL(sourceUrl).hostname; } catch { return ''; }
+          })(),
+          acquisitionMethod: result.acquisitionMethod || 'unknown',
+          transcriptSource: result.source || 'unknown',
+          transcriptVerified: result.success === true && result.verified === true,
+          acquiredAt: result.acquiredAt || new Date().toISOString(),
+          segmentCount: segments.length,
+          timedSegmentCount,
+          durationCoverageSeconds: calculateDurationCoverageSeconds(segments),
+          warnings: result.error ? [result.error] : [],
+        },
+      };
+    } catch (err) {
+      console.error('[Video Analyzer] Verified transcript acquisition failed:', err);
+      throw new Error('Verified transcript acquisition failed before analysis.');
     }
-  } catch (err) {
-    console.error(`[Video Analyzer] Error fetching real transcript:`, err);
   }
 
-  const hasTranscript = actualTranscript.trim().length > 50;
+  const preflight = assessAnalysisEvidence({
+    transcript: evidence.transcript,
+    segments: evidence.segments,
+    provenance: evidence.provenance,
+  });
+  if (!preflight.passed) {
+    throw new Error(`Verified transcript required: ${preflight.issues.join(' ')}`);
+  }
+
+  const actualTranscript = evidence.transcript;
+  const authoritativeSegments = evidence.segments.length > 0
+    ? evidence.segments
+    : [{ start: 0, duration: 0, text: actualTranscript }];
+  const finalize = (analysis: VideoAnalysisResult): VideoAnalysisResult => {
+    const quality = assessAnalysisEvidence({
+      transcript: actualTranscript,
+      segments: authoritativeSegments,
+      provenance: {
+        ...evidence.provenance,
+        segmentCount: authoritativeSegments.length,
+        timedSegmentCount: authoritativeSegments.filter((segment) => segment.duration > 0).length,
+      },
+    });
+    if (!quality.passed) {
+      throw new Error(`Analysis quality gate failed: ${quality.issues.join(' ')}`);
+    }
+    return {
+      ...analysis,
+      // The model may summarize the transcript, but it may never author the
+      // evidence rows or timestamps displayed as source speech.
+      transcript: authoritativeSegments,
+      provenance: {
+        ...evidence.provenance,
+        segmentCount: authoritativeSegments.length,
+        timedSegmentCount: authoritativeSegments.filter((segment) => segment.duration > 0).length,
+      },
+      quality,
+    };
+  };
+
+  const hasTranscript = true;
   const systemInstruction = buildSystemInstruction(videoUrl, actualTranscript);
   const model = hasTranscript ? GEMINI_STRUCTURED_MODEL : GEMINI_SEARCH_MODEL;
 
@@ -274,7 +356,7 @@ export async function analyzeVideoWithGemini(
   while (attempt < MAX_RETRIES) {
     try {
       if (hasAiGatewayKey()) {
-        return await analyzeVideoWithGateway(videoUrl, systemInstruction, model);
+        return finalize(await analyzeVideoWithGateway(videoUrl, systemInstruction, model));
       }
 
       const ai = getGeminiClient();
@@ -295,7 +377,7 @@ export async function analyzeVideoWithGemini(
       });
 
       const resultText = response.text || '{}';
-      return parseAnalysisResult(resultText);
+      return finalize(parseAnalysisResult(resultText));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       const retryable =

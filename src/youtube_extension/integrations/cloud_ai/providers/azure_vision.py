@@ -8,6 +8,7 @@ Implements video and image analysis using Azure AI Vision services:
 - Custom Vision (if configured)
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Optional
@@ -25,8 +26,15 @@ from ..exceptions import (
     ConfigurationError,
     RateLimitError,
 )
+from ..media_paths import resolve_local_media_path
 
 logger = logging.getLogger(__name__)
+
+
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file's bytes. Module-level so it can run in a worker thread."""
+    with open(path, 'rb') as handle:
+        return handle.read()
 
 
 class AzureVision(BaseCloudAI):
@@ -187,6 +195,11 @@ class AzureVision(BaseCloudAI):
                 results, image_url, analysis_types, processing_time
             )
 
+        except CloudAIError:
+            # Typed errors (e.g. UnsafeMediaPathError from the local-path guard)
+            # already carry provider and error_code; re-wrapping them would
+            # flatten them into a generic CloudAIError and lose that type.
+            raise
         except Exception as e:
             raise CloudAIError(
                 f"Azure AI Vision image analysis failed: {e}",
@@ -251,9 +264,11 @@ class AzureVision(BaseCloudAI):
             # For URL input, Azure can analyze directly
             return None
         else:
-            # For local files, read content
-            with open(image_url, 'rb') as image_file:
-                return image_file.read()
+            # Local file. The path is caller-supplied, so validate it against
+            # CLOUD_AI_MEDIA_ROOT before opening anything; the read then uses
+            # the resolved path rather than the raw string, off the event loop.
+            safe_path = resolve_local_media_path(image_url, provider=self.provider.value)
+            return await asyncio.to_thread(_read_file_bytes, str(safe_path))
 
     async def _await_ocr_call(self, deadline: float, func: Any, *args: Any, **kwargs: Any) -> Any:
         """Run a blocking Azure SDK call in a worker thread, bounded by a
@@ -263,8 +278,6 @@ class AzureVision(BaseCloudAI):
         ``asyncio.wait_for`` enforces the remaining budget so neither a slow read
         nor a slow poll can run past the OCR timeout. Raises ``CloudAIError`` on
         expiry."""
-        import asyncio
-
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             raise CloudAIError("Azure OCR operation timed out")
@@ -277,8 +290,6 @@ class AzureVision(BaseCloudAI):
 
     async def _perform_ocr(self, image_url: str, image_stream: Optional[bytes]) -> dict[str, Any]:
         """Perform OCR using Azure Read API."""
-        import asyncio
-
         from azure.cognitiveservices.vision.computervision.models import (
             OperationStatusCodes,
         )
@@ -322,8 +333,6 @@ class AzureVision(BaseCloudAI):
 
     async def _perform_ocr_stream(self, image_stream) -> dict[str, Any]:
         """Perform OCR on image stream."""
-        import asyncio
-
         from azure.cognitiveservices.vision.computervision.models import (
             OperationStatusCodes,
         )

@@ -33,6 +33,26 @@ const VALID_ANALYSIS = {
   e22Snippets: [],
 };
 const VALID_JSON = JSON.stringify(VALID_ANALYSIS);
+const TEST_EVIDENCE = {
+  transcript: 'This is verified source speech with enough content to support deterministic analysis.',
+  segments: [{
+    start: 0,
+    duration: 5,
+    text: 'This is verified source speech with enough content to support deterministic analysis.',
+  }],
+  provenance: {
+    sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+    sourceHost: 'www.youtube.com',
+    acquisitionMethod: 'backend-caption-api',
+    transcriptSource: 'youtube-captions',
+    transcriptVerified: true,
+    acquiredAt: '2026-08-16T12:00:00.000Z',
+    segmentCount: 1,
+    timedSegmentCount: 1,
+    durationCoverageSeconds: 5,
+    warnings: [],
+  },
+};
 
 afterEach(() => {
   gatewayChatMock.mockReset();
@@ -78,7 +98,10 @@ describe('analyzeVideoWithGemini retry on parse failure', () => {
       .mockResolvedValueOnce({ content: "{'not': 'json'}" })
       .mockResolvedValueOnce({ content: VALID_JSON });
 
-    const promise = analyzeVideoWithGemini('https://www.youtube.com/watch?v=abc123');
+    const promise = analyzeVideoWithGemini(
+      'https://www.youtube.com/watch?v=auJzb1D-fag',
+      TEST_EVIDENCE,
+    );
     await vi.advanceTimersByTimeAsync(5_000); // cover the 2s backoff after attempt 1
     const result = await promise;
 
@@ -90,7 +113,10 @@ describe('analyzeVideoWithGemini retry on parse failure', () => {
     vi.useFakeTimers();
     gatewayChatMock.mockResolvedValue({ content: 'not json at all' });
 
-    const promise = analyzeVideoWithGemini('https://www.youtube.com/watch?v=abc123');
+    const promise = analyzeVideoWithGemini(
+      'https://www.youtube.com/watch?v=auJzb1D-fag',
+      TEST_EVIDENCE,
+    );
     const assertion = expect(promise).rejects.toThrow(/failed after 3 attempts/);
     await vi.advanceTimersByTimeAsync(20_000); // cover 2s + 4s backoffs
     await assertion;
