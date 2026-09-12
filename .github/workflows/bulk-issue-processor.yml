@@ -2,6 +2,11 @@ name: Bulk Issue Processor
 
 # Process multiple issues at once: apply labels, generate summaries, or close stale items.
 
+# Prevent concurrent runs to avoid resource exhaustion
+concurrency:
+  group: bulk-issue-processor-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_dispatch:
     inputs:
@@ -48,6 +53,7 @@ jobs:
   process:
     name: Bulk process issues
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
 

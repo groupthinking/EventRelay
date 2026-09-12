@@ -425,6 +425,14 @@ export async function analyzeVideoWithGemini(
       return finalize(parseAnalysisResult(resultText));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (actualTranscript && isAbortOrTimeout(error)) {
+        console.warn(
+          '[Video Analyzer] Structured analysis timed out after transcript capture; returning transcript-only result.',
+        );
+        return buildTranscriptOnlyAnalysis(actualTranscript);
+      }
+
       const retryable =
         error instanceof AnalysisParseError ||
         errorMessage.includes('503') ||

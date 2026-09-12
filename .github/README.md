@@ -16,6 +16,14 @@ Custom instructions for GitHub Copilot that provide context about the EventRelay
 
 **Purpose**: Helps Copilot generate more accurate and contextually appropriate code suggestions.
 
+### `copilot-personas.md`
+User persona map for adapting Copilot's explanations and implementation guidance
+to builders, founders, operations leads, educators, enterprise teams, and
+EventRelay contributors.
+
+**Purpose**: Keeps persona-specific context available without weakening the
+repository's workflow, security, or validation requirements.
+
 ### `RESOURCE_EVALUATION.md`
 Comprehensive evaluation of recommended resources for EventRelay integration:
 - [langwatch/better-agents](https://github.com/langwatch/better-agents) - Agent testing and reliability toolkit

@@ -72,6 +72,7 @@ class YouTubePackagerService:
         self.enable_firecrawl = enable_firecrawl
         self.firecrawl_enhancer = FirecrawlEnhancedPackager() if enable_firecrawl else None
         self.ensure_directories()
+        self.published_events = []
 
     def ensure_directories(self):
         """Ensure required directories exist"""
@@ -261,8 +262,8 @@ Complete these objectives in order:
             logger.info(f"Publishing event: {event_type} for job_id: {job_id}")
             logger.debug(f"Event payload: {json.dumps(event, indent=2)}")
 
-            # TODO: Implement actual message queue publishing
-            # await message_queue.publish(event)
+            self.published_events.append(event)
+
 
         except Exception as e:
             logger.error(f"Failed to publish event {event_type} for job_id {job_id}: {e}")
