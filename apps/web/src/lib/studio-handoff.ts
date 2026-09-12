@@ -46,6 +46,17 @@ export type StudioQueryStartedKey = { current: string | null };
 let strictModeAutoStartedVideoId: string | null = null;
 
 /**
+ * Clear the module-level Strict Mode auto-start guard. Studio calls this on a
+ * genuine unmount so re-navigating to the same ?video= later in the same SPA
+ * session (or retrying after a failed run) can auto-start again. The guard only
+ * exists to swallow React's synchronous Strict Mode double-mount, so it must be
+ * released once the component truly leaves the tree.
+ */
+export function resetStudioQueryAutoStart(): void {
+  strictModeAutoStartedVideoId = null;
+}
+
+/**
  * One-shot ?video= / ?url= kick. Safe under Strict Mode remounts: both the
  * caller ref and a module-level key suppress duplicate start() calls.
  */
