@@ -36,7 +36,7 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Agent status error:', error);
     return NextResponse.json(
-      { error: 'Failed to get agent status', details: String(error) },
+      { error: 'Failed to get agent status' },
       { status: 502 },
     );
   }
