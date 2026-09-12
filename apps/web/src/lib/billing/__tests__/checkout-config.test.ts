@@ -87,12 +87,19 @@ describe('workflowProPriceLabel', () => {
 describe('resolveCheckoutAppUrl', () => {
   it('prefers NEXT_PUBLIC_APP_URL when set', () => {
     process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
+    process.env.NODE_ENV = 'test';
     expect(resolveCheckoutAppUrl()).toBe('https://preview.example.com');
   });
 
   it('defaults production checkout redirects to uvai.io', () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
     // @ts-expect-error read-only property
+    process.env.NODE_ENV = 'production';
+    expect(resolveCheckoutAppUrl()).toBe('https://uvai.io');
+  });
+
+  it('ignores NEXT_PUBLIC_APP_URL in production (fail-closed)', () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
     process.env.NODE_ENV = 'production';
     expect(resolveCheckoutAppUrl()).toBe('https://uvai.io');
   });

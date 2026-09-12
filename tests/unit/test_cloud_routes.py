@@ -1296,6 +1296,28 @@ class TestEventRoutes:
             })
         assert response.status_code == 500
 
+    def test_mention_for_myxstack_without_specialist_defaults_to_hermes(self):
+        response = self._client().post("/api/v1/events/", json={
+            "type": "mention",
+            "data": {"title": "@MyXstack please deploy this to production"},
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "processed"
+        assert data["metadata"]["owner"] == "Hermes"
+        assert data["metadata"]["specialist"] == "deployer"
+
+    def test_mention_for_myxstack_preserves_explicit_specialist_tag(self):
+        response = self._client().post("/api/v1/events/", json={
+            "type": "mention",
+            "data": {"title": "@MyXstack @researcher investigate the regression"},
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "processed"
+        assert data["metadata"]["owner"] == "Hermes"
+        assert data["metadata"]["specialist"] == "researcher"
+
 
 # ===========================================================================
 # Tests for reporting_routes.py  (fill remaining uncovered lines)

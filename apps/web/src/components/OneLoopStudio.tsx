@@ -19,6 +19,7 @@ import {
   actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
+  safeProjectName,
 } from '@/lib/action-surface';
 import {
   pollStudioDeploy,
@@ -39,6 +40,7 @@ import {
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportToastMessage,
+  studioFormationSupplementalEntities,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -61,6 +63,7 @@ import {
 } from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
@@ -281,6 +284,11 @@ export default function OneLoopStudio({
       packTools,
     );
   }, [selected, packFormation.tools]);
+  const stackChecks = packFormation.checks;
+  const supplementalEntities = studioFormationSupplementalEntities(
+    packFormation.tools,
+    linkedSop?.entities,
+  );
 
   useEffect(() => {
     setCompletedChecks([]);
@@ -359,6 +367,16 @@ export default function OneLoopStudio({
     // One-shot kick from ?video= so Home paste starts the live pack path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  useEffect(() => {
+    // Release the module-level Strict Mode guard when Studio truly unmounts so
+    // re-entering /studio?video= with the same id (re-paste, or retry after a
+    // failed run) auto-starts again. Deferred so React's synchronous Strict
+    // Mode unmount/remount still sees the guard and does not double-start.
+    return () => {
+      window.setTimeout(() => resetStudioQueryAutoStart(), 0);
+    };
+  }, []);
 
   const analyze = (event?: FormEvent) => {
     event?.preventDefault();
@@ -497,6 +515,9 @@ export default function OneLoopStudio({
   };
 
   const exportPkg = () => {
+    const filename = studioExportFilename(
+      safeProjectName(selected?.title || 'uvai-project'),
+    );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -516,7 +537,7 @@ export default function OneLoopStudio({
       packFormation.artifacts.length === 0 &&
       packFormation.tools.length === 0
     ) {
-      const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty', filename });
       setExportToast(toast);
       return;
     }
@@ -533,7 +554,6 @@ export default function OneLoopStudio({
         },
       });
       downloadScaffoldPackage(pkg);
-      const filename = studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
@@ -551,6 +571,7 @@ export default function OneLoopStudio({
       const toast = studioExportToastMessage({
         ok: false,
         error: err instanceof Error ? err.message : 'Export failed.',
+        filename,
       });
       setExportToast(toast);
     }
@@ -931,7 +952,7 @@ export default function OneLoopStudio({
               </h2>
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
-              {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
+              {supplementalEntities.length === 0 && packFormation.tools.length === 0 && (
                 <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
               )}
               {packFormation.tools.map((tool) => (
@@ -942,14 +963,7 @@ export default function OneLoopStudio({
                   <span className="font-medium text-white">{tool.name}</span>
                 </span>
               ))}
-              {linkedSop.entities
-                .filter(
-                  (entity) =>
-                    !packFormation.tools.some(
-                      (tool) => tool.name.toLowerCase() === entity.name.toLowerCase(),
-                    ),
-                )
-                .map((entity) => (
+              {supplementalEntities.map((entity) => (
                 <span
                   key={entity.name}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
@@ -1017,7 +1031,7 @@ export default function OneLoopStudio({
               ))}
             </ol>
 
-            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+            {stackChecks.length > 0 && (
               <>
                 <div className="border-t border-white/10 px-4 py-3">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -1025,9 +1039,7 @@ export default function OneLoopStudio({
                   </h2>
                 </div>
                 <ul className="divide-y divide-white/5">
-                  {linkedSop.checklist
-                    .filter((item) => item.source === 'stack')
-                    .map((item) => {
+                  {stackChecks.map((item) => {
                       const checked = completedChecks.includes(item.id);
                       const status = stackCheckStatus(item, completedChecks, 'anonymous');
                       return (

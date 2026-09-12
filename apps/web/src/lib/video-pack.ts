@@ -230,6 +230,7 @@ function processingEnvelope(identity: {
   return {
     status: 'processing' as const,
     data: {
+      version: IDENTITY_VERSION,
       id: identity.id,
       video_id: identity.video_id,
       source_url: identity.source_url,
