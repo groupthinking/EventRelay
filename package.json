@@ -59,16 +59,16 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^4.0.55",
+    "@ai-sdk/gateway": "^4.0.78",
     "@dataconnect/generated": "file:src/dataconnect-generated",
-    "@google-cloud/text-to-speech": "^7.0.0",
+    "@google-cloud/text-to-speech": "^7.1.0",
     "@google/genai": "^2.21.0",
     "@opentelemetry/core": "^2.11.0",
-    "@types/node": "^26.4.1",
-    "ai": "^7.0.91",
-    "chrome-devtools-mcp": "^1.8.0",
+    "@types/node": "^26.5.1",
+    "ai": "^7.0.97",
+    "chrome-devtools-mcp": "^1.9.0",
     "dotenv": "^17.4.2",
-    "openai": "^7.9.0",
+    "openai": "^7.13.0",
     "react": "^19",
     "react-dom": "^19",
     "tsx": "^4.23.13"
