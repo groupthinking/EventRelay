@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from typing import Any, Optional
 
@@ -32,6 +33,57 @@ CLASSIFIED_EVENT_TYPES = {t.value for t in EventType}
 LEGACY_EVENT_TYPES = {"user_login", "mention", "insight"}
 
 ACCEPTED_TYPES = CLASSIFIED_EVENT_TYPES | LEGACY_EVENT_TYPES
+MYXSTACK_HANDLE = "myxstack"
+MYXSTACK_OWNER = "Hermes"
+SPECIALIST_TAG_MAP = {
+    "research": "researcher",
+    "researcher": "researcher",
+    "deploy": "deployer",
+    "deployer": "deployer",
+    "code": "code_generator",
+    "coder": "code_generator",
+    "engineer": "code_generator",
+    "summary": "summarizer",
+    "summarizer": "summarizer",
+    "analysis": "analyzer",
+    "analyzer": "analyzer",
+}
+
+
+def _infer_specialist(text: str, classified_type: EventType) -> str:
+    lowered = text.lower()
+    if any(word in lowered for word in ("deploy", "release", "production", "ship")):
+        return "deployer"
+    if any(word in lowered for word in ("research", "investigate", "compare")):
+        return "researcher"
+    if any(word in lowered for word in ("code", "build", "implement", "fix")):
+        return "code_generator"
+    if any(word in lowered for word in ("summarize", "summary", "recap")):
+        return "summarizer"
+    if classified_type == EventType.CODE:
+        return "code_generator"
+    return "analyzer"
+
+
+def _myxstack_routing_metadata(
+    event: "EventPayload", classified_type: EventType
+) -> dict[str, str]:
+    if event.type.lower() != "mention":
+        return {}
+    title = str((event.data or {}).get("title", ""))
+    handles = [handle.lower() for handle in re.findall(r"@([a-zA-Z0-9_]+)", title)]
+    if MYXSTACK_HANDLE not in handles:
+        return {}
+
+    for handle in handles:
+        specialist = SPECIALIST_TAG_MAP.get(handle)
+        if specialist:
+            return {"owner": MYXSTACK_OWNER, "specialist": specialist}
+
+    return {
+        "owner": MYXSTACK_OWNER,
+        "specialist": _infer_specialist(title, classified_type),
+    }
 
 
 class EventPayload(BaseModel):
@@ -128,6 +180,7 @@ async def ingest_event(event: EventPayload):
                 "label": type_meta.get("label", classified_type.value),
                 "color": type_meta.get("color", "#ffffff"),
                 "icon": type_meta.get("icon", "📋"),
+                **_myxstack_routing_metadata(event, classified_type),
             },
         )
 

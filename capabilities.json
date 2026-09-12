@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "network": {
+    "available": true,
+    "description": "Core custom networking capabilities shipped as real SKILL.md artifacts.",
+    "skills": [
+      "network-configuration",
+      "network-diagnostics",
+      "network-performance",
+      "network-security"
+    ]
+  },
+  "skills": [
+    {
+      "id": "network-configuration",
+      "name": "Network Configuration",
+      "description": "Design, validate, and tune network configuration for local and cloud environments.",
+      "path": ".agents/skills/network-configuration/SKILL.md",
+      "available": true,
+      "category": "network"
+    },
+    {
+      "id": "network-diagnostics",
+      "name": "Network Diagnostics",
+      "description": "Track down connectivity, routing, DNS, latency, and service degradation issues.",
+      "path": ".agents/skills/network-diagnostics/SKILL.md",
+      "available": true,
+      "category": "network"
+    },
+    {
+      "id": "network-performance",
+      "name": "Network Performance",
+      "description": "Measure throughput, identify bottlenecks, and optimize network behavior for production workloads.",
+      "path": ".agents/skills/network-performance/SKILL.md",
+      "available": true,
+      "category": "network"
+    },
+    {
+      "id": "network-security",
+      "name": "Network Security",
+      "description": "Review network boundaries, access control, and secure communication patterns.",
+      "path": ".agents/skills/network-security/SKILL.md",
+      "available": true,
+      "category": "network"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "network-configuration",
+      "name": "Network Configuration",
+      "description": "Design, validate, and tune network configuration for local and cloud environments.",
+      "path": ".agents/skills/network-configuration/SKILL.md",
+      "available": true,
+      "category": "network"
+    },
+    {
+      "id": "network-diagnostics",
+      "name": "Network Diagnostics",
+      "description": "Track down connectivity, routing, DNS, latency, and service degradation issues.",
+      "path": ".agents/skills/network-diagnostics/SKILL.md",
+      "available": true,
+      "category": "network"
+    },
+    {
+      "id": "network-performance",
+      "name": "Network Performance",
+      "description": "Measure throughput, identify bottlenecks, and optimize network behavior for production workloads.",
+      "path": ".agents/skills/network-performance/SKILL.md",
+      "available": true,
+      "category": "network"
+    },
+    {
+      "id": "network-security",
+      "name": "Network Security",
+      "description": "Review network boundaries, access control, and secure communication patterns.",
+      "path": ".agents/skills/network-security/SKILL.md",
+      "available": true,
+      "category": "network"
+    }
+  ]
+}
