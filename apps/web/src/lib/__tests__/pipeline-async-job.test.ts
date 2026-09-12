@@ -14,6 +14,7 @@ import {
   fetchAsyncVideoJob,
   isTerminalJobStatus,
   kickoffAsyncVideoJob,
+  STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
   STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
   STUDIO_ORIGIN_NO_LIVE_HOLD,
   STUDIO_READY_TRANSCRIPT_HOLD,
@@ -428,8 +429,11 @@ describe('pipeline-async-job (WDK C)', () => {
       { transcript: READY_TRANSCRIPT },
     );
     expect(kicked.kind).toBe('failed');
+    expect(kicked.retryable).toBe(true);
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(kicked.message).toBe(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD);
+    expect(kicked.message ?? '').not.toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
     expect(kicked.message ?? '').not.toMatch(/Origin video-to-software returned no verified live URL/i);
     expect(kicked.message ?? '').not.toMatch(/Ready transcript was not reused/i);
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
@@ -528,7 +532,9 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(kicked.kind).toBe('failed');
     expect(kicked.retryable).toBe(true);
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(kicked.message).toBe(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD);
+    expect(kicked.message ?? '').not.toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
     expect(kicked.message ?? '').not.toMatch(/Origin video-to-software returned no verified live URL/i);
     expect(kicked.message ?? '').not.toMatch(/Ready transcript was not reused/i);
     expect(kicked.message ?? '').not.toMatch(/aborted due to timeout/i);
@@ -664,8 +670,18 @@ describe('pipeline-async-job (WDK C)', () => {
     ).toBe(STUDIO_READY_TRANSCRIPT_HOLD);
     expect(
       studioDeployReadyTranscriptHold('video-to-software timed out before a verified live URL'),
-    ).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
-    expect(studioDeployReadyTranscriptHold()).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    ).toBe(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD);
+    expect(studioDeployReadyTranscriptHold()).toBe(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD);
+    expect(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD).not.toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD).not.toMatch(
+      /Origin deploy finished without a backend-supplied https hostname/i,
+    );
+    expect(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD).not.toMatch(
+      /Origin video-to-software returned no verified live URL/i,
+    );
+    expect(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD).not.toMatch(/Ready transcript was not reused/i);
+    expect(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD).not.toMatch(/aborted due to timeout/i);
+    expect(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD).not.toMatch(/HTTP 524/);
     expect(STUDIO_ORIGIN_NO_HOSTNAME_HOLD).not.toMatch(
       /Origin video-to-software returned no verified live URL/i,
     );
@@ -707,6 +723,28 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(extractBackendLiveUrl({ metadata: { live_url: null, result: {} } })).toBeNull();
     expect(extractBackendLiveUrl({ live_url: 'https://' })).toBeNull();
     expect(extractBackendLiveUrl({ live_url: 'http://xy.vercel.app' })).toBeNull();
+  });
+
+  it('normalizes a backend-supplied bare vercel.app hostname without inventing one', () => {
+    expect(
+      extractBackendLiveUrl({
+        metadata: {
+          live_url: null,
+          result: { live_url: 'xy-ship.vercel.app' },
+        },
+      }),
+    ).toBe('https://xy-ship.vercel.app');
+    expect(
+      extractBackendLiveUrl({
+        deployment: { alias: 'xy-ship.vercel.app', urls: { vercel: 'xy-ship.vercel.app' } },
+      }),
+    ).toBe('https://xy-ship.vercel.app');
+    expect(
+      extractBackendLiveUrl({
+        deployment: { urls: { vercel: 'https://vercel.com/new/import?s=https://github.com/x/y' } },
+      }),
+    ).toBeNull();
+    expect(extractBackendLiveUrl({ live_url: 'https://github.com/uvai-generated/xy' })).toBeNull();
   });
 
   it('extracts a verified live_url from deployment.urls.vercel without inventing one', () => {

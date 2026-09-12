@@ -819,6 +819,15 @@ def _vts_sync_budget_seconds() -> float:
     return VTS_SYNC_BUDGET_SECONDS
 
 
+_BARE_LIVE_HOST_SUFFIXES = (".vercel.app", ".netlify.app", ".fly.dev")
+_REJECTED_LIVE_HOSTS = {
+    "github.com",
+    "www.github.com",
+    "vercel.com",
+    "www.vercel.com",
+}
+
+
 def _verified_https_live_url(value: Any) -> str:
     """Pass through a backend-supplied https hostname only — never invent one."""
     if not isinstance(value, str):
@@ -826,6 +835,10 @@ def _verified_https_live_url(value: Any) -> str:
     raw = value.strip()
     if not raw:
         return ""
+    if "://" not in raw and raw.lower().endswith(_BARE_LIVE_HOST_SUFFIXES):
+        if "/" in raw or any(ch.isspace() for ch in raw):
+            return ""
+        raw = f"https://{raw}"
     try:
         parsed = urlparse(raw)
     except ValueError:
@@ -833,7 +846,7 @@ def _verified_https_live_url(value: Any) -> str:
     host = (parsed.hostname or "").lower()
     if parsed.scheme != "https" or not host or not any(ch.isalnum() for ch in host):
         return ""
-    if host in {"github.com", "www.github.com"}:
+    if host in _REJECTED_LIVE_HOSTS:
         return ""
     return raw
 
@@ -877,10 +890,22 @@ def _extract_vts_live_url(result: Optional[dict[str, Any]]) -> str:
         out_dep.get("live_url"),
         out_dep.get("url"),
         *(urls.get(key) for key in preferred_keys),
+        deployment.get("alias"),
+        result.get("alias"),
         summary.get("primary_url"),
         *(summary_urls.get(key) for key in preferred_keys),
         *urls.values(),
         *summary_urls.values(),
+        *(
+            deployment.get("aliases")
+            if isinstance(deployment.get("aliases"), list)
+            else []
+        ),
+        *(
+            result.get("aliases")
+            if isinstance(result.get("aliases"), list)
+            else []
+        ),
     ]
     for candidate in candidates:
         verified = _verified_https_live_url(candidate)
@@ -899,6 +924,14 @@ def _vts_missing_url_error(result: dict[str, Any]) -> str:
         err = deployment.get("error")
         if isinstance(err, str) and err.strip():
             errors.append(err.strip())
+        platforms = deployment.get("deployments")
+        if isinstance(platforms, dict):
+            for name, payload in platforms.items():
+                if not isinstance(payload, dict):
+                    continue
+                platform_err = payload.get("error") or payload.get("error_message")
+                if isinstance(platform_err, str) and platform_err.strip():
+                    errors.append(f"{name}: {platform_err.strip()}")
     if errors:
         return "; ".join(errors)
     return "Origin deploy finished without a backend-supplied https hostname"
@@ -956,6 +989,7 @@ async def video_to_software_v1(
         target_info = resolve_deployment_target(request.deployment_target)
 
         job_id = f"job_{_uuid.uuid4().hex[:10]}"
+        # In-memory + async store — do not block the 202 on a slow job store.
         _persist_video_job(
             VideoJobStatusResponse(
                 job_id=job_id,
@@ -964,7 +998,7 @@ async def video_to_software_v1(
                 video_url=request.video_url,
                 transcript=request.transcript,
             ),
-            sync=True,
+            sync=False,
         )
 
         async def _run_and_persist() -> dict[str, Any]:

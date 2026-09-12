@@ -1,4 +1,31 @@
-# TASK: Origin video-to-software must return verified live URL
+# TASK: studio.deploy must surface a backend hostname or a precise kickoff HOLD
+
+## 1. Goal & Scope
+* **Objective:** Ready-transcript `studio.deploy` / G.A.T.E. for XYMcBrFSJ4c must PASS with a backend-supplied https hostname + receipt, or HOLD with a residual that is **not** any cleared copy (reuse miss, timeout abort, HTTP 524, YouTube bot, UNKNOWN, workflow-run, workflow-return, BACKEND_URL, origin-no-live, or the #1889 hostname-finished string).
+* **Context:** AXIOM on READY prod `dpl_EHAzZtKkJ2PQLS2fjPfu8PpDyizt` (#1889 / `ab752a7b`) / XYMcBrFSJ4c. Cleared: `Origin video-to-software returned no verified live URL.` Still HOLD: `Origin deploy finished without a backend-supplied https hostname.` Receipt `er:gate:v1:wrun_01M2B5SRA5W5S4WQP2M4ZHY040`. AXIOM: Not VERCEL_TOKEN. No live URL.
+* **Root cause (verified in Vercel runtime logs):** Kickoff `POST /video-to-software` hit `AbortSignal.timeout(20s)` twice per `kickoffStep` (16:04:25 and 16:05:05). #1889 remapped that abort via `studioDeployReadyTranscriptHold` / `isGatewayTimeoutKickoff` to `STUDIO_ORIGIN_NO_HOSTNAME_HOLD`. Workflow retried kickoff once, then `FatalError` — never received a `job_id`, never polled. The residual is false: deploy did not finish.
+* **Scope:** Stop remapping kickoff abort/524 to hostname-finished. Durable kickoff retries. Longer vts wait. Normalize backend-supplied bare `*.vercel.app` hosts. Async initial job persist so 202 is not store-blocked. Do not invent a URL or a secret.
+ * *Initial check:* Modify existing kickoff/poll/extract/persist. No new Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (kickoff abort/524 ≠ hostname HOLD; bare hostname extract; wrun_01M2B5SRA5W5S4WQP2M4ZHY040 receipt; persist hang ≠ blocked 202)
+- [x] Step 2: Implement kickoff residual + retries + 45s wait + bare-host extract + async pending persist
+- [x] Step 3: Focused Vitest + pytest GREEN
+- [x] Step 4: PR off current main — https://github.com/groupthinking/EventRelay/pull/1891
+
+## 3. Definition of Done
+* **Expected Outcome:** Timeout/524 kickoff stays retryable and HOLDs `STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD` if no job id arrives. Hostname HOLD is only for a terminal job with no URL. Bare backend hostnames become `https://`. 202 is not blocked on job-store save.
+* **Verification Method:** Focused Vitest (`pipeline-async-job`, `gate-transition`, `studio-pipeline-status`) + pytest extract/persist/202.
+* **Proof Artifact:** PR https://github.com/groupthinking/EventRelay/pull/1891. Vitest 5 files / 107 passed. Pytest 7 passed (202 reuse, store hang, bare hostname, nested platform error, GET flatten).
+
+## 4. Post-Task Reflection
+* **What was done:** Stopped remapping vts kickoff abort/524 to the #1889 hostname-finished HOLD. Durable kickoff retries + 45s wait. Bare `*.vercel.app` pass-through. Async pending persist. Nested platform errors become the job error when a job actually finishes without a hostname.
+* **Why it was needed:** Prod logs for `wrun_01M2B5SRA5W5S4WQP2M4ZHY040` showed kickoff abort remapped to a finished-deploy HOLD; no job id, no poll.
+* **How it was tested:** Focused Vitest 107 passed; focused pytest 7 passed. No URL invented. No Hayden secrets guessed.
+
+---
+
+# Prior cut: Origin video-to-software must return verified live URL
 
 ## 1. Goal & Scope
 * **Objective:** After transcript reuse, studio.deploy / origin video-to-software must surface a verified clickable https live URL + EventRelay receipt for G.A.T.E. PASS, or an honest HOLD that is **not** `Origin video-to-software returned no verified live URL` and not prior cleared residuals.
