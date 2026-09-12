@@ -18,6 +18,11 @@ import {
   type TranscriptSegment,
 } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
+import {
+  buildActionAgentSource,
+  sanitizeActEvents,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
 
 export interface VideoToActionsEvent {
   type?: string;
@@ -68,17 +73,24 @@ export async function videoToActionsWorkflow(
     throw new FatalError('Analysis quality gate failed: missing provenance');
   }
 
-  const provider = await providerLabelStep();
-  const actions = (analysis.actions || []).map((action) => ({
-    tool: 'review_action',
-    status: 'proposed',
-    result: action.title,
+  const acted = await actionAgentStep({
+    transcript: buildActionAgentSource(
+      usableProvidedTranscript(input.transcript) || evidence.transcript,
+      sanitizeActEvents(input.events),
+    ),
+    videoTitle: input.videoTitle,
+  });
+  const provider = acted.provider || (await providerLabelStep());
+  const actions = acted.actions.map((action) => ({
+    tool: action.tool,
+    status: action.status,
+    result: action.result,
   }));
 
   return {
     url,
     transcriptChars: evidence.transcript.length,
-    actionCount: analysis.actions?.length || 0,
+    actionCount: actions.length,
     provider,
     actions,
     analysis,
@@ -171,4 +183,18 @@ async function providerLabelStep(): Promise<string> {
 
   const { getGeminiRoutingLabel } = await import('@/lib/gemini-client');
   return getGeminiRoutingLabel();
+}
+
+async function actionAgentStep(input: {
+  transcript: string;
+  videoTitle?: string;
+}): Promise<{ provider: string; actions: Array<{ tool: string; status: string; result?: string }> }> {
+  'use step';
+
+  const { runActionAgent } = await import('@/lib/action-agent');
+  return runActionAgent({
+    transcript: input.transcript,
+    videoTitle: input.videoTitle,
+    executeTools: false,
+  });
 }
