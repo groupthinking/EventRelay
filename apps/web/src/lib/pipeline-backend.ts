@@ -1,19 +1,8 @@
 import 'server-only';
 
-/** Documented env names that may hold the FastAPI origin. First http(s) wins. */
-export const BACKEND_URL_ENV_KEYS = [
-  'BACKEND_URL',
-  'NEXT_PUBLIC_BACKEND_URL',
-  'NEXT_PUBLIC_API_URL',
-] as const;
-
-/**
- * Resolve the configured EventRelay backend origin.
- * Production Studio Attempt deploy reads these names — do not invent a host.
- */
-export function resolveConfiguredBackendUrl(): string | null {
-  for (const key of BACKEND_URL_ENV_KEYS) {
-    const raw = (process.env[key] || '').trim();
+function firstHttpOrigin(...values: Array<string | undefined>): string | null {
+  for (const value of values) {
+    const raw = value?.trim() ?? '';
     if (!raw) continue;
     try {
       const parsed = new URL(raw);
@@ -24,6 +13,19 @@ export function resolveConfiguredBackendUrl(): string | null {
     }
   }
   return null;
+}
+
+/**
+ * Resolve the configured EventRelay backend origin.
+ * Names are read statically so Next.js can inline them on Vercel builds.
+ * Production Studio Attempt deploy — do not invent a host.
+ */
+export function resolveConfiguredBackendUrl(): string | null {
+  return firstHttpOrigin(
+    process.env.BACKEND_URL,
+    process.env.NEXT_PUBLIC_BACKEND_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+  );
 }
 
 /**
