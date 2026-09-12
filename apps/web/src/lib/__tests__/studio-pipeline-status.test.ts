@@ -421,6 +421,13 @@ describe('studio-pipeline-status', () => {
     expect(retired).not.toMatch(/durable Workflow DevKit/);
   });
 
+  it('does not claim live deploy in retired studio without a verified receipt guard', () => {
+    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    expect(retired).toContain('studioVerifiedLiveUrl');
+    expect(retired).not.toContain('setActionMessage(`Deploy live: ${kick.live_url}`)');
+    expect(retired).not.toContain('setActionMessage(`Deploy ready: ${polled.live_url}`)');
+  });
+
   it('renders review_action as a card with status, title, and detail', () => {
     const review = studioActionCard({
       tool: 'review_action',
