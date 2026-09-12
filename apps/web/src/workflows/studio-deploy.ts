@@ -42,6 +42,9 @@ interface StudioDeployKickoff {
 /** Durable 10s gaps × 36 reads = 6 minutes after kickoff — not one 180s step. */
 const JOB_POLL_READS = 36;
 
+/** Kickoff abort/524 on wrun_01M2B5SRA5W5S4WQP2M4ZHY040 never received a job id. */
+const KICKOFF_RETRIES = 6;
+
 export async function studioDeployWorkflow(
   input: StudioDeployInput,
 ): Promise<StudioDeployResult> {
@@ -53,7 +56,8 @@ export async function studioDeployWorkflow(
   }
 
   let kicked = await kickoffStep(url, input.transcript);
-  if (kicked.kind === 'failed' && kicked.retryable) {
+  for (let i = 0; i < KICKOFF_RETRIES && kicked.kind === 'failed' && kicked.retryable; i++) {
+    await sleep('10s');
     kicked = await kickoffStep(url, input.transcript);
   }
   if (kicked.kind === 'failed') {
@@ -133,7 +137,7 @@ async function kickoffStep(
   const {
     isAbortTimeout,
     kickoffAsyncVideoJob,
-    STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
+    STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
   } = await import('@/lib/pipeline-async-job');
   try {
     return await kickoffAsyncVideoJob(url, { transcript });
@@ -143,7 +147,7 @@ async function kickoffStep(
         kind: 'failed',
         retryable: true,
         message: transcript
-          ? STUDIO_ORIGIN_NO_HOSTNAME_HOLD
+          ? STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD
           : 'Deploy kickoff timed out before a verified live URL. Waiting for the origin job — not aborting the attempt.',
       };
     }

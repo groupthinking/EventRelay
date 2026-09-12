@@ -41,6 +41,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 const PREFERRED_LIVE_HOST = /\.(vercel\.app|netlify\.app|fly\.dev)$/i;
+const BARE_LIVE_HOST = /^(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|fly\.dev)$/i;
+const REJECTED_LIVE_HOST = /^(?:www\.)?(?:github\.com|vercel\.com)$/i;
 
 function hostnameOf(url: string): string {
   try {
@@ -48,6 +50,19 @@ function hostnameOf(url: string): string {
   } catch {
     return '';
   }
+}
+
+/** Pass through a backend-supplied hostname only — never invent one. */
+function asBackendLiveCandidate(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const verified = studioVerifiedLiveUrl(raw);
+  if (verified) return verified;
+  if (BARE_LIVE_HOST.test(raw)) {
+    return studioVerifiedLiveUrl(`https://${raw}`);
+  }
+  return null;
 }
 
 function collectLiveUrlCandidates(record: Record<string, unknown>): unknown[] {
@@ -75,9 +90,14 @@ function collectLiveUrlCandidates(record: Record<string, unknown>): unknown[] {
     urls?.vercel,
     urls?.netlify,
     urls?.fly,
+    deployment?.alias,
+    record.alias,
     summary?.primary_url,
     ...(summaryUrls ? Object.values(summaryUrls) : []),
     ...(urls ? Object.values(urls) : []),
+    ...(Array.isArray(deployment?.aliases) ? deployment.aliases : []),
+    ...(Array.isArray(deployment?.automaticAliases) ? deployment.automaticAliases : []),
+    ...(Array.isArray(record.aliases) ? record.aliases : []),
     record.url,
     data,
     result,
@@ -103,9 +123,12 @@ export function extractBackendLiveUrl(...values: unknown[]): string | null {
     const value = queue.shift();
     if (value == null || seen.has(value)) continue;
     if (typeof value === 'object') seen.add(value);
-    const verified = studioVerifiedLiveUrl(typeof value === 'string' ? value : null);
+    const verified = asBackendLiveCandidate(value);
     if (verified) {
       const host = hostnameOf(verified);
+      if (REJECTED_LIVE_HOST.test(host)) {
+        continue;
+      }
       if (PREFERRED_LIVE_HOST.test(host) || host.endsWith('.vercel.app')) {
         preferred.push(verified);
       } else if (host !== 'github.com' && host !== 'www.github.com') {
@@ -138,6 +161,10 @@ export const STUDIO_ORIGIN_NO_LIVE_HOLD =
 export const STUDIO_ORIGIN_NO_HOSTNAME_HOLD =
   'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
 
+/** Honest HOLD when kickoff abort/524 never returned a pollable job id. */
+export const STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD =
+  'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
+
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
   if (message && YOUTUBE_REFETCH_RE.test(message)) {
@@ -161,7 +188,7 @@ export function studioDeployReadyTranscriptHold(message?: string): string {
     return STUDIO_READY_TRANSCRIPT_HOLD;
   }
   if (!message || isGatewayTimeoutKickoff(undefined, message)) {
-    return STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
+    return STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD;
   }
   return message;
 }
@@ -425,16 +452,24 @@ async function tryVideoToSoftwareDeploy(
         deployment_target: 'vercel',
         ...(transcript ? { transcript } : {}),
       }),
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(45_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     const data = asRecord(payload.data) || {};
-    const handedOffJobId = str(data.job_id) || str(payload.job_id);
+    const handedOffJobId = str(data.job_id) || str(data.jobId) || str(payload.job_id) || str(payload.jobId);
     if (response.status === 202 && handedOffJobId) {
       return {
         kind: 'job',
         jobId: handedOffJobId,
         statusUrl: `/api/jobs/${handedOffJobId}`,
+      };
+    }
+    if (response.status === 202 && !handedOffJobId) {
+      return {
+        kind: 'failed',
+        retryable: true,
+        httpStatus: 202,
+        message: STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
       };
     }
     const miss =

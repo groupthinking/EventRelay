@@ -1201,6 +1201,47 @@ class TestVideoToSoftwareEndpoint:
         finally:
             app.dependency_overrides[get_video_processing_service] = _make_vps
 
+    def test_ready_transcript_202_does_not_block_on_sync_job_store(self, client):
+        """202 must return even if the durable job store save hangs."""
+        hang = threading.Event()
+
+        def _hanging_save(*_args, **_kwargs):
+            hang.wait(timeout=2.0)
+
+        mock_store = MagicMock()
+        mock_store.save.side_effect = _hanging_save
+        mock_store.load.return_value = None
+
+        try:
+            with patch(
+                "youtube_extension.backend.api.v1.router.resolve_deployment_target",
+                return_value={
+                    "requested": "vercel",
+                    "resolved": "vercel",
+                    "alias_applied": False,
+                },
+            ), patch(
+                "youtube_extension.backend.api.v1.router.get_job_store",
+                return_value=mock_store,
+            ):
+                payload = {
+                    "url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "project_type": "web",
+                    "deployment_target": "vercel",
+                    "transcript": (
+                        "Studio Video Pack for auJzb1D-fag already has a usable "
+                        "transcript ready for deploy."
+                    ),
+                }
+                started = time.perf_counter()
+                resp = client.post("/api/v1/video-to-software", json=payload)
+                elapsed = time.perf_counter() - started
+            assert resp.status_code == 202
+            assert elapsed < 0.15
+            assert resp.json()["data"]["job_id"].startswith("job_")
+        finally:
+            hang.set()
+
 
 # ===========================================================================
 # Async Video Jobs (start, status, events, dispatch, agents)
@@ -2211,6 +2252,73 @@ class TestRunVideoJobCoroutine:
             assert job.metadata["live_url"] == "https://xy.vercel.app"
             assert job.live_url == "https://xy.vercel.app"
             assert "no verified live URL" not in (job.error or "")
+        finally:
+            _video_jobs.pop(job_id, None)
+
+    def test_extract_vts_live_url_from_bare_vercel_hostname(self):
+        from youtube_extension.backend.api.v1.router import _extract_vts_live_url
+
+        assert (
+            _extract_vts_live_url(
+                {
+                    "live_url": "",
+                    "deployment": {"urls": {"vercel": "xy-ship.vercel.app"}},
+                }
+            )
+            == "https://xy-ship.vercel.app"
+        )
+        assert (
+            _extract_vts_live_url(
+                {"deployment": {"alias": "xy-ship.vercel.app", "urls": {}}}
+            )
+            == "https://xy-ship.vercel.app"
+        )
+        assert _extract_vts_live_url(
+            {
+                "deployment": {
+                    "urls": {
+                        "vercel": "https://vercel.com/new/import?s=https://github.com/x/y"
+                    }
+                }
+            }
+        ) == ""
+
+    def test_persist_vts_surfaces_nested_platform_error(self):
+        from youtube_extension.backend.api.v1.router import (
+            _persist_vts_job_result,
+            _video_jobs,
+        )
+
+        job_id = "job_vts_platform_err"
+        _video_jobs[job_id] = VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            progress=0.0,
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+        )
+        try:
+            _persist_vts_job_result(
+                job_id,
+                {
+                    "status": "success",
+                    "live_url": "",
+                    "deployment": {
+                        "status": "failed",
+                        "errors": [],
+                        "deployments": {
+                            "vercel": {
+                                "status": "failed",
+                                "error": "GITHUB_REPO_URL required for Vercel deployment",
+                            }
+                        },
+                    },
+                },
+            )
+            job = _video_jobs[job_id]
+            assert job.status == JobStatus.failed
+            assert "GITHUB_REPO_URL required" in (job.error or "")
+            assert "no verified live URL" not in (job.error or "")
+            assert "backend-supplied https hostname" not in (job.error or "")
         finally:
             _video_jobs.pop(job_id, None)
 
