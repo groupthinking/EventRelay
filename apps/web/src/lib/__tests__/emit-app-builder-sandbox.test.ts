@@ -18,6 +18,18 @@ import {
   QJ_VIDEO_ID,
   QJ_VISUAL_EVENTS,
 } from '@/lib/__fixtures__/qj-z5ohr7sga-emit';
+import {
+  XYMC_FORBIDDEN_ARCHITECTURE,
+  XYMC_FORBIDDEN_CODE_SNIPPETS,
+  XYMC_KEYFRAMES,
+  XYMC_PACK_ID,
+  XYMC_SOP_STEPS,
+  XYMC_SOURCE_HASH,
+  XYMC_SOURCE_URL,
+  XYMC_TRANSCRIPT,
+  XYMC_VIDEO_ID,
+  XYMC_VISUAL_EVENTS,
+} from '@/lib/__fixtures__/xymcbrfsj4c-emit';
 
 function emitFixture() {
   return emitAppBuilderSandbox({
@@ -245,5 +257,172 @@ describe('buildStudioShipPackage', () => {
     expect(pkg.files['ARCHITECTURE.md']).toBeUndefined();
     expect(pkg.files['artifacts.json']).toBeUndefined();
     expect(Object.values(pkg.files).join('\n')).not.toContain('tire_procedure.ts');
+  });
+});
+
+function emitXymcFixture() {
+  return emitAppBuilderSandbox({
+    videoId: XYMC_VIDEO_ID,
+    sourceUrl: XYMC_SOURCE_URL,
+    sourceHash: XYMC_SOURCE_HASH,
+    packId: XYMC_PACK_ID,
+    transcript: XYMC_TRANSCRIPT,
+    visualEvents: [...XYMC_VISUAL_EVENTS],
+    sopSteps: [...XYMC_SOP_STEPS],
+  });
+}
+
+describe('emitAppBuilderSandbox (second-video XYMcBrFSJ4c)', () => {
+  it('uses the live XYMcBrFSJ4c identity hash and does not alias QjZ5ohr7sGA', () => {
+    expect(identityHash(XYMC_VIDEO_ID)).toBe(XYMC_SOURCE_HASH);
+    expect(XYMC_PACK_ID).toBe('vp:v0:XYMcBrFSJ4c');
+    expect(XYMC_VIDEO_ID).not.toBe(QJ_VIDEO_ID);
+    expect(XYMC_SOURCE_HASH).not.toBe(QJ_SOURCE_HASH);
+    expect(identityHash(QJ_VIDEO_ID)).toBe(QJ_SOURCE_HASH);
+  });
+
+  it('renders XYMc transcript, visual events, and SOP — not architecture or Qj tire copy', () => {
+    const sandbox = emitXymcFixture();
+    const html = sandbox.files['index.html'];
+    const shipped = Object.values(sandbox.files).join('\n');
+    expect(sandbox.videoId).toBe(XYMC_VIDEO_ID);
+    expect(sandbox.preview.port).toBe(8080);
+    expect(html).toContain(XYMC_VIDEO_ID);
+    expect(html).toContain(XYMC_SOURCE_URL);
+    expect(html).toContain(XYMC_SOURCE_HASH);
+    expect(html).toContain('unpaid invoices');
+    expect(html).toContain('nine boring AI automations');
+    expect(html).toContain('Torty Gym');
+    expect(html).toContain('Email Triage Workflow');
+    expect(html).toContain('Sub-60s Speed-to-Lead Calling');
+    expect(html).not.toContain('five flat tires');
+    expect(html).not.toContain('scissor jack');
+    expect(html).not.toContain('Safety and Vehicle Staging');
+    expect(html).not.toContain(QJ_VIDEO_ID);
+    expect(html).not.toContain('data-testid="pack-architecture"');
+    expect(shipped).not.toContain('EmailClassification');
+    expect(shipped).not.toContain('email_triage.ts');
+    expect(shipped).not.toContain('OutboundCallPayload');
+    expect(shipped).not.toContain('Modular agency architecture connecting lead capture');
+    expect(shipped).not.toMatch(/dpl_/);
+  });
+
+  it('strips invented architecture and code_snippets from the live XYMc pack shape', () => {
+    const sandbox = sandboxFromVideoPack({
+      version: 'v0',
+      id: XYMC_PACK_ID,
+      video_id: XYMC_VIDEO_ID,
+      source_url: XYMC_SOURCE_URL,
+      provenance: { source_hash: XYMC_SOURCE_HASH },
+      transcript: XYMC_TRANSCRIPT,
+      keyframes: XYMC_KEYFRAMES.map((frame) => ({
+        t_s: frame.t_s,
+        desc: frame.desc,
+      })),
+      visual_context: {
+        visual_elements: XYMC_VISUAL_EVENTS.map((event) => ({
+          timestamp: event.timestamp,
+          element_type: event.element_type,
+          content: event.content,
+          confidence: 0.9,
+        })),
+        summary: 'Live functional demos of n8n, Make, Retell AI, and Voiceflow.',
+        frame_analysis_count: 12,
+      },
+      requirements: XYMC_SOP_STEPS.map((step) => ({
+        id: step.id,
+        title: step.title,
+        detail: step.description,
+      })),
+      architecture: {
+        summary: XYMC_FORBIDDEN_ARCHITECTURE.summary,
+        stages: XYMC_FORBIDDEN_ARCHITECTURE.stages.map((stage) => ({ ...stage })),
+        mermaid: XYMC_FORBIDDEN_ARCHITECTURE.mermaid,
+      },
+      artifacts: [
+        {
+          path_hint: 'workflows/speed_to_lead_n8n.json',
+          purpose: 'Invented workflow dump',
+          interface: 'n8n workflow definition',
+        },
+      ],
+      stack: { tools: [] },
+      concepts: [],
+      code_snippets: XYMC_FORBIDDEN_CODE_SNIPPETS.map((snippet) => ({ ...snippet })),
+      metrics: {},
+    });
+    const html = sandbox.files['index.html'];
+    const shipped = Object.values(sandbox.files).join('\n');
+    expect(html).toContain('unpaid invoices');
+    expect(html).toContain('Torty Gym');
+    expect(html).toContain('Email Triage Workflow');
+    expect(html).toContain('Diagram showing CRM, AI Agent, and Client unpaid invoice follow-up flow');
+    expect(sandbox.files['src/pack.ts']).toContain(XYMC_VIDEO_ID);
+    expect(shipped).not.toContain('email_triage.ts');
+    expect(shipped).not.toContain('EmailClassification');
+    expect(shipped).not.toContain('retell_voice.ts');
+    expect(shipped).not.toContain('calendar_tool.ts');
+    expect(shipped).not.toContain('speed_to_lead_n8n.json');
+    expect(shipped).not.toContain('Modular agency architecture connecting lead capture');
+    expect(shipped).not.toContain('five flat tires');
+    expect(shipped).not.toContain(QJ_VIDEO_ID);
+  });
+});
+
+describe('buildStudioShipPackage (second-video XYMcBrFSJ4c)', () => {
+  it('merges the XYMc App Builder sandbox and drops architecture files', () => {
+    const pkg = buildStudioShipPackage({
+      projectName: 'uvai-project',
+      actions: [],
+      videoPack: {
+        videoId: XYMC_VIDEO_ID,
+        sourceUrl: XYMC_SOURCE_URL,
+        sourceHash: XYMC_SOURCE_HASH,
+        packId: XYMC_PACK_ID,
+        visual: {
+          visual_context: {
+            visual_elements: XYMC_VISUAL_EVENTS.map((event) => ({
+              timestamp: event.timestamp,
+              element_type: event.element_type,
+              content: event.content,
+              confidence: 0.9,
+            })),
+            summary: 'Live functional demos of n8n, Make, Retell AI, and Voiceflow.',
+            frame_analysis_count: 12,
+          },
+        },
+        requirements: XYMC_SOP_STEPS.map((step) => ({
+          id: step.id,
+          title: step.title,
+          detail: step.description,
+        })),
+      },
+      transcript: XYMC_TRANSCRIPT,
+      packFormation: {
+        architecture: {
+          summary: XYMC_FORBIDDEN_ARCHITECTURE.summary,
+          stages: XYMC_FORBIDDEN_ARCHITECTURE.stages.map((stage) => ({ ...stage })),
+          mermaid: XYMC_FORBIDDEN_ARCHITECTURE.mermaid,
+        },
+        artifacts: [
+          {
+            path_hint: 'workflows/email_triage.ts',
+            purpose: 'Invented type dump',
+            interface: 'interface EmailClassification',
+          },
+        ],
+      },
+    });
+    expect(pkg.files['startup.sh']).toContain('npm run dev');
+    expect(pkg.files['scripts/browser-smoke.mjs']).toContain(XYMC_VIDEO_ID);
+    expect(pkg.files['scripts/browser-smoke.mjs']).not.toContain(QJ_VIDEO_ID);
+    expect(pkg.files['index.html']).toContain('unpaid invoices');
+    expect(pkg.files['index.html']).toContain('Torty Gym');
+    expect(pkg.files['index.html']).toContain('Email Triage Workflow');
+    expect(pkg.files['index.html']).not.toContain('five flat tires');
+    expect(pkg.files['ARCHITECTURE.md']).toBeUndefined();
+    expect(pkg.files['artifacts.json']).toBeUndefined();
+    expect(Object.values(pkg.files).join('\n')).not.toContain('email_triage.ts');
+    expect(Object.values(pkg.files).join('\n')).not.toContain('EmailClassification');
   });
 });
