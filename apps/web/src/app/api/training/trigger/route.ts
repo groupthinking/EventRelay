@@ -232,7 +232,6 @@ export async function POST(request: Request) {
       } catch (uploadError) {
         return NextResponse.json({
           error: 'Upload/trigger failed',
-          details: String(uploadError),
           fallback: {
             message: 'Run manually:',
             commands: [
@@ -249,7 +248,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Training trigger error:', error);
     return NextResponse.json(
-      { error: 'Failed to process training request', details: String(error) },
+      { error: 'Failed to process training request' },
       { status: 500 },
     );
   }

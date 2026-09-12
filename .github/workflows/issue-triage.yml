@@ -22,18 +22,26 @@ concurrency:
 jobs:
   triage:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/github-script@v9
         with:
           script: |
             const issue = context.payload.issue;
+            const title = (issue.title || '').trim().toLowerCase();
             const body = (issue.body || '').trim();
+            const linearLinkbackOnly = /^<!--\s*linear-linkback\s*-->\s*<p>\s*<a\b[^>]*>[^<]+<\/a>\s*<\/p>\s*$/i.test(body);
 
             // Bot-opened issues with no body are agent-session artifacts (e.g. the
             // recurring empty "Addressing Issues" shells from Jules/Linear sessions,
             // #1548/#1553/#1568). Labeling them for triage just manufactures noise
             // that syncs back into Linear, so close them instead.
-            if (issue.user && issue.user.type === 'Bot' && body === '') {
+            if (
+              issue.user &&
+              issue.user.type === 'Bot' &&
+              title === 'addressing issues' &&
+              (body === '' || linearLinkbackOnly)
+            ) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,

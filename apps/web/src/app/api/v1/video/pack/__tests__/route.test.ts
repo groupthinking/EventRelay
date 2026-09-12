@@ -80,6 +80,18 @@ describe('POST /api/v1/video/pack', () => {
       postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }),
     );
     expect(accepted.status).toBe(202);
+    const acceptedBody = (await accepted.json()) as {
+      status: string;
+      data: {
+        version?: string;
+        source_url?: string;
+        provenance?: { source_hash?: string };
+      };
+    };
+    expect(acceptedBody.status).toBe('processing');
+    expect(acceptedBody.data.version).toBe('v0');
+    expect(acceptedBody.data.source_url).toBe('https://www.youtube.com/watch?v=jNQXAC9IVRw');
+    expect(acceptedBody.data.provenance?.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     await flush();
     const byHash = await GET(
       new Request(

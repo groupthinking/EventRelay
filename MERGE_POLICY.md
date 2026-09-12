@@ -34,7 +34,7 @@ one quiet window could pass.
 SHA; previews are routinely canceled for reasons unrelated to the change. It
 required independent review approval; CodeRabbit skips any pull request without
 one of 26 labels, so an unlabeled pull request could never obtain the approval
-the gate demanded. `agent-completion/truth-gate` failed `invalid_payload` on
+the gate demanded. The retired agent-completion gate failed `invalid_payload` on
 every pull request that had no dispatch contract — including #1368, which
 merged and became the tip of `main` with that status red.
 
@@ -111,10 +111,10 @@ weakening introduced by the rewrite that set out to make this gate precise.
 > tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
 > not something the workflow decides.
 >
-> So gate 2 requires these checks to **run and complete** — which catches a scan
-> that crashed, timed out, or was silently dropped from the pipeline. It is
-> **not** vulnerability enforcement, and this policy should not be read as
-> claiming it is. Making findings actually block is a change to
+> So gate 2 requires these security scan jobs (check-runs) to **run and complete** —
+> which catches a scan that crashed, timed out, or was silently dropped from the
+> pipeline. It is not a findings gate, and this policy should not be read as
+> claiming vulnerability enforcement. Making findings actually block is a change to
 > `security.yml`, with its own diff and its own blast radius; see *What is
 > deliberately not here*.
 
@@ -122,6 +122,23 @@ weakening introduced by the rewrite that set out to make this gate precise.
 > `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads
 > above. Selecting the capitalised one requires a check that never passes —
 > precisely the trap the confirmation rule below exists to catch.
+
+> **`PR Governance` / `Canonical issue and evidence` (#1436).** Neither name
+> appears in the required list above, and that is deliberate, not an
+> omission. `pr-governance.yml` was the sole source of both check-run names,
+> and on its escape paths (draft PRs, Dependabot) only its own custom
+> `PR Governance` check reported the honest `neutral`; the job-level
+> `Canonical issue and evidence` check still reported `success`, because the
+> escape never called `core.setFailed`. Requiring the descriptive-sounding
+> `Canonical issue and evidence` name alone would have made every draft and
+> every Dependabot PR read as "contract satisfied" instead of "not
+> evaluated" — the exact trap the confirmation rule below exists to catch,
+> and worse here because nothing in the picker hints which of the two names
+> carries the real signal. The workflow was retired outright (#1665) rather
+> than fixed, so the trap no longer exists to fall into. If a canonical-issue
+> gate is reintroduced, whichever check carries the three-state signal must
+> be the one required, and that must be spelled out here before it is added
+> to branch protection — not discovered afterward on a green draft PR.
 
 **Conditionally required — never require these unconditionally:**
 
@@ -197,7 +214,7 @@ was written to remove.
 > issue is opened against its owner.**
 
 A check red on everything has zero signal and actively hides real failures.
-`agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
+The retired agent-completion gate was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
 ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
 this failure mode in its own comments while its sibling did exactly that. Both

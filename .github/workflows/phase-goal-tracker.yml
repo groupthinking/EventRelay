@@ -28,6 +28,7 @@ jobs:
   track:
     name: Track phase checklist progress
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Evaluate checklist and update tracker comment
         uses: actions/github-script@v9

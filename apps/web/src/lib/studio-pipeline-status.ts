@@ -1,5 +1,9 @@
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
-import { stackChecksFromPackTools, type ChecklistItem } from '@/lib/linked-sop';
+import {
+  stackChecksFromPackTools,
+  type ChecklistItem,
+  type LinkedEntity,
+} from '@/lib/linked-sop';
 import type {
   VideoPackArchitecture,
   VideoPackArtifact,
@@ -84,6 +88,14 @@ export function studioPackFormation(pack: VideoPackCitation | null | undefined):
     architecture: pack?.pack.architecture ?? null,
     artifacts: pack?.pack.artifacts ?? [],
   };
+}
+
+export function studioFormationSupplementalEntities(
+  tools: VideoPackStackTool[] | null | undefined,
+  entities: LinkedEntity[] | null | undefined,
+): LinkedEntity[] {
+  if ((tools?.length ?? 0) > 0) return [];
+  return entities ?? [];
 }
 
 export function studioEventsEmptyMessage(input: {
@@ -372,7 +384,7 @@ export function studioExportToastMessage(input: {
   if (!input.ok || input.kind === 'empty') {
     return {
       tone: 'error',
-      text: input.error || 'Export failed — nothing to export yet.',
+      text: `${input.error || 'Export failed — nothing to export yet.'}${fileBit}`,
     };
   }
   if (input.kind === 'pack') {

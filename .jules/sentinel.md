@@ -1,0 +1,3 @@
+## 2026-09-12 - Fix Overly Permissive CORS Policy
+
+Found and remediated an issue where `CORSMiddleware` was configured with `allow_methods=["*"]` and `allow_headers=["*"]` alongside `allow_credentials=True`. This violates the principle of least privilege and opens up potential bypasses or CSRF-like attacks if any allowed origin is compromised. The fix explicitly enumerated the required methods (`GET`, `POST`, `PUT`, `DELETE`, `OPTIONS`, `HEAD`, `PATCH`) and headers (`Accept`, `Accept-Language`, `Authorization`, `Content-Language`, `Content-Type`, `Origin`, `X-API-Key`, `X-Requested-With`) across all FastAPI instances.
