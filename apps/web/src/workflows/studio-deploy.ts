@@ -133,7 +133,7 @@ async function kickoffStep(
   const {
     isAbortTimeout,
     kickoffAsyncVideoJob,
-    STUDIO_ORIGIN_NO_LIVE_HOLD,
+    STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
   } = await import('@/lib/pipeline-async-job');
   try {
     return await kickoffAsyncVideoJob(url, { transcript });
@@ -143,7 +143,7 @@ async function kickoffStep(
         kind: 'failed',
         retryable: true,
         message: transcript
-          ? STUDIO_ORIGIN_NO_LIVE_HOLD
+          ? STUDIO_ORIGIN_NO_HOSTNAME_HOLD
           : 'Deploy kickoff timed out before a verified live URL. Waiting for the origin job — not aborting the attempt.',
       };
     }

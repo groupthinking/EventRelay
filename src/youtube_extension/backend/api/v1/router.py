@@ -18,6 +18,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from fastapi import (
     APIRouter,
@@ -818,6 +819,91 @@ def _vts_sync_budget_seconds() -> float:
     return VTS_SYNC_BUDGET_SECONDS
 
 
+def _verified_https_live_url(value: Any) -> str:
+    """Pass through a backend-supplied https hostname only — never invent one."""
+    if not isinstance(value, str):
+        return ""
+    raw = value.strip()
+    if not raw:
+        return ""
+    try:
+        parsed = urlparse(raw)
+    except ValueError:
+        return ""
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or not host or not any(ch.isalnum() for ch in host):
+        return ""
+    if host in {"github.com", "www.github.com"}:
+        return ""
+    return raw
+
+
+def _extract_vts_live_url(result: Optional[dict[str, Any]]) -> str:
+    """Read a verified live URL from vts / job payload nests. Never invent one."""
+    if not isinstance(result, dict):
+        return ""
+    deployment = result.get("deployment")
+    if not isinstance(deployment, dict):
+        deployment = {}
+    urls = deployment.get("urls")
+    if not isinstance(urls, dict):
+        urls = result.get("urls") if isinstance(result.get("urls"), dict) else {}
+    summary = deployment.get("summary")
+    if not isinstance(summary, dict):
+        summary = {}
+    summary_urls = summary.get("deployment_urls")
+    if not isinstance(summary_urls, dict):
+        summary_urls = {}
+    outputs = result.get("outputs")
+    if not isinstance(outputs, dict):
+        outputs = {}
+    out_dep = outputs.get("deployment")
+    if not isinstance(out_dep, dict):
+        out_dep = {}
+    nested_result = result.get("result")
+    if not isinstance(nested_result, dict):
+        nested_result = {}
+    metadata = result.get("metadata")
+    if not isinstance(metadata, dict):
+        metadata = {}
+
+    preferred_keys = ("vercel", "netlify", "fly")
+    candidates = [
+        result.get("live_url"),
+        metadata.get("live_url"),
+        nested_result.get("live_url"),
+        deployment.get("live_url"),
+        deployment.get("url"),
+        out_dep.get("live_url"),
+        out_dep.get("url"),
+        *(urls.get(key) for key in preferred_keys),
+        summary.get("primary_url"),
+        *(summary_urls.get(key) for key in preferred_keys),
+        *urls.values(),
+        *summary_urls.values(),
+    ]
+    for candidate in candidates:
+        verified = _verified_https_live_url(candidate)
+        if verified:
+            return verified
+    return ""
+
+
+def _vts_missing_url_error(result: dict[str, Any]) -> str:
+    deployment = result.get("deployment")
+    errors: list[str] = []
+    if isinstance(deployment, dict):
+        raw = deployment.get("errors")
+        if isinstance(raw, list):
+            errors.extend(str(item).strip() for item in raw if item)
+        err = deployment.get("error")
+        if isinstance(err, str) and err.strip():
+            errors.append(err.strip())
+    if errors:
+        return "; ".join(errors)
+    return "Origin deploy finished without a backend-supplied https hostname"
+
+
 def _persist_vts_job_result(
     job_id: str,
     result: dict[str, Any],
@@ -825,9 +911,9 @@ def _persist_vts_job_result(
     stored = _load_video_job(job_id)
     if stored is None:
         return
-    live_url = result.get("live_url")
-    live_url = live_url.strip() if isinstance(live_url, str) else ""
+    live_url = _extract_vts_live_url(result)
     stored.progress = 100.0
+    stored.live_url = live_url or None
     stored.metadata = {
         "success": result.get("status") == "success",
         "live_url": live_url or None,
@@ -841,10 +927,11 @@ def _persist_vts_job_result(
     }
     if result.get("status") == "success" and live_url:
         stored.status = JobStatus.complete
+        stored.error = None
     else:
         stored.status = JobStatus.failed
-        stored.error = "video-to-software job returned no verified live URL"
-    _persist_video_job(stored)
+        stored.error = _vts_missing_url_error(result)
+    _persist_video_job(stored, sync=True)
 
 
 @router.post(
@@ -876,7 +963,8 @@ async def video_to_software_v1(
                 progress=0.0,
                 video_url=request.video_url,
                 transcript=request.transcript,
-            )
+            ),
+            sync=True,
         )
 
         async def _run_and_persist() -> dict[str, Any]:
@@ -1663,7 +1751,7 @@ async def startup_event():
     asyncio.create_task(_periodic_cleanup())
 
 
-def _persist_video_job(job: VideoJobStatusResponse) -> None:
+def _persist_video_job(job: VideoJobStatusResponse, *, sync: bool = False) -> None:
     """Persist job state. Uses a background task for expensive serialization to avoid blocking."""
     _video_jobs[job.job_id] = job
 
@@ -1678,6 +1766,10 @@ def _persist_video_job(job: VideoJobStatusResponse) -> None:
                 _safe_log_value(job.job_id),
                 _safe_log_value(exc),
             )
+
+    if sync:
+        _sync_persist()
+        return
 
     # If we are in an async loop, offload serialization and I/O to a thread
     try:
@@ -1910,8 +2002,7 @@ async def _run_video_to_software_job(
         features,
         transcript=transcript_text,
     )
-    live_url = result.get("live_url")
-    live_url = live_url.strip() if isinstance(live_url, str) else ""
+    live_url = _extract_vts_live_url(result)
     deployment = result.get("deployment")
     if not isinstance(deployment, dict):
         deployment = {}
@@ -1919,6 +2010,7 @@ async def _run_video_to_software_job(
         deployment = {**deployment, "live_url": live_url, "url": live_url}
 
     job.progress = 100.0
+    job.live_url = live_url or None
     job.metadata = {
         "success": result.get("status") == "success",
         "live_url": live_url or None,
@@ -1926,17 +2018,19 @@ async def _run_video_to_software_job(
         "deployment": deployment,
         "github_repo": result.get("github_repo"),
         "build_status": result.get("build_status"),
+        "result": result,
     }
     if result.get("status") == "success" and live_url:
         job.status = JobStatus.complete
+        job.error = None
     else:
         job.status = JobStatus.failed
         job.error = (
-            "video-to-software job returned no verified live URL"
+            _vts_missing_url_error(result)
             if result.get("status") == "success"
             else str(result.get("error") or "video-to-software job failed")
         )
-    _persist_video_job(job)
+    _persist_video_job(job, sync=True)
 
 
 async def _run_video_job(
@@ -2095,7 +2189,13 @@ async def get_video_job_status(job_id: str):
     job = _load_video_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    return ApiResponse.success(job.model_dump())
+    payload = job.model_dump()
+    live_url = _extract_vts_live_url(payload) or _extract_vts_live_url(
+        job.metadata if isinstance(job.metadata, dict) else {}
+    )
+    if live_url:
+        payload["live_url"] = live_url
+    return ApiResponse.success(payload)
 
 
 @router.get(

@@ -10,6 +10,7 @@ import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import {
   isStudioDeployAbortTimeout,
   STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+  studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 
 export interface VideoToActionsStart {
@@ -241,7 +242,7 @@ export async function getStudioDeployStatus(
           kind: str(resultRaw.kind),
           jobId: str(resultRaw.jobId),
           jobStatus: str(resultRaw.jobStatus),
-          live_url: str(resultRaw.live_url) ?? null,
+          live_url: studioVerifiedLiveUrl(str(resultRaw.live_url)) ?? null,
           github_repo: str(resultRaw.github_repo) ?? null,
           message: str(resultRaw.message),
         }

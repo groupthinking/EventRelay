@@ -67,6 +67,26 @@ describe('studio-deploy (F5)', () => {
     expect(polled.jobStatus).toBe('completed');
   });
 
+  it('pollStudioJob reads live_url from metadata.result without inventing one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            status: 'complete',
+            metadata: { live_url: null, result: { live_url: 'https://xy.vercel.app' } },
+          },
+        }),
+      }),
+    );
+
+    const polled = await pollStudioJob('job_nested', { attempts: 1, delayMs: 0 });
+    expect(polled.live_url).toBe('https://xy.vercel.app');
+    expect(polled.jobStatus).toBe('complete');
+  });
+
   it('pollStudioJob treats backend complete as terminal', async () => {
     vi.stubGlobal(
       'fetch',

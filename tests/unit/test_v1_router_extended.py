@@ -1193,6 +1193,11 @@ class TestVideoToSoftwareEndpoint:
                 time.sleep(0.01)
             assert seen.get("transcript") == payload["transcript"]
             assert "524" not in str(body).lower()
+            job_id = body["data"]["job_id"]
+            status = client.get(f"/api/v1/jobs/{job_id}")
+            assert status.status_code == 200
+            assert status.json()["data"]["job_id"] == job_id
+            assert status.json()["data"]["status"] == "pending"
         finally:
             app.dependency_overrides[get_video_processing_service] = _make_vps
 
@@ -2171,6 +2176,62 @@ class TestRunVideoJobCoroutine:
             assert job.metadata["outputs"]["deployment"]["live_url"] == "https://xy.vercel.app"
             mock_svc.process_video_to_software.assert_awaited()
             assert mock_svc.process_video_to_software.await_args.kwargs["transcript"] == ready
+        finally:
+            _video_jobs.pop(job_id, None)
+
+    def test_persist_vts_live_url_from_deployment_urls(self):
+        """Empty top-level live_url still persists a backend vercel hostname."""
+        from youtube_extension.backend.api.v1.router import (
+            _persist_vts_job_result,
+            _video_jobs,
+        )
+
+        job_id = "job_vts_urls"
+        _video_jobs[job_id] = VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.pending,
+            progress=0.0,
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+        )
+        try:
+            _persist_vts_job_result(
+                job_id,
+                {
+                    "status": "success",
+                    "live_url": "",
+                    "github_repo": "https://github.com/uvai-generated/xy",
+                    "deployment": {
+                        "status": "success",
+                        "urls": {"vercel": "https://xy.vercel.app"},
+                    },
+                },
+            )
+            job = _video_jobs[job_id]
+            assert job.status == JobStatus.complete
+            assert job.metadata["live_url"] == "https://xy.vercel.app"
+            assert job.live_url == "https://xy.vercel.app"
+            assert "no verified live URL" not in (job.error or "")
+        finally:
+            _video_jobs.pop(job_id, None)
+
+    def test_get_job_flattens_nested_live_url(self, client):
+        from youtube_extension.backend.api.v1.router import _video_jobs
+
+        job_id = "job_flat_live"
+        _video_jobs[job_id] = VideoJobStatusResponse(
+            job_id=job_id,
+            status=JobStatus.complete,
+            progress=100.0,
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+            metadata={
+                "live_url": None,
+                "result": {"live_url": "https://xy.vercel.app"},
+            },
+        )
+        try:
+            resp = client.get(f"/api/v1/jobs/{job_id}")
+            assert resp.status_code == 200
+            assert resp.json()["data"]["live_url"] == "https://xy.vercel.app"
         finally:
             _video_jobs.pop(job_id, None)
 

@@ -2,6 +2,7 @@ import 'server-only';
 
 import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
+import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
 export { usableProvidedTranscript as usableKickoffTranscript };
@@ -39,13 +40,88 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+const PREFERRED_LIVE_HOST = /\.(vercel\.app|netlify\.app|fly\.dev)$/i;
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function collectLiveUrlCandidates(record: Record<string, unknown>): unknown[] {
+  const deployment = asRecord(record.deployment);
+  const outputs = asRecord(record.outputs);
+  const result = asRecord(record.result);
+  const metadata = asRecord(record.metadata);
+  const data = asRecord(record.data);
+  const urls =
+    asRecord(deployment?.urls) ||
+    asRecord(record.urls) ||
+    asRecord(asRecord(outputs?.deployment)?.urls);
+  const summary = asRecord(deployment?.summary) || asRecord(record.summary);
+  const summaryUrls = asRecord(summary?.deployment_urls);
+  const outDep = asRecord(outputs?.deployment);
+  return [
+    record.live_url,
+    data?.live_url,
+    result?.live_url,
+    metadata?.live_url,
+    deployment?.live_url,
+    deployment?.url,
+    outDep?.live_url,
+    outDep?.url,
+    urls?.vercel,
+    urls?.netlify,
+    urls?.fly,
+    summary?.primary_url,
+    ...(summaryUrls ? Object.values(summaryUrls) : []),
+    ...(urls ? Object.values(urls) : []),
+    record.url,
+    data,
+    result,
+    metadata,
+    deployment,
+    outputs,
+    outDep,
+    urls,
+    summary,
+  ];
+}
+
+/**
+ * Pass through a backend-supplied verified https hostname only — never invent one.
+ * Prefer explicit live_url / vercel|netlify|fly hosts over a GitHub repo URL.
+ */
+export function extractBackendLiveUrl(...values: unknown[]): string | null {
+  const preferred: string[] = [];
+  const other: string[] = [];
+  const queue: unknown[] = [...values];
+  const seen = new Set<unknown>();
+  while (queue.length) {
+    const value = queue.shift();
+    if (value == null || seen.has(value)) continue;
+    if (typeof value === 'object') seen.add(value);
+    const verified = studioVerifiedLiveUrl(typeof value === 'string' ? value : null);
+    if (verified) {
+      const host = hostnameOf(verified);
+      if (PREFERRED_LIVE_HOST.test(host) || host.endsWith('.vercel.app')) {
+        preferred.push(verified);
+      } else if (host !== 'github.com' && host !== 'www.github.com') {
+        other.push(verified);
+      }
+      continue;
+    }
+    const rec = asRecord(value);
+    if (rec) queue.push(...collectLiveUrlCandidates(rec));
+  }
+  return preferred[0] ?? other[0] ?? null;
+}
+
 /** Pass through a backend-supplied live URL only — never invent one. */
 function firstLiveUrl(...values: unknown[]): string | null {
-  for (const value of values) {
-    const found = str(value);
-    if (found) return found;
-  }
-  return null;
+  return extractBackendLiveUrl(...values);
 }
 
 const YOUTUBE_REFETCH_RE =
@@ -58,12 +134,16 @@ export const STUDIO_READY_TRANSCRIPT_HOLD =
 export const STUDIO_ORIGIN_NO_LIVE_HOLD =
   'Studio transcript was reused. Origin video-to-software returned no verified live URL.';
 
+/** Honest HOLD after reuse — no job id and no backend-supplied https hostname. */
+export const STUDIO_ORIGIN_NO_HOSTNAME_HOLD =
+  'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
+
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
   if (message && YOUTUBE_REFETCH_RE.test(message)) {
     return STUDIO_READY_TRANSCRIPT_HOLD;
   }
-  return message || 'video-to-software returned no verified live URL';
+  return message || STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
 }
 
 /** Cloudflare/origin gateway timeout — kickoff must async-handoff, not HOLD HTTP 524. */
@@ -81,7 +161,7 @@ export function studioDeployReadyTranscriptHold(message?: string): string {
     return STUDIO_READY_TRANSCRIPT_HOLD;
   }
   if (!message || isGatewayTimeoutKickoff(undefined, message)) {
-    return STUDIO_ORIGIN_NO_LIVE_HOLD;
+    return STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
   }
   return message;
 }
@@ -209,15 +289,7 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
     ok: response.ok,
     httpStatus: response.status,
     jobStatus: str(data.status) || str(payload.status),
-    live_url: firstLiveUrl(
-      data.live_url,
-      payload.live_url,
-      metadata?.live_url,
-      outputs?.live_url,
-      deployment?.live_url,
-      deployment?.url,
-      nestedMeta?.live_url,
-    ),
+    live_url: firstLiveUrl(data, payload, metadata, outputs, deployment, nestedMeta),
     github_repo: str(data.github_repo) ?? str(payload.github_repo) ?? null,
     message:
       str(payload.error) ||
@@ -277,6 +349,14 @@ export function decideStudioDeployPoll(
     status.httpStatus === 408 ||
     isGatewayTimeoutKickoff(status.httpStatus, status.message);
 
+  if (status.httpStatus === 404) {
+    return {
+      action: 'continue',
+      jobStatus: status.jobStatus,
+      message: `Deploy job ${opts.jobId} still pending`,
+    };
+  }
+
   if (!status.ok && !statusTimeout) {
     const raw =
       status.message || `Deploy job ${opts.jobId} status HTTP ${status.httpStatus ?? 'error'}`;
@@ -307,7 +387,7 @@ export function decideStudioDeployPoll(
       github_repo: status.github_repo,
       message:
         status.message ||
-        (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
+        (status.live_url ? undefined : STUDIO_ORIGIN_NO_HOSTNAME_HOLD),
     };
   }
 
@@ -361,19 +441,14 @@ async function tryVideoToSoftwareDeploy(
       str(payload.error) ||
       str(payload.detail) ||
       (response.ok
-        ? 'video-to-software returned no verified live URL'
+        ? STUDIO_ORIGIN_NO_HOSTNAME_HOLD
         : `Backend kickoff returned HTTP ${response.status}`);
     if (!response.ok) {
       return { kind: 'failed', message: miss, httpStatus: response.status };
     }
     const result = asRecord(payload.result);
     const deployment = asRecord(payload.deployment) || asRecord(result?.deployment);
-    const live_url = firstLiveUrl(
-      payload.live_url,
-      result?.live_url,
-      deployment?.live_url,
-      deployment?.url,
-    );
+    const live_url = firstLiveUrl(payload, data, result, deployment);
     if (!live_url) {
       return { kind: 'failed', message: miss };
     }
