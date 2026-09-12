@@ -1,5 +1,4 @@
-import assert from 'node:assert/strict';
-import { afterEach, beforeEach, test } from 'node:test';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { useDashboardStore, type Video } from '../dashboard-store';
 
@@ -56,89 +55,91 @@ function resetStore() {
 
 function readStoredState(storage: ReturnType<typeof makeStorage>): StoredDashboardState {
   const raw = storage.getItem(STORAGE_KEY);
-  assert.notEqual(raw, null);
+  expect(raw).not.toBeNull();
   return JSON.parse(raw as string) as StoredDashboardState;
 }
 
-let storage: ReturnType<typeof makeStorage>;
+describe('dashboard-store persistence', () => {
+  let storage: ReturnType<typeof makeStorage>;
 
-beforeEach(async () => {
-  storage = makeStorage();
-  Object.defineProperty(globalThis, 'window', {
-    configurable: true,
-    value: globalThis,
-  });
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    value: storage,
-  });
-  await useDashboardStore.persist.clearStorage();
-  resetStore();
-});
-
-afterEach(async () => {
-  await useDashboardStore.persist.clearStorage();
-  delete (globalThis as { window?: typeof globalThis }).window;
-  delete (globalThis as { localStorage?: typeof storage }).localStorage;
-});
-
-test('persists only videos and activities to localStorage', () => {
-  const video = makeVideo();
-  const activity = { time: '10:15', event: 'Stored event', type: 'info' as const };
-
-  useDashboardStore.setState({
-    videos: [video],
-    activities: [activity],
-    selectedVideoId: video.id,
-    loading: true,
-    searchQuery: 'ignored',
-    searchResults: [{ start: 0, duration: 3, text: 'ignored', score: 1 }],
-    searchLoading: true,
+  beforeEach(async () => {
+    storage = makeStorage();
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: globalThis,
+    });
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      value: storage,
+    });
+    await useDashboardStore.persist.clearStorage();
+    resetStore();
   });
 
-  const stored = readStoredState(storage);
-  assert.deepEqual(stored.state, {
-    videos: [video],
-    activities: [activity],
+  afterEach(async () => {
+    await useDashboardStore.persist.clearStorage();
+    delete (globalThis as { window?: typeof globalThis }).window;
+    delete (globalThis as { localStorage?: typeof storage }).localStorage;
   });
-  assert.equal(stored.version, 0);
-  assert.equal('selectedVideoId' in stored.state, false);
-  assert.equal('searchQuery' in stored.state, false);
-});
 
-test('rehydrates persisted videos and activities while leaving volatile fields at defaults', async () => {
-  const video = makeVideo({ id: 'video-2', progress: 100, status: 'complete' });
-  const activity = { time: '11:30', event: 'Hydrated event', type: 'success' as const };
+  it('persists only videos and activities to localStorage', () => {
+    const video = makeVideo();
+    const activity = { time: '10:15', event: 'Stored event', type: 'info' as const };
 
-  storage.setItem(
-    STORAGE_KEY,
-    JSON.stringify({
-      state: {
-        videos: [video],
-        activities: [activity],
-      },
-      version: 0,
-    } satisfies StoredDashboardState),
-  );
+    useDashboardStore.setState({
+      videos: [video],
+      activities: [activity],
+      selectedVideoId: video.id,
+      loading: true,
+      searchQuery: 'ignored',
+      searchResults: [{ start: 0, duration: 3, text: 'ignored', score: 1 }],
+      searchLoading: true,
+    });
 
-  await useDashboardStore.persist.rehydrate();
+    const stored = readStoredState(storage);
+    expect(stored.state).toEqual({
+      videos: [video],
+      activities: [activity],
+    });
+    expect(stored.version).toBe(0);
+    expect('selectedVideoId' in stored.state).toBe(false);
+    expect('searchQuery' in stored.state).toBe(false);
+  });
 
-  const state = useDashboardStore.getState();
-  assert.deepEqual(state.videos, [video]);
-  assert.deepEqual(state.activities, [activity]);
-  assert.equal(state.selectedVideoId, null);
-  assert.equal(state.loading, false);
-  assert.equal(state.searchQuery, '');
-  assert.deepEqual(state.searchResults, []);
-  assert.equal(state.searchLoading, false);
-});
+  it('rehydrates persisted videos and activities while leaving volatile fields at defaults', async () => {
+    const video = makeVideo({ id: 'video-2', progress: 100, status: 'complete' });
+    const activity = { time: '11:30', event: 'Hydrated event', type: 'success' as const };
 
-test('ignores malformed localStorage payloads during rehydrate', async () => {
-  storage.setItem(STORAGE_KEY, '{not-json');
+    storage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          videos: [video],
+          activities: [activity],
+        },
+        version: 0,
+      } satisfies StoredDashboardState),
+    );
 
-  await useDashboardStore.persist.rehydrate();
+    await useDashboardStore.persist.rehydrate();
 
-  const state = useDashboardStore.getState();
-  assert.deepEqual(state.videos, []);
-  assert.deepEqual(state.activities, []);
+    const state = useDashboardStore.getState();
+    expect(state.videos).toEqual([video]);
+    expect(state.activities).toEqual([activity]);
+    expect(state.selectedVideoId).toBeNull();
+    expect(state.loading).toBe(false);
+    expect(state.searchQuery).toBe('');
+    expect(state.searchResults).toEqual([]);
+    expect(state.searchLoading).toBe(false);
+  });
+
+  it('ignores malformed localStorage payloads during rehydrate', async () => {
+    storage.setItem(STORAGE_KEY, '{not-json');
+
+    await useDashboardStore.persist.rehydrate();
+
+    const state = useDashboardStore.getState();
+    expect(state.videos).toEqual([]);
+    expect(state.activities).toEqual([]);
+  });
 });
