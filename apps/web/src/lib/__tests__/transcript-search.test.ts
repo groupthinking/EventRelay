@@ -54,6 +54,10 @@ describe('filterSegments — empty/null query behavior (#908)', () => {
       segments.length,
     );
   });
+
+  it('returns the original segment array when no filters are active', () => {
+    expect(filterSegments(segments, { search: '' })).toBe(segments);
+  });
 });
 
 describe('filterSegments — null-safe segment text (#908)', () => {
