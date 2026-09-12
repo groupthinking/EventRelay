@@ -14,6 +14,7 @@ export interface StudioDeployInput {
   url: string;
   projectType?: string;
   outcome?: string;
+  transcript?: string;
 }
 
 export interface StudioDeployResult {
@@ -36,7 +37,7 @@ export async function studioDeployWorkflow(
     throw new FatalError('url must be an http(s) URL');
   }
 
-  const kicked = await kickoffStep(url);
+  const kicked = await kickoffStep(url, input.transcript);
   if (kicked.kind === 'failed') {
     throw new FatalError(kicked.message || 'Backend refused the deploy kickoff');
   }
@@ -61,7 +62,10 @@ export async function studioDeployWorkflow(
   return { url, ...polled, jobId: kicked.jobId };
 }
 
-async function kickoffStep(url: string): Promise<{
+async function kickoffStep(
+  url: string,
+  transcript?: string,
+): Promise<{
   kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
   message?: string;
@@ -71,7 +75,7 @@ async function kickoffStep(url: string): Promise<{
   'use step';
 
   const { kickoffAsyncVideoJob } = await import('@/lib/pipeline-async-job');
-  return kickoffAsyncVideoJob(url);
+  return kickoffAsyncVideoJob(url, { transcript });
 }
 
 async function pollJobStep(jobId: string): Promise<{
