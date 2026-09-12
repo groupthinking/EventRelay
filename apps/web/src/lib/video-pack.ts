@@ -230,6 +230,7 @@ function processingEnvelope(identity: {
   return {
     status: 'processing' as const,
     data: {
+      version: IDENTITY_VERSION,
       id: identity.id,
       video_id: identity.video_id,
       source_url: identity.source_url,
@@ -356,12 +357,18 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
     // A new POST retries after a visible failure; GET keeps serving the error.
   }
 
-  const claimed = await claimPackProcessing({
-    video_id: identity.video_id,
-    source_url: identity.source_url,
-    source_hash: sourceHash,
-    id: identity.id,
-  });
+  let claimed: Awaited<ReturnType<typeof claimPackProcessing>>;
+  try {
+    claimed = await claimPackProcessing({
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: sourceHash,
+      id: identity.id,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Video pack claim failed.';
+    return NextResponse.json({ status: 'error', error: message }, { status: 503 });
+  }
   if (claimed !== 'claimed') {
     return recordToResponse(claimed);
   }
