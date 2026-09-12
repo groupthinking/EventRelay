@@ -11,7 +11,7 @@
 - [x] Step 1: Failing tests for no attempt-started G.A.T.E., still-pollable vs finished residuals, poll budget, nested extract
 - [x] Step 2: Implement residual classifier + poll window + client extract; drop in-flight HOLD
 - [x] Step 3: Focused Vitest GREEN (pytest N/A — no Python touched)
-- [ ] Step 4: PR off current main — do not merge
+- [x] Step 4: PR off current main — https://github.com/groupthinking/EventRelay/pull/1895 — do not merge
 
 ## 3. Definition of Done
 * **Expected Outcome:** `wrun_01M2B9NW5JA5JQNBTWDRRSHXD6` cannot HOLD `Deploy attempt started. Waiting for a verified https live URL.` G.A.T.E. runs after poll. Still-running / no-visible-job_id → still-pollable (not hostname-finished, not attempt-started). Terminal WDK without URL → kickoff-no-job or hostname-finished. PASS only with backend https hostname.
