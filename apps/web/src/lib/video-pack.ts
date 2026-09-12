@@ -29,9 +29,12 @@ export const IDENTITY_VERSION = 'v0' as const;
 export {
   KEYFRAME_IMAGES_OK,
   KEYFRAME_IMAGES_OK_NOTE,
+  KEYFRAME_IMAGES_OK_STILLS_NOTE,
+  KEYFRAME_IMAGES_OK_STORYBOARD_NOTE,
   KEYFRAME_IMAGES_PARTIAL,
   KEYFRAME_IMAGES_PARTIAL_NOTE,
   applyKeyframeImageHonesty,
+  applyKeyframeImageSourceNotes,
   sanitizeKeyframeImagePath,
 } from '@/lib/keyframe-image-path';
 

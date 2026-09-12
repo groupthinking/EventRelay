@@ -97,6 +97,22 @@ describe('auth path policy', () => {
     expect(isPublicApiPath('/api/v1/video')).toBe(false);
   });
 
+  it('keeps app-served pack frame GETs public like pack GET', () => {
+    // #1907 served JPEGs at /api/video/pack/frames/{videoId}/{t}, but
+    // middleware only public-listed exact /api/video/pack, so anonymous
+    // curl on uvai.io returned 401 Authentication required.
+    expect(isPublicApiPath('/api/video/pack/frames/QjZ5ohr7sGA/1')).toBe(true);
+    expect(isPublicApiPath('/api/video/pack/frames/XYMcBrFSJ4c/12.5')).toBe(true);
+    expect(isPublicApiPath('/api/video/pack/frames/CWUy2zynCqc/0')).toBe(true);
+    expect(needsAuthentication('/api/video/pack/frames/QjZ5ohr7sGA/1')).toBe(false);
+    // Prefix is exact-segment — do not widen pack siblings.
+    expect(isPublicApiPath('/api/video/pack/frameshift')).toBe(false);
+    expect(isPublicApiPath('/api/video/pack/admin')).toBe(false);
+    expect(needsAuthentication('/api/video/generate')).toBe(true);
+    expect(isAiRoute('/api/video/pack/frames/QjZ5ohr7sGA/1', 'GET')).toBe(false);
+    expect(isAiRoute('/api/video/pack/frames/QjZ5ohr7sGA/1', 'POST')).toBe(false);
+  });
+
   it('does not gate marketing pages', () => {
     expect(needsAuthentication('/')).toBe(false);
     expect(needsAuthentication('/pricing')).toBe(false);

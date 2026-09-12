@@ -357,6 +357,56 @@ describe('GET /api/video/pack (anonymous read)', () => {
     expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com/);
   });
 
+  it('hydrates cached null keyframes via stills bytes and seals stills-ok', async () => {
+    const loaded = await loadPackRoute();
+    loaded.setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
+      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]),
+      contentType: KEYFRAME_JPEG_CONTENT_TYPE,
+      imagePath: `/api/video/pack/frames/${videoId}/${t_s}`,
+      source: 'stills' as const,
+    }));
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-12T16:39:08.716Z',
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: {
+        ...pack,
+        keyframes: [
+          { t_s: 1, image_path: null, desc: `Keyframe from ${CANON_B}` },
+          { t_s: 12, image_path: null, desc: 'Second described frame' },
+        ],
+        metrics: { keyframes_images: KEYFRAME_IMAGES_PARTIAL },
+        provenance: {
+          ...pack.provenance,
+          notes: `${pack.provenance.notes} ${KEYFRAME_IMAGES_PARTIAL_NOTE}`.trim(),
+        },
+      },
+    });
+
+    const res = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: {
+        keyframes: Array<{ t_s: number; image_path?: string | null }>;
+        metrics: Record<string, number | string>;
+        provenance: { source_hash: string; notes: string };
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.keyframes.every((frame) => typeof frame.image_path === 'string')).toBe(true);
+    expect(body.data.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(body.data.metrics.keyframes_images_source).toBe('stills');
+    expect(body.data.provenance.notes).toMatch(/stills captured as JPEG bytes/i);
+    expect(body.data.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com|img\.youtube\.com|hqdefault/);
+    expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+  });
+
   it('does not serve an identity-only pack as success after cite-only extract', async () => {
     extractVideoPackSpec.mockRejectedValue(new VideoPackExtractError('Gemini 3.8 Flash returned no extracted spec content.'));
     const { POST, GET, flush } = await loadPackRoute();
