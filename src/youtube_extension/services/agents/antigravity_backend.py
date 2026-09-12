@@ -267,21 +267,31 @@ tool_call = payload.get("tool_call", {})
 name = str(tool_call.get("name", ""))
 args = tool_call.get("args") or {}
 command = str(args.get("code", ""))
-allowed_prefixes = (
+allowed_commands = {
     "python -m pytest",
     "pytest",
     "npm test",
     "npm run build",
     "turbo run test",
     "turbo run build",
-)
+}
+# Any shell metacharacter can chain undeclared side effects onto an
+# otherwise-allowed command, so reject them outright and require the
+# command to exactly match a vetted entry (a prefix check is bypassable
+# via `pytest && curl ... | sh`, `pytest; rm -rf /`, etc.).
+forbidden_tokens = (";", "&", "|", "`", "$(", "${", ">", "<", "\\n", "\\r", "(", ")", "\\\\")
+
+def _is_allowed(cmd):
+    if any(token in cmd for token in forbidden_tokens):
+        return False
+    return cmd.strip() in allowed_commands
 
 if name in {"write_file", "delete_file"}:
     print(json.dumps({
         "decision": "deny",
         "reason": "Filesystem side effects must be declared in EventRelay receipts first."
     }))
-elif name == "code_execution" and not command.startswith(allowed_prefixes):
+elif name == "code_execution" and not _is_allowed(command):
     print(json.dumps({
         "decision": "deny",
         "reason": "Only bounded build/test commands are allowed for the Antigravity spike."
