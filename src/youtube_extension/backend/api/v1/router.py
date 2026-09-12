@@ -29,6 +29,7 @@ from fastapi import (
     Response,
     status,
 )
+from fastapi.responses import JSONResponse
 
 from shared.youtube import RobustYouTubeMetadata
 from uvai.ml.client import get_uvai_ml_client
@@ -809,6 +810,43 @@ async def process_video_markdown_v1(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+# Stay well under Cloudflare's ~100s 524 and Studio's 20s vts abort.
+VTS_SYNC_BUDGET_SECONDS = 12.0
+
+
+def _vts_sync_budget_seconds() -> float:
+    return VTS_SYNC_BUDGET_SECONDS
+
+
+def _persist_vts_job_result(
+    job_id: str,
+    result: dict[str, Any],
+) -> None:
+    stored = _load_video_job(job_id)
+    if stored is None:
+        return
+    live_url = result.get("live_url")
+    live_url = live_url.strip() if isinstance(live_url, str) else ""
+    stored.progress = 100.0
+    stored.metadata = {
+        "success": result.get("status") == "success",
+        "live_url": live_url or None,
+        "outputs": {
+            "deployment": {"live_url": live_url or None, "url": live_url or None}
+        },
+        "deployment": result.get("deployment") or {},
+        "github_repo": result.get("github_repo"),
+        "build_status": result.get("build_status"),
+        "result": result,
+    }
+    if result.get("status") == "success" and live_url:
+        stored.status = JobStatus.complete
+    else:
+        stored.status = JobStatus.failed
+        stored.error = "video-to-software job returned no verified live URL"
+    _persist_video_job(stored)
+
+
 @router.post(
     "/video-to-software",
     response_model=VideoToSoftwareResponse,
@@ -821,27 +859,73 @@ async def video_to_software_v1(
         get_video_processing_service
     ),
 ):
-    """Convert YouTube video to deployed software"""
+    """Convert YouTube video to deployed software.
+
+    Fast completions still return 200. Work that would sit past Cloudflare's
+    524 window is handed to a pollable job (202 + job_id).
+    """
     try:
         logger.info("Video-to-software request: %s", _safe_log_value(request.video_url))
         target_info = resolve_deployment_target(request.deployment_target)
 
-        result = await video_processing_service.process_video_to_software(
-            request.video_url,
-            request.project_type,
-            target_info["resolved"],
-            request.features,
-            transcript=request.transcript,
+        job_id = f"job_{_uuid.uuid4().hex[:10]}"
+        _persist_video_job(
+            VideoJobStatusResponse(
+                job_id=job_id,
+                status=JobStatus.pending,
+                progress=0.0,
+                video_url=request.video_url,
+                transcript=request.transcript,
+            )
         )
 
-        result.setdefault("deployment", {})
-        result["deployment"]["requested_target"] = target_info["requested"]
-        result["deployment"]["resolved_target"] = target_info["resolved"]
-        result["deployment"]["alias_applied"] = target_info.get("alias_applied", False)
-        result["deployment_target"] = target_info["requested"]
+        async def _run_and_persist() -> dict[str, Any]:
+            try:
+                result = await video_processing_service.process_video_to_software(
+                    request.video_url,
+                    request.project_type,
+                    target_info["resolved"],
+                    request.features,
+                    transcript=request.transcript,
+                )
+                result.setdefault("deployment", {})
+                result["deployment"]["requested_target"] = target_info["requested"]
+                result["deployment"]["resolved_target"] = target_info["resolved"]
+                result["deployment"]["alias_applied"] = target_info.get(
+                    "alias_applied", False
+                )
+                result["deployment_target"] = target_info["requested"]
+                _persist_vts_job_result(job_id, result)
+                return result
+            except Exception as exc:
+                stored = _load_video_job(job_id)
+                if stored is not None:
+                    stored.status = JobStatus.failed
+                    stored.error = str(exc)
+                    _persist_video_job(stored)
+                raise
 
-        return VideoToSoftwareResponse(**result)
+        task = asyncio.create_task(_run_and_persist())
+        try:
+            result = await asyncio.wait_for(
+                asyncio.shield(task),
+                timeout=_vts_sync_budget_seconds(),
+            )
+            return VideoToSoftwareResponse(**result)
+        except asyncio.TimeoutError:
+            return JSONResponse(
+                status_code=202,
+                content=ApiResponse.success(
+                    VideoProcessJobResponse(
+                        job_id=job_id,
+                        video_url=request.video_url,
+                        status=JobStatus.pending,
+                    ).model_dump()
+                ).model_dump(mode="json"),
+            )
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(
             "Video-to-software processing failed: %s",

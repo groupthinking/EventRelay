@@ -1101,6 +1101,50 @@ class TestVideoToSoftwareEndpoint:
         finally:
             app.dependency_overrides[get_video_processing_service] = _make_vps
 
+    def test_video_to_software_returns_202_when_sync_budget_exceeded(self, client):
+        """Origin must answer before Cloudflare 524 — hand back a pollable job_id."""
+        result = _make_vps().process_video_to_software.return_value
+
+        async def _slow(*_args, **_kwargs):
+            await asyncio.sleep(0.05)
+            return result
+
+        def _slow_svc():
+            svc = _make_vps()
+            svc.process_video_to_software = AsyncMock(side_effect=_slow)
+            return svc
+
+        app.dependency_overrides[get_video_processing_service] = _slow_svc
+        try:
+            with patch(
+                "youtube_extension.backend.api.v1.router.resolve_deployment_target",
+                return_value={
+                    "requested": "vercel",
+                    "resolved": "vercel",
+                    "alias_applied": False,
+                },
+            ), patch(
+                "youtube_extension.backend.api.v1.router._vts_sync_budget_seconds",
+                return_value=0.01,
+            ):
+                payload = {
+                    "url": "https://www.youtube.com/watch?v=auJzb1D-fag",
+                    "project_type": "web",
+                    "deployment_target": "vercel",
+                    "transcript": (
+                        "Studio Video Pack for auJzb1D-fag already has a usable "
+                        "transcript ready for deploy."
+                    ),
+                }
+                resp = client.post("/api/v1/video-to-software", json=payload)
+            assert resp.status_code == 202
+            body = resp.json()
+            assert body["status"] == "success"
+            assert body["data"]["job_id"].startswith("job_")
+            assert "524" not in str(body).lower()
+        finally:
+            app.dependency_overrides[get_video_processing_service] = _make_vps
+
 
 # ===========================================================================
 # Async Video Jobs (start, status, events, dispatch, agents)

@@ -1,10 +1,37 @@
-# TASK: studio.deploy backend kickoff no HTTP 524
+# TASK: restore #1859 ready-transcript reuse after #1875 524 handoff
+
+## 1. Goal & Scope
+* **Objective:** Ready-transcript studio.deploy must not HOLD the YouTube bot wall and must not HOLD HTTP 524. Keep #1875 async past 524 via origin `202` + `job_id`. Do not regress UNKNOWN / workflow-run / return-value / BACKEND_URL. Claim guard stays.
+* **Context:** AXIOM on `dpl_BK1hFnDuN366N5WBAUpAsLka9iwP` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2AF8WD3G4VCB63KEBX311HV`) cleared HTTP 524. Regression: `Sign in to confirm you’re not a bot` (cleared on #1859). No live URL.
+* **Root cause:** #1875 gateway-timeout fallthrough starts `/videos/process` even when a Studio transcript is ready. Prod `api.uvai.io` ignores `transcript` / `pipeline` and re-hits YouTube. WDK `pollJobStep` FatalErrors the bot string.
+* **Scope:** Skip `/videos/process` whenever a usable transcript exists. Treat origin vts `202` + `job_id` as the async handoff (not process). Remap bot / 524 on the ready-transcript miss. URL-only timeout/401 still uses process. No cookies / Origin invent.
+ * *Initial check:* Modify existing kickoff + poll remap. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (524 + ready transcript must not call process)
+- [x] Step 2: Skip process on ready transcript; keep process for URL-only; origin 202 job_id
+- [x] Step 3: Focused Vitest GREEN (89) + pytest vts 202
+- [ ] Step 4: New PR from current main → merge-when-core-green → prod READY `dpl_`
+
+## 3. Definition of Done
+* **Expected Outcome:** Ready-transcript deploy does not HOLD bot wall or HTTP 524. PASS only with a verified https hostname URL + EventRelay receipt. Honest HOLD ≠ bot, ≠ 524, ≠ cleared residuals is allowed.
+* **Verification Method:** Focused Vitest + Vercel prod READY after merge. Cannot signed-in dogfood AXIOM here.
+* **Proof Artifact:** PR https://github.com/groupthinking/EventRelay/pull/1880 — Vitest 3 files 58 passed + 4 files 31 passed; pytest `test_video_to_software_returns_202_when_sync_budget_exceeded` PASSED.
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: studio.deploy backend kickoff no HTTP 524
 
 ## 1. Goal & Scope
 * **Objective:** Attempt deploy kickoff must not HOLD on `Backend kickoff returned HTTP 524`. Reach a verified https live URL + EventRelay receipt, or an honest HOLD that is not 524 and not the cleared residuals.
 * **Context:** AXIOM on `dpl_BbFnnqTvYiVDfSFEDa43LQTFETTD` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S`) cleared #1859 YouTube bot. Transcript was ready. New HOLD is HTTP 524. No Deploy completed / no live URL.
 * **Root cause:** After #1859, ready-transcript kickoff only calls sync `POST /api/v1/video-to-software` (180s). Cloudflare in front of api.uvai.io returns 524 at ~100s. Kickoff HOLDs that status and never starts an async job to poll.
-* **Scope:** Fail-fast / treat 524·504·408·abort as gateway timeout; async-handoff `/videos/process` with ready transcript + `pipeline: video-to-software`. Backend accepts `transcript` and runs vts in the job (skip YouTube when transcript is provided). Claim guard unchanged. Do not reopen #1848. No cookies / Origin invent.
+* **Scope:** Fail-fast / treat 524·504·408·abort as gateway timeout; origin `/video-to-software` returns 202 + job_id when work exceeds a 12s sync budget (no CF 524). Studio uses that job_id. Fallback `/videos/process` with ready transcript + `pipeline: video-to-software`. Backend accepts `transcript` and runs vts in the job (skip YouTube when transcript is provided). Claim guard unchanged. Do not reopen #1848. No cookies / Origin invent.
  * *Initial check:* Modify existing kickoff + `_run_video_job`; do not add a second Studio surface.
 
 ## 2. Execution Plan

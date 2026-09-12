@@ -350,7 +350,7 @@ describe('pipeline-async-job (WDK C)', () => {
     );
   });
 
-  it('does not HOLD HTTP 524 when vts is a Cloudflare timeout and transcript is ready', async () => {
+  it('uses an origin 202 job_id from video-to-software (no HTTP 524 HOLD)', async () => {
     vi.mocked(checkBackendHealth).mockResolvedValue({
       configured: true,
       available: true,
@@ -362,18 +362,17 @@ describe('pipeline-async-job (WDK C)', () => {
     });
     const fetchMock = vi.fn().mockImplementation(async (input: unknown) => {
       const href = String(input);
-      if (href.includes('/video-to-software')) {
-        return {
-          ok: false,
-          status: 524,
-          json: async () => ({ error: 'error code: 524' }),
-        };
-      }
       if (href.includes('/videos/process')) {
+        throw new Error('must use the origin 202 job_id, not a second process job');
+      }
+      if (href.includes('/video-to-software')) {
         return {
           ok: true,
           status: 202,
-          json: async () => ({ data: { job_id: 'job_01M2AE6Z9Q2KZRBA0Z0Q455B0S' } }),
+          json: async () => ({
+            status: 'success',
+            data: { job_id: 'job_01M2AE6Z9Q2KZRBA0Z0Q455B0S' },
+          }),
         };
       }
       throw new Error(`unexpected fetch ${href}`);
@@ -387,19 +386,94 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(kicked.jobId).toBe('job_01M2AE6Z9Q2KZRBA0Z0Q455B0S');
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
     expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
+    expect(kicked.message ?? '').not.toMatch(/BACKEND_URL is not configured/i);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/videos/process'))).toBe(
+      false,
+    );
+  });
+
+  it('does not start videos/process on HTTP 524 when a ready transcript exists', async () => {
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.uvai.io',
+    });
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    const fetchMock = vi.fn().mockImplementation(async (input: unknown) => {
+      const href = String(input);
+      if (href.includes('/videos/process')) {
+        throw new Error('must not re-hit YouTube via videos/process');
+      }
+      if (href.includes('/video-to-software')) {
+        return {
+          ok: false,
+          status: 524,
+          json: async () => ({ error: 'error code: 524' }),
+        };
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const kicked = await kickoffAsyncVideoJob(
+      'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      { transcript: READY_TRANSCRIPT },
+    );
+    expect(kicked.kind).toBe('failed');
+    expect(kicked.jobId).toBeUndefined();
+    expect(kicked.message ?? '').toMatch(/ready transcript|must not re-fetch YouTube|no verified deploy receipt/i);
+    expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
+    expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
     expect(kicked.message ?? '').not.toMatch(/UNKNOWN checks are not a live URL/i);
     expect(kicked.message ?? '').not.toMatch(/Failed to read workflow run/i);
     expect(kicked.message ?? '').not.toMatch(/Failed to read workflow return value/i);
     expect(kicked.message ?? '').not.toMatch(/BACKEND_URL is not configured/i);
-    const processInit = fetchMock.mock.calls.find(([input]) =>
-      String(input).includes('/videos/process'),
-    )?.[1] as { body?: string };
-    const body = JSON.parse(String(processInit.body)) as {
-      transcript?: string;
-      options?: { pipeline?: string };
-    };
-    expect(body.transcript).toBe(READY_TRANSCRIPT);
-    expect(body.options?.pipeline).toBe('video-to-software');
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/videos/process'))).toBe(
+      false,
+    );
+  });
+
+  it('does not start videos/process on vts abort timeout when a ready transcript exists', async () => {
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.uvai.io',
+    });
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    const fetchMock = vi.fn().mockImplementation(async (input: unknown) => {
+      const href = String(input);
+      if (href.includes('/videos/process')) {
+        throw new Error('must not re-hit YouTube via videos/process');
+      }
+      if (href.includes('/video-to-software')) {
+        throw Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'TimeoutError',
+        });
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const kicked = await kickoffAsyncVideoJob(
+      'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      { transcript: READY_TRANSCRIPT },
+    );
+    expect(kicked.kind).toBe('failed');
+    expect(kicked.jobId).toBeUndefined();
+    expect(kicked.message ?? '').toMatch(/ready transcript|must not re-fetch YouTube|no verified deploy receipt/i);
+    expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
+    expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
+    expect(kicked.message ?? '').not.toMatch(/UNKNOWN checks are not a live URL/i);
+    expect(kicked.message ?? '').not.toMatch(/Failed to read workflow run/i);
+    expect(kicked.message ?? '').not.toMatch(/Failed to read workflow return value/i);
+    expect(kicked.message ?? '').not.toMatch(/BACKEND_URL is not configured/i);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/videos/process'))).toBe(
+      false,
+    );
   });
 
   it('treats a backend HTTP error as failed, not a config handoff', async () => {
