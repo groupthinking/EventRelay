@@ -173,6 +173,7 @@ export async function startStudioDeploy(input: {
   url: string;
   projectType?: string;
   outcome?: string;
+  transcript?: string;
   signal?: AbortSignal;
 }): Promise<StudioDeployStart> {
   const response = await fetch('/api/workflows/studio-deploy', {
@@ -183,6 +184,7 @@ export async function startStudioDeploy(input: {
       url: input.url,
       projectType: input.projectType,
       outcome: input.outcome,
+      ...(input.transcript ? { transcript: input.transcript } : {}),
     }),
     signal: input.signal ?? AbortSignal.timeout(30_000),
   });
