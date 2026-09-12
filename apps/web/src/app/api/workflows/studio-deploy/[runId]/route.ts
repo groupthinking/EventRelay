@@ -1,5 +1,10 @@
 import { NextResponse } from 'next/server';
 import { getRun } from 'workflow/api';
+import {
+  isTransientWorkflowRunReadError,
+  workflowReturnErrorMessage,
+} from '@/lib/studio-workflow';
+import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import type { StudioDeployResult } from '@/workflows/studio-deploy';
 
 export const runtime = 'nodejs';
@@ -15,45 +20,49 @@ export async function GET(
   }
 
   try {
-    const run = getRun<StudioDeployResult>(runId);
-    const exists = await run.exists;
-    if (!exists) {
-      return NextResponse.json(
-        { ok: false, runId, error: 'Workflow run not found' },
-        { status: 404 },
-      );
-    }
-
-    const [runStatus, workflowName, createdAt, startedAt, completedAt] =
-      await Promise.all([
-        run.status,
-        run.workflowName.catch(() => undefined),
-        run.createdAt.then((d) => d.toISOString()).catch(() => undefined),
-        run.startedAt.then((d) => d?.toISOString()).catch(() => undefined),
-        run.completedAt.then((d) => d?.toISOString()).catch(() => undefined),
-      ]);
-
-    const payload: Record<string, unknown> = {
-      ok: true,
-      runId,
-      runStatus,
-      workflowName,
-      createdAt,
-      startedAt,
-      completedAt,
-    };
-
-    if (runStatus === 'completed' || runStatus === 'failed') {
-      try {
-        payload.result = await run.returnValue;
-      } catch {
-        payload.error = 'Failed to read workflow return value';
+    const payload = await withWorldVercelFetch(async () => {
+      const run = getRun<StudioDeployResult>(runId);
+      const exists = await run.exists;
+      if (!exists) {
+        return {
+          status: 404 as const,
+          body: { ok: false, runId, error: 'Workflow run not found' },
+        };
       }
-    }
 
-    return NextResponse.json(payload);
+      const [runStatus, workflowName, createdAt, startedAt, completedAt] =
+        await Promise.all([
+          run.status,
+          run.workflowName.catch(() => undefined),
+          run.createdAt.then((d) => d.toISOString()).catch(() => undefined),
+          run.startedAt.then((d) => d?.toISOString()).catch(() => undefined),
+          run.completedAt.then((d) => d?.toISOString()).catch(() => undefined),
+        ]);
+
+      const body: Record<string, unknown> = {
+        ok: true,
+        runId,
+        runStatus,
+        workflowName,
+        createdAt,
+        startedAt,
+        completedAt,
+      };
+
+      if (runStatus === 'completed' || runStatus === 'failed') {
+        try {
+          body.result = await run.returnValue;
+        } catch (err) {
+          body.error = workflowReturnErrorMessage(err);
+        }
+      }
+
+      return { status: 200 as const, body };
+    });
+
+    return NextResponse.json(payload.body, { status: payload.status });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = workflowReturnErrorMessage(err);
     if (/not found|does not exist/i.test(message)) {
       return NextResponse.json(
         { ok: false, runId, error: 'Workflow run not found' },
@@ -61,9 +70,13 @@ export async function GET(
       );
     }
     console.error('[api/workflows/studio-deploy/:runId]', err);
-    return NextResponse.json(
-      { ok: false, runId, error: 'Failed to read workflow run' },
-      { status: 500 },
-    );
+    if (isTransientWorkflowRunReadError(err)) {
+      return NextResponse.json({
+        ok: true,
+        runId,
+        runStatus: 'running',
+      });
+    }
+    return NextResponse.json({ ok: false, runId, error: message }, { status: 500 });
   }
 }

@@ -50,9 +50,48 @@ const securityHeaders = [
   { key: 'Content-Security-Policy', value: contentSecurityPolicy },
 ];
 
+function firstHttpBackendUrl(...values) {
+  for (const raw of values) {
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (!value) continue;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return value.replace(/\/+$/, '');
+      }
+    } catch {
+      // skip invalid
+    }
+  }
+  return '';
+}
+
+// Verified Cloud Run hostname (live / and /api/v1/health = 200). Last resort
+// when Vercel did not inject BACKEND_URL — do not invent a different host.
+const VERIFIED_PRODUCTION_BACKEND_URL = 'https://api.uvai.io';
+
+const resolvedBackendUrl =
+  firstHttpBackendUrl(
+    process.env.BACKEND_URL,
+    process.env.NEXT_PUBLIC_BACKEND_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+  ) ||
+  (process.env.NODE_ENV === 'production' ? VERIFIED_PRODUCTION_BACKEND_URL : '');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  ...(resolvedBackendUrl
+    ? {
+        env: {
+          BACKEND_URL: resolvedBackendUrl,
+          NEXT_PUBLIC_BACKEND_URL:
+            firstHttpBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL) || resolvedBackendUrl,
+          NEXT_PUBLIC_API_URL:
+            firstHttpBackendUrl(process.env.NEXT_PUBLIC_API_URL) || resolvedBackendUrl,
+        },
+      }
+    : {}),
   // Keep local Chrome QA functional when the dev server is reached by its
   // loopback IP instead of the canonical localhost name.
   allowedDevOrigins: ['127.0.0.1'],
