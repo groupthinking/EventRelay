@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { executePreparedActions, runActionAgent } from '@/lib/action-agent';
 import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
 import { hasGeminiKey } from '@/lib/gemini-client';
-import type { AgentAction } from '@/lib/action-lifecycle';
+import { dedupeAgentActions, type AgentAction } from '@/lib/action-lifecycle';
 import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
 
@@ -79,7 +79,19 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    if (actions.some((action) => PRO_ACTION_TOOLS.has(action.tool))) {
+    const reviewedActions = dedupeAgentActions(actions as AgentAction[]);
+    if (reviewedActions.length !== actions.length) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Duplicate reviewed tool calls are not allowed',
+          actions: [],
+        },
+        { status: 400 },
+      );
+    }
+
+    if (reviewedActions.some((action) => PRO_ACTION_TOOLS.has(action.tool))) {
       const billingEmail = await resolveTrustedBillingEmail(request);
       if (!(await isProSubscriber(billingEmail))) {
         return NextResponse.json(
@@ -96,7 +108,7 @@ export async function POST(request: Request): Promise<NextResponse> {
 
     try {
       const fulfilled = await executePreparedActions({
-        actions,
+        actions: reviewedActions,
         jobId: typeof jobId === 'string' ? jobId : undefined,
       });
       return NextResponse.json({ success: true, provider: 'confirmed-plan', actions: fulfilled });

@@ -34,7 +34,7 @@ one quiet window could pass.
 SHA; previews are routinely canceled for reasons unrelated to the change. It
 required independent review approval; CodeRabbit skips any pull request without
 one of 26 labels, so an unlabeled pull request could never obtain the approval
-the gate demanded. `agent-completion/truth-gate` failed `invalid_payload` on
+the gate demanded. The retired agent-completion gate failed `invalid_payload` on
 every pull request that had no dispatch contract — including #1368, which
 merged and became the tip of `main` with that status red.
 
@@ -49,6 +49,22 @@ permanently, and duplicates were exactly what the draft backlog kept producing.
 
 A gate that cannot be satisfied is not strict — it is broken, and it teaches
 everyone to merge around it.
+
+## Author checklist
+
+When a gate is not satisfied, take the corresponding action below. These are
+remedies, not reasons to leave a pull request in draft indefinitely.
+
+| Gate | Author action |
+| --- | --- |
+| Binding | Add exactly one `Closes #<issue>` reference and use the pull request template. |
+| Required checks | Fix a failing check and push; if a check does not report, verify whether the diff belongs in the conditional list rather than waiting for it. |
+| Review | Request the automated reviewer, address actionable findings, or proceed after its 24-hour response window. |
+| Preview | For an `apps/web/**` change, deploy or retry a READY preview whose `apps/web` tree matches the head; backend-only changes need no preview. |
+| Provenance | Align the declared scope with the diff and remove unrelated changes. |
+| Overlap | Coordinate on one implementation, then close the losing pull request with a pointer to the winner within 72 hours. |
+| Freshness | Merge `main` and resolve conflicts; do not repeatedly rebase just to reach zero commits behind. |
+| Risk class | Classify the change and obtain the approval required by that class. |
 
 ## Gates
 
@@ -111,10 +127,10 @@ weakening introduced by the rewrite that set out to make this gate precise.
 > tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
 > not something the workflow decides.
 >
-> So gate 2 requires these checks to **run and complete** — which catches a scan
-> that crashed, timed out, or was silently dropped from the pipeline. It is
-> **not** vulnerability enforcement, and this policy should not be read as
-> claiming it is. Making findings actually block is a change to
+> So gate 2 requires these security scan jobs (check-runs) to **run and complete** —
+> which catches a scan that crashed, timed out, or was silently dropped from the
+> pipeline. It is not a findings gate, and this policy should not be read as
+> claiming vulnerability enforcement. Making findings actually block is a change to
 > `security.yml`, with its own diff and its own blast radius; see *What is
 > deliberately not here*.
 
@@ -122,6 +138,23 @@ weakening introduced by the rewrite that set out to make this gate precise.
 > `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads
 > above. Selecting the capitalised one requires a check that never passes —
 > precisely the trap the confirmation rule below exists to catch.
+
+> **`PR Governance` / `Canonical issue and evidence` (#1436).** Neither name
+> appears in the required list above, and that is deliberate, not an
+> omission. `pr-governance.yml` was the sole source of both check-run names,
+> and on its escape paths (draft PRs, Dependabot) only its own custom
+> `PR Governance` check reported the honest `neutral`; the job-level
+> `Canonical issue and evidence` check still reported `success`, because the
+> escape never called `core.setFailed`. Requiring the descriptive-sounding
+> `Canonical issue and evidence` name alone would have made every draft and
+> every Dependabot PR read as "contract satisfied" instead of "not
+> evaluated" — the exact trap the confirmation rule below exists to catch,
+> and worse here because nothing in the picker hints which of the two names
+> carries the real signal. The workflow was retired outright (#1665) rather
+> than fixed, so the trap no longer exists to fall into. If a canonical-issue
+> gate is reintroduced, whichever check carries the three-state signal must
+> be the one required, and that must be spelled out here before it is added
+> to branch protection — not discovered afterward on a green draft PR.
 
 **Conditionally required — never require these unconditionally:**
 
@@ -197,7 +230,7 @@ was written to remove.
 > issue is opened against its owner.**
 
 A check red on everything has zero signal and actively hides real failures.
-`agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
+The retired agent-completion gate was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
 ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
 this failure mode in its own comments while its sibling did exactly that. Both
@@ -248,7 +281,7 @@ protection; the re-examination is.
 1. Commit this file. ✅ *(this pull request)*
 2. Retire the v1 Notion page — link here, mark superseded. Any agent still
    reading v1 will keep returning pull requests to draft.
-3. Enable branch protection: the six checks from gate 2, block direct pushes.
+3. Enable branch protection: the required checks from gate 2, and block direct pushes.
 4. Enable the merge queue (makes gate 7 structural).
 5. Implement the 50% demotion rule as a scheduled workflow.
 6. Enable Class A auto-merge. Two clean weeks later, Class B batches.

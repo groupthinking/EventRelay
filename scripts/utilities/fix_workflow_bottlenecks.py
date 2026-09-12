@@ -51,30 +51,40 @@ concurrency:
 
     def add_timeout_to_job(self, content: str, workflow_name: str, timeout_minutes: int = 10) -> str:
         """Add timeout to job if missing"""
-        # Look for job definitions
-        job_pattern = r'jobs:\s*\n\s+(\w+):\s*\n'
-        jobs_match = re.findall(job_pattern, content, re.MULTILINE)
+        jobs_start = content.find('\njobs:')
+        if jobs_start != -1:
+            jobs_content = content[jobs_start:]
+            # Try to find all jobs inside jobs_content
+            # Usually jobs are indented with 2 spaces
+            jobs_match = re.findall(r'^  ([a-zA-Z_0-9-]+):\s*$', jobs_content, re.MULTILINE)
 
-        for job_name in jobs_match:
-            job_section = f'  {job_name}:\n'
-            if job_section in content:
-                # Check if timeout already exists
-                job_start = content.find(job_section)
-                job_end_pattern = r'(?=^\s+\w+:|^$)'
-                job_end_match = re.search(job_end_pattern, content[job_start:], re.MULTILINE)
+            # Process from the end to avoid messing up the indices
+            for job_name in reversed(jobs_match):
+                job_section_pattern = r'^  ' + job_name + r':\s*\n'
 
-                if job_end_match:
-                    job_content = content[job_start:job_start + job_end_match.start()]
+                job_start_match = re.search(job_section_pattern, content, re.MULTILINE)
+                if job_start_match:
+                    job_start = job_start_match.start()
+                    job_end_pattern = r'(?=^  [a-zA-Z_0-9-]+:)'
+                    # skip current job definition for end pattern search
+                    job_end_match = re.search(job_end_pattern, content[job_start+len(job_name)+3:], re.MULTILINE)
+
+                    if job_end_match:
+                        job_end_pos = job_start + len(job_name) + 3 + job_end_match.start()
+                    else:
+                        job_end_pos = len(content)
+
+                    job_content = content[job_start:job_end_pos]
 
                     if "timeout-minutes:" in job_content:
                         logger.info(f"✅ Timeout already exists in job {job_name}")
                         continue
 
                     # Find runs-on line and add timeout after it
-                    runs_on_match = re.search(r'\s+runs-on:', job_content)
+                    runs_on_match = re.search(r'\n\s+runs-on:.*', job_content)
                     if runs_on_match:
                         insert_pos = job_start + runs_on_match.end()
-                        timeout_line = f"\n    timeout-minutes: {timeout_minutes}  # Prevent long-running jobs\n"
+                        timeout_line = f"\n    timeout-minutes: {timeout_minutes}  # Prevent long-running jobs"
                         content = content[:insert_pos] + timeout_line + content[insert_pos:]
                         logger.info(f"✅ Added timeout to job {job_name} in {workflow_name}")
 
@@ -203,7 +213,7 @@ concurrency:
 
     def create_emergency_stop(self) -> bool:
         """Create an emergency stop workflow to halt all processing if needed"""
-        emergency_workflow = """""name: 🚨 Emergency Stop - Halt All Processing
+        emergency_workflow = """name: 🚨 Emergency Stop - Halt All Processing
 
 on:
   workflow_dispatch:
