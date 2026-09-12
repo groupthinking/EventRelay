@@ -50,6 +50,22 @@ permanently, and duplicates were exactly what the draft backlog kept producing.
 A gate that cannot be satisfied is not strict — it is broken, and it teaches
 everyone to merge around it.
 
+## Author checklist
+
+When a gate is not satisfied, take the corresponding action below. These are
+remedies, not reasons to leave a pull request in draft indefinitely.
+
+| Gate | Author action |
+| --- | --- |
+| Binding | Add exactly one `Closes #<issue>` reference and use the pull request template. |
+| Required checks | Fix a failing check and push; if a check does not report, verify whether the diff belongs in the conditional list rather than waiting for it. |
+| Review | Request the automated reviewer, address actionable findings, or proceed after its 24-hour response window. |
+| Preview | For an `apps/web/**` change, deploy or retry a READY preview whose `apps/web` tree matches the head; backend-only changes need no preview. |
+| Provenance | Align the declared scope with the diff and remove unrelated changes. |
+| Overlap | Coordinate on one implementation, then close the losing pull request with a pointer to the winner within 72 hours. |
+| Freshness | Merge `main` and resolve conflicts; do not repeatedly rebase just to reach zero commits behind. |
+| Risk class | Classify the change and obtain the approval required by that class. |
+
 ## Gates
 
 A pull request may merge when all of the following hold.
@@ -265,7 +281,7 @@ protection; the re-examination is.
 1. Commit this file. ✅ *(this pull request)*
 2. Retire the v1 Notion page — link here, mark superseded. Any agent still
    reading v1 will keep returning pull requests to draft.
-3. Enable branch protection: the six checks from gate 2, block direct pushes.
+3. Enable branch protection: the required checks from gate 2, and block direct pushes.
 4. Enable the merge queue (makes gate 7 structural).
 5. Implement the 50% demotion rule as a scheduled workflow.
 6. Enable Class A auto-merge. Two clean weeks later, Class B batches.
