@@ -102,3 +102,10 @@ def test_reconciliation_workflow_report_is_idempotent() -> None:
     # Should update the existing issue if found, otherwise create a new one.
     assert "issues.update" in script
     assert "issues.create" in script
+
+
+def test_reconciliation_workflow_excludes_dependabot_from_untracked() -> None:
+    """Dependabot dependency PRs should not be counted as canonical-issue drift."""
+    script = _get_script(_load_workflow())
+    assert "dependabot[bot]" in script
+    assert "isDependencyAutomationPR" in script
