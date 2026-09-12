@@ -347,6 +347,10 @@ describe('studio-pipeline-status', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioDeployOutcomeMessage');
     expect(studio).not.toMatch(/pollStudioDeploy\([^)]*attempts:\s*20\b/);
+    expect(studio).toMatch(/startStudioDeploy\(\{[\s\S]*transcript:/);
+    expect(studio).toContain('usableProvidedTranscript');
+    const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
+    expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
     expect(studio).toContain('studioDeployButtonLabel');
     expect(studio).toContain('studioDeployReceiptForSelection');
     expect(studio).toContain('studioVerifiedLiveUrl');
