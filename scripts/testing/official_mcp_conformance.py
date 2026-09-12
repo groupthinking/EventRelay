@@ -161,6 +161,7 @@ def summarize_checks(
     checks: list[dict[str, Any]],
     *,
     required: bool,
+    exit_code: int,
 ) -> dict[str, Any]:
     counts = Counter(str(check.get("status", "UNKNOWN")) for check in checks)
     blocking = [
@@ -168,6 +169,11 @@ def summarize_checks(
         for check in checks
         if required and str(check.get("status")) in {"FAILURE", "WARNING"}
     ]
+    # Fail closed on a runner-level failure: a required scenario whose
+    # conformance runner exits non-zero must never be reported as passing,
+    # even when checks.json contains no FAILURE/WARNING entries.
+    if required and exit_code != 0:
+        blocking.append(f"runner-exit-code:{exit_code}")
     return {
         "ok": not blocking,
         "counts": dict(counts),
@@ -251,7 +257,11 @@ def _run_server_scenario(config: dict[str, Any]) -> dict[str, Any]:
             server.terminate()
             server.wait(timeout=5)
 
-    summary = summarize_checks(checks, required=bool(config["required"]))
+    summary = summarize_checks(
+        checks,
+        required=bool(config["required"]),
+        exit_code=result.returncode,
+    )
     return {
         "leg": "server",
         "scenario": config["scenario"],
@@ -283,7 +293,11 @@ def _run_client_scenario(config: dict[str, Any]) -> dict[str, Any]:
         result = _run(cmd)
         checks = _load_checks(output_dir)
 
-    summary = summarize_checks(checks, required=bool(config["required"]))
+    summary = summarize_checks(
+        checks,
+        required=bool(config["required"]),
+        exit_code=result.returncode,
+    )
     return {
         "leg": "client",
         "scenario": config["scenario"],
