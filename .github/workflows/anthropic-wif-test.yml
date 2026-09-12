@@ -30,6 +30,7 @@ concurrency:
 jobs:
   call-claude:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Fetch GitHub OIDC token
         uses: actions/github-script@v9

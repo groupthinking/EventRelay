@@ -14,6 +14,7 @@
 import { create } from 'zustand';
 import {
   createLifecycle,
+  dedupeAgentActions,
   reduceLifecycle,
   type AgentAction,
   type LifecycleEvent,
@@ -89,9 +90,9 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
       return;
     }
 
-    const actions: AgentAction[] = Array.isArray(body.actions)
-      ? body.actions.filter(isAgentAction)
-      : [];
+    const actions: AgentAction[] = dedupeAgentActions(
+      Array.isArray(body.actions) ? body.actions.filter(isAgentAction) : [],
+    );
     apply({ type: 'ACTIONS_EXTRACTED', actions, provider: body.provider });
     if (actions.length === 0) apply({ type: 'ACTIONS_FULFILLED', actions });
   }
@@ -152,7 +153,7 @@ export const useActionAgentStore = create<ActionAgentState>((set, get) => {
         return;
       }
       const { id: jobId, actions: preparedActions } = get().lifecycle;
-      const actions = selectedActions ?? preparedActions;
+      const actions = dedupeAgentActions(selectedActions ?? preparedActions);
       if (actions.length === 0) return;
       set({ isRunning: true });
       try {
