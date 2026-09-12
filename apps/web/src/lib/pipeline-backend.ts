@@ -1,5 +1,31 @@
 import 'server-only';
 
+/** Documented env names that may hold the FastAPI origin. First http(s) wins. */
+export const BACKEND_URL_ENV_KEYS = [
+  'BACKEND_URL',
+  'NEXT_PUBLIC_BACKEND_URL',
+  'NEXT_PUBLIC_API_URL',
+] as const;
+
+/**
+ * Resolve the configured EventRelay backend origin.
+ * Production Studio Attempt deploy reads these names — do not invent a host.
+ */
+export function resolveConfiguredBackendUrl(): string | null {
+  for (const key of BACKEND_URL_ENV_KEYS) {
+    const raw = (process.env[key] || '').trim();
+    if (!raw) continue;
+    try {
+      const parsed = new URL(raw);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') continue;
+      return raw.replace(/\/+$/, '');
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
 /**
  * Shared headers for Next.js → FastAPI backend calls.
  * Trims EVENTRELAY_API_KEY to avoid Secret Manager newline mismatches.
