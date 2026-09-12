@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GOLDEN_IDENTITY_HASHES, identityHash } from '@/lib/video-pack';
+import {
+  GOLDEN_IDENTITY_HASHES,
+  KEYFRAME_IMAGES_PARTIAL,
+  KEYFRAME_IMAGES_PARTIAL_NOTE,
+  identityHash,
+} from '@/lib/video-pack';
 import { VideoPackExtractError } from '@/lib/video-pack-extractor';
 
 const CANON_A = 'auJzb1D-fag';
@@ -249,6 +254,50 @@ describe('GET /api/video/pack (anonymous read)', () => {
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     expect(body.data.transcript.full_text).not.toBe(`cite:youtube:${CANON_B}`);
     expect(body.data.concepts).toEqual([`topic-${CANON_B}`]);
+  });
+
+  it('annotates stored null image_path keyframes as PARTIAL without inventing URLs', async () => {
+    const loaded = await loadPackRoute();
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-12T16:39:08.716Z',
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: {
+        ...pack,
+        keyframes: [
+          { t_s: 1, image_path: null, desc: `Keyframe from ${CANON_B}` },
+          { t_s: 12, image_path: null, desc: 'Second described frame' },
+        ],
+        metrics: {},
+        provenance: {
+          ...pack.provenance,
+          notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+        },
+      },
+    });
+
+    const res = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: {
+        keyframes: Array<{ t_s: number; image_path?: string | null; desc?: string | null }>;
+        metrics: Record<string, number | string>;
+        provenance: { source_hash: string; notes: string };
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.keyframes).toHaveLength(2);
+    expect(body.data.keyframes.every((frame) => frame.image_path === null)).toBe(true);
+    expect(body.data.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(body.data.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/https?:\/\//);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com/);
   });
 
   it('does not serve an identity-only pack as success after cite-only extract', async () => {
