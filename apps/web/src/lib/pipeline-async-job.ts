@@ -11,6 +11,7 @@ export interface AsyncJobKickoff {
   message?: string;
   live_url?: string | null;
   github_repo?: string | null;
+  httpStatus?: number;
 }
 
 export interface AsyncJobStatus {
@@ -54,6 +55,15 @@ export function studioDeployYoutubeRefetchHold(message?: string): string {
   return message || 'video-to-software returned no verified live URL';
 }
 
+/** Cloudflare/origin gateway timeout — kickoff must async-handoff, not HOLD HTTP 524. */
+export function isGatewayTimeoutKickoff(status?: number, message?: string): boolean {
+  if (status === 524 || status === 504 || status === 408) return true;
+  if (!message) return false;
+  return /http 524|error code:\s*524|cloudflare|timed out before a verified live url|aborted due to timeout/i.test(
+    message,
+  );
+}
+
 /**
  * Kick off FastAPI async video processing (same contract as POST /api/pipeline async).
  * Used from WDK steps — no self-HTTP to /api/pipeline.
@@ -76,7 +86,8 @@ export async function kickoffAsyncVideoJob(
   const { url: backendUrl } = getBackendConfig();
   const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
   if (shipped.kind === 'live') return shipped;
-  if (transcript) {
+  const gatewayTimeout = isGatewayTimeoutKickoff(shipped.httpStatus, shipped.message);
+  if (transcript && !gatewayTimeout) {
     return {
       kind: 'failed',
       message: studioDeployYoutubeRefetchHold(shipped.message),
@@ -86,7 +97,12 @@ export async function kickoffAsyncVideoJob(
   const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
     method: 'POST',
     headers: backendHeaders(),
-    body: JSON.stringify({ video_url: url, language: 'en' }),
+    body: JSON.stringify({
+      video_url: url,
+      language: 'en',
+      ...(transcript ? { transcript } : {}),
+      options: { pipeline: 'video-to-software' },
+    }),
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -198,7 +214,7 @@ async function tryVideoToSoftwareDeploy(
         deployment_target: 'vercel',
         ...(transcript ? { transcript } : {}),
       }),
-      signal: AbortSignal.timeout(180_000),
+      signal: AbortSignal.timeout(20_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     const miss =
@@ -208,7 +224,7 @@ async function tryVideoToSoftwareDeploy(
         ? 'video-to-software returned no verified live URL'
         : `Backend kickoff returned HTTP ${response.status}`);
     if (!response.ok) {
-      return { kind: 'failed', message: miss };
+      return { kind: 'failed', message: miss, httpStatus: response.status };
     }
     const result = asRecord(payload.result);
     const deployment = asRecord(payload.deployment) || asRecord(result?.deployment);
@@ -228,13 +244,14 @@ async function tryVideoToSoftwareDeploy(
       message: str(payload.message) || str(result?.message),
     };
   } catch (err) {
-    if (isAbortTimeout(err)) {
-      throw err;
-    }
     console.error('[pipeline-async-job] video-to-software kickoff failed', err);
     return {
       kind: 'failed',
-      message: err instanceof Error ? err.message : 'video-to-software kickoff failed',
+      message: isAbortTimeout(err)
+        ? 'video-to-software timed out before a verified live URL'
+        : err instanceof Error
+          ? err.message
+          : 'video-to-software kickoff failed',
     };
   }
 }
