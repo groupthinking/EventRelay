@@ -706,3 +706,62 @@ class TestSecurityAgentEvalFix:
 
         assert bad_found, "Failed to detect dangerous eval"
         assert not safe_found, "Falsely detected literal_eval as dangerous"
+
+
+class TestMojoSharedMemoryPickleFix:
+    """Test Issue: pickle RCE risk in Mojo shared-memory transport.
+
+    A receiver that unpickles data read from a cross-process shared-memory
+    segment can be forced into arbitrary code execution by a malicious or
+    compromised writer. The shared-memory transport must serialize with
+    JSON instead.
+    """
+
+    def test_mcp_a2a_mojo_integration_does_not_import_pickle(self):
+        """Verify the module no longer imports the pickle module."""
+        module_path = project_root / "src" / "agents" / "unified" / "mcp_a2a_mojo_integration.py"
+        assert module_path.exists()
+        content = module_path.read_text()
+        assert "import pickle" not in content
+        assert "pickle.dumps" not in content
+        assert "pickle.loads" not in content
+
+    @pytest.mark.asyncio
+    async def test_shared_memory_send_serializes_as_json(self):
+        """Verify _shared_memory_send writes a JSON payload, not pickle bytes."""
+        from agents.a2a_framework import A2AMessage
+        from agents.unified.mcp_a2a_mojo_integration import (
+            MojoTransportLayer,
+            TransportStrategy,
+            UnifiedMessage,
+        )
+        from connectors.mcp_base import MCPContext
+
+        message = UnifiedMessage(
+            a2a_message=A2AMessage(
+                sender="agent_a",
+                recipient="agent_b",
+                message_type="task",
+                content={"payload": "value"},
+            ),
+            mcp_context=MCPContext(),
+            transport_strategy=TransportStrategy.SHARED_MEMORY,
+        )
+        layer = MojoTransportLayer()
+        try:
+            result = await layer._shared_memory_send(message)
+            assert result["status"] == "delivered"
+            assert result["method"] == "shared_memory"
+
+            shm = layer._shm_blocks[result["shm_name"]]
+            size = result["size_bytes"]
+            raw = bytes(shm.buf[4:4 + size])
+
+            # Must be parseable JSON (proves no pickle opcodes were written).
+            decoded = json.loads(raw.decode("utf-8"))
+            assert decoded["a2a_message"]["sender"] == "agent_a"
+            assert decoded["transport_strategy"] == "shared_memory"
+        finally:
+            for shm in layer._shm_blocks.values():
+                shm.close()
+                shm.unlink()
