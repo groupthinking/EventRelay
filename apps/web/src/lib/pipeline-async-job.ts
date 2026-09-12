@@ -85,7 +85,7 @@ export async function kickoffAsyncVideoJob(
   const transcript = usableProvidedTranscript(opts?.transcript);
   const { url: backendUrl } = getBackendConfig();
   const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
-  if (shipped.kind === 'live') return shipped;
+  if (shipped.kind === 'live' || shipped.kind === 'job') return shipped;
   const gatewayTimeout = isGatewayTimeoutKickoff(shipped.httpStatus, shipped.message);
   if (transcript && !gatewayTimeout) {
     return {
@@ -217,6 +217,15 @@ async function tryVideoToSoftwareDeploy(
       signal: AbortSignal.timeout(20_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const data = asRecord(payload.data) || {};
+    const handedOffJobId = str(data.job_id) || str(payload.job_id);
+    if (response.status === 202 && handedOffJobId) {
+      return {
+        kind: 'job',
+        jobId: handedOffJobId,
+        statusUrl: `/api/jobs/${handedOffJobId}`,
+      };
+    }
     const miss =
       str(payload.error) ||
       str(payload.detail) ||

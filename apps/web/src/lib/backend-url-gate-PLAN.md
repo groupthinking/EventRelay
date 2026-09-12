@@ -4,7 +4,7 @@
 * **Objective:** Attempt deploy kickoff must not HOLD on `Backend kickoff returned HTTP 524`. Reach a verified https live URL + EventRelay receipt, or an honest HOLD that is not 524 and not the cleared residuals.
 * **Context:** AXIOM on `dpl_BbFnnqTvYiVDfSFEDa43LQTFETTD` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S`) cleared #1859 YouTube bot. Transcript was ready. New HOLD is HTTP 524. No Deploy completed / no live URL.
 * **Root cause:** After #1859, ready-transcript kickoff only calls sync `POST /api/v1/video-to-software` (180s). Cloudflare in front of api.uvai.io returns 524 at ~100s. Kickoff HOLDs that status and never starts an async job to poll.
-* **Scope:** Fail-fast / treat 524·504·408·abort as gateway timeout; async-handoff `/videos/process` with ready transcript + `pipeline: video-to-software`. Backend accepts `transcript` and runs vts in the job (skip YouTube when transcript is provided). Claim guard unchanged. Do not reopen #1848. No cookies / Origin invent.
+* **Scope:** Fail-fast / treat 524·504·408·abort as gateway timeout; origin `/video-to-software` returns 202 + job_id when work exceeds a 12s sync budget (no CF 524). Studio uses that job_id. Fallback `/videos/process` with ready transcript + `pipeline: video-to-software`. Backend accepts `transcript` and runs vts in the job (skip YouTube when transcript is provided). Claim guard unchanged. Do not reopen #1848. No cookies / Origin invent.
  * *Initial check:* Modify existing kickoff + `_run_video_job`; do not add a second Studio surface.
 
 ## 2. Execution Plan
