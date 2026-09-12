@@ -51,6 +51,31 @@ describe('GET /api/workflows/studio-deploy/:runId', () => {
     expect(json.error).not.toBe('Failed to read workflow return value');
   });
 
+  it('does not HOLD with Failed to read workflow run when getRun fetch gets a Request', async () => {
+    const parseErr = new TypeError('Failed to parse URL from [object Request]');
+    Object.assign(parseErr, {
+      cause: Object.assign(new TypeError('Invalid URL'), {
+        code: 'ERR_INVALID_URL',
+        input: '[object Request]',
+      }),
+    });
+    getRun.mockImplementation(() => {
+      throw parseErr;
+    });
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('https://uvai.io/api/workflows/studio-deploy/wrun_req'), {
+      params: Promise.resolve({ runId: 'wrun_req' }),
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(json.error).not.toBe('Failed to read workflow run');
+    expect(json.error).not.toBe('Failed to read workflow return value');
+    expect(res.status).toBe(200);
+    expect(json.ok).toBe(true);
+    expect(json.runId).toBe('wrun_req');
+    expect(json.runStatus).toBe('running');
+  });
+
   it('returns a completed live result when returnValue is readable', async () => {
     getRun.mockReturnValue(
       runHandle({
