@@ -211,6 +211,26 @@ describe('emitJsonCanvas (pack→JSON Canvas emit)', () => {
     ).toBeNull();
   });
 
+  it('emits a file node when a durable captured keyframe image_path is present', () => {
+    const captured = '/api/video/pack/frames/XYMcBrFSJ4c/12';
+    const canvas = emitJsonCanvas({
+      ...xymcInput(),
+      visualEvents: [
+        {
+          timestamp: 12,
+          content: 'n8n workflow editor for email triage',
+          element_type: 'keyframe',
+          image_path: captured,
+        },
+      ],
+    });
+    expect(canvas).not.toBeNull();
+    const valid = validateJsonCanvas(canvas);
+    const files = (valid.nodes ?? []).filter((node) => node.type === 'file');
+    expect(files).toHaveLength(1);
+    expect(files[0]).toMatchObject({ type: 'file', file: captured });
+  });
+
   it('never emits file nodes for B2-null keyframe image_path', () => {
     const canvas = emitJsonCanvas({
       ...xymcInput(),

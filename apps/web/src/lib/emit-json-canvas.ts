@@ -6,7 +6,10 @@
  * File name in the App Builder / Studio workspace: mission.canvas
  * Omit the file when the pack has no usable emit-slice content.
  * Never invent architecture, code_snippets, or keyframe file nodes.
+ * File nodes are emitted only when a durable captured image_path is present.
  */
+
+import { isDurableCapturedImagePath } from '@/lib/keyframe-image-path';
 
 export const JSON_CANVAS_SPEC = '1.0' as const;
 export const JSON_CANVAS_SPEC_URL =
@@ -46,6 +49,7 @@ export type JsonCanvasEmitInput = {
     timestamp: number;
     content: string;
     element_type?: string;
+    image_path?: string | null;
   }>;
   sopSteps?: Array<{
     id: string;
@@ -468,16 +472,30 @@ export function emitJsonCanvas(input: JsonCanvasEmitInput): JsonCanvas | null {
         let cursorY = ORIGIN_Y + 48;
         for (const [eventIndex, body] of bodies.entries()) {
           const height = heights[eventIndex] ?? 100;
-          nodes.push({
-            id: `visual-${eventIndex}`,
-            type: 'text',
-            x: innerX,
-            y: cursorY,
-            width: TEXT_WIDTH,
-            height,
-            color: '3',
-            text: body,
-          });
+          const captured = visuals[eventIndex]?.image_path;
+          if (isDurableCapturedImagePath(captured)) {
+            nodes.push({
+              id: `visual-${eventIndex}`,
+              type: 'file',
+              x: innerX,
+              y: cursorY,
+              width: TEXT_WIDTH,
+              height,
+              color: '3',
+              file: captured,
+            });
+          } else {
+            nodes.push({
+              id: `visual-${eventIndex}`,
+              type: 'text',
+              x: innerX,
+              y: cursorY,
+              width: TEXT_WIDTH,
+              height,
+              color: '3',
+              text: body,
+            });
+          }
           cursorY += height + 16;
         }
         break;

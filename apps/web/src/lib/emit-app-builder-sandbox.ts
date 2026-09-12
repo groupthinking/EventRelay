@@ -26,6 +26,7 @@ export type AppBuilderVisualEvent = {
   timestamp: number;
   content: string;
   element_type?: string;
+  image_path?: string | null;
 };
 
 export type AppBuilderSopStep = {
@@ -350,7 +351,7 @@ Payload: transcript + visual events + SOP steps. Architecture and code snippets 
 3. \`sh startup.sh\` — probes \`http://127.0.0.1:8080/\`, then \`npm run dev\` on \`0.0.0.0:8080\`.
 4. \`node scripts/browser-smoke.mjs\` — visible UI must include \`${input.videoId}\`.
 5. \`npm run build\` and \`npm run typecheck\` must pass.
-6. Optional \`mission.canvas\` is JSON Canvas 1.0 (https://github.com/groupthinking/jsoncanvas spec/1.0) from transcript + visual events + SOP only. Omitted when that slice is empty. Open in Obsidian or any JSON Canvas app. Keyframe \`image_path\` is not invented (B2 PARTIAL).
+6. Optional \`mission.canvas\` is JSON Canvas 1.0 (https://github.com/groupthinking/jsoncanvas spec/1.0) from transcript + visual events + SOP only. Omitted when that slice is empty. Open in Obsidian or any JSON Canvas app. Keyframe \`image_path\` becomes a file node only when a captured frame was persisted.
 
 This cut does not claim a live deploy URL and does not run G.A.T.E. \`studio.deploy\`.
 `;
@@ -374,7 +375,14 @@ export function visualEventsFromPack(input: {
   const fromFrames = (input.keyframes ?? []).flatMap((frame) => {
     const content = (frame.desc ?? '').trim();
     if (!content) return [];
-    return [{ timestamp: frame.t_s, content, element_type: 'keyframe' }];
+    return [
+      {
+        timestamp: frame.t_s,
+        content,
+        element_type: 'keyframe',
+        image_path: frame.image_path ?? null,
+      },
+    ];
   });
   return [...fromVisual, ...fromFrames];
 }
