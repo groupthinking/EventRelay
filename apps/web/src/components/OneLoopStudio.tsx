@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Download, Play, Rocket } from 'lucide-react';
+import { Download, GitPullRequest, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
@@ -77,6 +77,7 @@ import {
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
+import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -99,6 +100,15 @@ function gateDecisionChipClass(decision: GateDecision): string {
 
 function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
+}
+
+function toSpecBranch(videoId: string, stepId: string): string {
+  const slug = `${videoId || 'video'}-${stepId}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `spec/${slug || 'approved'}`;
 }
 
 function mapExtractedEvents(raw: unknown[], videoId: string): ExtractedEvent[] {
@@ -236,6 +246,8 @@ export default function OneLoopStudio({
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
   const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
+  const [openingPrs, setOpeningPrs] = useState(false);
   const [playerEpoch, setPlayerEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
@@ -292,6 +304,7 @@ export default function OneLoopStudio({
 
   useEffect(() => {
     setCompletedChecks([]);
+    setApprovedSpecIds([]);
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(null);
   }, [selectedVideoId]);
@@ -655,6 +668,35 @@ export default function OneLoopStudio({
     }
   };
 
+  const openApprovedSpecsPrs = async () => {
+    if (!linkedSop || linkedSop.steps.length === 0) {
+      setMessage('Analyze a video with SOP steps before opening GitHub pull requests.');
+      return;
+    }
+    const sourceVideoId = getYouTubeId(selected?.url || url || '');
+    const specs = linkedSop.steps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      body: [step.description || '', step.quote ? `\nQuote: ${step.quote}` : ''].join('').trim(),
+      head: toSpecBranch(sourceVideoId, step.id),
+      base: 'main',
+      approved: approvedSpecIds.includes(step.id),
+    }));
+    setOpeningPrs(true);
+    try {
+      const result = await openGitHubPrsForApprovedSpecs(specs);
+      if (!result.ok) {
+        setMessage(result.error || 'Could not open GitHub pull requests for approved specs.');
+        return;
+      }
+      setMessage(`Opened or updated ${result.pullRequests.length} GitHub pull request(s) for approved specs.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open GitHub pull requests.');
+    } finally {
+      setOpeningPrs(false);
+    }
+  };
+
   const transcriptStage = studioTranscriptStage({
     busy: transcriptWorking,
     elapsedSeconds: elapsed,
@@ -1008,7 +1050,9 @@ export default function OneLoopStudio({
               {linkedSop.steps.length === 0 && (
                 <li className="px-4 py-3 text-sm text-white/40">No ordered SOP in this run.</li>
               )}
-              {linkedSop.steps.map((step) => (
+              {linkedSop.steps.map((step) => {
+                const approved = approvedSpecIds.includes(step.id);
+                return (
                 <li key={step.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
                   {step.timestamp != null ? (
                     <button
@@ -1022,13 +1066,29 @@ export default function OneLoopStudio({
                     <div className="font-mono text-[11px] text-white/35">{step.order}</div>
                   )}
                   <div>
+                    <label className="mb-1 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-white/45">
+                      <input
+                        type="checkbox"
+                        checked={approved}
+                        onChange={() =>
+                          setApprovedSpecIds((current) =>
+                            current.includes(step.id)
+                              ? current.filter((id) => id !== step.id)
+                              : [...current, step.id],
+                          )
+                        }
+                        className="h-3.5 w-3.5 accent-[#e8b86d]"
+                      />
+                      Approved for PR
+                    </label>
                     <div className="text-sm font-medium text-white">{step.title}</div>
                     {step.description && (
                       <div className="mt-0.5 text-sm text-white/55">{step.description}</div>
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ol>
 
             {stackChecks.length > 0 && (
@@ -1255,6 +1315,17 @@ export default function OneLoopStudio({
           >
             <Rocket className="h-4 w-4" aria-hidden />
             {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
+          </button>
+          <button
+            type="button"
+            data-testid="studio-open-prs-button"
+            onClick={() => void openApprovedSpecsPrs()}
+            disabled={openingPrs || approvedSpecIds.length === 0}
+            title={approvedSpecIds.length === 0 ? 'Approve at least one SOP spec first.' : undefined}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
+          >
+            <GitPullRequest className="h-4 w-4" aria-hidden />
+            {openingPrs ? 'Opening PRs…' : `Open GitHub PRs (${approvedSpecIds.length})`}
           </button>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
