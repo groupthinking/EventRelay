@@ -41,6 +41,22 @@ export interface ScaffoldPackage {
   files: Record<string, string>;
 }
 
+export type ScaffoldDownloadResult =
+  | {
+      ok: true;
+      status: number;
+      filename: string;
+    }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      code?: string;
+      upgradeRequired?: boolean;
+      checkoutUrl?: string;
+      retryable?: boolean;
+    };
+
 function safeProjectName(name: string): string {
   return (
     name
@@ -274,19 +290,84 @@ export function summarizeProjectScaffold(scaffold: unknown, maxItems = 6): strin
 }
 
 /** One zip so Chrome does not swallow official starter files after the first blob. */
-export function downloadScaffoldPackage(pkg: ScaffoldPackage): void {
-  if (typeof document === 'undefined') return;
-  const zip = zipUtf8Files(pkg.files);
-  const bytes = new ArrayBuffer(zip.byteLength);
-  new Uint8Array(bytes).set(zip);
-  const blob = new Blob([bytes], { type: 'application/zip' });
+function exportFallbackName(projectName: string): string {
+  const trimmed = projectName.trim();
+  if (!trimmed) return 'uvai-project.zip';
+  return trimmed.toLowerCase().endsWith('.zip') ? trimmed : `${trimmed}.zip`;
+}
+
+function attachmentFilename(disposition: string | null, fallback: string): string {
+  const match = disposition?.match(/filename="([^"]+)"/i);
+  return match?.[1]?.trim() || fallback;
+}
+
+async function readExportError(response: Response): Promise<ScaffoldDownloadResult> {
+  const body = await response
+    .json()
+    .catch(() => ({} as Record<string, unknown>));
+
+  return {
+    ok: false,
+    status: response.status,
+    error:
+      typeof body.error === 'string' && body.error.trim()
+        ? body.error
+        : 'Export failed.',
+    code: typeof body.code === 'string' ? body.code : undefined,
+    upgradeRequired: body.upgradeRequired === true,
+    checkoutUrl: typeof body.checkoutUrl === 'string' ? body.checkoutUrl : undefined,
+    retryable: body.retryable === true,
+  };
+}
+
+/** One zip so Chrome does not swallow official starter files after the first blob. */
+export async function downloadScaffoldPackage(
+  pkg: ScaffoldPackage,
+): Promise<ScaffoldDownloadResult> {
+  if (typeof document === 'undefined' || typeof fetch === 'undefined') {
+    return { ok: false, status: 0, error: 'Downloads require a browser context.' };
+  }
+
+  let response: Response | null = null;
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      response = await fetch('/api/workspace/export', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(pkg),
+      });
+      if (response.ok || response.status < 500) break;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (!response) {
+    return {
+      ok: false,
+      status: 0,
+      error: lastError?.message || 'Export failed.',
+    };
+  }
+
+  if (!response.ok) {
+    return readExportError(response);
+  }
+
+  const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${pkg.projectName || 'uvai-project'}.zip`;
+  const filename = attachmentFilename(
+    response.headers.get('content-disposition'),
+    exportFallbackName(pkg.projectName || 'uvai-project'),
+  );
+  a.download = filename;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  return { ok: true, status: response.status, filename };
 }

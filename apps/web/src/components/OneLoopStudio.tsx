@@ -492,7 +492,7 @@ export default function OneLoopStudio({
     }
   };
 
-  const exportPkg = () => {
+  const exportPkg = async () => {
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -528,8 +528,21 @@ export default function OneLoopStudio({
           tools: packFormation.tools,
         },
       });
-      downloadScaffoldPackage(pkg);
-      const filename = studioExportFilename(pkg.projectName);
+      const result = await downloadScaffoldPackage(pkg);
+      if (!result.ok) {
+        if (result.status === 402 && result.checkoutUrl) {
+          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
+          window.location.href = result.checkoutUrl;
+          return;
+        }
+        const toast = studioExportToastMessage({
+          ok: false,
+          error: result.error,
+        });
+        setExportToast(toast);
+        return;
+      }
+      const filename = result.filename || studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'

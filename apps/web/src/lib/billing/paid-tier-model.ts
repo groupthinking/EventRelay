@@ -29,6 +29,8 @@ export const PRO_FEATURES = {
   agentDispatch: true,
   apiAccess: true,
   priorityProcessing: true,
+  workspaceZipExport: true,
+  refineryDatasetAccess: true,
 } as const;
 
 export const FREE_CHAT_DAILY_LIMIT = 5;
