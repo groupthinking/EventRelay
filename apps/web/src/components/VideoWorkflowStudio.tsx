@@ -163,9 +163,9 @@ function getYouTubeId(url: string) {
 
 function currentVideoUrlForLink(videoUrl: string) {
   const id = getYouTubeId(videoUrl);
-  if (!id) return '/dashboard';
+  if (!id) return '/studio';
   const normalized = videoUrl.trim() || `https://www.youtube.com/watch?v=${id}`;
-  return `/dashboard?video=${encodeURIComponent(normalized)}`;
+  return `/studio?video=${encodeURIComponent(normalized)}`;
 }
 
 function isUnsafeRequest(text: string) {
@@ -516,7 +516,7 @@ export default function VideoWorkflowStudio() {
   };
 
   /**
-   * Act on findings — durable Workflow DevKit path (video → transcript → action agent).
+   * Act on findings — Workflow DevKit path (video → transcript → action agent).
    * Survives reloads better than a single long request; poll by runId.
    */
   const handleActOnFindings = async () => {
@@ -530,7 +530,7 @@ export default function VideoWorkflowStudio() {
 
     setActionsBusy(true);
     setWorkflowActions(null);
-    setActionMessage('Starting durable video-to-actions workflow…');
+    setActionMessage('Starting video-to-actions run…');
 
     try {
       const started = await startVideoToActions({
@@ -540,8 +540,8 @@ export default function VideoWorkflowStudio() {
       if (!started.ok || !started.runId) {
         setActionMessage(
           started.error
-            ? `Could not start durable workflow: ${started.error}`
-            : 'Could not start durable workflow. Check Workflow DevKit install and withWorkflow config.',
+            ? `Could not start the run: ${started.error}`
+            : 'Could not start the run. Check Workflow DevKit install and withWorkflow config.',
         );
         return;
       }
@@ -598,7 +598,7 @@ export default function VideoWorkflowStudio() {
     deployAbortRef.current = deployAbort;
 
     setDeployBusy(true);
-    setActionMessage('Starting durable Studio deploy…');
+    setActionMessage('Starting Studio deploy…');
 
     try {
       const started = await startStudioDeploy({
@@ -622,8 +622,6 @@ export default function VideoWorkflowStudio() {
         setDeployRunId(started.runId);
         setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
         const polled = await pollStudioDeploy(started.runId, {
-          attempts: 24,
-          delayMs: 2000,
           signal: deployAbort.signal,
         });
         const live = polled.result?.live_url;
@@ -771,17 +769,14 @@ export default function VideoWorkflowStudio() {
           </Link>
 
           <nav className="hidden items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 text-sm text-slate-600 md:flex">
-            <Link href="/" className="rounded-full bg-white px-4 py-1.5 font-medium text-slate-950 shadow-sm">
+            <Link href="/studio" className="rounded-full bg-white px-4 py-1.5 font-medium text-slate-950 shadow-sm">
               Studio
             </Link>
-            <Link href="/dashboard" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Dashboard
+            <Link href="/" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Home
             </Link>
-            <Link href="/features" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Verified capabilities
-            </Link>
-            <Link href="/dashboard/agents" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
-              Agents
+            <Link href="/pricing" className="rounded-full px-4 py-1.5 hover:bg-white hover:text-slate-950">
+              Pricing
             </Link>
           </nav>
 
@@ -812,7 +807,7 @@ export default function VideoWorkflowStudio() {
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
               {' '}
-              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video-to-transcript-to-actions workflow.
+              <span className="font-semibold text-slate-950">Act on findings</span> runs a video-to-transcript-to-actions workflow.
               {' '}
               <span className="font-semibold text-slate-950">Dashboard</span> runs the live SSE agent pipeline.
               {' '}
@@ -1131,7 +1126,7 @@ export default function VideoWorkflowStudio() {
                   {activeAction === 'deploy' && (
                     <div className="space-y-3">
                       <p className="leading-6">
-                        Deploy starts a signed-in durable workflow, then falls back to{' '}
+                        Deploy starts a signed-in run, then falls back to{' '}
                         <code className="text-xs">POST /api/pipeline</code> only if start() is unavailable.
                         {deployBusy ? ' (in progress…)' : ''} Sign in first. If the backend is down, use Export.
                       </p>
@@ -1146,7 +1141,7 @@ export default function VideoWorkflowStudio() {
                             <div>
                               Job:{' '}
                               <Link
-                                href={`/dashboard?video=${encodeURIComponent(videoUrl || '')}`}
+                                href={`/studio?video=${encodeURIComponent(videoUrl || '')}`}
                                 className="font-mono text-blue-700 underline"
                               >
                                 {deployJobId}

@@ -129,6 +129,23 @@ def test_dependabot_ignores_eslint_v10() -> None:
         } in update.get("ignore", [])
 
 
+def test_dependabot_ignores_generated_gh_aw_action_locks() -> None:
+    config = _load_dependabot_config()
+    github_actions_updates = [
+        update
+        for update in config["updates"]
+        if update["package-ecosystem"] == "github-actions" and update["directory"] == "/"
+    ]
+
+    assert len(github_actions_updates) == 1, (
+        "Expected exactly one root github-actions Dependabot entry, got "
+        f"{len(github_actions_updates)}"
+    )
+    assert {"dependency-name": "github/gh-aw-actions/*"} in github_actions_updates[
+        0
+    ].get("ignore", [])
+
+
 # ---------------------------------------------------------------------------
 # Behavioural coverage for the merge gate (#1476).
 #
@@ -195,8 +212,6 @@ REQUIRED_CHECKS = [
     "CodeQL",
     "gitleaks (working tree)",
     "dependency-review",
-    "PR Governance",
-    "Canonical issue and evidence",
     "Security Scan - python",
     "Security Scan - javascript",
     "bandit",
@@ -298,17 +313,14 @@ def test_merge_gate_blocks_on_a_failing_check_run(tmp_path: Path) -> None:
 
 def test_merge_gate_treats_skipped_and_neutral_as_satisfied(tmp_path: Path) -> None:
     """`MERGE_POLICY.md` gate 2 lists conditional checks; `E2E Pipeline Tests`
-    is routinely `skipped` and `PR Governance` `neutral`. Neither should
-    deadlock a merge."""
+    is routinely `skipped` and should not deadlock a merge."""
     outcome = _run_merge_gate(
         tmp_path,
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
             "checkRuns": [
-                *_all_required_green(
-                    **{"PR Governance": {"conclusion": "neutral"}}
-                ),
+                *_all_required_green(),
                 {
                     "name": "E2E Pipeline Tests",
                     "status": "completed",

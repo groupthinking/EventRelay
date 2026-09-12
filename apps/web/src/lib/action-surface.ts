@@ -1,5 +1,10 @@
 import { renderDeployMarkdown, type LinkedSop } from '@/lib/linked-sop';
 import { officialTemplateFiles, pickOfficialTemplate } from '@/lib/official-templates';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
 import { zipUtf8Files } from '@/lib/zip-store';
 
 /**
@@ -36,7 +41,7 @@ export interface ScaffoldPackage {
   files: Record<string, string>;
 }
 
-function safeProjectName(name: string): string {
+export function safeProjectName(name: string): string {
   return (
     name
       .toLowerCase()
@@ -105,12 +110,20 @@ export function actionsFromStudioRun(input: {
   return out;
 }
 
+export type StudioPackExportFormation = {
+  architecture?: VideoPackArchitecture | null;
+  artifacts?: VideoPackArtifact[];
+  tools?: VideoPackStackTool[];
+};
+
 export function buildScaffoldPackage(input: {
   projectName?: string;
   actions: ActionCardLike[];
   /** Optional Gemini project_scaffold blob from TranscriptActionAgent. */
   projectScaffold?: unknown;
   linkedSop?: LinkedSop;
+  /** Pack architecture / artifacts / stack when events[] is empty. */
+  packFormation?: StudioPackExportFormation;
 }): ScaffoldPackage {
   const name = safeProjectName(input.projectName || 'generated-project');
   const sop = input.linkedSop;
@@ -179,6 +192,34 @@ export function buildScaffoldPackage(input: {
   if (input.projectScaffold != null) {
     files['project_scaffold.json'] =
       JSON.stringify(input.projectScaffold, null, 2) + '\n';
+  }
+
+  const architecture = input.packFormation?.architecture;
+  if (architecture) {
+    const stageLines = architecture.stages
+      .map((stage) => `- ${stage.name}${stage.description ? ` — ${stage.description}` : ''}`)
+      .join('\n');
+    files['ARCHITECTURE.md'] = [
+      `# Architecture`,
+      '',
+      architecture.summary?.trim() || '',
+      stageLines ? `\n## Stages\n\n${stageLines}\n` : '',
+      architecture.mermaid ? `\n## Graph\n\n\`\`\`mermaid\n${architecture.mermaid}\n\`\`\`\n` : '',
+    ]
+      .filter((block) => block.length > 0)
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
+  const artifacts = input.packFormation?.artifacts ?? [];
+  if (artifacts.length > 0) {
+    files['artifacts.json'] = JSON.stringify(artifacts, null, 2) + '\n';
+  }
+
+  const tools = input.packFormation?.tools ?? [];
+  if (tools.length > 0 && !entityLines) {
+    const toolLines = tools.map((tool) => `- ${tool.name}`).join('\n');
+    files['README.md'] += `\n## Stack\n\n${toolLines}\n`;
   }
 
   return { projectName: name, files };

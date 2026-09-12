@@ -4,10 +4,11 @@
  * After verified captions land, label the tools the video named, attach only
  * official docs, and turn speech order into a checklist. Unknown names do not
  * get invented URLs. Stack checklists (Vercel Deployment Checks, Shopify CLI)
- * are appended only when that stack is actually in the transcript.
+ * are appended only from pack.stack.tools — never from hallucinated topics.
  */
 
 import { formatSeconds } from '@/lib/timestamp';
+import type { VideoPackStackTool } from '@/lib/video-pack-types';
 
 export type EntityKind = 'tool' | 'product' | 'process' | 'platform';
 
@@ -60,6 +61,8 @@ export interface LinkedSopInput {
   events?: Array<{ timestamp?: number; label?: string; title?: string; description?: string }>;
   actions?: Array<{ title?: string; description?: string; category?: string }>;
   topics?: string[];
+  /** Industry stack checks are generated only from these pack-grounded tools. */
+  packTools?: VideoPackStackTool[] | null;
 }
 
 interface StackCheck {
@@ -193,6 +196,31 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://developers.cloudflare.com',
     docsUrl: 'https://developers.cloudflare.com',
+    stack: 'cloudflare',
+  },
+  {
+    name: 'Cloudflare Workers',
+    aliases: ['cloudflare workers'],
+    kind: 'product',
+    officialUrl: 'https://developers.cloudflare.com/workers',
+    docsUrl: 'https://developers.cloudflare.com/workers',
+    stack: 'cloudflare',
+  },
+  {
+    name: 'x402',
+    aliases: ['x402', 'x-402'],
+    kind: 'tool',
+    officialUrl: 'https://www.x402.org',
+    docsUrl: 'https://www.x402.org',
+    stack: 'x402',
+  },
+  {
+    name: 'MCP',
+    aliases: ['mcp', 'model context protocol'],
+    kind: 'tool',
+    officialUrl: 'https://modelcontextprotocol.io',
+    docsUrl: 'https://modelcontextprotocol.io/docs',
+    stack: 'mcp',
   },
   {
     name: 'FastAPI',
@@ -325,6 +353,83 @@ function entityNamesIn(text: string, entities: LinkedEntity[]): string[] {
     .map((entity) => entity.name);
 }
 
+function slugTool(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tool';
+}
+
+function catalogForTool(name: string): CatalogEntry | undefined {
+  const lower = name.toLowerCase();
+  return OFFICIAL_CATALOG.find(
+    (entry) =>
+      entry.name.toLowerCase() === lower ||
+      entry.aliases.some((alias) => alias === lower),
+  );
+}
+
+export function stackChecksFromPackTools(
+  tools: VideoPackStackTool[] | null | undefined,
+): ChecklistItem[] {
+  if (!tools?.length) return [];
+  const checks: ChecklistItem[] = [];
+  const seen = new Set<string>();
+  const stacks = new Set<string>();
+
+  for (const tool of tools) {
+    const name = tool.name.trim();
+    if (!name) continue;
+    const entry = catalogForTool(name);
+    if (entry?.stack) stacks.add(entry.stack);
+  }
+
+  for (const check of STACK_CHECKS) {
+    if (!stacks.has(check.stack)) continue;
+    const key = `${check.stack}:${check.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    checks.push({
+      id: `chk_${check.stack}_${checks.length + 1}`,
+      source: 'stack',
+      stack: check.stack,
+      title: check.title,
+      href: check.href,
+    });
+  }
+
+  for (const tool of tools) {
+    const name = tool.name.trim();
+    if (!name) continue;
+    const entry = catalogForTool(name);
+    if (entry?.stack && STACK_CHECKS.some((item) => item.stack === entry.stack)) {
+      continue;
+    }
+    const key = `tool:${name.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    checks.push({
+      id: `chk_tool_${slugTool(name)}_${checks.length + 1}`,
+      source: 'stack',
+      stack: entry?.stack || slugTool(name),
+      title: tool.check?.trim() || `Use ${name} as named in the video`,
+      href: entry?.docsUrl || entry?.officialUrl,
+    });
+  }
+
+  return checks;
+}
+
+export function applyPackStackChecks(
+  sop: LinkedSop,
+  packTools?: VideoPackStackTool[] | null,
+): LinkedSop {
+  return {
+    ...sop,
+    checklist: [
+      ...sop.checklist.filter((item) => item.source !== 'stack'),
+      ...stackChecksFromPackTools(packTools),
+    ],
+  };
+}
+
 function similarTitle(left: string, right: string): boolean {
   const norm = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const a = norm(left);
@@ -422,12 +527,6 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     }
   }
 
-  const stacks = new Set(
-    entities
-      .map((entity) => OFFICIAL_CATALOG.find((entry) => entry.name === entity.name)?.stack)
-      .filter((stack): stack is string => Boolean(stack)),
-  );
-
   const checklist: ChecklistItem[] = steps.map((step) => ({
     id: `chk_${step.id}`,
     source: 'video-sop',
@@ -435,16 +534,7 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     timestamp: step.timestamp,
   }));
 
-  for (const check of STACK_CHECKS) {
-    if (!stacks.has(check.stack)) continue;
-    checklist.push({
-      id: `chk_${check.stack}_${checklist.length + 1}`,
-      source: 'stack',
-      stack: check.stack,
-      title: check.title,
-      href: check.href,
-    });
-  }
+  checklist.push(...stackChecksFromPackTools(input.packTools));
 
   return { entities, steps, checklist };
 }

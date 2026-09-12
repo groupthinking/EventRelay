@@ -28,41 +28,35 @@ billing/auth vars go in `apps/web/.env.local` (or your Vercel project settings),
 
 ## 1. Launch-gating blockers (must do)
 
-### 1.1 Stripe products & prices — ⏳ TEST MODE (LIVE prices NOT yet created)
+### 1.1 Stripe products & prices — UVAI Workflow Pro (live account)
 
-> **Reality check (verified 2026-07-14):** production checkout runs in Stripe
-> **TEST mode**. The LIVE prices this section used to claim as "DONE" are **DEAD** —
-> Stripe now returns `No such price` for them (evidence:
-> `docs/control-plane/sessions/gate3-reprobe-20260714T2011Z/renew-empty.body`).
+Public catalog for this slice: **UVAI Workflow Pro** at **$39/mo** and **$390/yr**.
+Do **not** charge the stale EventRelay Pro $19/$180 amounts.
+
 > **DO NOT re-apply `price_1Tos02AmTgsI2zgNWx7onroJ` or
-> `price_1Tos0AAmTgsI2zgNSu5lwBv6`** — they were reverted and will 500 checkout.
+> `price_1Tos0AAmTgsI2zgNSu5lwBv6`** — those EventRelay Pro $19/$180 IDs are
+> dead and will 500 checkout.
 
-**Current production prices (Stripe TEST mode, account `acct_1ScN2hAmTgsI2zgN`):**
+**Authoritative live Price IDs (UVAI Stripe account, product `prod_V9TYXeVHLQGrVW`):**
 
-- **$19/mo** (test): `price_1TtCZXPPnkyjEyFR8dYmDo52` — produces `cs_test_` sessions
-- **$180/yr** (test): `price_1TtCZYPPnkyjEyFRLMLPjmzE`
+- **$39/mo** (3900 cents, lookup `uvai-workflow-pro-monthly`): `price_1U9AbLAmTgsI2zgNEZD4Kwed`
+- **$390/yr** (39000 cents, lookup `uvai-workflow-pro-annual`): `price_1U9AbLAmTgsI2zgN0SM70JN9`
 
-The Vercel Production env carries the **env-var names** below (do not hardcode any
-price ID as "done" in this doc — the authoritative IDs live only in Vercel/Stripe):
+Prefer Vercel env. Production `requireStripePriceId()` still throws if these
+are unset (fail closed). Non-production may use the IDs above as last-resort
+documented fallbacks only.
+
+Set in Vercel Production / `apps/web/.env.local` (never commit `STRIPE_SECRET_KEY`):
   ```
-  STRIPE_SECRET_KEY=sk_test_...          # currently TEST; swap to sk_live_ at cutover
-  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
-  STRIPE_WEBHOOK_SECRET=whsec_...        # from step 1.2 (configured — verified)
-  STRIPE_PRICE_PRO_MONTHLY=<test monthly price id above>
-  STRIPE_PRICE_PRO_ANNUAL=<test annual price id above>
+  STRIPE_SECRET_KEY=sk_live_...          # live key lives only in Vercel env
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
+  STRIPE_WEBHOOK_SECRET=whsec_...
+  STRIPE_PRICE_PRO_MONTHLY=price_1U9AbLAmTgsI2zgNEZD4Kwed
+  STRIPE_PRICE_PRO_ANNUAL=price_1U9AbLAmTgsI2zgN0SM70JN9
+  NEXT_PUBLIC_APP_URL=https://uvai.io    # success/cancel stay on /pricing
   ```
-- Without the two `STRIPE_PRICE_*` IDs, `requireStripePriceId()` throws and
-  checkout 500s. Price IDs are not secrets; the `sk_` key and `whsec_` secret are.
-
-**🔴 LIVE cutover (required before real revenue):** create a fresh LIVE-mode
-Product + recurring Prices on `acct_1ScN2hAmTgsI2zgN`, record the NEW live price
-IDs, set them plus `sk_live_` / `pk_live_` / a live `whsec_` in Vercel Production,
-then re-run the gate3 probe and confirm the renew session returns `cs_live_`
-(not `cs_test_`) with no "No such price" error **before** charging real cards.
-
-> **Local drift:** `apps/web/.env.local` (gitignored) currently sets a THIRD
-> divergent pair (`price_1TnYlW…`) matching neither prod nor the dead IDs.
-> Reconcile it to the TEST IDs above for local↔prod parity.
+- Price IDs are not secrets; the `sk_` key and `whsec_` secret are.
+- Checkout success/cancel URLs must remain `https://uvai.io/pricing`.
 
 ### 1.2 Stripe webhook endpoint — ✅ CONFIGURED (test mode; redo for live at cutover)
 Verified 2026-07-14: unsigned POST → `400 missing_signature` (not 503), bad signature → `400`. `STRIPE_WEBHOOK_SECRET` is live in Vercel Production for endpoint `we_1TtCYr…`. At LIVE cutover, create a new **live-mode** webhook and swap in its `whsec_`.

@@ -15,11 +15,17 @@ interface NavProps {
   fixed?: boolean;
 }
 
-/** Primary product navigation — one analyze loop. */
+/** Primary product navigation — Home sells; Studio is the workbench. */
 const NAV_LINKS = [
-  { href: '/', label: 'Analyze' },
-  { href: '/dashboard', label: 'Library' },
+  { href: '/', label: 'Home' },
+  { href: '/studio', label: 'Studio' },
+  { href: '/pricing', label: 'Pricing' },
 ];
+
+function isNavActive(pathname: string, href: string): boolean {
+  if (href === '/') return pathname === '/';
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
 
 /** Secondary / developer surfaces — not part of the default user path. */
 const DEV_LINKS = [
@@ -62,10 +68,10 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
             <Link
               key={href}
               href={href}
-              aria-current={pathname === href ? 'page' : undefined}
+              aria-current={isNavActive(pathname, href) ? 'page' : undefined}
               className={clsx(
                 'text-sm px-3 py-2 rounded-lg transition-colors',
-                pathname === href || pathname.startsWith(`${href}/`)
+                isNavActive(pathname, href)
                   ? 'text-white bg-white/[0.08]'
                   : 'text-white/55 hover:text-white hover:bg-white/[0.04]'
               )}
@@ -91,8 +97,8 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/" className="btn btn-primary py-2 px-5 text-sm">
-            Analyze
+          <Link href="/#get-pro" className="btn btn-primary py-2 px-5 text-sm">
+            Get Pro
           </Link>
         )}
         <button
@@ -121,10 +127,10 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
               key={href}
               href={href}
               onClick={() => setMobileOpen(false)}
-              aria-current={pathname === href ? 'page' : undefined}
+              aria-current={isNavActive(pathname, href) ? 'page' : undefined}
               className={clsx(
                 'text-sm px-3 py-2.5 rounded-lg transition-colors',
-                pathname === href
+                isNavActive(pathname, href)
                   ? 'text-white/90 bg-white/[0.05]'
                   : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
               )}

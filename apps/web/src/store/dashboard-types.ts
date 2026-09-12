@@ -1,5 +1,6 @@
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { VideoPackCitation } from '@/lib/emit-video-pack';
 import type { LinkedSop } from '@/lib/linked-sop';
 
 export interface PipelineResult {
@@ -48,6 +49,8 @@ export interface Video {
   statusUrl?: string;
   /** Durable Workflow DevKit generation identity. */
   runId?: string;
+  /** Hashed VideoPack v0 citation emitted from paste-URL. */
+  videoPack?: VideoPackCitation;
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
   failure?: {

@@ -1,10 +1,11 @@
 import Link from 'next/link';
+import { STUDIO_PRODUCT_TAGLINE } from '@/lib/studio-pipeline-status';
 
 const PRODUCT_LINKS = [
-  { label: 'Dashboard', href: '/dashboard' },
-  { label: 'Features', href: '/features' },
+  { label: 'Home', href: '/' },
+  { label: 'Studio', href: '/studio' },
   { label: 'Pricing', href: '/pricing' },
-  { label: 'API Docs', href: '/playground' },
+  { label: 'API Docs', href: '/docs/api' },
 ];
 
 const USE_CASES = ['Meeting Notes', 'Conference Talks', 'Tutorials', 'Product Demos', 'Podcasts'];
@@ -30,10 +31,10 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
         <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
           <span>UVAI video intelligence</span>
           <div className="flex items-center gap-4">
-            <Link href="/features" className="hover:text-white/50 transition py-2 px-1">
-              Features
+            <Link href="/studio" className="hover:text-white/50 transition py-2 px-1">
+              Studio
             </Link>
-            <Link href="/playground" className="hover:text-white/50 transition py-2 px-1">
+            <Link href="/docs/api" className="hover:text-white/50 transition py-2 px-1">
               API
             </Link>
             <a
@@ -62,7 +63,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
               <span className="font-bold text-sm">UVAI</span>
             </div>
             <p className="text-xs text-white/30 leading-relaxed">
-              Evidence-gated video intelligence with durable workflows and reviewed actions.
+              {STUDIO_PRODUCT_TAGLINE}
             </p>
           </div>
           <div>

@@ -175,6 +175,7 @@ youtube_processed_videos/
 UVAI_Digital_Refinery_Blueprint.pdf
 *.db
 .vercel
+vercel-debug.log*
 .env*.local
 .next/
 .env
@@ -232,3 +233,6 @@ data/audit/*.jsonl
 
 # Local verification and native-module quarantine artifacts
 /work/
+
+# Runtime Video Pack identity store (hashed v0 records)
+/storage/video_packs/

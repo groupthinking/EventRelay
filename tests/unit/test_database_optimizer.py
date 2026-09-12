@@ -1406,6 +1406,9 @@ class _RecordingCursor:
     def fetchall(self):
         return [("row",)]
 
+    def close(self):
+        self._sink.setdefault("cursor_close_tids", []).append(threading.get_ident())
+
 
 class _RecordingConnection:
     """Minimal DB-API connection stub (has .execute, so no .fetch/asyncpg)."""
@@ -1449,6 +1452,24 @@ class TestSqliteQueryOffloadedToThread:
         assert loop_tid not in sink["execute_tids"], (
             "cursor.execute ran on the event loop thread; it must be offloaded "
             "via asyncio.to_thread so the loop stays responsive"
+        )
+
+    @pytest.mark.asyncio
+    async def test_cursor_close_runs_with_fetch_on_a_worker_thread(self) -> None:
+        """Cursor cleanup must not return to the event loop after fetching."""
+        sink: dict = {}
+        pool = MagicMock()
+        pool.get_connection = AsyncMock(return_value=_RecordingConnection(sink))
+        pool.release_connection = AsyncMock()
+        optimizer = QueryOptimizer(pool)
+
+        loop_tid = threading.get_ident()
+        await optimizer.execute_query("SELECT 1", use_cache=False)
+
+        assert sink["cursor_close_tids"], "cursor.close() was never called"
+        assert loop_tid not in sink["cursor_close_tids"], (
+            "cursor.close ran on the event loop thread; it must stay with the "
+            "offloaded SQLite work"
         )
 
     @pytest.mark.asyncio

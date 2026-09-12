@@ -25,17 +25,28 @@ describe('auth configuration source safety', () => {
     expect(source).not.toContain('<Image');
   });
 
-  it('accepts both project-specific and common Google OAuth env names', () => {
+  it('prefers canonical Google OAuth env names while retaining legacy fallbacks', () => {
     const source = readSource('lib/auth.ts');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_ID');
-    expect(source).toContain('GOOGLE_CLIENT_ID');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_SECRET');
-    expect(source).toContain('GOOGLE_CLIENT_SECRET');
+    expect(source.indexOf('process.env.GOOGLE_CLIENT_ID')).toBeLessThan(
+      source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_ID'),
+    );
+    expect(source.indexOf('process.env.GOOGLE_CLIENT_SECRET')).toBeLessThan(
+      source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_SECRET'),
+    );
   });
 
-  it('keeps the root route as the live studio instead of redirecting to the dashboard', () => {
+  it('keeps the root route as a sell Home instead of redirecting to the dashboard', () => {
     const source = readSource('app/page.tsx');
     expect(source).not.toContain("redirect('/dashboard')");
-    expect(source).toContain('OneLoopStudio');
+    expect(source).not.toContain('OneLoopStudio');
+    expect(source).toContain('HomePasteForm');
+  });
+
+  it('folds the retired dashboard skin into the studio', () => {
+    const dashboard = readSource('app/dashboard/page.tsx');
+    expect(dashboard).toContain('canonicalStudioPath');
+    expect(dashboard).toContain('redirect(');
+    expect(dashboard).not.toContain('DashboardSplitView');
+    expect(dashboard).not.toContain('VideoCard');
   });
 });

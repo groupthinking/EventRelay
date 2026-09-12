@@ -7,10 +7,9 @@ import { clsx } from 'clsx';
 import { GitFork, Menu, Play, X } from 'lucide-react';
 
 const NAV_LINKS = [
-  { href: '/#features', label: 'Features', page: '/features' },
-  { href: '/#workflow', label: 'How it works' },
+  { href: '/', label: 'Home' },
+  { href: '/studio', label: 'Studio' },
   { href: '/pricing', label: 'Pricing', page: '/pricing' },
-  { href: '/#contact', label: 'Contact' },
 ];
 
 const REPO_URL = 'https://github.com/groupthinking/EventRelay';
@@ -86,11 +85,11 @@ export default function LandingNav() {
             GitHub
           </a>
           <Link
-            href="/dashboard"
+            href="/studio"
             className="hidden rounded-lg px-5 py-2.5 text-sm font-bold transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] sm:inline-flex"
             style={{ background: '#6af2de', color: '#021a18' }}
           >
-            Open dashboard
+            Open studio
           </Link>
           <button
             type="button"
@@ -118,11 +117,11 @@ export default function LandingNav() {
               </Link>
             ))}
             <Link
-              href="/dashboard"
+              href="/studio"
               onClick={() => setMobileOpen(false)}
               className="evidence-primary-button mt-2 flex min-h-11 items-center justify-center rounded-lg px-5 text-sm font-bold"
             >
-              Open dashboard
+              Open studio
             </Link>
           </div>
         </div>
