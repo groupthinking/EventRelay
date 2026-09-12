@@ -2,8 +2,10 @@ import { put as putVercelBlob } from '@vercel/blob';
 import jpeg from 'jpeg-js';
 import {
   applyKeyframeImageHonesty,
+  applyKeyframeImageSourceNotes,
   isDurableCapturedImagePath,
   sanitizeKeyframeImagePath,
+  type KeyframeImageCaptureSource,
   type KeyframeImageHonestyPack,
 } from '@/lib/keyframe-image-path';
 
@@ -14,11 +16,13 @@ export type KeyframeFrameCaptureResult = {
   bytes: Uint8Array;
   contentType: typeof KEYFRAME_JPEG_CONTENT_TYPE;
   imagePath: string;
+  source?: KeyframeImageCaptureSource;
 };
 
 export type KeyframeFrameCapture = (input: {
   videoId: string;
   t_s: number;
+  spanS?: number;
 }) => Promise<KeyframeFrameCaptureResult | null>;
 
 export type StoryboardLevel = {
@@ -45,8 +49,13 @@ export type StoryboardTile = {
 
 type HydratePack = KeyframeImageHonestyPack & { video_id: string };
 
+const YOUTUBE_STILL_HOSTS = ['https://img.youtube.com/vi', 'https://i.ytimg.com/vi'] as const;
+const STILL_FETCH_UA =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+
 let captureForTests: KeyframeFrameCapture | null = null;
 const memoryFrameCache = new Map<string, Uint8Array>();
+const stillBytesCache = new Map<string, Uint8Array>();
 
 export function setKeyframeFrameCaptureForTests(capture: KeyframeFrameCapture | null): void {
   captureForTests = capture;
@@ -55,6 +64,7 @@ export function setKeyframeFrameCaptureForTests(capture: KeyframeFrameCapture | 
 export function resetKeyframeFrameCaptureForTests(): void {
   captureForTests = null;
   memoryFrameCache.clear();
+  stillBytesCache.clear();
 }
 
 export { isDurableCapturedImagePath, sanitizeKeyframeImagePath };
@@ -139,6 +149,84 @@ export function selectStoryboardTile(
     width: level.width,
     height: level.height,
   };
+}
+
+export function selectYoutubeStillIndex(t_s: number, spanS: number): 1 | 2 | 3 {
+  const span = spanS > 0 ? spanS : 1;
+  const ratio = Math.min(0.999, Math.max(0, t_s / span));
+  const bucket = Math.min(2, Math.floor(ratio * 3));
+  return (bucket + 1) as 1 | 2 | 3;
+}
+
+export function youtubeStillUrls(videoId: string, index: 1 | 2 | 3): string[] {
+  return YOUTUBE_STILL_HOSTS.flatMap((host) => [
+    `${host}/${videoId}/hq${index}.jpg`,
+    `${host}/${videoId}/${index}.jpg`,
+  ]);
+}
+
+function stillCacheKey(videoId: string, index: 1 | 2 | 3): string {
+  return `${videoId}:still:${index}`;
+}
+
+export function normalizeCapturedJpeg(bytes: Uint8Array): Uint8Array | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    return null;
+  }
+  try {
+    const decoded = jpeg.decode(Buffer.from(bytes), { useTArray: true });
+    if (!(decoded.width > 0) || !(decoded.height > 0)) {
+      return bytes;
+    }
+    const encoded = jpeg.encode(
+      { data: decoded.data, width: decoded.width, height: decoded.height },
+      80,
+    );
+    return new Uint8Array(encoded.data);
+  } catch (error) {
+    console.error('[keyframe-frame-capture] JPEG normalize failed:', error);
+    return bytes;
+  }
+}
+
+export async function captureYoutubeStillFrame(input: {
+  videoId: string;
+  t_s: number;
+  spanS?: number;
+  fetchBytes?: (url: string) => Promise<Uint8Array | null>;
+}): Promise<Uint8Array | null> {
+  const index = selectYoutubeStillIndex(input.t_s, input.spanS ?? Math.max(input.t_s + 1, 30));
+  const cached = stillBytesCache.get(stillCacheKey(input.videoId, index));
+  if (cached) {
+    return cached;
+  }
+  const fetchBytes =
+    input.fetchBytes ??
+    (async (url: string) => {
+      const response = await fetch(url, {
+        headers: { 'User-Agent': STILL_FETCH_UA },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (!response.ok) return null;
+      const contentType = response.headers.get('content-type') ?? '';
+      if (contentType && !contentType.toLowerCase().includes('image/jpeg')) {
+        return null;
+      }
+      return new Uint8Array(await response.arrayBuffer());
+    });
+  for (const url of youtubeStillUrls(input.videoId, index)) {
+    try {
+      const raw = await fetchBytes(url);
+      const bytes = raw ? normalizeCapturedJpeg(raw) : null;
+      if (bytes) {
+        stillBytesCache.set(stillCacheKey(input.videoId, index), bytes);
+        return bytes;
+      }
+    } catch (error) {
+      console.error('[keyframe-frame-capture] still fetch failed:', error);
+    }
+  }
+  return null;
 }
 
 export function cropStoryboardTile(jpegBytes: Uint8Array, tile: StoryboardTile): Uint8Array | null {
@@ -302,19 +390,53 @@ export async function captureStoryboardFrame(input: {
   return cropStoryboardTile(sheet, tile);
 }
 
-async function defaultCapture(input: { videoId: string; t_s: number }): Promise<KeyframeFrameCaptureResult | null> {
-  if (process.env.VITEST && !captureForTests) {
-    return null;
+export async function captureKeyframeFrame(input: {
+  videoId: string;
+  t_s: number;
+  spanS?: number;
+  fetchStoryboardSpec?: () => Promise<{ spec: string; durationS?: number } | null>;
+  fetchBytes?: (url: string) => Promise<Uint8Array | null>;
+}): Promise<KeyframeFrameCaptureResult | null> {
+  const storyboard = await captureStoryboardFrame({
+    videoId: input.videoId,
+    t_s: input.t_s,
+    fetchSpec: input.fetchStoryboardSpec,
+    fetchBytes: input.fetchBytes,
+  });
+  let source: KeyframeImageCaptureSource = 'storyboard';
+  let bytes = storyboard;
+  if (!bytes) {
+    bytes = await captureYoutubeStillFrame({
+      videoId: input.videoId,
+      t_s: input.t_s,
+      spanS: input.spanS,
+      fetchBytes: input.fetchBytes,
+    });
+    source = 'stills';
   }
-  const bytes = await captureStoryboardFrame(input);
   if (!bytes) return null;
   const imagePath = await persistCapturedJpeg({ videoId: input.videoId, t_s: input.t_s, bytes });
   if (!imagePath || !isDurableCapturedImagePath(imagePath)) return null;
-  return { bytes, contentType: KEYFRAME_JPEG_CONTENT_TYPE, imagePath };
+  return { bytes, contentType: KEYFRAME_JPEG_CONTENT_TYPE, imagePath, source };
 }
 
-export async function hydrateKeyframeImages<T extends HydratePack>(pack: T): Promise<T> {
-  const capture = captureForTests ?? defaultCapture;
+async function defaultCapture(input: {
+  videoId: string;
+  t_s: number;
+  spanS?: number;
+}): Promise<KeyframeFrameCaptureResult | null> {
+  if (process.env.VITEST && !captureForTests) {
+    return null;
+  }
+  return captureKeyframeFrame(input);
+}
+
+async function hydrateWithCapture<T extends HydratePack>(
+  pack: T,
+  capture: KeyframeFrameCapture,
+): Promise<T> {
+  const sources = new Set<KeyframeImageCaptureSource>();
+  const spanS = Math.max(...pack.keyframes.map((frame) => frame.t_s), 1);
   const keyframes = [];
   for (const frame of pack.keyframes) {
     const existing = sanitizeKeyframeImagePath(frame.image_path);
@@ -323,9 +445,12 @@ export async function hydrateKeyframeImages<T extends HydratePack>(pack: T): Pro
       continue;
     }
     try {
-      const captured = await capture({ videoId: pack.video_id, t_s: frame.t_s });
+      const captured = await capture({ videoId: pack.video_id, t_s: frame.t_s, spanS });
       if (captured?.bytes?.length && isDurableCapturedImagePath(captured.imagePath)) {
         rememberCapturedFrame(pack.video_id, frame.t_s, captured.bytes);
+        if (captured.source) {
+          sources.add(captured.source);
+        }
         keyframes.push({ ...frame, image_path: captured.imagePath });
       } else {
         keyframes.push({ ...frame, image_path: null });
@@ -335,7 +460,55 @@ export async function hydrateKeyframeImages<T extends HydratePack>(pack: T): Pro
       keyframes.push({ ...frame, image_path: null });
     }
   }
-  return applyKeyframeImageHonesty({ ...pack, keyframes });
+  return applyKeyframeImageSourceNotes(applyKeyframeImageHonesty({ ...pack, keyframes }), sources);
+}
+
+export async function hydrateKeyframeImages<T extends HydratePack>(pack: T): Promise<T> {
+  if (captureForTests) {
+    return hydrateWithCapture(pack, captureForTests);
+  }
+  if (process.env.VITEST) {
+    return applyKeyframeImageHonesty({
+      ...pack,
+      keyframes: pack.keyframes.map((frame) => ({
+        ...frame,
+        image_path: sanitizeKeyframeImagePath(frame.image_path),
+      })),
+    });
+  }
+
+  const spanS = Math.max(...pack.keyframes.map((frame) => frame.t_s), 1);
+  let storyboardSpec: { spec: string; durationS?: number } | null = null;
+  try {
+    storyboardSpec = await fetchStoryboardFromPlayer(pack.video_id);
+  } catch (error) {
+    console.error('[keyframe-frame-capture] pack storyboard spec fetch failed:', error);
+  }
+
+  return hydrateWithCapture(pack, async ({ videoId, t_s }) => {
+    let bytes: Uint8Array | null = null;
+    let source: KeyframeImageCaptureSource = 'stills';
+    if (storyboardSpec) {
+      bytes = await captureStoryboardFrame({
+        videoId,
+        t_s,
+        fetchSpec: async () => storyboardSpec,
+      });
+      if (bytes) source = 'storyboard';
+    }
+    if (!bytes) {
+      bytes = await captureYoutubeStillFrame({
+        videoId,
+        t_s,
+        spanS: storyboardSpec?.durationS ?? spanS,
+      });
+      source = 'stills';
+    }
+    if (!bytes) return null;
+    const imagePath = await persistCapturedJpeg({ videoId, t_s, bytes });
+    if (!imagePath || !isDurableCapturedImagePath(imagePath)) return null;
+    return { bytes, contentType: KEYFRAME_JPEG_CONTENT_TYPE, imagePath, source };
+  });
 }
 
 export async function loadCapturedFrameJpeg(videoId: string, t_s: number): Promise<Uint8Array | null> {

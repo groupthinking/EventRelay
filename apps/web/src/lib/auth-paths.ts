@@ -10,6 +10,9 @@ const PUBLIC_API_PREFIXES = [
   // Studio "Act on findings" (WDK B) — public page, durable start + poll.
   // Sibling /api/workflows/* routes stay gated; this prefix is exact-segment.
   '/api/workflows/video-to-actions',
+  // App-served keyframe JPEGs — same anonymous surface as GET /api/video/pack.
+  // Exact pack path stays exact so /api/video/pack siblings stay gated.
+  '/api/video/pack/frames',
 ] as const;
 
 /** Exact public API paths (prefix match would over-expose siblings). */
@@ -156,6 +159,16 @@ const IDENTITY_PACK_PATHS = new Set([
   '/api/v1/video/sandbox',
 ]);
 
+/** App-served frame JPEGs are identity-pack bytes, not model work. */
+const IDENTITY_PACK_PREFIXES = ['/api/video/pack/frames'] as const;
+
+function isIdentityPackSurface(pathname: string): boolean {
+  if (IDENTITY_PACK_PATHS.has(pathname)) return true;
+  return IDENTITY_PACK_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 /**
  * Whether a request should be metered against the AI budget rather than the
  * general one.
@@ -164,7 +177,7 @@ const IDENTITY_PACK_PATHS = new Set([
  * limit) rather than silently widening the budget.
  */
 export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
-  if (IDENTITY_PACK_PATHS.has(pathname)) return false;
+  if (isIdentityPackSurface(pathname)) return false;
 
   const prefix = AI_ROUTE_PREFIXES.find((candidate) =>
     pathname.startsWith(candidate),

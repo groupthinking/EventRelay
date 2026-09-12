@@ -3,6 +3,7 @@ import {
   GOLDEN_IDENTITY_HASHES,
   KEYFRAME_IMAGES_OK,
   KEYFRAME_IMAGES_OK_NOTE,
+  KEYFRAME_IMAGES_OK_STILLS_NOTE,
   KEYFRAME_IMAGES_PARTIAL,
   KEYFRAME_IMAGES_PARTIAL_NOTE,
   applyExtractedSpec,
@@ -664,6 +665,19 @@ describe('applyKeyframeImageHonesty', () => {
     expect(honest.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
     expect(JSON.stringify(honest.keyframes)).not.toContain(thumb);
   });
+
+  it('strips img.youtube.com still URLs instead of treating them as captured paths', () => {
+    const identity = buildIdentityPack('QjZ5ohr7sGA', 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', '2026-09-12T16:39:08.716Z');
+    const still = 'https://img.youtube.com/vi/QjZ5ohr7sGA/hq2.jpg';
+    const honest = applyKeyframeImageHonesty({
+      ...applyExtractedSpec(identity, SPEC_JSON),
+      keyframes: [{ t_s: 8, desc: 'Jack point under the car', image_path: still }],
+    });
+    expect(isDurableCapturedImagePath(still)).toBe(false);
+    expect(honest.keyframes[0]?.image_path).toBeNull();
+    expect(honest.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(JSON.stringify(honest.keyframes)).not.toContain(still);
+  });
 });
 
 const TINY_JPEG = Uint8Array.from([
@@ -719,5 +733,37 @@ describe('hydrateKeyframeImages', () => {
     const hydrated = await hydrateKeyframeImages(stored);
     expect(hydrated.keyframes[0]?.image_path).toBeNull();
     expect(hydrated.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(hydrated.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(hydrated.provenance.notes).toMatch(/storyboard and stills/i);
+  });
+
+  it('seals ok with stills provenance when every frame came from stills bytes', async () => {
+    setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
+      bytes: TINY_JPEG,
+      contentType: KEYFRAME_JPEG_CONTENT_TYPE,
+      imagePath: `/api/video/pack/frames/${videoId}/${t_s}`,
+      source: 'stills',
+    }));
+    const identity = buildIdentityPack('QjZ5ohr7sGA', 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', '2026-09-12T16:39:08.716Z');
+    const stored = applyKeyframeImageHonesty({
+      ...applyExtractedSpec(identity, SPEC_JSON),
+      keyframes: [
+        { t_s: 1, image_path: null, desc: 'Host Matt Schmitz introducing tire change guide' },
+        { t_s: 8, image_path: null, desc: 'Jack point under the car' },
+      ],
+    });
+
+    const hydrated = await hydrateKeyframeImages(stored);
+
+    expect(hydrated.keyframes.map((frame) => frame.image_path)).toEqual([
+      '/api/video/pack/frames/QjZ5ohr7sGA/1',
+      '/api/video/pack/frames/QjZ5ohr7sGA/8',
+    ]);
+    expect(hydrated.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(hydrated.metrics.keyframes_images_source).toBe('stills');
+    expect(hydrated.provenance.notes).toContain(KEYFRAME_IMAGES_OK_STILLS_NOTE);
+    expect(hydrated.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(JSON.stringify(hydrated.keyframes)).not.toMatch(/i\.ytimg\.com|img\.youtube\.com|hqdefault/);
+    expect(hydrated.provenance.source_hash).toBe(stored.provenance.source_hash);
   });
 });
