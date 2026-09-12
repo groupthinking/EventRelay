@@ -82,8 +82,12 @@ describe('auth path policy', () => {
     // uvai.io failure after #1609: pack never emits, UI shows no source_hash.
     expect(isPublicApiPath('/api/video/pack')).toBe(true);
     expect(isPublicApiPath('/api/v1/video/pack')).toBe(true);
+    expect(isPublicApiPath('/api/video/sandbox')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video/sandbox')).toBe(true);
     expect(needsAuthentication('/api/video/pack')).toBe(false);
     expect(needsAuthentication('/api/v1/video/pack')).toBe(false);
+    expect(needsAuthentication('/api/video/sandbox')).toBe(false);
+    expect(needsAuthentication('/api/v1/video/sandbox')).toBe(false);
     // Exact allowlist only — siblings stay gated.
     expect(isPublicApiPath('/api/video')).toBe(false);
     expect(isPublicApiPath('/api/video/generate')).toBe(false);
@@ -174,6 +178,8 @@ describe('AI route classification (rate-limit budget)', () => {
   it('does not meter identity pack emit as AI work', () => {
     expect(isAiRoute('/api/video/pack', 'POST')).toBe(false);
     expect(isAiRoute('/api/v1/video/pack', 'POST')).toBe(false);
+    expect(isAiRoute('/api/video/sandbox', 'GET')).toBe(false);
+    expect(isAiRoute('/api/v1/video/sandbox', 'POST')).toBe(false);
     expect(isAiRoute('/api/video', 'POST')).toBe(true);
     expect(isAiRoute('/api/video/generate', 'POST')).toBe(true);
   });

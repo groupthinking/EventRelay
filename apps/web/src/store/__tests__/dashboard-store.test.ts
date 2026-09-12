@@ -218,6 +218,11 @@ const VIDEO_PACK_CITATION = {
     provenance: {
       source_hash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
     },
+    transcript: {
+      language: null,
+      full_text: 'cite:youtube:auJzb1D-fag',
+      segments: [],
+    },
   },
 };
 

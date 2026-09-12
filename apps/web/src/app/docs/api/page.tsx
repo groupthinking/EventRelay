@@ -34,6 +34,8 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
   { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'GET', path: '/api/video/sandbox', summary: 'Materialize an App Builder Workspace sandbox from a stored Video Pack (startup.sh, 8080, browser-smoke, build/typecheck).' },
+  { method: 'POST', path: '/api/video/sandbox', summary: 'Same sandbox emit by paste-URL identity. Requires a ready pack from POST /api/video/pack.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
   { method: 'POST', path: '/api/workflows/video-to-actions', summary: 'Start the Studio analysis workflow.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
 ];
 
