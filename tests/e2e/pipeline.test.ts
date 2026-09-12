@@ -21,31 +21,63 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
+import {
+  shouldSkipLiveE2EForVercelProtection,
+  vercelProtectionHeaders,
+} from './vercel-protection';
 
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
   'https://www.youtube.com/watch?v=auJzb1D-fag';
 
-// To exercise a protected deployment (e.g. a Vercel preview, which returns 401
-// to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
-// "Protection Bypass for Automation" secret. It is attached as a header on
-// every request so the preview is reachable. Unset (the default — e.g. when
-// BASE_URL is production) → no header is added and behaviour is unchanged.
-const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+// Protection headers (optional):
+//   VERCEL_AUTOMATION_BYPASS_SECRET — x-vercel-protection-bypass
+//   VERCEL_OIDC_IDP_TOKEN — x-vercel-trusted-oidc-idp-token (GitHub Actions OIDC)
+// Unset on public production. If the target is still SSO-protected, the live
+// suite is skipped instead of asserting 401 === 200.
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-/** Merge the Vercel protection-bypass header into a request init, when configured. */
+/** Merge Vercel protection-bypass / Trusted Sources OIDC headers when configured. */
 function withBypass(init?: RequestInit): RequestInit {
-  if (!VERCEL_BYPASS_SECRET) return init ?? {};
+  const extra = vercelProtectionHeaders();
+  if (Object.keys(extra).length === 0) return init ?? {};
   // Normalize via the Headers constructor so any HeadersInit shape (plain
   // object, Headers instance, or [key, value][] array) is preserved — a bare
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
-  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
+  for (const [key, value] of Object.entries(extra)) {
+    headers.set(key, value);
+  }
   return { ...init, headers };
+}
+
+async function probeVercelProtection(baseUrl: string): Promise<boolean> {
+  try {
+    const res = await fetchWithTimeout(
+      `${baseUrl}/api/pipeline/stream`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+      15_000,
+      1,
+    );
+    const body = await res.text();
+    return shouldSkipLiveE2EForVercelProtection({ status: res.status, body });
+  } catch (error) {
+    console.warn('[E2E] protection probe failed; running live suite', error);
+    return false;
+  }
+}
+
+const SKIP_PROTECTED_PREVIEW = await probeVercelProtection(BASE_URL);
+if (SKIP_PROTECTED_PREVIEW) {
+  console.warn(
+    `[E2E] Skipping live suite: ${BASE_URL} is behind Vercel Deployment Protection and no bypass/OIDC credential was accepted.`,
+  );
 }
 
 /** Fetch with a hard timeout and automatic retry for transient network errors. */
@@ -101,7 +133,7 @@ function parseSSEEvents(raw: string): Array<Record<string, unknown>> {
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
-describe('EventRelay E2E — Live Deployment', () => {
+describe.skipIf(SKIP_PROTECTED_PREVIEW)('EventRelay E2E — Live Deployment', () => {
   // Smoke check: is the site up?
   beforeAll(async () => {
     const res = await fetchWithTimeout(BASE_URL, {}, 15_000);
