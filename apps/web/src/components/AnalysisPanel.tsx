@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { clsx } from 'clsx';
 import { Bot, X, ArrowUp } from 'lucide-react';
+import { seededPromptDispatchKey } from '@/lib/orchestrator-rail-seeding';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -10,10 +11,12 @@ interface Message {
   timestamp: Date;
 }
 
-interface AnalysisPanelProps {
+export interface AnalysisPanelProps {
   videoId: string;
   videoUrl: string;
   initialContext?: string;
+  initialPrompt?: string;
+  promptNonce?: string;
   onClose?: () => void;
 }
 
@@ -28,6 +31,8 @@ export default function AnalysisPanel({
   videoId,
   videoUrl,
   initialContext,
+  initialPrompt,
+  promptNonce,
   onClose
 }: AnalysisPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
@@ -40,22 +45,29 @@ export default function AnalysisPanel({
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef(messages);
+  const pendingSeedPromptRef = useRef<string | null>(null);
+  const pendingSeedKeyRef = useRef<string | null>(null);
+  const sentSeedKeyRef = useRef<string | null>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || isLoading) return;
-
+  const sendPrompt = useCallback(async (nextPrompt: string) => {
+    const prompt = nextPrompt.trim();
+    if (!prompt || isLoading) return false;
     const userMessage: Message = {
       role: 'user',
-      content: input,
+      content: prompt,
       timestamp: new Date()
     };
 
@@ -72,8 +84,8 @@ export default function AnalysisPanel({
         body: JSON.stringify({
           video_id: videoId,
           video_url: videoUrl,
-          query: input,
-          history: messages.map(m => ({ role: m.role, content: m.content }))
+          query: prompt,
+          history: messagesRef.current.map(m => ({ role: m.role, content: m.content }))
         })
       });
 
@@ -98,7 +110,33 @@ export default function AnalysisPanel({
     } finally {
       setIsLoading(false);
     }
+    return true;
+  }, [videoId, videoUrl, isLoading]);
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await sendPrompt(input);
   };
+
+  useEffect(() => {
+    const seedKey = seededPromptDispatchKey(initialPrompt, promptNonce);
+    if (!seedKey || seedKey === sentSeedKeyRef.current || seedKey === pendingSeedKeyRef.current) {
+      return;
+    }
+    pendingSeedPromptRef.current = initialPrompt!.trim();
+    pendingSeedKeyRef.current = seedKey;
+  }, [initialPrompt, promptNonce]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const prompt = pendingSeedPromptRef.current;
+    const key = pendingSeedKeyRef.current;
+    if (!prompt || !key || key === sentSeedKeyRef.current) return;
+    sentSeedKeyRef.current = key;
+    pendingSeedPromptRef.current = null;
+    pendingSeedKeyRef.current = null;
+    void sendPrompt(prompt);
+  }, [isLoading, sendPrompt]);
 
   return (
     <div className="flex flex-col h-full bg-surface-900/50 backdrop-blur-xl border-l border-white/[0.08] animate-slide-in-right motion-reduce:animate-none">

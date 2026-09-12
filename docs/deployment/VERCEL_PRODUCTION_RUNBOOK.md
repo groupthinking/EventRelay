@@ -20,6 +20,18 @@ shipped code.
   - `npm run build:web`
   - `npm --prefix apps/web audit --omit=dev`
 
+## Google OAuth Production Migration
+
+- Configure `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in Vercel Production.
+  These are the canonical names used by the app.
+- `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET` remain temporary
+  fallbacks only. Do not remove them until a production deployment has completed
+  a real Google sign-in and callback using the canonical names.
+- In Google Cloud, authorize exactly
+  `https://uvai.io/api/auth/callback/google` as the production redirect URI.
+- Never record credential values in repository files, deployment logs, issue
+  comments, or build artifacts.
+
 ## Incident Response
 
 - Severity owner: project owner on the Vercel team.
