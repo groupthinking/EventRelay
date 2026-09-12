@@ -1,4 +1,31 @@
-# TASK: restore ready-transcript reuse on studio.deploy
+# TASK: Origin video-to-software must return verified live URL
+
+## 1. Goal & Scope
+* **Objective:** After transcript reuse, studio.deploy / origin video-to-software must surface a verified clickable https live URL + EventRelay receipt for G.A.T.E. PASS, or an honest HOLD that is **not** `Origin video-to-software returned no verified live URL` and not prior cleared residuals.
+* **Context:** AXIOM on `dpl_3mKicmxjHttT1JznuaRp1tRx8tWS` (#1887 `b6c0b4416d14`) / XYMcBrFSJ4c. Ready-transcript reuse CLEARED. Still HOLD: `Origin video-to-software returned no verified live URL.` Receipt `er:gate:v1:wrun_01M2B1Q97XA9GHVSG1FZY92N19`. No live URL.
+* **Root cause:** #1887 returns origin 202 immediately so WDK can poll, but (1) `fetchAsyncVideoJob` / kickoff miss `metadata.result.live_url` and `deployment.urls.*`, (2) persist only reads top-level `result.live_url`, (3) GET `/jobs/{id}` never flattens a live URL, (4) first poll 404 (async persist / other instance) is a terminal fail remapped to the origin-no-live HOLD.
+* **Scope:** Extract backend-supplied https hostnames only (claim guard). Continue poll on 404 / pending until a verified URL or a non-cleared honest HOLD. Flatten persist + GET. Do not invent a URL. Do not reopen reuse / timeout / 524.
+ * *Initial check:* Modify existing kickoff/poll/persist/GET. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (nested live_url extract; 404 continue; persist from deployment.urls; GET flatten)
+- [x] Step 2: Implement extract + continue + persist/GET flatten
+- [x] Step 3: Focused Vitest + pytest GREEN; no reuse/timeout/524 regression
+- [ ] Step 4: PR off current main
+
+## 3. Definition of Done
+* **Expected Outcome:** Poll continues until a backend-supplied verified https hostname is extracted, or HOLD is a specific non-cleared reason (still pending / adapter error) — not origin-no-live, not reuse-miss, not timeout/524/bot/UNKNOWN/workflow-run/return-value/BACKEND_URL.
+* **Verification Method:** Focused Vitest pipeline-async-job + studio-deploy + gate-transition; pytest persist/GET/202 loadable.
+* **Proof Artifact:** Vitest 5 files / 102 passed (`pipeline-async-job`, `studio-deploy`, `gate-transition`, `studio-pipeline-status`, `studio-workflow`). Pytest 5/5: ready-transcript 202, sync-budget 202, persist from `deployment.urls.vercel`, GET flatten `metadata.result.live_url`, vts coroutine persist. Claim guard: only `studioVerifiedLiveUrl` / `_verified_https_live_url` pass-through. No URL invented.
+
+## 4. Post-Task Reflection
+* **What was done:** After #1887's immediate 202, extract nested backend live URLs (`metadata.result.live_url`, `deployment.urls.vercel`), persist/GET flatten them, and continue the WDK poll on first-read 404 instead of remapping to the origin-no-live HOLD. Missing-URL job error is now a specific adapter/hostname miss, not that residual string.
+* **Why it was needed:** Dogfood on `dpl_3mKicmxjHttT1JznuaRp1tRx8tWS` / XYMcBrFSJ4c reused the transcript (CLEARED) but HOLDed `Origin video-to-software returned no verified live URL` with receipt `er:gate:v1:wrun_01M2B1Q97XA9GHVSG1FZY92N19` and no live URL — poll ended before a nested URL was surfaced, or first 404 was treated as terminal.
+* **How it was tested:** TDD RED then GREEN on extract/poll/persist/GET. Reuse (202 without sync wait, no `/videos/process` on ready transcript), timeout abort remap, and HTTP 524 remap tests left intact and passing.
+
+---
+
+# Prior cut: restore ready-transcript reuse on studio.deploy
 
 ## 1. Goal & Scope
 * **Objective:** Attempt Deploy must reuse an already-ready transcript — never re-hit YouTube `/videos/process` — and still reach G.A.T.E. PASS with a clickable https live URL + receipt, or an honest HOLD that is **not** the reuse-miss copy and not prior cleared residuals.

@@ -10,6 +10,7 @@ vi.mock('@/lib/pipeline-backend-health', () => ({
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import {
   decideStudioDeployPoll,
+  extractBackendLiveUrl,
   fetchAsyncVideoJob,
   isTerminalJobStatus,
   kickoffAsyncVideoJob,
@@ -681,6 +682,181 @@ describe('pipeline-async-job (WDK C)', () => {
       live_url: 'https://xy.vercel.app',
       jobStatus: 'completed',
       github_repo: undefined,
+    });
+  });
+
+  it('extracts a verified live_url from metadata.result without inventing one', () => {
+    expect(
+      extractBackendLiveUrl({
+        status: 'complete',
+        metadata: {
+          live_url: null,
+          result: { live_url: 'https://xy.vercel.app', status: 'success' },
+        },
+      }),
+    ).toBe('https://xy.vercel.app');
+    expect(extractBackendLiveUrl({ metadata: { live_url: null, result: {} } })).toBeNull();
+    expect(extractBackendLiveUrl({ live_url: 'https://' })).toBeNull();
+    expect(extractBackendLiveUrl({ live_url: 'http://xy.vercel.app' })).toBeNull();
+  });
+
+  it('extracts a verified live_url from deployment.urls.vercel without inventing one', () => {
+    expect(
+      extractBackendLiveUrl({
+        metadata: {
+          live_url: '',
+          deployment: { urls: { vercel: 'https://ship.example.app' } },
+        },
+      }),
+    ).toBe('https://ship.example.app');
+    expect(
+      extractBackendLiveUrl({
+        metadata: {
+          deployment: {
+            urls: {
+              github: 'https://github.com/uvai-generated/project-pending',
+              vercel: 'https://xy.vercel.app',
+            },
+          },
+        },
+      }),
+    ).toBe('https://xy.vercel.app');
+  });
+
+  it('reads live_url nested in job metadata.result without inventing one', async () => {
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            status: 'complete',
+            metadata: {
+              live_url: null,
+              result: { live_url: 'https://xy.vercel.app' },
+            },
+          },
+        }),
+      }),
+    );
+    const status = await fetchAsyncVideoJob('job_result_nested');
+    expect(status.live_url).toBe('https://xy.vercel.app');
+    expect(status.message ?? '').not.toMatch(/Origin video-to-software returned no verified live URL/i);
+  });
+
+  it('reads live_url from job.metadata.deployment.urls without inventing one', async () => {
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            status: 'complete',
+            metadata: {
+              deployment: { urls: { vercel: 'https://xy.vercel.app' } },
+            },
+          },
+        }),
+      }),
+    );
+    const status = await fetchAsyncVideoJob('job_urls');
+    expect(status.live_url).toBe('https://xy.vercel.app');
+  });
+
+  it('passes through a nested video-to-software live_url on 200 kickoff', async () => {
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.uvai.io',
+    });
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    const fetchMock = vi.fn().mockImplementation(async (input: unknown) => {
+      const href = String(input);
+      if (href.includes('/videos/process')) {
+        throw new Error('must not re-hit YouTube via videos/process');
+      }
+      if (href.includes('/video-to-software')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              live_url: null,
+              deployment: { urls: { vercel: 'https://xy.vercel.app' } },
+            },
+          }),
+        };
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const kicked = await kickoffAsyncVideoJob(
+      'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      { transcript: READY_TRANSCRIPT },
+    );
+    expect(kicked.kind).toBe('live');
+    expect(kicked.live_url).toBe('https://xy.vercel.app');
+    expect(kicked.message ?? '').not.toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/videos/process'))).toBe(
+      false,
+    );
+  });
+
+  it('continues the deploy poll on job 404 instead of the origin-no-live HOLD', () => {
+    const decided = decideStudioDeployPoll(
+      {
+        ok: false,
+        httpStatus: 404,
+        message: 'Job job_01M2B1Q97XA9GHVSG1FZY92N19 not found',
+      },
+      {
+        jobId: 'job_01M2B1Q97XA9GHVSG1FZY92N19',
+        transcript: READY_TRANSCRIPT,
+      },
+    );
+    expect(decided.action).toBe('continue');
+    expect(JSON.stringify(decided)).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Ready transcript was not reused/i);
+    expect(JSON.stringify(decided)).not.toMatch(/aborted due to timeout/i);
+    expect(JSON.stringify(decided)).not.toMatch(/HTTP 524/);
+    expect(JSON.stringify(decided)).not.toMatch(/Sign in to confirm you’re not a bot/i);
+    expect(JSON.stringify(decided)).not.toMatch(/UNKNOWN checks are not a live URL/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow run/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow return value/i);
+    expect(JSON.stringify(decided)).not.toMatch(/BACKEND_URL is not configured/i);
+  });
+
+  it('does not emit origin-no-live when a terminal job has no URL yet but is still pending-shaped', () => {
+    const decided = decideStudioDeployPoll(
+      {
+        ok: true,
+        jobStatus: 'pending',
+        live_url: null,
+      },
+      {
+        jobId: 'job_01M2B1Q97XA9GHVSG1FZY92N19',
+        transcript: READY_TRANSCRIPT,
+      },
+    );
+    expect(decided.action).toBe('continue');
+    expect(JSON.stringify(decided)).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(decided).toMatchObject({
+      action: 'continue',
+      message: 'Deploy job job_01M2B1Q97XA9GHVSG1FZY92N19 still pending',
     });
   });
 });
