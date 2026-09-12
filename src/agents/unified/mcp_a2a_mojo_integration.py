@@ -165,8 +165,8 @@ class UnifiedMessage:
             return TransportStrategy.SHARED_MEMORY
 
 
+import json
 import multiprocessing
-import pickle
 import struct
 from multiprocessing import shared_memory
 
@@ -230,10 +230,18 @@ class MojoTransportLayer:
     async def _shared_memory_send(self, message: UnifiedMessage) -> dict[str, Any]:
         """Shared memory for large transfers"""
         try:
-            # Serialize the message
-            # Note: In a real full implementation, we'd handle the pickling more carefully
-            # to avoid serializing the whole object if we only want parts.
-            serialized = pickle.dumps(message)
+            # Serialize the message as JSON. Pickle is deliberately avoided here:
+            # a receiver that unpickles data from a cross-process shared-memory
+            # segment can be forced into arbitrary code execution by a malicious
+            # or compromised writer. JSON has no executable payload.
+            payload = {
+                "a2a_message": message.a2a_message.to_dict(),
+                "mcp_context": message.mcp_context.to_dict(),
+                "transport_strategy": message.transport_strategy.value,
+                "priority": message.priority,
+                "deadline_ms": message.deadline_ms,
+            }
+            serialized = json.dumps(payload).encode("utf-8")
             size = len(serialized)
 
             # Create or get shared memory block

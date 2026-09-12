@@ -255,10 +255,9 @@ Respond with ONLY valid JSON matching the required structure.`;
     return NextResponse.json({ success: true, provider, data: parsed });
   } catch (error) {
     console.error('Event extraction error:', error);
-    // SECURITY: Prevent information disclosure by masking the raw error message
     return NextResponse.json({
       success: false,
-      error: 'Internal server error',
+      error: 'Event extraction failed',
       data: { events: [], actions: [], summary: '', topics: [] },
     }, { status: 500 });
   }

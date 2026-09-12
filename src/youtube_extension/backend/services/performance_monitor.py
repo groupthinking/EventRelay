@@ -299,17 +299,19 @@ class PerformanceMonitor:
             # diverges from the parity this method's docstring promises and
             # erases per-sample ordering for callers that submit genuinely
             # distinct samples in one call.
-            records = [
-                PerformanceMetric(
-                    component=entry["component"],
-                    metric_name=entry["metric_name"],
-                    value=float(entry["value"]),
-                    timestamp=entry.get("timestamp") or datetime.now(timezone.utc),
-                    unit=entry.get("unit", "ms"),
-                    tags=entry.get("tags") or {},
+            records = []
+            for entry in metrics:
+                records.append(
+                    PerformanceMetric(
+                        component=entry["component"],
+                        metric_name=entry["metric_name"],
+                        value=float(entry["value"]),
+                        timestamp=entry.get("timestamp")
+                        or datetime.now(timezone.utc),
+                        unit=entry.get("unit", "ms"),
+                        tags=entry.get("tags") or {},
+                    )
                 )
-                for entry in metrics
-            ]
 
             # Mirror record_metric's buffer bookkeeping, but take the lock once
             # for the whole batch instead of once per metric.
