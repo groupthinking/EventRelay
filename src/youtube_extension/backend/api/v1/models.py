@@ -88,6 +88,10 @@ class VideoProcessJobRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL")
     language: Optional[str] = Field("en", description="Transcript language")
     options: Optional[dict[str, Any]] = Field(default_factory=dict)
+    transcript: Optional[str] = Field(
+        None,
+        description="Ready transcript to reuse; skip YouTube extract when provided",
+    )
 
     @validator("video_url")
     def validate_video_url(cls, value: str) -> str:
@@ -372,6 +376,10 @@ class VideoToSoftwareRequest(BaseModel):
     deployment_target: str = Field("vercel", description="Deployment platform")
     features: Optional[list[str]] = Field(
         [], description="Additional features to implement"
+    )
+    transcript: Optional[str] = Field(
+        None,
+        description="Ready transcript to reuse; skip YouTube extract when provided",
     )
 
     @validator("video_url", pre=True)

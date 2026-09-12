@@ -106,6 +106,7 @@ jobs:
       ((github.event_name != 'pull_request' && github.event_name != 'pull_request_review') || github.event.pull_request.stack == null ||
       github.event.pull_request.stack.position == github.event.pull_request.stack.size))
     runs-on: ubuntu-slim
+    timeout-minutes: 10  # Prevent long-running jobs
     permissions:
       actions: read
       contents: read
@@ -1545,6 +1546,7 @@ jobs:
       needs.activation.outputs.oauth_token_check_failed == 'true' || needs.activation.outputs.stale_lock_file_failed == 'true' ||
       needs.activation.outputs.daily_ai_credits_exceeded == 'true')
     runs-on: ubuntu-slim
+    timeout-minutes: 10  # Prevent long-running jobs
     permissions:
       actions: read
       contents: write
@@ -2368,6 +2370,7 @@ jobs:
       ((github.event_name != 'pull_request' && github.event_name != 'pull_request_review') || github.event.pull_request.stack == null ||
       github.event.pull_request.stack.position == github.event.pull_request.stack.size)
     runs-on: ubuntu-slim
+    timeout-minutes: 10  # Prevent long-running jobs
     env:
       GH_AW_RUNTIME_FEATURES: ${{ vars.GH_AW_RUNTIME_FEATURES }}
     outputs:
@@ -2425,6 +2428,7 @@ jobs:
       - evals
     if: always() && (!cancelled()) && needs.evals.result != 'skipped'
     runs-on: ubuntu-slim
+    timeout-minutes: 10  # Prevent long-running jobs
     permissions:
       contents: write
     env:
@@ -2663,6 +2667,7 @@ jobs:
       - detection
     if: always() && needs.detection.result == 'success' && needs.agent.result == 'success'
     runs-on: ubuntu-slim
+    timeout-minutes: 10  # Prevent long-running jobs
     permissions:
       actions: write
     env:
