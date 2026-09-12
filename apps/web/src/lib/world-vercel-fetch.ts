@@ -26,18 +26,15 @@ function isFetchRequest(input: unknown): input is Request {
 export async function withWorldVercelFetch<T>(fn: () => Promise<T>): Promise<T> {
   const { fetch: undiciFetch } = await import('undici');
   const previous = globalThis.fetch;
-  const compatFetch = ((
-    input: RequestInfo | URL,
-    init?: RequestInit,
-  ): Promise<Response> => {
+  const compatFetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (isFetchRequest(input)) {
       return previous.call(globalThis, input, init);
     }
     return undiciFetch(
       input as Parameters<typeof undiciFetch>[0],
       init as Parameters<typeof undiciFetch>[1],
-    ) as Promise<Response>;
-  }) as typeof fetch;
+    );
+  }) as unknown as typeof fetch;
   globalThis.fetch = compatFetch;
   try {
     return await fn();
