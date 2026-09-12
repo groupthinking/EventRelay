@@ -54,6 +54,23 @@ describe('filterSegments — empty/null query behavior (#908)', () => {
       segments.length,
     );
   });
+
+  it('treats empty/null/undefined queries identically even with nullish segment text', () => {
+    const nullishSegments = [
+      seg({ id: 'has-text', text: 'Alpha' }),
+      seg({ id: 'undefined-text', text: undefined as unknown as string }),
+      seg({ id: 'null-text', text: null as unknown as string }),
+    ];
+
+    const idsFor = (query: string | null | undefined): string[] =>
+      filterSegments(nullishSegments, {
+        search: query as unknown as string,
+      }).map((s) => s.id);
+
+    const emptyIds = idsFor('');
+    expect(idsFor(undefined)).toEqual(emptyIds);
+    expect(idsFor(null)).toEqual(emptyIds);
+  });
 });
 
 describe('filterSegments — null-safe segment text (#908)', () => {
