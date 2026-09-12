@@ -266,6 +266,26 @@ describe('studio-pipeline-status', () => {
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
+    expect(
+      studioDeployOutcomeMessage({
+        runStatus: 'failed',
+        error: 'Deploy job job_1 still complete',
+      }),
+    ).toBe('Deploy job job_1 still complete');
+    expect(
+      studioDeployOutcomeMessage({
+        runStatus: 'completed',
+        kind: 'job',
+        message: 'Backend job finished with no verified live URL',
+      }),
+    ).toBe('Backend job finished with no verified live URL');
+    expect(
+      studioDeployOutcomeMessage({
+        runStatus: 'completed',
+        kind: 'job',
+        message: 'Backend job finished with no verified live URL',
+      }),
+    ).not.toMatch(/Deploy completed/i);
     const completedNoUrl = studioDeployOutcomeMessage({ runStatus: 'completed' });
     expect(completedNoUrl.toLowerCase()).not.toMatch(/deploy completed/);
     expect(completedNoUrl.toLowerCase()).not.toMatch(/\bsuccess(?:ful|fully)?\b/);

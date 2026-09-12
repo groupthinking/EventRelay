@@ -40,6 +40,15 @@ export async function studioDeployWorkflow(
   if (kicked.kind === 'failed') {
     throw new FatalError(kicked.message || 'Backend refused the deploy kickoff');
   }
+  if (kicked.kind === 'live' && kicked.live_url) {
+    return {
+      url,
+      kind: 'live',
+      live_url: kicked.live_url,
+      github_repo: kicked.github_repo,
+      message: kicked.message,
+    };
+  }
   if (kicked.kind !== 'job' || !kicked.jobId) {
     return {
       url,
@@ -53,9 +62,11 @@ export async function studioDeployWorkflow(
 }
 
 async function kickoffStep(url: string): Promise<{
-  kind: 'job' | 'handoff' | 'failed';
+  kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
   message?: string;
+  live_url?: string | null;
+  github_repo?: string | null;
 }> {
   'use step';
 
@@ -112,6 +123,8 @@ async function pollJobStep(jobId: string): Promise<{
     jobStatus: status.jobStatus,
     live_url: status.live_url,
     github_repo: status.github_repo,
-    message: status.message,
+    message:
+      status.message ||
+      (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
   };
 }

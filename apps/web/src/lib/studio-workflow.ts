@@ -59,6 +59,35 @@ function str(v: unknown): string | undefined {
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
+/** WDK failed-run cause, not a generic unread-return placeholder. */
+export function workflowReturnErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object') {
+    const rec = err as Record<string, unknown>;
+    const cause = rec.cause;
+    if (cause instanceof Error) {
+      const fromCause = cause.message.trim();
+      if (fromCause) return fromCause;
+    } else if (cause && typeof cause === 'object') {
+      const fromCause = str((cause as { message?: unknown }).message);
+      if (fromCause) return fromCause;
+    }
+  }
+  if (err instanceof Error) {
+    const message = err.message.trim();
+    if (message) return message;
+  }
+  return 'Workflow run failed';
+}
+
+export function isUnreadWorkflowReturn(poll: {
+  runStatus?: string;
+  result?: unknown;
+  error?: string;
+}): boolean {
+  if (poll.runStatus !== 'completed' || poll.result) return false;
+  return /failed to read workflow return value|return value/i.test(poll.error || '');
+}
+
 /** Start durable Studio deploy (WDK C). Returns immediately with runId. */
 export interface StudioDeployStart {
   ok: boolean;
@@ -162,7 +191,9 @@ export async function pollStudioDeploy(
       return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
     }
     last = await getStudioDeployStatus(runId, { signal: opts?.signal });
-    if (last.runStatus && TERMINAL.has(last.runStatus)) return last;
+    if (last.runStatus && TERMINAL.has(last.runStatus) && !isUnreadWorkflowReturn(last)) {
+      return last;
+    }
     if (last.status === 404) return last;
     if (i < attempts - 1) {
       await new Promise<void>((resolve) => {
