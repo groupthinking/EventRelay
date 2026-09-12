@@ -11,7 +11,7 @@
 - [x] Step 1: Lock failing tests (nested live_url extract; 404 continue; persist from deployment.urls; GET flatten)
 - [x] Step 2: Implement extract + continue + persist/GET flatten
 - [x] Step 3: Focused Vitest + pytest GREEN; no reuse/timeout/524 regression
-- [ ] Step 4: PR off current main
+- [x] Step 4: PR off current main — https://github.com/groupthinking/EventRelay/pull/1889 (`ed68883ee`)
 
 ## 3. Definition of Done
 * **Expected Outcome:** Poll continues until a backend-supplied verified https hostname is extracted, or HOLD is a specific non-cleared reason (still pending / adapter error) — not origin-no-live, not reuse-miss, not timeout/524/bot/UNKNOWN/workflow-run/return-value/BACKEND_URL.
