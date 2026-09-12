@@ -132,7 +132,7 @@ export default function PricingPage() {
           </p>
           <h2 className="mt-4 font-heading text-3xl font-black">Confirm external work</h2>
           <p className="mt-4 text-sm leading-7 text-white/45">
-            Adds the entitlement required when a reviewed plan dispatches backend agents or writes to the knowledge store.
+            Adds the entitlement required when a Studio plan dispatches backend agents or writes to the knowledge store.
           </p>
           <ul className="mt-7 flex-1 space-y-3">
             {PRO_CAPABILITIES.map((capability) => (
