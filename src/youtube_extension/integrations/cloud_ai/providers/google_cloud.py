@@ -21,6 +21,7 @@ from ..base import (
     DetectionResult,
     VideoAnalysisResult,
 )
+from ..blocking_io import run_blocking
 from ..exceptions import (
     AuthenticationError,
     CloudAIError,
@@ -194,7 +195,7 @@ class GoogleCloudAI(BaseCloudAI):
                 safe_path = resolve_local_media_path(
                     image_url, provider=self.provider.value
                 )
-                image.content = await asyncio.to_thread(
+                image.content = await run_blocking(
                     _read_file_bytes, str(safe_path)
                 )
 
