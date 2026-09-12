@@ -367,11 +367,15 @@ describe('studio-pipeline-status', () => {
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    const pricing = readFileSync(join(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8');
+    const apiDocs = readFileSync(join(process.cwd(), 'src/app/docs/api/page.tsx'), 'utf8');
     expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
     expect(footer.toLowerCase()).not.toContain('reviewed actions');
     expect(footer.toLowerCase()).not.toContain('durable workflows');
     expect(studio).toContain('data-testid="studio-main"');
-    expect(studio).toMatch(/pb-20|padding-bottom/);
+    expect(studio).toMatch(/pb-28|padding-bottom/);
+    expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
+    expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
     expect(retired).not.toMatch(/Starting durable/);
     expect(retired).not.toMatch(/Could not start durable workflow/);
     expect(retired).not.toMatch(/runs a durable video-to-transcript/);
