@@ -10,18 +10,18 @@
 ## 2. Execution Plan
 - [x] Step 1: Lock failing tests (kickoff abort/524 ≠ hostname HOLD; bare hostname extract; wrun_01M2B5SRA5W5S4WQP2M4ZHY040 receipt; persist hang ≠ blocked 202)
 - [x] Step 2: Implement kickoff residual + retries + 45s wait + bare-host extract + async pending persist
-- [ ] Step 3: Focused Vitest + pytest GREEN
-- [ ] Step 4: PR off current main
+- [x] Step 3: Focused Vitest + pytest GREEN
+- [x] Step 4: PR off current main — https://github.com/groupthinking/EventRelay/pull/1891
 
 ## 3. Definition of Done
 * **Expected Outcome:** Timeout/524 kickoff stays retryable and HOLDs `STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD` if no job id arrives. Hostname HOLD is only for a terminal job with no URL. Bare backend hostnames become `https://`. 202 is not blocked on job-store save.
 * **Verification Method:** Focused Vitest (`pipeline-async-job`, `gate-transition`, `studio-pipeline-status`) + pytest extract/persist/202.
-* **Proof Artifact:** (filled after tests + PR)
+* **Proof Artifact:** PR https://github.com/groupthinking/EventRelay/pull/1891. Vitest 5 files / 107 passed. Pytest 7 passed (202 reuse, store hang, bare hostname, nested platform error, GET flatten).
 
 ## 4. Post-Task Reflection
-* **What was done:** (filled after GREEN)
-* **Why it was needed:** Prod logs for `wrun_01M2B5SRA5W5S4WQP2M4ZHY040` showed kickoff abort remapped to a finished-deploy HOLD.
-* **How it was tested:** (filled after GREEN)
+* **What was done:** Stopped remapping vts kickoff abort/524 to the #1889 hostname-finished HOLD. Durable kickoff retries + 45s wait. Bare `*.vercel.app` pass-through. Async pending persist. Nested platform errors become the job error when a job actually finishes without a hostname.
+* **Why it was needed:** Prod logs for `wrun_01M2B5SRA5W5S4WQP2M4ZHY040` showed kickoff abort remapped to a finished-deploy HOLD; no job id, no poll.
+* **How it was tested:** Focused Vitest 107 passed; focused pytest 7 passed. No URL invented. No Hayden secrets guessed.
 
 ---
 
