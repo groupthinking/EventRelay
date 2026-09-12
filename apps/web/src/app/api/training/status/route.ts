@@ -39,7 +39,7 @@ export async function GET() {
   } catch (error) {
     console.error('Training status error:', error);
     return NextResponse.json(
-      { error: 'Failed to read training status', details: String(error) },
+      { error: 'Failed to read training status' },
       { status: 500 },
     );
   }
