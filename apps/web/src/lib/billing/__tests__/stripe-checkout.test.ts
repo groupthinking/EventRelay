@@ -22,7 +22,8 @@ beforeEach(() => {
   process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_monthly_env';
   process.env.STRIPE_PRICE_PRO_ANNUAL = 'price_annual_env';
   delete process.env.NEXT_PUBLIC_APP_URL;
-  process.env.NODE_ENV = 'test';
+  // @ts-expect-error read-only property
+    process.env.NODE_ENV = 'test';
 });
 
 describe('createProCheckoutSession', () => {
@@ -44,6 +45,7 @@ describe('createProCheckoutSession', () => {
 
   it('throws in production when monthly price id is missing', async () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
+    // @ts-expect-error read-only property
     process.env.NODE_ENV = 'production';
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await expect(
@@ -54,6 +56,7 @@ describe('createProCheckoutSession', () => {
   it('never falls back to dead EventRelay Pro $19/$180 price IDs', async () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
     delete process.env.STRIPE_PRICE_PRO_ANNUAL;
+    // @ts-expect-error read-only property
     process.env.NODE_ENV = 'test';
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await createProCheckoutSession({ annual: false, flow: 'acquisition' });
@@ -69,9 +72,22 @@ describe('createProCheckoutSession', () => {
 
   it('sends production success and cancel URLs to https://uvai.io/pricing', async () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
+    // @ts-expect-error read-only property
     process.env.NODE_ENV = 'production';
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await createProCheckoutSession({ annual: false, flow: 'acquisition' });
+    const args = createMock.mock.calls[createMock.mock.calls.length - 1][0];
+    expect(args.success_url).toBe(
+      'https://uvai.io/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+    );
+    expect(args.cancel_url).toBe('https://uvai.io/pricing?checkout=cancelled');
+  });
+
+  it('ignores NEXT_PUBLIC_APP_URL for production checkout URLs (fail-closed)', async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
+    process.env.NODE_ENV = 'production';
+    const { createProCheckoutSession } = await import('../stripe-checkout');
+    await createProCheckoutSession({ annual: true, flow: 'acquisition' });
     const args = createMock.mock.calls[createMock.mock.calls.length - 1][0];
     expect(args.success_url).toBe(
       'https://uvai.io/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}',

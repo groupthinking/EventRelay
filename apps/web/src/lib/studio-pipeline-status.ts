@@ -1,5 +1,9 @@
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
-import { stackChecksFromPackTools, type ChecklistItem } from '@/lib/linked-sop';
+import {
+  stackChecksFromPackTools,
+  type ChecklistItem,
+  type LinkedEntity,
+} from '@/lib/linked-sop';
 import type {
   VideoPackArchitecture,
   VideoPackArtifact,
@@ -84,6 +88,14 @@ export function studioPackFormation(pack: VideoPackCitation | null | undefined):
     architecture: pack?.pack.architecture ?? null,
     artifacts: pack?.pack.artifacts ?? [],
   };
+}
+
+export function studioFormationSupplementalEntities(
+  tools: VideoPackStackTool[] | null | undefined,
+  entities: LinkedEntity[] | null | undefined,
+): LinkedEntity[] {
+  if ((tools?.length ?? 0) > 0) return [];
+  return entities ?? [];
 }
 
 export function studioEventsEmptyMessage(input: {
@@ -260,6 +272,8 @@ export function studioDeployOutcomeMessage(input: {
   error?: string | null;
   kind?: string | null;
   message?: string | null;
+  jobId?: string | null;
+  jobStatus?: string | null;
 }): string {
   const error = input.error?.trim();
   if (error) return error;
@@ -267,16 +281,22 @@ export function studioDeployOutcomeMessage(input: {
   if (receipt) {
     return `Deploy receipt: ${receipt}`;
   }
+  const jobId = input.jobId?.trim();
+  const jobStatus = input.jobStatus?.trim();
+  const terminalJob = new Set(['complete', 'completed', 'succeeded', 'failed', 'error', 'cancelled']);
+  if (jobId && jobStatus && !terminalJob.has(jobStatus.toLowerCase())) {
+    return `Deploy job ${jobId} still ${jobStatus}`;
+  }
   const status = (input.runStatus || '').toLowerCase();
   if (STUDIO_IN_FLIGHT_DEPLOY_STATUSES.has(status)) {
-    return `Deploy still ${status}. No verified deploy receipt — UNKNOWN checks are not a live URL.`;
+    return `Deploy still ${status}. Waiting for a verified https live URL.`;
   }
   if (status === 'failed' || status === 'cancelled' || status === 'error') {
     return `Deploy ${status}. No verified live URL.`;
   }
-  const handoff = input.message?.trim();
-  if (input.kind === 'handoff' && handoff) return handoff;
-  return 'Deploy attempt ended. No verified deploy receipt — UNKNOWN checks are not a live URL.';
+  const detail = input.message?.trim();
+  if ((input.kind === 'handoff' || input.kind === 'job') && detail) return detail;
+  return 'Deploy attempt ended. No verified deploy receipt.';
 }
 
 export function studioDeployButtonLabel(_hasReceipt: boolean): string {
@@ -364,7 +384,7 @@ export function studioExportToastMessage(input: {
   if (!input.ok || input.kind === 'empty') {
     return {
       tone: 'error',
-      text: input.error || 'Export failed — nothing to export yet.',
+      text: `${input.error || 'Export failed — nothing to export yet.'}${fileBit}`,
     };
   }
   if (input.kind === 'pack') {

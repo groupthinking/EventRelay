@@ -93,6 +93,14 @@ const memoryStore = new Map<string, VideoPackRecord>();
 
 let redisPromise: Promise<VideoPackRedisClient | null> | null = null;
 
+function assertDurableVideoPackStorageConfigured(): void {
+  if (process.env.NODE_ENV !== 'production') return;
+  if (resolveUpstashRedisCredentials()) return;
+  throw new Error(
+    'Durable video pack storage is not configured in production. Set UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (or KV_REST_API_URL + KV_REST_API_TOKEN).',
+  );
+}
+
 export function packStoreKey(sourceHash: string): string {
   return `${VIDEO_PACK_STORE_PREFIX}${sourceHash}`;
 }
@@ -209,6 +217,7 @@ export async function claimPackProcessing(
   identity: PackProcessingIdentity,
   now: Date = new Date(),
 ): Promise<'claimed' | VideoPackRecord> {
+  assertDurableVideoPackStorageConfigured();
   const processing: Extract<VideoPackRecord, { state: 'processing' }> = {
     state: 'processing',
     video_id: identity.video_id,
@@ -220,6 +229,9 @@ export async function claimPackProcessing(
 
   const key = packStoreKey(identity.source_hash);
   const redis = await getRedis();
+  if (process.env.NODE_ENV === 'production' && !redis) {
+    throw new Error('Durable video pack storage is unavailable in production.');
+  }
   if (redis) {
     try {
       const result = await redis.eval<unknown>(

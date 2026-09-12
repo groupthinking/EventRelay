@@ -66,4 +66,21 @@ describe('studio-deploy (F5)', () => {
     expect(polled.live_url).toBe('https://example.vercel.app');
     expect(polled.jobStatus).toBe('completed');
   });
+
+  it('pollStudioJob treats backend complete as terminal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: { status: 'complete', error: 'no live url on transcript job' },
+        }),
+      }),
+    );
+    const polled = await pollStudioJob('job_complete', { attempts: 3, delayMs: 0 });
+    expect(polled.ok).toBe(true);
+    expect(polled.jobStatus).toBe('complete');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });

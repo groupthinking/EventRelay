@@ -23,6 +23,7 @@ from ..base import (
     DetectionResult,
     VideoAnalysisResult,
 )
+from ..blocking_io import run_blocking
 from ..exceptions import (
     AuthenticationError,
     CloudAIError,
@@ -493,7 +494,7 @@ class AWSRekognition(BaseCloudAI):
             # traversal or symlink escape); the read then uses the resolved
             # path, off the event loop.
             safe_path = resolve_local_media_path(image_url, provider=self.provider.value)
-            return {'Bytes': await asyncio.to_thread(_read_file_bytes, str(safe_path))}
+            return {'Bytes': await run_blocking(_read_file_bytes, str(safe_path))}
 
     def _process_video_results(self, results: dict[str, Any], video_id: str,
                              analysis_types: list[AnalysisType],
