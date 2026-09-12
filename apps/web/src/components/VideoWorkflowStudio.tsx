@@ -623,8 +623,6 @@ export default function VideoWorkflowStudio() {
         setDeployRunId(started.runId);
         setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
         const polled = await pollStudioDeploy(started.runId, {
-          attempts: 24,
-          delayMs: 2000,
           signal: deployAbort.signal,
         });
         const live = studioVerifiedLiveUrl(polled.result?.live_url);

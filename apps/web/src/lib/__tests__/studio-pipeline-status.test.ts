@@ -266,6 +266,26 @@ describe('studio-pipeline-status', () => {
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
+    expect(
+      studioDeployOutcomeMessage({
+        runStatus: 'failed',
+        error: 'Deploy job job_1 still complete',
+      }),
+    ).toBe('Deploy job job_1 still complete');
+    expect(
+      studioDeployOutcomeMessage({
+        runStatus: 'completed',
+        kind: 'job',
+        message: 'Backend job finished with no verified live URL',
+      }),
+    ).toBe('Backend job finished with no verified live URL');
+    expect(
+      studioDeployOutcomeMessage({
+        runStatus: 'completed',
+        kind: 'job',
+        message: 'Backend job finished with no verified live URL',
+      }),
+    ).not.toMatch(/Deploy completed/i);
     const completedNoUrl = studioDeployOutcomeMessage({ runStatus: 'completed' });
     expect(completedNoUrl.toLowerCase()).not.toMatch(/deploy completed/);
     expect(completedNoUrl.toLowerCase()).not.toMatch(/\bsuccess(?:ful|fully)?\b/);
@@ -286,10 +306,16 @@ describe('studio-pipeline-status', () => {
     expect(studioHasDeployReceipt('https://example.vercel.app')).toBe(true);
 
     for (const runStatus of ['pending', 'running', 'queued'] as const) {
-      const inFlight = studioDeployOutcomeMessage({ runStatus });
+      const inFlight = studioDeployOutcomeMessage({
+        runStatus,
+        jobId: 'job_96f498640b',
+        jobStatus: 'transcribing',
+      });
       expect(inFlight.toLowerCase()).not.toMatch(/finished|completed|success/);
-      expect(inFlight).toMatch(/no verified deploy receipt/i);
-      expect(inFlight.toLowerCase()).toMatch(/still|pending|running|queued/);
+      expect(inFlight.toLowerCase()).not.toMatch(/deploy completed/);
+      expect(inFlight).not.toMatch(/UNKNOWN checks are not a live URL/);
+      expect(inFlight).toMatch(/job_96f498640b still transcribing/);
+      expect(inFlight.toLowerCase()).toMatch(/still|pending|running|queued|transcribing/);
     }
 
     expect(
@@ -320,6 +346,11 @@ describe('studio-pipeline-status', () => {
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioDeployOutcomeMessage');
+    expect(studio).not.toMatch(/pollStudioDeploy\([^)]*attempts:\s*20\b/);
+    expect(studio).toMatch(/startStudioDeploy\(\{[\s\S]*transcript:/);
+    expect(studio).toContain('usableProvidedTranscript');
+    const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
+    expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
     expect(studio).toContain('studioDeployButtonLabel');
     expect(studio).toContain('studioDeployReceiptForSelection');
     expect(studio).toContain('studioVerifiedLiveUrl');
