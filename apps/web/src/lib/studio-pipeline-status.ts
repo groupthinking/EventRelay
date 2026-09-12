@@ -274,8 +274,8 @@ export function studioDeployOutcomeMessage(input: {
   if (status === 'failed' || status === 'cancelled' || status === 'error') {
     return `Deploy ${status}. No verified live URL.`;
   }
-  const handoff = input.message?.trim();
-  if (input.kind === 'handoff' && handoff) return handoff;
+  const detail = input.message?.trim();
+  if ((input.kind === 'handoff' || input.kind === 'job') && detail) return detail;
   return 'Deploy attempt ended. No verified deploy receipt — UNKNOWN checks are not a live URL.';
 }
 

@@ -4,10 +4,12 @@ import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 
 export interface AsyncJobKickoff {
-  kind: 'job' | 'handoff' | 'failed';
+  kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
   statusUrl?: string;
   message?: string;
+  live_url?: string | null;
+  github_repo?: string | null;
 }
 
 export interface AsyncJobStatus {
@@ -54,6 +56,9 @@ export async function kickoffAsyncVideoJob(url: string): Promise<AsyncJobKickoff
   }
 
   const { url: backendUrl } = getBackendConfig();
+  const shipped = await tryVideoToSoftwareDeploy(backendUrl, url);
+  if (shipped) return shipped;
+
   const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
     method: 'POST',
     headers: backendHeaders(),
@@ -110,6 +115,11 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
 
   const metadata = asRecord(data.metadata);
   const outputs = asRecord(metadata?.outputs);
+  const nestedMeta = asRecord(metadata?.metadata);
+  const deployment =
+    asRecord(data.deployment) ||
+    asRecord(outputs?.deployment) ||
+    asRecord(metadata?.deployment);
 
   return {
     ok: response.ok,
@@ -120,18 +130,69 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
       payload.live_url,
       metadata?.live_url,
       outputs?.live_url,
+      deployment?.live_url,
+      deployment?.url,
+      nestedMeta?.live_url,
     ),
     github_repo: str(data.github_repo) ?? str(payload.github_repo) ?? null,
-    message: str(payload.error) || str(payload.detail) || str(data.message),
+    message:
+      str(payload.error) ||
+      str(payload.detail) ||
+      str(data.error) ||
+      str(data.message),
   };
 }
 
 export function isTerminalJobStatus(status: string | undefined): boolean {
   return (
+    status === 'complete' ||
     status === 'completed' ||
     status === 'succeeded' ||
     status === 'failed' ||
     status === 'error' ||
     status === 'cancelled'
   );
+}
+
+/**
+ * Real deploy attempt (FastAPI video-to-software). Pass through a backend
+ * live URL only — never invent one. 401/403 and other non-live outcomes
+ * return null so the caller can fall through to the process job.
+ */
+async function tryVideoToSoftwareDeploy(
+  backendUrl: string,
+  url: string,
+): Promise<AsyncJobKickoff | null> {
+  try {
+    const response = await fetch(`${backendUrl}/api/v1/video-to-software`, {
+      method: 'POST',
+      headers: backendHeaders(),
+      body: JSON.stringify({
+        video_url: url,
+        project_type: 'web',
+        deployment_target: 'vercel',
+      }),
+      signal: AbortSignal.timeout(50_000),
+    });
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    if (!response.ok) return null;
+    const result = asRecord(payload.result);
+    const deployment = asRecord(payload.deployment) || asRecord(result?.deployment);
+    const live_url = firstLiveUrl(
+      payload.live_url,
+      result?.live_url,
+      deployment?.live_url,
+      deployment?.url,
+    );
+    if (!live_url) return null;
+    return {
+      kind: 'live',
+      live_url,
+      github_repo: str(payload.github_repo) ?? str(result?.github_repo) ?? null,
+      message: str(payload.message) || str(result?.message),
+    };
+  } catch (err) {
+    console.error('[pipeline-async-job] video-to-software kickoff failed', err);
+    return null;
+  }
 }

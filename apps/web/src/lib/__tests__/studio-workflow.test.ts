@@ -5,9 +5,18 @@ import {
   pollVideoToActions,
   startStudioDeploy,
   startVideoToActions,
+  workflowReturnErrorMessage,
 } from '@/lib/studio-workflow';
 
 describe('studio-workflow (WDK Product v1)', () => {
+  it('prefers a failed-run cause over a generic unread-return message', () => {
+    const cause = new Error('Deploy job job_1 still complete');
+    const failed = new Error('Workflow run failed');
+    Object.assign(failed, { cause });
+    expect(workflowReturnErrorMessage(failed)).toBe('Deploy job job_1 still complete');
+    expect(workflowReturnErrorMessage(new Error('fetch failed'))).toBe('fetch failed');
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -215,6 +224,36 @@ describe('studio-workflow (WDK Product v1)', () => {
       url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
     });
     expect(started.ok).toBe(false);
+  });
+
+  it('pollStudioDeploy keeps polling when completed has no result yet', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_unread',
+          runStatus: 'completed',
+          error: 'Failed to read workflow return value',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_unread',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://ready.example.app' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_unread', { attempts: 4, delayMs: 1 });
+    expect(poll.result?.live_url).toBe('https://ready.example.app');
+    expect(poll.error).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('pollStudioDeploy returns immediately on 404', async () => {

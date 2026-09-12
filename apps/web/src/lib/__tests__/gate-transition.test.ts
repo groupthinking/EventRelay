@@ -203,6 +203,26 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.receiptHash).toMatch(/^[a-f0-9]{64}$/);
     expect(view.version).toBe(GATE_RECEIPT_VERSION);
   });
+
+  it('HOLD when the workflow return is missing a live URL — no Deploy completed claim', () => {
+    const backendReason = 'Backend job finished with no verified live URL';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2A8RXT1HS8NPW70HV6AA0YV',
+      runId: 'wrun_01M2A8RXT1HS8NPW70HV6AA0YV',
+      runStatus: 'completed',
+      kind: 'job',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason_code).toBe('GATE_HOLD_MISSING_EVIDENCE');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2A8RXT1HS8NPW70HV6AA0YV');
+  });
 });
 
 describe('studioGateReceiptView', () => {
