@@ -232,6 +232,41 @@ describe('emitJsonCanvas (pack→JSON Canvas emit)', () => {
         .join('\n'),
     ).toContain('n8n workflow editor for email triage');
   });
+
+  it('does not crash sandbox emit when SOP ids collide with lane groups or each other', () => {
+    const colliding = {
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      sopSteps: [
+        { id: 'sop', order: 1, title: 'Safety and Vehicle Staging', description: 'Park safely.' },
+        { id: 'sop', order: 2, title: 'Star Pattern Torquing', description: 'Tighten in a star.' },
+        { id: 'source', order: 3, title: 'Spare Tire Operating Envelope', description: '50 mph / 100 miles.' },
+      ],
+    };
+    expect(() => emitJsonCanvas(colliding)).not.toThrow();
+    const canvas = emitJsonCanvas(colliding);
+    expect(canvas).not.toBeNull();
+    const valid = validateJsonCanvas(canvas);
+    const ids = (valid.nodes ?? []).map((node) => node.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.filter((id) => id === 'sop').length).toBe(1);
+    expect(ids).toContain('sop-step-0');
+    expect(ids).toContain('sop-step-1');
+    expect(ids).toContain('sop-step-2');
+    const texts = (valid.nodes ?? [])
+      .filter((node) => node.type === 'text')
+      .map((node) => node.text)
+      .join('\n');
+    expect(texts).toContain('Safety and Vehicle Staging');
+    expect(texts).toContain('Star Pattern Torquing');
+
+    const sandbox = emitAppBuilderSandbox(colliding);
+    expect(sandbox.files['startup.sh']).toContain('npm run dev');
+    expect(sandbox.files[MISSION_CANVAS_FILENAME]).toBeTruthy();
+    expect(sandbox.files['index.html']).toContain('Safety and Vehicle Staging');
+  });
 });
 
 describe('App Builder / Studio file map (mission.canvas)', () => {

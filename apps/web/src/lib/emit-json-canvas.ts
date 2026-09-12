@@ -506,7 +506,7 @@ export function emitJsonCanvas(input: JsonCanvasEmitInput): JsonCanvas | null {
           const height = heights[stepIndex] ?? 100;
           const body = bodies[stepIndex] ?? step.title.trim();
           nodes.push({
-            id: step.id.trim() || `sop-${stepIndex}`,
+            id: `sop-step-${stepIndex}`,
             type: 'text',
             x: innerX,
             y: cursorY,
@@ -545,7 +545,12 @@ export function emitJsonCanvas(input: JsonCanvasEmitInput): JsonCanvas | null {
 
 /** Serialize mission.canvas or return null when the emit slice is empty. */
 export function emitMissionCanvasFile(input: JsonCanvasEmitInput): string | null {
-  const canvas = emitJsonCanvas(input);
-  if (!canvas) return null;
-  return `${JSON.stringify(canvas, null, 2)}\n`;
+  try {
+    const canvas = emitJsonCanvas(input);
+    if (!canvas) return null;
+    return `${JSON.stringify(canvas, null, 2)}\n`;
+  } catch (error) {
+    console.error('JSON Canvas emit omitted: document failed spec 1.0 validation.', error);
+    return null;
+  }
 }
