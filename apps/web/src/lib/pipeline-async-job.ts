@@ -4,6 +4,8 @@ import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
+export { usableProvidedTranscript as usableKickoffTranscript };
+
 export interface AsyncJobKickoff {
   kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
@@ -47,10 +49,13 @@ function firstLiveUrl(...values: unknown[]): string | null {
 const YOUTUBE_REFETCH_RE =
   /sign in to confirm you.?re not a bot|cookies-from-browser|--cookies for the authentication|\[youtube\].*not a bot/i;
 
+export const STUDIO_READY_TRANSCRIPT_HOLD =
+  'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
   if (message && YOUTUBE_REFETCH_RE.test(message)) {
-    return 'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+    return STUDIO_READY_TRANSCRIPT_HOLD;
   }
   return message || 'video-to-software returned no verified live URL';
 }
@@ -62,6 +67,14 @@ export function isGatewayTimeoutKickoff(status?: number, message?: string): bool
   return /http 524|error code:\s*524|cloudflare|timed out before a verified live url|aborted due to timeout/i.test(
     message,
   );
+}
+
+/** Ready-transcript miss: never the bot wall and never HTTP 524. */
+export function studioDeployReadyTranscriptHold(message?: string): string {
+  if (!message || YOUTUBE_REFETCH_RE.test(message) || isGatewayTimeoutKickoff(undefined, message)) {
+    return STUDIO_READY_TRANSCRIPT_HOLD;
+  }
+  return message;
 }
 
 /**
@@ -86,11 +99,10 @@ export async function kickoffAsyncVideoJob(
   const { url: backendUrl } = getBackendConfig();
   const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
   if (shipped.kind === 'live' || shipped.kind === 'job') return shipped;
-  const gatewayTimeout = isGatewayTimeoutKickoff(shipped.httpStatus, shipped.message);
-  if (transcript && !gatewayTimeout) {
+  if (transcript) {
     return {
       kind: 'failed',
-      message: studioDeployYoutubeRefetchHold(shipped.message),
+      message: studioDeployReadyTranscriptHold(shipped.message),
     };
   }
 

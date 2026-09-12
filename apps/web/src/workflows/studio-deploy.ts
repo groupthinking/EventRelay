@@ -58,7 +58,7 @@ export async function studioDeployWorkflow(
     };
   }
 
-  const polled = await pollJobStep(kicked.jobId);
+  const polled = await pollJobStep(kicked.jobId, input.transcript);
   return { url, ...polled, jobId: kicked.jobId };
 }
 
@@ -78,7 +78,10 @@ async function kickoffStep(
   return kickoffAsyncVideoJob(url, { transcript });
 }
 
-async function pollJobStep(jobId: string): Promise<{
+async function pollJobStep(
+  jobId: string,
+  transcript?: string,
+): Promise<{
   kind: 'live' | 'job';
   jobStatus?: string;
   live_url?: string | null;
@@ -87,9 +90,12 @@ async function pollJobStep(jobId: string): Promise<{
 }> {
   'use step';
 
-  const { fetchAsyncVideoJob, isTerminalJobStatus } = await import(
-    '@/lib/pipeline-async-job'
-  );
+  const {
+    fetchAsyncVideoJob,
+    isTerminalJobStatus,
+    studioDeployReadyTranscriptHold,
+    usableKickoffTranscript,
+  } = await import('@/lib/pipeline-async-job');
 
   const reads = 18;
   const gapMs = 10_000;
@@ -105,7 +111,10 @@ async function pollJobStep(jobId: string): Promise<{
     }
 
     if (!status.ok) {
-      const msg = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+      const raw = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+      const msg = usableKickoffTranscript(transcript)
+        ? studioDeployReadyTranscriptHold(raw)
+        : raw;
       if (status.httpStatus && status.httpStatus >= 500) {
         throw new Error(msg);
       }
@@ -113,8 +122,11 @@ async function pollJobStep(jobId: string): Promise<{
     }
 
     if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
+      const raw = status.message || `Deploy job ${jobId} ${status.jobStatus}`;
       throw new FatalError(
-        status.message || `Deploy job ${jobId} ${status.jobStatus}`,
+        usableKickoffTranscript(transcript)
+          ? studioDeployReadyTranscriptHold(raw)
+          : raw,
       );
     }
 
