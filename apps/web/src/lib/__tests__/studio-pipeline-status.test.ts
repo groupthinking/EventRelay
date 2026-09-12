@@ -306,10 +306,16 @@ describe('studio-pipeline-status', () => {
     expect(studioHasDeployReceipt('https://example.vercel.app')).toBe(true);
 
     for (const runStatus of ['pending', 'running', 'queued'] as const) {
-      const inFlight = studioDeployOutcomeMessage({ runStatus });
+      const inFlight = studioDeployOutcomeMessage({
+        runStatus,
+        jobId: 'job_96f498640b',
+        jobStatus: 'transcribing',
+      });
       expect(inFlight.toLowerCase()).not.toMatch(/finished|completed|success/);
-      expect(inFlight).toMatch(/no verified deploy receipt/i);
-      expect(inFlight.toLowerCase()).toMatch(/still|pending|running|queued/);
+      expect(inFlight.toLowerCase()).not.toMatch(/deploy completed/);
+      expect(inFlight).not.toMatch(/UNKNOWN checks are not a live URL/);
+      expect(inFlight).toMatch(/job_96f498640b still transcribing/);
+      expect(inFlight.toLowerCase()).toMatch(/still|pending|running|queued|transcribing/);
     }
 
     expect(
@@ -340,6 +346,11 @@ describe('studio-pipeline-status', () => {
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioDeployOutcomeMessage');
+    expect(studio).not.toMatch(/pollStudioDeploy\([^)]*attempts:\s*20\b/);
+    expect(studio).toMatch(/startStudioDeploy\(\{[\s\S]*transcript:/);
+    expect(studio).toContain('usableProvidedTranscript');
+    const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
+    expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
     expect(studio).toContain('studioDeployButtonLabel');
     expect(studio).toContain('studioDeployReceiptForSelection');
     expect(studio).toContain('studioVerifiedLiveUrl');
@@ -356,11 +367,15 @@ describe('studio-pipeline-status', () => {
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    const pricing = readFileSync(join(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8');
+    const apiDocs = readFileSync(join(process.cwd(), 'src/app/docs/api/page.tsx'), 'utf8');
     expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
     expect(footer.toLowerCase()).not.toContain('reviewed actions');
     expect(footer.toLowerCase()).not.toContain('durable workflows');
     expect(studio).toContain('data-testid="studio-main"');
-    expect(studio).toMatch(/pb-20|padding-bottom/);
+    expect(studio).toMatch(/pb-28|padding-bottom/);
+    expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
+    expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
     expect(retired).not.toMatch(/Starting durable/);
     expect(retired).not.toMatch(/Could not start durable workflow/);
     expect(retired).not.toMatch(/runs a durable video-to-transcript/);

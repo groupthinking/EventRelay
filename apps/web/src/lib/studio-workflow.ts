@@ -59,6 +59,20 @@ function str(v: unknown): string | undefined {
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
+/** Client poll window: long enough for one video-to-software attempt (~3 min). */
+export const STUDIO_DEPLOY_POLL_ATTEMPTS = 150;
+export const STUDIO_DEPLOY_POLL_DELAY_MS = 2000;
+
+function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
+  const jobId = poll.result?.jobId?.trim();
+  const jobStatus = poll.result?.jobStatus?.trim();
+  if (jobId && jobStatus && !TERMINAL.has(jobStatus)) {
+    return `Deploy job ${jobId} still ${jobStatus}`;
+  }
+  if (poll.error?.trim()) return poll.error.trim();
+  return `Deploy still ${poll.runStatus || 'running'} after ${attempts} polls — waiting for a verified https live URL (runId ${poll.runId})`;
+}
+
 /** WDK failed-run cause, not a generic unread-return placeholder. */
 export function workflowReturnErrorMessage(err: unknown): string {
   if (err && typeof err === 'object') {
@@ -86,6 +100,46 @@ export function isUnreadWorkflowReturn(poll: {
 }): boolean {
   if (poll.runStatus !== 'completed' || poll.result) return false;
   return /failed to read workflow return value|return value/i.test(poll.error || '');
+}
+
+/** GET getRun threw before status/result — keep polling, do not HOLD on the generic. */
+export function isUnreadWorkflowRun(poll: {
+  runStatus?: string;
+  result?: unknown;
+  error?: string;
+  status?: number;
+}): boolean {
+  if (poll.result) return false;
+  const error = poll.error || '';
+  if (
+    /failed to read workflow run|failed to parse url from \[object request\]|err_invalid_url/i.test(
+      error,
+    )
+  ) {
+    return true;
+  }
+  return poll.status === 500 && !poll.runStatus;
+}
+
+export function isTransientWorkflowRunReadError(err: unknown): boolean {
+  const parts = [workflowReturnErrorMessage(err)];
+  if (err instanceof Error) parts.push(err.message);
+  if (err && typeof err === 'object') {
+    const rec = err as {
+      code?: unknown;
+      cause?: { message?: unknown; code?: unknown; input?: unknown };
+    };
+    if (typeof rec.code === 'string') parts.push(rec.code);
+    const cause = rec.cause;
+    if (cause && typeof cause === 'object') {
+      if (typeof cause.message === 'string') parts.push(cause.message);
+      if (typeof cause.code === 'string') parts.push(cause.code);
+      if (typeof cause.input === 'string') parts.push(cause.input);
+    }
+  }
+  return /failed to parse url from \[object request\]|err_invalid_url|\[object request\]/i.test(
+    parts.join(' '),
+  );
 }
 
 /** Start durable Studio deploy (WDK C). Returns immediately with runId. */
@@ -119,6 +173,7 @@ export async function startStudioDeploy(input: {
   url: string;
   projectType?: string;
   outcome?: string;
+  transcript?: string;
   signal?: AbortSignal;
 }): Promise<StudioDeployStart> {
   const response = await fetch('/api/workflows/studio-deploy', {
@@ -129,6 +184,7 @@ export async function startStudioDeploy(input: {
       url: input.url,
       projectType: input.projectType,
       outcome: input.outcome,
+      ...(input.transcript ? { transcript: input.transcript } : {}),
     }),
     signal: input.signal ?? AbortSignal.timeout(30_000),
   });
@@ -183,15 +239,20 @@ export async function pollStudioDeploy(
   runId: string,
   opts?: { attempts?: number; delayMs?: number; signal?: AbortSignal },
 ): Promise<StudioDeployPoll> {
-  const attempts = opts?.attempts ?? 24;
-  const delayMs = opts?.delayMs ?? 2000;
+  const attempts = opts?.attempts ?? STUDIO_DEPLOY_POLL_ATTEMPTS;
+  const delayMs = opts?.delayMs ?? STUDIO_DEPLOY_POLL_DELAY_MS;
   let last: StudioDeployPoll = { ok: false, status: 0, runId, message: 'No poll yet' };
   for (let i = 0; i < attempts; i++) {
     if (opts?.signal?.aborted) {
       return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
     }
     last = await getStudioDeployStatus(runId, { signal: opts?.signal });
-    if (last.runStatus && TERMINAL.has(last.runStatus) && !isUnreadWorkflowReturn(last)) {
+    if (
+      last.runStatus &&
+      TERMINAL.has(last.runStatus) &&
+      !isUnreadWorkflowReturn(last) &&
+      !isUnreadWorkflowRun(last)
+    ) {
       return last;
     }
     if (last.status === 404) return last;
@@ -209,11 +270,11 @@ export async function pollStudioDeploy(
       });
     }
   }
+  const hold = inFlightJobHold(last, attempts);
   return {
     ...last,
-    message:
-      last.message ||
-      `Still ${last.runStatus || 'running'} after ${attempts} polls — re-check runId ${runId}`,
+    error: last.error || hold,
+    message: last.message || hold,
   };
 }
 

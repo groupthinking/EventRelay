@@ -1,4 +1,85 @@
-# TASK: Parse studio.deploy workflow return / live URL (residual after #1848)
+# TASK: studio.deploy reuse ready transcript (no YouTube re-hit)
+
+## 1. Goal & Scope
+* **Objective:** When Video Pack / transcript is already ready, Attempt deploy must not re-fetch YouTube. Continue to a verified https live URL + EventRelay receipt, or an honest HOLD that is not the yt-dlp bot miss and not the cleared residuals.
+* **Context:** AXIOM on `dpl_8DjoBuK8pE5MxE5L7SQaRgixivTK` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ`) cleared #1855 UNKNOWN-checks. New HOLD: `ERROR: [youtube] XYMcBrFSJ4c: Sign in to confirm you’re not a bot.` Transcript was already ready.
+* **Root cause:** `startStudioDeploy` / `kickoffAsyncVideoJob` send URL only. After video-to-software misses (401 / no live URL), kickoff starts `/videos/process`, which re-runs yt-dlp. `pollJobStep` FatalErrors the bot check. Ready Studio transcript is never passed.
+* **Scope:** Pass usable transcript through Studio deploy → WDK → kickoff. When transcript is ready, do not start URL-only `/videos/process`. Surface the real vts miss (remap YouTube bot). Claim guard unchanged. No YouTube cookies/secret. Do not reopen #1848 / #1853 / #1855.
+ * *Initial check:* Reuse `usableProvidedTranscript`; modify existing kickoff/workflow/POST. Do not add a second deploy path.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (no process re-hit, POST/client pass transcript, remapped bot HOLD)
+- [x] Step 2: Thread transcript; skip `/videos/process` when ready
+- [x] Step 3: Focused Vitest 75 passed
+- [ ] Step 4: New PR from main → merge-when-core-green → prod READY `dpl_`
+
+## 3. Definition of Done
+* **Expected Outcome:** Ready-transcript deploy does not HOLD on the YouTube bot string. PASS only with a verified https hostname URL. Honest different HOLD is allowed.
+* **Verification Method:** Focused Vitest + Vercel prod READY after merge.
+* **Proof Artifact:** (filled after verification)
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: Wait for a verified studio.deploy receipt (residual after #1853)
+
+## 1. Goal & Scope
+* **Objective:** Attempt deploy must not HOLD solely for `Deploy still running. No verified deploy receipt — UNKNOWN checks are not a live URL.` Wait for a verified https live URL + EventRelay receipt, or an honest different HOLD.
+* **Context:** AXIOM on `dpl_8wx8iEfUcwNpWQNHwvpMsyLh9xsW` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2ABB1NJ5TFZ153CTRNTPNW9`) cleared the three prior residuals. New HOLD is the UNKNOWN-checks string. No Deploy completed / no live URL.
+* **Root cause:** `tryVideoToSoftwareDeploy` aborted at 50s (real deploy path still in flight) and fell through to `/videos/process`. Client `pollStudioDeploy(..., { attempts: 20 })` stopped while WDK `runStatus` was still `running`. `studioDeployOutcomeMessage` then HOLDs with UNKNOWN checks. WDK `pollJobStep` later died after 4 retries on `job_96f498640b still transcribing`.
+* **Scope:** `pipeline-async-job.ts` (do not abandon vts on timeout), `studio-workflow.ts` poller, `OneLoopStudio` attempt count, `studio-pipeline-status.ts` HOLD copy, WDK `pollJobStep` wait. Do not invent a live URL, do not weaken G.A.T.E., do not reopen #1848.
+ * *Initial check:* Modify existing poll/kickoff; do not add a second deploy path.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (poll through running, no UNKNOWN-checks HOLD, vts timeout not process-fallback)
+- [x] Step 2: Retry vts on timeout; wait for terminal/receipt; honest in-flight HOLD
+- [x] Step 3: Focused Vitest 66 passed
+- [ ] Step 4: New PR from main → merge-when-core-green → prod READY `dpl_`
+
+## 3. Definition of Done
+* **Expected Outcome:** HOLD is not UNKNOWN-checks, not the three cleared residuals. PASS only with a verified https hostname URL.
+* **Verification Method:** Focused Vitest + Vercel prod READY after merge.
+* **Proof Artifact:** (filled after verification)
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: Read studio.deploy workflow run (residual after #1850)
+
+## 1. Goal & Scope
+* **Objective:** Attempt deploy must not HOLD solely for `Failed to read workflow run`. GET must read the WDK run. PASS only with a verified https live URL + EventRelay receipt; otherwise honest HOLD/REJECT with a different real reason.
+* **Context:** #1850 removed `Failed to read workflow return value`. AXIOM re-dogfood XYMcBrFSJ4c on `dpl_3o6VDNVej7vkA82TQKDNWhkxLGYs` HOLDs with `Failed to read workflow run` (receipt `er:gate:v1:wrun_01M2A9Z9SYXD59NG211W9N8EQA`).
+* **Root cause:** `withWorldVercelFetch` rebinds `globalThis.fetch` to undici `fetch(url, init)`. `getRun()` calls `fetch(Request)`. undici treats the Request as a URL string → `Failed to parse URL from [object Request]` / `ERR_INVALID_URL`. Outer GET catch swallows that as `Failed to read workflow run`.
+* **Scope:** `world-vercel-fetch.ts`, GET `[runId]/route.ts`, `studio-workflow.ts` poller. Do not invent a live URL, do not weaken G.A.T.E., do not reopen #1848 env pin.
+ * *Initial check:* Modify the existing undici wrapper; do not add a second fetch path.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (Request fetch, GET unread-run, poller retry, claim guard)
+- [x] Step 2: Compat-wrap undici fetch so Request inputs use native fetch; never emit the generic unread-run string
+- [x] Step 3: Focused Vitest 88 passed
+- [ ] Step 4: New PR from main → merge-when-core-green → prod READY `dpl_`
+
+## 3. Definition of Done
+* **Expected Outcome:** GET can read the workflow run. HOLD is not `Failed to read workflow run` or `Failed to read workflow return value`. PASS only with a verified https hostname URL.
+* **Verification Method:** Focused Vitest + Vercel prod READY after merge.
+* **Proof Artifact:** 88 passed (`world-vercel-fetch`, GET `[runId]`, `studio-workflow`, `gate-transition`, `pipeline-async-job`, `studio-pipeline-status`, `pipeline-backend-health`, POST studio-deploy, isolation)
+
+## 4. Post-Task Reflection
+* **What was done:** Compat-wrapped `withWorldVercelFetch` so `fetch(Request)` stays on Next/Node fetch; GET no longer emits `Failed to read workflow run`; poller retries unread-run 500s. Claim guard unchanged.
+* **Why it was needed:** #1850 wrapped GET in undici fetch. `getRun()` passes a Request; undici parses it as `[object Request]` → 500 generic HOLD.
+* **How it was tested:** TDD RED then GREEN. Focused Vitest 88/88. Prod logs on `dpl_3o6VDNVej7vkA82TQKDNWhkxLGYs` showed `Failed to parse URL from [object Request]` for `wrun_01M2A9Z9SYXD59NG211W9N8EQA`.
+
+---
+
+# Prior cut: Parse studio.deploy workflow return / live URL (residual after #1848)
 
 ## 1. Goal & Scope
 * **Objective:** Attempt deploy must not HOLD solely for `Failed to read workflow return value`. PASS only with a verified https live URL + EventRelay receipt; otherwise honest HOLD/REJECT/ESCALATE with the real reason.

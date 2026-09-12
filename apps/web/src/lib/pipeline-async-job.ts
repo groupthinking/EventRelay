@@ -2,6 +2,7 @@ import 'server-only';
 
 import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
+import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
 export interface AsyncJobKickoff {
   kind: 'job' | 'handoff' | 'failed' | 'live';
@@ -42,11 +43,27 @@ function firstLiveUrl(...values: unknown[]): string | null {
   return null;
 }
 
+const YOUTUBE_REFETCH_RE =
+  /sign in to confirm you.?re not a bot|cookies-from-browser|--cookies for the authentication|\[youtube\].*not a bot/i;
+
+/** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
+export function studioDeployYoutubeRefetchHold(message?: string): string {
+  if (message && YOUTUBE_REFETCH_RE.test(message)) {
+    return 'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+  }
+  return message || 'video-to-software returned no verified live URL';
+}
+
 /**
  * Kick off FastAPI async video processing (same contract as POST /api/pipeline async).
  * Used from WDK steps — no self-HTTP to /api/pipeline.
+ * When a usable transcript is already ready, do not start URL-only /videos/process
+ * (that path re-hits YouTube / yt-dlp).
  */
-export async function kickoffAsyncVideoJob(url: string): Promise<AsyncJobKickoff> {
+export async function kickoffAsyncVideoJob(
+  url: string,
+  opts?: { transcript?: string },
+): Promise<AsyncJobKickoff> {
   const health = await checkBackendHealth();
   if (!health.available) {
     return {
@@ -55,9 +72,16 @@ export async function kickoffAsyncVideoJob(url: string): Promise<AsyncJobKickoff
     };
   }
 
+  const transcript = usableProvidedTranscript(opts?.transcript);
   const { url: backendUrl } = getBackendConfig();
-  const shipped = await tryVideoToSoftwareDeploy(backendUrl, url);
-  if (shipped) return shipped;
+  const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
+  if (shipped.kind === 'live') return shipped;
+  if (transcript) {
+    return {
+      kind: 'failed',
+      message: studioDeployYoutubeRefetchHold(shipped.message),
+    };
+  }
 
   const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
     method: 'POST',
@@ -162,7 +186,8 @@ export function isTerminalJobStatus(status: string | undefined): boolean {
 async function tryVideoToSoftwareDeploy(
   backendUrl: string,
   url: string,
-): Promise<AsyncJobKickoff | null> {
+  transcript?: string,
+): Promise<AsyncJobKickoff> {
   try {
     const response = await fetch(`${backendUrl}/api/v1/video-to-software`, {
       method: 'POST',
@@ -171,11 +196,20 @@ async function tryVideoToSoftwareDeploy(
         video_url: url,
         project_type: 'web',
         deployment_target: 'vercel',
+        ...(transcript ? { transcript } : {}),
       }),
-      signal: AbortSignal.timeout(50_000),
+      signal: AbortSignal.timeout(180_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!response.ok) return null;
+    const miss =
+      str(payload.error) ||
+      str(payload.detail) ||
+      (response.ok
+        ? 'video-to-software returned no verified live URL'
+        : `Backend kickoff returned HTTP ${response.status}`);
+    if (!response.ok) {
+      return { kind: 'failed', message: miss };
+    }
     const result = asRecord(payload.result);
     const deployment = asRecord(payload.deployment) || asRecord(result?.deployment);
     const live_url = firstLiveUrl(
@@ -184,7 +218,9 @@ async function tryVideoToSoftwareDeploy(
       deployment?.live_url,
       deployment?.url,
     );
-    if (!live_url) return null;
+    if (!live_url) {
+      return { kind: 'failed', message: miss };
+    }
     return {
       kind: 'live',
       live_url,
@@ -192,7 +228,21 @@ async function tryVideoToSoftwareDeploy(
       message: str(payload.message) || str(result?.message),
     };
   } catch (err) {
+    if (isAbortTimeout(err)) {
+      throw err;
+    }
     console.error('[pipeline-async-job] video-to-software kickoff failed', err);
-    return null;
+    return {
+      kind: 'failed',
+      message: err instanceof Error ? err.message : 'video-to-software kickoff failed',
+    };
   }
+}
+
+function isAbortTimeout(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const rec = err as { name?: unknown; code?: unknown; message?: unknown };
+  if (rec.name === 'TimeoutError') return true;
+  if (rec.code === 23 || rec.code === 'TIMEOUT_ERR') return true;
+  return typeof rec.message === 'string' && /aborted due to timeout/i.test(rec.message);
 }

@@ -221,7 +221,55 @@ describe('evaluateStudioDeployTransition', () => {
     const view = studioGateReceiptView(result, { backendReason });
     expect(view.reason).toContain(backendReason);
     expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2A8RXT1HS8NPW70HV6AA0YV');
+  });
+
+  it('HOLD while deploy is still running cites the job, not UNKNOWN checks', () => {
+    const backendReason = 'Deploy job job_96f498640b still transcribing';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2ABB1NJ5TFZ153CTRNTPNW9',
+      runId: 'wrun_01M2ABB1NJ5TFZ153CTRNTPNW9',
+      jobId: 'job_96f498640b',
+      runStatus: 'running',
+      kind: 'job',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
+  });
+
+  it('HOLD after ready-transcript reuse miss is not the YouTube bot string', () => {
+    const backendReason =
+      'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ',
+      runId: 'wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ');
   });
 });
 
