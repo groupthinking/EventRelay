@@ -54,7 +54,11 @@ import {
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
-import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
+import {
+  buildSameRunActInput,
+  MIN_ACT_TRANSCRIPT_CHARS,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
   resolveStudioHandoff,
@@ -567,7 +571,10 @@ export default function OneLoopStudio({
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(attemptVideoId);
     try {
-      const started = await startStudioDeploy({ url: next });
+      const started = await startStudioDeploy({
+        url: next,
+        transcript: usableProvidedTranscript(selected?.transcript),
+      });
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;
@@ -585,7 +592,7 @@ export default function OneLoopStudio({
         return;
       }
       setDeployRunId(started.runId);
-      const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
+      const polled = await pollStudioDeploy(started.runId);
       const backendReason = polled.error || polled.result?.message || null;
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
@@ -608,6 +615,8 @@ export default function OneLoopStudio({
           error: polled.error,
           kind: polled.result?.kind,
           message: polled.result?.message,
+          jobId: polled.result?.jobId,
+          jobStatus: polled.result?.jobStatus,
         }),
       );
     } catch (err) {
@@ -718,6 +727,19 @@ export default function OneLoopStudio({
                 <p data-testid="studio-gate-reason" className="text-sm text-white/80">
                   {gateReceipt.reason}
                 </p>
+                {scopedDeployReceipt ? (
+                  <p className="mt-1">
+                    <a
+                      data-testid="studio-gate-live-url"
+                      href={scopedDeployReceipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-[#e8b86d] underline"
+                    >
+                      {scopedDeployReceipt}
+                    </a>
+                  </p>
+                ) : null}
                 <p className="mt-1 break-all font-mono text-[11px] text-white/45">
                   <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
                   {' · '}
