@@ -17,6 +17,7 @@ import {
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioFormationSupplementalEntities,
   studioPackFormation,
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
@@ -155,7 +156,37 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioPackFormation');
     expect(studio).toContain('data-testid="pack-architecture"');
     expect(studio).toContain('data-testid="pack-artifacts"');
+    expect(studio).toContain('packFormation.checks');
     expect(studio).not.toMatch(/router\.(push|replace)\(['"]\/dashboard/);
+  });
+
+  it('suppresses transcript-only tool chips when pack.stack.tools are grounded', () => {
+    expect(
+      studioFormationSupplementalEntities(
+        [{ name: 'Cloudflare' }, { name: 'x402' }],
+        [
+          {
+            name: 'Shopify',
+            kind: 'platform',
+            officialUrl: 'https://shopify.dev',
+            docsUrl: 'https://shopify.dev/docs',
+            timestamps: [],
+          },
+        ],
+      ),
+    ).toEqual([]);
+
+    expect(
+      studioFormationSupplementalEntities([], [
+        {
+          name: 'Shopify',
+          kind: 'platform',
+          officialUrl: 'https://shopify.dev',
+          docsUrl: 'https://shopify.dev/docs',
+          timestamps: [],
+        },
+      ]).map((entity) => entity.name),
+    ).toEqual(['Shopify']);
   });
 
   it('tells the truth when events[] is empty after a completed run', () => {
