@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { backendHeaders } from '@/lib/pipeline-backend';
-
-const rawBackendUrl = process.env.BACKEND_URL || '';
-const BACKEND_URL = rawBackendUrl.startsWith('http') ? rawBackendUrl : '';
+import { getBackendConfig } from '@/lib/pipeline-backend-health';
 
 export const runtime = 'nodejs';
 
@@ -21,12 +19,13 @@ export async function GET(
     return NextResponse.json({ error: 'jobId is required' }, { status: 400 });
   }
 
-  if (!BACKEND_URL) {
+  const { configured, url: backendUrl } = getBackendConfig();
+  if (!configured) {
     return NextResponse.json({ error: 'BACKEND_URL is not configured' }, { status: 503 });
   }
 
   try {
-    const response = await fetch(`${BACKEND_URL}/api/v1/jobs/${encodeURIComponent(jobId)}`, {
+    const response = await fetch(`${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`, {
       cache: 'no-store',
       headers: backendHeaders(),
       signal: AbortSignal.timeout(15_000),

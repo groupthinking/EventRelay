@@ -13,6 +13,7 @@
 #
 # Usage:
 #   scripts/maintenance/branch-cleanup-delete.sh safe             # delete CLOSE-SAFE branches
+#   scripts/maintenance/branch-cleanup-delete.sh stale            # delete CLOSE-STALE branches
 #   scripts/maintenance/branch-cleanup-delete.sh review           # delete REVIEW branches (after looking)
 #   DRY_RUN=1 scripts/maintenance/branch-cleanup-delete.sh safe   # print actions only
 #
@@ -61,6 +62,13 @@ SAFE_BRANCHES=(
   "v0/ultrathinking-6aaf1beb-2"
 )
 
+
+# No branch currently carries the CLOSE-STALE verdict in
+# docs/branch-cleanup-matrix.csv; this array intentionally starts empty and
+# should be filled in from any future assessment that produces that verdict.
+STALE_BRANCHES=(
+)
+
 REVIEW_BRANCHES=(
   "claude/create-markdown-mermaid"
   "claude/help-github-docs-page"
@@ -89,6 +97,7 @@ archive_and_delete() {
 
 case "${1:-}" in
   safe)   for b in "${SAFE_BRANCHES[@]}";   do archive_and_delete "$b"; done ;;
+  stale)  for b in "${STALE_BRANCHES[@]}";  do archive_and_delete "$b"; done ;;
   review) for b in "${REVIEW_BRANCHES[@]}"; do archive_and_delete "$b"; done ;;
-  *) echo "usage: $0 {safe|review}   (prefix DRY_RUN=1 to preview)"; exit 2 ;;
+  *) echo "usage: $0 {safe|stale|review}   (prefix DRY_RUN=1 to preview)"; exit 2 ;;
 esac
