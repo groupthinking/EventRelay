@@ -3217,16 +3217,16 @@ class TestVideoDetailOffloading:
             f"concurrent callers, only saw {peak}"
         )
 
-    def test_budget_is_shared_with_the_learning_log_walk(self):
-        """Both walk endpoints must draw on ONE budget, not one gate each.
+    def test_budget_is_shared_with_video_listing_and_learning_log_walk(self):
+        """All walk endpoints must draw on ONE budget, not one gate each.
 
         The resource being protected is the single default `ThreadPoolExecutor`,
         sized `min(32, cpu_count + 4)` and therefore as small as five workers.
         Two independent gates of `limit` would each look correct in isolation
         while together occupying every worker -- the exact starvation the gate
-        exists to prevent. So the combined in-flight count across *both*
-        endpoints, driven well past `limit` from each, must still never exceed
-        `limit`.
+        exists to prevent. So the combined in-flight count across `/videos`,
+        `/videos/{video_id}`, and `/learning-log`, driven well past `limit`
+        from each, must still never exceed `limit`.
         """
         import time
 
@@ -3254,6 +3254,8 @@ class TestVideoDetailOffloading:
 
         log_svc.get_learning_log.side_effect = _log
 
+        list_svc = TestListVideosOffloading._service(on_count=_occupy)
+
         async def _run():
             tasks = [
                 asyncio.create_task(
@@ -3266,6 +3268,12 @@ class TestVideoDetailOffloading:
             tasks += [
                 asyncio.create_task(
                     router_module.get_learning_log_v1(data_service=log_svc)
+                )
+                for _ in range(limit)
+            ]
+            tasks += [
+                asyncio.create_task(
+                    router_module.list_videos_v1(limit=50, offset=0, data_service=list_svc)
                 )
                 for _ in range(limit)
             ]
@@ -3287,15 +3295,18 @@ class TestVideoDetailOffloading:
 
         peak, results = asyncio.run(_run())
 
-        # Anti-vacuity: every caller on both endpoints really ran.
-        assert len(results) == 2 * limit
+        # Anti-vacuity: every caller on all three endpoints really ran.
+        assert len(results) == 3 * limit
         assert detail_svc.get_video_detail.call_count == limit
         assert log_svc.get_learning_log.call_count == limit
+        assert list_svc.count_videos.call_count == limit
+        assert list_svc.get_videos_summary.call_count == limit
 
         assert peak == limit, (
-            f"combined peak of {peak} across both walk endpoints with a shared "
-            f"cap of {limit}; a peak of {2 * limit} means each endpoint built "
-            "its own gate and the shared executor is unprotected"
+            f"combined peak of {peak} across /videos, /videos/{{video_id}}, and "
+            f"/learning-log with a shared cap of {limit}; a peak above {limit} "
+            "means at least one endpoint bypassed the shared gate and left the "
+            "executor unprotected"
         )
 
     def test_closed_loops_are_discarded_from_the_gate_registry(self):

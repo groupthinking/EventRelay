@@ -992,9 +992,10 @@ async def list_videos_v1(
 ):
     """Get paginated list of processed videos"""
     try:
-        total, paginated_videos, past_end = await asyncio.to_thread(
-            _collect_videos_page, data_service, limit, offset
-        )
+        async with _get_fs_walk_gate():
+            total, paginated_videos, past_end = await asyncio.to_thread(
+                _collect_videos_page, data_service, limit, offset
+            )
         if past_end:
             return {
                 "videos": [],
