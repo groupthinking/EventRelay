@@ -102,6 +102,7 @@ export function studioEventsEmptyMessage(input: {
   busy: boolean;
   hasCompletedRun: boolean;
   eventCount: number;
+  hasTranscript?: boolean;
   hasArchitecture: boolean;
   artifactCount: number;
   toolCount: number;
@@ -114,7 +115,10 @@ export function studioEventsEmptyMessage(input: {
   if (packReady) {
     return 'This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page.';
   }
-  return 'This run has no extracted events. Transcript and pack identity stay on this page.';
+  if (input.hasTranscript) {
+    return 'This run has no extracted events. Transcript and pack identity stay on this page.';
+  }
+  return 'This run has no extracted events. Pack identity stays on this page.';
 }
 
 export function studioPromotePackWorkbench(input: {
@@ -384,7 +388,7 @@ export function studioExportToastMessage(input: {
   if (!input.ok || input.kind === 'empty') {
     return {
       tone: 'error',
-      text: input.error || 'Export failed — nothing to export yet.',
+      text: `${input.error || 'Export failed — nothing to export yet.'}${fileBit}`,
     };
   }
   if (input.kind === 'pack') {

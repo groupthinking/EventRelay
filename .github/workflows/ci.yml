@@ -155,4 +155,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev,youtube]"
       - name: Run tests
-        run: PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 --override-ini="addopts=" --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
+        # This is a fast unit-only sanity job. It measures coverage but must NOT
+        # enforce the 88.1833% baseline: that figure (19,761 / 22,409 statements)
+        # was measured over the FULL `tests/` suite in coverage.yml, which is the
+        # authoritative gate. The unit subset (integration + one workflow file +
+        # all top-level/e2e tests excluded) exercises strictly fewer code paths
+        # against the same package-wide denominator, so a full-suite floor here
+        # would fail every run. See coverage.yml for the enforced baseline.
+        run: >-
+          PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120
+          --cov=src/youtube_extension
+          --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"

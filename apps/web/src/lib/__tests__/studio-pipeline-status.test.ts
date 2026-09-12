@@ -231,6 +231,22 @@ describe('studio-pipeline-status', () => {
     );
   });
 
+  it('does not claim a transcript exists when a completed run only has pack identity', () => {
+    const emptyNoTranscript = studioEventsEmptyMessage({
+      busy: false,
+      hasCompletedRun: true,
+      eventCount: 0,
+      hasArchitecture: false,
+      artifactCount: 0,
+      toolCount: 0,
+      hasTranscript: false,
+    });
+
+    expect(emptyNoTranscript.toLowerCase()).toMatch(/no extracted events/);
+    expect(emptyNoTranscript.toLowerCase()).not.toContain('transcript');
+    expect(emptyNoTranscript.toLowerCase()).toContain('pack identity');
+  });
+
   it('enables export from pack formation when events[] is empty', () => {
     expect(
       studioCanExport({
@@ -250,6 +266,13 @@ describe('studio-pipeline-status', () => {
         toolCount: 0,
       }),
     ).toBe(false);
+
+    const dashboardPanels = readFileSync(
+      join(process.cwd(), 'src/components/dashboard/panels.tsx'),
+      'utf8',
+    );
+    expect(dashboardPanels).toContain('actionsFromStudioRun');
+    expect(dashboardPanels).toContain('studioCanExport');
   });
 
   it('names an invalid ?video= handoff instead of staying silent', () => {
@@ -414,6 +437,13 @@ describe('studio-pipeline-status', () => {
     expect(retired).not.toMatch(/durable Workflow DevKit/);
   });
 
+  it('does not claim live deploy in retired studio without a verified receipt guard', () => {
+    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    expect(retired).toContain('studioVerifiedLiveUrl');
+    expect(retired).not.toContain('setActionMessage(`Deploy live: ${kick.live_url}`)');
+    expect(retired).not.toContain('setActionMessage(`Deploy ready: ${polled.live_url}`)');
+  });
+
   it('renders review_action as a card with status, title, and detail', () => {
     const review = studioActionCard({
       tool: 'review_action',
@@ -438,18 +468,20 @@ describe('studio-pipeline-status', () => {
 
   it('returns a toast for export success and failure including filename', () => {
     expect(studioExportFilename('AI Gold Rushes')).toBe('AI Gold Rushes.zip');
+    const filename = 'AI Gold Rushes.zip';
     const pack = studioExportToastMessage({
       ok: true,
       kind: 'pack',
-      filename: 'AI Gold Rushes.zip',
+      filename,
     });
     expect(pack.tone).toBe('success');
     expect(pack.text).toMatch(/pack exported/i);
-    expect(pack.text).toContain('AI Gold Rushes.zip');
+    expect(pack.text).toContain(filename);
     expect(studioExportToastMessage({ ok: true, kind: 'sop' }).tone).toBe('success');
-    const failed = studioExportToastMessage({ ok: false, error: 'Disk full' });
+    const failed = studioExportToastMessage({ ok: false, error: 'Disk full', filename });
     expect(failed.tone).toBe('error');
-    expect(failed.text).toBe('Disk full');
+    expect(failed.text).toContain('Disk full');
+    expect(failed.text).toContain(filename);
     expect(studioExportToastMessage({ ok: false, kind: 'empty' }).tone).toBe('error');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');

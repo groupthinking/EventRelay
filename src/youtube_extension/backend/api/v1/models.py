@@ -30,8 +30,12 @@ T = TypeVar("T")
 # tolerates uppercase schemes/hosts. The pattern stays anchored to the
 # youtube.com/youtu.be family + an 11-char id, so only *legitimate* YouTube URLs
 # pass; non-YouTube hosts are still rejected.
+# Full-string match: accept only canonical YouTube URLs with an 11-char video ID
+# and optional query params, while rejecting trailing whitespace / CLI flags such
+# as "--config-locations=/etc/passwd" that would otherwise be passed through to
+# yt-dlp as additional arguments.
 _YOUTUBE_URL_REGEX = re.compile(
-    r"^(https?://)?((?:www\.|m\.|music\.)?youtube\.com/(?:watch\?v=|embed/|shorts/)|(?:www\.)?youtu\.be/)[a-zA-Z0-9_-]{11}",
+    r"^(https?://)?((?:www\.|m\.|music\.)?youtube\.com/(?:watch\?v=|embed/|shorts/)|(?:www\.)?youtu\.be/)[a-zA-Z0-9_-]{11}(?:[?&][^\s]*)?$",
     re.IGNORECASE,
 )
 
