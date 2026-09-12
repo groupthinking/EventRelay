@@ -1,5 +1,9 @@
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
-import { stackChecksFromPackTools, type ChecklistItem } from '@/lib/linked-sop';
+import {
+  stackChecksFromPackTools,
+  type ChecklistItem,
+  type LinkedEntity,
+} from '@/lib/linked-sop';
 import type {
   VideoPackArchitecture,
   VideoPackArtifact,
@@ -86,6 +90,73 @@ export function studioPackFormation(pack: VideoPackCitation | null | undefined):
   };
 }
 
+export function studioFormationSupplementalEntities(
+  tools: VideoPackStackTool[] | null | undefined,
+  entities: LinkedEntity[] | null | undefined,
+): LinkedEntity[] {
+  if ((tools?.length ?? 0) > 0) return [];
+  return entities ?? [];
+}
+
+export function studioEventsEmptyMessage(input: {
+  busy: boolean;
+  hasCompletedRun: boolean;
+  eventCount: number;
+  hasTranscript?: boolean;
+  hasArchitecture: boolean;
+  artifactCount: number;
+  toolCount: number;
+}): string {
+  if (input.eventCount > 0) return '';
+  if (input.busy) return 'Extracting events…';
+  if (!input.hasCompletedRun) return 'Events show up after Run.';
+  const packReady =
+    input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
+  if (packReady) {
+    return 'This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page.';
+  }
+  if (input.hasTranscript) {
+    return 'This run has no extracted events. Transcript and pack identity stay on this page.';
+  }
+  return 'This run has no extracted events. Pack identity stays on this page.';
+}
+
+export function studioPromotePackWorkbench(input: {
+  eventCount: number;
+  hasArchitecture: boolean;
+  artifactCount: number;
+  toolCount: number;
+}): boolean {
+  if (input.eventCount > 0) return false;
+  return input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
+}
+
+export function studioCanExport(input: {
+  transcript?: string | null;
+  eventCount?: number;
+  hasArchitecture?: boolean;
+  artifactCount?: number;
+  toolCount?: number;
+  hasLinkedSopSteps?: boolean;
+  hasProjectScaffold?: boolean;
+}): boolean {
+  const transcript = input.transcript?.trim() ?? '';
+  return (
+    transcript.length >= 40 ||
+    (input.eventCount ?? 0) > 0 ||
+    Boolean(input.hasArchitecture) ||
+    (input.artifactCount ?? 0) > 0 ||
+    (input.toolCount ?? 0) > 0 ||
+    Boolean(input.hasLinkedSopSteps) ||
+    Boolean(input.hasProjectScaffold)
+  );
+}
+
+export function studioInvalidHandoffMessage(raw: string): string {
+  const preview = raw.trim() || 'that input';
+  return `Need a valid YouTube URL. "${preview}" is not a watchable video.`;
+}
+
 export function studioPasteOutcomeMessage(input: {
   hasUsableTranscript: boolean;
   packCitation?: string | null;
@@ -97,4 +168,237 @@ export function studioPasteOutcomeMessage(input: {
     return `Identity pack ${input.packCitation}. No usable transcript.`;
   }
   return 'Pack emit failed: verification failed (source_url + source_hash required).';
+}
+
+export const STUDIO_PRODUCT_TAGLINE =
+  'Paste a YouTube URL. UVAI builds a Video Pack you can export and act on.';
+
+export const STUDIO_TRANSCRIPT_TYPICAL_SECONDS = 45;
+
+export type StudioTranscriptStageId =
+  | 'idle'
+  | 'pack'
+  | 'captions'
+  | 'transcript'
+  | 'events'
+  | 'ready'
+  | 'failed';
+
+export function studioTranscriptStage(input: {
+  busy: boolean;
+  elapsedSeconds: number;
+  progress?: number;
+  hasPack?: boolean;
+  hasTranscript?: boolean;
+  hasFailed?: boolean;
+}): { id: StudioTranscriptStageId; label: string } {
+  if (input.hasFailed) {
+    return { id: 'failed', label: 'Transcript failed' };
+  }
+  if (input.hasTranscript && !input.busy) {
+    return { id: 'ready', label: 'Transcript ready' };
+  }
+  if (!input.busy) {
+    return { id: 'idle', label: 'Waiting for a video' };
+  }
+  if (input.hasTranscript) {
+    return { id: 'events', label: 'Extracting events' };
+  }
+  const progress = input.progress ?? 0;
+  if (progress >= 10 || input.elapsedSeconds >= 18) {
+    return { id: 'transcript', label: 'Building transcript' };
+  }
+  if (input.hasPack || progress >= 5 || input.elapsedSeconds >= 6) {
+    return { id: 'captions', label: 'Fetching captions' };
+  }
+  return { id: 'pack', label: 'Pack identity' };
+}
+
+export function studioTranscriptEtaLabel(
+  elapsedSeconds: number,
+  typicalSeconds = STUDIO_TRANSCRIPT_TYPICAL_SECONDS,
+): string {
+  const remaining = Math.max(0, typicalSeconds - Math.max(0, elapsedSeconds));
+  if (remaining === 0) {
+    return 'Still working — typical run is about 45s';
+  }
+  return `About ${remaining}s left (typical ~45s)`;
+}
+
+export function studioCanRetryTranscript(input: {
+  busy: boolean;
+  hasFailed?: boolean;
+  retryable?: boolean;
+  elapsedSeconds?: number;
+}): boolean {
+  if (input.busy) {
+    return (input.elapsedSeconds ?? 0) >= 90;
+  }
+  return Boolean(input.hasFailed && input.retryable !== false);
+}
+
+const STUDIO_IN_FLIGHT_DEPLOY_STATUSES = new Set(['pending', 'running', 'queued', 'in_progress']);
+
+/** A real deploy receipt is a parseable https URL with a hostname. */
+export function studioVerifiedLiveUrl(liveUrl?: string | null): string | null {
+  const raw = liveUrl?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'https:') return null;
+    if (!parsed.hostname || !/[a-z0-9]/i.test(parsed.hostname)) return null;
+    return raw;
+  } catch {
+    return null;
+  }
+}
+
+/** A real deploy receipt is an https live URL. Workflow "completed" is not. */
+export function studioHasDeployReceipt(liveUrl?: string | null): boolean {
+  return studioVerifiedLiveUrl(liveUrl) !== null;
+}
+
+/** Receipts stay on the video that produced them. Switching videos or a malformed URL clears them. */
+export function studioDeployReceiptForSelection(input: {
+  selectedVideoId?: string | null;
+  receiptVideoId?: string | null;
+  liveUrl?: string | null;
+}): string | null {
+  if (!input.selectedVideoId || input.selectedVideoId !== input.receiptVideoId) {
+    return null;
+  }
+  return studioVerifiedLiveUrl(input.liveUrl);
+}
+
+export function studioDeployOutcomeMessage(input: {
+  liveUrl?: string | null;
+  runStatus?: string | null;
+  error?: string | null;
+  kind?: string | null;
+  message?: string | null;
+  jobId?: string | null;
+  jobStatus?: string | null;
+}): string {
+  const error = input.error?.trim();
+  if (error) return error;
+  const receipt = studioVerifiedLiveUrl(input.liveUrl);
+  if (receipt) {
+    return `Deploy receipt: ${receipt}`;
+  }
+  const jobId = input.jobId?.trim();
+  const jobStatus = input.jobStatus?.trim();
+  const terminalJob = new Set(['complete', 'completed', 'succeeded', 'failed', 'error', 'cancelled']);
+  if (jobId && jobStatus && !terminalJob.has(jobStatus.toLowerCase())) {
+    return `Deploy job ${jobId} still ${jobStatus}`;
+  }
+  const status = (input.runStatus || '').toLowerCase();
+  if (STUDIO_IN_FLIGHT_DEPLOY_STATUSES.has(status)) {
+    return `Deploy still ${status}. Waiting for a verified https live URL.`;
+  }
+  if (status === 'failed' || status === 'cancelled' || status === 'error') {
+    return `Deploy ${status}. No verified live URL.`;
+  }
+  const detail = input.message?.trim();
+  if ((input.kind === 'handoff' || input.kind === 'job') && detail) return detail;
+  return 'Deploy attempt ended. No verified deploy receipt.';
+}
+
+export function studioDeployButtonLabel(_hasReceipt: boolean): string {
+  return 'Attempt deploy';
+}
+
+export function studioDeployEnabledHint(hasReceipt: boolean): string {
+  if (hasReceipt) return 'A live URL was returned. That is the receipt — not the enabled button.';
+  return 'Starts an attempt. UNKNOWN checks are not a deploy receipt.';
+}
+
+export type StudioPlayerPhase = 'empty' | 'loading' | 'ready' | 'error';
+
+export function studioPlayerPhase(input: {
+  videoId?: string | null;
+  loaded?: boolean;
+  failed?: boolean;
+  timedOut?: boolean;
+}): StudioPlayerPhase {
+  if (!input.videoId) return 'empty';
+  if (input.failed) return 'error';
+  if (input.loaded) return 'ready';
+  if (input.timedOut) return 'error';
+  return 'loading';
+}
+
+export function studioPlayerOverlay(phase: StudioPlayerPhase): string | null {
+  if (phase === 'loading') return 'Loading video…';
+  if (phase === 'error') return 'Video did not load. Retry or open on YouTube.';
+  return null;
+}
+
+export type StudioExportToastKind = 'pack' | 'sop' | 'scaffold' | 'empty';
+
+export function studioExportFilename(projectName?: string | null): string {
+  const base = (projectName || 'uvai-project').trim() || 'uvai-project';
+  return base.toLowerCase().endsWith('.zip') ? base : `${base}.zip`;
+}
+
+export function studioActionCard(action: {
+  tool: string;
+  status: string;
+  result?: string;
+}): {
+  title: string;
+  statusLabel: string;
+  detail: string;
+  kind: 'review' | 'tool';
+} {
+  const isReview = action.tool === 'review_action';
+  const statusLabel =
+    action.status === 'proposed'
+      ? 'Needs review'
+      : action.status === 'completed'
+        ? 'Done'
+        : action.status === 'failed'
+          ? 'Failed'
+          : action.status;
+  const title = isReview
+    ? 'Review this result'
+    : action.tool
+        .split('_')
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+  const detail =
+    action.result?.trim() ||
+    (isReview ? 'Open the evidence on this page before you act.' : 'No detail from this tool.');
+  return {
+    title,
+    statusLabel,
+    detail,
+    kind: isReview ? 'review' : 'tool',
+  };
+}
+
+export function studioExportToastMessage(input: {
+  ok: boolean;
+  kind?: StudioExportToastKind;
+  error?: string;
+  filename?: string;
+}): { tone: 'success' | 'error'; text: string } {
+  const file = input.filename?.trim();
+  const fileBit = file ? ` (${file})` : '';
+  if (!input.ok || input.kind === 'empty') {
+    return {
+      tone: 'error',
+      text: `${input.error || 'Export failed — nothing to export yet.'}${fileBit}`,
+    };
+  }
+  if (input.kind === 'pack') {
+    return { tone: 'success', text: `Pack exported${fileBit} — check your downloads.` };
+  }
+  if (input.kind === 'sop') {
+    return {
+      tone: 'success',
+      text: `SOP and deploy files exported${fileBit} — check your downloads.`,
+    };
+  }
+  return { tone: 'success', text: `Export downloaded${fileBit}.` };
 }

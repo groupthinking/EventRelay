@@ -27,6 +27,7 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioVerifiedLiveUrl,
   type StudioPipelineCheck,
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
@@ -516,7 +517,7 @@ export default function VideoWorkflowStudio() {
   };
 
   /**
-   * Act on findings — durable Workflow DevKit path (video → transcript → action agent).
+   * Act on findings — Workflow DevKit path (video → transcript → action agent).
    * Survives reloads better than a single long request; poll by runId.
    */
   const handleActOnFindings = async () => {
@@ -530,7 +531,7 @@ export default function VideoWorkflowStudio() {
 
     setActionsBusy(true);
     setWorkflowActions(null);
-    setActionMessage('Starting durable video-to-actions workflow…');
+    setActionMessage('Starting video-to-actions run…');
 
     try {
       const started = await startVideoToActions({
@@ -540,8 +541,8 @@ export default function VideoWorkflowStudio() {
       if (!started.ok || !started.runId) {
         setActionMessage(
           started.error
-            ? `Could not start durable workflow: ${started.error}`
-            : 'Could not start durable workflow. Check Workflow DevKit install and withWorkflow config.',
+            ? `Could not start the run: ${started.error}`
+            : 'Could not start the run. Check Workflow DevKit install and withWorkflow config.',
         );
         return;
       }
@@ -598,7 +599,7 @@ export default function VideoWorkflowStudio() {
     deployAbortRef.current = deployAbort;
 
     setDeployBusy(true);
-    setActionMessage('Starting durable Studio deploy…');
+    setActionMessage('Starting Studio deploy…');
 
     try {
       const started = await startStudioDeploy({
@@ -622,17 +623,15 @@ export default function VideoWorkflowStudio() {
         setDeployRunId(started.runId);
         setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
         const polled = await pollStudioDeploy(started.runId, {
-          attempts: 24,
-          delayMs: 2000,
           signal: deployAbort.signal,
         });
-        const live = polled.result?.live_url;
+        const live = studioVerifiedLiveUrl(polled.result?.live_url);
         if (live) setDeployLiveUrl(live);
         if (polled.result?.github_repo) setDeployRepo(polled.result.github_repo);
         if (polled.result?.jobId) setDeployJobId(polled.result.jobId);
 
         if (live) {
-          setActionMessage(`Deploy ready: ${live} (run ${started.runId})`);
+          setActionMessage(`Deploy receipt: ${live} (run ${started.runId})`);
           return;
         }
         if (polled.result?.kind === 'handoff') {
@@ -667,7 +666,8 @@ export default function VideoWorkflowStudio() {
         });
         jobId = kick.jobId;
         if (kick.jobId) setDeployJobId(kick.jobId);
-        if (kick.live_url) setDeployLiveUrl(kick.live_url);
+        const kickLive = studioVerifiedLiveUrl(kick.live_url);
+        if (kickLive) setDeployLiveUrl(kickLive);
         if (kick.github_repo) setDeployRepo(kick.github_repo);
 
         if (!kick.ok && !kick.jobId) {
@@ -679,8 +679,8 @@ export default function VideoWorkflowStudio() {
           return;
         }
 
-        if (kick.live_url) {
-          setActionMessage(`Deploy live: ${kick.live_url}`);
+        if (kickLive) {
+          setActionMessage(`Deploy receipt: ${kickLive}`);
           return;
         }
 
@@ -699,11 +699,12 @@ export default function VideoWorkflowStudio() {
       }
 
       const polled = await pollStudioJob(jobId, { attempts: 6, delayMs: 1500 });
-      if (polled.live_url) setDeployLiveUrl(polled.live_url);
+      const polledLive = studioVerifiedLiveUrl(polled.live_url);
+      if (polledLive) setDeployLiveUrl(polledLive);
       if (polled.github_repo) setDeployRepo(polled.github_repo);
 
-      if (polled.live_url) {
-        setActionMessage(`Deploy ready: ${polled.live_url}`);
+      if (polledLive) {
+        setActionMessage(`Deploy receipt: ${polledLive}`);
       } else if (polled.jobStatus === 'failed' || polled.jobStatus === 'error') {
         setActionMessage(
           `Deploy job ${jobId} failed${polled.message ? `: ${polled.message}` : ''}. Export package for manual handoff.`,
@@ -809,7 +810,7 @@ export default function VideoWorkflowStudio() {
             <div className="text-sm text-slate-600">
               <span className="font-semibold text-slate-950">Studio</span> builds local planning drafts.
               {' '}
-              <span className="font-semibold text-slate-950">Act on findings</span> runs a durable video-to-transcript-to-actions workflow.
+              <span className="font-semibold text-slate-950">Act on findings</span> runs a video-to-transcript-to-actions workflow.
               {' '}
               <span className="font-semibold text-slate-950">Dashboard</span> runs the live SSE agent pipeline.
               {' '}
@@ -1128,7 +1129,7 @@ export default function VideoWorkflowStudio() {
                   {activeAction === 'deploy' && (
                     <div className="space-y-3">
                       <p className="leading-6">
-                        Deploy starts a signed-in durable workflow, then falls back to{' '}
+                        Deploy starts a signed-in run, then falls back to{' '}
                         <code className="text-xs">POST /api/pipeline</code> only if start() is unavailable.
                         {deployBusy ? ' (in progress…)' : ''} Sign in first. If the backend is down, use Export.
                       </p>

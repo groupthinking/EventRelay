@@ -78,4 +78,28 @@ describe('action agent store video review boundary', () => {
     );
     expect(useActionAgentStore.getState().lifecycle.actions).toEqual(fulfilled);
   });
+
+  it('deduplicates repeated planned actions before dispatch', async () => {
+    const duplicateAction = preparedActions[0];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            success: true,
+            provider: 'test',
+            actions: [duplicateAction, { ...duplicateAction, input: { title: 'Review the source' } }],
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await useActionAgentStore
+      .getState()
+      .runFromTranscript('A sufficiently long verified transcript for review.', 'Video A', 'video-a');
+
+    expect(useActionAgentStore.getState().lifecycle.actions).toHaveLength(2);
+    expect(useActionAgentStore.getState().lifecycle.actions[0]).toEqual(duplicateAction);
+  });
 });

@@ -34,7 +34,8 @@ function restoreEnv() {
   else process.env.STRIPE_PRICE_PRO_ANNUAL = originalEnv.annual;
   if (originalEnv.appUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
   else process.env.NEXT_PUBLIC_APP_URL = originalEnv.appUrl;
-  process.env.NODE_ENV = originalEnv.nodeEnv;
+  // @ts-expect-error read-only property
+    process.env.NODE_ENV = originalEnv.nodeEnv;
 }
 
 afterEach(restoreEnv);
@@ -86,11 +87,19 @@ describe('workflowProPriceLabel', () => {
 describe('resolveCheckoutAppUrl', () => {
   it('prefers NEXT_PUBLIC_APP_URL when set', () => {
     process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
+    process.env.NODE_ENV = 'test';
     expect(resolveCheckoutAppUrl()).toBe('https://preview.example.com');
   });
 
   it('defaults production checkout redirects to uvai.io', () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
+    // @ts-expect-error read-only property
+    process.env.NODE_ENV = 'production';
+    expect(resolveCheckoutAppUrl()).toBe('https://uvai.io');
+  });
+
+  it('ignores NEXT_PUBLIC_APP_URL in production (fail-closed)', () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
     process.env.NODE_ENV = 'production';
     expect(resolveCheckoutAppUrl()).toBe('https://uvai.io');
   });
@@ -107,6 +116,7 @@ describe('resolveStripePriceId', () => {
   it('uses documented Workflow Pro live price IDs as last-resort fallbacks outside production', () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
     delete process.env.STRIPE_PRICE_PRO_ANNUAL;
+    // @ts-expect-error read-only property
     process.env.NODE_ENV = 'test';
     expect(resolveStripePriceId(false)).toBe(LIVE_WORKFLOW_PRO_MONTHLY);
     expect(resolveStripePriceId(true)).toBe(LIVE_WORKFLOW_PRO_ANNUAL);
@@ -120,12 +130,14 @@ describe('resolveStripePriceId', () => {
 describe('requireStripePriceId', () => {
   it('throws in production when env price is unset', () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
+    // @ts-expect-error read-only property
     process.env.NODE_ENV = 'production';
     expect(() => requireStripePriceId(false)).toThrow('STRIPE_PRICE_PRO_MONTHLY missing');
   });
 
   it('throws in production when annual env price is unset', () => {
     delete process.env.STRIPE_PRICE_PRO_ANNUAL;
+    // @ts-expect-error read-only property
     process.env.NODE_ENV = 'production';
     expect(() => requireStripePriceId(true)).toThrow('STRIPE_PRICE_PRO_ANNUAL missing');
   });
