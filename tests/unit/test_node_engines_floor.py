@@ -118,6 +118,11 @@ def _declared_floor() -> tuple[int, int, int]:
     return floor
 
 
+def test_declared_floor_is_node_22() -> None:
+    """Root engines floor must remain on Node 22 for Vercel/runtime parity."""
+    assert _declared_floor()[0] == 22
+
+
 def _locked_floor(name: str) -> tuple[int, int, int] | None:
     """Strictest declared Node floor for any copy of `name` in the lockfile."""
     strictest: tuple[int, int, int] | None = None

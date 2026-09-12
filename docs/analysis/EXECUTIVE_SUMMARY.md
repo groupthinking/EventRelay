@@ -19,6 +19,15 @@
 > [REMEDIATION_PLAN.md](./REMEDIATION_PLAN.md). The assessment below is
 > retained as a historical snapshot.
 
+### Current Verification (2026-08-04)
+
+The historical findings are closed in the current tree: pickle was replaced
+with JSON, the old XSS component and vulnerable dependency chain are gone, and
+subprocess calls use list-form arguments. Stripe environment generators emit
+empty values when keys are absent, and CI now enforces the 88.1833% coverage
+baseline. Remaining launch work is operational (staging, load testing,
+runbooks, and alerting), not a re-opened SEC-001..004 finding.
+
 The EventRelay codebase shows strong architectural vision but requires targeted security fixes and code consolidation before production deployment.
 
 ### Key Metrics

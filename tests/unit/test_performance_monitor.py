@@ -1396,6 +1396,28 @@ class TestRecordMetricsBatch:
 
         assert [r[1] for r in rows] == [i.isoformat() for i in instants]
 
+    async def test_batch_preserves_timestamp_order_for_input_samples(self, monitor):
+        """Rows retain the timestamp order of the submitted samples."""
+        instants = [
+            datetime(2026, 1, 1, 0, 0, second, tzinfo=timezone.utc)
+            for second in range(3)
+        ]
+
+        with patch.object(
+            self._impl_module(), "datetime", self._walking_clock(instants)
+        ):
+            await monitor.record_metrics(self._samples(3))
+
+        conn = sqlite3.connect(monitor.db_path)
+        try:
+            rows = conn.execute(
+                "SELECT timestamp FROM performance_metrics ORDER BY rowid"
+            ).fetchall()
+        finally:
+            conn.close()
+
+        assert [row[0] for row in rows] == [instant.isoformat() for instant in instants]
+
     async def test_empty_batch_does_no_database_work(self, monitor):
         calls: list[int] = []
         with patch.object(perf_mod.sqlite3, "connect", self._counting_connect(calls)):

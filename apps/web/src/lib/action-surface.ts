@@ -41,7 +41,7 @@ export interface ScaffoldPackage {
   files: Record<string, string>;
 }
 
-function safeProjectName(name: string): string {
+export function safeProjectName(name: string): string {
   return (
     name
       .toLowerCase()

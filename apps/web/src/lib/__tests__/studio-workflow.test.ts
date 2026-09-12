@@ -5,9 +5,40 @@ import {
   pollVideoToActions,
   startStudioDeploy,
   startVideoToActions,
+  isTransientWorkflowRunReadError,
+  isUnreadWorkflowRun,
+  workflowReturnErrorMessage,
 } from '@/lib/studio-workflow';
 
 describe('studio-workflow (WDK Product v1)', () => {
+  it('prefers a failed-run cause over a generic unread-return message', () => {
+    const cause = new Error('Deploy job job_1 still complete');
+    const failed = new Error('Workflow run failed');
+    Object.assign(failed, { cause });
+    expect(workflowReturnErrorMessage(failed)).toBe('Deploy job job_1 still complete');
+    expect(workflowReturnErrorMessage(new Error('fetch failed'))).toBe('fetch failed');
+  });
+
+  it('treats Request-parse GET failures as unread workflow run, not a terminal HOLD', () => {
+    const parseErr = new TypeError('Failed to parse URL from [object Request]');
+    Object.assign(parseErr, {
+      cause: Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' }),
+    });
+    expect(isTransientWorkflowRunReadError(parseErr)).toBe(true);
+    expect(
+      isUnreadWorkflowRun({
+        status: 500,
+        error: 'Failed to read workflow run',
+      }),
+    ).toBe(true);
+    expect(
+      isUnreadWorkflowRun({
+        runStatus: 'completed',
+        result: { kind: 'live', live_url: 'https://ready.example.app' },
+      }),
+    ).toBe(false);
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -184,6 +215,25 @@ describe('studio-workflow (WDK Product v1)', () => {
     );
   });
 
+  it('startStudioDeploy sends a ready transcript so deploy can skip YouTube re-fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, runId: 'wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const transcript =
+      'Studio Video Pack for XYMcBrFSJ4c already has a usable transcript ready for deploy.';
+    const started = await startStudioDeploy({
+      url: 'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      transcript,
+    });
+    expect(started.ok).toBe(true);
+    const init = fetchMock.mock.calls[0]?.[1] as { body?: string };
+    const body = JSON.parse(String(init.body)) as { transcript?: string };
+    expect(body.transcript).toBe(transcript);
+  });
+
   it('pollStudioDeploy returns on handoff result', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -217,6 +267,68 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(started.ok).toBe(false);
   });
 
+  it('pollStudioDeploy keeps polling when GET cannot read the workflow run yet', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({
+          ok: false,
+          runId: 'wrun_01M2A9Z9SYXD59NG211W9N8EQA',
+          error: 'Failed to read workflow run',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2A9Z9SYXD59NG211W9N8EQA',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://ready.example.app' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_01M2A9Z9SYXD59NG211W9N8EQA', {
+      attempts: 4,
+      delayMs: 1,
+    });
+    expect(poll.result?.live_url).toBe('https://ready.example.app');
+    expect(poll.error).not.toBe('Failed to read workflow run');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('pollStudioDeploy keeps polling when completed has no result yet', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_unread',
+          runStatus: 'completed',
+          error: 'Failed to read workflow return value',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_unread',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://ready.example.app' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_unread', { attempts: 4, delayMs: 1 });
+    expect(poll.result?.live_url).toBe('https://ready.example.app');
+    expect(poll.error).toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('pollStudioDeploy returns immediately on 404', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: false,
@@ -227,6 +339,74 @@ describe('studio-workflow (WDK Product v1)', () => {
     const poll = await pollStudioDeploy('wrun_missing', { attempts: 5, delayMs: 1 });
     expect(poll.status).toBe(404);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('pollStudioDeploy keeps polling while the run is still running until a live URL exists', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2ABB1NJ5TFZ153CTRNTPNW9',
+          runStatus: 'running',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2ABB1NJ5TFZ153CTRNTPNW9',
+          runStatus: 'running',
+          result: { kind: 'job', jobId: 'job_96f498640b', jobStatus: 'transcribing' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2ABB1NJ5TFZ153CTRNTPNW9',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://xy.vercel.app' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_01M2ABB1NJ5TFZ153CTRNTPNW9', {
+      attempts: 5,
+      delayMs: 1,
+    });
+    expect(poll.result?.live_url).toBe('https://xy.vercel.app');
+    expect(poll.runStatus).toBe('completed');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('pollStudioDeploy exhausted in-flight cites the job status, not UNKNOWN checks', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        runId: 'wrun_01M2ABB1NJ5TFZ153CTRNTPNW9',
+        runStatus: 'running',
+        result: { kind: 'job', jobId: 'job_96f498640b', jobStatus: 'transcribing' },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_01M2ABB1NJ5TFZ153CTRNTPNW9', {
+      attempts: 2,
+      delayMs: 1,
+    });
+    const text = `${poll.error || ''} ${poll.message || ''}`;
+    expect(text).toMatch(/job_96f498640b still transcribing/);
+    expect(text).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(text).not.toMatch(/Failed to read workflow run/);
+    expect(text).not.toMatch(/Failed to read workflow return value/);
+    expect(text).not.toMatch(/BACKEND_URL is not configured/);
+    expect(poll.runStatus).toBe('running');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('pollStudioDeploy stops when the abort signal fires', async () => {

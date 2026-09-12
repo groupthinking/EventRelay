@@ -131,8 +131,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+    allow_headers=["Accept", "Accept-Language", "Authorization", "Content-Language", "Content-Type", "Origin", "X-API-Key", "X-Requested-With"],
 )
 
 # Rate limiting

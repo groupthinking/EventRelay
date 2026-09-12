@@ -7,6 +7,7 @@ import { grokChatCompletion } from '@/lib/billing/grok-client';
 import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/paid-tier-model';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
+import { hasAiGatewayKey } from '@/lib/vercel-ai-gateway';
 
 type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -121,7 +122,7 @@ export async function POST(request: Request) {
       });
     }
 
-    if (!process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL_AI_GATEWAY_API_KEY && !process.env.VERCEL_API_KEY) {
+    if (!hasAiGatewayKey()) {
       return NextResponse.json(
         {
           answer: 'Chat requires either BACKEND_URL or AI_GATEWAY_API_KEY to be configured.',
