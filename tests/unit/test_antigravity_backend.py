@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import pytest
 
@@ -11,6 +12,7 @@ from youtube_extension.services.agents.antigravity_backend import (
     AntigravityBackendConfig,
     AntigravityConfigurationError,
     AntigravityExecutionBlocked,
+    AntigravityHookPolicy,
     AntigravityMCPServer,
     compare_agent_factory_runs,
 )
@@ -56,6 +58,17 @@ def config(**changes: Any) -> AntigravityBackendConfig:
     return AntigravityBackendConfig(**values)
 
 
+def hook_policy(**changes: Any) -> AntigravityHookPolicy:
+    values = {
+        "source_type": "repository",
+        "source": "https://github.com/groupthinking/antigravity-hook-policy",
+        "target": "/workspace/hook-policy",
+        "identity": "git:7f3c2f2",
+    }
+    values.update(changes)
+    return AntigravityHookPolicy(**values)
+
+
 @pytest.mark.asyncio
 async def test_execute_builds_bounded_request_and_receipt() -> None:
     transport = FakeTransport()
@@ -86,6 +99,32 @@ async def test_execute_builds_bounded_request_and_receipt() -> None:
     assert "pack-1" in payload["input"]
 
 
+def test_build_payload_mounts_hook_policy_outside_writable_workspace() -> None:
+    backend = AntigravityBackend(
+        config(
+            hook_policy=hook_policy(),
+            hook_tamper_probe_path="/workspace/hook-policy/.agents/hooks.json",
+        ),
+        FakeTransport(),
+    )
+
+    payload = backend.build_payload("Verify the managed hook policy")
+
+    assert payload["environment"] == {
+        "type": "remote",
+        "sources": [
+            {
+                "type": "repository",
+                "source": "https://github.com/groupthinking/antigravity-hook-policy",
+                "target": "/workspace/hook-policy",
+            }
+        ],
+    }
+    assert "Tamper-resistance probe" in payload["input"]
+    assert "/workspace/hook-policy/.agents/hooks.json" in payload["input"]
+    assert "denial" in payload["input"]
+
+
 @pytest.mark.asyncio
 async def test_disabled_backend_cannot_execute() -> None:
     backend = AntigravityBackend(config(enabled=False), FakeTransport())
@@ -104,6 +143,18 @@ async def test_live_transport_requires_two_explicit_gates() -> None:
         config(allow_live_execution=True), FakeTransport(is_live=True)
     )
     with pytest.raises(AntigravityExecutionBlocked, match="fail open"):
+        await backend.execute("do work")
+
+    backend = AntigravityBackend(
+        config(
+            allow_live_execution=True,
+            acknowledge_fail_open_hooks=True,
+        ),
+        FakeTransport(is_live=True),
+    )
+    with pytest.raises(
+        AntigravityConfigurationError, match="read-only hook policy source"
+    ):
         await backend.execute("do work")
 
 
@@ -190,6 +241,80 @@ async def test_receipt_survives_transport_exception() -> None:
 
     assert receipt.status == "failed"
     assert receipt.error == "TimeoutError: provider timed out"
+
+
+@pytest.mark.asyncio
+async def test_receipt_records_hook_policy_identity_and_probe_denial() -> None:
+    backend = AntigravityBackend(
+        config(
+            hook_policy=hook_policy(identity="git:9f4e1a1"),
+            hook_tamper_probe_path="/workspace/hook-policy/.agents/hooks.json",
+        ),
+        FakeTransport(
+            {
+                "id": "interaction-3",
+                "environment_id": "environment-3",
+                "status": "completed",
+                "usage": {"total_tokens": 99},
+                "policy_result": {
+                    "hook_policy": "enforced",
+                    "tamper_probe": {
+                        "attempted": True,
+                        "target": "/workspace/hook-policy/.agents/hooks.json",
+                        "result": "denied",
+                        "reason": "PermissionError: read-only mount",
+                    },
+                },
+            }
+        ),
+    )
+
+    receipt = await backend.execute("verify hook policy")
+
+    assert receipt.policy["hook_config"] == {
+        "source_type": "repository",
+        "source": "https://github.com/groupthinking/antigravity-hook-policy",
+        "target": "/workspace/hook-policy",
+        "identity": "git:9f4e1a1",
+        "hooks_path": "/workspace/hook-policy/.agents/hooks.json",
+        "boundary": "read_only_source_mount",
+    }
+    assert receipt.policy["hook_failure_behavior"] == "allow"
+    assert receipt.policy["hook_policy_result"] == "enforced"
+    assert receipt.policy["tamper_probe"]["result"] == "denied"
+    assert (
+        receipt.policy["tamper_probe"]["reason"] == "PermissionError: read-only mount"
+    )
+
+
+@pytest.mark.asyncio
+async def test_receipt_does_not_treat_probe_timeout_as_denial() -> None:
+    receipt = await AntigravityBackend(
+        config(
+            hook_policy=hook_policy(),
+            hook_tamper_probe_path="/workspace/hook-policy/.agents/hooks.json",
+        ),
+        FakeTransport(
+            {
+                "id": "interaction-4",
+                "status": "completed",
+                "policy_result": {
+                    "hook_policy": "hook_timeout",
+                    "tamper_probe": {
+                        "attempted": True,
+                        "target": "/workspace/hook-policy/.agents/hooks.json",
+                        "result": "timeout",
+                        "reason": "hook timed out after 10 seconds",
+                    },
+                },
+            }
+        ),
+    ).execute("verify hook policy")
+
+    assert receipt.policy["hook_policy_result"] == "hook_timeout"
+    assert receipt.policy["tamper_probe"]["result"] == "timeout"
+    assert receipt.policy["tamper_probe"]["counts_as_denial"] is False
+    assert receipt.policy["hook_failure_behavior"] == "allow"
 
 
 @pytest.mark.asyncio

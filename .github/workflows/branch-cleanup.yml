@@ -67,6 +67,7 @@ concurrency:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
         with:
