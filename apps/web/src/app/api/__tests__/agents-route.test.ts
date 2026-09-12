@@ -115,7 +115,9 @@ describe('POST /api/agents/dispatch', () => {
     });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse('boom', false, 500)));
     const res = await dispatchPOST(dispatchReq({ events: [] }));
+    const body = await res.json();
     expect(res.status).toBe(502);
+    expect(body).toEqual({ error: 'Failed to dispatch agents' });
   });
 });
 
@@ -147,5 +149,16 @@ describe('GET /api/agents/status', () => {
       'http://backend/api/v1/agents/a1/status',
       expect.anything(),
     );
+  });
+
+  it('does not expose backend errors', async () => {
+    setBackend('http://backend');
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('internal backend hostname')));
+
+    const res = await statusGET(new Request('http://localhost/api/agents/status?agentId=a1'));
+    const body = await res.json();
+
+    expect(res.status).toBe(502);
+    expect(body).toEqual({ error: 'Failed to get agent status' });
   });
 });

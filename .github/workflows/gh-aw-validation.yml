@@ -8,6 +8,7 @@ on:
       - ".github/workflows/*.lock.yml"
       - ".github/workflows/gh-aw-validation.yml"
       - ".github/aw/actions-lock.json"
+      - ".poutine.yml"
   pull_request:
     branches: [main]
     paths:
@@ -15,6 +16,7 @@ on:
       - ".github/workflows/*.lock.yml"
       - ".github/workflows/gh-aw-validation.yml"
       - ".github/aw/actions-lock.json"
+      - ".poutine.yml"
   workflow_dispatch:
 
 permissions:
@@ -38,6 +40,7 @@ concurrency:
 jobs:
   validate-gh-aw:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,15 +50,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh extension remove aw || true
-          gh extension install github/gh-aw --pin v0.82.14
+          gh extension install github/gh-aw --pin v0.88.7
           ACTUAL_VERSION="$(gh aw version 2>&1 | awk '{print $NF}')"
-          if [ "$ACTUAL_VERSION" != "v0.82.14" ]; then
-            echo "Expected gh aw v0.82.14 but got $ACTUAL_VERSION"
+          if [ "$ACTUAL_VERSION" != "v0.88.7" ]; then
+            echo "Expected gh aw v0.88.7 but got $ACTUAL_VERSION"
             exit 1
           fi
-          PRERELEASE="$(gh api repos/github/gh-aw/releases/tags/v0.82.14 --jq '.prerelease')"
+          PRERELEASE="$(gh api repos/github/gh-aw/releases/tags/v0.88.7 --jq '.prerelease')"
           if [ "$PRERELEASE" != "false" ]; then
-            echo "v0.82.14 must remain a stable release"
+            echo "v0.88.7 must remain a stable release"
             exit 1
           fi
 
@@ -64,14 +67,19 @@ jobs:
           python - <<'PY'
           import json
           from pathlib import Path
-
+          
           data = json.loads(Path('.github/aw/actions-lock.json').read_text())
-          key = 'github/gh-aw-actions/setup@v0.82.14'
-          entry = data.get('entries', {}).get(key)
-          if not entry:
-              raise SystemExit(f'actions-lock.json missing required entry: {key}')
-          if entry.get('sha') != 'b6d1443e05b8716267fa19425b99aa4f12006b4a':
-              raise SystemExit('actions-lock.json has unexpected setup SHA for v0.82.14')
+          expected = {
+              'github/gh-aw-actions/setup-cli@v0.88.7': '5e508589e03a7757a7e05b26e834292f5445bfb6',
+              'github/gh-aw-actions/setup@v0.88.7': '5e508589e03a7757a7e05b26e834292f5445bfb6',
+          }
+          entries = data.get('entries', {})
+          for key, sha in expected.items():
+              entry = entries.get(key)
+              if not entry:
+                  raise SystemExit(f'actions-lock.json missing required entry: {key}')
+              if entry.get('sha') != sha:
+                  raise SystemExit(f'actions-lock.json has unexpected SHA for {key}')
           PY
 
       - name: Compile and validate workflows
@@ -79,6 +87,7 @@ jobs:
           gh aw compile \
             canonical-pr-remediator \
             focused-coverage-controller \
+            pr-iteration-loop \
             repo-assist \
             --validate \
             --approve
@@ -88,6 +97,7 @@ jobs:
           gh aw compile \
             canonical-pr-remediator \
             focused-coverage-controller \
+            pr-iteration-loop \
             repo-assist \
             --actionlint \
             --zizmor \
@@ -99,4 +109,5 @@ jobs:
           git diff --exit-code -- \
             .github/workflows/canonical-pr-remediator.lock.yml \
             .github/workflows/focused-coverage-controller.lock.yml \
+            .github/workflows/pr-iteration-loop.lock.yml \
             .github/workflows/repo-assist.lock.yml

@@ -131,6 +131,7 @@ export async function pollStudioJob(
 
       if (
         live_url ||
+        jobStatus === 'complete' ||
         jobStatus === 'completed' ||
         jobStatus === 'failed' ||
         jobStatus === 'error' ||

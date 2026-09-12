@@ -69,4 +69,22 @@ describe('POST /api/chat AI Gateway fallback', () => {
       }),
     );
   });
+
+  it('accepts the VERCEL_AI_GATEWAY_API alias for free-tier chat', async () => {
+    delete process.env.AI_GATEWAY_API_KEY;
+    process.env.VERCEL_AI_GATEWAY_API = 'vck_alias_test';
+
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'Hello from alias key' }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.answer).toBe('gateway reply');
+    expect(aiGateway).toHaveBeenCalledWith('openai/gpt-4o');
+  });
 });

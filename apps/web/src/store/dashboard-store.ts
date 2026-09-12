@@ -275,6 +275,21 @@ const noopStorage = {
   removeItem: () => {},
 };
 
+const dashboardStorage = {
+  getItem: (name: string) =>
+    typeof window !== 'undefined' ? window.localStorage.getItem(name) : noopStorage.getItem(),
+  setItem: (name: string, value: string) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(name, value);
+    }
+  },
+  removeItem: (name: string) => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(name);
+    }
+  },
+};
+
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
@@ -691,9 +706,7 @@ export const useDashboardStore = create<DashboardState>()(
         videos: state.videos,
         activities: state.activities,
       }),
-      storage: createJSONStorage(() =>
-        typeof window !== 'undefined' ? localStorage : noopStorage,
-      ),
+      storage: createJSONStorage(() => dashboardStorage),
       skipHydration: true,
     },
   ),

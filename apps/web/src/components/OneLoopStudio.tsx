@@ -3,10 +3,15 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Download, Play, Rocket } from 'lucide-react';
+import { Download, GitPullRequest, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
-import { deployHoldReason, pickOfficialTemplate } from '@/lib/official-templates';
+import {
+  deployHoldReason,
+  pickOfficialTemplate,
+  stackCheckStatus,
+  stackCheckStatusLabel,
+} from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { useDashboardStore } from '@/store/dashboard-store';
@@ -14,6 +19,7 @@ import {
   actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
+  safeProjectName,
 } from '@/lib/action-surface';
 import {
   pollStudioDeploy,
@@ -24,22 +30,85 @@ import {
 } from '@/lib/studio-workflow';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
+  studioActionCard,
+  studioCanExport,
+  studioCanRetryTranscript,
+  studioDeployButtonLabel,
+  studioDeployEnabledHint,
+  studioDeployOutcomeMessage,
+  studioDeployReceiptForSelection,
+  studioEventsEmptyMessage,
+  studioExportFilename,
+  studioExportToastMessage,
+  studioFormationSupplementalEntities,
+  studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
+  studioPlayerOverlay,
+  studioPlayerPhase,
+  studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioTranscriptEtaLabel,
+  studioTranscriptStage,
+  studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
-import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
-import { applyStudioQueryAutoStart, resolveStudioHandoff } from '@/lib/studio-handoff';
+import { useYouTubePlayer } from '@/lib/use-youtube-player';
+import {
+  buildSameRunActInput,
+  MIN_ACT_TRANSCRIPT_CHARS,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
+import {
+  applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
+  resolveStudioHandoff,
+  studioQueryFromSearchParams,
+} from '@/lib/studio-handoff';
+import {
+  evaluateStudioDeployTransition,
+  studioDeployAttemptTransitionId,
+  studioGateReceiptView,
+  type GateDecision,
+  type StudioGateReceiptView,
+} from '@/lib/gate-transition';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
+import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
+import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
+function gateDecisionChipClass(decision: GateDecision): string {
+  switch (decision) {
+    case 'PASS':
+      return 'border-emerald-400/40 bg-emerald-950/50 text-emerald-200';
+    case 'HOLD':
+      return 'border-[#e8b86d]/40 bg-[#1a1408] text-[#e8b86d]';
+    case 'REJECT':
+      return 'border-red-400/40 bg-[#2a1212] text-red-100';
+    case 'ESCALATE':
+      return 'border-violet-400/40 bg-violet-950/40 text-violet-200';
+    default: {
+      const _exhaustive: never = decision;
+      return _exhaustive;
+    }
+  }
+}
+
 function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
+}
+
+function toSpecBranch(videoId: string, stepId: string): string {
+  const slug = `${videoId || 'video'}-${stepId}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `spec/${slug || 'approved'}`;
 }
 
 function mapExtractedEvents(raw: unknown[], videoId: string): ExtractedEvent[] {
@@ -86,7 +155,82 @@ async function tryExtractEvents(input: {
   return events.length > 0 ? events : null;
 }
 
-export default function OneLoopStudio() {
+function PackWorkbench({
+  architecture,
+  artifacts,
+  onExport,
+  canExport,
+}: {
+  architecture: VideoPackArchitecture | null;
+  artifacts: VideoPackArtifact[];
+  onExport: () => void;
+  canExport: boolean;
+}) {
+  return (
+    <section
+      data-testid="pack-workbench"
+      className="rounded-xl border border-[#e8b86d]/30 bg-[#11131a] p-4 lg:col-span-2"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
+          From this pack
+        </h2>
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={!canExport}
+          className="inline-flex items-center gap-2 rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d] disabled:opacity-40"
+        >
+          <Download className="h-4 w-4" aria-hidden />
+          Export pack
+        </button>
+      </div>
+      {architecture ? (
+        <div data-testid="pack-architecture" className="mt-4">
+          <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">Architecture</h3>
+          {architecture.summary ? (
+            <p className="mt-2 text-sm text-white/70">{architecture.summary}</p>
+          ) : null}
+          {architecture.stages.length > 0 ? (
+            <ol className="mt-2 space-y-1 text-sm text-white/80">
+              {architecture.stages.map((stage) => (
+                <li key={stage.id}>
+                  <span className="font-medium text-white">{stage.name}</span>
+                  {stage.description ? ` — ${stage.description}` : ''}
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {architecture.mermaid ? (
+            <pre className="mt-2 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/65">
+              {architecture.mermaid}
+            </pre>
+          ) : null}
+        </div>
+      ) : null}
+      {artifacts.length > 0 ? (
+        <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
+          {artifacts.map((artifact) => (
+            <li
+              key={artifact.path_hint}
+              className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+            >
+              <div className="font-mono text-[12px] text-[#e8b86d]">{artifact.path_hint}</div>
+              <div className="mt-1 text-white/80">{artifact.purpose}</div>
+              <div className="mt-1 font-mono text-[11px] text-white/55">{artifact.interface}</div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+export default function OneLoopStudio({
+  showAgentWorkflowUi,
+}: {
+  showAgentWorkflowUi: boolean;
+}) {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -98,8 +242,16 @@ export default function OneLoopStudio() {
   const [actRunId, setActRunId] = useState<string | null>(null);
   const [usedSameRun, setUsedSameRun] = useState(false);
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
-  const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
+  const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
+  const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
+  const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
+  const [openingPrs, setOpeningPrs] = useState(false);
+  const [playerEpoch, setPlayerEpoch] = useState(0);
+  const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
+    null,
+  );
   const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
@@ -108,6 +260,11 @@ export default function OneLoopStudio() {
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
+  const scopedDeployReceipt = studioDeployReceiptForSelection({
+    selectedVideoId,
+    receiptVideoId: deployReceiptVideoId,
+    liveUrl: deployReceiptUrl,
+  });
   const packFormation = useMemo(
     () => studioPackFormation(selected?.videoPack),
     [selected?.videoPack],
@@ -139,12 +296,26 @@ export default function OneLoopStudio() {
       packTools,
     );
   }, [selected, packFormation.tools]);
+  const stackChecks = packFormation.checks;
+  const supplementalEntities = studioFormationSupplementalEntities(
+    packFormation.tools,
+    linkedSop?.entities,
+  );
 
   useEffect(() => {
     setCompletedChecks([]);
+    setApprovedSpecIds([]);
+    setDeployReceiptUrl(null);
+    setDeployReceiptVideoId(null);
   }, [selectedVideoId]);
 
-  const holdReason = deployHoldReason(linkedSop, completedChecks);
+  useEffect(() => {
+    if (!exportToast) return;
+    const timer = window.setTimeout(() => setExportToast(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [exportToast]);
+
+  const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
   const officialTemplate = pickOfficialTemplate(linkedSop);
 
   useEffect(() => {
@@ -193,7 +364,7 @@ export default function OneLoopStudio() {
 
   useEffect(() => {
     applyStudioQueryAutoStart({
-      query: searchParams.get('video') || searchParams.get('url'),
+      query: studioQueryFromSearchParams(searchParams),
       startedKey: autoStartedKey,
       start: (watchUrl) => {
         void runAnalysis(watchUrl);
@@ -203,19 +374,32 @@ export default function OneLoopStudio() {
       },
       onInvalidQuery: (raw) => {
         setUrl(raw);
+        setMessage(studioInvalidHandoffMessage(raw));
       },
     });
     // One-shot kick from ?video= so Home paste starts the live pack path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  useEffect(() => {
+    // Release the module-level Strict Mode guard when Studio truly unmounts so
+    // re-entering /studio?video= with the same id (re-paste, or retry after a
+    // failed run) auto-starts again. Deferred so React's synchronous Strict
+    // Mode unmount/remount still sees the guard and does not double-start.
+    return () => {
+      window.setTimeout(() => resetStudioQueryAutoStart(), 0);
+    };
+  }, []);
+
   const analyze = (event?: FormEvent) => {
     event?.preventDefault();
     void runAnalysis(url);
   };
 
+  const transcriptWorking = busy || selected?.status === 'processing';
+
   useEffect(() => {
-    if (!busy) {
+    if (!transcriptWorking) {
       setElapsed(0);
       return;
     }
@@ -224,11 +408,36 @@ export default function OneLoopStudio() {
       setElapsed(Math.floor((Date.now() - started) / 1000));
     }, 250);
     return () => window.clearInterval(timer);
-  }, [busy]);
+  }, [transcriptWorking]);
 
-  const videoId = useMemo(() => getYouTubeId(url), [url]);
-  const hasPayload =
-    (selected?.transcript?.trim().length ?? 0) >= 40 || (selected?.events?.length ?? 0) > 0;
+  const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+  // Destructure at the hook call so render reads booleans + a callback ref,
+  // not properties of an object that also carries refs (react-hooks/refs).
+  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
+    useYouTubePlayer(videoId);
+
+  const playerPhase = studioPlayerPhase({
+    videoId: videoId || null,
+    loaded: playerReady,
+    failed: playerFailed,
+  });
+  const playerOverlay = studioPlayerOverlay(playerPhase);
+  const eventCount = selected?.events?.length ?? 0;
+  const promotePack = studioPromotePackWorkbench({
+    eventCount,
+    hasArchitecture: Boolean(packFormation.architecture),
+    artifactCount: packFormation.artifacts.length,
+    toolCount: packFormation.tools.length,
+  });
+  const hasPayload = studioCanExport({
+    transcript: selected?.transcript,
+    eventCount,
+    hasArchitecture: Boolean(packFormation.architecture),
+    artifactCount: packFormation.artifacts.length,
+    toolCount: packFormation.tools.length,
+    hasLinkedSopSteps: Boolean(linkedSop?.steps.length),
+    hasProjectScaffold: Boolean(selected?.insights?.project_scaffold),
+  });
   const runState = busy ? 'working' : selected ? 'ready' : 'idle';
   const quality = studioRunQuality(
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
@@ -319,6 +528,9 @@ export default function OneLoopStudio() {
   };
 
   const exportPkg = () => {
+    const filename = studioExportFilename(
+      safeProjectName(selected?.title || 'uvai-project'),
+    );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -330,24 +542,52 @@ export default function OneLoopStudio() {
       events: selected?.events,
       workflowActions: workflowActions?.actions,
     });
-    if (actions.length === 0 && !selected?.insights?.project_scaffold && !linkedSop?.steps.length) {
-      setMessage('Nothing to export yet — analyze a video first.');
+    if (
+      actions.length === 0 &&
+      !selected?.insights?.project_scaffold &&
+      !linkedSop?.steps.length &&
+      !packFormation.architecture &&
+      packFormation.artifacts.length === 0 &&
+      packFormation.tools.length === 0
+    ) {
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty', filename });
+      setExportToast(toast);
       return;
     }
-    const pkg = buildScaffoldPackage({
-      projectName: selected?.title || 'uvai-project',
-      actions,
-      projectScaffold: selected?.insights?.project_scaffold,
-      linkedSop: linkedSop || undefined,
-    });
-    downloadScaffoldPackage(pkg);
-    setMessage(
-      officialTemplate
-        ? `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md.`
-        : linkedSop
-          ? 'Exported SOP, named tools, and DEPLOY.md from this run.'
-          : 'Exported scaffold files (README, tasks.json).',
-    );
+    try {
+      const pkg = buildScaffoldPackage({
+        projectName: selected?.title || 'uvai-project',
+        actions,
+        projectScaffold: selected?.insights?.project_scaffold,
+        linkedSop: linkedSop || undefined,
+        packFormation: {
+          architecture: packFormation.architecture,
+          artifacts: packFormation.artifacts,
+          tools: packFormation.tools,
+        },
+      });
+      downloadScaffoldPackage(pkg);
+      const kind =
+        packFormation.architecture || packFormation.artifacts.length > 0
+          ? 'pack'
+          : linkedSop
+            ? 'sop'
+            : 'scaffold';
+      const toast = officialTemplate
+        ? {
+            tone: 'success' as const,
+            text: `Exported ${officialTemplate.clone} plus SOP and DEPLOY.md. ${filename}`,
+          }
+        : studioExportToastMessage({ ok: true, kind, filename });
+      setExportToast(toast);
+    } catch (err) {
+      const toast = studioExportToastMessage({
+        ok: false,
+        error: err instanceof Error ? err.message : 'Export failed.',
+        filename,
+      });
+      setExportToast(toast);
+    }
   };
 
   const deploy = async () => {
@@ -361,32 +601,118 @@ export default function OneLoopStudio() {
       return;
     }
     setDeployBusy(true);
+    const attemptVideoId = selectedVideoId ?? null;
+    setDeployReceiptUrl(null);
+    setDeployReceiptVideoId(attemptVideoId);
     try {
-      const started = await startStudioDeploy({ url: next });
+      const started = await startStudioDeploy({
+        url: next,
+        transcript: usableProvidedTranscript(selected?.transcript),
+      });
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;
       }
       if (!started.ok || !started.runId) {
-        setMessage(started.error || 'Deploy needs sign-in.');
+        const backendReason = started.error || started.message || 'Deploy needs sign-in.';
+        const gated = evaluateStudioDeployTransition({
+          transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+          kind: 'handoff',
+          backendReason,
+          authority: { actor: 'anonymous' },
+        });
+        setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+        setMessage(backendReason);
         return;
       }
       setDeployRunId(started.runId);
-      const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
-      if (polled.result?.live_url) {
-        setMessage(`Deploy ready: ${polled.result.live_url}`);
-      } else {
-        setMessage(polled.error || `Deploy ${polled.runStatus || 'started'}.`);
-      }
+      const polled = await pollStudioDeploy(started.runId);
+      const backendReason = polled.error || polled.result?.message || null;
+      const gated = evaluateStudioDeployTransition({
+        transitionId: started.runId,
+        runId: started.runId,
+        jobId: polled.result?.jobId,
+        liveUrl: polled.result?.live_url,
+        runStatus: polled.runStatus,
+        kind: polled.result?.kind,
+        backendReason,
+        authority: { actor: 'anonymous' },
+      });
+      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+      const liveUrl = gated.decision === 'PASS' ? polled.result?.live_url : undefined;
+      setDeployReceiptUrl(studioVerifiedLiveUrl(liveUrl));
+      setDeployReceiptVideoId(attemptVideoId);
+      setMessage(
+        studioDeployOutcomeMessage({
+          liveUrl,
+          runStatus: polled.runStatus,
+          error: polled.error,
+          kind: polled.result?.kind,
+          message: polled.result?.message,
+          jobId: polled.result?.jobId,
+          jobStatus: polled.result?.jobStatus,
+        }),
+      );
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Deploy failed.');
+      const backendReason = err instanceof Error ? err.message : 'Deploy failed.';
+      const gated = evaluateStudioDeployTransition({
+        transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+        kind: 'handoff',
+        backendReason,
+        authority: { actor: 'anonymous' },
+      });
+      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+      setMessage(backendReason);
     } finally {
       setDeployBusy(false);
     }
   };
 
-  const statusText = busy
-    ? `Working · ${elapsed}s — ${message}`
+  const openApprovedSpecsPrs = async () => {
+    if (!linkedSop || linkedSop.steps.length === 0) {
+      setMessage('Analyze a video with SOP steps before opening GitHub pull requests.');
+      return;
+    }
+    const sourceVideoId = getYouTubeId(selected?.url || url || '');
+    const specs = linkedSop.steps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      body: [step.description || '', step.quote ? `\nQuote: ${step.quote}` : ''].join('').trim(),
+      head: toSpecBranch(sourceVideoId, step.id),
+      base: 'main',
+      approved: approvedSpecIds.includes(step.id),
+    }));
+    setOpeningPrs(true);
+    try {
+      const result = await openGitHubPrsForApprovedSpecs(specs);
+      if (!result.ok) {
+        setMessage(result.error || 'Could not open GitHub pull requests for approved specs.');
+        return;
+      }
+      setMessage(`Opened or updated ${result.pullRequests.length} GitHub pull request(s) for approved specs.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open GitHub pull requests.');
+    } finally {
+      setOpeningPrs(false);
+    }
+  };
+
+  const transcriptStage = studioTranscriptStage({
+    busy: transcriptWorking,
+    elapsedSeconds: elapsed,
+    progress: selected?.progress,
+    hasPack: Boolean(selected?.videoPack),
+    hasTranscript: Boolean(selected?.transcript?.trim()),
+    hasFailed: selected?.status === 'failed',
+  });
+  const showTranscriptRetry = studioCanRetryTranscript({
+    busy: transcriptWorking,
+    hasFailed: selected?.status === 'failed',
+    retryable: selected?.failure?.retryable !== false,
+    elapsedSeconds: elapsed,
+  });
+  const statusText = transcriptWorking
+    ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
     : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
 
   return (
@@ -445,6 +771,48 @@ export default function OneLoopStudio() {
           <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
             {statusText}
           </p>
+          {gateReceipt ? (
+            <div
+              data-testid="studio-gate-receipt"
+              role="status"
+              className="mt-2 flex flex-wrap items-start gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+            >
+              <span
+                data-testid="studio-gate-decision"
+                className={clsx(
+                  'inline-flex rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em]',
+                  gateDecisionChipClass(gateReceipt.decision),
+                )}
+              >
+                {gateReceipt.decision}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p data-testid="studio-gate-reason" className="text-sm text-white/80">
+                  {gateReceipt.reason}
+                </p>
+                {scopedDeployReceipt ? (
+                  <p className="mt-1">
+                    <a
+                      data-testid="studio-gate-live-url"
+                      href={scopedDeployReceipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-[#e8b86d] underline"
+                    >
+                      {scopedDeployReceipt}
+                    </a>
+                  </p>
+                ) : null}
+                <p className="mt-1 break-all font-mono text-[11px] text-white/45">
+                  <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
+                  {' · '}
+                  <span data-testid="studio-gate-receipt-hash">{gateReceipt.receiptHash}</span>
+                  {' · '}
+                  {gateReceipt.version}
+                </p>
+              </div>
+            </div>
+          ) : null}
           {selected?.videoPack && (
             <p
               data-testid="video-pack-citation"
@@ -453,7 +821,7 @@ export default function OneLoopStudio() {
               {studioPackCitation(selected.videoPack)}
             </p>
           )}
-          {(busy || selected?.status === 'processing') && (
+          {transcriptWorking && (
             <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full bg-[#e8b86d] transition-all"
@@ -464,20 +832,50 @@ export default function OneLoopStudio() {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <section className="overflow-hidden rounded-xl border border-white/10 bg-black">
+      <main
+        data-testid="studio-main"
+        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-28 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
+      >
+        <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
-            <iframe
-              title="YouTube source"
-              className="aspect-video w-full"
-              src={
-                seekSeconds != null
-                  ? `https://www.youtube.com/embed/${videoId}?start=${seekSeconds}`
-                  : `https://www.youtube.com/embed/${videoId}`
-              }
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
+            <>
+              <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
+                <div
+                  ref={containerRef}
+                  className="h-full w-full"
+                  data-testid="studio-player"
+                  title="YouTube source"
+                />
+              </div>
+              {playerOverlay ? (
+                <div
+                  data-testid="studio-player-overlay"
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#14151c] px-6 text-center"
+                >
+                  <p className="text-sm text-white/80">{playerOverlay}</p>
+                  {playerPhase === 'error' ? (
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <button
+                        type="button"
+                        data-testid="studio-player-retry"
+                        onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
+                        className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                      >
+                        Retry player
+                      </button>
+                      <a
+                        href={`https://www.youtube.com/watch?v=${videoId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70"
+                      >
+                        Open on YouTube
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
               Paste a link. The video plays here while we pull the transcript.
@@ -496,11 +894,49 @@ export default function OneLoopStudio() {
               </span>
             ) : null}
           </div>
+          {(transcriptStage.id !== 'idle' || showTranscriptRetry) && (
+            <div
+              data-testid="studio-transcript-stage"
+              className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2"
+            >
+              <div>
+                <p className="text-sm text-white/80">{transcriptStage.label}</p>
+                {transcriptWorking && !selected?.transcript && (
+                  <p className="font-mono text-[11px] text-white/40">
+                    {studioTranscriptEtaLabel(elapsed)}
+                  </p>
+                )}
+              </div>
+              {showTranscriptRetry ? (
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                >
+                  Retry transcript
+                </button>
+              ) : null}
+            </div>
+          )}
           <div className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80">
             {selected?.transcript?.trim() ||
-              (busy ? 'Waiting on captions…' : 'Nothing yet.')}
+              (transcriptWorking
+                ? 'Waiting on captions — no invented text.'
+                : selected?.status === 'failed'
+                  ? selected.failure?.message || 'Transcript failed.'
+                  : 'Nothing yet.')}
           </div>
         </section>
+
+        {promotePack ? (
+          <PackWorkbench
+            architecture={packFormation.architecture}
+            artifacts={packFormation.artifacts}
+            onExport={exportPkg}
+            canExport={hasPayload}
+          />
+        ) : null}
 
         <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
           <div className="border-b border-white/10 px-4 py-3">
@@ -510,8 +946,15 @@ export default function OneLoopStudio() {
           </div>
           <ul className="divide-y divide-white/5">
             {(selected?.events || []).length === 0 && (
-              <li className="px-4 py-4 text-sm text-white/40">
-                {busy ? 'Extracting events…' : 'Events show up after Run.'}
+              <li data-testid="studio-events-empty" className="px-4 py-4 text-sm text-white/40">
+                {studioEventsEmptyMessage({
+                  busy: busy || selected?.status === 'processing',
+                  hasCompletedRun: selected != null && selected.status !== 'processing' && !busy,
+                  eventCount: 0,
+                  hasArchitecture: Boolean(packFormation.architecture),
+                  artifactCount: packFormation.artifacts.length,
+                  toolCount: packFormation.tools.length,
+                })}
               </li>
             )}
             {(selected?.events || []).map((event) => {
@@ -521,7 +964,7 @@ export default function OneLoopStudio() {
                 {seconds != null ? (
                   <button
                     type="button"
-                    onClick={() => setSeekSeconds(seconds)}
+                    onClick={() => seekTo(seconds)}
                     className="text-left font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]"
                   >
                     {formatSeconds(seconds)}
@@ -551,7 +994,7 @@ export default function OneLoopStudio() {
               </h2>
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
-              {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
+              {supplementalEntities.length === 0 && packFormation.tools.length === 0 && (
                 <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
               )}
               {packFormation.tools.map((tool) => (
@@ -562,14 +1005,7 @@ export default function OneLoopStudio() {
                   <span className="font-medium text-white">{tool.name}</span>
                 </span>
               ))}
-              {linkedSop.entities
-                .filter(
-                  (entity) =>
-                    !packFormation.tools.some(
-                      (tool) => tool.name.toLowerCase() === entity.name.toLowerCase(),
-                    ),
-                )
-                .map((entity) => (
+              {supplementalEntities.map((entity) => (
                 <span
                   key={entity.name}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
@@ -595,7 +1031,7 @@ export default function OneLoopStudio() {
                   {entity.timestamps[0] != null && (
                     <button
                       type="button"
-                      onClick={() => setSeekSeconds(entity.timestamps[0])}
+                      onClick={() => seekTo(entity.timestamps[0])}
                       className="font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(entity.timestamps[0])}
@@ -614,12 +1050,14 @@ export default function OneLoopStudio() {
               {linkedSop.steps.length === 0 && (
                 <li className="px-4 py-3 text-sm text-white/40">No ordered SOP in this run.</li>
               )}
-              {linkedSop.steps.map((step) => (
+              {linkedSop.steps.map((step) => {
+                const approved = approvedSpecIds.includes(step.id);
+                return (
                 <li key={step.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
                   {step.timestamp != null ? (
                     <button
                       type="button"
-                      onClick={() => setSeekSeconds(step.timestamp!)}
+                      onClick={() => seekTo(step.timestamp!)}
                       className="text-left font-mono text-[11px] text-[#e8b86d]"
                     >
                       {formatSeconds(step.timestamp)}
@@ -628,16 +1066,32 @@ export default function OneLoopStudio() {
                     <div className="font-mono text-[11px] text-white/35">{step.order}</div>
                   )}
                   <div>
+                    <label className="mb-1 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-white/45">
+                      <input
+                        type="checkbox"
+                        checked={approved}
+                        onChange={() =>
+                          setApprovedSpecIds((current) =>
+                            current.includes(step.id)
+                              ? current.filter((id) => id !== step.id)
+                              : [...current, step.id],
+                          )
+                        }
+                        className="h-3.5 w-3.5 accent-[#e8b86d]"
+                      />
+                      Approved for PR
+                    </label>
                     <div className="text-sm font-medium text-white">{step.title}</div>
                     {step.description && (
                       <div className="mt-0.5 text-sm text-white/55">{step.description}</div>
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ol>
 
-            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+            {stackChecks.length > 0 && (
               <>
                 <div className="border-t border-white/10 px-4 py-3">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -645,10 +1099,9 @@ export default function OneLoopStudio() {
                   </h2>
                 </div>
                 <ul className="divide-y divide-white/5">
-                  {linkedSop.checklist
-                    .filter((item) => item.source === 'stack')
-                    .map((item) => {
+                  {stackChecks.map((item) => {
                       const checked = completedChecks.includes(item.id);
+                      const status = stackCheckStatus(item, completedChecks, 'anonymous');
                       return (
                       <li key={item.id} className="flex items-start gap-3 px-4 py-3 text-sm">
                         <input
@@ -677,6 +1130,9 @@ export default function OneLoopStudio() {
                           ) : (
                             <span className="text-white">{item.title}</span>
                           )}
+                          <div className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-white/40">
+                            {stackCheckStatusLabel(status)}
+                          </div>
                         </label>
                       </li>
                       );
@@ -708,7 +1164,7 @@ export default function OneLoopStudio() {
                 <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceHash}</dd>
               </div>
             </dl>
-            {packFormation.architecture && (
+            {!promotePack && packFormation.architecture && (
               <div data-testid="pack-architecture" className="mt-4">
                 <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">
                   Architecture
@@ -733,7 +1189,7 @@ export default function OneLoopStudio() {
                 )}
               </div>
             )}
-            {packFormation.artifacts.length > 0 && (
+            {!promotePack && packFormation.artifacts.length > 0 && (
               <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
                 {packFormation.artifacts.map((artifact) => (
                   <li
@@ -765,7 +1221,7 @@ export default function OneLoopStudio() {
           </section>
         )}
 
-        {(actRunId || workflowActions) && (
+        {showAgentWorkflowUi && (actRunId || workflowActions) && (
           <section
             id="act-results"
             data-testid="act-results"
@@ -785,13 +1241,24 @@ export default function OneLoopStudio() {
                 {workflowActions.actions.length === 0 && (
                   <li className="text-white/50">No tool results from this run.</li>
                 )}
-                {workflowActions.actions.map((action, i) => (
-                  <li key={`${action.tool}-${i}`}>
-                    <span className="font-medium">{action.tool}</span>
-                    <span className="text-white/50"> — {action.status}</span>
-                    {action.result && <div className="text-white/70">{action.result}</div>}
-                  </li>
-                ))}
+                {workflowActions.actions.map((action, i) => {
+                  const card = studioActionCard(action);
+                  return (
+                    <li
+                      key={`${action.tool}-${i}`}
+                      data-testid="studio-action-card"
+                      className="rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="font-medium text-white">{card.title}</span>
+                        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#e8b86d]">
+                          {card.statusLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-white/70">{card.detail}</p>
+                    </li>
+                  );
+                })}
               </ul>
             ) : (
               <p className="mt-3 text-sm text-white/60">
@@ -802,16 +1269,33 @@ export default function OneLoopStudio() {
         )}
       </main>
 
+      {exportToast ? (
+        <div
+          data-testid="studio-export-toast"
+          role={exportToast.tone === 'error' ? 'alert' : 'status'}
+          className={clsx(
+            'fixed bottom-20 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
+            exportToast.tone === 'success'
+              ? 'border-[#e8b86d]/40 bg-[#1a1408] text-[#e8b86d]'
+              : 'border-red-400/40 bg-[#2a1212] text-red-100',
+          )}
+        >
+          {exportToast.text}
+        </div>
+      ) : null}
+
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={() => void act()}
-            disabled={actBusy || !hasPayload}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
-          >
-            {actBusy ? 'Running tools…' : 'Run tools'}
-          </button>
+          {showAgentWorkflowUi && (
+            <button
+              type="button"
+              onClick={() => void act()}
+              disabled={actBusy || !hasPayload}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
+            >
+              {actBusy ? 'Running tools…' : 'Run tools'}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportPkg}
@@ -819,17 +1303,29 @@ export default function OneLoopStudio() {
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Download className="h-4 w-4" aria-hidden />
-            Export
+            {promotePack ? 'Export pack' : 'Export'}
           </button>
           <button
             type="button"
+            data-testid="studio-deploy-button"
             onClick={() => void deploy()}
             disabled={deployBusy || !hasPayload || Boolean(holdReason)}
-            title={holdReason || undefined}
+            title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
-            Deploy
+            {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
+          </button>
+          <button
+            type="button"
+            data-testid="studio-open-prs-button"
+            onClick={() => void openApprovedSpecsPrs()}
+            disabled={openingPrs || approvedSpecIds.length === 0}
+            title={approvedSpecIds.length === 0 ? 'Approve at least one SOP spec first.' : undefined}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
+          >
+            <GitPullRequest className="h-4 w-4" aria-hidden />
+            {openingPrs ? 'Opening PRs…' : `Open GitHub PRs (${approvedSpecIds.length})`}
           </button>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
