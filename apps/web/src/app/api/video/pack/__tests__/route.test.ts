@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
+  KEYFRAME_IMAGES_OK,
+  KEYFRAME_IMAGES_OK_NOTE,
   KEYFRAME_IMAGES_PARTIAL,
   KEYFRAME_IMAGES_PARTIAL_NOTE,
   identityHash,
 } from '@/lib/video-pack';
+import { KEYFRAME_JPEG_CONTENT_TYPE } from '@/lib/keyframe-frame-capture';
 import { VideoPackExtractError } from '@/lib/video-pack-extractor';
 
 const CANON_A = 'auJzb1D-fag';
@@ -74,6 +77,8 @@ async function loadPackRoute() {
   videoPack.setVideoPackSchedulerForTests((work) => {
     scheduled.push(work);
   });
+  const capture = await import('@/lib/keyframe-frame-capture');
+  capture.resetKeyframeFrameCaptureForTests();
   const route = await import('../route');
   return {
     POST: route.POST,
@@ -85,6 +90,7 @@ async function loadPackRoute() {
     seedVideoPackRecordForTests: store.seedVideoPackRecordForTests,
     buildIdentityPack: videoPack.buildIdentityPack,
     applyExtractedSpec: videoPack.applyExtractedSpec,
+    setKeyframeFrameCaptureForTests: capture.setKeyframeFrameCaptureForTests,
   };
 }
 
@@ -297,6 +303,57 @@ describe('GET /api/video/pack (anonymous read)', () => {
     expect(body.data.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     expect(JSON.stringify(body.data.keyframes)).not.toMatch(/https?:\/\//);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com/);
+  });
+
+  it('hydrates stored null keyframes with captured app-served paths and seals ok', async () => {
+    const loaded = await loadPackRoute();
+    loaded.setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
+      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]),
+      contentType: KEYFRAME_JPEG_CONTENT_TYPE,
+      imagePath: `/api/video/pack/frames/${videoId}/${t_s}`,
+    }));
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-12T16:39:08.716Z',
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: {
+        ...pack,
+        keyframes: [
+          { t_s: 1, image_path: null, desc: `Keyframe from ${CANON_B}` },
+          { t_s: 12, image_path: null, desc: 'Second described frame' },
+        ],
+        metrics: { keyframes_images: KEYFRAME_IMAGES_PARTIAL },
+        provenance: {
+          ...pack.provenance,
+          notes: `${pack.provenance.notes} ${KEYFRAME_IMAGES_PARTIAL_NOTE}`.trim(),
+        },
+      },
+    });
+
+    const res = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: {
+        keyframes: Array<{ t_s: number; image_path?: string | null }>;
+        metrics: Record<string, number | string>;
+        provenance: { source_hash: string; notes: string };
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.keyframes.map((frame) => frame.image_path)).toEqual([
+      `/api/video/pack/frames/${CANON_B}/1`,
+      `/api/video/pack/frames/${CANON_B}/12`,
+    ]);
+    expect(body.data.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(body.data.provenance.notes).toContain(KEYFRAME_IMAGES_OK_NOTE);
+    expect(body.data.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com/);
   });
 

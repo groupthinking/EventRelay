@@ -21,13 +21,19 @@ import {
   putPackRecord,
   type VideoPackRecord,
 } from '@/lib/video-pack-store';
+import { applyKeyframeImageHonesty } from '@/lib/keyframe-image-path';
+import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
 
 export const IDENTITY_VERSION = 'v0' as const;
 
-/** Honest gap: Vercel pack extract has no frame-capture/upload store. */
-export const KEYFRAME_IMAGES_PARTIAL = 'partial' as const;
-export const KEYFRAME_IMAGES_PARTIAL_NOTE =
-  'Keyframe images PARTIAL: no frame-capture/upload path; image_path left null (not invented).';
+export {
+  KEYFRAME_IMAGES_OK,
+  KEYFRAME_IMAGES_OK_NOTE,
+  KEYFRAME_IMAGES_PARTIAL,
+  KEYFRAME_IMAGES_PARTIAL_NOTE,
+  applyKeyframeImageHonesty,
+  sanitizeKeyframeImagePath,
+} from '@/lib/keyframe-image-path';
 
 export const GOLDEN_IDENTITY_HASHES = {
   'auJzb1D-fag': '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
@@ -172,41 +178,6 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
   };
 }
 
-/**
- * Fail closed on keyframe images. There is no durable capture/upload on the
- * Vercel pack path (Upstash REST is JSON-only; Blob is unwired). Gemini
- * strings and YouTube thumbs are not captured frames at t_s — leave null.
- */
-export function sanitizeKeyframeImagePath(_value: unknown): string | null {
-  return null;
-}
-
-export function applyKeyframeImageHonesty(pack: VideoPackV0Json): VideoPackV0Json {
-  const keyframes = pack.keyframes.map((frame) => ({
-    ...frame,
-    image_path: sanitizeKeyframeImagePath(frame.image_path),
-  }));
-  const missingImages = keyframes.length > 0 && keyframes.some((frame) => !frame.image_path);
-  if (!missingImages) {
-    return { ...pack, keyframes };
-  }
-  const notes = pack.provenance.notes.includes(KEYFRAME_IMAGES_PARTIAL_NOTE)
-    ? pack.provenance.notes
-    : `${pack.provenance.notes} ${KEYFRAME_IMAGES_PARTIAL_NOTE}`.trim();
-  return {
-    ...pack,
-    keyframes,
-    metrics: {
-      ...pack.metrics,
-      keyframes_images: KEYFRAME_IMAGES_PARTIAL,
-    },
-    provenance: {
-      ...pack.provenance,
-      notes,
-    },
-  };
-}
-
 export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
@@ -279,7 +250,7 @@ function processingEnvelope(identity: {
   };
 }
 
-function recordToResponse(record: VideoPackRecord): NextResponse {
+async function recordToResponse(record: VideoPackRecord): Promise<NextResponse> {
   switch (record.state) {
     case 'ready':
       if (isIdentityOnlyPack(record.pack)) {
@@ -288,7 +259,11 @@ function recordToResponse(record: VideoPackRecord): NextResponse {
           { status: 503 },
         );
       }
-      return NextResponse.json({ status: 'success', data: applyKeyframeImageHonesty(record.pack) });
+      const hydrated = await hydrateKeyframeImages(record.pack);
+      if (JSON.stringify(hydrated.keyframes) !== JSON.stringify(record.pack.keyframes)) {
+        await putPackRecord({ state: 'ready', pack: hydrated });
+      }
+      return NextResponse.json({ status: 'success', data: applyKeyframeImageHonesty(hydrated) });
     case 'processing':
       return NextResponse.json(
         processingEnvelope({
@@ -336,7 +311,7 @@ async function persistExtract(identity: VideoPackV0Json): Promise<void> {
       sourceUrl: identity.source_url,
       videoId: identity.video_id,
     });
-    const pack = applyExtractedSpec(identity, spec);
+    const pack = await hydrateKeyframeImages(applyExtractedSpec(identity, spec));
     if (isIdentityOnlyPack(pack)) {
       await putPackRecord({
         state: 'error',
