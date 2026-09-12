@@ -10,6 +10,7 @@ import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import {
   isStudioDeployAbortTimeout,
   STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+  STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 
@@ -74,6 +75,9 @@ function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
   const jobStatus = poll.result?.jobStatus?.trim();
   if (jobId && jobStatus && !TERMINAL.has(jobStatus)) {
     return `Deploy job ${jobId} still ${jobStatus}`;
+  }
+  if (!jobId) {
+    return STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD;
   }
   if (poll.error?.trim()) return poll.error.trim();
   return `Deploy still ${poll.runStatus || 'running'} after ${attempts} polls — waiting for a verified https live URL (runId ${poll.runId})`;

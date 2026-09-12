@@ -1,4 +1,31 @@
-# TASK: studio.deploy must surface a backend hostname or a precise kickoff HOLD
+# TASK: studio.deploy must terminalize Attempting deploy (success or HOLD)
+
+## 1. Goal & Scope
+* **Objective:** Anon Studio Attempt Deploy / G.A.T.E. `studio.deploy` with ready-transcript reuse must reach a **terminal** decision within a reasonable budget: G.A.T.E. PASS + backend-supplied https live URL + receipt bound to the **new** run, or a precise HOLD (not a stale prior receipt, not silent forever on Attempting deploy).
+* **Context:** AXIOM on READY prod `dpl_GfaxC4wivWYZqzGFrKvMcYn8fsdD` (#1891 / `d7ac9058`) / XYMcBrFSJ4c. First click started `wrun_01M2B768A7AVDRR5YQTNVJDZJ8` then UI briefly showed stale #1853 receipt `wrun_01M2ABB1NJ5TFZ153CTRNTPNW9` → UNVERIFIED. Second clean click: **NO TERMINAL** — UI stayed `Attempting deploy…` ~5 minutes. No new receipt. No live URL. Explicitly not the stale #1853 receipt.
+* **Root cause:** `#1891` `KICKOFF_RETRIES = 6` × `kickoffStep` (45s vts wait, plus an inner abort retry) × `sleep('10s')` keeps the WDK run `running` with no `returnValue`. GET status only attaches `result` when `completed`/`failed`, so the client poll sees no job id and never flips `deployBusy` until the 7-minute attempt budget. `gateReceipt` is not cleared on a new attempt, so a prior receipt can flash.
+* **Scope:** Bound kickoff retries; complete the run with a kickoff-no-job handoff (not silent running); clear stale receipt and bind the new `runId` before poll; exhausted no-result polls HOLD `STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD`. Do not invent a live URL or secrets.
+ * *Initial check:* Modify existing workflow / client poll / OneLoopStudio / tests. No new Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Failing tests for terminalization + stale-receipt clear + bounded kickoff retries
+- [x] Step 2: Implement workflow handoff + retry bound + client HOLD + Studio receipt bind
+- [x] Step 3: Focused Vitest GREEN (pytest N/A — no Python touched)
+- [ ] Step 4: PR off current main — do not merge
+
+## 3. Definition of Done
+* **Expected Outcome:** Attempting deploy cannot stick indefinitely without a gate decision/receipt bound to the new run. Kickoff without a job id HOLDs `STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD`. Cleared residuals stay cleared.
+* **Verification Method:** Focused Vitest (`studio-workflow`, `gate-transition`, `studio-pipeline-status`, `pipeline-async-job`, `studio-deploy`)
+* **Proof Artifact:** Focused Vitest **5 files / 109 passed**. Route tests **6 passed**.
+
+## 4. Post-Task Reflection
+* **What was done:** Bounded `KICKOFF_RETRIES` to 1 and completed a no-job kickoff as a `handoff` (terminal WDK status + precise HOLD). Client exhausted no-result polls HOLD kickoff-no-job. Studio clears stale `gateReceipt` and binds the new `runId` before poll.
+* **Why it was needed:** #1891 retries left the WDK run `running` with no result for ~5–11 minutes; UI stayed `Attempting deploy…` and could flash the #1853 receipt.
+* **How it was tested:** TDD RED then GREEN. Focused Vitest 109 passed (`studio-workflow`, `gate-transition`, `studio-pipeline-status`, `pipeline-async-job`, `studio-deploy`). No Python touched.
+
+---
+
+# Prior cut: studio.deploy must surface a backend hostname or a precise kickoff HOLD
 
 ## 1. Goal & Scope
 * **Objective:** Ready-transcript `studio.deploy` / G.A.T.E. for XYMcBrFSJ4c must PASS with a backend-supplied https hostname + receipt, or HOLD with a residual that is **not** any cleared copy (reuse miss, timeout abort, HTTP 524, YouTube bot, UNKNOWN, workflow-run, workflow-return, BACKEND_URL, origin-no-live, or the #1889 hostname-finished string).

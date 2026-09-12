@@ -33,6 +33,7 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
+  STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD,
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
@@ -604,6 +605,7 @@ export default function OneLoopStudio({
     const attemptVideoId = selectedVideoId ?? null;
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(attemptVideoId);
+    setGateReceipt(null);
     try {
       const started = await startStudioDeploy({
         url: next,
@@ -626,6 +628,16 @@ export default function OneLoopStudio({
         return;
       }
       setDeployRunId(started.runId);
+      const inFlight = evaluateStudioDeployTransition({
+        transitionId: started.runId,
+        runId: started.runId,
+        runStatus: 'running',
+        backendReason: STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD,
+        authority: { actor: 'anonymous' },
+      });
+      setGateReceipt(
+        studioGateReceiptView(inFlight, { backendReason: STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD }),
+      );
       const polled = await pollStudioDeploy(started.runId);
       const backendReason = polled.error || polled.result?.message || null;
       const gated = evaluateStudioDeployTransition({

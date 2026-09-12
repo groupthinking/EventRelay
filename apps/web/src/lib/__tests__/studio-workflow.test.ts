@@ -420,6 +420,39 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it('pollStudioDeploy exhausted with no job id HOLDs kickoff-no-job, not a silent running poll', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        runId: 'wrun_01M2B768A7AVDRR5YQTNVJDZJ8',
+        runStatus: 'running',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_01M2B768A7AVDRR5YQTNVJDZJ8', {
+      attempts: 3,
+      delayMs: 1,
+    });
+    const text = `${poll.error || ''} ${poll.message || ''}`;
+    expect(text).toMatch(/kickoff returned no job id/i);
+    expect(text).not.toMatch(/Deploy still running after 3 polls/i);
+    expect(text).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(text).not.toMatch(/Failed to read workflow run/);
+    expect(text).not.toMatch(/Failed to read workflow return value/);
+    expect(text).not.toMatch(/BACKEND_URL is not configured/);
+    expect(text).not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
+    expect(text).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(text).not.toMatch(/Ready transcript was not reused/i);
+    expect(text).not.toMatch(/aborted due to timeout/i);
+    expect(text).not.toMatch(/HTTP 524/);
+    expect(text).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(poll.runId).toBe('wrun_01M2B768A7AVDRR5YQTNVJDZJ8');
+    expect(poll.runStatus).toBe('running');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('pollStudioDeploy exhausted in-flight cites the job status, not UNKNOWN checks', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

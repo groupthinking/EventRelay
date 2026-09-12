@@ -374,6 +374,35 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B1Q97XA9GHVSG1FZY92N19');
   });
 
+  it('HOLD on wrun_01M2B768A7AVDRR5YQTNVJDZJ8 is kickoff-no-job bound to the new run, not stale #1853', () => {
+    const backendReason =
+      'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B768A7AVDRR5YQTNVJDZJ8',
+      runId: 'wrun_01M2B768A7AVDRR5YQTNVJDZJ8',
+      runStatus: 'completed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B768A7AVDRR5YQTNVJDZJ8');
+    expect(view.receiptId).not.toBe('er:gate:v1:wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
+    expect(view.reason).not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/HTTP 524/);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+  });
+
   it('HOLD on wrun_01M2B5SRA5W5S4WQP2M4ZHY040 is kickoff-no-job, not hostname finished', () => {
     const backendReason =
       'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
@@ -515,5 +544,14 @@ describe('Studio deploy call site', () => {
     const failBlock = deployFn.slice(failIdx, deployFn.indexOf('return;', failIdx));
     expect(failBlock).toContain('evaluateStudioDeployTransition');
     expect(failBlock).toContain('studioGateReceiptView');
+    expect(deployFn).toMatch(/setGateReceipt\(\s*null\s*\)/);
+    const runIdIdx = deployFn.indexOf('setDeployRunId(started.runId)');
+    const pollIdx = deployFn.indexOf('pollStudioDeploy(started.runId)');
+    expect(runIdIdx).toBeGreaterThan(-1);
+    expect(pollIdx).toBeGreaterThan(runIdIdx);
+    const betweenStartAndPoll = deployFn.slice(runIdIdx, pollIdx);
+    expect(betweenStartAndPoll).toContain('evaluateStudioDeployTransition');
+    expect(betweenStartAndPoll).toContain('started.runId');
+    expect(betweenStartAndPoll).not.toContain('wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
   });
 });

@@ -273,6 +273,14 @@ export function studioDeployReceiptForSelection(input: {
 export const STUDIO_DEPLOY_ABORT_RETRY_MESSAGE =
   'Deploy kickoff timed out before a verified live URL. Waiting for the origin job — not aborting the attempt.';
 
+/** Honest HOLD when kickoff abort/524 never returned a pollable job id. */
+export const STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD =
+  'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
+
+/** In-flight chip bound to the new runId — not a prior receipt. */
+export const STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD =
+  'Deploy attempt started. Waiting for a verified https live URL.';
+
 export function isStudioDeployAbortTimeout(value: unknown): boolean {
   if (typeof value === 'string') {
     return /aborted due to timeout/i.test(value);
