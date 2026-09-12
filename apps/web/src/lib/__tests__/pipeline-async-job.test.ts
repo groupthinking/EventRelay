@@ -9,6 +9,7 @@ vi.mock('@/lib/pipeline-backend-health', () => ({
 
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import {
+  decideStudioDeployPoll,
   fetchAsyncVideoJob,
   isTerminalJobStatus,
   kickoffAsyncVideoJob,
@@ -596,5 +597,44 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(status.ok).toBe(false);
     expect(status.httpStatus).toBe(404);
     expect(isTerminalJobStatus(status.jobStatus)).toBe(false);
+  });
+
+  it('continues the deploy poll after a timeout abort status instead of HOLD', () => {
+    const decided = decideStudioDeployPoll(
+      {
+        ok: false,
+        httpStatus: 408,
+        message: 'Deploy job status read timed out; retrying',
+      },
+      {
+        jobId: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ',
+        transcript: READY_TRANSCRIPT,
+      },
+    );
+    expect(decided.action).toBe('continue');
+    expect(JSON.stringify(decided)).not.toMatch(/aborted due to timeout/i);
+    expect(JSON.stringify(decided)).not.toMatch(/HTTP 524/);
+    expect(JSON.stringify(decided)).not.toMatch(/Sign in to confirm you’re not a bot/i);
+    expect(JSON.stringify(decided)).not.toMatch(/UNKNOWN checks are not a live URL/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow run/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Failed to read workflow return value/i);
+    expect(JSON.stringify(decided)).not.toMatch(/BACKEND_URL is not configured/i);
+  });
+
+  it('returns a live poll decision only when the backend supplies a live URL', () => {
+    const decided = decideStudioDeployPoll(
+      {
+        ok: true,
+        jobStatus: 'completed',
+        live_url: 'https://xy.vercel.app',
+      },
+      { jobId: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ', transcript: READY_TRANSCRIPT },
+    );
+    expect(decided).toEqual({
+      action: 'live',
+      live_url: 'https://xy.vercel.app',
+      jobStatus: 'completed',
+      github_repo: undefined,
+    });
   });
 });

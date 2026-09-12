@@ -1,4 +1,31 @@
-# TASK: clear G.A.T.E. timeout abort HOLD on studio.deploy
+# TASK: studio.deploy no abort-timeout → live URL
+
+## 1. Goal & Scope
+* **Objective:** Prevent abort-timeout on the studio.deploy path (extend wait, async poll, or honest progress) through a verified deploy receipt + clickable live URL, or an honest HOLD that is not this timeout and not prior cleared residuals.
+* **Context:** CoS formal GO. Residual on `dpl_DL2TCbLyYZhgjv7tnePcEdKHCARs` / XYMcBrFSJ4c: `The operation was aborted due to timeout` (receipt `er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ`). Transcript ready. No Deploy completed / no live URL. Cleared: YouTube bot wall, HTTP 524, UNKNOWN checks, workflow-run, return-value, BACKEND_URL.
+* **Root cause:** WDK `pollJobStep` sat ~180s (`18 × 10s setTimeout`) inside one `'use step'`. Vercel/WDK step budget ~60s aborts with the DOM string. Receipt exists so kickoff succeeded. Remap/retry alone does not prevent the in-step abort.
+* **Scope:** Split poll onto durable `sleep('10s')` between short job reads. Continue on 408/gateway timeout. Client poll window covers the durable wait. Claim guard unchanged. No Origin invent. Do not reopen #1878.
+ * *Initial check:* Modify existing workflow + poll helpers. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (decideStudioDeployPoll continue on 408; workflow imports sleep; no in-step setTimeout; client window ≥ 6 min)
+- [x] Step 2: Implement durable poll + decide helper + client window
+- [ ] Step 3: Focused + full frontend tests / lint GREEN
+- [ ] Step 4: Push PR #1884 — core CI green — report PR # + SHA
+
+## 3. Definition of Done
+* **Expected Outcome:** studio.deploy does not abort-timeout. PASS only with verified https hostname URL + receipt. Honest HOLD ≠ abort-timeout, ≠ bot, ≠ 524, ≠ UNKNOWN checks, ≠ workflow-run, ≠ return-value, ≠ BACKEND_URL.
+* **Verification Method:** Focused Vitest + `cd apps/web && npx vitest run` + `npm run lint` + required GitHub core jobs.
+* **Proof Artifact:** (filled after verification)
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: clear G.A.T.E. timeout abort HOLD on studio.deploy
 
 ## 1. Goal & Scope
 * **Objective:** Attempt deploy / studio.deploy for XYMcBrFSJ4c must not HOLD on `The operation was aborted due to timeout`. Reach G.A.T.E. PASS with a verified https live URL + EventRelay receipt, or an honest HOLD that is not timeout-abort, not HTTP 524, and not the YouTube bot wall.

@@ -8,6 +8,8 @@ import {
   isTransientWorkflowRunReadError,
   isUnreadWorkflowRun,
   workflowReturnErrorMessage,
+  STUDIO_DEPLOY_POLL_ATTEMPTS,
+  STUDIO_DEPLOY_POLL_DELAY_MS,
 } from '@/lib/studio-workflow';
 
 describe('studio-workflow (WDK Product v1)', () => {
@@ -437,6 +439,13 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(poll.error ?? '').not.toMatch(/aborted due to timeout/i);
     expect(poll.message ?? '').not.toMatch(/aborted due to timeout/i);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('client poll window covers the durable WDK job wait', () => {
+    expect(STUDIO_DEPLOY_POLL_DELAY_MS).toBe(2000);
+    expect(STUDIO_DEPLOY_POLL_ATTEMPTS * STUDIO_DEPLOY_POLL_DELAY_MS).toBeGreaterThanOrEqual(
+      360_000,
+    );
   });
 
   it('startStudioDeploy remaps a kickoff abort timeout instead of throwing', async () => {

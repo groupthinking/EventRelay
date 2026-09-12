@@ -4,11 +4,14 @@
  * Kick off FastAPI async video→software and poll the job until a live URL,
  * terminal failure, or an honest handoff (no backend).
  *
+ * Job waits use workflow `sleep('10s')` between short `'use step'` reads so
+ * the poll cannot sit in one step until Vercel/WDK abort-timeout.
+ *
  * Trigger: POST /api/workflows/studio-deploy  { url, projectType?, outcome? }
  * Status:  GET  /api/workflows/studio-deploy/:runId
  */
 
-import { FatalError } from 'workflow';
+import { FatalError, sleep } from 'workflow';
 
 export interface StudioDeployInput {
   url: string;
@@ -35,6 +38,9 @@ interface StudioDeployKickoff {
   github_repo?: string | null;
   retryable?: boolean;
 }
+
+/** Durable 10s gaps × 36 reads = 6 minutes after kickoff — not one 180s step. */
+const JOB_POLL_READS = 36;
 
 export async function studioDeployWorkflow(
   input: StudioDeployInput,
@@ -70,8 +76,52 @@ export async function studioDeployWorkflow(
     };
   }
 
-  const polled = await pollJobStep(kicked.jobId, input.transcript);
-  return { url, ...polled, jobId: kicked.jobId };
+  const jobId = kicked.jobId;
+  let lastMessage: string | undefined;
+  let lastJobStatus: string | undefined;
+  for (let i = 0; i < JOB_POLL_READS; i++) {
+    const decided = await readJobStep(jobId, input.transcript);
+    switch (decided.action) {
+      case 'live':
+        return {
+          url,
+          kind: 'live',
+          jobId,
+          jobStatus: decided.jobStatus,
+          live_url: decided.live_url,
+          github_repo: decided.github_repo,
+        };
+      case 'job':
+        return {
+          url,
+          kind: 'job',
+          jobId,
+          jobStatus: decided.jobStatus,
+          live_url: decided.live_url,
+          github_repo: decided.github_repo,
+          message: decided.message,
+        };
+      case 'retry':
+        throw new Error(decided.message);
+      case 'fail':
+        throw new FatalError(decided.message);
+      case 'continue':
+        lastMessage = decided.message;
+        lastJobStatus = decided.jobStatus;
+        if (i < JOB_POLL_READS - 1) {
+          await sleep('10s');
+        }
+        break;
+      default: {
+        const unexpected: never = decided;
+        throw new FatalError(`Unknown studio.deploy poll decision: ${JSON.stringify(unexpected)}`);
+      }
+    }
+  }
+
+  throw new Error(
+    lastMessage || `Deploy job ${jobId} still ${lastJobStatus || 'pending'}`,
+  );
 }
 
 async function kickoffStep(
@@ -99,86 +149,12 @@ async function kickoffStep(
   }
 }
 
-async function pollJobStep(
-  jobId: string,
-  transcript?: string,
-): Promise<{
-  kind: 'live' | 'job';
-  jobStatus?: string;
-  live_url?: string | null;
-  github_repo?: string | null;
-  message?: string;
-}> {
+async function readJobStep(jobId: string, transcript?: string) {
   'use step';
 
-  const {
-    fetchAsyncVideoJob,
-    isGatewayTimeoutKickoff,
-    isTerminalJobStatus,
-    studioDeployReadyTranscriptHold,
-    usableKickoffTranscript,
-  } = await import('@/lib/pipeline-async-job');
-
-  const reads = 18;
-  const gapMs = 10_000;
-  let status = await fetchAsyncVideoJob(jobId);
-  for (let i = 0; i < reads; i++) {
-    if (status.live_url) {
-      return {
-        kind: 'live',
-        jobStatus: status.jobStatus || 'completed',
-        live_url: status.live_url,
-        github_repo: status.github_repo,
-      };
-    }
-
-    const statusTimeout =
-      status.httpStatus === 408 ||
-      isGatewayTimeoutKickoff(status.httpStatus, status.message);
-
-    if (!status.ok && !statusTimeout) {
-      const raw = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
-      const msg = usableKickoffTranscript(transcript)
-        ? studioDeployReadyTranscriptHold(raw)
-        : raw;
-      if (status.httpStatus && status.httpStatus >= 500) {
-        throw new Error(msg);
-      }
-      throw new FatalError(msg);
-    }
-
-    if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
-      const raw = status.message || `Deploy job ${jobId} ${status.jobStatus}`;
-      throw new FatalError(
-        usableKickoffTranscript(transcript)
-          ? studioDeployReadyTranscriptHold(raw)
-          : raw,
-      );
-    }
-
-    if (isTerminalJobStatus(status.jobStatus)) {
-      return {
-        kind: 'job',
-        jobStatus: status.jobStatus,
-        live_url: status.live_url,
-        github_repo: status.github_repo,
-        message:
-          status.message ||
-          (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
-      };
-    }
-
-    if (i < reads - 1) {
-      await new Promise<void>((resolve) => {
-        setTimeout(resolve, gapMs);
-      });
-      status = await fetchAsyncVideoJob(jobId);
-    }
-  }
-
-  throw new Error(
-    usableKickoffTranscript(transcript)
-      ? studioDeployReadyTranscriptHold(status.message)
-      : status.message || `Deploy job ${jobId} still ${status.jobStatus || 'pending'}`,
+  const { decideStudioDeployPoll, fetchAsyncVideoJob } = await import(
+    '@/lib/pipeline-async-job'
   );
+  const status = await fetchAsyncVideoJob(jobId);
+  return decideStudioDeployPoll(status, { jobId, transcript });
 }

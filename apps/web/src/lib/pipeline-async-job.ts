@@ -231,6 +231,88 @@ export function isTerminalJobStatus(status: string | undefined): boolean {
   );
 }
 
+export type StudioDeployPollDecision =
+  | {
+      action: 'live';
+      live_url: string;
+      jobStatus?: string;
+      github_repo?: string | null;
+    }
+  | {
+      action: 'job';
+      jobStatus?: string;
+      live_url?: string | null;
+      github_repo?: string | null;
+      message?: string;
+    }
+  | { action: 'continue'; message?: string; jobStatus?: string }
+  | { action: 'retry'; message: string }
+  | { action: 'fail'; message: string };
+
+/**
+ * One WDK job-status read → continue, live, terminal job, or honest fail.
+ * Timeout / 408 / gateway abort must continue — never a raw abort HOLD.
+ */
+export function decideStudioDeployPoll(
+  status: AsyncJobStatus,
+  opts: { jobId: string; transcript?: string },
+): StudioDeployPollDecision {
+  if (status.live_url) {
+    return {
+      action: 'live',
+      live_url: status.live_url,
+      jobStatus: status.jobStatus || 'completed',
+      github_repo: status.github_repo,
+    };
+  }
+
+  const statusTimeout =
+    status.httpStatus === 408 ||
+    isGatewayTimeoutKickoff(status.httpStatus, status.message);
+
+  if (!status.ok && !statusTimeout) {
+    const raw =
+      status.message || `Deploy job ${opts.jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+    const msg = usableProvidedTranscript(opts.transcript)
+      ? studioDeployReadyTranscriptHold(raw)
+      : raw;
+    if (status.httpStatus && status.httpStatus >= 500) {
+      return { action: 'retry', message: msg };
+    }
+    return { action: 'fail', message: msg };
+  }
+
+  if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
+    const raw = status.message || `Deploy job ${opts.jobId} ${status.jobStatus}`;
+    return {
+      action: 'fail',
+      message: usableProvidedTranscript(opts.transcript)
+        ? studioDeployReadyTranscriptHold(raw)
+        : raw,
+    };
+  }
+
+  if (isTerminalJobStatus(status.jobStatus)) {
+    return {
+      action: 'job',
+      jobStatus: status.jobStatus,
+      live_url: status.live_url,
+      github_repo: status.github_repo,
+      message:
+        status.message ||
+        (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
+    };
+  }
+
+  return {
+    action: 'continue',
+    jobStatus: status.jobStatus,
+    message: usableProvidedTranscript(opts.transcript)
+      ? studioDeployReadyTranscriptHold(status.message)
+      : status.message || `Deploy job ${opts.jobId} still ${status.jobStatus || 'pending'}`,
+  };
+}
+
 /**
  * Real deploy attempt (FastAPI video-to-software). Pass through a backend
  * live URL only — never invent one. 401/403 and other non-live outcomes

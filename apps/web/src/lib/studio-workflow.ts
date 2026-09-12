@@ -64,7 +64,8 @@ function str(v: unknown): string | undefined {
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
 /** Client poll window: long enough for one video-to-software attempt (~3 min). */
-export const STUDIO_DEPLOY_POLL_ATTEMPTS = 150;
+/** Client window must cover WDK durable job polls (36 × 10s) plus kickoff. */
+export const STUDIO_DEPLOY_POLL_ATTEMPTS = 210;
 export const STUDIO_DEPLOY_POLL_DELAY_MS = 2000;
 
 function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
