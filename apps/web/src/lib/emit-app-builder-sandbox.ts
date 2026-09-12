@@ -1,4 +1,5 @@
 import type { VideoPackCitation, EmittedVideoPack } from '@/lib/emit-video-pack';
+import { MISSION_CANVAS_FILENAME, emitMissionCanvasFile } from '@/lib/emit-json-canvas';
 import type {
   VideoPackKeyframe,
   VideoPackRequirement,
@@ -349,6 +350,7 @@ Payload: transcript + visual events + SOP steps. Architecture and code snippets 
 3. \`sh startup.sh\` — probes \`http://127.0.0.1:8080/\`, then \`npm run dev\` on \`0.0.0.0:8080\`.
 4. \`node scripts/browser-smoke.mjs\` — visible UI must include \`${input.videoId}\`.
 5. \`npm run build\` and \`npm run typecheck\` must pass.
+6. Optional \`mission.canvas\` is JSON Canvas 1.0 (https://github.com/groupthinking/jsoncanvas spec/1.0) from transcript + visual events + SOP only. Omitted when that slice is empty. Open in Obsidian or any JSON Canvas app. Keyframe \`image_path\` is not invented (B2 PARTIAL).
 
 This cut does not claim a live deploy URL and does not run G.A.T.E. \`studio.deploy\`.
 `;
@@ -427,7 +429,7 @@ export function emitAppBuilderSandbox(input: AppBuilderSandboxInput): AppBuilder
     sopSteps: input.sopSteps ?? [],
   };
 
-  return {
+  const sandbox: AppBuilderSandbox = {
     contract: APP_BUILDER_CONTRACT,
     cut: APP_BUILDER_CUT,
     videoId,
@@ -448,6 +450,11 @@ export function emitAppBuilderSandbox(input: AppBuilderSandboxInput): AppBuilder
       'README.md': readme(normalized),
     },
   };
+  const canvasFile = emitMissionCanvasFile(normalized);
+  if (canvasFile) {
+    sandbox.files[MISSION_CANVAS_FILENAME] = canvasFile;
+  }
+  return sandbox;
 }
 
 function isCitation(value: unknown): value is VideoPackCitation {
