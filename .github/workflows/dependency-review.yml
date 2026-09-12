@@ -36,6 +36,11 @@ jobs:
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
+          # The dependency graph API can briefly report "no snapshots found for the
+          # head SHA" when a PR's dependency snapshot is submitted asynchronously and
+          # hasn't finished indexing yet. Retry instead of failing/warning on that race.
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 300
           # GHSA-w5hq-g745-h8pq: transitive uuid@8.3.2 pulled by next-auth@4.24 (which pins uuid ^8.3.2).
           # The moderate advisory affects uuid v3/v5/v6 when a caller-provided buffer is passed; next-auth
           # only calls v4(), so the vulnerable code path is unreachable here. The first patched uuid is
