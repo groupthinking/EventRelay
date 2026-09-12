@@ -62,6 +62,7 @@ import {
 } from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
@@ -365,6 +366,16 @@ export default function OneLoopStudio({
     // One-shot kick from ?video= so Home paste starts the live pack path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  useEffect(() => {
+    // Release the module-level Strict Mode guard when Studio truly unmounts so
+    // re-entering /studio?video= with the same id (re-paste, or retry after a
+    // failed run) auto-starts again. Deferred so React's synchronous Strict
+    // Mode unmount/remount still sees the guard and does not double-start.
+    return () => {
+      window.setTimeout(() => resetStudioQueryAutoStart(), 0);
+    };
+  }, []);
 
   const analyze = (event?: FormEvent) => {
     event?.preventDefault();
