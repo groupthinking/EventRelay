@@ -55,7 +55,11 @@ import {
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
-import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
+import {
+  buildSameRunActInput,
+  MIN_ACT_TRANSCRIPT_CHARS,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
   resolveStudioHandoff,
@@ -210,7 +214,11 @@ function PackWorkbench({
   );
 }
 
-export default function OneLoopStudio() {
+export default function OneLoopStudio({
+  showAgentWorkflowUi,
+}: {
+  showAgentWorkflowUi: boolean;
+}) {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -569,7 +577,10 @@ export default function OneLoopStudio() {
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(attemptVideoId);
     try {
-      const started = await startStudioDeploy({ url: next });
+      const started = await startStudioDeploy({
+        url: next,
+        transcript: usableProvidedTranscript(selected?.transcript),
+      });
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;
@@ -587,7 +598,7 @@ export default function OneLoopStudio() {
         return;
       }
       setDeployRunId(started.runId);
-      const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
+      const polled = await pollStudioDeploy(started.runId);
       const backendReason = polled.error || polled.result?.message || null;
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
@@ -610,6 +621,8 @@ export default function OneLoopStudio() {
           error: polled.error,
           kind: polled.result?.kind,
           message: polled.result?.message,
+          jobId: polled.result?.jobId,
+          jobStatus: polled.result?.jobStatus,
         }),
       );
     } catch (err) {
@@ -720,6 +733,19 @@ export default function OneLoopStudio() {
                 <p data-testid="studio-gate-reason" className="text-sm text-white/80">
                   {gateReceipt.reason}
                 </p>
+                {scopedDeployReceipt ? (
+                  <p className="mt-1">
+                    <a
+                      data-testid="studio-gate-live-url"
+                      href={scopedDeployReceipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-[#e8b86d] underline"
+                    >
+                      {scopedDeployReceipt}
+                    </a>
+                  </p>
+                ) : null}
                 <p className="mt-1 break-all font-mono text-[11px] text-white/45">
                   <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
                   {' · '}
@@ -751,7 +777,7 @@ export default function OneLoopStudio() {
 
       <main
         data-testid="studio-main"
-        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-20 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
+        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-28 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
       >
         <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
@@ -1120,7 +1146,7 @@ export default function OneLoopStudio() {
           </section>
         )}
 
-        {(actRunId || workflowActions) && (
+        {showAgentWorkflowUi && (actRunId || workflowActions) && (
           <section
             id="act-results"
             data-testid="act-results"
@@ -1185,14 +1211,16 @@ export default function OneLoopStudio() {
 
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          <button
-            type="button"
-            onClick={() => void act()}
-            disabled={actBusy || !hasPayload}
-            className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
-          >
-            {actBusy ? 'Running tools…' : 'Run tools'}
-          </button>
+          {showAgentWorkflowUi && (
+            <button
+              type="button"
+              onClick={() => void act()}
+              disabled={actBusy || !hasPayload}
+              className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
+            >
+              {actBusy ? 'Running tools…' : 'Run tools'}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportPkg}
