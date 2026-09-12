@@ -11,6 +11,18 @@ import {
   QJ_VIDEO_ID,
   QJ_VISUAL_EVENTS,
 } from '@/lib/__fixtures__/qj-z5ohr7sga-emit';
+import {
+  XYMC_FORBIDDEN_ARCHITECTURE,
+  XYMC_FORBIDDEN_CODE_SNIPPETS,
+  XYMC_KEYFRAMES,
+  XYMC_PACK_ID,
+  XYMC_SOP_STEPS,
+  XYMC_SOURCE_HASH,
+  XYMC_SOURCE_URL,
+  XYMC_TRANSCRIPT,
+  XYMC_VIDEO_ID,
+  XYMC_VISUAL_EVENTS,
+} from '@/lib/__fixtures__/xymcbrfsj4c-emit';
 
 afterEach(() => {
   vi.resetModules();
@@ -163,6 +175,72 @@ describe('POST /api/video/sandbox', () => {
     const body = (await res.json()) as { data: { files: Record<string, string> } };
     expect(body.data.files['scripts/browser-smoke.mjs']).toContain(QJ_VIDEO_ID);
     expect(body.data.files['index.html']).toContain('scissor jack');
+  });
+
+  it('materializes XYMcBrFSJ4c without architecture, code snippets, or Qj tire copy', async () => {
+    expect(identityHash(XYMC_VIDEO_ID)).toBe(XYMC_SOURCE_HASH);
+    const loaded = await loadSandboxRoute();
+    const identity = loaded.buildIdentityPack(XYMC_VIDEO_ID, XYMC_SOURCE_URL, '2026-09-12T00:00:00.000Z');
+    const pack = loaded.applyExtractedSpec(identity, {
+      transcript: XYMC_TRANSCRIPT,
+      keyframes: XYMC_KEYFRAMES.map((frame) => ({
+        t_s: frame.t_s,
+        desc: frame.desc,
+      })),
+      concepts: ['Boring AI Automations'],
+      requirements: XYMC_SOP_STEPS.map((step) => ({
+        id: step.id,
+        title: step.title,
+        detail: step.description,
+        priority: 'P1',
+        tags: [],
+      })),
+      code_snippets: XYMC_FORBIDDEN_CODE_SNIPPETS.map((snippet) => ({ ...snippet })),
+      architecture: {
+        summary: XYMC_FORBIDDEN_ARCHITECTURE.summary,
+        stages: XYMC_FORBIDDEN_ARCHITECTURE.stages.map((stage) => ({ ...stage })),
+        mermaid: XYMC_FORBIDDEN_ARCHITECTURE.mermaid,
+      },
+      artifacts: [
+        {
+          path_hint: 'workflows/email_triage.ts',
+          purpose: 'Invented type dump',
+          interface: 'interface EmailClassification',
+        },
+      ],
+      stack: { tools: [] },
+      visual_context: {
+        visual_elements: XYMC_VISUAL_EVENTS.map((event) => ({
+          timestamp: event.timestamp,
+          element_type: event.element_type,
+          content: event.content,
+          confidence: 0.9,
+        })),
+        summary: 'Live functional demos of n8n, Make, Retell AI, and Voiceflow.',
+        frame_analysis_count: 12,
+      },
+    });
+    loaded.seedVideoPackRecordForTests({ state: 'ready', pack });
+
+    const res = await loaded.POST(postRequest({ url: XYMC_SOURCE_URL }));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: { videoId: string; files: Record<string, string> };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.videoId).toBe(XYMC_VIDEO_ID);
+    expect(body.data.files['index.html']).toContain('unpaid invoices');
+    expect(body.data.files['index.html']).toContain('Email Triage Workflow');
+    expect(body.data.files['index.html']).toContain('Torty Gym');
+    expect(body.data.files['scripts/browser-smoke.mjs']).toContain(XYMC_VIDEO_ID);
+    const shipped = JSON.stringify(body.data.files);
+    expect(shipped).not.toContain(QJ_VIDEO_ID);
+    expect(shipped).not.toContain('five flat tires');
+    expect(shipped).not.toContain('email_triage.ts');
+    expect(shipped).not.toContain('EmailClassification');
+    expect(shipped).not.toContain('Modular agency architecture connecting lead capture');
+    expect(shipped).not.toMatch(/dpl_/);
   });
 
   it('does not start a new extract when the pack is missing', async () => {
