@@ -1,4 +1,31 @@
-# TASK: studio.deploy must terminalize Attempting deploy (success or HOLD)
+# TASK: studio.deploy G.A.T.E. HOLD must be a live URL or a finished-without-hostname residual
+
+## 1. Goal & Scope
+* **Objective:** `studio.deploy` / G.A.T.E. must PASS with a backend-supplied https live URL + receipt, or HOLD with a residual that means Origin/deploy **truly finished** without a hostname. Do **not** terminalize a premature “waiting” HOLD while a job is still obtainable / pollable.
+* **Context:** AXIOM on READY prod `dpl_HheLD9BJr8jts34NDQgMGcta2Fnb` (#1893 / `6dd8fe23`) / XYMcBrFSJ4c. Cleared: Attempting deploy hang; stale #1853 receipt. Terminal HOLD: `Deploy attempt started. Waiting for a verified https live URL.` Receipt `er:gate:v1:wrun_01M2B9NW5JA5JQNBTWDRRSHXD6`. No live URL.
+* **Root cause:** #1893 evaluates G.A.T.E. **before** `pollStudioDeploy` with `STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD`. That HOLD + `er:gate:v1:{runId}` is treated as the terminal residual. GET `/studio-deploy/:runId` only attaches `result` when completed/failed, so a still-running WDK job is invisible; exhausted polls then claim kickoff-no-job even though a job may still be pollable. Client window (210×2s=420s) is shorter than kickoff retry (45+10+45) + 36×10s job reads (≥460s). Client `getStudioDeployStatus` only reads top-level `result.live_url`.
+* **Scope:** Remove in-flight G.A.T.E. HOLD; keep stale-receipt clear + runId bind; classify residuals (still-pollable vs kickoff-no-job vs hostname-finished); cover kickoff+job in the client poll budget; extract nested live_url on the client GET. Do not invent a URL or secrets.
+ * *Initial check:* Modify existing OneLoopStudio / studio-workflow / studio-pipeline-status / tests. No new Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Failing tests for no attempt-started G.A.T.E., still-pollable vs finished residuals, poll budget, nested extract
+- [x] Step 2: Implement residual classifier + poll window + client extract; drop in-flight HOLD
+- [x] Step 3: Focused Vitest GREEN (pytest N/A — no Python touched)
+- [x] Step 4: PR off current main — https://github.com/groupthinking/EventRelay/pull/1895 — do not merge
+
+## 3. Definition of Done
+* **Expected Outcome:** `wrun_01M2B9NW5JA5JQNBTWDRRSHXD6` cannot HOLD `Deploy attempt started. Waiting for a verified https live URL.` G.A.T.E. runs after poll. Still-running / no-visible-job_id → still-pollable (not hostname-finished, not attempt-started). Terminal WDK without URL → kickoff-no-job or hostname-finished. PASS only with backend https hostname.
+* **Verification Method:** Focused Vitest (`studio-workflow`, `gate-transition`, `studio-pipeline-status`, `pipeline-async-job`, `studio-deploy`)
+* **Proof Artifact:** Focused Vitest **7 files / 121 passed**. Pytest N/A.
+
+## 4. Post-Task Reflection
+* **What was done:** Removed the #1893 in-flight G.A.T.E. HOLD. Classified residuals (`studioDeployPollResidual`): still-pollable vs kickoff-no-job vs hostname-finished. Extended client poll to cover kickoff retry + 36×10s. Client GET extracts nested `deployment.urls.vercel`.
+* **Why it was needed:** AXIOM treated `Deploy attempt started. Waiting for a verified https live URL.` as the terminal residual on `wrun_01M2B9NW5JA5JQNBTWDRRSHXD6` while Origin/job could still be pollable.
+* **How it was tested:** TDD RED then GREEN. Focused Vitest 121 passed. No Python touched. Production AXIOM dogfood not available here.
+
+---
+
+# Prior cut: studio.deploy must terminalize Attempting deploy (success or HOLD)
 
 ## 1. Goal & Scope
 * **Objective:** Anon Studio Attempt Deploy / G.A.T.E. `studio.deploy` with ready-transcript reuse must reach a **terminal** decision within a reasonable budget: G.A.T.E. PASS + backend-supplied https live URL + receipt bound to the **new** run, or a precise HOLD (not a stale prior receipt, not silent forever on Attempting deploy).

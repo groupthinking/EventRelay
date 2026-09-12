@@ -26,6 +26,7 @@ import {
   pollVideoToActions,
   startStudioDeploy,
   startVideoToActions,
+  studioDeployPollResidual,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
 import { identityPackJson } from '@/lib/emit-video-pack';
@@ -33,7 +34,6 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
-  STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD,
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
@@ -628,18 +628,8 @@ export default function OneLoopStudio({
         return;
       }
       setDeployRunId(started.runId);
-      const inFlight = evaluateStudioDeployTransition({
-        transitionId: started.runId,
-        runId: started.runId,
-        runStatus: 'running',
-        backendReason: STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD,
-        authority: { actor: 'anonymous' },
-      });
-      setGateReceipt(
-        studioGateReceiptView(inFlight, { backendReason: STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD }),
-      );
       const polled = await pollStudioDeploy(started.runId);
-      const backendReason = polled.error || polled.result?.message || null;
+      const backendReason = studioDeployPollResidual(polled);
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
         runId: started.runId,
@@ -658,7 +648,7 @@ export default function OneLoopStudio({
         studioDeployOutcomeMessage({
           liveUrl,
           runStatus: polled.runStatus,
-          error: polled.error,
+          error: backendReason || polled.error,
           kind: polled.result?.kind,
           message: polled.result?.message,
           jobId: polled.result?.jobId,

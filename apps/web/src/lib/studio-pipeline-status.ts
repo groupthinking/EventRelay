@@ -253,6 +253,114 @@ export function studioVerifiedLiveUrl(liveUrl?: string | null): string | null {
   }
 }
 
+const PREFERRED_LIVE_HOST = /\.(vercel\.app|netlify\.app|fly\.dev)$/i;
+const BARE_LIVE_HOST = /^(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|fly\.dev)$/i;
+const REJECTED_LIVE_HOST = /^(?:www\.)?(?:github\.com|vercel\.com)$/i;
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function asLiveRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Pass through a backend-supplied hostname only — never invent one. */
+function asBackendLiveCandidate(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  const verified = studioVerifiedLiveUrl(raw);
+  if (verified) return verified;
+  if (BARE_LIVE_HOST.test(raw)) {
+    return studioVerifiedLiveUrl(`https://${raw}`);
+  }
+  return null;
+}
+
+function collectLiveUrlCandidates(record: Record<string, unknown>): unknown[] {
+  const deployment = asLiveRecord(record.deployment);
+  const outputs = asLiveRecord(record.outputs);
+  const result = asLiveRecord(record.result);
+  const metadata = asLiveRecord(record.metadata);
+  const data = asLiveRecord(record.data);
+  const urls =
+    asLiveRecord(deployment?.urls) ||
+    asLiveRecord(record.urls) ||
+    asLiveRecord(asLiveRecord(outputs?.deployment)?.urls);
+  const summary = asLiveRecord(deployment?.summary) || asLiveRecord(record.summary);
+  const summaryUrls = asLiveRecord(summary?.deployment_urls);
+  const outDep = asLiveRecord(outputs?.deployment);
+  return [
+    record.live_url,
+    data?.live_url,
+    result?.live_url,
+    metadata?.live_url,
+    deployment?.live_url,
+    deployment?.url,
+    outDep?.live_url,
+    outDep?.url,
+    urls?.vercel,
+    urls?.netlify,
+    urls?.fly,
+    deployment?.alias,
+    record.alias,
+    summary?.primary_url,
+    ...(summaryUrls ? Object.values(summaryUrls) : []),
+    ...(urls ? Object.values(urls) : []),
+    ...(Array.isArray(deployment?.aliases) ? deployment.aliases : []),
+    ...(Array.isArray(deployment?.automaticAliases) ? deployment.automaticAliases : []),
+    ...(Array.isArray(record.aliases) ? record.aliases : []),
+    record.url,
+    data,
+    result,
+    metadata,
+    deployment,
+    outputs,
+    outDep,
+    urls,
+    summary,
+  ];
+}
+
+/**
+ * Pass through a backend-supplied verified https hostname only — never invent one.
+ * Prefer explicit live_url / vercel|netlify|fly hosts over a GitHub repo URL.
+ */
+export function extractBackendLiveUrl(...values: unknown[]): string | null {
+  const preferred: string[] = [];
+  const other: string[] = [];
+  const queue: unknown[] = [...values];
+  const seen = new Set<unknown>();
+  while (queue.length) {
+    const value = queue.shift();
+    if (value == null || seen.has(value)) continue;
+    if (typeof value === 'object') seen.add(value);
+    const verified = asBackendLiveCandidate(value);
+    if (verified) {
+      const host = hostnameOf(verified);
+      if (REJECTED_LIVE_HOST.test(host)) {
+        continue;
+      }
+      if (PREFERRED_LIVE_HOST.test(host) || host.endsWith('.vercel.app')) {
+        preferred.push(verified);
+      } else if (host !== 'github.com' && host !== 'www.github.com') {
+        other.push(verified);
+      }
+      continue;
+    }
+    const rec = asLiveRecord(value);
+    if (rec) queue.push(...collectLiveUrlCandidates(rec));
+  }
+  return preferred[0] ?? other[0] ?? null;
+}
+
 /** A real deploy receipt is an https live URL. Workflow "completed" is not. */
 export function studioHasDeployReceipt(liveUrl?: string | null): boolean {
   return studioVerifiedLiveUrl(liveUrl) !== null;
@@ -277,7 +385,15 @@ export const STUDIO_DEPLOY_ABORT_RETRY_MESSAGE =
 export const STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD =
   'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
 
-/** In-flight chip bound to the new runId — not a prior receipt. */
+/** Honest HOLD after reuse — Origin/deploy finished and no backend-supplied https hostname. */
+export const STUDIO_ORIGIN_NO_HOSTNAME_HOLD =
+  'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
+
+/** Honest HOLD when the client poll budget ended while the WDK run is still running. */
+export const STUDIO_ORIGIN_STILL_POLLABLE_HOLD =
+  'Studio deploy run is still in progress after the EventRelay poll budget. Origin job remains pollable.';
+
+/** Retired #1893 in-flight copy — must not be a terminal G.A.T.E. residual. */
 export const STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD =
   'Deploy attempt started. Waiting for a verified https live URL.';
 

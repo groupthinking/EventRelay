@@ -440,7 +440,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioVerifiedLiveUrl');
     expect(studio).toContain('setDeployReceiptUrl(null)');
     expect(studio).toContain('setGateReceipt(null)');
-    expect(studio).toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
+    expect(studio).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
+    expect(studio).not.toContain('Deploy attempt started. Waiting for a verified https live URL.');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
     expect(studio).not.toMatch(/`Deploy \$\{polled\.runStatus/);
     expect(studio).not.toContain('>Deploy<');
