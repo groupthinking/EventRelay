@@ -325,6 +325,7 @@ class TestEndToEndDispatch:
         """
         skills = registry.list_skills()
         assert skills, "registry discovered no skills; the guard would be vacuous"
+        assert registry.get_skills_for_trigger("manual") == []
 
         # 1. Registry metadata, normalized from skills-lock.json.
         for skill in skills:
@@ -354,6 +355,28 @@ class TestEndToEndDispatch:
             assert (
                 "manual" not in trigger_events
             ), f"Agent '{agent.get('id')}' has forbidden 'manual' in trigger_events"
+
+    def test_registry_trigger_mapping_matches_loaded_skills(
+        self, registry: SkillRegistry
+    ) -> None:
+        """The lock, loaded skill classes, and agent network must agree."""
+        network_cfg = json.loads(
+            (_REPO_ROOT / "config" / "agent_network.json").read_text()
+        )
+        network_skills = {
+            agent["id"]: agent
+            for agent in network_cfg.get("agents", [])
+            if agent.get("skill_source") == "uvai-skills"
+        }
+
+        for metadata in registry.list_skills():
+            skill_id = metadata["id"]
+            instance = registry._load_skill_instance(skill_id)
+            assert set(metadata["triggers"]) == set(instance.triggers)
+            assert skill_id in network_skills
+            assert set(metadata["triggers"]) == set(
+                network_skills[skill_id].get("trigger_events", [])
+            )
 
     @pytest.mark.asyncio
     async def test_trigger_dispatch_invokes_all_matching_skills(

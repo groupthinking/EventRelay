@@ -1454,6 +1454,50 @@ class TestEnqueueBatchConcurrency:
             f"across calls"
         )
 
+    async def test_distinct_services_share_the_process_bound(self):
+        """Distinct services in one worker must still respect the process bound."""
+        per_batch = 12
+        mock_tv2 = _routing_tasks_v2()
+        first_service = _initialized_service(mock_tv2)
+        second_service = _initialized_service(mock_tv2)
+
+        lock = threading.Lock()
+        in_flight = 0
+        peak = 0
+
+        def create_task(request=None, **_kwargs):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{_video_id_of(request)}"
+            return response
+
+        first_service.client.create_task.side_effect = create_task
+        second_service.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            first, second = await asyncio.gather(
+                first_service.enqueue_batch(self._video_tasks(per_batch, prefix="a")),
+                second_service.enqueue_batch(self._video_tasks(per_batch, prefix="b")),
+            )
+
+        assert len(first) == per_batch
+        assert len(second) == per_batch
+        assert peak > 1, "expected concurrent fan-out, observed a serial drain"
+        assert peak <= m._ENQUEUE_MAX_CONCURRENCY, (
+            f"two services reached {peak} concurrent RPCs, but the process limit "
+            f"is {m._ENQUEUE_MAX_CONCURRENCY}; the limiter is not shared across "
+            f"service instances"
+        )
+
     async def test_ids_follow_input_order_despite_completion_order(self):
         """Returned ids stay positionally aligned with the input tasks.
 

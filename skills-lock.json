@@ -109,6 +109,13 @@
       "computedHash": "9b446f0c7fe1cfb560b1d34439523b1a76d5f177290007b2c053a1c749a4a8ba",
       "subscribed_triggers": []
     },
+    "code-review": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".agents/skills/code-review/SKILL.md",
+      "computedHash": "48a49c3910e512e6055fa2be8a67a3bbd62827f4825d250cd3dc75b5ab3aeba8",
+      "subscribed_triggers": []
+    },
     "xcode-project-setup": {
       "source": "firebase/agent-skills",
       "sourceType": "github",

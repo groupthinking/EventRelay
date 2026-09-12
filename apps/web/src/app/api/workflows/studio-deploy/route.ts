@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { start } from 'workflow/api';
 import { workflowStartErrorBody } from '@/lib/sentry-server-integrations';
 import { assertPublicHttpUrl } from '@/lib/ssrf-guard';
+import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import { studioDeployWorkflow } from '@/workflows/studio-deploy';
 
@@ -15,7 +16,7 @@ export const maxDuration = 60;
  * Returns immediately with { runId }.
  */
 export async function POST(request: Request): Promise<NextResponse> {
-  let body: { url?: unknown; projectType?: unknown; outcome?: unknown };
+  let body: { url?: unknown; projectType?: unknown; outcome?: unknown; transcript?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -40,10 +41,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     typeof body.projectType === 'string' ? body.projectType.slice(0, 40) : undefined;
   const outcome =
     typeof body.outcome === 'string' ? body.outcome.slice(0, 80) : undefined;
+  const transcript =
+    typeof body.transcript === 'string' ? usableProvidedTranscript(body.transcript) : undefined;
 
   try {
     const run = await withWorldVercelFetch(() =>
-      start(studioDeployWorkflow, [{ url, projectType, outcome }]),
+      start(studioDeployWorkflow, [{ url, projectType, outcome, transcript }]),
     );
     return NextResponse.json({
       ok: true,

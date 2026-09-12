@@ -27,6 +27,7 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioVerifiedLiveUrl,
   type StudioPipelineCheck,
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
@@ -622,17 +623,15 @@ export default function VideoWorkflowStudio() {
         setDeployRunId(started.runId);
         setActionMessage(`Deploy workflow ${started.runId} running — polling job…`);
         const polled = await pollStudioDeploy(started.runId, {
-          attempts: 24,
-          delayMs: 2000,
           signal: deployAbort.signal,
         });
-        const live = polled.result?.live_url;
+        const live = studioVerifiedLiveUrl(polled.result?.live_url);
         if (live) setDeployLiveUrl(live);
         if (polled.result?.github_repo) setDeployRepo(polled.result.github_repo);
         if (polled.result?.jobId) setDeployJobId(polled.result.jobId);
 
         if (live) {
-          setActionMessage(`Deploy ready: ${live} (run ${started.runId})`);
+          setActionMessage(`Deploy receipt: ${live} (run ${started.runId})`);
           return;
         }
         if (polled.result?.kind === 'handoff') {
@@ -667,7 +666,8 @@ export default function VideoWorkflowStudio() {
         });
         jobId = kick.jobId;
         if (kick.jobId) setDeployJobId(kick.jobId);
-        if (kick.live_url) setDeployLiveUrl(kick.live_url);
+        const kickLive = studioVerifiedLiveUrl(kick.live_url);
+        if (kickLive) setDeployLiveUrl(kickLive);
         if (kick.github_repo) setDeployRepo(kick.github_repo);
 
         if (!kick.ok && !kick.jobId) {
@@ -679,8 +679,8 @@ export default function VideoWorkflowStudio() {
           return;
         }
 
-        if (kick.live_url) {
-          setActionMessage(`Deploy live: ${kick.live_url}`);
+        if (kickLive) {
+          setActionMessage(`Deploy receipt: ${kickLive}`);
           return;
         }
 
@@ -699,11 +699,12 @@ export default function VideoWorkflowStudio() {
       }
 
       const polled = await pollStudioJob(jobId, { attempts: 6, delayMs: 1500 });
-      if (polled.live_url) setDeployLiveUrl(polled.live_url);
+      const polledLive = studioVerifiedLiveUrl(polled.live_url);
+      if (polledLive) setDeployLiveUrl(polledLive);
       if (polled.github_repo) setDeployRepo(polled.github_repo);
 
-      if (polled.live_url) {
-        setActionMessage(`Deploy ready: ${polled.live_url}`);
+      if (polledLive) {
+        setActionMessage(`Deploy receipt: ${polledLive}`);
       } else if (polled.jobStatus === 'failed' || polled.jobStatus === 'error') {
         setActionMessage(
           `Deploy job ${jobId} failed${polled.message ? `: ${polled.message}` : ''}. Export package for manual handoff.`,

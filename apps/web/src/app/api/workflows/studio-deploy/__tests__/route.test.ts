@@ -86,4 +86,31 @@ describe('POST /api/workflows/studio-deploy', () => {
     expect(json.runId).toBe('wrun_c1');
     expect(String(json.statusUrl)).toContain('wrun_c1');
   });
+
+  it('forwards a ready transcript into the workflow start payload', async () => {
+    start.mockResolvedValue({ runId: 'wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ' });
+    const { POST } = await import('../route');
+    const transcript =
+      'Studio Video Pack for XYMcBrFSJ4c already has a usable transcript ready for deploy.';
+    const res = await POST(
+      new Request('https://uvai.io/api/workflows/studio-deploy', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          url: 'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+          transcript,
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(start).toHaveBeenCalledWith(
+      expect.anything(),
+      [
+        expect.objectContaining({
+          url: 'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+          transcript,
+        }),
+      ],
+    );
+  });
 });

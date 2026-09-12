@@ -61,6 +61,11 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
   advertised tools, and invokes `git_status` end-to-end. This is the
   baseline the issue asked to confirm before adding anything further; it
   passes today (see the "MCP baseline verification" section below).
+- ⚠️ **MCP Skills extension trust posture tracked (watch-only)** — SEP-2640
+  compatibility is explicitly tracked as **WATCH → TEST** with trigger-gated,
+  draft-only conformance scope in
+  [`docs/mcp-skills-sep-2640-watch.md`](./mcp-skills-sep-2640-watch.md)
+  (issue [#1640](https://github.com/groupthinking/EventRelay/issues/1640)).
 - ✅ **Video-processing MCP layer** — `src/youtube_extension/mcp/`,
   `src/mcp/mcp_ecosystem_coordinator.py`, `src/mcp/mcp_video_processor.py`.
 - ✅ **Standalone MCP servers** — `mcp-servers/langextract/`,
@@ -130,7 +135,7 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
   workflows, triggers, and purposes (CI, coverage, CodeQL, security,
   dependency review, secret scanning, deploy, E2E, gh-aw validation, etc.).
 - ✅ **gh-aw validation** — `gh-aw-validation.yml` pins `gh aw` to
-  `v0.82.14`, compiles the repository's markdown-based agentic workflows,
+  `v0.88.7`, compiles the repository's markdown-based agentic workflows,
   and runs `actionlint` + `zizmor` + `poutine` against the compiled output
   before requiring the `.lock.yml` files to match what's committed.
 
