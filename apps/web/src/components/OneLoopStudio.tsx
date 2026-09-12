@@ -585,7 +585,7 @@ export default function OneLoopStudio({
         return;
       }
       setDeployRunId(started.runId);
-      const polled = await pollStudioDeploy(started.runId, { attempts: 20, delayMs: 2000 });
+      const polled = await pollStudioDeploy(started.runId);
       const backendReason = polled.error || polled.result?.message || null;
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
@@ -608,6 +608,8 @@ export default function OneLoopStudio({
           error: polled.error,
           kind: polled.result?.kind,
           message: polled.result?.message,
+          jobId: polled.result?.jobId,
+          jobStatus: polled.result?.jobStatus,
         }),
       );
     } catch (err) {

@@ -1,4 +1,31 @@
-# TASK: Read studio.deploy workflow run (residual after #1850)
+# TASK: Wait for a verified studio.deploy receipt (residual after #1853)
+
+## 1. Goal & Scope
+* **Objective:** Attempt deploy must not HOLD solely for `Deploy still running. No verified deploy receipt — UNKNOWN checks are not a live URL.` Wait for a verified https live URL + EventRelay receipt, or an honest different HOLD.
+* **Context:** AXIOM on `dpl_8wx8iEfUcwNpWQNHwvpMsyLh9xsW` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2ABB1NJ5TFZ153CTRNTPNW9`) cleared the three prior residuals. New HOLD is the UNKNOWN-checks string. No Deploy completed / no live URL.
+* **Root cause:** `tryVideoToSoftwareDeploy` aborted at 50s (real deploy path still in flight) and fell through to `/videos/process`. Client `pollStudioDeploy(..., { attempts: 20 })` stopped while WDK `runStatus` was still `running`. `studioDeployOutcomeMessage` then HOLDs with UNKNOWN checks. WDK `pollJobStep` later died after 4 retries on `job_96f498640b still transcribing`.
+* **Scope:** `pipeline-async-job.ts` (do not abandon vts on timeout), `studio-workflow.ts` poller, `OneLoopStudio` attempt count, `studio-pipeline-status.ts` HOLD copy, WDK `pollJobStep` wait. Do not invent a live URL, do not weaken G.A.T.E., do not reopen #1848.
+ * *Initial check:* Modify existing poll/kickoff; do not add a second deploy path.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (poll through running, no UNKNOWN-checks HOLD, vts timeout not process-fallback)
+- [x] Step 2: Retry vts on timeout; wait for terminal/receipt; honest in-flight HOLD
+- [x] Step 3: Focused Vitest 66 passed
+- [ ] Step 4: New PR from main → merge-when-core-green → prod READY `dpl_`
+
+## 3. Definition of Done
+* **Expected Outcome:** HOLD is not UNKNOWN-checks, not the three cleared residuals. PASS only with a verified https hostname URL.
+* **Verification Method:** Focused Vitest + Vercel prod READY after merge.
+* **Proof Artifact:** (filled after verification)
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: Read studio.deploy workflow run (residual after #1850)
 
 ## 1. Goal & Scope
 * **Objective:** Attempt deploy must not HOLD solely for `Failed to read workflow run`. GET must read the WDK run. PASS only with a verified https live URL + EventRelay receipt; otherwise honest HOLD/REJECT with a different real reason.

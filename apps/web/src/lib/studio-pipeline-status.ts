@@ -260,6 +260,8 @@ export function studioDeployOutcomeMessage(input: {
   error?: string | null;
   kind?: string | null;
   message?: string | null;
+  jobId?: string | null;
+  jobStatus?: string | null;
 }): string {
   const error = input.error?.trim();
   if (error) return error;
@@ -267,16 +269,22 @@ export function studioDeployOutcomeMessage(input: {
   if (receipt) {
     return `Deploy receipt: ${receipt}`;
   }
+  const jobId = input.jobId?.trim();
+  const jobStatus = input.jobStatus?.trim();
+  const terminalJob = new Set(['complete', 'completed', 'succeeded', 'failed', 'error', 'cancelled']);
+  if (jobId && jobStatus && !terminalJob.has(jobStatus.toLowerCase())) {
+    return `Deploy job ${jobId} still ${jobStatus}`;
+  }
   const status = (input.runStatus || '').toLowerCase();
   if (STUDIO_IN_FLIGHT_DEPLOY_STATUSES.has(status)) {
-    return `Deploy still ${status}. No verified deploy receipt — UNKNOWN checks are not a live URL.`;
+    return `Deploy still ${status}. Waiting for a verified https live URL.`;
   }
   if (status === 'failed' || status === 'cancelled' || status === 'error') {
     return `Deploy ${status}. No verified live URL.`;
   }
   const detail = input.message?.trim();
   if ((input.kind === 'handoff' || input.kind === 'job') && detail) return detail;
-  return 'Deploy attempt ended. No verified deploy receipt — UNKNOWN checks are not a live URL.';
+  return 'Deploy attempt ended. No verified deploy receipt.';
 }
 
 export function studioDeployButtonLabel(_hasReceipt: boolean): string {

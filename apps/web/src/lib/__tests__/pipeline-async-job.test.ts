@@ -187,8 +187,37 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(kicked.live_url).toBe('https://xy.vercel.app');
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.uvai.io/api/v1/video-to-software',
-      expect.objectContaining({ method: 'POST' }),
+      expect.objectContaining({
+        method: 'POST',
+        signal: expect.any(AbortSignal),
+      }),
     );
+  });
+
+  it('does not abandon video-to-software timeout to start a transcript job', async () => {
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.uvai.io',
+    });
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    const fetchMock = vi.fn().mockImplementation(async (input: unknown) => {
+      const href = String(input);
+      if (href.includes('/video-to-software')) {
+        throw Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'TimeoutError',
+        });
+      }
+      throw new Error(`must not fall through to ${href}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(
+      kickoffAsyncVideoJob('https://www.youtube.com/watch?v=XYMcBrFSJ4c'),
+    ).rejects.toThrow(/timeout|aborted/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('falls through to videos/process when video-to-software is 401 (not an auth cut)', async () => {
