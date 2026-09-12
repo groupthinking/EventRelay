@@ -1,4 +1,31 @@
-# TASK: studio.deploy no abort-timeout → live URL
+# TASK: restore ready-transcript reuse on studio.deploy
+
+## 1. Goal & Scope
+* **Objective:** Attempt Deploy must reuse an already-ready transcript — never re-hit YouTube `/videos/process` — and still reach G.A.T.E. PASS with a clickable https live URL + receipt, or an honest HOLD that is **not** the reuse-miss copy and not prior cleared residuals.
+* **Context:** AXIOM on `dpl_BL2mQMcrQEyuKB1LjmwCgEeA4V9Y` (#1884 / `2f9b4751`) / XYMcBrFSJ4c. Timeout abort residual CLEARED. Still HOLD: `Ready transcript was not reused. Deploy must not re-fetch YouTube.` Receipt `er:gate:v1:wrun_01M2B05JJZNTD7MKANV0RN0J28`. No live URL.
+* **Root cause (verified in tree):** `#1884` remaps timeout / 524 / empty poll messages through `studioDeployReadyTranscriptHold()` to `STUDIO_READY_TRANSCRIPT_HOLD`. `decideStudioDeployPoll` continue with a ready transcript and no status message becomes that reuse-miss string; kickoff abort catch calls `studioDeployReadyTranscriptHold()` with no args. Transcript **is** sent to origin vts — the HOLD is a false reuse-miss label. Origin 202 is also delayed by a 12s sync wait even when a transcript is already ready.
+* **Scope:** Honest remappers (reuse HOLD only on YouTube re-fetch). Continue poll keeps pending copy. Ready-transcript vts returns 202 immediately. Keep timeout/524/bot/UNKNOWN/workflow-run/return-value/BACKEND_URL cleared. Claim guard unchanged.
+ * *Initial check:* Modify existing `pipeline-async-job.ts`, `studio-deploy.ts` workflow, and `router.py` vts. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (continue ≠ reuse miss; 524/abort ≠ reuse miss; bot still reuse HOLD; origin 202 without sync wait)
+- [x] Step 2: Remap + immediate 202 + workflow abort copy
+- [x] Step 3: Focused Vitest + pytest GREEN
+- [ ] Step 4: PR off current main
+
+## 3. Definition of Done
+* **Expected Outcome:** Ready-transcript deploy never calls `/videos/process`. Timeout/524 no longer become the reuse-miss HOLD. Origin 202 + job poll remains the async path. PASS only with verified https hostname URL + receipt.
+* **Verification Method:** Focused Vitest (`pipeline-async-job`, `studio-workflow`, `studio-pipeline-status`, `gate-transition`, studio-deploy route) + pytest ready-transcript 202 + skip YouTube.
+* **Proof Artifact:** Vitest 5 files / 96 passed. Pytest `test_ready_transcript_video_to_software_returns_202_without_sync_wait` + `test_video_to_software_returns_202_when_sync_budget_exceeded` + `test_ready_transcript_skips_youtube_fetch` passed.
+
+## 4. Post-Task Reflection
+* **What was done:** Stopped remapping timeout/524/empty poll copy to the reuse-miss HOLD. Continue polls stay `Deploy job … still pending`. Origin vts with a usable transcript returns 202 immediately so Studio can poll `job_id` instead of aborting the 12s sync wait. YouTube bot string still maps to the reuse HOLD. `/videos/process` still skipped when a transcript is ready. Claim guard unchanged.
+* **Why it was needed:** After #1884, AXIOM HOLDs `Ready transcript was not reused` even though kickoff already sent the Studio transcript — `studioDeployReadyTranscriptHold()` treated timeout/empty as a reuse miss, and exhausted polls inherited that string.
+* **How it was tested:** TDD RED then GREEN. Focused Vitest 96. Pytest 3 ready-transcript/202 cases. Cannot signed-in dogfood AXIOM here.
+
+---
+
+# Prior cut: studio.deploy no abort-timeout → live URL
 
 ## 1. Goal & Scope
 * **Objective:** Prevent abort-timeout on the studio.deploy path (extend wait, async poll, or honest progress) through a verified deploy receipt + clickable live URL, or an honest HOLD that is not this timeout and not prior cleared residuals.

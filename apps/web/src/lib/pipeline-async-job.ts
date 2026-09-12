@@ -54,6 +54,10 @@ const YOUTUBE_REFETCH_RE =
 export const STUDIO_READY_TRANSCRIPT_HOLD =
   'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
 
+/** Honest HOLD when origin reused the transcript but produced no live URL. */
+export const STUDIO_ORIGIN_NO_LIVE_HOLD =
+  'Studio transcript was reused. Origin video-to-software returned no verified live URL.';
+
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
   if (message && YOUTUBE_REFETCH_RE.test(message)) {
@@ -71,10 +75,13 @@ export function isGatewayTimeoutKickoff(status?: number, message?: string): bool
   );
 }
 
-/** Ready-transcript miss: never the bot wall and never HTTP 524. */
+/** Ready-transcript miss: YouTube re-fetch → reuse HOLD; timeout/524 → origin miss. */
 export function studioDeployReadyTranscriptHold(message?: string): string {
-  if (!message || YOUTUBE_REFETCH_RE.test(message) || isGatewayTimeoutKickoff(undefined, message)) {
+  if (message && YOUTUBE_REFETCH_RE.test(message)) {
     return STUDIO_READY_TRANSCRIPT_HOLD;
+  }
+  if (!message || isGatewayTimeoutKickoff(undefined, message)) {
+    return STUDIO_ORIGIN_NO_LIVE_HOLD;
   }
   return message;
 }
@@ -304,12 +311,17 @@ export function decideStudioDeployPoll(
     };
   }
 
+  const pending = `Deploy job ${opts.jobId} still ${status.jobStatus || 'pending'}`;
+  const raw = status.message;
+  const remapped =
+    raw && usableProvidedTranscript(opts.transcript)
+      ? studioDeployYoutubeRefetchHold(raw)
+      : raw;
   return {
     action: 'continue',
     jobStatus: status.jobStatus,
-    message: usableProvidedTranscript(opts.transcript)
-      ? studioDeployReadyTranscriptHold(status.message)
-      : status.message || `Deploy job ${opts.jobId} still ${status.jobStatus || 'pending'}`,
+    message:
+      !remapped || remapped === STUDIO_READY_TRANSCRIPT_HOLD ? pending : remapped,
   };
 }
 
