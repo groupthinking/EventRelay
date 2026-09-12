@@ -9,9 +9,15 @@ import {
   isTransientWorkflowRunReadError,
   isUnreadWorkflowRun,
   workflowReturnErrorMessage,
+  studioDeployPollResidual,
   STUDIO_DEPLOY_POLL_ATTEMPTS,
   STUDIO_DEPLOY_POLL_DELAY_MS,
 } from '@/lib/studio-workflow';
+import {
+  STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
+  STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
+  STUDIO_ORIGIN_STILL_POLLABLE_HOLD,
+} from '@/lib/studio-pipeline-status';
 
 describe('studio-workflow (WDK Product v1)', () => {
   it('prefers a failed-run cause over a generic unread-return message', () => {
@@ -420,23 +426,28 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
-  it('pollStudioDeploy exhausted with no job id HOLDs kickoff-no-job, not a silent running poll', async () => {
+  it('pollStudioDeploy exhausted while WDK still running HOLDs still-pollable, not kickoff-no-job or attempt-started', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       status: 200,
       json: async () => ({
         ok: true,
-        runId: 'wrun_01M2B768A7AVDRR5YQTNVJDZJ8',
+        runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
         runStatus: 'running',
       }),
     });
     vi.stubGlobal('fetch', fetchMock);
-    const poll = await pollStudioDeploy('wrun_01M2B768A7AVDRR5YQTNVJDZJ8', {
+    const poll = await pollStudioDeploy('wrun_01M2B9NW5JA5JQNBTWDRRSHXD6', {
       attempts: 3,
       delayMs: 1,
     });
     const text = `${poll.error || ''} ${poll.message || ''}`;
-    expect(text).toMatch(/kickoff returned no job id/i);
+    expect(poll.error).toBe(STUDIO_ORIGIN_STILL_POLLABLE_HOLD);
+    expect(poll.message).toBe(STUDIO_ORIGIN_STILL_POLLABLE_HOLD);
+    expect(text).toContain(STUDIO_ORIGIN_STILL_POLLABLE_HOLD);
+    expect(text).not.toMatch(/kickoff returned no job id/i);
+    expect(text).not.toMatch(/Deploy attempt started/i);
+    expect(text).not.toMatch(/Waiting for a verified https live URL/i);
     expect(text).not.toMatch(/Deploy still running after 3 polls/i);
     expect(text).not.toMatch(/UNKNOWN checks are not a live URL/);
     expect(text).not.toMatch(/Failed to read workflow run/);
@@ -448,9 +459,69 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(text).not.toMatch(/aborted due to timeout/i);
     expect(text).not.toMatch(/HTTP 524/);
     expect(text).not.toMatch(/Sign in to confirm you.?re not a bot/i);
-    expect(poll.runId).toBe('wrun_01M2B768A7AVDRR5YQTNVJDZJ8');
+    expect(poll.runId).toBe('wrun_01M2B9NW5JA5JQNBTWDRRSHXD6');
     expect(poll.runStatus).toBe('running');
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('classifies poll residuals: still-pollable vs kickoff-no-job vs hostname-finished', () => {
+    expect(
+      studioDeployPollResidual({
+        ok: true,
+        status: 200,
+        runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+        runStatus: 'running',
+      }),
+    ).toBe(STUDIO_ORIGIN_STILL_POLLABLE_HOLD);
+    expect(
+      studioDeployPollResidual({
+        ok: true,
+        status: 200,
+        runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+        runStatus: 'completed',
+        result: { kind: 'handoff', message: STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD },
+      }),
+    ).toBe(STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD);
+    expect(
+      studioDeployPollResidual({
+        ok: true,
+        status: 200,
+        runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+        runStatus: 'completed',
+        result: { kind: 'job', jobId: 'job_xy', jobStatus: 'complete' },
+      }),
+    ).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(
+      studioDeployPollResidual({
+        ok: true,
+        status: 200,
+        runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+        runStatus: 'completed',
+        result: { kind: 'live', live_url: 'https://xy.vercel.app' },
+      }),
+    ).toBeNull();
+  });
+
+  it('getStudioDeployStatus extracts a nested vercel live_url without inventing one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+          runStatus: 'completed',
+          result: {
+            kind: 'live',
+            live_url: null,
+            deployment: { urls: { vercel: 'https://xy.vercel.app' } },
+          },
+        }),
+      }),
+    );
+    const verified = await getStudioDeployStatus('wrun_01M2B9NW5JA5JQNBTWDRRSHXD6');
+    expect(verified.result?.live_url).toBe('https://xy.vercel.app');
   });
 
   it('pollStudioDeploy exhausted in-flight cites the job status, not UNKNOWN checks', async () => {
@@ -509,10 +580,10 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it('client poll window covers the durable WDK job wait', () => {
+  it('client poll window covers kickoff retry plus the durable WDK job wait', () => {
     expect(STUDIO_DEPLOY_POLL_DELAY_MS).toBe(2000);
     expect(STUDIO_DEPLOY_POLL_ATTEMPTS * STUDIO_DEPLOY_POLL_DELAY_MS).toBeGreaterThanOrEqual(
-      360_000,
+      45_000 + 10_000 + 45_000 + 360_000,
     );
   });
 

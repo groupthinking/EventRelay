@@ -3,12 +3,13 @@ import 'server-only';
 import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import {
+  extractBackendLiveUrl,
   STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
-  studioVerifiedLiveUrl,
+  STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
 } from '@/lib/studio-pipeline-status';
 import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
-export { STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD };
+export { extractBackendLiveUrl, STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD, STUDIO_ORIGIN_NO_HOSTNAME_HOLD };
 export { usableProvidedTranscript as usableKickoffTranscript };
 
 export interface AsyncJobKickoff {
@@ -44,108 +45,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-const PREFERRED_LIVE_HOST = /\.(vercel\.app|netlify\.app|fly\.dev)$/i;
-const BARE_LIVE_HOST = /^(?:[a-z0-9-]+\.)+(?:vercel\.app|netlify\.app|fly\.dev)$/i;
-const REJECTED_LIVE_HOST = /^(?:www\.)?(?:github\.com|vercel\.com)$/i;
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-/** Pass through a backend-supplied hostname only — never invent one. */
-function asBackendLiveCandidate(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  const raw = value.trim();
-  if (!raw) return null;
-  const verified = studioVerifiedLiveUrl(raw);
-  if (verified) return verified;
-  if (BARE_LIVE_HOST.test(raw)) {
-    return studioVerifiedLiveUrl(`https://${raw}`);
-  }
-  return null;
-}
-
-function collectLiveUrlCandidates(record: Record<string, unknown>): unknown[] {
-  const deployment = asRecord(record.deployment);
-  const outputs = asRecord(record.outputs);
-  const result = asRecord(record.result);
-  const metadata = asRecord(record.metadata);
-  const data = asRecord(record.data);
-  const urls =
-    asRecord(deployment?.urls) ||
-    asRecord(record.urls) ||
-    asRecord(asRecord(outputs?.deployment)?.urls);
-  const summary = asRecord(deployment?.summary) || asRecord(record.summary);
-  const summaryUrls = asRecord(summary?.deployment_urls);
-  const outDep = asRecord(outputs?.deployment);
-  return [
-    record.live_url,
-    data?.live_url,
-    result?.live_url,
-    metadata?.live_url,
-    deployment?.live_url,
-    deployment?.url,
-    outDep?.live_url,
-    outDep?.url,
-    urls?.vercel,
-    urls?.netlify,
-    urls?.fly,
-    deployment?.alias,
-    record.alias,
-    summary?.primary_url,
-    ...(summaryUrls ? Object.values(summaryUrls) : []),
-    ...(urls ? Object.values(urls) : []),
-    ...(Array.isArray(deployment?.aliases) ? deployment.aliases : []),
-    ...(Array.isArray(deployment?.automaticAliases) ? deployment.automaticAliases : []),
-    ...(Array.isArray(record.aliases) ? record.aliases : []),
-    record.url,
-    data,
-    result,
-    metadata,
-    deployment,
-    outputs,
-    outDep,
-    urls,
-    summary,
-  ];
-}
-
-/**
- * Pass through a backend-supplied verified https hostname only — never invent one.
- * Prefer explicit live_url / vercel|netlify|fly hosts over a GitHub repo URL.
- */
-export function extractBackendLiveUrl(...values: unknown[]): string | null {
-  const preferred: string[] = [];
-  const other: string[] = [];
-  const queue: unknown[] = [...values];
-  const seen = new Set<unknown>();
-  while (queue.length) {
-    const value = queue.shift();
-    if (value == null || seen.has(value)) continue;
-    if (typeof value === 'object') seen.add(value);
-    const verified = asBackendLiveCandidate(value);
-    if (verified) {
-      const host = hostnameOf(verified);
-      if (REJECTED_LIVE_HOST.test(host)) {
-        continue;
-      }
-      if (PREFERRED_LIVE_HOST.test(host) || host.endsWith('.vercel.app')) {
-        preferred.push(verified);
-      } else if (host !== 'github.com' && host !== 'www.github.com') {
-        other.push(verified);
-      }
-      continue;
-    }
-    const rec = asRecord(value);
-    if (rec) queue.push(...collectLiveUrlCandidates(rec));
-  }
-  return preferred[0] ?? other[0] ?? null;
-}
-
 /** Pass through a backend-supplied live URL only — never invent one. */
 function firstLiveUrl(...values: unknown[]): string | null {
   return extractBackendLiveUrl(...values);
@@ -160,10 +59,6 @@ export const STUDIO_READY_TRANSCRIPT_HOLD =
 /** Honest HOLD when origin reused the transcript but produced no live URL. */
 export const STUDIO_ORIGIN_NO_LIVE_HOLD =
   'Studio transcript was reused. Origin video-to-software returned no verified live URL.';
-
-/** Honest HOLD after reuse — no job id and no backend-supplied https hostname. */
-export const STUDIO_ORIGIN_NO_HOSTNAME_HOLD =
-  'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
 
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {

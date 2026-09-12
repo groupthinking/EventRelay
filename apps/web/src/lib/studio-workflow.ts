@@ -8,9 +8,12 @@
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import {
+  extractBackendLiveUrl,
   isStudioDeployAbortTimeout,
   STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
   STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
+  STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
+  STUDIO_ORIGIN_STILL_POLLABLE_HOLD,
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 
@@ -64,23 +67,55 @@ function str(v: unknown): string | undefined {
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+const TERMINAL_JOB = new Set([
+  'complete',
+  'completed',
+  'succeeded',
+  'failed',
+  'error',
+  'cancelled',
+]);
 
-/** Client poll window: long enough for one video-to-software attempt (~3 min). */
-/** Client window must cover WDK durable job polls (36 × 10s) plus kickoff. */
-export const STUDIO_DEPLOY_POLL_ATTEMPTS = 210;
+/** Client poll window: kickoff 45s + 10s + 45s retry + 36×10s job reads + slack. */
+export const STUDIO_DEPLOY_POLL_ATTEMPTS = 280;
 export const STUDIO_DEPLOY_POLL_DELAY_MS = 2000;
 
 function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
+  return studioDeployPollResidual(poll, attempts) ?? STUDIO_ORIGIN_STILL_POLLABLE_HOLD;
+}
+
+/** Classify a poll snapshot: live URL → null; otherwise a precise HOLD residual. */
+export function studioDeployPollResidual(
+  poll: StudioDeployPoll,
+  _attempts: number = STUDIO_DEPLOY_POLL_ATTEMPTS,
+): string | null {
+  if (studioVerifiedLiveUrl(poll.result?.live_url)) {
+    return null;
+  }
+  const runStatus = (poll.runStatus || '').toLowerCase();
   const jobId = poll.result?.jobId?.trim();
-  const jobStatus = poll.result?.jobStatus?.trim();
-  if (jobId && jobStatus && !TERMINAL.has(jobStatus)) {
-    return `Deploy job ${jobId} still ${jobStatus}`;
+  const jobStatus = (poll.result?.jobStatus || '').trim();
+  const jobStatusKey = jobStatus.toLowerCase();
+  const terminalRun = TERMINAL.has(runStatus);
+
+  if (!terminalRun) {
+    if (jobId && jobStatus && !TERMINAL_JOB.has(jobStatusKey)) {
+      return `Deploy job ${jobId} still ${jobStatus}`;
+    }
+    if (jobId && !TERMINAL_JOB.has(jobStatusKey)) {
+      return `Deploy job ${jobId} still ${jobStatus || 'pending'}`;
+    }
+    return STUDIO_ORIGIN_STILL_POLLABLE_HOLD;
   }
-  if (!jobId) {
-    return STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD;
+
+  const detail = poll.result?.message?.trim() || poll.error?.trim();
+  if (jobId) {
+    return detail || STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
   }
-  if (poll.error?.trim()) return poll.error.trim();
-  return `Deploy still ${poll.runStatus || 'running'} after ${attempts} polls — waiting for a verified https live URL (runId ${poll.runId})`;
+  if (detail) {
+    return detail;
+  }
+  return STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD;
 }
 
 /** WDK failed-run cause, not a generic unread-return placeholder. */
@@ -246,7 +281,7 @@ export async function getStudioDeployStatus(
           kind: str(resultRaw.kind),
           jobId: str(resultRaw.jobId),
           jobStatus: str(resultRaw.jobStatus),
-          live_url: studioVerifiedLiveUrl(str(resultRaw.live_url)) ?? null,
+          live_url: extractBackendLiveUrl(resultRaw) ?? studioVerifiedLiveUrl(str(resultRaw.live_url)) ?? null,
           github_repo: str(resultRaw.github_repo) ?? null,
           message: str(resultRaw.message),
         }

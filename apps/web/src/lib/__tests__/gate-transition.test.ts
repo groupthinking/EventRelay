@@ -374,6 +374,35 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B1Q97XA9GHVSG1FZY92N19');
   });
 
+  it('HOLD on wrun_01M2B9NW5JA5JQNBTWDRRSHXD6 is not the #1893 attempt-started waiting copy', () => {
+    const backendReason =
+      'Studio deploy run is still in progress after the EventRelay poll budget. Origin job remains pollable.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+      runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+      runStatus: 'running',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B9NW5JA5JQNBTWDRRSHXD6');
+    expect(view.reason).not.toMatch(/Deploy attempt started/i);
+    expect(view.reason).not.toMatch(/Waiting for a verified https live URL/i);
+    expect(view.reason).not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/HTTP 524/);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+  });
+
   it('HOLD on wrun_01M2B768A7AVDRR5YQTNVJDZJ8 is kickoff-no-job bound to the new run, not stale #1853', () => {
     const backendReason =
       'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
@@ -550,8 +579,15 @@ describe('Studio deploy call site', () => {
     expect(runIdIdx).toBeGreaterThan(-1);
     expect(pollIdx).toBeGreaterThan(runIdIdx);
     const betweenStartAndPoll = deployFn.slice(runIdIdx, pollIdx);
-    expect(betweenStartAndPoll).toContain('evaluateStudioDeployTransition');
+    expect(betweenStartAndPoll).not.toContain('evaluateStudioDeployTransition');
+    expect(betweenStartAndPoll).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
+    expect(betweenStartAndPoll).not.toContain(
+      'Deploy attempt started. Waiting for a verified https live URL.',
+    );
     expect(betweenStartAndPoll).toContain('started.runId');
     expect(betweenStartAndPoll).not.toContain('wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
+    const afterPoll = deployFn.slice(pollIdx);
+    expect(afterPoll).toContain('evaluateStudioDeployTransition');
+    expect(afterPoll).toContain('studioDeployPollResidual');
   });
 });
