@@ -200,3 +200,9 @@ def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
     assert 'payload.selected = {\n            kind: "issue",' not in workflow_source
     assert 'payload.selected = {\n            kind: "pull_request",' not in workflow_source
     assert "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null" in workflow_source
+
+
+def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
+    workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
+
+    assert "required-title-prefix" not in workflow_source
