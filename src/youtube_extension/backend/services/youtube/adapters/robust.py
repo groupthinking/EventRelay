@@ -20,7 +20,11 @@ from typing import Any, Optional
 
 import httpx
 
-from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+from youtube_extension.utils.proxy import (
+    get_proxy_url,
+    get_transcript_proxy_config,
+    redact_proxy_credentials,
+)
 
 # Import our cost monitor
 try:
@@ -140,7 +144,7 @@ class RobustYouTubeService:
         try:
             return await self._get_metadata_ytdlp(video_url, video_id)
         except Exception as e:
-            logger.warning(f"yt-dlp fallback failed: {e}")
+            logger.warning("yt-dlp fallback failed: %s", redact_proxy_credentials(e))
 
         raise Exception("All YouTube metadata APIs failed")
 
@@ -167,7 +171,9 @@ class RobustYouTubeService:
                 timeout=30,
             )
             if result.returncode != 0:
-                raise Exception(f"yt-dlp failed: {result.stderr}")
+                raise Exception(
+                    f"yt-dlp failed: {redact_proxy_credentials(result.stderr)}"
+                )
             return json.loads(result.stdout)
 
         data = await asyncio.get_event_loop().run_in_executor(None, _get_ytdlp_metadata)
