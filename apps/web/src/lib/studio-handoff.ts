@@ -48,14 +48,45 @@ export type StudioQueryStartedKey = { current: string | null };
  * One-shot ?video= / ?url= kick. Safe under Strict Mode: the same startedKey
  * ref suppresses a second start() for the same video id.
  */
+export type StudioSearchParams = {
+  get(name: string): string | null;
+};
+
+/**
+ * Read ?video= / ?url= from Studio. Browsers keep
+ * `?video=https://www.youtube.com/watch?v=ID` as one param. Proxies that
+ * rewrite the second `?` into `&` leave `video` without an id and `v` as a
+ * sibling — reconstruct that pair instead of treating the handoff as junk.
+ */
+export function studioQueryFromSearchParams(
+  params: StudioSearchParams | null | undefined,
+): string | null {
+  if (!params) return null;
+  const video = (params.get('video') || params.get('url') || '').trim();
+  const siblingId = (params.get('v') || '').trim();
+  if (video && extractYouTubeId(video)) return video;
+  if (video && siblingId && /youtube\.com\/watch\/?$/i.test(video)) {
+    return `${video.replace(/\/$/, '')}?v=${siblingId}`;
+  }
+  if (siblingId && extractYouTubeId(siblingId)) return siblingId;
+  return video || null;
+}
+
 export function applyStudioQueryAutoStart(input: {
-  query: string | null | undefined;
+  query?: string | null | undefined;
+  searchParams?: StudioSearchParams | null;
   startedKey: StudioQueryStartedKey;
   start: (watchUrl: string) => void;
   onResolved?: (watchUrl: string) => void;
   onInvalidQuery?: (raw: string) => void;
 }): 'skipped' | 'invalid' | 'started' | 'already' {
-  const query = typeof input.query === 'string' ? input.query.trim() : '';
+  const query = (
+    input.searchParams
+      ? studioQueryFromSearchParams(input.searchParams)
+      : typeof input.query === 'string'
+        ? input.query.trim()
+        : ''
+  ) || '';
   if (!query) return 'skipped';
   const handoff = resolveStudioHandoff(query);
   if (!handoff) {

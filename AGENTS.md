@@ -67,6 +67,16 @@ UVAI▶
 
 `asRecord` / claim stay **held** unless that cut requires them. Do not start adjacent cuts (Mission Workspace, Agent Factory, ExperienceOS, FORGE-as-product, etc.) unless Loop asks.
 
+## G.A.T.E. vs Zero-Sim (locked)
+
+- **Zero-Sim:** is the evidence real? (`real` | `unverified` | `unreal`). Never invent evidence.
+- **G.A.T.E.:** do verified evidence + authority permit this state transition?
+- Every consequential transition resolves to exactly one of **PASS | HOLD | REJECT | ESCALATE**.
+- Missing required evidence → **HOLD**. Weak/unverified evidence → **HOLD**. Unreal or a live claim without a verified receipt → **REJECT**. Unknown authority / unknown Zero-Sim verdict → **ESCALATE**.
+- G.A.T.E. does not build the artifact and is not the project database. Plane stays **proposed** until config + receipts verify. SeeScriptShip lock ≠ install/run/deploy.
+- Contract: `apps/web/src/lib/gate-transition.ts`. Spec: `docs/gate-transition-contract.md`.
+- Gated today: Studio `studio.deploy` (`proposed` → `live`) in `OneLoopStudio` — no live success claim unless G.A.T.E. **PASS**es a verified `https://` hostname URL (#1707 / #1710).
+
 ## Grok Build discovery
 
 - **Project rules:** this `AGENTS.md` (also `CLAUDE.md` if present). Grok walks repo root → cwd. Each file is capped at 10k characters.
