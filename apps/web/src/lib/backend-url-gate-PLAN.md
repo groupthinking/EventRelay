@@ -11,17 +11,17 @@
 - [x] Step 1: Lock failing tests (timeout abort → retry 202 / keep polling; never raw abort HOLD; no process; no 524)
 - [x] Step 2: Retry + catch + remap; workflow does not FatalError abort
 - [x] Step 3: Focused Vitest GREEN (7 files, 97 passed)
-- [ ] Step 4: PR from current main → core CI
+- [x] Step 4: PR #1884 from current main — local test-frontend 703 passed; GitHub Actions core jobs still queued (no failure)
 
 ## 3. Definition of Done
 * **Expected Outcome:** Timeout abort is not a terminal HOLD reason. Ready-transcript path still skips YouTube process. 524 stay remapped. PASS only with a verified https hostname URL + receipt.
 * **Verification Method:** Focused Vitest on pipeline-async-job, studio-workflow, studio-pipeline-status, gate-transition.
-* **Proof Artifact:** (filled after verification)
+* **Proof Artifact:** https://github.com/groupthinking/EventRelay/pull/1884 — local `npx vitest run` 100 files / 703 passed / 1 skipped; `npm run lint` 0 errors. GitHub `CI` / `PR Checks` queued at report time (runner backlog), 0 failed.
 
 ## 4. Post-Task Reflection
-* **What was done:**
-* **Why it was needed:**
-* **How it was tested:**
+* **What was done:** Retry origin vts on abort when a ready transcript exists; catch abort on job status reads and client start/poll; WDK treats abort/408 as retryable; remap leftover abort copy. Claim guard unchanged.
+* **Why it was needed:** After #1880, AXIOM HOLDs on `The operation was aborted due to timeout` because AbortSignal.timeout failed the WDK step / client poll as a terminal run error instead of waiting for origin 202 + a verified live URL.
+* **How it was tested:** TDD RED then GREEN. Focused 97 + full apps/web 703. Cannot signed-in dogfood AXIOM here.
 
 ---
 
