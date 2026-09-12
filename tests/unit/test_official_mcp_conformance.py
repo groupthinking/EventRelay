@@ -50,6 +50,7 @@ def test_required_checks_fail_closed_on_warning() -> None:
             {"id": "tools-list-deterministic-order", "status": "WARNING"},
         ],
         required=True,
+        exit_code=0,
     )
 
     assert summary["ok"] is False
@@ -62,11 +63,25 @@ def test_unscored_failures_do_not_block_receipt() -> None:
     summary = module.summarize_checks(
         [{"id": "tasks-dispatch-and-envelope", "status": "FAILURE"}],
         required=False,
+        exit_code=0,
     )
 
     assert summary["ok"] is True
     assert summary["counts"]["FAILURE"] == 1
     assert summary["blocking"] == []
+
+
+def test_required_checks_fail_closed_on_runner_exit_code() -> None:
+    module = _load_module()
+
+    summary = module.summarize_checks(
+        [{"id": "tools-list", "status": "SUCCESS"}],
+        required=True,
+        exit_code=1,
+    )
+
+    assert summary["ok"] is False
+    assert summary["blocking"] == ["runner-exit-code:1"]
 
 
 def test_fixture_server_keeps_tools_list_order_stable() -> None:
