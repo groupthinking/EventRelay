@@ -6,3 +6,5 @@
     *   **Baseline (Blocking)**: All 10 requests ran sequentially, taking **5.00s** total.
     *   **Optimized (Async)**: All 10 requests ran concurrently, taking **0.50s** total.
     *   **Result**: 10.0x performance improvement for concurrent requests.
+## 2026-09-12 - Parallelizing Video Transcript Fetches
+When executing API calls inside loops for transcript fetching via `YouTubeTranscriptApi`, the sequential execution introduces heavy N+1 bottlenecks. Modifying to `asyncio.create_task` combined with awaiting them allows for parallel execution which drastically reduces the operation cost if the primary fetch falls back or fails, reducing a 2.5s simulated operation down to 0.5s. Note that to preserve strict ordering prioritization, `asyncio.as_completed` should be avoided in favor of direct ordered loop evaluation.
