@@ -130,7 +130,7 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
   workflows, triggers, and purposes (CI, coverage, CodeQL, security,
   dependency review, secret scanning, deploy, E2E, gh-aw validation, etc.).
 - ✅ **gh-aw validation** — `gh-aw-validation.yml` pins `gh aw` to
-  `v0.82.14`, compiles the repository's markdown-based agentic workflows,
+  `v0.88.7`, compiles the repository's markdown-based agentic workflows,
   and runs `actionlint` + `zizmor` + `poutine` against the compiled output
   before requiring the `.lock.yml` files to match what's committed.
 
