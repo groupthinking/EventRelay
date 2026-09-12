@@ -718,6 +718,19 @@ export default function OneLoopStudio({
                 <p data-testid="studio-gate-reason" className="text-sm text-white/80">
                   {gateReceipt.reason}
                 </p>
+                {scopedDeployReceipt ? (
+                  <p className="mt-1">
+                    <a
+                      data-testid="studio-gate-live-url"
+                      href={scopedDeployReceipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-[#e8b86d] underline"
+                    >
+                      {scopedDeployReceipt}
+                    </a>
+                  </p>
+                ) : null}
                 <p className="mt-1 break-all font-mono text-[11px] text-white/45">
                   <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
                   {' · '}

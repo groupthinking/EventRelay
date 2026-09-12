@@ -25,6 +25,21 @@ function str(v: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Pass through a backend-supplied live URL only — never invent one. */
+function firstLiveUrl(...values: unknown[]): string | null {
+  for (const value of values) {
+    const found = str(value);
+    if (found) return found;
+  }
+  return null;
+}
+
 /**
  * Kick off FastAPI async video processing (same contract as POST /api/pipeline async).
  * Used from WDK steps — no self-HTTP to /api/pipeline.
@@ -93,11 +108,19 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
       ? (payload.data as Record<string, unknown>)
       : payload;
 
+  const metadata = asRecord(data.metadata);
+  const outputs = asRecord(metadata?.outputs);
+
   return {
     ok: response.ok,
     httpStatus: response.status,
     jobStatus: str(data.status) || str(payload.status),
-    live_url: str(data.live_url) ?? str(payload.live_url) ?? null,
+    live_url: firstLiveUrl(
+      data.live_url,
+      payload.live_url,
+      metadata?.live_url,
+      outputs?.live_url,
+    ),
     github_repo: str(data.github_repo) ?? str(payload.github_repo) ?? null,
     message: str(payload.error) || str(payload.detail) || str(data.message),
   };

@@ -59,6 +59,28 @@ describe('pipeline-async-job (WDK C)', () => {
     });
   });
 
+  it('reads live_url nested in job metadata without inventing one', async () => {
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            status: 'completed',
+            metadata: { live_url: 'https://shipped.example.app' },
+          },
+        }),
+      }),
+    );
+    const status = await fetchAsyncVideoJob('job_nested');
+    expect(status.live_url).toBe('https://shipped.example.app');
+  });
+
   it('reads live_url from job status', async () => {
     vi.mocked(getBackendConfig).mockReturnValue({
       configured: true,

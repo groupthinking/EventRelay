@@ -269,6 +269,8 @@ describe('Studio deploy call site', () => {
     expect(studio).toContain('data-testid="studio-gate-decision"');
     expect(studio).toContain('data-testid="studio-gate-reason"');
     expect(studio).toContain('data-testid="studio-gate-receipt-hash"');
+    expect(studio).toContain('data-testid="studio-gate-live-url"');
+    expect(studio).toContain('scopedDeployReceipt');
     const failIdx = deployFn.indexOf('if (!started.ok || !started.runId)');
     expect(failIdx).toBeGreaterThan(-1);
     const failBlock = deployFn.slice(failIdx, deployFn.indexOf('return;', failIdx));
