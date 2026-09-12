@@ -545,6 +545,180 @@ class TestCacheEndpoints:
             app.dependency_overrides[get_cache_service] = _make_cache_svc
 
 
+class TestCacheStatsSingleFlight:
+    def setup_method(self):
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
+        with router_module._stats_refreshes_lock:
+            router_module._stats_refreshes.clear()
+
+    @staticmethod
+    def _payload():
+        return {
+            "total_cached_videos": 5,
+            "categories": {"test": {"count": 5, "size_mb": 1.0}},
+            "total_size_mb": 1.0,
+            "oldest_cache": None,
+            "newest_cache": None,
+        }
+
+    @classmethod
+    def _service(cls, on_call=None):
+        svc = MagicMock()
+
+        def _stats():
+            if on_call is not None:
+                on_call()
+            return cls._payload()
+
+        svc.get_cache_statistics.side_effect = _stats
+        return svc
+
+    def test_concurrent_refreshes_share_one_in_flight_walk(self):
+        import time
+
+        started = threading.Event()
+        release = threading.Event()
+        finished_at = {}
+        state = {"calls": 0}
+        counter_lock = threading.Lock()
+
+        def _occupy():
+            with counter_lock:
+                state["calls"] += 1
+            started.set()
+            release.wait(timeout=1.0)
+            finished_at["refresh"] = time.monotonic()
+
+        svc = self._service(on_call=_occupy)
+
+        async def _run():
+            tasks = [
+                asyncio.create_task(router_module.get_cache_stats_v1(cache_service=svc))
+                for _ in range(4)
+            ]
+
+            deadline = time.monotonic() + 5.0
+            while not started.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+
+            tick_times = []
+            for _ in range(20):
+                await asyncio.sleep(0.005)
+                tick_times.append(time.monotonic())
+                if len(tick_times) >= 3:
+                    break
+
+            with counter_lock:
+                observed_calls = state["calls"]
+
+            release.set()
+            return observed_calls, tick_times, await asyncio.gather(*tasks)
+
+        observed_calls, tick_times, results = asyncio.run(_run())
+
+        assert started.is_set(), "the cache-statistics walk never started"
+        assert len(results) == 4
+        assert all(result.total_cached_videos == 5 for result in results)
+        assert all(result.total_size_mb == 1.0 for result in results)
+        assert observed_calls == 1, (
+            "multiple callers entered the uncached cache-statistics walk before "
+            "the TTL reopened"
+        )
+        assert svc.get_cache_statistics.call_count == 1
+
+        refresh_end = finished_at["refresh"]
+        concurrent = [tick for tick in tick_times if tick < refresh_end]
+        assert len(concurrent) >= 3, (
+            "cache-statistics refresh blocked the event loop instead of being "
+            "offloaded while waiters shared one in-flight result"
+        )
+
+    def test_refresh_failure_propagates_to_all_waiters(self):
+        import time
+
+        from fastapi import HTTPException as FastAPIHTTPException
+
+        started = threading.Event()
+        release = threading.Event()
+        svc = MagicMock()
+
+        def _boom():
+            started.set()
+            release.wait(timeout=1.0)
+            raise RuntimeError("walk exploded")
+
+        svc.get_cache_statistics.side_effect = _boom
+
+        async def _run():
+            tasks = [
+                asyncio.create_task(router_module.get_cache_stats_v1(cache_service=svc))
+                for _ in range(3)
+            ]
+
+            deadline = time.monotonic() + 5.0
+            while not started.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+
+            await asyncio.sleep(0.05)
+            release.set()
+            return await asyncio.gather(*tasks, return_exceptions=True)
+
+        results = asyncio.run(_run())
+
+        assert started.is_set(), "the failing cache-statistics walk never started"
+        assert svc.get_cache_statistics.call_count == 1, (
+            "waiters retried independently instead of sharing the failing refresh"
+        )
+        assert len(results) == 3
+        assert all(isinstance(result, FastAPIHTTPException) for result in results)
+        assert all(result.status_code == 500 for result in results)
+
+    def test_refresh_guard_is_rebuilt_for_each_event_loop(self):
+        import time
+
+        started = threading.Event()
+        release = threading.Event()
+        svc = self._service(on_call=lambda: (started.set(), release.wait(timeout=1.0)))
+
+        async def _contend():
+            tasks = [
+                asyncio.create_task(router_module.get_cache_stats_v1(cache_service=svc))
+                for _ in range(3)
+            ]
+
+            deadline = time.monotonic() + 5.0
+            while not started.is_set() and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
+
+            await asyncio.sleep(0.05)
+            release.set()
+            return await asyncio.gather(*tasks)
+
+        results = asyncio.run(_contend())
+
+        assert len(results) == 3
+        assert all(result.total_cached_videos == 5 for result in results)
+
+        router_module._stats_cache = {}
+        router_module._stats_cache_time = 0
+        fresh_svc = self._service()
+
+        async def _fresh():
+            return await router_module.get_cache_stats_v1(cache_service=fresh_svc)
+
+        try:
+            result = asyncio.run(_fresh())
+        except RuntimeError as exc:  # pragma: no cover - regression path
+            raise AssertionError(
+                "the cache-stats refresh guard leaked across event loops after "
+                f"contention: {exc}"
+            ) from exc
+
+        assert result.total_cached_videos == 5
+        assert fresh_svc.get_cache_statistics.call_count == 1
+
+
 # ===========================================================================
 # Data / Video List Endpoints
 # ===========================================================================

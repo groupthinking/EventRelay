@@ -866,9 +866,19 @@ async def get_cache_stats_v1(cache_service: CacheService = Depends(get_cache_ser
         if now - _stats_cache_time < _stats_cache_ttl and _stats_cache:
             return CacheStats(**_stats_cache)
 
-        stats = cache_service.get_cache_statistics()
-        _stats_cache = stats
-        _stats_cache_time = now
+        refresh, leader = _get_stats_refresh()
+        if not leader:
+            return CacheStats(**await refresh)
+
+        try:
+            async with _get_fs_walk_gate():
+                stats = await asyncio.to_thread(cache_service.get_cache_statistics)
+            _stats_cache = stats
+            _stats_cache_time = time.time()
+            _finish_stats_refresh(refresh, stats=stats)
+        except BaseException as exc:
+            _finish_stats_refresh(refresh, exc=exc)
+            raise
         return CacheStats(**stats)
     except Exception as e:
         logger.error("Error getting cache stats: %s", _safe_log_value(e), exc_info=True)
@@ -1485,6 +1495,57 @@ _dispatches: _TTLDict = _TTLDict(ttl=_JOB_TTL, max_size=_JOB_MAX_SIZE)
 _stats_cache: dict[str, Any] = {}
 _stats_cache_time: float = 0
 _stats_cache_ttl: float = 60
+_stats_refreshes: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+_stats_refreshes_lock = threading.Lock()
+
+
+def _discard_closed_stats_refreshes() -> None:
+    """Drop cached refresh futures whose event loop has been closed."""
+    for closed in [loop for loop in _stats_refreshes if loop.is_closed()]:
+        del _stats_refreshes[closed]
+
+
+def _consume_stats_refresh_result(refresh: asyncio.Future) -> None:
+    """Silence asyncio warnings when a failed refresh had no external waiters."""
+    if refresh.cancelled():
+        return
+    refresh.exception()
+
+
+def _get_stats_refresh() -> tuple[asyncio.Future, bool]:
+    """Return the current loop's in-flight cache-stats refresh future."""
+    loop = asyncio.get_running_loop()
+    with _stats_refreshes_lock:
+        refresh = _stats_refreshes.get(loop)
+        if refresh is not None and refresh.done():
+            del _stats_refreshes[loop]
+            refresh = None
+        if refresh is None:
+            _discard_closed_stats_refreshes()
+            refresh = loop.create_future()
+            refresh.add_done_callback(_consume_stats_refresh_result)
+            _stats_refreshes[loop] = refresh
+            return refresh, True
+        return refresh, False
+
+
+def _finish_stats_refresh(
+    refresh: asyncio.Future,
+    *,
+    stats: dict[str, Any] | None = None,
+    exc: BaseException | None = None,
+) -> None:
+    """Resolve an in-flight cache-stats refresh and remove it from the registry."""
+    if not refresh.done():
+        if exc is None:
+            refresh.set_result(stats)
+        else:
+            refresh.set_exception(exc)
+
+    loop = refresh.get_loop()
+    with _stats_refreshes_lock:
+        if _stats_refreshes.get(loop) is refresh:
+            del _stats_refreshes[loop]
 
 
 async def _periodic_cleanup():
