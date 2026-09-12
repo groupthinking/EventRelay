@@ -384,7 +384,7 @@ export function studioExportToastMessage(input: {
   if (!input.ok || input.kind === 'empty') {
     return {
       tone: 'error',
-      text: input.error || 'Export failed — nothing to export yet.',
+      text: `${input.error || 'Export failed — nothing to export yet.'}${fileBit}`,
     };
   }
   if (input.kind === 'pack') {

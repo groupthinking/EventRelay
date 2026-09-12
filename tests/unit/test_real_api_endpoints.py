@@ -734,6 +734,85 @@ class TestServiceStatusEndpoint:
         data = response.json()
         assert data["api_keys"]["youtube_api"] is False
 
+    async def test_event_loop_stays_responsive_during_processing_status_scan(
+        self, api_app, mock_youtube, mock_cost_monitor, tmp_path
+    ):
+        tmp_cache = tmp_path / "cache"
+        tmp_cache.mkdir(parents=True, exist_ok=True)
+        _write_cache_file(tmp_cache, "auJzb1D-fag")
+
+        with (
+            patch(
+                "youtube_extension.backend.services.real_video_processor.get_youtube_service",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "youtube_extension.backend.services.real_video_processor.get_ai_processor",
+                return_value=MagicMock(),
+            ),
+            patch.dict(
+                "os.environ",
+                {"FALLBACK_TO_CACHE": "true", "MAX_RETRY_ATTEMPTS": "2"},
+            ),
+        ):
+            from youtube_extension.backend.services.real_video_processor import (
+                RealVideoProcessor,
+            )
+
+            processor = RealVideoProcessor()
+
+        processor.cache_dir = tmp_cache
+
+        scan_started = threading.Event()
+        may_finish = threading.Event()
+        real_glob = Path.glob
+
+        def gated_glob(self, pattern, *args, **kwargs):
+            if self == tmp_cache and pattern == "*_processed.json":
+                scan_started.set()
+                may_finish.wait(timeout=10)
+            return real_glob(self, pattern, *args, **kwargs)
+
+        async def _release_once_scan_starts():
+            while not scan_started.is_set():
+                await asyncio.sleep(0.01)
+            may_finish.set()
+
+        with (
+            patch(
+                "youtube_extension.backend.services.real_video_processor.cost_monitor"
+            ) as processor_cost_monitor,
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_real_video_processor",
+                return_value=processor,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.get_youtube_service",
+                return_value=mock_youtube,
+            ),
+            patch(
+                "youtube_extension.backend.real_api_endpoints.cost_monitor",
+                mock_cost_monitor,
+            ),
+            patch.object(Path, "glob", gated_glob),
+        ):
+            processor_cost_monitor.get_cost_dashboard = AsyncMock(return_value={})
+            transport = httpx.ASGITransport(app=api_app)
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://testserver"
+            ) as ac:
+                response, _ = await asyncio.wait_for(
+                    asyncio.gather(
+                        ac.get("/api/v2/service-status"),
+                        _release_once_scan_starts(),
+                    ),
+                    timeout=5,
+                )
+
+        assert response.status_code == 200
+        assert scan_started.is_set(), "cache directory was never scanned"
+        assert may_finish.is_set()
+
 
 # ===========================================================================
 # DELETE /api/v2/cache/clear

@@ -19,6 +19,7 @@ import {
   actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
+  safeProjectName,
 } from '@/lib/action-surface';
 import {
   pollStudioDeploy,
@@ -62,6 +63,7 @@ import {
 } from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
@@ -366,6 +368,16 @@ export default function OneLoopStudio({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
+  useEffect(() => {
+    // Release the module-level Strict Mode guard when Studio truly unmounts so
+    // re-entering /studio?video= with the same id (re-paste, or retry after a
+    // failed run) auto-starts again. Deferred so React's synchronous Strict
+    // Mode unmount/remount still sees the guard and does not double-start.
+    return () => {
+      window.setTimeout(() => resetStudioQueryAutoStart(), 0);
+    };
+  }, []);
+
   const analyze = (event?: FormEvent) => {
     event?.preventDefault();
     void runAnalysis(url);
@@ -503,6 +515,9 @@ export default function OneLoopStudio({
   };
 
   const exportPkg = () => {
+    const filename = studioExportFilename(
+      safeProjectName(selected?.title || 'uvai-project'),
+    );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -522,7 +537,7 @@ export default function OneLoopStudio({
       packFormation.artifacts.length === 0 &&
       packFormation.tools.length === 0
     ) {
-      const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty', filename });
       setExportToast(toast);
       return;
     }
@@ -539,7 +554,6 @@ export default function OneLoopStudio({
         },
       });
       downloadScaffoldPackage(pkg);
-      const filename = studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
@@ -557,6 +571,7 @@ export default function OneLoopStudio({
       const toast = studioExportToastMessage({
         ok: false,
         error: err instanceof Error ? err.message : 'Export failed.',
+        filename,
       });
       setExportToast(toast);
     }

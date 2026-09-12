@@ -1,6 +1,6 @@
 # UVAI▶ — Agent Instructions
 
-Grok Build (`grok --cwd <this-repo>`) appends this file to the system prompt.
+Grok Build (`grok --cwd <this-repo>`) appends this file to the system prompt; keep locked UVAI facts here.
 This is the live UVAI product repo (`uvai.io`, Vercel project `v0-uvai`).
 
 **Do not invent prices, catalog SKUs, or stack.** If a fact is not locked here, look it up in the repo or leave it unset.
@@ -83,7 +83,7 @@ UVAI▶
 - **Skills:** auto-discovered from `.grok/skills/` (repo or cwd). Extra `[skills] paths` belong in `~/.grok/config.toml`, not project config.
 - **Project `.grok/config.toml`:** official docs honor **`[mcp_servers]` only** here. Do not add one unless sharing MCP servers. This repo has no committed project MCP config.
 - **Existing Claude skills** in `.claude/skills/` load via Grok’s Claude compatibility. Do not duplicate them under `.grok/skills/` unless a Grok-native override is required.
-- **Workflows:** `.grok/workflows/*.rhai` (already present). Treat as automation, not product lineage.
+- **Workflows:** auto-discovered from `.grok/workflows/*.rhai` (already present). Treat as automation, not product lineage.
 - Confirm what loaded: `grok inspect --cwd <this-repo>`.
 
 ## Repo conventions
