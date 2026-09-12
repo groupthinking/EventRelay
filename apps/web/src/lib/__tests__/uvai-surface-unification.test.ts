@@ -63,7 +63,7 @@ describe('UVAI is one product surface', () => {
 
   it('keeps stack-check unlock on the same OneLoopStudio page', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
-    expect(studio).toContain("item.source === 'stack'");
+    expect(studio).toContain('packFormation.checks');
     expect(studio).toContain('setCompletedChecks');
     expect(studio).not.toMatch(/window\.location\.(href|assign).*dashboard/);
     expect(studio).not.toMatch(/router\.push\(['"`]\/dashboard/);
