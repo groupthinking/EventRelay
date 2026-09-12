@@ -53,7 +53,7 @@ export async function GET(request: Request) {
   } catch (error: any) {
     console.error('Video Search Error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error during vector search' },
+      { error: 'Internal server error during vector search' },
       { status: 500 }
     );
   }
