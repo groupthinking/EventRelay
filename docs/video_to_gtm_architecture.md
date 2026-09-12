@@ -1,4 +1,6 @@
 # Video → GTM Revenue Architecture v3.0
+
+> This is the single editable source of truth for EventRelay's Video → GTM Revenue Architecture v3.0. Any duplicate copies should point here instead of being edited separately.
 ## Complete End-to-End Pipeline Design — Video In → Deployed Site Out
 ## Date: March 20, 2026 (Updated from v2.0 March 13, 2026)
 ## Author: Lead Engineer + viralnowsales
