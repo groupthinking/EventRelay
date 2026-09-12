@@ -320,32 +320,6 @@ class EnhancedVideoExtractor:
             logger.error(f"Local content analysis failed: {e}")
             analysis['error'] = str(e)
 
-        # 3. Apply Unified World Class Scoring (Unified Pipeline)
-        try:
-            # We need to convert our TranscriptSegment list to the list of dicts expected by ScoringEngine
-            [asdict(seg) for seg in transcript]
-            # We also need a dict-like representation of metadata for some scoring functions
-            # Ideally we pass the raw response, but we can reconstruct a subset from VideoMetadata
-            # or better yet, since we don't store raw response in self, let's use what we have.
-            # ScoringEngine expects 'statistics' and 'contentDetails'.
-            # We can mock this structure from our standardized VideoMetadata to keep interfaces clean.
-
-            # Reconstruct minimal video_info for scoring
-            {
-               'contentDetails': {'duration': f"PT{int(transcript[-1].end if transcript else 0)}S"}, # Approx if needed
-               'statistics': {
-                   'viewCount': 0, # We don't have this in analyze_content args!
-                   # CRITICAL FIX: analyze_content only takes transcript. It needs metadata for full scoring.
-                   # However, changing the signature is a breaking change.
-                   # BUT, analyze_content is called from process_video which HAS metadata.
-                   # Let's handle this by computing score in process_video INSTEAD of analyze_content,
-                   # OR pass metadata to analyze_content.
-               }
-            }
-            # Actually, `process_video` calls `extract_video_metadata` first.
-            # I will move the scoring call to `process_video` to have access to both metadata and transcript.
-        except Exception as e:
-            logger.error(f"Scoring engine prep failed: {e}")
 
         return analysis
 
@@ -474,6 +448,11 @@ class EnhancedVideoExtractor:
 
             # 4. Run Unified Scoring (Simulated Post-Processing)
             try:
+                if getattr(self, 'scoring_engine', None) is None:
+                    # Lazy-load or create the ScoringEngine here
+                    from youtube_extension.processors.scoring_engine import ScoringEngine
+                    self.scoring_engine = ScoringEngine()
+
                 # Reconstruct info dict for scoring engine
                 video_info_dict = {
                     'contentDetails': {'duration': f"PT{metadata.duration}S"},
