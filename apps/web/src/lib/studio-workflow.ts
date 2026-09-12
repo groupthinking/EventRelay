@@ -7,6 +7,10 @@
 
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
+import {
+  isStudioDeployAbortTimeout,
+  STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+} from '@/lib/studio-pipeline-status';
 
 export interface VideoToActionsStart {
   ok: boolean;
@@ -176,26 +180,37 @@ export async function startStudioDeploy(input: {
   transcript?: string;
   signal?: AbortSignal;
 }): Promise<StudioDeployStart> {
-  const response = await fetch('/api/workflows/studio-deploy', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url: input.url,
-      projectType: input.projectType,
-      outcome: input.outcome,
-      ...(input.transcript ? { transcript: input.transcript } : {}),
-    }),
-    signal: input.signal ?? AbortSignal.timeout(30_000),
-  });
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  return {
-    ok: Boolean(payload.ok) && response.ok && Boolean(str(payload.runId)),
-    status: response.status,
-    runId: str(payload.runId),
-    message: str(payload.message),
-    error: str(payload.error),
-  };
+  try {
+    const response = await fetch('/api/workflows/studio-deploy', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: input.url,
+        projectType: input.projectType,
+        outcome: input.outcome,
+        ...(input.transcript ? { transcript: input.transcript } : {}),
+      }),
+      signal: input.signal ?? AbortSignal.timeout(30_000),
+    });
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    return {
+      ok: Boolean(payload.ok) && response.ok && Boolean(str(payload.runId)),
+      status: response.status,
+      runId: str(payload.runId),
+      message: str(payload.message),
+      error: str(payload.error),
+    };
+  } catch (err) {
+    if (isStudioDeployAbortTimeout(err)) {
+      return {
+        ok: false,
+        status: 408,
+        error: STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function getStudioDeployStatus(
@@ -246,13 +261,35 @@ export async function pollStudioDeploy(
     if (opts?.signal?.aborted) {
       return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
     }
-    last = await getStudioDeployStatus(runId, { signal: opts?.signal });
+    try {
+      last = await getStudioDeployStatus(runId, { signal: opts?.signal });
+    } catch (err) {
+      if (!isStudioDeployAbortTimeout(err)) {
+        throw err;
+      }
+      last = {
+        ok: false,
+        status: 408,
+        runId,
+        message: STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+      };
+    }
     if (
       last.runStatus &&
       TERMINAL.has(last.runStatus) &&
       !isUnreadWorkflowReturn(last) &&
       !isUnreadWorkflowRun(last)
     ) {
+      if (
+        isStudioDeployAbortTimeout(last.error) ||
+        isStudioDeployAbortTimeout(last.result?.message)
+      ) {
+        return {
+          ...last,
+          error: STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+          message: last.message || STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+        };
+      }
       return last;
     }
     if (last.status === 404) return last;

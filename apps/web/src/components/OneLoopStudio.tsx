@@ -654,7 +654,10 @@ export default function OneLoopStudio({
         }),
       );
     } catch (err) {
-      const backendReason = err instanceof Error ? err.message : 'Deploy failed.';
+      const backendReason = studioDeployOutcomeMessage({
+        error: err instanceof Error ? err.message : 'Deploy failed.',
+        runStatus: 'failed',
+      });
       const gated = evaluateStudioDeployTransition({
         transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
         kind: 'handoff',

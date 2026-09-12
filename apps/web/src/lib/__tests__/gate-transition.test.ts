@@ -326,6 +326,47 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S');
   });
+
+  it('HOLD after timeout abort is not the raw AbortSignal message', () => {
+    const backendReason =
+      'Deploy kickoff timed out before a verified live URL. Waiting for the origin job — not aborting the attempt.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      runId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      runStatus: 'running',
+      kind: 'job',
+      jobId: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ');
+  });
+
+  it('PASS when a verified live URL arrives after a timeout abort residual', () => {
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      runId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      jobId: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      liveUrl: 'https://xy.vercel.app',
+      runStatus: 'completed',
+      kind: 'live',
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('PASS');
+    expect(result.receipt.id).toBe('er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ');
+  });
 });
 
 describe('studioGateReceiptView', () => {

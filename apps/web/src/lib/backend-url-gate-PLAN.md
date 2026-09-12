@@ -1,4 +1,31 @@
-# TASK: restore #1859 ready-transcript reuse after #1875 524 handoff
+# TASK: clear G.A.T.E. timeout abort HOLD on studio.deploy
+
+## 1. Goal & Scope
+* **Objective:** Attempt deploy / studio.deploy for XYMcBrFSJ4c must not HOLD on `The operation was aborted due to timeout`. Reach G.A.T.E. PASS with a verified https live URL + EventRelay receipt, or an honest HOLD that is not timeout-abort, not HTTP 524, and not the YouTube bot wall.
+* **Context:** AXIOM on `dpl_DL2TCbLyYZhgjv7tnePcEdKHCARs` (includes #1880) / XYMcBrFSJ4c. Receipt `er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ`. Bot + 524 residuals cleared. Still HOLD on timeout abort. No live URL.
+* **Root cause:** `AbortSignal.timeout` in WDK `kickoffStep` / `pollJobStep` and the client poller is treated as a terminal workflow failure. WDK marks AbortError as FatalError. `fetchAsyncVideoJob` and `pollStudioDeploy` do not catch the abort, so `run.returnValue` / OneLoopStudio catch pass the raw DOM message to G.A.T.E. #1880 then `kind: 'failed'`s a ready-transcript vts abort instead of retrying origin `202` + `job_id`.
+* **Scope:** Retry origin vts on abort (never `/videos/process` when transcript is ready). Catch abort on job status reads and client polls. Remap leftover abort copy. Claim guard unchanged. No Origin invent.
+ * *Initial check:* Modify existing kickoff / poll / workflow / outcome helpers. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (timeout abort → retry 202 / keep polling; never raw abort HOLD; no process; no 524)
+- [x] Step 2: Retry + catch + remap; workflow does not FatalError abort
+- [x] Step 3: Focused Vitest GREEN (7 files, 97 passed)
+- [ ] Step 4: PR from current main → core CI
+
+## 3. Definition of Done
+* **Expected Outcome:** Timeout abort is not a terminal HOLD reason. Ready-transcript path still skips YouTube process. 524 stay remapped. PASS only with a verified https hostname URL + receipt.
+* **Verification Method:** Focused Vitest on pipeline-async-job, studio-workflow, studio-pipeline-status, gate-transition.
+* **Proof Artifact:** (filled after verification)
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: restore #1859 ready-transcript reuse after #1875 524 handoff
 
 ## 1. Goal & Scope
 * **Objective:** Ready-transcript studio.deploy must not HOLD the YouTube bot wall and must not HOLD HTTP 524. Keep #1875 async past 524 via origin `202` + `job_id`. Do not regress UNKNOWN / workflow-run / return-value / BACKEND_URL. Claim guard stays.

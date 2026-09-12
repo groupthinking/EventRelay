@@ -435,7 +435,62 @@ describe('pipeline-async-job (WDK C)', () => {
     );
   });
 
-  it('does not start videos/process on vts abort timeout when a ready transcript exists', async () => {
+  it('retries origin video-to-software on abort timeout when a ready transcript exists', async () => {
+    vi.mocked(checkBackendHealth).mockResolvedValue({
+      configured: true,
+      available: true,
+      host: 'api.uvai.io',
+    });
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    let vtsAttempts = 0;
+    const fetchMock = vi.fn().mockImplementation(async (input: unknown) => {
+      const href = String(input);
+      if (href.includes('/videos/process')) {
+        throw new Error('must not re-hit YouTube via videos/process');
+      }
+      if (href.includes('/video-to-software')) {
+        vtsAttempts += 1;
+        if (vtsAttempts === 1) {
+          throw Object.assign(new Error('The operation was aborted due to timeout'), {
+            name: 'TimeoutError',
+          });
+        }
+        return {
+          ok: true,
+          status: 202,
+          json: async () => ({
+            status: 'success',
+            data: { job_id: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ' },
+          }),
+        };
+      }
+      throw new Error(`unexpected fetch ${href}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const kicked = await kickoffAsyncVideoJob(
+      'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      { transcript: READY_TRANSCRIPT },
+    );
+    expect(kicked.kind).toBe('job');
+    expect(kicked.jobId).toBe('job_01M2AKRAVZ0SEBM670BGXEMCQZ');
+    expect(kicked.retryable).not.toBe(true);
+    expect(kicked.message ?? '').not.toMatch(/aborted due to timeout/i);
+    expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
+    expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
+    expect(kicked.message ?? '').not.toMatch(/UNKNOWN checks are not a live URL/i);
+    expect(kicked.message ?? '').not.toMatch(/Failed to read workflow run/i);
+    expect(kicked.message ?? '').not.toMatch(/Failed to read workflow return value/i);
+    expect(kicked.message ?? '').not.toMatch(/BACKEND_URL is not configured/i);
+    expect(vtsAttempts).toBe(2);
+    expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/videos/process'))).toBe(
+      false,
+    );
+  });
+
+  it('does not HOLD the raw abort string when ready-transcript vts retries still time out', async () => {
     vi.mocked(checkBackendHealth).mockResolvedValue({
       configured: true,
       available: true,
@@ -463,17 +518,40 @@ describe('pipeline-async-job (WDK C)', () => {
       { transcript: READY_TRANSCRIPT },
     );
     expect(kicked.kind).toBe('failed');
+    expect(kicked.retryable).toBe(true);
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message ?? '').toMatch(/ready transcript|must not re-fetch YouTube|no verified deploy receipt/i);
+    expect(kicked.message ?? '').toMatch(/ready transcript|must not re-fetch YouTube|no verified deploy receipt|origin job/i);
+    expect(kicked.message ?? '').not.toMatch(/aborted due to timeout/i);
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
     expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
     expect(kicked.message ?? '').not.toMatch(/UNKNOWN checks are not a live URL/i);
     expect(kicked.message ?? '').not.toMatch(/Failed to read workflow run/i);
     expect(kicked.message ?? '').not.toMatch(/Failed to read workflow return value/i);
     expect(kicked.message ?? '').not.toMatch(/BACKEND_URL is not configured/i);
+    expect(fetchMock.mock.calls.filter(([input]) => String(input).includes('/video-to-software')).length).toBeGreaterThan(1);
     expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/videos/process'))).toBe(
       false,
     );
+  });
+
+  it('treats a job status abort timeout as retryable, not a terminal abort HOLD', async () => {
+    vi.mocked(getBackendConfig).mockReturnValue({
+      configured: true,
+      url: 'https://api.uvai.io',
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () => {
+        throw Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'TimeoutError',
+        });
+      }),
+    );
+    const status = await fetchAsyncVideoJob('job_01M2AKRAVZ0SEBM670BGXEMCQZ');
+    expect(status.ok).toBe(false);
+    expect(status.httpStatus).toBe(408);
+    expect(status.message ?? '').not.toMatch(/aborted due to timeout/i);
+    expect(status.message ?? '').toMatch(/timed out|retry/i);
   });
 
   it('treats a backend HTTP error as failed, not a config handoff', async () => {

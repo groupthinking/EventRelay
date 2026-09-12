@@ -27,6 +27,15 @@ export interface StudioDeployResult {
   message?: string;
 }
 
+interface StudioDeployKickoff {
+  kind: 'job' | 'handoff' | 'failed' | 'live';
+  jobId?: string;
+  message?: string;
+  live_url?: string | null;
+  github_repo?: string | null;
+  retryable?: boolean;
+}
+
 export async function studioDeployWorkflow(
   input: StudioDeployInput,
 ): Promise<StudioDeployResult> {
@@ -37,7 +46,10 @@ export async function studioDeployWorkflow(
     throw new FatalError('url must be an http(s) URL');
   }
 
-  const kicked = await kickoffStep(url, input.transcript);
+  let kicked = await kickoffStep(url, input.transcript);
+  if (kicked.kind === 'failed' && kicked.retryable) {
+    kicked = await kickoffStep(url, input.transcript);
+  }
   if (kicked.kind === 'failed') {
     throw new FatalError(kicked.message || 'Backend refused the deploy kickoff');
   }
@@ -65,17 +77,26 @@ export async function studioDeployWorkflow(
 async function kickoffStep(
   url: string,
   transcript?: string,
-): Promise<{
-  kind: 'job' | 'handoff' | 'failed' | 'live';
-  jobId?: string;
-  message?: string;
-  live_url?: string | null;
-  github_repo?: string | null;
-}> {
+): Promise<StudioDeployKickoff> {
   'use step';
 
-  const { kickoffAsyncVideoJob } = await import('@/lib/pipeline-async-job');
-  return kickoffAsyncVideoJob(url, { transcript });
+  const {
+    isAbortTimeout,
+    kickoffAsyncVideoJob,
+    studioDeployReadyTranscriptHold,
+  } = await import('@/lib/pipeline-async-job');
+  try {
+    return await kickoffAsyncVideoJob(url, { transcript });
+  } catch (err) {
+    if (isAbortTimeout(err)) {
+      return {
+        kind: 'failed',
+        retryable: true,
+        message: studioDeployReadyTranscriptHold(),
+      };
+    }
+    throw err;
+  }
 }
 
 async function pollJobStep(
@@ -92,6 +113,7 @@ async function pollJobStep(
 
   const {
     fetchAsyncVideoJob,
+    isGatewayTimeoutKickoff,
     isTerminalJobStatus,
     studioDeployReadyTranscriptHold,
     usableKickoffTranscript,
@@ -110,7 +132,11 @@ async function pollJobStep(
       };
     }
 
-    if (!status.ok) {
+    const statusTimeout =
+      status.httpStatus === 408 ||
+      isGatewayTimeoutKickoff(status.httpStatus, status.message);
+
+    if (!status.ok && !statusTimeout) {
       const raw = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
       const msg = usableKickoffTranscript(transcript)
         ? studioDeployReadyTranscriptHold(raw)
@@ -151,6 +177,8 @@ async function pollJobStep(
   }
 
   throw new Error(
-    status.message || `Deploy job ${jobId} still ${status.jobStatus || 'pending'}`,
+    usableKickoffTranscript(transcript)
+      ? studioDeployReadyTranscriptHold(status.message)
+      : status.message || `Deploy job ${jobId} still ${status.jobStatus || 'pending'}`,
   );
 }

@@ -14,6 +14,8 @@ export interface AsyncJobKickoff {
   live_url?: string | null;
   github_repo?: string | null;
   httpStatus?: number;
+  /** Timeout / 408 — WDK should retry the step, not FatalError the run. */
+  retryable?: boolean;
 }
 
 export interface AsyncJobStatus {
@@ -99,6 +101,15 @@ export async function kickoffAsyncVideoJob(
   const { url: backendUrl } = getBackendConfig();
   const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
   if (shipped.kind === 'live' || shipped.kind === 'job') return shipped;
+  if (transcript && isGatewayTimeoutKickoff(shipped.httpStatus, shipped.message)) {
+    const retried = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
+    if (retried.kind === 'live' || retried.kind === 'job') return retried;
+    return {
+      kind: 'failed',
+      retryable: true,
+      message: studioDeployReadyTranscriptHold(retried.message),
+    };
+  }
   if (transcript) {
     return {
       kind: 'failed',
@@ -151,14 +162,28 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
     return { ok: false, message: 'BACKEND_URL is not configured' };
   }
 
-  const response = await fetch(
-    `${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`,
-    {
-      cache: 'no-store',
-      headers: backendHeaders(),
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`,
+      {
+        cache: 'no-store',
+        headers: backendHeaders(),
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+  } catch (err) {
+    console.error('[pipeline-async-job] job status read failed', err);
+    return {
+      ok: false,
+      httpStatus: isAbortTimeout(err) ? 408 : undefined,
+      message: isAbortTimeout(err)
+        ? 'Deploy job status read timed out; retrying'
+        : err instanceof Error
+          ? err.message
+          : 'Deploy job status read failed',
+    };
+  }
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   const data =
     payload.data && typeof payload.data === 'object'
@@ -268,6 +293,8 @@ async function tryVideoToSoftwareDeploy(
     console.error('[pipeline-async-job] video-to-software kickoff failed', err);
     return {
       kind: 'failed',
+      httpStatus: isAbortTimeout(err) ? 408 : undefined,
+      retryable: isAbortTimeout(err) ? true : undefined,
       message: isAbortTimeout(err)
         ? 'video-to-software timed out before a verified live URL'
         : err instanceof Error
@@ -277,7 +304,7 @@ async function tryVideoToSoftwareDeploy(
   }
 }
 
-function isAbortTimeout(err: unknown): boolean {
+export function isAbortTimeout(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const rec = err as { name?: unknown; code?: unknown; message?: unknown };
   if (rec.name === 'TimeoutError') return true;

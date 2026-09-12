@@ -409,6 +409,55 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it('pollStudioDeploy keeps polling after a status-read abort timeout until a live URL exists', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'TimeoutError',
+        }),
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://xy.vercel.app' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_01M2AKRAVZ0SEBM670BGXEMCQZ', {
+      attempts: 4,
+      delayMs: 1,
+    });
+    expect(poll.result?.live_url).toBe('https://xy.vercel.app');
+    expect(poll.runStatus).toBe('completed');
+    expect(poll.error ?? '').not.toMatch(/aborted due to timeout/i);
+    expect(poll.message ?? '').not.toMatch(/aborted due to timeout/i);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('startStudioDeploy remaps a kickoff abort timeout instead of throwing', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockRejectedValue(
+        Object.assign(new Error('The operation was aborted due to timeout'), {
+          name: 'TimeoutError',
+        }),
+      ),
+    );
+    const started = await startStudioDeploy({
+      url: 'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      transcript:
+        'Studio Video Pack for XYMcBrFSJ4c already has a usable transcript ready for deploy.',
+    });
+    expect(started.ok).toBe(false);
+    expect(started.error ?? '').not.toMatch(/aborted due to timeout/i);
+    expect(started.error ?? started.message ?? '').toMatch(/timed out|retry|origin/i);
+  });
+
   it('pollStudioDeploy stops when the abort signal fires', async () => {
     const controller = new AbortController();
     const fetchMock = vi.fn().mockImplementation(async () => {
