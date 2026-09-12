@@ -40,7 +40,6 @@ try:
     from email.mime.text import MIMEText
 
     import requests
-    import aiohttp
     HAS_NOTIFICATION_DEPS = True
 except ImportError:
     HAS_NOTIFICATION_DEPS = False
@@ -734,9 +733,8 @@ Files attached: {len(package.files or [])}
                 }
 
             # Send webhook
-            async with aiohttp.ClientSession() as session:
-                async with session.post(webhook_url, json=payload, headers=headers, timeout=30) as response:
-                    response.raise_for_status()
+            response = requests.post(webhook_url, json=payload, headers=headers, timeout=30)
+            response.raise_for_status()
 
             return TransferResult(
                 destination=destination,

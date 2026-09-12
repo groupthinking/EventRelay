@@ -54,11 +54,7 @@ import {
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
-import {
-  buildSameRunActInput,
-  MIN_ACT_TRANSCRIPT_CHARS,
-  usableProvidedTranscript,
-} from '@/lib/video-to-actions-input';
+import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
   resolveStudioHandoff,
@@ -571,10 +567,7 @@ export default function OneLoopStudio({
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(attemptVideoId);
     try {
-      const started = await startStudioDeploy({
-        url: next,
-        transcript: usableProvidedTranscript(selected?.transcript),
-      });
+      const started = await startStudioDeploy({ url: next });
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;

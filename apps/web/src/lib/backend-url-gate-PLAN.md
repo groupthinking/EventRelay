@@ -1,31 +1,4 @@
-# TASK: studio.deploy reuse ready transcript (no YouTube re-hit)
-
-## 1. Goal & Scope
-* **Objective:** When Video Pack / transcript is already ready, Attempt deploy must not re-fetch YouTube. Continue to a verified https live URL + EventRelay receipt, or an honest HOLD that is not the yt-dlp bot miss and not the cleared residuals.
-* **Context:** AXIOM on `dpl_8DjoBuK8pE5MxE5L7SQaRgixivTK` / XYMcBrFSJ4c (receipt `er:gate:v1:wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ`) cleared #1855 UNKNOWN-checks. New HOLD: `ERROR: [youtube] XYMcBrFSJ4c: Sign in to confirm you’re not a bot.` Transcript was already ready.
-* **Root cause:** `startStudioDeploy` / `kickoffAsyncVideoJob` send URL only. After video-to-software misses (401 / no live URL), kickoff starts `/videos/process`, which re-runs yt-dlp. `pollJobStep` FatalErrors the bot check. Ready Studio transcript is never passed.
-* **Scope:** Pass usable transcript through Studio deploy → WDK → kickoff. When transcript is ready, do not start URL-only `/videos/process`. Surface the real vts miss (remap YouTube bot). Claim guard unchanged. No YouTube cookies/secret. Do not reopen #1848 / #1853 / #1855.
- * *Initial check:* Reuse `usableProvidedTranscript`; modify existing kickoff/workflow/POST. Do not add a second deploy path.
-
-## 2. Execution Plan
-- [x] Step 1: Lock failing tests (no process re-hit, POST/client pass transcript, remapped bot HOLD)
-- [x] Step 2: Thread transcript; skip `/videos/process` when ready
-- [x] Step 3: Focused Vitest 75 passed
-- [ ] Step 4: New PR from main → merge-when-core-green → prod READY `dpl_`
-
-## 3. Definition of Done
-* **Expected Outcome:** Ready-transcript deploy does not HOLD on the YouTube bot string. PASS only with a verified https hostname URL. Honest different HOLD is allowed.
-* **Verification Method:** Focused Vitest + Vercel prod READY after merge.
-* **Proof Artifact:** (filled after verification)
-
-## 4. Post-Task Reflection
-* **What was done:**
-* **Why it was needed:**
-* **How it was tested:**
-
----
-
-# Prior cut: Wait for a verified studio.deploy receipt (residual after #1853)
+# TASK: Wait for a verified studio.deploy receipt (residual after #1853)
 
 ## 1. Goal & Scope
 * **Objective:** Attempt deploy must not HOLD solely for `Deploy still running. No verified deploy receipt — UNKNOWN checks are not a live URL.` Wait for a verified https live URL + EventRelay receipt, or an honest different HOLD.

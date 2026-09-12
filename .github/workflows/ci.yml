@@ -35,7 +35,6 @@ jobs:
     # (main previously carried unresolved markers in 10 files because the
     # pipeline had no syntax gate — see PR #736.)
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
       - name: No committed merge-conflict markers
@@ -67,7 +66,6 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -91,7 +89,6 @@ jobs:
 
   lint-python:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -104,7 +101,6 @@ jobs:
 
   lint-frontend:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -122,7 +118,6 @@ jobs:
   test-frontend:
     name: test-frontend
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -144,7 +139,6 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

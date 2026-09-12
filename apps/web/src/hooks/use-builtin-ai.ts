@@ -26,11 +26,7 @@ export function useBuiltInAI() {
   });
 
   useEffect(() => {
-    checkCapabilities()
-      .then(setAvailable)
-      .catch((error) => {
-        console.error('Failed to check built-in AI capabilities:', error);
-      });
+    checkCapabilities().then(setAvailable);
   }, []);
 
   return {

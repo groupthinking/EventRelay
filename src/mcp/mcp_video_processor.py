@@ -719,25 +719,11 @@ class MCPVideoProcessor:
             transcript_list = await loop.run_in_executor(
                 None, lambda: yt_api.list(video_id)
             )
-
-            async def _fetch_transcript(item):
+            for transcript_item in transcript_list:
                 try:
-                    return await loop.run_in_executor(
-                        None, lambda i=item: i.fetch().to_raw_data()
+                    transcript = await loop.run_in_executor(
+                        None, lambda item=transcript_item: item.fetch().to_raw_data()
                     )
-                except Exception as inner_e:
-                    self.mcp_logger.warning(
-                        "⚠️ MCP route failed", error=inner_e, video_id=video_id
-                    )
-                    return None
-
-            tasks = [
-                asyncio.create_task(_fetch_transcript(item)) for item in transcript_list
-            ]
-
-            try:
-                for task in tasks:
-                    transcript = await task
                     if transcript and len(transcript) > 0:
                         self.mcp_logger.info(
                             "✅ MCP-routed extraction successful",
@@ -745,11 +731,11 @@ class MCPVideoProcessor:
                             video_id=video_id,
                         )
                         return transcript
-            finally:
-                for task in tasks:
-                    if not task.done():
-                        task.cancel()
-
+                except Exception as inner_e:
+                    self.mcp_logger.warning(
+                        "⚠️ MCP route failed", error=inner_e, video_id=video_id
+                    )
+                    continue
             raise NoTranscriptFound("No routed transcript found")
 
         # Method 1: Direct API with circuit breaker protection
