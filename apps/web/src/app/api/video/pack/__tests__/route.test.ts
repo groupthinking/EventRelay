@@ -44,6 +44,7 @@ afterEach(() => {
   extractVideoPackSpec.mockReset();
   vi.resetModules();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function postRequest(body: unknown) {
@@ -117,6 +118,24 @@ describe('POST /api/video/pack', () => {
     expect(peek.status).toBe(202);
 
     finish?.(specFor(CANON_B));
+  });
+
+  it('does not return 202 in production when Redis durability is unavailable', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    vi.stubEnv('KV_REST_API_URL', '');
+    vi.stubEnv('KV_REST_API_TOKEN', '');
+
+    const { POST, scheduled } = await loadPackRoute();
+    const res = await POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { status?: string; error?: string };
+    expect(body.status).toBe('error');
+    expect(body.error).toMatch(/durable video pack storage is not configured/i);
+    expect(scheduled).toHaveLength(0);
+    expect(extractVideoPackSpec).not.toHaveBeenCalled();
   });
 
   it('fails closed with a visible error when Gateway extract is unavailable', async () => {

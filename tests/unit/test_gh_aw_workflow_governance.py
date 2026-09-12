@@ -171,11 +171,32 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
 
     assert workflow["name"] == "gh-aw Validation"
-    entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.82.14"]
-    assert entry["sha"] == "b6d1443e05b8716267fa19425b99aa4f12006b4a"
+    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.88.7"]
+    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v0.88.7"]
+    assert setup_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
+    assert setup_cli_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
     step_scripts = [step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]]
     combined = "\n".join(step_scripts)
-    assert "gh extension install github/gh-aw --pin v0.82.14" in combined
+    assert "gh extension install github/gh-aw --pin v0.88.7" in combined
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
+    assert "pr-iteration-loop" in combined
+    assert "repo-assist" in combined
+
+
+def test_gh_aw_validation_tracks_poutine_policy_paths() -> None:
+    workflow = _load_yaml(ROOT / ".github/workflows/gh-aw-validation.yml")
+    workflow_on = workflow.get("on", workflow.get(True))
+
+    assert workflow_on is not None
+    assert ".poutine.yml" in workflow_on["push"]["paths"]
+    assert ".poutine.yml" in workflow_on["pull_request"]["paths"]
+
+
+def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
+    workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
+
+    assert 'payload.selected = {\n            kind: "issue",' not in workflow_source
+    assert 'payload.selected = {\n            kind: "pull_request",' not in workflow_source
+    assert "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null" in workflow_source
