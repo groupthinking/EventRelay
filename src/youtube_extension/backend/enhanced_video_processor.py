@@ -27,7 +27,11 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+from youtube_extension.utils.proxy import (
+    get_proxy_url,
+    get_transcript_proxy_config,
+    redact_proxy_credentials,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +335,8 @@ class EnhancedVideoProcessor:
 
                 if download.returncode != 0:
                     raise RuntimeError(
-                        f"yt-dlp audio download failed: {stderr.decode()[:200]}"
+                        "yt-dlp audio download failed: "
+                        f"{redact_proxy_credentials(stderr.decode())[:200]}"
                     )
 
                 # The OpenAI client is synchronous and Whisper calls run for tens
