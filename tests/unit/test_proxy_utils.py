@@ -20,7 +20,11 @@ import sys
 
 import pytest
 
-from youtube_extension.utils.proxy import redact_proxy_credentials
+from youtube_extension.utils.proxy import (
+    get_proxy_dict,
+    get_proxy_url,
+    redact_proxy_credentials,
+)
 
 _PROXY_ENV_VAR = "WEBSHARE_PROXY_URL"
 _CONFIGURED = "http://user:s3cr3t@proxy.internal:8080"
@@ -63,6 +67,50 @@ def redact(request):
 @pytest.fixture(autouse=True)
 def _configured_proxy(monkeypatch):
     monkeypatch.setenv(_PROXY_ENV_VAR, _CONFIGURED)
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "http://" + "user" + ":" + "secret" + "@[::1",
+        "http://" + "user" + ":" + "secret" + "@host:notaport",
+        "http://" + "user" + ":" + "secret" + "@host:99999",
+    ],
+)
+def test_malformed_proxy_url_falls_back_without_logging_credentials(
+    monkeypatch, caplog, raw
+):
+    monkeypatch.setenv(_PROXY_ENV_VAR, raw)
+
+    with caplog.at_level("WARNING", logger="youtube_extension.utils.proxy"):
+        assert get_proxy_url() is None
+        assert get_proxy_dict() is None
+
+    assert raw not in caplog.text
+    assert "user" not in caplog.text
+    assert "secret" not in caplog.text
+
+
+def test_yt_dlp_supported_proxy_scheme_matches_shared_validation(monkeypatch):
+    raw = "socks5h://" + "user" + ":" + "secret" + "@proxy.internal:1080"
+    monkeypatch.setenv(_PROXY_ENV_VAR, raw)
+
+    assert get_proxy_url() == raw
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "http://" + "user" + ":" + "secret" + "@[::1",
+        "http://" + "user" + ":" + "secret" + "@host:notaport",
+        "socks5h://" + "user" + ":" + "secret" + "@proxy.internal:1080",
+    ],
+)
+def test_standalone_proxy_validation_matches_canonical_helper(monkeypatch, raw):
+    monkeypatch.setenv(_PROXY_ENV_VAR, raw)
+    shared = _load_shared_copy()
+
+    assert shared._get_webshare_proxy_url() == get_proxy_url()
 
 
 # Each case is (text, secret-that-must-not-survive).

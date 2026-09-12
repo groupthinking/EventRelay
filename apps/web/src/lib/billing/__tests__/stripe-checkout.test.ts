@@ -83,6 +83,18 @@ describe('createProCheckoutSession', () => {
     expect(args.cancel_url).toBe('https://uvai.io/pricing?checkout=cancelled');
   });
 
+  it('ignores NEXT_PUBLIC_APP_URL for production checkout URLs (fail-closed)', async () => {
+    process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
+    process.env.NODE_ENV = 'production';
+    const { createProCheckoutSession } = await import('../stripe-checkout');
+    await createProCheckoutSession({ annual: true, flow: 'acquisition' });
+    const args = createMock.mock.calls[createMock.mock.calls.length - 1][0];
+    expect(args.success_url).toBe(
+      'https://uvai.io/pricing?checkout=success&session_id={CHECKOUT_SESSION_ID}',
+    );
+    expect(args.cancel_url).toBe('https://uvai.io/pricing?checkout=cancelled');
+  });
+
   it('uses env price id for annual renewal', async () => {
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await createProCheckoutSession({
