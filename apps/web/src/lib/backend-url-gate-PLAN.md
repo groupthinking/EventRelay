@@ -1,4 +1,58 @@
-# TASK: restore #1859 ready-transcript reuse after #1875 524 handoff
+# TASK: studio.deploy no abort-timeout → live URL
+
+## 1. Goal & Scope
+* **Objective:** Prevent abort-timeout on the studio.deploy path (extend wait, async poll, or honest progress) through a verified deploy receipt + clickable live URL, or an honest HOLD that is not this timeout and not prior cleared residuals.
+* **Context:** CoS formal GO. Residual on `dpl_DL2TCbLyYZhgjv7tnePcEdKHCARs` / XYMcBrFSJ4c: `The operation was aborted due to timeout` (receipt `er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ`). Transcript ready. No Deploy completed / no live URL. Cleared: YouTube bot wall, HTTP 524, UNKNOWN checks, workflow-run, return-value, BACKEND_URL.
+* **Root cause:** WDK `pollJobStep` sat ~180s (`18 × 10s setTimeout`) inside one `'use step'`. Vercel/WDK step budget ~60s aborts with the DOM string. Receipt exists so kickoff succeeded. Remap/retry alone does not prevent the in-step abort.
+* **Scope:** Split poll onto durable `sleep('10s')` between short job reads. Continue on 408/gateway timeout. Client poll window covers the durable wait. Claim guard unchanged. No Origin invent. Do not reopen #1878.
+ * *Initial check:* Modify existing workflow + poll helpers. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (decideStudioDeployPoll continue on 408; workflow imports sleep; no in-step setTimeout; client window ≥ 6 min)
+- [x] Step 2: Implement durable poll + decide helper + client window
+- [ ] Step 3: Focused + full frontend tests / lint GREEN
+- [ ] Step 4: Push PR #1884 — core CI green — report PR # + SHA
+
+## 3. Definition of Done
+* **Expected Outcome:** studio.deploy does not abort-timeout. PASS only with verified https hostname URL + receipt. Honest HOLD ≠ abort-timeout, ≠ bot, ≠ 524, ≠ UNKNOWN checks, ≠ workflow-run, ≠ return-value, ≠ BACKEND_URL.
+* **Verification Method:** Focused Vitest + `cd apps/web && npx vitest run` + `npm run lint` + required GitHub core jobs.
+* **Proof Artifact:** (filled after verification)
+
+## 4. Post-Task Reflection
+* **What was done:**
+* **Why it was needed:**
+* **How it was tested:**
+
+---
+
+# Prior cut: clear G.A.T.E. timeout abort HOLD on studio.deploy
+
+## 1. Goal & Scope
+* **Objective:** Attempt deploy / studio.deploy for XYMcBrFSJ4c must not HOLD on `The operation was aborted due to timeout`. Reach G.A.T.E. PASS with a verified https live URL + EventRelay receipt, or an honest HOLD that is not timeout-abort, not HTTP 524, and not the YouTube bot wall.
+* **Context:** AXIOM on `dpl_DL2TCbLyYZhgjv7tnePcEdKHCARs` (includes #1880) / XYMcBrFSJ4c. Receipt `er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ`. Bot + 524 residuals cleared. Still HOLD on timeout abort. No live URL.
+* **Root cause:** `AbortSignal.timeout` in WDK `kickoffStep` / `pollJobStep` and the client poller is treated as a terminal workflow failure. WDK marks AbortError as FatalError. `fetchAsyncVideoJob` and `pollStudioDeploy` do not catch the abort, so `run.returnValue` / OneLoopStudio catch pass the raw DOM message to G.A.T.E. #1880 then `kind: 'failed'`s a ready-transcript vts abort instead of retrying origin `202` + `job_id`.
+* **Scope:** Retry origin vts on abort (never `/videos/process` when transcript is ready). Catch abort on job status reads and client polls. Remap leftover abort copy. Claim guard unchanged. No Origin invent.
+ * *Initial check:* Modify existing kickoff / poll / workflow / outcome helpers. Do not add a second Studio surface.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (timeout abort → retry 202 / keep polling; never raw abort HOLD; no process; no 524)
+- [x] Step 2: Retry + catch + remap; workflow does not FatalError abort
+- [x] Step 3: Focused Vitest GREEN (7 files, 97 passed)
+- [x] Step 4: PR #1884 from current main — local test-frontend 703 passed; GitHub Actions core jobs still queued (no failure)
+
+## 3. Definition of Done
+* **Expected Outcome:** Timeout abort is not a terminal HOLD reason. Ready-transcript path still skips YouTube process. 524 stay remapped. PASS only with a verified https hostname URL + receipt.
+* **Verification Method:** Focused Vitest on pipeline-async-job, studio-workflow, studio-pipeline-status, gate-transition.
+* **Proof Artifact:** https://github.com/groupthinking/EventRelay/pull/1884 — local `npx vitest run` 100 files / 703 passed / 1 skipped; `npm run lint` 0 errors. GitHub `CI` / `PR Checks` queued at report time (runner backlog), 0 failed.
+
+## 4. Post-Task Reflection
+* **What was done:** Retry origin vts on abort when a ready transcript exists; catch abort on job status reads and client start/poll; WDK treats abort/408 as retryable; remap leftover abort copy. Claim guard unchanged.
+* **Why it was needed:** After #1880, AXIOM HOLDs on `The operation was aborted due to timeout` because AbortSignal.timeout failed the WDK step / client poll as a terminal run error instead of waiting for origin 202 + a verified live URL.
+* **How it was tested:** TDD RED then GREEN. Focused 97 + full apps/web 703. Cannot signed-in dogfood AXIOM here.
+
+---
+
+# Prior cut: restore #1859 ready-transcript reuse after #1875 524 handoff
 
 ## 1. Goal & Scope
 * **Objective:** Ready-transcript studio.deploy must not HOLD the YouTube bot wall and must not HOLD HTTP 524. Keep #1875 async past 524 via origin `202` + `job_id`. Do not regress UNKNOWN / workflow-run / return-value / BACKEND_URL. Claim guard stays.

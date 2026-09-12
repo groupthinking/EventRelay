@@ -270,6 +270,20 @@ export function studioDeployReceiptForSelection(input: {
   return studioVerifiedLiveUrl(input.liveUrl);
 }
 
+export const STUDIO_DEPLOY_ABORT_RETRY_MESSAGE =
+  'Deploy kickoff timed out before a verified live URL. Waiting for the origin job — not aborting the attempt.';
+
+export function isStudioDeployAbortTimeout(value: unknown): boolean {
+  if (typeof value === 'string') {
+    return /aborted due to timeout/i.test(value);
+  }
+  if (!value || typeof value !== 'object') return false;
+  const rec = value as { name?: unknown; code?: unknown; message?: unknown };
+  if (rec.name === 'TimeoutError') return true;
+  if (rec.code === 23 || rec.code === 'TIMEOUT_ERR') return true;
+  return typeof rec.message === 'string' && /aborted due to timeout/i.test(rec.message);
+}
+
 export function studioDeployOutcomeMessage(input: {
   liveUrl?: string | null;
   runStatus?: string | null;
@@ -279,7 +293,10 @@ export function studioDeployOutcomeMessage(input: {
   jobId?: string | null;
   jobStatus?: string | null;
 }): string {
-  const error = input.error?.trim();
+  const rawError = input.error?.trim();
+  const error = rawError && isStudioDeployAbortTimeout(rawError)
+    ? STUDIO_DEPLOY_ABORT_RETRY_MESSAGE
+    : rawError;
   if (error) return error;
   const receipt = studioVerifiedLiveUrl(input.liveUrl);
   if (receipt) {

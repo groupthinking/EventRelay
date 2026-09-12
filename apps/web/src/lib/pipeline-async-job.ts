@@ -14,6 +14,8 @@ export interface AsyncJobKickoff {
   live_url?: string | null;
   github_repo?: string | null;
   httpStatus?: number;
+  /** Timeout / 408 — WDK should retry the step, not FatalError the run. */
+  retryable?: boolean;
 }
 
 export interface AsyncJobStatus {
@@ -99,6 +101,15 @@ export async function kickoffAsyncVideoJob(
   const { url: backendUrl } = getBackendConfig();
   const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
   if (shipped.kind === 'live' || shipped.kind === 'job') return shipped;
+  if (transcript && isGatewayTimeoutKickoff(shipped.httpStatus, shipped.message)) {
+    const retried = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
+    if (retried.kind === 'live' || retried.kind === 'job') return retried;
+    return {
+      kind: 'failed',
+      retryable: true,
+      message: studioDeployReadyTranscriptHold(retried.message),
+    };
+  }
   if (transcript) {
     return {
       kind: 'failed',
@@ -151,14 +162,28 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
     return { ok: false, message: 'BACKEND_URL is not configured' };
   }
 
-  const response = await fetch(
-    `${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`,
-    {
-      cache: 'no-store',
-      headers: backendHeaders(),
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`,
+      {
+        cache: 'no-store',
+        headers: backendHeaders(),
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+  } catch (err) {
+    console.error('[pipeline-async-job] job status read failed', err);
+    return {
+      ok: false,
+      httpStatus: isAbortTimeout(err) ? 408 : undefined,
+      message: isAbortTimeout(err)
+        ? 'Deploy job status read timed out; retrying'
+        : err instanceof Error
+          ? err.message
+          : 'Deploy job status read failed',
+    };
+  }
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   const data =
     payload.data && typeof payload.data === 'object'
@@ -204,6 +229,88 @@ export function isTerminalJobStatus(status: string | undefined): boolean {
     status === 'error' ||
     status === 'cancelled'
   );
+}
+
+export type StudioDeployPollDecision =
+  | {
+      action: 'live';
+      live_url: string;
+      jobStatus?: string;
+      github_repo?: string | null;
+    }
+  | {
+      action: 'job';
+      jobStatus?: string;
+      live_url?: string | null;
+      github_repo?: string | null;
+      message?: string;
+    }
+  | { action: 'continue'; message?: string; jobStatus?: string }
+  | { action: 'retry'; message: string }
+  | { action: 'fail'; message: string };
+
+/**
+ * One WDK job-status read → continue, live, terminal job, or honest fail.
+ * Timeout / 408 / gateway abort must continue — never a raw abort HOLD.
+ */
+export function decideStudioDeployPoll(
+  status: AsyncJobStatus,
+  opts: { jobId: string; transcript?: string },
+): StudioDeployPollDecision {
+  if (status.live_url) {
+    return {
+      action: 'live',
+      live_url: status.live_url,
+      jobStatus: status.jobStatus || 'completed',
+      github_repo: status.github_repo,
+    };
+  }
+
+  const statusTimeout =
+    status.httpStatus === 408 ||
+    isGatewayTimeoutKickoff(status.httpStatus, status.message);
+
+  if (!status.ok && !statusTimeout) {
+    const raw =
+      status.message || `Deploy job ${opts.jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+    const msg = usableProvidedTranscript(opts.transcript)
+      ? studioDeployReadyTranscriptHold(raw)
+      : raw;
+    if (status.httpStatus && status.httpStatus >= 500) {
+      return { action: 'retry', message: msg };
+    }
+    return { action: 'fail', message: msg };
+  }
+
+  if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
+    const raw = status.message || `Deploy job ${opts.jobId} ${status.jobStatus}`;
+    return {
+      action: 'fail',
+      message: usableProvidedTranscript(opts.transcript)
+        ? studioDeployReadyTranscriptHold(raw)
+        : raw,
+    };
+  }
+
+  if (isTerminalJobStatus(status.jobStatus)) {
+    return {
+      action: 'job',
+      jobStatus: status.jobStatus,
+      live_url: status.live_url,
+      github_repo: status.github_repo,
+      message:
+        status.message ||
+        (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
+    };
+  }
+
+  return {
+    action: 'continue',
+    jobStatus: status.jobStatus,
+    message: usableProvidedTranscript(opts.transcript)
+      ? studioDeployReadyTranscriptHold(status.message)
+      : status.message || `Deploy job ${opts.jobId} still ${status.jobStatus || 'pending'}`,
+  };
 }
 
 /**
@@ -268,6 +375,8 @@ async function tryVideoToSoftwareDeploy(
     console.error('[pipeline-async-job] video-to-software kickoff failed', err);
     return {
       kind: 'failed',
+      httpStatus: isAbortTimeout(err) ? 408 : undefined,
+      retryable: isAbortTimeout(err) ? true : undefined,
       message: isAbortTimeout(err)
         ? 'video-to-software timed out before a verified live URL'
         : err instanceof Error
@@ -277,7 +386,7 @@ async function tryVideoToSoftwareDeploy(
   }
 }
 
-function isAbortTimeout(err: unknown): boolean {
+export function isAbortTimeout(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false;
   const rec = err as { name?: unknown; code?: unknown; message?: unknown };
   if (rec.name === 'TimeoutError') return true;

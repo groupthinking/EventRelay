@@ -359,6 +359,14 @@ describe('studio-pipeline-status', () => {
     expect(withReceipt.toLowerCase()).not.toMatch(/deploy completed/);
     expect(studioHasDeployReceipt('https://example.vercel.app')).toBe(true);
 
+    const abortHold = studioDeployOutcomeMessage({
+      runStatus: 'failed',
+      error: 'The operation was aborted due to timeout',
+    });
+    expect(abortHold).not.toMatch(/aborted due to timeout/i);
+    expect(abortHold.toLowerCase()).not.toMatch(/deploy completed/);
+    expect(abortHold).toMatch(/timed out|origin job|waiting/i);
+
     for (const runStatus of ['pending', 'running', 'queued'] as const) {
       const inFlight = studioDeployOutcomeMessage({
         runStatus,
@@ -405,6 +413,13 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('usableProvidedTranscript');
     const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
     expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
+    expect(workflow).toMatch(/isAbortTimeout|retryable/);
+    expect(workflow).toMatch(/catch/);
+    expect(workflow).toMatch(/import \{[^}]*sleep[^}]*\} from ['"]workflow['"]/);
+    expect(workflow).toMatch(/await sleep\(['"]10s['"]\)/);
+    expect(workflow).toMatch(/decideStudioDeployPoll/);
+    expect(workflow).not.toMatch(/setTimeout/);
+    expect(workflow).not.toMatch(/AbortSignal\.timeout/);
     expect(studio).toContain('studioDeployButtonLabel');
     expect(studio).toContain('studioDeployReceiptForSelection');
     expect(studio).toContain('studioVerifiedLiveUrl');
