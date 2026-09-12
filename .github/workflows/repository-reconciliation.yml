@@ -17,6 +17,7 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Reconcile canonical delivery state
         uses: actions/github-script@v8

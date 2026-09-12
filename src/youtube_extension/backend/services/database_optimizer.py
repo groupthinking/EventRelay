@@ -399,11 +399,16 @@ class QueryOptimizer:
                 # instead of running them back to back.
                 def _run_sync_query() -> Any:
                     cursor = connection.cursor()
-                    if params:
-                        cursor.execute(query, params)
-                    else:
-                        cursor.execute(query)
-                    return cursor.fetchall()
+                    try:
+                        if params:
+                            cursor.execute(query, params)
+                        else:
+                            cursor.execute(query)
+                        return cursor.fetchall()
+                    finally:
+                        close_cursor = getattr(cursor, "close", None)
+                        if close_cursor is not None:
+                            close_cursor()
 
                 # Run the blocking work as a *task* and await it shielded. A
                 # worker thread cannot be cancelled: if this coroutine is

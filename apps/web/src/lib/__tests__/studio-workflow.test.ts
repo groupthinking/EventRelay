@@ -215,6 +215,25 @@ describe('studio-workflow (WDK Product v1)', () => {
     );
   });
 
+  it('startStudioDeploy sends a ready transcript so deploy can skip YouTube re-fetch', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ok: true, runId: 'wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const transcript =
+      'Studio Video Pack for XYMcBrFSJ4c already has a usable transcript ready for deploy.';
+    const started = await startStudioDeploy({
+      url: 'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
+      transcript,
+    });
+    expect(started.ok).toBe(true);
+    const init = fetchMock.mock.calls[0]?.[1] as { body?: string };
+    const body = JSON.parse(String(init.body)) as { transcript?: string };
+    expect(body.transcript).toBe(transcript);
+  });
+
   it('pollStudioDeploy returns on handoff result', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

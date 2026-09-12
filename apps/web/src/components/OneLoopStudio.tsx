@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Download, Play, Rocket } from 'lucide-react';
+import { Download, GitPullRequest, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
@@ -19,6 +19,7 @@ import {
   actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
+  safeProjectName,
 } from '@/lib/action-surface';
 import {
   pollStudioDeploy,
@@ -39,6 +40,7 @@ import {
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportToastMessage,
+  studioFormationSupplementalEntities,
   studioInvalidHandoffMessage,
   studioPackCitation,
   studioPackFormation,
@@ -54,9 +56,14 @@ import {
   studioVerifiedLiveUrl,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
-import { buildSameRunActInput, MIN_ACT_TRANSCRIPT_CHARS } from '@/lib/video-to-actions-input';
+import {
+  buildSameRunActInput,
+  MIN_ACT_TRANSCRIPT_CHARS,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
 import {
   applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
@@ -70,6 +77,7 @@ import {
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
+import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -92,6 +100,15 @@ function gateDecisionChipClass(decision: GateDecision): string {
 
 function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
+}
+
+function toSpecBranch(videoId: string, stepId: string): string {
+  const slug = `${videoId || 'video'}-${stepId}`
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 48);
+  return `spec/${slug || 'approved'}`;
 }
 
 function mapExtractedEvents(raw: unknown[], videoId: string): ExtractedEvent[] {
@@ -229,6 +246,8 @@ export default function OneLoopStudio({
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
   const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
+  const [openingPrs, setOpeningPrs] = useState(false);
   const [playerEpoch, setPlayerEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
@@ -277,9 +296,15 @@ export default function OneLoopStudio({
       packTools,
     );
   }, [selected, packFormation.tools]);
+  const stackChecks = packFormation.checks;
+  const supplementalEntities = studioFormationSupplementalEntities(
+    packFormation.tools,
+    linkedSop?.entities,
+  );
 
   useEffect(() => {
     setCompletedChecks([]);
+    setApprovedSpecIds([]);
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(null);
   }, [selectedVideoId]);
@@ -355,6 +380,16 @@ export default function OneLoopStudio({
     // One-shot kick from ?video= so Home paste starts the live pack path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
+
+  useEffect(() => {
+    // Release the module-level Strict Mode guard when Studio truly unmounts so
+    // re-entering /studio?video= with the same id (re-paste, or retry after a
+    // failed run) auto-starts again. Deferred so React's synchronous Strict
+    // Mode unmount/remount still sees the guard and does not double-start.
+    return () => {
+      window.setTimeout(() => resetStudioQueryAutoStart(), 0);
+    };
+  }, []);
 
   const analyze = (event?: FormEvent) => {
     event?.preventDefault();
@@ -493,6 +528,9 @@ export default function OneLoopStudio({
   };
 
   const exportPkg = () => {
+    const filename = studioExportFilename(
+      safeProjectName(selected?.title || 'uvai-project'),
+    );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
         return action.trim() ? [{ title: action.trim() }] : [];
@@ -512,7 +550,7 @@ export default function OneLoopStudio({
       packFormation.artifacts.length === 0 &&
       packFormation.tools.length === 0
     ) {
-      const toast = studioExportToastMessage({ ok: false, kind: 'empty' });
+      const toast = studioExportToastMessage({ ok: false, kind: 'empty', filename });
       setExportToast(toast);
       return;
     }
@@ -529,7 +567,6 @@ export default function OneLoopStudio({
         },
       });
       downloadScaffoldPackage(pkg);
-      const filename = studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
@@ -547,6 +584,7 @@ export default function OneLoopStudio({
       const toast = studioExportToastMessage({
         ok: false,
         error: err instanceof Error ? err.message : 'Export failed.',
+        filename,
       });
       setExportToast(toast);
     }
@@ -567,7 +605,10 @@ export default function OneLoopStudio({
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(attemptVideoId);
     try {
-      const started = await startStudioDeploy({ url: next });
+      const started = await startStudioDeploy({
+        url: next,
+        transcript: usableProvidedTranscript(selected?.transcript),
+      });
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
         return;
@@ -624,6 +665,35 @@ export default function OneLoopStudio({
       setMessage(backendReason);
     } finally {
       setDeployBusy(false);
+    }
+  };
+
+  const openApprovedSpecsPrs = async () => {
+    if (!linkedSop || linkedSop.steps.length === 0) {
+      setMessage('Analyze a video with SOP steps before opening GitHub pull requests.');
+      return;
+    }
+    const sourceVideoId = getYouTubeId(selected?.url || url || '');
+    const specs = linkedSop.steps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      body: [step.description || '', step.quote ? `\nQuote: ${step.quote}` : ''].join('').trim(),
+      head: toSpecBranch(sourceVideoId, step.id),
+      base: 'main',
+      approved: approvedSpecIds.includes(step.id),
+    }));
+    setOpeningPrs(true);
+    try {
+      const result = await openGitHubPrsForApprovedSpecs(specs);
+      if (!result.ok) {
+        setMessage(result.error || 'Could not open GitHub pull requests for approved specs.');
+        return;
+      }
+      setMessage(`Opened or updated ${result.pullRequests.length} GitHub pull request(s) for approved specs.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not open GitHub pull requests.');
+    } finally {
+      setOpeningPrs(false);
     }
   };
 
@@ -764,7 +834,7 @@ export default function OneLoopStudio({
 
       <main
         data-testid="studio-main"
-        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-20 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
+        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-28 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
       >
         <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
           {videoId ? (
@@ -924,7 +994,7 @@ export default function OneLoopStudio({
               </h2>
             </div>
             <div className="flex flex-wrap gap-2 px-4 py-3">
-              {linkedSop.entities.length === 0 && packFormation.tools.length === 0 && (
+              {supplementalEntities.length === 0 && packFormation.tools.length === 0 && (
                 <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
               )}
               {packFormation.tools.map((tool) => (
@@ -935,14 +1005,7 @@ export default function OneLoopStudio({
                   <span className="font-medium text-white">{tool.name}</span>
                 </span>
               ))}
-              {linkedSop.entities
-                .filter(
-                  (entity) =>
-                    !packFormation.tools.some(
-                      (tool) => tool.name.toLowerCase() === entity.name.toLowerCase(),
-                    ),
-                )
-                .map((entity) => (
+              {supplementalEntities.map((entity) => (
                 <span
                   key={entity.name}
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
@@ -987,7 +1050,9 @@ export default function OneLoopStudio({
               {linkedSop.steps.length === 0 && (
                 <li className="px-4 py-3 text-sm text-white/40">No ordered SOP in this run.</li>
               )}
-              {linkedSop.steps.map((step) => (
+              {linkedSop.steps.map((step) => {
+                const approved = approvedSpecIds.includes(step.id);
+                return (
                 <li key={step.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
                   {step.timestamp != null ? (
                     <button
@@ -1001,16 +1066,32 @@ export default function OneLoopStudio({
                     <div className="font-mono text-[11px] text-white/35">{step.order}</div>
                   )}
                   <div>
+                    <label className="mb-1 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-white/45">
+                      <input
+                        type="checkbox"
+                        checked={approved}
+                        onChange={() =>
+                          setApprovedSpecIds((current) =>
+                            current.includes(step.id)
+                              ? current.filter((id) => id !== step.id)
+                              : [...current, step.id],
+                          )
+                        }
+                        className="h-3.5 w-3.5 accent-[#e8b86d]"
+                      />
+                      Approved for PR
+                    </label>
                     <div className="text-sm font-medium text-white">{step.title}</div>
                     {step.description && (
                       <div className="mt-0.5 text-sm text-white/55">{step.description}</div>
                     )}
                   </div>
                 </li>
-              ))}
+                );
+              })}
             </ol>
 
-            {linkedSop.checklist.some((item) => item.source === 'stack') && (
+            {stackChecks.length > 0 && (
               <>
                 <div className="border-t border-white/10 px-4 py-3">
                   <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
@@ -1018,9 +1099,7 @@ export default function OneLoopStudio({
                   </h2>
                 </div>
                 <ul className="divide-y divide-white/5">
-                  {linkedSop.checklist
-                    .filter((item) => item.source === 'stack')
-                    .map((item) => {
+                  {stackChecks.map((item) => {
                       const checked = completedChecks.includes(item.id);
                       const status = stackCheckStatus(item, completedChecks, 'anonymous');
                       return (
@@ -1236,6 +1315,17 @@ export default function OneLoopStudio({
           >
             <Rocket className="h-4 w-4" aria-hidden />
             {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
+          </button>
+          <button
+            type="button"
+            data-testid="studio-open-prs-button"
+            onClick={() => void openApprovedSpecsPrs()}
+            disabled={openingPrs || approvedSpecIds.length === 0}
+            title={approvedSpecIds.length === 0 ? 'Approve at least one SOP spec first.' : undefined}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
+          >
+            <GitPullRequest className="h-4 w-4" aria-hidden />
+            {openingPrs ? 'Opening PRs…' : `Open GitHub PRs (${approvedSpecIds.length})`}
           </button>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">

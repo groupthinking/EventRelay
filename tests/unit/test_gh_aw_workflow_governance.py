@@ -42,7 +42,7 @@ def test_coverage_workflow_is_authoritative() -> None:
     run_script = run_step["run"]
     assert "pytest tests/" in run_script
     assert "--cov=src/youtube_extension" in run_script
-    assert "--cov-fail-under" not in run_script
+    assert "--cov-fail-under=88.1833" in run_script
     assert "--cov-fail-under" not in pytest_addopts
     assert "--timeout=120" in run_script
     assert ".[dev,youtube]" in next(
@@ -70,6 +70,13 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
 
     assert 'python -m pip install -e ".[dev,youtube]"' in install_script
     assert "--timeout=120" in test_script
+    assert "--cov=src/youtube_extension" in test_script
+    # The unit-only CI job must NOT enforce the full-suite baseline: 88.1833%
+    # (19,761 / 22,409 statements) is measured over the complete `tests/` suite
+    # in coverage.yml. Enforcing it on this reduced scope, against the same
+    # package-wide denominator, would fail every run. coverage.yml is authoritative.
+    assert "--cov-fail-under" not in test_script
+    assert "--override-ini" not in test_script
     for suppression in ("|| true", "2>/dev/null", "set +e"):
         assert suppression not in install_script
 

@@ -1,0 +1,6 @@
+Refactor analyze_content to properly calculate scores
+
+The previous implementation of `analyze_content` contained a TODO and partial
+implementation to calculate scores but lacked access to `metadata` which is needed
+for scoring. This commit moves the `ScoringEngine` lazy-loading and calculation logic
+into `process_video` instead, where both `transcript` and `metadata` are accessible.
