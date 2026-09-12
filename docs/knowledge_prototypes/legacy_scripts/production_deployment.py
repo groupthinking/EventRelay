@@ -11,6 +11,7 @@ import os
 import secrets
 from dataclasses import dataclass
 from pathlib import Path
+import pandas as pd
 from typing import Any, Dict, List
 
 # Security imports
@@ -251,6 +252,4 @@ def main() -> None:
     print(f"✅ Deployment configuration ready in: {deploy_dir}")
 
 if __name__ == "__main__":
-    # Fix imports
-    import pandas as pd
     main()
