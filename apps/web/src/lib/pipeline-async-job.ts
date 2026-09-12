@@ -172,7 +172,7 @@ async function tryVideoToSoftwareDeploy(
         project_type: 'web',
         deployment_target: 'vercel',
       }),
-      signal: AbortSignal.timeout(50_000),
+      signal: AbortSignal.timeout(180_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) return null;
@@ -192,7 +192,18 @@ async function tryVideoToSoftwareDeploy(
       message: str(payload.message) || str(result?.message),
     };
   } catch (err) {
+    if (isAbortTimeout(err)) {
+      throw err;
+    }
     console.error('[pipeline-async-job] video-to-software kickoff failed', err);
     return null;
   }
+}
+
+function isAbortTimeout(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const rec = err as { name?: unknown; code?: unknown; message?: unknown };
+  if (rec.name === 'TimeoutError') return true;
+  if (rec.code === 23 || rec.code === 'TIMEOUT_ERR') return true;
+  return typeof rec.message === 'string' && /aborted due to timeout/i.test(rec.message);
 }

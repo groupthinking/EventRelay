@@ -59,6 +59,20 @@ function str(v: unknown): string | undefined {
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
 
+/** Client poll window: long enough for one video-to-software attempt (~3 min). */
+export const STUDIO_DEPLOY_POLL_ATTEMPTS = 150;
+export const STUDIO_DEPLOY_POLL_DELAY_MS = 2000;
+
+function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
+  const jobId = poll.result?.jobId?.trim();
+  const jobStatus = poll.result?.jobStatus?.trim();
+  if (jobId && jobStatus && !TERMINAL.has(jobStatus)) {
+    return `Deploy job ${jobId} still ${jobStatus}`;
+  }
+  if (poll.error?.trim()) return poll.error.trim();
+  return `Deploy still ${poll.runStatus || 'running'} after ${attempts} polls — waiting for a verified https live URL (runId ${poll.runId})`;
+}
+
 /** WDK failed-run cause, not a generic unread-return placeholder. */
 export function workflowReturnErrorMessage(err: unknown): string {
   if (err && typeof err === 'object') {
@@ -223,8 +237,8 @@ export async function pollStudioDeploy(
   runId: string,
   opts?: { attempts?: number; delayMs?: number; signal?: AbortSignal },
 ): Promise<StudioDeployPoll> {
-  const attempts = opts?.attempts ?? 24;
-  const delayMs = opts?.delayMs ?? 2000;
+  const attempts = opts?.attempts ?? STUDIO_DEPLOY_POLL_ATTEMPTS;
+  const delayMs = opts?.delayMs ?? STUDIO_DEPLOY_POLL_DELAY_MS;
   let last: StudioDeployPoll = { ok: false, status: 0, runId, message: 'No poll yet' };
   for (let i = 0; i < attempts; i++) {
     if (opts?.signal?.aborted) {
@@ -254,11 +268,11 @@ export async function pollStudioDeploy(
       });
     }
   }
+  const hold = inFlightJobHold(last, attempts);
   return {
     ...last,
-    message:
-      last.message ||
-      `Still ${last.runStatus || 'running'} after ${attempts} polls — re-check runId ${runId}`,
+    error: last.error || hold,
+    message: last.message || hold,
   };
 }
 
