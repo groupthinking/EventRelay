@@ -16,7 +16,7 @@
 ## 3. Definition of Done
 * **Expected Outcome:** Poll continues until a backend-supplied verified https hostname is extracted, or HOLD is a specific non-cleared reason (still pending / adapter error) — not origin-no-live, not reuse-miss, not timeout/524/bot/UNKNOWN/workflow-run/return-value/BACKEND_URL.
 * **Verification Method:** Focused Vitest pipeline-async-job + studio-deploy + gate-transition; pytest persist/GET/202 loadable.
-* **Proof Artifact:** Vitest 5 files / 102 passed (`pipeline-async-job`, `studio-deploy`, `gate-transition`, `studio-pipeline-status`, `studio-workflow`). Pytest 5/5: ready-transcript 202, sync-budget 202, persist from `deployment.urls.vercel`, GET flatten `metadata.result.live_url`, vts coroutine persist. Claim guard: only `studioVerifiedLiveUrl` / `_verified_https_live_url` pass-through. No URL invented.
+* **Proof Artifact:** PR https://github.com/groupthinking/EventRelay/pull/1889. Focused Vitest (`pipeline-async-job`, `studio-deploy`, `gate-transition`, `studio-pipeline-status`, `studio-workflow`) + pytest persist/GET/202. Claim guard: only `studioVerifiedLiveUrl` / `_verified_https_live_url` pass-through. Honest HOLD is `STUDIO_ORIGIN_NO_HOSTNAME_HOLD`, not the origin-no-live residual. No URL invented. No Hayden secrets guessed.
 
 ## 4. Post-Task Reflection
 * **What was done:** After #1887's immediate 202, extract nested backend live URLs (`metadata.result.live_url`, `deployment.urls.vercel`), persist/GET flatten them, and continue the WDK poll on first-read 404 instead of remapping to the origin-no-live HOLD. Missing-URL job error is now a specific adapter/hostname miss, not that residual string.

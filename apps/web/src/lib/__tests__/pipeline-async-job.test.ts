@@ -14,6 +14,7 @@ import {
   fetchAsyncVideoJob,
   isTerminalJobStatus,
   kickoffAsyncVideoJob,
+  STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
   STUDIO_ORIGIN_NO_LIVE_HOLD,
   STUDIO_READY_TRANSCRIPT_HOLD,
   studioDeployReadyTranscriptHold,
@@ -428,7 +429,8 @@ describe('pipeline-async-job (WDK C)', () => {
     );
     expect(kicked.kind).toBe('failed');
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Origin video-to-software returned no verified live URL/i);
     expect(kicked.message ?? '').not.toMatch(/Ready transcript was not reused/i);
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
     expect(kicked.message ?? '').not.toMatch(/Sign in to confirm you’re not a bot/i);
@@ -526,7 +528,8 @@ describe('pipeline-async-job (WDK C)', () => {
     expect(kicked.kind).toBe('failed');
     expect(kicked.retryable).toBe(true);
     expect(kicked.jobId).toBeUndefined();
-    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    expect(kicked.message).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(kicked.message ?? '').not.toMatch(/Origin video-to-software returned no verified live URL/i);
     expect(kicked.message ?? '').not.toMatch(/Ready transcript was not reused/i);
     expect(kicked.message ?? '').not.toMatch(/aborted due to timeout/i);
     expect(kicked.message ?? '').not.toMatch(/HTTP 524/);
@@ -661,8 +664,14 @@ describe('pipeline-async-job (WDK C)', () => {
     ).toBe(STUDIO_READY_TRANSCRIPT_HOLD);
     expect(
       studioDeployReadyTranscriptHold('video-to-software timed out before a verified live URL'),
-    ).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
-    expect(studioDeployReadyTranscriptHold()).toBe(STUDIO_ORIGIN_NO_LIVE_HOLD);
+    ).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(studioDeployReadyTranscriptHold()).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+    expect(STUDIO_ORIGIN_NO_HOSTNAME_HOLD).not.toMatch(
+      /Origin video-to-software returned no verified live URL/i,
+    );
+    expect(STUDIO_ORIGIN_NO_HOSTNAME_HOLD).not.toMatch(/Ready transcript was not reused/i);
+    expect(STUDIO_ORIGIN_NO_HOSTNAME_HOLD).not.toMatch(/aborted due to timeout/i);
+    expect(STUDIO_ORIGIN_NO_HOSTNAME_HOLD).not.toMatch(/HTTP 524/);
     expect(STUDIO_ORIGIN_NO_LIVE_HOLD).not.toMatch(/Ready transcript was not reused/i);
     expect(STUDIO_ORIGIN_NO_LIVE_HOLD).not.toMatch(/aborted due to timeout/i);
     expect(STUDIO_ORIGIN_NO_LIVE_HOLD).not.toMatch(/HTTP 524/);
@@ -858,5 +867,28 @@ describe('pipeline-async-job (WDK C)', () => {
       action: 'continue',
       message: 'Deploy job job_01M2B1Q97XA9GHVSG1FZY92N19 still pending',
     });
+  });
+
+  it('HOLDs a complete job without a hostname as an honest miss, not origin-no-live', () => {
+    const decided = decideStudioDeployPoll(
+      {
+        ok: true,
+        jobStatus: 'complete',
+        live_url: null,
+      },
+      {
+        jobId: 'job_01M2B1Q97XA9GHVSG1FZY92N19',
+        transcript: READY_TRANSCRIPT,
+      },
+    );
+    expect(decided.action).toBe('job');
+    expect(decided).toMatchObject({
+      action: 'job',
+      message: STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
+    });
+    expect(JSON.stringify(decided)).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(JSON.stringify(decided)).not.toMatch(/Ready transcript was not reused/i);
+    expect(JSON.stringify(decided)).not.toMatch(/aborted due to timeout/i);
+    expect(JSON.stringify(decided)).not.toMatch(/HTTP 524/);
   });
 });

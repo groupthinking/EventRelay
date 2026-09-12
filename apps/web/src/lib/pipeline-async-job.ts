@@ -134,12 +134,16 @@ export const STUDIO_READY_TRANSCRIPT_HOLD =
 export const STUDIO_ORIGIN_NO_LIVE_HOLD =
   'Studio transcript was reused. Origin video-to-software returned no verified live URL.';
 
+/** Honest HOLD after reuse — no job id and no backend-supplied https hostname. */
+export const STUDIO_ORIGIN_NO_HOSTNAME_HOLD =
+  'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
+
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
   if (message && YOUTUBE_REFETCH_RE.test(message)) {
     return STUDIO_READY_TRANSCRIPT_HOLD;
   }
-  return message || 'video-to-software returned no verified live URL';
+  return message || STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
 }
 
 /** Cloudflare/origin gateway timeout — kickoff must async-handoff, not HOLD HTTP 524. */
@@ -157,7 +161,7 @@ export function studioDeployReadyTranscriptHold(message?: string): string {
     return STUDIO_READY_TRANSCRIPT_HOLD;
   }
   if (!message || isGatewayTimeoutKickoff(undefined, message)) {
-    return STUDIO_ORIGIN_NO_LIVE_HOLD;
+    return STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
   }
   return message;
 }
@@ -383,7 +387,7 @@ export function decideStudioDeployPoll(
       github_repo: status.github_repo,
       message:
         status.message ||
-        (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
+        (status.live_url ? undefined : STUDIO_ORIGIN_NO_HOSTNAME_HOLD),
     };
   }
 
@@ -437,7 +441,7 @@ async function tryVideoToSoftwareDeploy(
       str(payload.error) ||
       str(payload.detail) ||
       (response.ok
-        ? 'video-to-software returned no verified live URL'
+        ? STUDIO_ORIGIN_NO_HOSTNAME_HOLD
         : `Backend kickoff returned HTTP ${response.status}`);
     if (!response.ok) {
       return { kind: 'failed', message: miss, httpStatus: response.status };

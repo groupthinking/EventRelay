@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  getStudioDeployStatus,
   getVideoToActionsStatus,
   pollStudioDeploy,
   pollVideoToActions,
@@ -267,6 +268,40 @@ describe('studio-workflow (WDK Product v1)', () => {
       url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
     });
     expect(started.ok).toBe(false);
+  });
+
+  it('emits only a verified https live_url on the studio.deploy receipt path', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2B1Q97XA9GHVSG1FZY92N19',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://xy.vercel.app' },
+        }),
+      }),
+    );
+    const verified = await getStudioDeployStatus('wrun_01M2B1Q97XA9GHVSG1FZY92N19');
+    expect(verified.result?.live_url).toBe('https://xy.vercel.app');
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2B1Q97XA9GHVSG1FZY92N19',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'http://xy.vercel.app' },
+        }),
+      }),
+    );
+    const rejected = await getStudioDeployStatus('wrun_01M2B1Q97XA9GHVSG1FZY92N19');
+    expect(rejected.result?.live_url).toBeNull();
   });
 
   it('pollStudioDeploy keeps polling when GET cannot read the workflow run yet', async () => {

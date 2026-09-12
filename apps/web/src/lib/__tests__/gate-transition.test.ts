@@ -327,9 +327,9 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S');
   });
 
-  it('HOLD after origin reused the transcript is not the reuse-miss copy', () => {
+  it('HOLD after origin reused the transcript is not the origin-no-live residual', () => {
     const backendReason =
-      'Studio transcript was reused. Origin video-to-software returned no verified live URL.';
+      'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
     const result = evaluateStudioDeployTransition({
       transitionId: 'wrun_01M2B05JJZNTD7MKANV0RN0J28',
       runId: 'wrun_01M2B05JJZNTD7MKANV0RN0J28',
@@ -343,6 +343,7 @@ describe('evaluateStudioDeployTransition', () => {
     expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
     const view = studioGateReceiptView(result, { backendReason });
     expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
     expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
     expect(view.reason).not.toMatch(/aborted due to timeout/i);
     expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
@@ -352,6 +353,25 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.reason).not.toMatch(/Failed to read workflow return value/);
     expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B05JJZNTD7MKANV0RN0J28');
+  });
+
+  it('HOLD on dogfood receipt is hostname miss, not origin-no-live', () => {
+    const backendReason =
+      'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B1Q97XA9GHVSG1FZY92N19',
+      runId: 'wrun_01M2B1Q97XA9GHVSG1FZY92N19',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B1Q97XA9GHVSG1FZY92N19');
   });
 
   it('HOLD after timeout abort is not the raw AbortSignal message', () => {
