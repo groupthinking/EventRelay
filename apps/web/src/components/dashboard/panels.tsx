@@ -214,9 +214,15 @@ export function ActionsPanel({
   const fulfilled = planMatchesVideo ? lifecycle.actions || [] : [];
   const isPrepared = planMatchesVideo && lifecycle.phase === 'dispatching';
   const [selectedActionIndexes, setSelectedActionIndexes] = useState<number[]>([]);
+  const [exportMessage, setExportMessage] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
   useEffect(() => {
     setSelectedActionIndexes(isPrepared ? lifecycle.actions.map((_, index) => index) : []);
   }, [isPrepared, lifecycle.actions, lifecycle.id]);
+  useEffect(() => {
+    if (!exportMessage) return;
+    const timer = window.setTimeout(() => setExportMessage(null), 5000);
+    return () => window.clearTimeout(timer);
+  }, [exportMessage]);
   const selectedActions = fulfilled.filter((_, index) => selectedActionIndexes.includes(index));
   const plannedActions = video.insights?.actions || [];
   const projectScaffold = video.insights?.project_scaffold;
@@ -252,9 +258,26 @@ export function ActionsPanel({
       actions,
       projectScaffold,
     });
-    const result = await downloadScaffoldPackage(pkg);
-    if (!result.ok && result.checkoutUrl) {
-      window.location.href = result.checkoutUrl;
+    try {
+      const result = await downloadScaffoldPackage(pkg);
+      if (!result.ok) {
+        if (result.status === 402 && result.checkoutUrl) {
+          setExportMessage({
+            tone: 'error',
+            text: 'Workspace ZIP exports require Pro. Redirecting to checkout…',
+          });
+          window.location.href = result.checkoutUrl;
+          return;
+        }
+        setExportMessage({ tone: 'error', text: result.error || 'Export failed.' });
+        return;
+      }
+      setExportMessage({ tone: 'success', text: `Exported ${result.filename}` });
+    } catch (err) {
+      setExportMessage({
+        tone: 'error',
+        text: err instanceof Error ? err.message : 'Export failed.',
+      });
     }
   };
 
@@ -467,6 +490,27 @@ export function ActionsPanel({
             Export package
           </button>
         </div>
+
+        {exportMessage && (
+          <p
+            role={exportMessage.tone === 'error' ? 'alert' : 'status'}
+            className="text-xs leading-relaxed rounded-lg px-3 py-2"
+            style={{
+              color: exportMessage.tone === 'error' ? '#fca5a5' : '#6ee7b7',
+              background:
+                exportMessage.tone === 'error'
+                  ? 'rgba(248,113,113,0.08)'
+                  : 'rgba(52,211,153,0.08)',
+              border: `1px solid ${
+                exportMessage.tone === 'error'
+                  ? 'rgba(248,113,113,0.3)'
+                  : 'rgba(52,211,153,0.3)'
+              }`,
+            }}
+          >
+            {exportMessage.text}
+          </p>
+        )}
 
         {scaffoldPreview.length > 0 ? (
           <ul className="space-y-1.5">
