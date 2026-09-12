@@ -44,6 +44,13 @@ logger = logging.getLogger(__name__)
 # 17.5 ms, which is why the pool is deliberately not saturated.
 _ENQUEUE_MAX_CONCURRENCY = min(8, max(2, min(32, (os.cpu_count() or 1) + 4) // 2))
 
+# Shared across all CloudTasksQueueService instances in this process. Keyed by
+# event loop because asyncio synchronization primitives bind to the loop that
+# first awaits them; weak keys allow short-lived test loops to be collected.
+_ENQUEUE_SEMAPHORES_BY_LOOP: weakref.WeakKeyDictionary[
+    asyncio.AbstractEventLoop, asyncio.Semaphore
+] = weakref.WeakKeyDictionary()
+
 
 async def _run_sync_rpc(call, /, *args, **kwargs):
     """Run a synchronous RPC without abandoning it on caller cancellation.
@@ -155,16 +162,6 @@ class CloudTasksQueueService:
         # Initialize Cloud Tasks client
         self.client: Optional[tasks_v2.CloudTasksClient] = None
 
-        # Enqueue concurrency limiter, shared by every `enqueue_batch` call on
-        # this service so that concurrent batches (the batch endpoint drives the
-        # process-wide singleton) cannot collectively exceed the bound and
-        # starve co-tenant `to_thread` callers. Keyed by event loop because
-        # `asyncio.Semaphore` binds to the loop that first awaits it; the weak
-        # keys let finished loops (e.g. per-test `asyncio.run`) be collected.
-        self._enqueue_semaphores: weakref.WeakKeyDictionary[
-            asyncio.AbstractEventLoop, asyncio.Semaphore
-        ] = weakref.WeakKeyDictionary()
-
         logger.info(
             f"CloudTasksQueueService initialized: "
             f"project={self.project_id}, location={self.location}, queue={self.queue_name}"
@@ -266,16 +263,16 @@ class CloudTasksQueueService:
 
     def _get_enqueue_semaphore(self) -> asyncio.Semaphore:
         """
-        Return this service's enqueue limiter for the running event loop.
+        Return the process-wide enqueue limiter for the running event loop.
 
         Shared across concurrent `enqueue_batch` calls so the bound holds for
-        the process, not merely within a single batch.
+        the process, not merely within a single batch or service instance.
         """
         loop = asyncio.get_running_loop()
-        semaphore = self._enqueue_semaphores.get(loop)
+        semaphore = _ENQUEUE_SEMAPHORES_BY_LOOP.get(loop)
         if semaphore is None:
             semaphore = asyncio.Semaphore(_ENQUEUE_MAX_CONCURRENCY)
-            self._enqueue_semaphores[loop] = semaphore
+            _ENQUEUE_SEMAPHORES_BY_LOOP[loop] = semaphore
         return semaphore
 
     async def enqueue_batch(

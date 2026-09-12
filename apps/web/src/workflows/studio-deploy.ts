@@ -14,6 +14,7 @@ export interface StudioDeployInput {
   url: string;
   projectType?: string;
   outcome?: string;
+  transcript?: string;
 }
 
 export interface StudioDeployResult {
@@ -36,9 +37,18 @@ export async function studioDeployWorkflow(
     throw new FatalError('url must be an http(s) URL');
   }
 
-  const kicked = await kickoffStep(url);
+  const kicked = await kickoffStep(url, input.transcript);
   if (kicked.kind === 'failed') {
     throw new FatalError(kicked.message || 'Backend refused the deploy kickoff');
+  }
+  if (kicked.kind === 'live' && kicked.live_url) {
+    return {
+      url,
+      kind: 'live',
+      live_url: kicked.live_url,
+      github_repo: kicked.github_repo,
+      message: kicked.message,
+    };
   }
   if (kicked.kind !== 'job' || !kicked.jobId) {
     return {
@@ -52,15 +62,20 @@ export async function studioDeployWorkflow(
   return { url, ...polled, jobId: kicked.jobId };
 }
 
-async function kickoffStep(url: string): Promise<{
-  kind: 'job' | 'handoff' | 'failed';
+async function kickoffStep(
+  url: string,
+  transcript?: string,
+): Promise<{
+  kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
   message?: string;
+  live_url?: string | null;
+  github_repo?: string | null;
 }> {
   'use step';
 
   const { kickoffAsyncVideoJob } = await import('@/lib/pipeline-async-job');
-  return kickoffAsyncVideoJob(url);
+  return kickoffAsyncVideoJob(url, { transcript });
 }
 
 async function pollJobStep(jobId: string): Promise<{
@@ -75,43 +90,55 @@ async function pollJobStep(jobId: string): Promise<{
   const { fetchAsyncVideoJob, isTerminalJobStatus } = await import(
     '@/lib/pipeline-async-job'
   );
-  const status = await fetchAsyncVideoJob(jobId);
 
-  if (status.live_url) {
-    return {
-      kind: 'live',
-      jobStatus: status.jobStatus || 'completed',
-      live_url: status.live_url,
-      github_repo: status.github_repo,
-    };
-  }
-
-  if (!status.ok) {
-    const msg = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
-    if (status.httpStatus && status.httpStatus >= 500) {
-      throw new Error(msg);
+  const reads = 18;
+  const gapMs = 10_000;
+  let status = await fetchAsyncVideoJob(jobId);
+  for (let i = 0; i < reads; i++) {
+    if (status.live_url) {
+      return {
+        kind: 'live',
+        jobStatus: status.jobStatus || 'completed',
+        live_url: status.live_url,
+        github_repo: status.github_repo,
+      };
     }
-    throw new FatalError(msg);
+
+    if (!status.ok) {
+      const msg = status.message || `Deploy job ${jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+      if (status.httpStatus && status.httpStatus >= 500) {
+        throw new Error(msg);
+      }
+      throw new FatalError(msg);
+    }
+
+    if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
+      throw new FatalError(
+        status.message || `Deploy job ${jobId} ${status.jobStatus}`,
+      );
+    }
+
+    if (isTerminalJobStatus(status.jobStatus)) {
+      return {
+        kind: 'job',
+        jobStatus: status.jobStatus,
+        live_url: status.live_url,
+        github_repo: status.github_repo,
+        message:
+          status.message ||
+          (status.live_url ? undefined : 'Backend job finished with no verified live URL'),
+      };
+    }
+
+    if (i < reads - 1) {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, gapMs);
+      });
+      status = await fetchAsyncVideoJob(jobId);
+    }
   }
 
-  if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
-    throw new FatalError(
-      status.message || `Deploy job ${jobId} ${status.jobStatus}`,
-    );
-  }
-
-  if (!isTerminalJobStatus(status.jobStatus)) {
-    // Retryable: WDK re-runs this step until the job finishes or retries exhaust.
-    throw new Error(
-      status.message || `Deploy job ${jobId} still ${status.jobStatus || 'pending'}`,
-    );
-  }
-
-  return {
-    kind: 'job',
-    jobStatus: status.jobStatus,
-    live_url: status.live_url,
-    github_repo: status.github_repo,
-    message: status.message,
-  };
+  throw new Error(
+    status.message || `Deploy job ${jobId} still ${status.jobStatus || 'pending'}`,
+  );
 }

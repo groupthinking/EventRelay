@@ -119,6 +119,15 @@ class TestPositiveFiniteFloatEnv:
         assert _VAR in caplog.text
         assert raw in caplog.text
 
+    def test_enforces_optional_maximum(self, caplog):
+        with patch.dict(os.environ, {_VAR: "65.5"}, clear=False):
+            assert positive_finite_float_env(_VAR, 16.0, maximum=64.0) == 16.0
+        assert "between 1 and 64.0" in caplog.text
+
+    def test_accepts_value_at_maximum(self):
+        with patch.dict(os.environ, {_VAR: "64.0"}, clear=False):
+            assert positive_finite_float_env(_VAR, 16.0, maximum=64.0) == 64.0
+
 
 # ===========================================================================
 # Import-time wiring of the tunable constants
