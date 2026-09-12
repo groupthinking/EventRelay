@@ -129,6 +129,23 @@ def test_dependabot_ignores_eslint_v10() -> None:
         } in update.get("ignore", [])
 
 
+def test_dependabot_ignores_generated_gh_aw_action_locks() -> None:
+    config = _load_dependabot_config()
+    github_actions_updates = [
+        update
+        for update in config["updates"]
+        if update["package-ecosystem"] == "github-actions" and update["directory"] == "/"
+    ]
+
+    assert len(github_actions_updates) == 1, (
+        "Expected exactly one root github-actions Dependabot entry, got "
+        f"{len(github_actions_updates)}"
+    )
+    assert {"dependency-name": "github/gh-aw-actions/*"} in github_actions_updates[
+        0
+    ].get("ignore", [])
+
+
 # ---------------------------------------------------------------------------
 # Behavioural coverage for the merge gate (#1476).
 #

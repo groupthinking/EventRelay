@@ -798,6 +798,40 @@ class TestProcessVideoToSoftware:
         assert result["build_status"] == "completed"
         assert "vercel" in result["live_url"]
 
+    async def test_ready_transcript_skips_youtube_fetch(self):
+        ready = (
+            "Studio Video Pack for auJzb1D-fag already has a usable "
+            "transcript ready for deploy."
+        )
+        processor = _make_processor_with_process_video(_success_result())
+        svc = _make_service(processor=processor)
+        gen_result = self._make_generation_result()
+        dep_result = self._make_deployment_result()
+        mock_generator = MagicMock()
+        mock_generator.generate_project = AsyncMock(return_value=gen_result)
+        mock_deployment = MagicMock()
+        mock_deployment.deploy_project = AsyncMock(return_value=dep_result)
+        mock_code_gen_mod = MagicMock()
+        mock_code_gen_mod.get_code_generator = MagicMock(return_value=mock_generator)
+        mock_deploy_mod = MagicMock()
+        mock_deploy_mod.get_deployment_manager = MagicMock(return_value=mock_deployment)
+
+        with patch.dict("sys.modules", {
+            "youtube_extension.backend.code_generator": mock_code_gen_mod,
+            "youtube_extension.backend.deployment_manager": mock_deploy_mod,
+        }):
+            result = await svc.process_video_to_software(
+                _VIDEO_URL,
+                project_type="web",
+                deployment_target="vercel",
+                transcript=ready,
+            )
+
+        processor.process_video.assert_not_awaited()
+        assert result["status"] == "success"
+        assert "vercel" in result["live_url"]
+        assert result["video_analysis"]["processing_pipeline"] == ["provided_transcript"]
+
     async def test_video_analysis_status_success_branch(self):
         """Test branch where result has 'status' == 'success' instead of 'success' flag."""
         raw = {

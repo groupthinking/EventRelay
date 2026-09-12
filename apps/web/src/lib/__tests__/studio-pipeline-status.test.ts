@@ -17,6 +17,7 @@ import {
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioFormationSupplementalEntities,
   studioPackFormation,
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
@@ -155,7 +156,37 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioPackFormation');
     expect(studio).toContain('data-testid="pack-architecture"');
     expect(studio).toContain('data-testid="pack-artifacts"');
+    expect(studio).toContain('packFormation.checks');
     expect(studio).not.toMatch(/router\.(push|replace)\(['"]\/dashboard/);
+  });
+
+  it('suppresses transcript-only tool chips when pack.stack.tools are grounded', () => {
+    expect(
+      studioFormationSupplementalEntities(
+        [{ name: 'Cloudflare' }, { name: 'x402' }],
+        [
+          {
+            name: 'Shopify',
+            kind: 'platform',
+            officialUrl: 'https://shopify.dev',
+            docsUrl: 'https://shopify.dev/docs',
+            timestamps: [],
+          },
+        ],
+      ),
+    ).toEqual([]);
+
+    expect(
+      studioFormationSupplementalEntities([], [
+        {
+          name: 'Shopify',
+          kind: 'platform',
+          officialUrl: 'https://shopify.dev',
+          docsUrl: 'https://shopify.dev/docs',
+          timestamps: [],
+        },
+      ]).map((entity) => entity.name),
+    ).toEqual(['Shopify']);
   });
 
   it('tells the truth when events[] is empty after a completed run', () => {
@@ -200,6 +231,22 @@ describe('studio-pipeline-status', () => {
     );
   });
 
+  it('does not claim a transcript exists when a completed run only has pack identity', () => {
+    const emptyNoTranscript = studioEventsEmptyMessage({
+      busy: false,
+      hasCompletedRun: true,
+      eventCount: 0,
+      hasArchitecture: false,
+      artifactCount: 0,
+      toolCount: 0,
+      hasTranscript: false,
+    });
+
+    expect(emptyNoTranscript.toLowerCase()).toMatch(/no extracted events/);
+    expect(emptyNoTranscript.toLowerCase()).not.toContain('transcript');
+    expect(emptyNoTranscript.toLowerCase()).toContain('pack identity');
+  });
+
   it('enables export from pack formation when events[] is empty', () => {
     expect(
       studioCanExport({
@@ -219,6 +266,13 @@ describe('studio-pipeline-status', () => {
         toolCount: 0,
       }),
     ).toBe(false);
+
+    const dashboardPanels = readFileSync(
+      join(process.cwd(), 'src/components/dashboard/panels.tsx'),
+      'utf8',
+    );
+    expect(dashboardPanels).toContain('actionsFromStudioRun');
+    expect(dashboardPanels).toContain('studioCanExport');
   });
 
   it('names an invalid ?video= handoff instead of staying silent', () => {
@@ -367,16 +421,27 @@ describe('studio-pipeline-status', () => {
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    const pricing = readFileSync(join(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8');
+    const apiDocs = readFileSync(join(process.cwd(), 'src/app/docs/api/page.tsx'), 'utf8');
     expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
     expect(footer.toLowerCase()).not.toContain('reviewed actions');
     expect(footer.toLowerCase()).not.toContain('durable workflows');
     expect(studio).toContain('data-testid="studio-main"');
-    expect(studio).toMatch(/pb-20|padding-bottom/);
+    expect(studio).toMatch(/pb-28|padding-bottom/);
+    expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
+    expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
     expect(retired).not.toMatch(/Starting durable/);
     expect(retired).not.toMatch(/Could not start durable workflow/);
     expect(retired).not.toMatch(/runs a durable video-to-transcript/);
     expect(retired).not.toMatch(/signed-in durable workflow/);
     expect(retired).not.toMatch(/durable Workflow DevKit/);
+  });
+
+  it('does not claim live deploy in retired studio without a verified receipt guard', () => {
+    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    expect(retired).toContain('studioVerifiedLiveUrl');
+    expect(retired).not.toContain('setActionMessage(`Deploy live: ${kick.live_url}`)');
+    expect(retired).not.toContain('setActionMessage(`Deploy ready: ${polled.live_url}`)');
   });
 
   it('renders review_action as a card with status, title, and detail', () => {
@@ -403,18 +468,20 @@ describe('studio-pipeline-status', () => {
 
   it('returns a toast for export success and failure including filename', () => {
     expect(studioExportFilename('AI Gold Rushes')).toBe('AI Gold Rushes.zip');
+    const filename = 'AI Gold Rushes.zip';
     const pack = studioExportToastMessage({
       ok: true,
       kind: 'pack',
-      filename: 'AI Gold Rushes.zip',
+      filename,
     });
     expect(pack.tone).toBe('success');
     expect(pack.text).toMatch(/pack exported/i);
-    expect(pack.text).toContain('AI Gold Rushes.zip');
+    expect(pack.text).toContain(filename);
     expect(studioExportToastMessage({ ok: true, kind: 'sop' }).tone).toBe('success');
-    const failed = studioExportToastMessage({ ok: false, error: 'Disk full' });
+    const failed = studioExportToastMessage({ ok: false, error: 'Disk full', filename });
     expect(failed.tone).toBe('error');
-    expect(failed.text).toBe('Disk full');
+    expect(failed.text).toContain('Disk full');
+    expect(failed.text).toContain(filename);
     expect(studioExportToastMessage({ ok: false, kind: 'empty' }).tone).toBe('error');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');

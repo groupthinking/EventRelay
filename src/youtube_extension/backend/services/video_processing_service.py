@@ -314,9 +314,15 @@ class VideoProcessingService:
 
         return normalized
 
-    async def process_video_to_software(self, video_url: str, project_type: str = "web",
-                                      deployment_target: str = "vercel",
-                                      features: Optional[list] = None) -> dict[str, Any]:
+    async def process_video_to_software(
+        self,
+        video_url: str,
+        project_type: str = "web",
+        deployment_target: str = "vercel",
+        features: Optional[list] = None,
+        *,
+        transcript: Optional[str] = None,
+    ) -> dict[str, Any]:
         """
         Process video and generate deployable software.
 
@@ -325,6 +331,7 @@ class VideoProcessingService:
             project_type: Type of project to generate
             deployment_target: Target deployment platform
             features: List of features to implement
+            transcript: Ready transcript; skip YouTube extract when usable
 
         Returns:
             Dict containing software generation results
@@ -348,9 +355,19 @@ class VideoProcessingService:
             if not pipeline_available:
                 raise ValueError("Software generation pipeline not available")
 
-            # Phase 1: Video Processing
-            processor = self.get_video_processor()
-            video_analysis = await processor.process_video(video_url)
+            # Phase 1: Video Processing (reuse a ready transcript — do not re-hit YouTube)
+            provided = (transcript or "").strip()
+            if len(provided) >= 40:
+                video_analysis = {
+                    "success": True,
+                    "metadata": {"title": "UVAI Generated Project"},
+                    "ai_analysis": {"Related Topics": [], "actions": []},
+                    "processing_pipeline": ["provided_transcript"],
+                    "transcript": provided,
+                }
+            else:
+                processor = self.get_video_processor()
+                video_analysis = await processor.process_video(video_url)
 
             # Extract information based on processor format
             if video_analysis.get("success"):

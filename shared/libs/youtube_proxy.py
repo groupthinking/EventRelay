@@ -39,14 +39,22 @@ except ImportError as e:
 
 logger = logging.getLogger("youtube_api_proxy")
 
+_ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
+
 
 def _get_webshare_proxy_url() -> str | None:
     """Return the validated WEBSHARE_PROXY_URL, or None for direct connection."""
     url = os.getenv("WEBSHARE_PROXY_URL", "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    try:
+        parsed = urllib.parse.urlparse(url)
+        valid = parsed.scheme in _ALLOWED_SCHEMES and bool(parsed.hostname)
+        if valid:
+            _ = parsed.port
+    except ValueError:
+        valid = False
+    if not valid:
         logger.warning(
             "WEBSHARE_PROXY_URL is set but malformed — falling back to direct connection"
         )
@@ -438,7 +446,9 @@ class YouTubeAPIProxy:
                     logger.info(f"✅ Direct transcript extraction: {len(transcript)} segments")
                     return transcript
             except Exception as e:
-                logger.debug(f"Direct transcript failed: {e}")
+                logger.debug(
+                    "Direct transcript failed: %s", _redact_proxy_credentials(e)
+                )
 
             # Method 2: Alternative language codes
             # ``list_transcripts`` class method is now the instance ``list``;
@@ -458,13 +468,19 @@ class YouTubeAPIProxy:
                             lambda item=transcript_item: item.fetch().to_raw_data(),
                         )
                     except Exception as item_e:
-                        logger.debug(f"Alternative language item failed: {item_e}")
+                        logger.debug(
+                            "Alternative language item failed: %s",
+                            _redact_proxy_credentials(item_e),
+                        )
                         continue
                     if transcript:
                         logger.info(f"✅ Alternative language transcript: {len(transcript)} segments")
                         return transcript
             except Exception as e:
-                logger.debug(f"Alternative transcript failed: {e}")
+                logger.debug(
+                    "Alternative transcript failed: %s",
+                    _redact_proxy_credentials(e),
+                )
 
             # Method 3: yt-dlp fallback
             try:
@@ -489,7 +505,9 @@ class YouTubeAPIProxy:
                         # Convert to transcript format
                         return [{'text': 'Transcript extracted via yt-dlp', 'start': 0, 'duration': 1}]
             except Exception as e:
-                logger.debug(f"yt-dlp extraction failed: {e}")
+                logger.debug(
+                    "yt-dlp extraction failed: %s", _redact_proxy_credentials(e)
+                )
 
             # CouldNotRetrieveTranscript(>=1.0) takes a bare video_id and builds
             # its own message/URL; passing a sentence corrupts the generated URL.

@@ -4,6 +4,8 @@ import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
 import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
 
+export { usableProvidedTranscript as usableKickoffTranscript };
+
 export interface AsyncJobKickoff {
   kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
@@ -11,6 +13,7 @@ export interface AsyncJobKickoff {
   message?: string;
   live_url?: string | null;
   github_repo?: string | null;
+  httpStatus?: number;
 }
 
 export interface AsyncJobStatus {
@@ -46,12 +49,32 @@ function firstLiveUrl(...values: unknown[]): string | null {
 const YOUTUBE_REFETCH_RE =
   /sign in to confirm you.?re not a bot|cookies-from-browser|--cookies for the authentication|\[youtube\].*not a bot/i;
 
+export const STUDIO_READY_TRANSCRIPT_HOLD =
+  'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+
 /** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
 export function studioDeployYoutubeRefetchHold(message?: string): string {
   if (message && YOUTUBE_REFETCH_RE.test(message)) {
-    return 'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+    return STUDIO_READY_TRANSCRIPT_HOLD;
   }
   return message || 'video-to-software returned no verified live URL';
+}
+
+/** Cloudflare/origin gateway timeout — kickoff must async-handoff, not HOLD HTTP 524. */
+export function isGatewayTimeoutKickoff(status?: number, message?: string): boolean {
+  if (status === 524 || status === 504 || status === 408) return true;
+  if (!message) return false;
+  return /http 524|error code:\s*524|cloudflare|timed out before a verified live url|aborted due to timeout/i.test(
+    message,
+  );
+}
+
+/** Ready-transcript miss: never the bot wall and never HTTP 524. */
+export function studioDeployReadyTranscriptHold(message?: string): string {
+  if (!message || YOUTUBE_REFETCH_RE.test(message) || isGatewayTimeoutKickoff(undefined, message)) {
+    return STUDIO_READY_TRANSCRIPT_HOLD;
+  }
+  return message;
 }
 
 /**
@@ -75,18 +98,23 @@ export async function kickoffAsyncVideoJob(
   const transcript = usableProvidedTranscript(opts?.transcript);
   const { url: backendUrl } = getBackendConfig();
   const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
-  if (shipped.kind === 'live') return shipped;
+  if (shipped.kind === 'live' || shipped.kind === 'job') return shipped;
   if (transcript) {
     return {
       kind: 'failed',
-      message: studioDeployYoutubeRefetchHold(shipped.message),
+      message: studioDeployReadyTranscriptHold(shipped.message),
     };
   }
 
   const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
     method: 'POST',
     headers: backendHeaders(),
-    body: JSON.stringify({ video_url: url, language: 'en' }),
+    body: JSON.stringify({
+      video_url: url,
+      language: 'en',
+      ...(transcript ? { transcript } : {}),
+      options: { pipeline: 'video-to-software' },
+    }),
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -198,9 +226,18 @@ async function tryVideoToSoftwareDeploy(
         deployment_target: 'vercel',
         ...(transcript ? { transcript } : {}),
       }),
-      signal: AbortSignal.timeout(180_000),
+      signal: AbortSignal.timeout(20_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const data = asRecord(payload.data) || {};
+    const handedOffJobId = str(data.job_id) || str(payload.job_id);
+    if (response.status === 202 && handedOffJobId) {
+      return {
+        kind: 'job',
+        jobId: handedOffJobId,
+        statusUrl: `/api/jobs/${handedOffJobId}`,
+      };
+    }
     const miss =
       str(payload.error) ||
       str(payload.detail) ||
@@ -208,7 +245,7 @@ async function tryVideoToSoftwareDeploy(
         ? 'video-to-software returned no verified live URL'
         : `Backend kickoff returned HTTP ${response.status}`);
     if (!response.ok) {
-      return { kind: 'failed', message: miss };
+      return { kind: 'failed', message: miss, httpStatus: response.status };
     }
     const result = asRecord(payload.result);
     const deployment = asRecord(payload.deployment) || asRecord(result?.deployment);
@@ -228,13 +265,14 @@ async function tryVideoToSoftwareDeploy(
       message: str(payload.message) || str(result?.message),
     };
   } catch (err) {
-    if (isAbortTimeout(err)) {
-      throw err;
-    }
     console.error('[pipeline-async-job] video-to-software kickoff failed', err);
     return {
       kind: 'failed',
-      message: err instanceof Error ? err.message : 'video-to-software kickoff failed',
+      message: isAbortTimeout(err)
+        ? 'video-to-software timed out before a verified live URL'
+        : err instanceof Error
+          ? err.message
+          : 'video-to-software kickoff failed',
     };
   }
 }

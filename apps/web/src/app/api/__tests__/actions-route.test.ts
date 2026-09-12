@@ -90,6 +90,23 @@ describe('POST /api/agents/actions review gate', () => {
     expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
   });
 
+  it('rejects duplicate reviewed action calls to prevent replays', async () => {
+    const first = {
+      tool: 'create_workflow_task',
+      input: { title: 'Review captions' },
+      status: 'pending' as const,
+    };
+
+    const response = await POST(
+      request({ mode: 'execute', actions: [first, { ...first, input: { title: 'Review captions' } }] }),
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toBe('Duplicate reviewed tool calls are not allowed');
+    expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed plans and unknown modes', async () => {
     expect((await POST(request({ mode: 'execute', actions: [] }))).status).toBe(400);
     expect((await POST(request({ mode: 'surprise' }))).status).toBe(400);

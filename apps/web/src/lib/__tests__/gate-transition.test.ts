@@ -112,6 +112,13 @@ describe('G.A.T.E. transition contract', () => {
     const assessed = assessZeroSim({ evidenceRefs: [] });
     expect(assessed.verdict).toBe('unverified');
     expect(assessed.reason_code).toBe('ZERO_SIM_MISSING_EVIDENCE');
+
+    const forcedReal = assessZeroSim({
+      result: { verdict: 'real', reason_code: 'ZERO_SIM_REAL' },
+      evidenceRefs: [],
+    });
+    expect(forcedReal.verdict).toBe('unverified');
+    expect(forcedReal.reason_code).toBe('ZERO_SIM_MISSING_EVIDENCE');
   });
 
   it('emits a versioned receipt whose hash matches canonical JSON without the hash field', () => {
@@ -270,6 +277,54 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.reason).not.toMatch(/Failed to read workflow return value/);
     expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ');
+  });
+
+  it('HOLD after #1875 process re-hit is not the YouTube bot wall', () => {
+    const backendReason =
+      'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AF8WD3G4VCB63KEBX311HV',
+      runId: 'wrun_01M2AF8WD3G4VCB63KEBX311HV',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AF8WD3G4VCB63KEBX311HV');
+  });
+
+  it('HOLD after a 524 miss is not Backend kickoff returned HTTP 524', () => {
+    const backendReason = 'Deploy job job_01M2AE6Z9Q2KZRBA0Z0Q455B0S still pending';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S',
+      runId: 'wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S',
+      jobId: 'job_01M2AE6Z9Q2KZRBA0Z0Q455B0S',
+      runStatus: 'running',
+      kind: 'job',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S');
   });
 });
 
