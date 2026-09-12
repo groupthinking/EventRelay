@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GOLDEN_IDENTITY_HASHES, applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
+import {
+  GOLDEN_IDENTITY_HASHES,
+  KEYFRAME_IMAGES_PARTIAL,
+  KEYFRAME_IMAGES_PARTIAL_NOTE,
+  applyExtractedSpec,
+  applyKeyframeImageHonesty,
+  buildIdentityPack,
+} from '@/lib/video-pack';
 import { parseArchitecture, parseArtifacts } from '@/lib/video-pack-types';
 import {
   VIDEO_PACK_EXTRACTOR_MODEL,
@@ -246,6 +253,62 @@ describe('extractVideoPackSpec', () => {
     await expect(
       extractVideoPackSpec({ sourceUrl: SOURCE_URL, videoId: CANON }, { generateText }),
     ).rejects.toBeInstanceOf(VideoPackExtractError);
+  });
+
+  it('asks Gemini for keyframe t_s + desc only and forbids invented image_path URLs', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const generateText = vi.fn<VideoPackGenerateText>(async (args) => {
+      const textPart = args.messages[0]?.content.find((part) => part.type === 'text');
+      const prompt = textPart && textPart.type === 'text' ? textPart.text : '';
+      expect(prompt).toMatch(/keyframes: \[{ t_s, desc }\]/);
+      expect(prompt).toMatch(/Do not (emit|invent) image_path/i);
+      expect(prompt).not.toMatch(/keyframes: \[{ t_s, desc, image_path }\]/);
+      return { text: JSON.stringify(SPEC_JSON) };
+    });
+
+    await extractVideoPackSpec({ sourceUrl: SOURCE_URL, videoId: CANON }, { generateText });
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps desc-only keyframes and leaves image_path null (no captured asset)', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: JSON.stringify(SPEC_JSON),
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+
+    expect(spec.keyframes).toHaveLength(1);
+    expect(spec.keyframes[0]?.t_s).toBe(1.2);
+    expect(spec.keyframes[0]?.desc).toBe('Elephants at the enclosure');
+    expect(spec.keyframes[0]?.image_path).toBeNull();
+  });
+
+  it('strips Gemini-invented image_path instead of persisting a hallucinated URL', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const invented = 'https://i.ytimg.com/vi/QjZ5ohr7sGA/hqdefault.jpg';
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        keyframes: [
+          { t_s: 1.2, desc: 'Elephants at the enclosure', image_path: invented },
+          { t_s: 4, desc: 'Close-up trunk', image_path: '/tmp/frame-4.png' },
+        ],
+      }),
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+
+    expect(spec.keyframes).toHaveLength(2);
+    expect(spec.keyframes.every((frame) => frame.image_path === null)).toBe(true);
+    expect(JSON.stringify(spec.keyframes)).not.toContain(invented);
+    expect(JSON.stringify(spec.keyframes)).not.toContain('/tmp/frame-4.png');
   });
 
   it('asks Gemini for architecture, artifacts, and grounded stack.tools — not a Shopify dump', async () => {
@@ -495,5 +558,66 @@ describe('applyExtractedSpec', () => {
       expect.arrayContaining(['Cloudflare', 'x402', 'MCP']),
     );
     expect(JSON.stringify(merged.stack)).not.toMatch(/shopify/i);
+  });
+
+  it('marks desc-only keyframes as PARTIAL and does not invent image_path', () => {
+    const identity = buildIdentityPack(CANON, SOURCE_URL, '2026-09-03T00:00:00.000Z');
+    const merged = applyExtractedSpec(identity, SPEC_JSON);
+
+    expect(merged.keyframes[0]?.image_path).toBeNull();
+    expect(merged.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(merged.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(merged.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON]);
+    expect(JSON.stringify(merged.keyframes)).not.toMatch(/https?:\/\//);
+  });
+
+  it('strips an invented Gemini image_path and still records PARTIAL provenance', () => {
+    const identity = buildIdentityPack(CANON, SOURCE_URL, '2026-09-03T00:00:00.000Z');
+    const invented = 'https://example.com/not-a-captured-frame.jpg';
+    const merged = applyExtractedSpec(identity, {
+      ...SPEC_JSON,
+      keyframes: [{ t_s: 1.2, desc: 'Elephants at the enclosure', image_path: invented }],
+    });
+
+    expect(merged.keyframes[0]?.image_path).toBeNull();
+    expect(merged.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(merged.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(JSON.stringify(merged)).not.toContain(invented);
+  });
+});
+
+describe('applyKeyframeImageHonesty', () => {
+  it('overlays PARTIAL on a stored prod-shaped pack without inventing URLs', () => {
+    const identity = buildIdentityPack('QjZ5ohr7sGA', 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', '2026-09-12T16:39:08.716Z');
+    const stored = applyExtractedSpec(identity, SPEC_JSON);
+    const prodShaped = {
+      ...stored,
+      keyframes: [
+        { t_s: 1, image_path: null, desc: 'Host Matt Schmitz introducing tire change guide' },
+        { t_s: 8, image_path: null, desc: 'Jack point under the car' },
+      ],
+      metrics: {},
+      provenance: {
+        ...stored.provenance,
+        notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+      },
+    };
+
+    const honest = applyKeyframeImageHonesty(prodShaped);
+
+    expect(honest.keyframes.every((frame) => frame.image_path === null)).toBe(true);
+    expect(honest.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(honest.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(honest.provenance.notes).toContain('Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.');
+    expect(honest.provenance.source_hash).toBe(prodShaped.provenance.source_hash);
+    expect(JSON.stringify(honest.keyframes)).not.toMatch(/https?:\/\//);
+  });
+
+  it('does not duplicate the PARTIAL note on a second seal', () => {
+    const identity = buildIdentityPack(CANON, SOURCE_URL, '2026-09-03T00:00:00.000Z');
+    const once = applyKeyframeImageHonesty(applyExtractedSpec(identity, SPEC_JSON));
+    const twice = applyKeyframeImageHonesty(once);
+    const occurrences = twice.provenance.notes.split(KEYFRAME_IMAGES_PARTIAL_NOTE).length - 1;
+    expect(occurrences).toBe(1);
   });
 });

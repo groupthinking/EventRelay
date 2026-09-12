@@ -24,6 +24,11 @@ import {
 
 export const IDENTITY_VERSION = 'v0' as const;
 
+/** Honest gap: Vercel pack extract has no frame-capture/upload store. */
+export const KEYFRAME_IMAGES_PARTIAL = 'partial' as const;
+export const KEYFRAME_IMAGES_PARTIAL_NOTE =
+  'Keyframe images PARTIAL: no frame-capture/upload path; image_path left null (not invented).';
+
 export const GOLDEN_IDENTITY_HASHES = {
   'auJzb1D-fag': '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
   'jNQXAC9IVRw': '97150a5c21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d',
@@ -167,11 +172,46 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
   };
 }
 
+/**
+ * Fail closed on keyframe images. There is no durable capture/upload on the
+ * Vercel pack path (Upstash REST is JSON-only; Blob is unwired). Gemini
+ * strings and YouTube thumbs are not captured frames at t_s — leave null.
+ */
+export function sanitizeKeyframeImagePath(_value: unknown): string | null {
+  return null;
+}
+
+export function applyKeyframeImageHonesty(pack: VideoPackV0Json): VideoPackV0Json {
+  const keyframes = pack.keyframes.map((frame) => ({
+    ...frame,
+    image_path: sanitizeKeyframeImagePath(frame.image_path),
+  }));
+  const missingImages = keyframes.length > 0 && keyframes.some((frame) => !frame.image_path);
+  if (!missingImages) {
+    return { ...pack, keyframes };
+  }
+  const notes = pack.provenance.notes.includes(KEYFRAME_IMAGES_PARTIAL_NOTE)
+    ? pack.provenance.notes
+    : `${pack.provenance.notes} ${KEYFRAME_IMAGES_PARTIAL_NOTE}`.trim();
+  return {
+    ...pack,
+    keyframes,
+    metrics: {
+      ...pack.metrics,
+      keyframes_images: KEYFRAME_IMAGES_PARTIAL,
+    },
+    provenance: {
+      ...pack.provenance,
+      notes,
+    },
+  };
+}
+
 export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
 ): VideoPackV0Json {
-  return {
+  return applyKeyframeImageHonesty({
     ...identity,
     transcript: spec.transcript,
     keyframes: spec.keyframes,
@@ -190,7 +230,7 @@ export function applyExtractedSpec(
       },
       notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
     },
-  };
+  });
 }
 
 export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
@@ -248,7 +288,7 @@ function recordToResponse(record: VideoPackRecord): NextResponse {
           { status: 503 },
         );
       }
-      return NextResponse.json({ status: 'success', data: record.pack });
+      return NextResponse.json({ status: 'success', data: applyKeyframeImageHonesty(record.pack) });
     case 'processing':
       return NextResponse.json(
         processingEnvelope({

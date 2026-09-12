@@ -116,7 +116,7 @@ function buildExtractPrompt(sourceUrl: string, videoId: string): string {
     'Do not return cite:youtube as full_text. Extract real spoken/on-screen content.',
     'Return ONLY a JSON object with keys:',
     'transcript: { language: string|null, full_text: string, segments: [{idx, start_s, end_s, text}] }',
-    'keyframes: [{ t_s, desc }]',
+    'keyframes: [{ t_s, desc }] — descriptions only. Do not emit image_path or image URLs; UVAI has no frame-capture store and will not invent paths.',
     'concepts: string[]',
     'requirements: [{ id, title, detail, priority, tags }]',
     'code_snippets: [{ path_hint, lang, content }] — signatures only, never a full source dump',
@@ -374,7 +374,9 @@ function parseSpecJson(raw: string): ExtractedVideoPackSpec {
       return [
         {
           t_s: asNumber(row.t_s),
-          image_path: typeof row.image_path === 'string' ? row.image_path : null,
+          // Gemini never captured/uploaded a durable asset. Do not persist
+          // invented URLs or local paths from the model JSON.
+          image_path: null,
           desc: desc || null,
         },
       ];
