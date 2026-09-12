@@ -10,14 +10,14 @@ Persists state inside `data/session_orchestration_state.json`.
 
 import argparse
 import asyncio
-import fnmatch
 import json
 import logging
-import os
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+from uuid import uuid4
+
+from youtube_extension.services.shared_sql_state import SharedSQLStateStore
 
 # Set up logging
 logging.basicConfig(
@@ -34,10 +34,23 @@ STATE_FILE_PATH = _PROJECT_ROOT / "data" / "session_orchestration_state.json"
 class SessionOrchestrationManager:
     """Programmatic API interface for playbooks, sessions, scheduling, integrations, and knowledge."""
 
-    def __init__(self, state_path: Path = STATE_FILE_PATH):
+    def __init__(
+        self,
+        state_path: Path = STATE_FILE_PATH,
+        *,
+        database_url: Optional[str] = None,
+    ):
         self.state_path = state_path
-        self.state: Dict[str, Any] = {}
+        self.state: dict[str, Any] = {}
         self.load_state()
+        self._shared_state = SharedSQLStateStore(
+            database_url=database_url,
+            sqlite_path=state_path.with_suffix(".db"),
+        )
+        legacy_sessions = self.state.get("sessions", {})
+        if legacy_sessions:
+            self._shared_state.import_legacy_sessions(legacy_sessions)
+        self._refresh_sessions_from_store()
 
     def load_state(self):
         """Loads state from JSON, initializing with defaults if missing."""
@@ -142,9 +155,14 @@ class SessionOrchestrationManager:
         try:
             self.state_path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.state_path, "w", encoding="utf-8") as f:
-                json.dump(self.state, f, indent=2, ensure_ascii=False)
+                persisted_state = dict(self.state)
+                persisted_state["sessions"] = {}
+                json.dump(persisted_state, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Failed to write state file: {e}")
+
+    def _refresh_sessions_from_store(self) -> None:
+        self.state["sessions"] = self._shared_state.list_sessions()
 
     # ==========================================
     # Sessions API
@@ -154,13 +172,24 @@ class SessionOrchestrationManager:
         self,
         prompt: str,
         playbook: str,
-        tags: List[str],
+        tags: list[str],
         acu_limit: int,
         origin: str = "user",
-        user: str = "jules-agent"
-    ) -> Dict[str, Any]:
+        user: str = "jules-agent",
+    ) -> dict[str, Any]:
         """Programmatically creates a new active agent session."""
-        session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{len(self.state['sessions']) + 1}"
+        session_id = (
+            f"session_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_"
+            f"{uuid4().hex[:8]}"
+        )
+        initial_event = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "summary": "Session initialized",
+            "content": (
+                f"Initialized session with playbook '{playbook}' and ACU limit "
+                f"{acu_limit}."
+            ),
+        }
         session = {
             "id": session_id,
             "prompt": prompt,
@@ -171,29 +200,25 @@ class SessionOrchestrationManager:
             "user": user,
             "status": "running",
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "timeline": [
-                {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "summary": "Session initialized",
-                    "content": f"Initialized session with playbook '{playbook}' and ACU limit {acu_limit}."
-                }
-            ]
+            "timeline": [initial_event],
         }
-        self.state["sessions"][session_id] = session
+        self._shared_state.save_session(session)
+        self._shared_state.append_timeline_event(session_id, initial_event)
+        self._refresh_sessions_from_store()
         self.save_state()
         logger.info(f"Created session {session_id} programmatically.")
-        return session
+        return self.state["sessions"][session_id]
 
     def search_sessions(
         self,
         tag: Optional[str] = None,
         playbook: Optional[str] = None,
         origin: Optional[str] = None,
-        user: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
+        user: Optional[str] = None,
+    ) -> list[dict[str, Any]]:
         """Filters across sessions by tags, playbook, origin, or user."""
         results = []
-        for s in self.state["sessions"].values():
+        for s in self._shared_state.list_sessions().values():
             if tag and tag not in s.get("tags", []):
                 continue
             if playbook and s.get("playbook") != playbook:
@@ -205,9 +230,11 @@ class SessionOrchestrationManager:
             results.append(s)
         return results
 
-    def inspect_timeline(self, session_id: str, search_text: Optional[str] = None) -> List[Dict[str, Any]]:
+    def inspect_timeline(
+        self, session_id: str, search_text: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         """Fetches the timeline event list for a session, optionally filtered by search text."""
-        session = self.state["sessions"].get(session_id)
+        session = self._shared_state.get_session(session_id)
         if not session:
             logger.error(f"Session {session_id} not found.")
             return []
@@ -222,36 +249,41 @@ class SessionOrchestrationManager:
 
     def send_message(self, session_id: str, message: str) -> bool:
         """Sends a programmatic message/command to a running session, appending to timeline."""
-        session = self.state["sessions"].get(session_id)
+        session = self._shared_state.get_session(session_id)
         if not session or session.get("status") != "running":
             logger.error(f"Session {session_id} is not active.")
             return False
 
-        session["timeline"].append({
+        self._shared_state.append_timeline_event(session_id, {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "summary": "Received message",
             "content": message
         })
+        self._refresh_sessions_from_store()
         self.save_state()
         return True
 
     def terminate_session(self, session_id: str, archive: bool = False) -> bool:
         """Terminates or archives an active session."""
-        session = self.state["sessions"].get(session_id)
+        session = self._shared_state.get_session(session_id)
         if not session:
             return False
 
         session["status"] = "archived" if archive else "terminated"
-        session["timeline"].append({
+        self._shared_state.save_session(session)
+        self._shared_state.append_timeline_event(session_id, {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "summary": f"Session {session['status']}",
             "content": f"The session was programmatically {session['status']}."
         })
+        self._refresh_sessions_from_store()
         self.save_state()
         logger.info(f"Session {session_id} {session['status']}.")
         return True
 
-    async def run_parallel_sessions(self, packages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def run_parallel_sessions(
+        self, packages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Launches multiple sessions in parallel and waits for all of them to complete
         in a single async call instead of individual polling.
@@ -272,12 +304,17 @@ class SessionOrchestrationManager:
         # Auto-complete sessions post-parallel run
         for s in created_sessions:
             session_id = s["id"]
-            self.state["sessions"][session_id]["status"] = "completed"
-            self.state["sessions"][session_id]["timeline"].append({
+            session = self._shared_state.get_session(session_id)
+            if session is None:
+                continue
+            session["status"] = "completed"
+            self._shared_state.save_session(session)
+            self._shared_state.append_timeline_event(session_id, {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "summary": "Parallel run complete",
                 "content": "All execution items inside the playbook packages completed with success."
             })
+        self._refresh_sessions_from_store()
         self.save_state()
         return [self.state["sessions"][s["id"]] for s in created_sessions]
 
@@ -285,11 +322,13 @@ class SessionOrchestrationManager:
     # Playbook Management API
     # ==========================================
 
-    def list_playbooks(self) -> Dict[str, Any]:
+    def list_playbooks(self) -> dict[str, Any]:
         """Lists all registered playbooks."""
         return self.state["playbooks"]
 
-    def create_playbook(self, name: str, description: str, macros: List[str] = None) -> Dict[str, Any]:
+    def create_playbook(
+        self, name: str, description: str, macros: Optional[list[str]] = None
+    ) -> dict[str, Any]:
         """Creates a new automation playbook."""
         playbook = {
             "name": name,
@@ -300,7 +339,12 @@ class SessionOrchestrationManager:
         self.save_state()
         return playbook
 
-    def update_playbook(self, name: str, description: Optional[str] = None, macros: Optional[List[str]] = None) -> bool:
+    def update_playbook(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        macros: Optional[list[str]] = None,
+    ) -> bool:
         """Updates an existing playbook's properties and automation macros."""
         if name not in self.state["playbooks"]:
             return False
@@ -323,7 +367,15 @@ class SessionOrchestrationManager:
     # Knowledge Management API
     # ==========================================
 
-    def create_knowledge_note(self, note_id: str, repo: str, folder: str, name: str, trigger: str, content: str) -> Dict[str, Any]:
+    def create_knowledge_note(
+        self,
+        note_id: str,
+        repo: str,
+        folder: str,
+        name: str,
+        trigger: str,
+        content: str,
+    ) -> dict[str, Any]:
         """Creates a new knowledge note entry."""
         note = {
             "id": note_id,
@@ -337,7 +389,9 @@ class SessionOrchestrationManager:
         self.save_state()
         return note
 
-    def get_knowledge_notes(self, repo: Optional[str] = None, folder: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_knowledge_notes(
+        self, repo: Optional[str] = None, folder: Optional[str] = None
+    ) -> list[dict[str, Any]]:
         """Filters and retrieves knowledge notes."""
         notes = list(self.state["knowledge_notes"].values())
         if repo:
@@ -354,7 +408,7 @@ class SessionOrchestrationManager:
             return True
         return False
 
-    def list_suggestions(self) -> List[Dict[str, Any]]:
+    def list_suggestions(self) -> list[dict[str, Any]]:
         """Lists pending knowledge suggestions generated from sessions."""
         return self.state["pending_suggestions"]
 
@@ -371,7 +425,9 @@ class SessionOrchestrationManager:
     # Schedule Management API
     # ==========================================
 
-    def create_schedule(self, schedule_id: str, cron: str, agent: str, active: bool = True) -> Dict[str, Any]:
+    def create_schedule(
+        self, schedule_id: str, cron: str, agent: str, active: bool = True
+    ) -> dict[str, Any]:
         """Creates a recurring or one-time scheduled session."""
         sched = {
             "id": schedule_id,
@@ -396,7 +452,7 @@ class SessionOrchestrationManager:
     # Integration Management API
     # ==========================================
 
-    def get_integrations(self) -> Dict[str, Any]:
+    def get_integrations(self) -> dict[str, Any]:
         """Returns the landscape of native integrations."""
         return self.state["integrations"]
 
@@ -404,7 +460,7 @@ class SessionOrchestrationManager:
     # Repository Documentation API
     # ==========================================
 
-    def search_repo_docs(self, query: str) -> List[Dict[str, str]]:
+    def search_repo_docs(self, query: str) -> list[dict[str, str]]:
         """Queries repository documentation markdown files."""
         docs_dir = _PROJECT_ROOT / "docs"
         matches = []
