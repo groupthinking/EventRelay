@@ -47,6 +47,10 @@ class VideoProcessJobRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL")
     language: Optional[str] = Field("en", description="Transcript language")
     options: Optional[dict[str, Any]] = Field(default_factory=dict)
+    transcript: Optional[str] = Field(
+        None,
+        description="Ready transcript to reuse; skip YouTube extract when provided",
+    )
 
 
 class VideoProcessJobResponse(BaseModel):

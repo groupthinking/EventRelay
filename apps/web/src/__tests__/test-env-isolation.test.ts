@@ -44,4 +44,11 @@ describe('test environment isolation', () => {
     expect(process.env.NEXT_PUBLIC_BACKEND_URL ?? '').not.toMatch(/^http/);
     expect(process.env.NEXT_PUBLIC_API_URL ?? '').not.toMatch(/^http/);
   });
+
+  it.each(['NEXT_PUBLIC_BACKEND_URL', 'NEXT_PUBLIC_API_URL'] as const)(
+    'pins %s to a blank test default',
+    (key) => {
+      expect(process.env[key]).toBe('');
+    },
+  );
 });

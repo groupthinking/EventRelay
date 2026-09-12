@@ -345,6 +345,23 @@ class TestAWSRekognitionPrepareImageInput:
         result = await provider._prepare_image_input(str(img_file))
         assert result == {'Bytes': b"\xff\xd8\xff\xe0"}
 
+    async def test_local_file_read_routes_through_run_blocking(self, tmp_path, monkeypatch):
+        img_file = tmp_path / "test.jpg"
+        img_file.write_bytes(b"\xff\xd8\xff\xe0")
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        provider = _make_provider()
+        method_globals = type(provider)._prepare_image_input.__globals__
+        run_blocking = AsyncMock(return_value=b"worker-bytes")
+
+        with patch.dict(method_globals, {"run_blocking": run_blocking}):
+            result = await provider._prepare_image_input(str(img_file))
+
+        assert result == {'Bytes': b"worker-bytes"}
+        run_blocking.assert_awaited_once()
+        read_func, read_path = run_blocking.await_args.args
+        assert read_func is method_globals["_read_file_bytes"]
+        assert read_path == str(img_file)
+
     async def test_http_url_fetches_bytes(self):
         provider = _make_provider()
         mock_response = MagicMock()

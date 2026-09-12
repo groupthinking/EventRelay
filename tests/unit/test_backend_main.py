@@ -14,8 +14,10 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import sys
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -767,6 +769,29 @@ class TestShutdownEvent:
         ):
             # Should not propagate the exception
             await main_module.shutdown_event()
+
+    async def test_shutdown_runs_container_and_db_shutdown_concurrently(self):
+        mock_container = _make_mock_container()
+
+        async def _slow_container_shutdown():
+            await asyncio.sleep(0.05)
+
+        async def _slow_db_shutdown():
+            await asyncio.sleep(0.05)
+
+        mock_container.shutdown = AsyncMock(side_effect=_slow_container_shutdown)
+        main_module.service_container = mock_container
+
+        with patch(
+            "youtube_extension.backend.main.shutdown_database_optimization",
+            AsyncMock(side_effect=_slow_db_shutdown),
+        ):
+            started = time.perf_counter()
+            await main_module.shutdown_event()
+            elapsed = time.perf_counter() - started
+
+        # Serial execution would be ~100ms; concurrent should be close to 50ms.
+        assert elapsed < 0.09, f"expected concurrent shutdown, took {elapsed:.3f}s"
 
 
 # ===========================================================================

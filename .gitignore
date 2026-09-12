@@ -175,6 +175,7 @@ youtube_processed_videos/
 UVAI_Digital_Refinery_Blueprint.pdf
 *.db
 .vercel
+vercel-debug.log*
 .env*.local
 .next/
 .env
