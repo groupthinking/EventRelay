@@ -7,15 +7,29 @@ modern implementation.
 
 from __future__ import annotations
 
+import importlib
+from typing import Any
+
 
 __all__ = []
 
-try:
-    from .gemini_video_master_agent import GeminiVideoMasterAgent
+# Keep the package import lightweight. Importing agents.action_implementer
+# must not pull GeminiVideoMasterAgent (locked by
+# test_offline_builder_import_does_not_eager_load_unrelated_agents).
 
-    __all__.append("GeminiVideoMasterAgent")
-except ImportError:
-    pass
+
+def __getattr__(name: str) -> Any:
+    if name != "GeminiVideoMasterAgent":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    try:
+        module = importlib.import_module(".gemini_video_master_agent", __name__)
+        value = getattr(module, "GeminiVideoMasterAgent")
+    except ImportError as exc:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from exc
+    globals()["GeminiVideoMasterAgent"] = value
+    if "GeminiVideoMasterAgent" not in __all__:
+        __all__.append("GeminiVideoMasterAgent")
+    return value
 
 try:
     from .grok4_video_subagent import Grok4VideoSubagent
