@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
+  KEYFRAME_IMAGES_OK,
+  KEYFRAME_IMAGES_OK_NOTE,
   KEYFRAME_IMAGES_PARTIAL,
   KEYFRAME_IMAGES_PARTIAL_NOTE,
   applyExtractedSpec,
   applyKeyframeImageHonesty,
   buildIdentityPack,
 } from '@/lib/video-pack';
+import {
+  KEYFRAME_JPEG_CONTENT_TYPE,
+  hydrateKeyframeImages,
+  isDurableCapturedImagePath,
+  resetKeyframeFrameCaptureForTests,
+  setKeyframeFrameCaptureForTests,
+} from '@/lib/keyframe-frame-capture';
 import { parseArchitecture, parseArtifacts } from '@/lib/video-pack-types';
 import {
   VIDEO_PACK_EXTRACTOR_MODEL,
@@ -619,5 +628,96 @@ describe('applyKeyframeImageHonesty', () => {
     const twice = applyKeyframeImageHonesty(once);
     const occurrences = twice.provenance.notes.split(KEYFRAME_IMAGES_PARTIAL_NOTE).length - 1;
     expect(occurrences).toBe(1);
+  });
+
+  it('keeps a durable Blob capture URL and marks keyframes_images ok', () => {
+    const identity = buildIdentityPack(CANON, SOURCE_URL, '2026-09-03T00:00:00.000Z');
+    const captured =
+      'https://abc123.public.blob.vercel-storage.com/videopack/auJzb1D-fag/keyframes/1.2.jpg';
+    const honest = applyKeyframeImageHonesty({
+      ...applyExtractedSpec(identity, SPEC_JSON),
+      keyframes: [{ t_s: 1.2, desc: 'Elephants at the enclosure', image_path: captured }],
+    });
+
+    expect(isDurableCapturedImagePath(captured)).toBe(true);
+    expect(honest.keyframes[0]?.image_path).toBe(captured);
+    expect(honest.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(honest.provenance.notes).toContain(KEYFRAME_IMAGES_OK_NOTE);
+    expect(honest.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(honest.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON]);
+  });
+
+  it('keeps an app-served captured frame path and still strips thumbs', () => {
+    const identity = buildIdentityPack('QjZ5ohr7sGA', 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', '2026-09-12T16:39:08.716Z');
+    const served = '/api/video/pack/frames/QjZ5ohr7sGA/8';
+    const thumb = 'https://i.ytimg.com/vi/QjZ5ohr7sGA/hqdefault.jpg';
+    const honest = applyKeyframeImageHonesty({
+      ...applyExtractedSpec(identity, SPEC_JSON),
+      keyframes: [
+        { t_s: 8, desc: 'Jack point under the car', image_path: served },
+        { t_s: 1, desc: 'Host intro', image_path: thumb },
+      ],
+    });
+
+    expect(honest.keyframes[0]?.image_path).toBe(served);
+    expect(honest.keyframes[1]?.image_path).toBeNull();
+    expect(honest.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(JSON.stringify(honest.keyframes)).not.toContain(thumb);
+  });
+});
+
+const TINY_JPEG = Uint8Array.from([
+  0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+  0x00, 0x01, 0x00, 0x00, 0xff, 0xdb, 0x00, 0x43, 0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
+  0x07, 0x07, 0x07, 0x09, 0x09, 0x08, 0x0a, 0x0c, 0x14, 0x0d, 0x0c, 0x0b, 0x0b, 0x0c, 0x19, 0x12,
+  0x13, 0x0f, 0x14, 0x1d, 0x1a, 0x1f, 0x1e, 0x1d, 0x1a, 0x1c, 0x1c, 0x20, 0x24, 0x2e, 0x27, 0x20,
+  0x22, 0x2c, 0x23, 0x1c, 0x1c, 0x28, 0x37, 0x29, 0x2c, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1f, 0x27,
+  0x39, 0x3d, 0x38, 0x32, 0x3c, 0x2e, 0x33, 0x34, 0x32, 0xff, 0xc0, 0x00, 0x0b, 0x08, 0x00, 0x01,
+  0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xff, 0xc4, 0x00, 0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0xff, 0xc4, 0x00, 0x14,
+  0x10, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0xff, 0xda, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3f, 0x00, 0x7f, 0x3f, 0xff, 0xd9,
+]);
+
+describe('hydrateKeyframeImages', () => {
+  afterEach(() => {
+    resetKeyframeFrameCaptureForTests();
+  });
+
+  it('writes app-served image_path after a real JPEG capture and seals ok', async () => {
+    setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
+      bytes: TINY_JPEG,
+      contentType: KEYFRAME_JPEG_CONTENT_TYPE,
+      imagePath: `/api/video/pack/frames/${videoId}/${t_s}`,
+    }));
+    const identity = buildIdentityPack('QjZ5ohr7sGA', 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', '2026-09-12T16:39:08.716Z');
+    const stored = applyKeyframeImageHonesty({
+      ...applyExtractedSpec(identity, SPEC_JSON),
+      keyframes: [
+        { t_s: 1, image_path: null, desc: 'Host Matt Schmitz introducing tire change guide' },
+        { t_s: 8, image_path: null, desc: 'Jack point under the car' },
+      ],
+    });
+    expect(stored.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+
+    const hydrated = await hydrateKeyframeImages(stored);
+
+    expect(hydrated.keyframes.map((frame) => frame.image_path)).toEqual([
+      '/api/video/pack/frames/QjZ5ohr7sGA/1',
+      '/api/video/pack/frames/QjZ5ohr7sGA/8',
+    ]);
+    expect(hydrated.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(hydrated.provenance.notes).toContain(KEYFRAME_IMAGES_OK_NOTE);
+    expect(hydrated.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(hydrated.provenance.source_hash).toBe(stored.provenance.source_hash);
+  });
+
+  it('stays PARTIAL when capture cannot obtain a frame', async () => {
+    setKeyframeFrameCaptureForTests(async () => null);
+    const identity = buildIdentityPack(CANON, SOURCE_URL, '2026-09-03T00:00:00.000Z');
+    const stored = applyExtractedSpec(identity, SPEC_JSON);
+    const hydrated = await hydrateKeyframeImages(stored);
+    expect(hydrated.keyframes[0]?.image_path).toBeNull();
+    expect(hydrated.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
   });
 });
