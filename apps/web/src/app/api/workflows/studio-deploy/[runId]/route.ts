@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getRun } from 'workflow/api';
-import { workflowReturnErrorMessage } from '@/lib/studio-workflow';
+import {
+  isTransientWorkflowRunReadError,
+  workflowReturnErrorMessage,
+} from '@/lib/studio-workflow';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import type { StudioDeployResult } from '@/workflows/studio-deploy';
 
@@ -59,7 +62,7 @@ export async function GET(
 
     return NextResponse.json(payload.body, { status: payload.status });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = workflowReturnErrorMessage(err);
     if (/not found|does not exist/i.test(message)) {
       return NextResponse.json(
         { ok: false, runId, error: 'Workflow run not found' },
@@ -67,9 +70,13 @@ export async function GET(
       );
     }
     console.error('[api/workflows/studio-deploy/:runId]', err);
-    return NextResponse.json(
-      { ok: false, runId, error: 'Failed to read workflow run' },
-      { status: 500 },
-    );
+    if (isTransientWorkflowRunReadError(err)) {
+      return NextResponse.json({
+        ok: true,
+        runId,
+        runStatus: 'running',
+      });
+    }
+    return NextResponse.json({ ok: false, runId, error: message }, { status: 500 });
   }
 }

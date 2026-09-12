@@ -5,6 +5,8 @@ import {
   pollVideoToActions,
   startStudioDeploy,
   startVideoToActions,
+  isTransientWorkflowRunReadError,
+  isUnreadWorkflowRun,
   workflowReturnErrorMessage,
 } from '@/lib/studio-workflow';
 
@@ -15,6 +17,26 @@ describe('studio-workflow (WDK Product v1)', () => {
     Object.assign(failed, { cause });
     expect(workflowReturnErrorMessage(failed)).toBe('Deploy job job_1 still complete');
     expect(workflowReturnErrorMessage(new Error('fetch failed'))).toBe('fetch failed');
+  });
+
+  it('treats Request-parse GET failures as unread workflow run, not a terminal HOLD', () => {
+    const parseErr = new TypeError('Failed to parse URL from [object Request]');
+    Object.assign(parseErr, {
+      cause: Object.assign(new TypeError('Invalid URL'), { code: 'ERR_INVALID_URL' }),
+    });
+    expect(isTransientWorkflowRunReadError(parseErr)).toBe(true);
+    expect(
+      isUnreadWorkflowRun({
+        status: 500,
+        error: 'Failed to read workflow run',
+      }),
+    ).toBe(true);
+    expect(
+      isUnreadWorkflowRun({
+        runStatus: 'completed',
+        result: { kind: 'live', live_url: 'https://ready.example.app' },
+      }),
+    ).toBe(false);
   });
 
   afterEach(() => {
@@ -224,6 +246,38 @@ describe('studio-workflow (WDK Product v1)', () => {
       url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
     });
     expect(started.ok).toBe(false);
+  });
+
+  it('pollStudioDeploy keeps polling when GET cannot read the workflow run yet', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: async () => ({
+          ok: false,
+          runId: 'wrun_01M2A9Z9SYXD59NG211W9N8EQA',
+          error: 'Failed to read workflow run',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          ok: true,
+          runId: 'wrun_01M2A9Z9SYXD59NG211W9N8EQA',
+          runStatus: 'completed',
+          result: { kind: 'live', live_url: 'https://ready.example.app' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+    const poll = await pollStudioDeploy('wrun_01M2A9Z9SYXD59NG211W9N8EQA', {
+      attempts: 4,
+      delayMs: 1,
+    });
+    expect(poll.result?.live_url).toBe('https://ready.example.app');
+    expect(poll.error).not.toBe('Failed to read workflow run');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('pollStudioDeploy keeps polling when completed has no result yet', async () => {

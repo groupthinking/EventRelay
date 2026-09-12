@@ -221,6 +221,7 @@ describe('evaluateStudioDeployTransition', () => {
     const view = studioGateReceiptView(result, { backendReason });
     expect(view.reason).toContain(backendReason);
     expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2A8RXT1HS8NPW70HV6AA0YV');
   });
 });

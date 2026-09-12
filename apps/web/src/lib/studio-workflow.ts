@@ -88,6 +88,46 @@ export function isUnreadWorkflowReturn(poll: {
   return /failed to read workflow return value|return value/i.test(poll.error || '');
 }
 
+/** GET getRun threw before status/result — keep polling, do not HOLD on the generic. */
+export function isUnreadWorkflowRun(poll: {
+  runStatus?: string;
+  result?: unknown;
+  error?: string;
+  status?: number;
+}): boolean {
+  if (poll.result) return false;
+  const error = poll.error || '';
+  if (
+    /failed to read workflow run|failed to parse url from \[object request\]|err_invalid_url/i.test(
+      error,
+    )
+  ) {
+    return true;
+  }
+  return poll.status === 500 && !poll.runStatus;
+}
+
+export function isTransientWorkflowRunReadError(err: unknown): boolean {
+  const parts = [workflowReturnErrorMessage(err)];
+  if (err instanceof Error) parts.push(err.message);
+  if (err && typeof err === 'object') {
+    const rec = err as {
+      code?: unknown;
+      cause?: { message?: unknown; code?: unknown; input?: unknown };
+    };
+    if (typeof rec.code === 'string') parts.push(rec.code);
+    const cause = rec.cause;
+    if (cause && typeof cause === 'object') {
+      if (typeof cause.message === 'string') parts.push(cause.message);
+      if (typeof cause.code === 'string') parts.push(cause.code);
+      if (typeof cause.input === 'string') parts.push(cause.input);
+    }
+  }
+  return /failed to parse url from \[object request\]|err_invalid_url|\[object request\]/i.test(
+    parts.join(' '),
+  );
+}
+
 /** Start durable Studio deploy (WDK C). Returns immediately with runId. */
 export interface StudioDeployStart {
   ok: boolean;
@@ -191,7 +231,12 @@ export async function pollStudioDeploy(
       return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
     }
     last = await getStudioDeployStatus(runId, { signal: opts?.signal });
-    if (last.runStatus && TERMINAL.has(last.runStatus) && !isUnreadWorkflowReturn(last)) {
+    if (
+      last.runStatus &&
+      TERMINAL.has(last.runStatus) &&
+      !isUnreadWorkflowReturn(last) &&
+      !isUnreadWorkflowRun(last)
+    ) {
       return last;
     }
     if (last.status === 404) return last;

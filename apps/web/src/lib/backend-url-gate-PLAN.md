@@ -1,4 +1,31 @@
-# TASK: Parse studio.deploy workflow return / live URL (residual after #1848)
+# TASK: Read studio.deploy workflow run (residual after #1850)
+
+## 1. Goal & Scope
+* **Objective:** Attempt deploy must not HOLD solely for `Failed to read workflow run`. GET must read the WDK run. PASS only with a verified https live URL + EventRelay receipt; otherwise honest HOLD/REJECT with a different real reason.
+* **Context:** #1850 removed `Failed to read workflow return value`. AXIOM re-dogfood XYMcBrFSJ4c on `dpl_3o6VDNVej7vkA82TQKDNWhkxLGYs` HOLDs with `Failed to read workflow run` (receipt `er:gate:v1:wrun_01M2A9Z9SYXD59NG211W9N8EQA`).
+* **Root cause:** `withWorldVercelFetch` rebinds `globalThis.fetch` to undici `fetch(url, init)`. `getRun()` calls `fetch(Request)`. undici treats the Request as a URL string → `Failed to parse URL from [object Request]` / `ERR_INVALID_URL`. Outer GET catch swallows that as `Failed to read workflow run`.
+* **Scope:** `world-vercel-fetch.ts`, GET `[runId]/route.ts`, `studio-workflow.ts` poller. Do not invent a live URL, do not weaken G.A.T.E., do not reopen #1848 env pin.
+ * *Initial check:* Modify the existing undici wrapper; do not add a second fetch path.
+
+## 2. Execution Plan
+- [x] Step 1: Lock failing tests (Request fetch, GET unread-run, poller retry, claim guard)
+- [x] Step 2: Compat-wrap undici fetch so Request inputs use native fetch; never emit the generic unread-run string
+- [x] Step 3: Focused Vitest 88 passed
+- [ ] Step 4: New PR from main → merge-when-core-green → prod READY `dpl_`
+
+## 3. Definition of Done
+* **Expected Outcome:** GET can read the workflow run. HOLD is not `Failed to read workflow run` or `Failed to read workflow return value`. PASS only with a verified https hostname URL.
+* **Verification Method:** Focused Vitest + Vercel prod READY after merge.
+* **Proof Artifact:** 88 passed (`world-vercel-fetch`, GET `[runId]`, `studio-workflow`, `gate-transition`, `pipeline-async-job`, `studio-pipeline-status`, `pipeline-backend-health`, POST studio-deploy, isolation)
+
+## 4. Post-Task Reflection
+* **What was done:** Compat-wrapped `withWorldVercelFetch` so `fetch(Request)` stays on Next/Node fetch; GET no longer emits `Failed to read workflow run`; poller retries unread-run 500s. Claim guard unchanged.
+* **Why it was needed:** #1850 wrapped GET in undici fetch. `getRun()` passes a Request; undici parses it as `[object Request]` → 500 generic HOLD.
+* **How it was tested:** TDD RED then GREEN. Focused Vitest 88/88. Prod logs on `dpl_3o6VDNVej7vkA82TQKDNWhkxLGYs` showed `Failed to parse URL from [object Request]` for `wrun_01M2A9Z9SYXD59NG211W9N8EQA`.
+
+---
+
+# Prior cut: Parse studio.deploy workflow return / live URL (residual after #1848)
 
 ## 1. Goal & Scope
 * **Objective:** Attempt deploy must not HOLD solely for `Failed to read workflow return value`. PASS only with a verified https live URL + EventRelay receipt; otherwise honest HOLD/REJECT/ESCALATE with the real reason.
