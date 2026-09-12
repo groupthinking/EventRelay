@@ -14,6 +14,7 @@ Version: 2.0.0
 Architecture: Service-Oriented with IoC Container
 """
 
+import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -533,21 +534,22 @@ async def shutdown_event():
     """Application shutdown tasks"""
     logger.info("🛑 Shutting down YouTube Extension API")
 
-    try:
-        await service_container.shutdown()
-        # Stop parallel processor and shutdown DB optimization
-        # try:
-        #     await parallel_processor.stop()
-        # except Exception:
-        #     pass
-        try:
-            await shutdown_database_optimization()
-        except Exception:
-            pass
-        logger.info("✅ Graceful shutdown completed")
+    shutdown_targets = [
+        ("database optimization", shutdown_database_optimization()),
+    ]
+    if service_container is not None:
+        shutdown_targets.append(("service container", service_container.shutdown()))
 
-    except Exception as e:
-        logger.warning(f"⚠️  Shutdown warning: {e}")
+    results = await asyncio.gather(
+        *(coro for _, coro in shutdown_targets),
+        return_exceptions=True,
+    )
+
+    for (name, _), result in zip(shutdown_targets, results):
+        if isinstance(result, BaseException):
+            logger.warning(f"⚠️  Shutdown warning ({name}): {result}")
+
+    logger.info("✅ Graceful shutdown completed")
 
 
 # Development server runner
