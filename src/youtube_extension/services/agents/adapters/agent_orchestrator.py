@@ -517,7 +517,7 @@ class AgentOrchestrator:
             )
         )
         if self._audit_store is not None:
-            total_tokens = receipt.usage.get("total_tokens")
+            input_tokens = receipt.usage.get("input_tokens")
             output_tokens = receipt.usage.get("output_tokens")
             self._audit_store.append(
                 receipt.receipt_id,
@@ -540,7 +540,7 @@ class AgentOrchestrator:
                     "error": receipt.error,
                 },
                 input_tokens=(
-                    int(total_tokens) if isinstance(total_tokens, (int, float)) else None
+                    int(input_tokens) if isinstance(input_tokens, (int, float)) else None
                 ),
                 output_tokens=(
                     int(output_tokens)
