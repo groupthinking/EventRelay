@@ -206,6 +206,7 @@ function serverGateView(value: unknown): StudioGateReceiptView | undefined {
   const decision = gate.decision;
   if (decision !== 'PASS' && decision !== 'HOLD' && decision !== 'REJECT' && decision !== 'ESCALATE') return undefined;
   if (receipt.version !== 'eventrelay.gate-receipt.v2' || receipt.decision !== decision || typeof receipt.id !== 'string' || typeof receipt.receipt_hash !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.receipt_hash) || typeof gate.reason !== 'string' || typeof gate.reason_code !== 'string') return undefined;
+  if (receipt.reason !== gate.reason || receipt.reason_code !== gate.reason_code) return undefined;
   if (decision === 'PASS' && (receipt.retained !== true || typeof receipt.signature !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.signature))) return undefined;
   return { decision, reason: gate.reason, reason_code: gate.reason_code, receiptId: receipt.id, receiptHash: receipt.receipt_hash, version: receipt.version, transitionId: str(receipt.transition_id), retained: receipt.retained === true };
 }

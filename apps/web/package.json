@@ -9,6 +9,7 @@
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "test:gate": "ORIGIN_GATE_REDIS_TESTS=1 vitest run src/lib/__tests__/origin-gate.test.ts src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-workflow.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/auth-paths.test.ts src/lib/studio/__tests__/security.test.ts src/app/api/gate/transitions/__tests__/route.test.ts src/app/api/workflows/studio-deploy/__tests__/route.test.ts src/components/__tests__/OneLoopStudio.gate.test.tsx",
     "assemble:app-builder": "vitest run src/lib/__tests__/assemble-app-builder.gates.test.ts",
     "analyze": "next experimental-analyze --output",
     "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs"

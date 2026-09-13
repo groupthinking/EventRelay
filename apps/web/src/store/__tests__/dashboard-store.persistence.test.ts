@@ -133,6 +133,20 @@ describe('dashboard-store persistence', () => {
     expect(state.searchLoading).toBe(false);
   });
 
+  it('keeps a session usable when browser storage writes fail', () => {
+    storage.setItem = () => { throw new Error('Quota exceeded'); };
+    expect(() => useDashboardStore.getState().addVideo(makeVideo())).not.toThrow();
+    expect(useDashboardStore.getState().videos).toHaveLength(1);
+  });
+
+  it('ignores corrupt array shapes without replacing store actions', async () => {
+    storage.setItem(STORAGE_KEY, JSON.stringify({ state: { videos: [null, { id: 'bad' }], activities: 'bad', updateVideo: null }, version: 0 }));
+    await useDashboardStore.persist.rehydrate();
+    expect(useDashboardStore.getState().videos).toEqual([]);
+    expect(useDashboardStore.getState().activities).toEqual([]);
+    expect(typeof useDashboardStore.getState().updateVideo).toBe('function');
+  });
+
   it('ignores malformed localStorage payloads during rehydrate', async () => {
     storage.setItem(STORAGE_KEY, '{not-json');
 

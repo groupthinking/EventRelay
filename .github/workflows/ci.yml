@@ -130,17 +130,26 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm install --legacy-peer-deps
-      - name: Install Redis for Video Pack integration tests
+      - name: Install Redis for Video Pack and Origin G.A.T.E. integration tests
         run: sudo apt-get update && sudo apt-get install -y redis-server
       - name: Unit tests (apps/web)
         # Hermetic: do not inject ambient AI/billing keys (see #1230).
         env:
+          ORIGIN_GATE_REDIS_TESTS: "1"
           OPENAI_API_KEY: ""
           AI_GATEWAY_API_KEY: ""
           VERCEL_AI_GATEWAY_API_KEY: ""
           STRIPE_SECRET_KEY: ""
           STRIPE_WEBHOOK_SECRET: ""
-        run: cd apps/web && npx vitest run --reporter=default
+        run: npm --workspace=apps/web test -- --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-vitest-report.json"
+      - name: Retain machine-readable test evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-vitest-${{ github.sha }}
+          path: ${{ runner.temp }}/web-vitest-report.json
+          if-no-files-found: error
+          retention-days: 7
 
   test:
     runs-on: ubuntu-latest

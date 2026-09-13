@@ -1,4 +1,7 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { canonicalGateJson, type GateDecision } from '@/lib/gate-transition';
+import { evaluateOriginGate, type OriginGateEvaluation } from '@/lib/origin-gate';
 import {
   getStudioDeployStatus,
   getVideoToActionsStatus,
@@ -19,13 +22,64 @@ import {
   STUDIO_ORIGIN_STILL_POLLABLE_HOLD,
 } from '@/lib/studio-pipeline-status';
 
+const receiptTime = Date.parse('2026-09-13T12:00:00.000Z');
+const receiptIssuers = [generateKeyPairSync('ed25519'), generateKeyPairSync('ed25519')];
+async function serverReceipt(decision: GateDecision, retained = true) {
+  const binding = { transitionId: 'consumer-transition', kind: 'studio.deploy', fromState: 'proposed', toState: 'live', subject: 'consumer-owner', runId: 'consumer-run', artifactHash: 'a'.repeat(64), target: { provider: 'vercel', projectId: 'consumer-project', environment: 'preview', liveUrl: 'https://consumer.example.test' } };
+  const attestations = receiptIssuers.map((key, index) => {
+    const payload = { version: 'origin.attestation.v1', type: index ? 'deployment' : 'approval', issuer: `consumer-${index}`, nonce: `consumer-nonce-${index}`, issuedAt: new Date(receiptTime - 1000).toISOString(), expiresAt: new Date(receiptTime + 60_000).toISOString(), binding, verdict: index ? (decision === 'HOLD' ? 'unverified' : decision === 'REJECT' ? 'unreal' : 'real') : (decision === 'ESCALATE' ? 'unknown' : 'allow'), ...(index ? { providerReceiptId: 'consumer-provider-receipt', providerReceiptHash: 'b'.repeat(64) } : {}) };
+    return { payload, signature: sign(null, Buffer.from(`origin.attestation.v1\n${canonicalGateJson(payload)}`), key.privateKey).toString('base64url') };
+  });
+  const { subject, ...proposal } = binding;
+  return evaluateOriginGate({ ...proposal, approval: attestations[0], evidence: attestations[1] }, {
+    subject, now: receiptTime, signingSecret: 'consumer-offline-secret-at-least-32-characters',
+    store: {
+      readPolicy: async () => ({ version: 1, issuers: receiptIssuers.map((key, index) => ({ id: `consumer-${index}`, role: index ? 'deployment-verifier' : 'loop', publicKey: key.publicKey.export({ type: 'spki', format: 'pem' }).toString(), projectIds: ['consumer-project'], revoked: false })) }),
+      commit: async () => { if (!retained) throw new Error('offline retention failure'); return { status: 'stored' }; },
+    },
+  });
+}
+function respondWithGate(gate: unknown, status = 409) {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: status === 200, status, json: async () => ({ ok: status === 200, gate }) }));
+}
+
 describe('studio-workflow (WDK Product v1)', () => {
+  it.each(['PASS', 'HOLD', 'REJECT', 'ESCALATE'] as const)('preserves an evaluator-issued %s receipt without claiming execution success', async (decision) => {
+    const gate = await serverReceipt(decision);
+    expect(gate.decision).toBe(decision);
+    respondWithGate(gate, decision === 'PASS' ? 200 : 409);
+    const result = await startStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' });
+    expect(result).toMatchObject({ ok: false, gate: { decision, reason: gate.reason, reason_code: gate.reason_code, receiptId: gate.receipt.id, receiptHash: gate.receipt.receipt_hash, version: gate.receipt.version, transitionId: gate.receipt.transition_id, retained: true } });
+    expect(result.runId).toBeUndefined();
+  });
+
+  it('preserves an actual unretained runtime HOLD', async () => {
+    const gate = await serverReceipt('PASS', false);
+    respondWithGate(gate);
+    expect(await startStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' })).toMatchObject({ ok: false, gate: { decision: 'HOLD', retained: false, reason_code: 'GATE_HOLD_RUNTIME_UNAVAILABLE' } });
+  });
+
+  it.each([
+    ['unknown decision', (gate: OriginGateEvaluation) => ({ ...gate, decision: 'MAYBE' })],
+    ['mismatched decision', (gate: OriginGateEvaluation) => ({ ...gate, receipt: { ...gate.receipt, decision: 'HOLD' } })],
+    ['wrong version', (gate: OriginGateEvaluation) => ({ ...gate, receipt: { ...gate.receipt, version: 'eventrelay.gate-receipt.v1' } })],
+    ['malformed hash', (gate: OriginGateEvaluation) => ({ ...gate, receipt: { ...gate.receipt, receipt_hash: 'invalid' } })],
+    ['unsigned PASS', (gate: OriginGateEvaluation) => ({ ...gate, receipt: { ...gate.receipt, signature: null } })],
+    ['unretained PASS', (gate: OriginGateEvaluation) => ({ ...gate, receipt: { ...gate.receipt, retained: false } })],
+    ['mismatched reason', (gate: OriginGateEvaluation) => ({ ...gate, reason: 'An altered claim' })],
+    ['mismatched reason code', (gate: OriginGateEvaluation) => ({ ...gate, reason_code: 'ALTERED' })],
+  ] as const)('does not display a %s as an authoritative server receipt', async (_label, alter) => {
+    respondWithGate(alter(await serverReceipt('PASS')));
+    const result = await startStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' });
+    expect(result.ok).toBe(false);
+    expect(result.gate).toBeUndefined();
+  });
   it('preserves the server gate receipt on a blocked deployment', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: false, status: 409,
       json: async () => ({ ok: false, gate: {
         decision: 'HOLD', reason: 'Artifact-bound evidence required.', reason_code: 'GATE_HOLD_MISSING_EVIDENCE',
-        receipt: { version: 'eventrelay.gate-receipt.v2', decision: 'HOLD', id: 'er:gate:v2:test', receipt_hash: 'a'.repeat(64), transition_id: 'transition-test', retained: false },
+        receipt: { version: 'eventrelay.gate-receipt.v2', decision: 'HOLD', reason: 'Artifact-bound evidence required.', reason_code: 'GATE_HOLD_MISSING_EVIDENCE', id: 'er:gate:v2:test', receipt_hash: 'a'.repeat(64), transition_id: 'transition-test', retained: false },
       } }),
     }));
     const result = await startStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' });
