@@ -18,7 +18,7 @@ AUTH_CLIENT = REPO_ROOT / "tests/testing/official_mcp_auth_client.mjs"
 DEFAULT_RECEIPT = (
     REPO_ROOT / "tests/fixtures/mcp_conformance/official-2026-07-28-receipt.json"
 )
-CONFORMANCE_COMMIT = "a983ba93c91e0bb31d0b6849eeb52f0ad1083107"
+CONFORMANCE_COMMIT = "7169291ec0b68eb370fddcd9947313ab0d5e4156"
 CONFORMANCE_PACKAGE = (
     f"git+https://github.com/modelcontextprotocol/conformance.git#{CONFORMANCE_COMMIT}"
 )
@@ -104,6 +104,13 @@ EXCLUSIONS = {
                 "tasks-status-notifications",
                 "tasks-required-task-error",
                 "tasks-mrtr-composition",
+                # SEP-2640 Skills server scenarios landed upstream after the
+                # original baseline. EventRelay does not expose these server
+                # methods yet, so account for them explicitly instead of
+                # silently producing a stale green receipt.
+                "sep-2640-skills-enumeration",
+                "sep-2640-skills-manifest",
+                "sep-2640-skills-directory",
             ],
         },
     ],
@@ -151,6 +158,15 @@ EXCLUSIONS = {
                 "auth/dpop-nonce",
                 "auth/wif-jwt-bearer",
                 "json-schema-2020-12-preservation",
+                # The closed Agent Factory host spike was not merged and has
+                # not been exercised as a real MCP client. Keep every official
+                # Skills client scenario visible as unsupported until a driver
+                # runs against the upstream hostile servers.
+                "sep-2640-client-no-prefetch",
+                "sep-2640-client-verify-digest",
+                "sep-2640-client-verify-size",
+                "sep-2640-client-verify-frontmatter",
+                "sep-2640-client-verify-unlisted-uri",
             ],
         },
     ],
