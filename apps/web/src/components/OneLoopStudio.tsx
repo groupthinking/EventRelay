@@ -16,6 +16,7 @@ import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
+import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   actionsFromStudioRun,
   buildStudioShipPackage,
@@ -789,6 +790,27 @@ export default function OneLoopStudio({
               </button>
             </div>
           </form>
+          {videos.some((video) => video.videoPack) ? (
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="stored-pack">Stored packs</FieldLabel>
+                <select
+                  id="stored-pack"
+                  value={selected?.videoPack ? selected.id : ''}
+                  disabled={busy}
+                  onChange={(event) => selectVideo(event.target.value || null)}
+                  aria-describedby="stored-pack-hint"
+                  className="min-w-0 rounded-lg border border-ink/15 bg-void px-3 py-2 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                >
+                  <option value="">Choose a stored pack</option>
+                  {videos.filter((video) => video.videoPack).map((video) => (
+                    <option key={video.id} value={video.id}>{video.title}</option>
+                  ))}
+                </select>
+                <FieldDescription id="stored-pack-hint">Reopen a pack stored in this browser without running analysis.</FieldDescription>
+              </Field>
+            </FieldGroup>
+          ) : null}
           <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
             {statusText}
           </p>

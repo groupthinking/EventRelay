@@ -26,7 +26,7 @@ describe('Studio authoritative gate receipt', () => {
   it('reopens a stored pack without running analysis or gate actions', async () => {
     const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
     const pack = reviewPackFixture();
-    useDashboardStore.setState({ videos: [{ ...video, status: 'failed', videoPack: { packId: pack.id, sourceHash: pack.provenance.source_hash, version: pack.version, pack } }], selectedVideoId: null });
+    useDashboardStore.setState({ videos: [{ ...video, status: 'failed', videoPack: { packId: pack.id, videoId: pack.video_id, sourceUrl: pack.source_url, sourceHash: pack.provenance.source_hash, version: pack.version, pack } }], selectedVideoId: null });
     const process = vi.spyOn(useDashboardStore.getState(), 'processVideo');
     const deployCalls = vi.mocked(startStudioDeploy).mock.calls.length;
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
