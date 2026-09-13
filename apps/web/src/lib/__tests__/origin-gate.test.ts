@@ -1,4 +1,8 @@
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, createHmac, generateKeyPairSync, sign } from 'node:crypto';
+import { encode } from 'next-auth/jwt';
+import { NextRequest } from 'next/server';
+import { POST as acceptTransition } from '@/app/api/gate/transitions/route';
+import { POST as deploymentPreflight } from '@/app/api/workflows/studio-deploy/route';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -8,6 +12,15 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { canonicalGateJson, hashCanonical } from '@/lib/gate-transition';
 import { evaluateOriginGate, type OriginGateEvaluation, type OriginGateStore } from '@/lib/origin-gate';
 import { COMMIT_ORIGIN_GATE_SCRIPT, createOriginGateStore, ORIGIN_GATE_POLICY_KEY } from '@/lib/origin-gate-store';
+
+const { start } = vi.hoisted(() => ({ start: vi.fn() }));
+vi.mock('workflow/api', () => ({ start }));
+vi.mock('node:dns/promises', () => ({
+  lookup: async (host: string) => {
+    if (host !== 'www.youtube.com') throw new Error('Unexpected offline DNS request');
+    return [{ address: '142.250.72.206', family: 4 }];
+  },
+}));
 
 const now = Date.parse('2026-09-13T12:00:00.000Z');
 const loop = generateKeyPairSync('ed25519');
@@ -58,7 +71,136 @@ function setup(trust: unknown = policy) {
   return { store, context };
 }
 
+function expectAuthenticReceipt(result: OriginGateEvaluation, secret = setup().context.signingSecret) {
+  const { receipt_hash, signature, ...body } = result.receipt;
+  const digest = createHash('sha256').update(canonicalGateJson(body), 'utf8').digest('hex');
+  expect(receipt_hash).toBe(digest);
+  expect(signature).toBe(createHmac('sha256', secret).update(`origin.gate-receipt.v2\n${digest}`).digest('hex'));
+  expect(result).toMatchObject({ decision: body.decision, reason: body.reason, reason_code: body.reason_code });
+}
+
 describe('Origin G.A.T.E. signed server boundary', () => {
+  describe.each(['approval', 'deployment'] as const)('%s contract matrix', (type) => {
+    const field = type === 'approval' ? 'approval' : 'evidence';
+    const signerIndex = type === 'approval' ? 0 : 1;
+    const withAttestation = (changes: object) => input({ [field]: attestation(type, changes) });
+
+    it.each([
+      ['subject', { subject: 'another-owner' }],
+      ['transition', { transitionId: 'another-transition' }],
+      ['run', { runId: 'another-run' }],
+      ['artifact', { artifactHash: 'c'.repeat(64) }],
+      ['project', { target: { ...binding.target, projectId: 'another-project' } }],
+      ['environment', { target: { ...binding.target, environment: 'production' } }],
+      ['URL', { target: { ...binding.target, liveUrl: 'https://other.example.com' } }],
+    ])('rejects a separately signed mismatched %s', async (_label, changes) => {
+      const result = await evaluateOriginGate(withAttestation({ binding: { ...binding, ...changes } }), setup().context);
+      expect(result).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_ATTESTATION_MISMATCH' });
+    });
+
+    it.each([
+      ['revoked', { revoked: true }],
+      ['wrong role', { role: type === 'approval' ? 'deployment-verifier' : 'loop' }],
+      ['wrong project', { projectIds: ['other-project'] }],
+    ])('rejects a %s issuer', async (_label, changes) => {
+      const trust = { ...policy, issuers: policy.issuers.map((issuer, i) => i === signerIndex ? { ...issuer, ...changes } : issuer) };
+      expect(await evaluateOriginGate(input(), setup(trust).context)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_AUTHORITY_SCOPE' });
+    });
+
+    it('escalates an unknown issuer and an unusable registered key', async () => {
+      expect(await evaluateOriginGate(withAttestation({ issuer: 'unknown' }), setup().context)).toMatchObject({ decision: 'ESCALATE', reason_code: 'GATE_ESCALATE_AUTHORITY_UNKNOWN' });
+      const trust = { ...policy, issuers: policy.issuers.map((issuer, i) => i === signerIndex ? { ...issuer, publicKey: 'not-a-public-key' } : issuer) };
+      expect(await evaluateOriginGate(input(), setup(trust).context)).toMatchObject({ decision: 'ESCALATE', reason_code: 'GATE_ESCALATE_AUTHORITY_UNKNOWN' });
+    });
+
+    it.each([
+      ['issuance skew inclusive', 30_000, 60_000, 'PASS'],
+      ['issuance skew exceeded', 30_001, 60_000, 'HOLD'],
+      ['expiry exclusive', -1000, 0, 'HOLD'],
+      ['just before expiry', -1000, 1, 'PASS'],
+      ['maximum validity inclusive', -1000, 899_000, 'PASS'],
+      ['maximum validity exceeded', -1000, 899_001, 'HOLD'],
+      ['nonpositive lifetime', 1000, 1000, 'HOLD'],
+    ] as const)('enforces %s', async (_label, issued, expires, decision) => {
+      const result = await evaluateOriginGate(withAttestation({ issuedAt: new Date(now + issued).toISOString(), expiresAt: new Date(now + expires).toISOString() }), setup().context);
+      expect(result).toMatchObject({ decision, reason_code: decision === 'PASS' ? 'GATE_PASS' : 'GATE_HOLD_STALE_EVIDENCE' });
+    });
+
+    it('rejects post-signature payload tampering and a valid signature over the wrong type', async () => {
+      const envelope = attestation(type);
+      envelope.payload.nonce = 'tampered-after-signing';
+      expect(await evaluateOriginGate(input({ [field]: envelope }), setup().context)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_ATTESTATION_MISMATCH' });
+      expect(await evaluateOriginGate(withAttestation({ type: type === 'approval' ? 'deployment' : 'approval' }), setup().context)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_ATTESTATION_MISMATCH' });
+    });
+  });
+
+  it.each(['providerReceiptId', 'providerReceiptHash'])('holds signed real evidence without %s', async (field) => {
+    expect(await evaluateOriginGate(input({ evidence: attestation('deployment', { [field]: undefined }) }), setup().context)).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_MISSING_EVIDENCE' });
+  });
+
+  it.each([
+    ['allow', 'PASS', 'GATE_PASS'],
+    ['deny', 'REJECT', 'GATE_REJECT_AUTHORITY_DENIED'],
+    ['unknown', 'ESCALATE', 'GATE_ESCALATE_AUTHORITY_UNKNOWN'],
+  ])('honors the signed Loop %s verdict', async (verdict, decision, reason_code) => {
+    expect(await evaluateOriginGate(input({ approval: attestation('approval', { verdict }) }), setup().context)).toMatchObject({ decision, reason_code });
+  });
+
+  it('escalates duplicate issuer IDs rather than selecting a preferred record', async () => {
+    expect(await evaluateOriginGate(input(), setup({ ...policy, issuers: [...policy.issuers, policy.issuers[0]] }).context)).toMatchObject({ decision: 'ESCALATE', reason_code: 'GATE_ESCALATE_AUTHORITY_UNKNOWN' });
+  });
+
+  it.each(['http://test.example.com', 'https://', ' https://test.example.com', 'https://test.example.com '])('rejects invalid or untrimmed target %s', async (liveUrl) => {
+    expect(await evaluateOriginGate(input({ target: { ...binding.target, liveUrl } }), setup().context)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_INVALID_TRANSITION', receipt: { retained: false } });
+  });
+
+  it.each(['https://127.0.0.1', 'https://user:pass@test.example.com', 'https://TEST.example.com', 'https://test.example.com/'])('requires exact signed URL bytes for %s, not URL-parser equivalence', async (liveUrl) => {
+    const target = { ...binding.target, liveUrl };
+    expect(await evaluateOriginGate(input({ target }), setup().context)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_ATTESTATION_MISMATCH' });
+    const exact = { ...binding, target };
+    expect(await evaluateOriginGate(input({ target, approval: attestation('approval', { binding: exact }), evidence: attestation('deployment', { binding: exact }) }), setup().context)).toMatchObject({ decision: 'PASS' });
+  });
+
+  it('binds production explicitly without inventing an issuer environment allowlist', async () => {
+    const production = { ...binding, target: { ...binding.target, environment: 'production' } };
+    expect(await evaluateOriginGate(input({ target: production.target, approval: attestation('approval', { binding: production }), evidence: attestation('deployment', { binding: production }) }), setup().context)).toMatchObject({ decision: 'PASS' });
+  });
+
+  it('checks approval before evidence, and freshness before signed verdicts', async () => {
+    expect(await evaluateOriginGate(input({ approval: attestation('approval', { verdict: 'unknown' }), evidence: attestation('deployment', { verdict: 'unreal' }) }), setup().context)).toMatchObject({ decision: 'ESCALATE', reason_code: 'GATE_ESCALATE_AUTHORITY_UNKNOWN' });
+    expect(await evaluateOriginGate(input({ approval: attestation('approval', { verdict: 'deny', expiresAt: new Date(now).toISOString() }) }), setup().context)).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_STALE_EVIDENCE' });
+    expect(await evaluateOriginGate(input({ evidence: undefined, approval: undefined }), setup().context)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_CLAIM_MISMATCH' });
+  });
+
+  it('independently authenticates all four decision receipts with Node crypto', async () => {
+    for (const proposal of [input(), input({ approval: undefined }), input({ evidence: undefined }), input({ approval: attestation('approval', { verdict: 'unknown' }) })]) {
+      expectAuthenticReceipt(await evaluateOriginGate(proposal, setup().context));
+    }
+  });
+
+  it.each(['decision', 'reason', 'reason_code', 'body', 'signature', 'hash', 'request', 'retained'])('fails closed on a retained receipt with altered %s', async (field) => {
+    const { context, store } = setup();
+    const accepted = await evaluateOriginGate(input(), context);
+    const altered = structuredClone(accepted);
+    if (field === 'decision') altered.decision = 'HOLD';
+    if (field === 'reason') altered.reason = 'Forged reason';
+    if (field === 'reason_code') altered.reason_code = 'FORGED';
+    if (field === 'body') altered.receipt.artifact_hash = 'f'.repeat(64);
+    if (field === 'signature') altered.receipt.signature = '0'.repeat(64);
+    if (field === 'hash') altered.receipt.receipt_hash = '0'.repeat(64);
+    if (field === 'request') altered.receipt.request_hash = '0'.repeat(64);
+    if (field === 'retained') altered.receipt.retained = false;
+    vi.mocked(store.commit).mockResolvedValue({ status: 'existing', evaluation: altered });
+    expect(await evaluateOriginGate(input(), context)).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_RUNTIME_UNAVAILABLE', receipt: { retained: false } });
+  });
+
+  it('does not reaccept a retained PASS after signing-secret rotation or a policy read failure', async () => {
+    const { context, store } = setup();
+    expect((await evaluateOriginGate(input(), context)).decision).toBe('PASS');
+    expect(await evaluateOriginGate(input(), { ...context, signingSecret: 'rotated-offline-secret-at-least-32-characters' })).toMatchObject({ decision: 'HOLD', receipt: { retained: false } });
+    vi.mocked(store.readPolicy).mockRejectedValue(new Error('offline'));
+    expect(await evaluateOriginGate(input(), context)).toMatchObject({ decision: 'HOLD', receipt: { retained: false } });
+  });
   it('PASSes independently signed, exact-bound approval and evidence and retains a signed receipt', async () => {
     const { context, store } = setup();
     const result = await evaluateOriginGate(input(), context);
@@ -265,12 +407,19 @@ describe.runIf(process.env.ORIGIN_GATE_REDIS_TESTS === '1')('Origin G.A.T.E. iso
   beforeEach(async () => {
     await redis.flushDb();
     await redis.set(ORIGIN_GATE_POLICY_KEY, JSON.stringify(policy));
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('NEXTAUTH_URL', 'https://offline-studio.example.test');
+    vi.stubEnv('NEXTAUTH_SECRET', setup().context.signingSecret);
+    for (const key of ['V0_SANDBOX_URL', 'V0_RUNTIME_URL', 'V0_BUILD_URL', 'KV_REST_API_READ_ONLY_TOKEN']) vi.stubEnv(key, '');
+    start.mockClear();
     vi.stubEnv('KV_REST_API_URL', '');
     vi.stubEnv('KV_REST_API_TOKEN', '');
     vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://offline-gate.example.test');
     vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'offline-only');
     vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
       expect(url).toBe('https://offline-gate.example.test');
+      expect(options).toMatchObject({ method: 'POST', cache: 'no-store', redirect: 'error' });
+      expect(new Headers(options.headers).get('authorization')).toBe('Bearer offline-only');
       const args = JSON.parse(String(options.body)) as Array<string | number>;
       expect(['GET', 'EVAL']).toContain(args[0]);
       const result = await redis.sendCommand(args.map(String));
@@ -378,6 +527,135 @@ describe.runIf(process.env.ORIGIN_GATE_REDIS_TESTS === '1')('Origin G.A.T.E. iso
     expect(await redis.get(receiptKey(held))).toBe(raw);
     expect(await redis.ttl(receiptKey(accepted))).toBe(-1);
     expect(await redis.zCard(await quotaKey())).toBe(1);
+  });
+
+  describe('real route → NextAuth → evaluator → REST adapter → Lua', () => {
+    let session: string;
+    beforeEach(async () => {
+      // Freeze JWT and evaluator time together, leaving process/socket cleanup timers real.
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(now);
+      session = await encode({ secret: setup().context.signingSecret, token: { sub: binding.subject }, maxAge: 900 });
+    });
+    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+    function request(body: unknown, options: { session?: string; origin?: string; path?: string; contentType?: string; raw?: string } = {}) {
+      return new NextRequest(`https://offline-studio.example.test${options.path ?? '/api/gate/transitions'}`, {
+        method: 'POST',
+        headers: {
+          origin: options.origin ?? 'https://offline-studio.example.test',
+          'content-type': options.contentType ?? 'application/json',
+          cookie: `__Secure-next-auth.session-token=${options.session ?? session}`,
+        },
+        body: options.raw ?? JSON.stringify(body),
+      });
+    }
+    async function submit(proposal: unknown = input()) {
+      const response = await acceptTransition(request(proposal));
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const payload = await response.json() as { ok: boolean; gate: OriginGateEvaluation };
+      expectAuthenticReceipt(payload.gate);
+      return { response, ...payload };
+    }
+
+    it('returns HTTP 200 only with the authentic retained record and permanent replay markers', async () => {
+      const { response, ok, gate } = await submit();
+      expect(response.status).toBe(200);
+      expect(ok).toBe(true);
+      expect(gate).toMatchObject({ decision: 'PASS', receipt: { retained: true, authority: { claim: binding.subject }, artifact_hash: binding.artifactHash, target: binding.target } });
+      expect(JSON.parse((await redis.get(receiptKey(gate)))!)).toEqual(gate);
+      expect(await redis.ttl(receiptKey(gate))).toBe(-1);
+      const markers = [...await redis.keys('er:gate:v2:transition:*'), ...await redis.keys('er:gate:v2:nonce:*')];
+      expect(markers).toHaveLength(3);
+      for (const key of markers) {
+        expect(await redis.get(key)).toBe(gate.receipt.request_hash);
+        expect(await redis.ttl(key)).toBe(-1);
+      }
+      expect(start).not.toHaveBeenCalled();
+    });
+
+    it.each(['HOLD', 'REJECT', 'ESCALATE'])('returns HTTP 409 with a real retained %s', async (decision) => {
+      const proposal = decision === 'HOLD' ? pending('missing') : decision === 'REJECT' ? input({ evidence: attestation('deployment', { verdict: 'unreal' }) }) : input({ approval: attestation('approval', { issuer: 'unregistered' }) });
+      const { response, ok, gate } = await submit(proposal);
+      expect(response.status).toBe(409);
+      expect(ok).toBe(false);
+      expect(gate.decision).toBe(decision);
+      expect(JSON.parse((await redis.get(receiptKey(gate)))!)).toEqual(gate);
+      expect(await redis.keys('er:gate:v2:transition:*')).toEqual([]);
+      expect(await redis.keys('er:gate:v2:nonce:*')).toEqual([]);
+    });
+
+    it.each(['missing', 'forged', 'expired', 'cross-origin'])('denies %s identity before any storage call', async (kind) => {
+      const invalidSession = kind === 'forged' ? await encode({ secret: 'not-the-offline-session-secret', token: { sub: binding.subject } }) : kind === 'expired' ? await encode({ secret: setup().context.signingSecret, token: { sub: binding.subject }, maxAge: -60 }) : '';
+      const response = await acceptTransition(request(input(), kind === 'cross-origin' ? { origin: 'https://untrusted.example.test' } : { session: invalidSession }));
+      expect(response.status).toBe(kind === 'cross-origin' ? 403 : 401);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(fetch).not.toHaveBeenCalled();
+      expect(await redis.keys('er:gate:v2:receipt:*')).toEqual([]);
+    });
+
+    it('rejects caller-supplied identity and signed evidence belonging to another session', async () => {
+      const supplied = await submit(input({ subject: 'forged-owner' }));
+      expect(supplied.gate).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_INVALID_TRANSITION', receipt: { retained: false } });
+      expect(fetch).not.toHaveBeenCalled();
+      session = await encode({ secret: setup().context.signingSecret, token: { sub: 'different-authenticated-owner' } });
+      const other = await submit();
+      expect(other.gate).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_ATTESTATION_MISMATCH', receipt: { authority: { claim: 'different-authenticated-owner' } } });
+      expect(await redis.keys('er:gate:v2:transition:*')).toEqual([]);
+    });
+
+    it.each([
+      ['malformed JSON', { raw: '{' }, 400],
+      ['wrong content type', { contentType: 'text/plain' }, 415],
+      ['oversized JSON', { raw: JSON.stringify({ padding: 'x'.repeat(33_000) }) }, 413],
+    ])('denies %s before evaluation', async (_label, options, status) => {
+      const response = await acceptTransition(request({}, options as Parameters<typeof request>[1]));
+      expect(response.status).toBe(status);
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it('never authorizes a transition when the REST transport is unavailable', async () => {
+      vi.mocked(fetch).mockRejectedValueOnce(new Error('offline-only transport failure'));
+      const { response, ok, gate } = await submit();
+      expect(response.status).toBe(409);
+      expect(ok).toBe(false);
+      expect(gate).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_RUNTIME_UNAVAILABLE', receipt: { retained: false } });
+      expect(await redis.keys('er:gate:v2:receipt:*')).toEqual([]);
+    });
+
+    it('returns one identical retained PASS for concurrent authenticated retries', async () => {
+      const results = await Promise.all([submit(), submit(), submit()]);
+      for (const result of results) {
+        expect(result.response.status).toBe(200);
+        expect(result.gate).toEqual(results[0].gate);
+      }
+      expect(await redis.keys('er:gate:v2:receipt:*')).toHaveLength(1);
+      expect(await redis.keys('er:gate:v2:transition:*')).toHaveLength(1);
+      expect(await redis.keys('er:gate:v2:nonce:*')).toHaveLength(2);
+    });
+
+    it('allows only one conflicting authenticated acceptance for the same transition', async () => {
+      const results = await Promise.all([submit(), submit(input({ approval: attestation('approval', { nonce: 'other-approval' }), evidence: attestation('deployment', { nonce: 'other-evidence' }) }))]);
+      expect(results.map((result) => result.response.status).sort()).toEqual([200, 409]);
+      const rejected = results.find((result) => !result.ok)!;
+      expect(rejected.gate).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_REPLAY', receipt: { retained: false } });
+      expect(await redis.keys('er:gate:v2:receipt:*')).toHaveLength(1);
+      expect(await redis.keys('er:gate:v2:nonce:*')).toHaveLength(2);
+    });
+
+    it('does not execute the legacy deployment even with a valid envelope and retained PASS', async () => {
+      const accepted = await submit();
+      expect(accepted.response.status).toBe(200);
+      const response = await deploymentPreflight(request({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag', ...input(), gate: accepted.gate }, { path: '/api/workflows/studio-deploy' }));
+      expect(response.status).toBe(409);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const payload = await response.json();
+      expect(payload).toMatchObject({ ok: false, gate: { decision: 'HOLD', reason_code: 'GATE_HOLD_MISSING_EVIDENCE', receipt: { retained: true, artifact_hash: null } } });
+      expect(payload).not.toHaveProperty('runId');
+      expect(start).not.toHaveBeenCalled();
+      expect(JSON.parse((await redis.get(receiptKey(accepted.gate)))!)).toEqual(accepted.gate);
+      expect(await redis.keys('er:gate:v2:transition:*')).toHaveLength(1);
+    });
   });
 
   it('bounds a legacy permanent non-PASS receipt when it is next re-evaluated', async () => {

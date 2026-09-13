@@ -23,6 +23,34 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Studio authoritative gate receipt', () => {
+  it.each(['PASS', 'HOLD', 'REJECT', 'ESCALATE'] as const)('displays server %s without inventing deployment links or execution', async (decision) => {
+    const receipt = { ...gate, decision, retained: true, reason: `${decision}: isolated server decision.`, reason_code: `GATE_${decision}` };
+    vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: decision === 'PASS' ? 200 : 409, gate: receipt });
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-deploy-button'));
+    await screen.findByTestId('studio-gate-receipt');
+    expect(screen.getByTestId('studio-gate-decision').textContent).toBe(decision);
+    expect(screen.getByTestId('studio-gate-reason').textContent).toBe(receipt.reason);
+    expect(screen.getByTestId('studio-gate-receipt-id').textContent).toBe(receipt.receiptId);
+    expect(screen.getByTestId('studio-gate-receipt-hash').textContent).toBe(receipt.receiptHash);
+    expect(screen.getByText(/Transition: transition-test.*Receipt retained/)).toBeTruthy();
+    expect(screen.getByText('Server decision. Later stages require separate Loop approval.')).toBeTruthy();
+    expect(screen.queryByTestId('studio-gate-live-url')).toBeNull();
+    expect(screen.queryByText(/deploy live|deployment succeeded|deploy completed/i)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Check preflight' }).hasAttribute('disabled')).toBe(false);
+  });
+
+  it('labels a missing server receipt as a local diagnostic, never retained authorization', async () => {
+    vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: 503, error: 'Offline runtime unavailable.' });
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-deploy-button'));
+    const receipt = await screen.findByTestId('studio-gate-receipt');
+    expect(receipt.textContent).toContain('Local diagnostic only — not an authorization receipt.');
+    expect(receipt.textContent).toContain('eventrelay.gate-receipt.v1');
+    expect(receipt.textContent).not.toContain('Receipt retained');
+    expect(receipt.textContent).not.toContain('Server decision.');
+    expect(screen.queryByTestId('studio-gate-live-url')).toBeNull();
+  });
   it('labels idle and pending actions as preflight only, with deployment unavailable', async () => {
     let finish!: (result: Awaited<ReturnType<typeof startStudioDeploy>>) => void;
     vi.mocked(startStudioDeploy).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));

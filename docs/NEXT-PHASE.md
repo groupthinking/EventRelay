@@ -14,16 +14,17 @@ Origin G.A.T.E. is the only cut authorized by root policy. The requested impleme
 
 Studio distinguishes authoritative server decisions from local diagnostics. A valid HTTPS hostname is no longer upgraded into verified deployment evidence. The legacy deployment kickoff is held because regenerating from a video cannot guarantee the approved artifact bytes.
 
-**Operational acceptance remains pending.** An authorized runtime owner must register real Loop/verifier public keys and supply fresh, actual artifact/provider evidence for an authenticated acceptance run. No production registry, issuer keys, deployment, or later-phase approval is created by the tests or this document. The gate verifies external verifier attestations; provider execution/health verification is not implemented by this cut.
+## Implementation-proof handoff — 2026-09-13
 
-## Proposed implementation sequence
+The approved cut verifies the existing implementation rather than restarting it. The [contract evidence record and named-test matrix](gate-transition-contract.md#executable-contract-map) identify the tested baseline/worktree, commands, runtime versions, reports, and limitations.
 
-1. **Lock the contract slice.** Name the exact transition, caller, required evidence, evidence verifier, and what stays proposed. Preserve compatibility with the existing [gate contract](gate-transition-contract.md).
-2. **Bind authority and evidence at the owned server boundary.** Derive authority from the actual trusted context; tie accepted receipts to the expected run/artifact and permitted target. Do not trust browser actor strings as authorization.
-3. **Handle retries and negative evidence.** Define idempotency and reject/hold/escalate behavior for stale, replayed, mismatched, unknown, missing, or unavailable results. Keep receipt retention with its approved runtime owner, not inside a new G.A.T.E. database.
-4. **Verify the exact user path.** Run focused contract and route tests, then exercise Studio's receipt display, auth denial, missing-backend, pending, and accepted-result paths. Record what was actually verified.
+- **Software-contract verification:** 326 focused tests passed across 9 files, with no failures or skips. Exact binding, both signer roles, decision precedence, cryptographic receipt checks, freshness, replay/retention and consumer behavior are covered. The full web suite passed 1,169 tests across 119 files, with one unrelated opt-in Video Pack test skipped. Web type-check, targeted lint, CI YAML checks and lock consistency passed.
+- **Isolated integration verification:** all 26 actual-Lua Redis cases executed, including 16 real route → NextAuth → evaluator → REST adapter → Lua cases. A fake external transport forwards only to disposable Unix-socket Redis, never the connected store. Valid acceptance still cannot start the legacy deployment. Component tests cover all four decisions and stale-selection isolation; a local browser smoke confirmed the explicit preflight-only UI.
+- **Production authorization/acceptance not established:** hosted storage, independent operational key ownership, actual provider evidence/health, authenticated browser acceptance, deployed routing and remote CI were not verified. No registry, credentials, production data, deployment, operational PASS or later-phase approval was created. These checks were excluded by the approved scope, not treated as prerequisites for software verification.
 
-No step authorizes deploying, adding credentials, mutating production data, or weakening the current gate.
+The only production change is a regression-proven one-line receipt-consumer guard: envelope reasons/codes must match the receipt before being shown as a server decision. Evaluator, session verification, REST storage, Lua, and deployment execution remain unchanged. CI now opts into the required Redis tests and retains its machine-readable report on success or failure; no remote run/artifact is claimed yet.
+
+**Next ownership decision:** UVAI Loop may separately authorize an operational acceptance exercise or another named cut. Do not request authority records again merely to repeat the offline proof, or interpret test fixtures as that authorization. Do not deploy, add credentials, mutate production data, or weaken the gate.
 
 ## Acceptance
 
@@ -39,10 +40,10 @@ No step authorizes deploying, adding credentials, mutating production data, or w
 From repository root:
 
 ```bash
-npm exec --workspace=apps/web --no -- vitest run src/lib/__tests__/origin-gate.test.ts src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/studio-workflow.test.ts src/lib/__tests__/auth-paths.test.ts src/app/api/gate/transitions/__tests__/route.test.ts src/app/api/workflows/studio-deploy/__tests__/route.test.ts src/components/__tests__/OneLoopStudio.gate.test.tsx
+npm --workspace=apps/web run test:gate -- --reporter=default --reporter=json --outputFile.json=/tmp/origin-gate-focused.json
 ```
 
-Then add checks for the approved implementation boundary; this command alone does not prove server-side authorization or a live deployment.
+Use the declared npm 10.8.0 and a local `redis-server` or `redis6-server`. The script enables all required isolated gate cases and fails if Redis is unavailable. It proves the named software boundary with offline fixtures, not production authority or a live deployment; see the contract record for the full regression/static checks and historical observations.
 
 ## Held work
 
