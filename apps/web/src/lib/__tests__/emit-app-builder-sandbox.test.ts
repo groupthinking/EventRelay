@@ -227,8 +227,6 @@ describe('buildStudioShipPackage', () => {
               content: event.content,
               confidence: 0.9,
             })),
-            summary: 'Roadside tire replacement tools.',
-            frame_analysis_count: 4,
           },
         },
         requirements: QJ_SOP_STEPS.map((step) => ({
@@ -387,8 +385,6 @@ describe('buildStudioShipPackage (second-video XYMcBrFSJ4c)', () => {
               content: event.content,
               confidence: 0.9,
             })),
-            summary: 'Live functional demos of n8n, Make, Retell AI, and Voiceflow.',
-            frame_analysis_count: 12,
           },
         },
         requirements: XYMC_SOP_STEPS.map((step) => ({

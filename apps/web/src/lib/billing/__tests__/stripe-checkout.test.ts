@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resetKaizenTracesForTests } from '../kaizen-trace';
 
 const createMock = vi.fn().mockResolvedValue({
@@ -18,13 +18,14 @@ vi.mock('stripe', () => {
 beforeEach(() => {
   resetKaizenTracesForTests();
   createMock.mockClear();
-  process.env.STRIPE_SECRET_KEY = 'sk_test_mock';
-  process.env.STRIPE_PRICE_PRO_MONTHLY = 'price_monthly_env';
-  process.env.STRIPE_PRICE_PRO_ANNUAL = 'price_annual_env';
-  delete process.env.NEXT_PUBLIC_APP_URL;
-  // @ts-expect-error read-only property
-    process.env.NODE_ENV = 'test';
+  vi.stubEnv('STRIPE_SECRET_KEY', 'sk_test_mock');
+  vi.stubEnv('STRIPE_PRICE_PRO_MONTHLY', 'price_monthly_env');
+  vi.stubEnv('STRIPE_PRICE_PRO_ANNUAL', 'price_annual_env');
+  vi.stubEnv('NEXT_PUBLIC_APP_URL', undefined);
+  vi.stubEnv('NODE_ENV', 'test');
 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 describe('createProCheckoutSession', () => {
   it('creates subscription session with env price id', async () => {
@@ -45,8 +46,7 @@ describe('createProCheckoutSession', () => {
 
   it('throws in production when monthly price id is missing', async () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
-    // @ts-expect-error read-only property
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await expect(
       createProCheckoutSession({ annual: false, flow: 'acquisition' }),
@@ -56,8 +56,7 @@ describe('createProCheckoutSession', () => {
   it('never falls back to dead EventRelay Pro $19/$180 price IDs', async () => {
     delete process.env.STRIPE_PRICE_PRO_MONTHLY;
     delete process.env.STRIPE_PRICE_PRO_ANNUAL;
-    // @ts-expect-error read-only property
-    process.env.NODE_ENV = 'test';
+    vi.stubEnv('NODE_ENV', 'test');
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await createProCheckoutSession({ annual: false, flow: 'acquisition' });
     await createProCheckoutSession({ annual: true, flow: 'acquisition' });
@@ -72,8 +71,7 @@ describe('createProCheckoutSession', () => {
 
   it('sends production success and cancel URLs to https://uvai.io/pricing', async () => {
     delete process.env.NEXT_PUBLIC_APP_URL;
-    // @ts-expect-error read-only property
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await createProCheckoutSession({ annual: false, flow: 'acquisition' });
     const args = createMock.mock.calls[createMock.mock.calls.length - 1][0];
@@ -85,7 +83,7 @@ describe('createProCheckoutSession', () => {
 
   it('ignores NEXT_PUBLIC_APP_URL for production checkout URLs (fail-closed)', async () => {
     process.env.NEXT_PUBLIC_APP_URL = 'https://preview.example.com/';
-    process.env.NODE_ENV = 'production';
+    vi.stubEnv('NODE_ENV', 'production');
     const { createProCheckoutSession } = await import('../stripe-checkout');
     await createProCheckoutSession({ annual: true, flow: 'acquisition' });
     const args = createMock.mock.calls[createMock.mock.calls.length - 1][0];
