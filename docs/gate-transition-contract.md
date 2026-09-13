@@ -70,6 +70,12 @@ The Studio adapter may assert Zero-Sim `real` only after `studioVerifiedLiveUrl`
 
 Mission advance is not implemented in this repo; do not invent a Mission Workspace gate here.
 
+## Current evidence boundary
+
+The current Studio integration calls this client-safe module with `authority: { actor: 'anonymous' }`. Recognizing that actor label is policy classification, not session authentication or authorization. The adapter's `real` signal comes from `studioVerifiedLiveUrl`; it does not independently verify a provider deployment, ownership, reachability, or the generated artifact. Canonical SHA-256 makes the receipt content-addressable; it is not a cryptographic signature proving who issued it.
+
+The module emits receipts but does not persist them or prevent a backend side effect by itself. Keep this existing behavior distinct from proposed server-bound evidence and authority checks in [NEXT-PHASE.md](NEXT-PHASE.md). Any stronger verification or retention contract needs its own approved scope, implementation, and current evidence; this clarification does not change the locked URL bar or existing decisions.
+
 ## Tests
 
 ```bash

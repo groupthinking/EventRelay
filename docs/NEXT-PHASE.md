@@ -1,56 +1,52 @@
-# Next phase — P3 Act same run
+# Next phase — Origin G.A.T.E.
 
-**Branch:** `feat/one-loop-studio`  
-**Goal command:** see [GOAL.md](./GOAL.md)  
-**Live view:** `~/BrainVault/UVAI-EventRelay-SSOT/17-ONE-LOOP-LIVE.md`
+- **Reviewed:** 2026-09-13
+- **Authority:** [../AGENTS.md](../AGENTS.md)
+- **Plan:** [MASTER_ROADMAP.md](MASTER_ROADMAP.md)
 
-P1 is done (`/` and `/studio` call live `/api/pipeline/stream`).  
-**P3 implement + verify passed** (`uvai-one-loop-next`, 2026-08-15). Remaining: optional OneLoopStudio `#act-results` test; P2 is audit-pass (no local secret).
+The former P3 “Act on the same run” document described an earlier cut. Same-run actions already exist in `OneLoopStudio`; do not restart that work or use its historical `/` routing as current guidance. `/studio` is the canonical workbench.
 
-## Goal
+## Next owned slice
 
-After Analyze, the same page can Act. Results render here. No second product, no ADK, no Rickroll. Fixture: `auJzb1D-fag`.
+Origin G.A.T.E. is the only next cut authorized by root policy. UVAI Loop must confirm the exact slice before implementation, including whether previously parked live-URL verification is in scope. This document is a plan, not a new authorization or a claim that the slice has shipped.
 
-```
-/goal After Analyze on / , Act on the same run shows tool results on that page. Fixture auJzb1D-fag. Do not add ADK/LWP. Do not use dQw4w9WgXcQ.
-```
+**Goal:** make the approved consequential transition depend on trustworthy evidence and authority, without changing the existing fail-closed decision vocabulary or creating a second product.
 
-## Agents and workflows
+The current contract and Studio chip are already implemented. The remaining boundary to resolve is that the Studio caller supplies `anonymous` authority and the adapter treats a validated HTTPS hostname URL as its `real` evidence signal. That is not independently authenticated authority, provider ownership, deployment health, or artifact verification.
 
-Run one agent at a time, or the orchestrator.
+## Proposed implementation sequence
 
-| Agent | Workflow | Mode | Measurable pass | Fail |
-|-------|----------|------|-----------------|------|
-| **act-implementer** | `/uvai-p3-act` | read-write | `OneLoopStudio` Act uses the selected video’s transcript/events when present; results stay on `/` | Act only re-kicks URL with no on-page output |
-| **act-verifier** | `/uvai-p3-verify` | read-only | Code + curl/browser evidence that Act start returns `runId` and the UI has an Act-results surface | No file read, or only a plan |
-| **auth-auditor** | `/uvai-p2-auth` | read-only | `auth-paths.ts`: stream + video-to-actions public; studio-deploy gated; UI 401 → `/login` | Claims local 401 when `.env.local` has no `NEXTAUTH_SECRET` |
-| **hygiene** | `/uvai-p4-hygiene` | read-write | Launch Board stale rows noted; GitHub synced PR DB **not** deleted | Deletes the synced PR database |
-| **orchestrator** | `/uvai-one-loop-next` | gated | implement → verify (fail closed) → auth audit → hygiene | Continues after a failed verify |
+1. **Lock the contract slice.** Name the exact transition, caller, required evidence, evidence verifier, and what stays proposed. Preserve compatibility with the existing [gate contract](gate-transition-contract.md).
+2. **Bind authority and evidence at the owned server boundary.** Derive authority from the actual trusted context; tie accepted receipts to the expected run/artifact and permitted target. Do not trust browser actor strings as authorization.
+3. **Handle retries and negative evidence.** Define idempotency and reject/hold/escalate behavior for stale, replayed, mismatched, unknown, missing, or unavailable results. Keep receipt retention with its approved runtime owner, not inside a new G.A.T.E. database.
+4. **Verify the exact user path.** Run focused contract and route tests, then exercise Studio's receipt display, auth denial, missing-backend, pending, and accepted-result paths. Record what was actually verified.
 
-## Order (do not skip)
+No step authorizes deploying, adding credentials, mutating production data, or weakening the current gate.
 
-```
-P3 implement  →  P3 verify  →  P2 auth audit  →  P4 hygiene
-```
+## Acceptance
 
-P2 does **not** invent a local `NEXTAUTH_SECRET`. Production gate is already in `auth-paths.ts`.
+- Every scoped decision is exactly PASS, HOLD, REJECT, or ESCALATE.
+- Missing/weak required evidence stays HOLD; unreal evidence or an invalid live claim is REJECT; unknown authority/verdict is ESCALATE.
+- Known actor labels do not substitute for server authorization.
+- A completed workflow or generated bundle without the required receipt never becomes a live-success claim.
+- The visible receipt identifies the decision, reason, transition, and canonical hash; it is tied to the current run, not a stale selected video.
+- Tests exercise failure paths as well as the accepted case. Any fresh operational PASS cites the actual verification run.
 
-## Out of scope this phase
+## Starting checks
 
-ADK, LWP, Ultron, HF AV-Skills training, merging `research/uvai-landscape`, WDK C extras, deleting Notion GitHub sync.
+From repository root:
 
-## How to run
-
-```
-/goal After Analyze on / , Act on the same run shows tool results on that page. Fixture auJzb1D-fag. Do not add ADK/LWP. Do not use dQw4w9WgXcQ.
-/workflow uvai-one-loop-next
+```bash
+npm exec --workspace=apps/web --no -- vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/studio-workflow.test.ts src/lib/__tests__/auth-paths.test.ts
 ```
 
-One agent:
+Then add checks for the approved implementation boundary; this command alone does not prove server-side authorization or a live deployment.
 
-```
-/uvai-p3-act
-/uvai-p3-verify
-/uvai-p2-auth
-/uvai-p4-hygiene
-```
+## Held work
+
+- `asRecord` / claim changes unless this authorized cut specifically requires them.
+- Extractor expansion, new storage, or a broader assembly/build system without Loop approval.
+- Mission Workspace, Agent Factory / Slingshot, ExperienceOS, or a new FORGE product.
+- Replaying old App Builder VM/PR receipts as current evidence, deleting synced external records, or promoting production as “cleanup.”
+
+Use [GOAL.md](GOAL.md) only after the owned slice is confirmed. The later build-out sequence remains proposed in [MASTER_ROADMAP.md](MASTER_ROADMAP.md).

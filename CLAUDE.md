@@ -1,10 +1,12 @@
-# CLAUDE.md
+# UVAI — Claude Code Context
 
-This file provides context for Claude Code when working in the EventRelay repository.
+Read [AGENTS.md](AGENTS.md) first. Its locked product facts and scope take precedence over historical plans. The current execution boundary is [docs/NEXT-PHASE.md](docs/NEXT-PHASE.md); the evidence-based build-out plan is [docs/MASTER_ROADMAP.md](docs/MASTER_ROADMAP.md).
 
 ## Project Overview
 
-EventRelay is an AI-powered video automation platform that transforms YouTube videos into actionable workflows. It captures transcripts, extracts events, dispatches them to MCP (Model Context Protocol) agents, and builds a RAG-based knowledge store. The backend is Python/FastAPI and the frontend is a Next.js/React/TypeScript monorepo.
+UVAI (Universal Video Action Intelligence) turns a YouTube URL into a hashed Video Pack and grounded build rails. The public entry is `/`; `OneLoopStudio` at `/studio` is the canonical workbench, and legacy `/dashboard` skins redirect there. EventRelay is the internal Python/FastAPI runtime and repository name, not the public product. The web app uses Next.js App Router, React, and TypeScript.
+
+Video Pack extraction uses Gemini 3.8 Flash via Vercel AI Gateway. Production pack persistence is Upstash REST only. An App Builder workspace export is not proof of app recreation or deployment. Origin G.A.T.E. is the only authorized next cut; do not start adjacent product work or reopen held `asRecord` / claim work without the required authority.
 
 ## Repository Structure
 
@@ -54,22 +56,18 @@ mypy src/                                # Type check
 ### Frontend (Next.js)
 
 ```bash
-# Install all workspace dependencies
-npm install
+# Node.js >=22; packageManager is npm@10.8.0; root lockfile only
+npm ci
 
-# Build (all workspaces via Turbo)
-turbo run build
-# or: npm run build
+# Root scripts invoke the local Turbo binary
+npm run build
+npm run dev
+npm run lint
+npm run test
 
-# Dev server
-turbo run dev
-# or: npm run dev
-
-# Lint
-turbo run lint
-
-# Test
-turbo run test
+# Focus on the public web app
+npm run dev:web
+npm --workspace=apps/web run type-check
 ```
 
 ## Code Style
@@ -79,7 +77,7 @@ turbo run test
 - **Import sorting**: isort (profile: black)
 - **Linter**: Ruff (E, W, F, I, B, C4, UP rules; E501 ignored)
 - **Type checking**: mypy strict mode (`disallow_untyped_defs = true`)
-- Target Python 3.9+
+- Target Python 3.10+ (`pyproject.toml` is authoritative)
 - Config in `pyproject.toml`
 
 ### TypeScript/JavaScript
@@ -104,11 +102,12 @@ turbo run test
 
 - **Event-driven**: Events follow `<domain>.<entity>.<action>` naming (e.g. `youtube.video.captured`)
 - **Dependency injection**: Service container pattern in `backend/containers/`
-- **Multi-provider AI**: Routes to Gemini, OpenAI, Anthropic, or Grok
-- **MCP integration**: Agent orchestration via Model Context Protocol
-- **Database**: SQLite (dev), PostgreSQL (prod); migrations via Alembic
-- **Auth**: NextAuth.js (frontend), python-jose (backend)
-- **Monorepo**: Turbo for JS workspaces (`apps/*`, `packages/*`, `mcp-servers/*`)
+- **Product AI**: Video Pack extraction uses Gemini 3.8 Flash through Vercel AI Gateway; internal runtime paths also contain other provider integrations
+- **MCP integration**: Internal agent orchestration via Model Context Protocol
+- **Video Pack store**: Upstash REST only; never substitute a Redis TCP client or backend SQL store
+- **Other runtime data**: SQLAlchemy / Alembic and auxiliary stores exist; inspect the owning service before changing one
+- **Auth**: Existing NextAuth.js web configuration; backend auth has its own middleware policy. Do not infer one from the other
+- **Monorepo**: Turbo; root npm workspace membership is `apps/*`. Shared packages and MCP directories are not automatically npm workspaces
 
 ## Key Policies
 

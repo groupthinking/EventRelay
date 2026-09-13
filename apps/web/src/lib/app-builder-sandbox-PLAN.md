@@ -1,4 +1,6 @@
-# TASK: second-video→App Builder smoke (XYMcBrFSJ4c)
+# Completed cut record: second-video→App Builder smoke (XYMcBrFSJ4c)
+
+> Historical execution receipt, classified 2026-09-13. The checked steps, VM paths, smoke results, and draft-PR statement below describe the original run; they have not been freshly reverified by the documentation review. Preserve this evidence and its locked fixtures. It is not the current execution plan, proof of recreating the demonstrated app, or a production deployment receipt. Current scope is in [AGENTS.md](../../../../AGENTS.md), [NEXT-PHASE.md](../../../../docs/NEXT-PHASE.md), and [MASTER_ROADMAP.md](../../../../docs/MASTER_ROADMAP.md).
 
 ## 1. Goal & Scope
 * **Objective:** Lock App Builder sandbox emit for live pack `XYMcBrFSJ4c` (`vp:v0:XYMcBrFSJ4c`, source_hash `b7d0ea083b1f8a6146fd6db818896ed09abfaa3f92babf976f5c209e07d3b959`). Payload is transcript + visual events + SOP only. PASS is fixture + tests, materialize from live pack/sandbox JSON, `npm run build` + `npm run typecheck`, and `0.0.0.0:8080` smoke on this VM.

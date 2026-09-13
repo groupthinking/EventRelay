@@ -1,6 +1,6 @@
-# Video → GTM Revenue Architecture v3.0
+# Video → GTM Revenue Architecture v3.0 — historical design
 
-> This is the single editable source of truth for EventRelay's Video → GTM Revenue Architecture v3.0. Any duplicate copies should point here instead of being edited separately.
+> Historical March 2026 design, marked 2026-09-13. This remains the canonical copy of that design; duplicate architecture stubs should continue pointing here. Its implementation, deployment, provider, and product claims are not a fresh verification of today's UVAI system. Current authority is [../AGENTS.md](../AGENTS.md); current source navigation and proposed work are [REPO_MAP.md](REPO_MAP.md) and [MASTER_ROADMAP.md](MASTER_ROADMAP.md). Do not execute this historical plan as a new authorized cut.
 ## Complete End-to-End Pipeline Design — Video In → Deployed Site Out
 ## Date: March 20, 2026 (Updated from v2.0 March 13, 2026)
 ## Author: Lead Engineer + viralnowsales
