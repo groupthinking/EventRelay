@@ -45,6 +45,9 @@ const PUBLIC_API_EXACT = new Set([
   // Deterministic sandbox emit from a stored pack (no model work).
   '/api/video/sandbox',
   '/api/v1/video/sandbox',
+  // Planned assembly receipt from a stored pack (no npm, no model work).
+  '/api/video/assemble',
+  '/api/v1/video/assemble',
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
@@ -157,6 +160,8 @@ const IDENTITY_PACK_PATHS = new Set([
   '/api/v1/video/pack',
   '/api/video/sandbox',
   '/api/v1/video/sandbox',
+  '/api/video/assemble',
+  '/api/v1/video/assemble',
 ]);
 
 /** App-served frame JPEGs are identity-pack bytes, not model work. */
