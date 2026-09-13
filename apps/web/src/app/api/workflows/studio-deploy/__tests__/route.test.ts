@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { start, getToken, decide } = vi.hoisted(() => ({ start: vi.fn(), getToken: vi.fn(), decide: vi.fn() }));
 vi.mock('workflow/api', () => ({ start }));
@@ -16,9 +16,40 @@ const fixture = { url: 'https://www.youtube.com/watch?v=auJzb1D-fag' };
 describe('Studio deployment preflight', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NODE_ENV', 'test');
+    vi.stubEnv('NEXTAUTH_URL', 'https://uvai.io');
+    for (const key of ['V0_SANDBOX_URL', 'V0_RUNTIME_URL', 'V0_BUILD_URL']) vi.stubEnv(key, '');
     vi.stubEnv('NEXTAUTH_SECRET', 'unit-test-secret-with-at-least-32-characters');
     getToken.mockResolvedValue({ sub: 'owner-test' });
     decide.mockResolvedValue({ decision: 'HOLD', reason_code: 'GATE_HOLD_MISSING_EVIDENCE', reason: 'Artifact-bound receipts are missing.', receipt: { version: 'eventrelay.gate-receipt.v2' } });
+  });
+  afterEach(() => vi.unstubAllEnvs());
+
+  function previewRequest() {
+    vi.stubEnv('NODE_ENV', 'development');
+    vi.stubEnv('V0_BUILD_URL', 'https://preview.example.test');
+    return new NextRequest('http://localhost:3000/api/workflows/studio-deploy', {
+      method: 'POST',
+      headers: { origin: 'https://preview.example.test', 'content-type': 'application/json' },
+      body: JSON.stringify(fixture),
+    });
+  }
+
+  it('requires authentication for an approved development preview origin', async () => {
+    getToken.mockResolvedValue(null);
+    const res = await POST(previewRequest());
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ code: 'authentication_required' });
+    expect(decide).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('keeps the approved preview preflight held and never starts a deployment', async () => {
+    const res = await POST(previewRequest());
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ ok: false, gate: { decision: 'HOLD' } });
+    expect(decide).toHaveBeenCalledWith(expect.objectContaining({ kind: 'studio.deploy' }), 'owner-test');
+    expect(start).not.toHaveBeenCalled();
   });
 
   it('requires a real server session before any side effect', async () => {

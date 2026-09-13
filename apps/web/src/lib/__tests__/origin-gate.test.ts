@@ -212,6 +212,8 @@ describe('Origin G.A.T.E. Upstash REST adapter', () => {
     evaluation = await evaluateOriginGate(input(), setup().context);
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
+    vi.stubEnv('KV_REST_API_URL', '');
+    vi.stubEnv('KV_REST_API_TOKEN', '');
     vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://redis.example.test');
     vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-rest-token');
   });
@@ -248,6 +250,28 @@ describe('Origin G.A.T.E. Upstash REST adapter', () => {
     if (status === 'existing') expect(await store.commit(commitInput())).toEqual({ status, evaluation });
     else if (status === 'conflict') expect(await store.commit(commitInput())).toEqual({ status });
     else await expect(store.commit(commitInput())).rejects.toThrow();
+  });
+
+  it('uses the injected KV REST alias pair without a TCP client', async () => {
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    vi.stubEnv('KV_REST_API_URL', 'https://kv.example.test');
+    vi.stubEnv('KV_REST_API_TOKEN', 'offline-kv-token');
+    fetchMock.mockResolvedValue(response(rawPolicy));
+    expect(await createOriginGateStore().readPolicy()).toEqual(policy);
+    expect(fetchMock).toHaveBeenCalledWith('https://kv.example.test', expect.objectContaining({
+      method: 'POST',
+      headers: { authorization: 'Bearer offline-kv-token', 'content-type': 'application/json' },
+      body: JSON.stringify(['GET', ORIGIN_GATE_POLICY_KEY]),
+    }));
+  });
+
+  it.each(['both', 'url', 'token'])('HOLDs without retained evidence when REST credentials are missing: %s', async (missing) => {
+    if (missing !== 'token') vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    if (missing !== 'url') vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    const result = await evaluateOriginGate(input(), { ...setup().context, store: createOriginGateStore() });
+    expect(result).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_RUNTIME_UNAVAILABLE', receipt: { retained: false } });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('fails closed on an unavailable REST runtime', async () => {
