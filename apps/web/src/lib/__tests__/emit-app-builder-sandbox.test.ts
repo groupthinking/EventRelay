@@ -85,11 +85,16 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     const sandbox = emitFixture();
     const pkg = JSON.parse(sandbox.files['package.json']) as {
       scripts: Record<string, string>;
+      devDependencies: Record<string, string>;
     };
     expect(pkg.scripts.dev).toMatch(/--host\s+0\.0\.0\.0/);
     expect(pkg.scripts.dev).toMatch(/--port\s+8080/);
     expect(pkg.scripts.build).toBeTruthy();
     expect(pkg.scripts.typecheck).toMatch(/tsc/);
+    expect(pkg.devDependencies.typescript).toBe('5.7.3');
+    expect(pkg.devDependencies.vite).toBe('6.4.3');
+    expect(pkg.devDependencies.typescript.startsWith('^')).toBe(false);
+    expect(pkg.devDependencies.vite.startsWith('^')).toBe(false);
     expect(sandbox.files['tsconfig.json']).toContain('"noEmit"');
     expect(sandbox.files['vite.config.ts']).toMatch(/8080/);
   });
@@ -116,6 +121,9 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(html).toContain('scissor jack');
     expect(html).toContain('Safety and Vehicle Staging');
     expect(html).toContain('Star Pattern Torquing');
+    expect(html).toContain('data-testid="sop-check"');
+    expect(html).toContain('data-testid="assembly-honesty"');
+    expect(html).toContain('data-sop-id="REQ-01"');
     expect(html).not.toMatch(/shopify/i);
     expect(html).not.toMatch(/https:\/\/[a-z0-9-]+\.vercel\.app/i);
     expect(html).not.toMatch(/G\.A\.T\.E\. HOLD/i);

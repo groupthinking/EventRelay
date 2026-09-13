@@ -9,6 +9,7 @@
     "lint": "eslint src",
     "type-check": "tsc --noEmit",
     "test": "vitest run",
+    "assemble:app-builder": "vitest run src/lib/__tests__/assemble-app-builder.gates.test.ts",
     "analyze": "next experimental-analyze --output",
     "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs"
   },
