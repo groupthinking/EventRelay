@@ -223,3 +223,39 @@ def test_fixture_server_does_not_reflect_invalid_protocol_version_header() -> No
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+
+def test_current_upstream_skills_suite_is_pinned_and_fully_accounted_for() -> None:
+    module = _load_module()
+
+    assert module.CONFORMANCE_COMMIT == "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+
+    certified_server = {entry["scenario"] for entry in module.SERVER_SCENARIOS}
+    certified_client = {entry["scenario"] for entry in module.CLIENT_SCENARIOS}
+    excluded_server = {
+        scenario
+        for group in module.EXCLUSIONS["server"]
+        for scenario in group["scenarios"]
+    }
+    excluded_client = {
+        scenario
+        for group in module.EXCLUSIONS["client"]
+        for scenario in group["scenarios"]
+    }
+
+    skills_server = {
+        "sep-2640-skills-enumeration",
+        "sep-2640-skills-manifest",
+        "sep-2640-skills-directory",
+    }
+    skills_client = {
+        "sep-2640-client-no-prefetch",
+        "sep-2640-client-verify-digest",
+        "sep-2640-client-verify-size",
+        "sep-2640-client-verify-frontmatter",
+        "sep-2640-client-verify-unlisted-uri",
+    }
+
+    assert skills_server <= excluded_server
+    assert skills_client <= excluded_client
+    assert skills_server.isdisjoint(certified_server)
+    assert skills_client.isdisjoint(certified_client)
