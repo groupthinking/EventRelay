@@ -20,6 +20,19 @@ import {
 } from '@/lib/studio-pipeline-status';
 
 describe('studio-workflow (WDK Product v1)', () => {
+  it('preserves the server gate receipt on a blocked deployment', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 409,
+      json: async () => ({ ok: false, gate: {
+        decision: 'HOLD', reason: 'Artifact-bound evidence required.', reason_code: 'GATE_HOLD_MISSING_EVIDENCE',
+        receipt: { version: 'eventrelay.gate-receipt.v2', decision: 'HOLD', id: 'er:gate:v2:test', receipt_hash: 'a'.repeat(64), transition_id: 'transition-test', retained: false },
+      } }),
+    }));
+    const result = await startStudioDeploy({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' });
+    expect(result.ok).toBe(false);
+    expect(result.gate).toEqual({ decision: 'HOLD', reason: 'Artifact-bound evidence required.', reason_code: 'GATE_HOLD_MISSING_EVIDENCE', receiptId: 'er:gate:v2:test', receiptHash: 'a'.repeat(64), version: 'eventrelay.gate-receipt.v2', transitionId: 'transition-test', retained: false });
+  });
+
   it('prefers a failed-run cause over a generic unread-return message', () => {
     const cause = new Error('Deploy job job_1 still complete');
     const failed = new Error('Workflow run failed');
@@ -224,23 +237,18 @@ describe('studio-workflow (WDK Product v1)', () => {
     );
   });
 
-  it('startStudioDeploy sends a ready transcript so deploy can skip YouTube re-fetch', async () => {
+  it('keeps gate preflight bounded instead of resubmitting a large transcript', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ ok: true, runId: 'wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ' }),
+      ok: false,
+      status: 409,
+      json: async () => ({ ok: false, message: 'Artifact-bound evidence required.' }),
     });
     vi.stubGlobal('fetch', fetchMock);
-    const transcript =
-      'Studio Video Pack for XYMcBrFSJ4c already has a usable transcript ready for deploy.';
-    const started = await startStudioDeploy({
-      url: 'https://www.youtube.com/watch?v=XYMcBrFSJ4c',
-      transcript,
-    });
-    expect(started.ok).toBe(true);
+    const url = 'https://www.youtube.com/watch?v=auJzb1D-fag';
+    const started = await startStudioDeploy({ url, transcript: 'x'.repeat(40_000) });
+    expect(started.ok).toBe(false);
     const init = fetchMock.mock.calls[0]?.[1] as { body?: string };
-    const body = JSON.parse(String(init.body)) as { transcript?: string };
-    expect(body.transcript).toBe(transcript);
+    expect(JSON.parse(String(init.body))).toEqual({ url });
   });
 
   it('pollStudioDeploy returns on handoff result', async () => {

@@ -308,6 +308,7 @@ export default function OneLoopStudio({
     setApprovedSpecIds([]);
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(null);
+    setGateReceipt(null);
   }, [selectedVideoId]);
 
   useEffect(() => {
@@ -616,12 +617,15 @@ export default function OneLoopStudio({
     setDeployReceiptVideoId(attemptVideoId);
     setGateReceipt(null);
     try {
-      const started = await startStudioDeploy({
-        url: next,
-        transcript: usableProvidedTranscript(selected?.transcript),
-      });
+      const started = await startStudioDeploy({ url: next });
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
+        return;
+      }
+      if (started.gate) {
+        setGateReceipt(started.gate);
+        setMessage(started.gate.reason);
         return;
       }
       if (!started.ok || !started.runId) {
@@ -638,6 +642,7 @@ export default function OneLoopStudio({
       }
       setDeployRunId(started.runId);
       const polled = await pollStudioDeploy(started.runId);
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       const backendReason = studioDeployPollResidual(polled);
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
@@ -665,6 +670,7 @@ export default function OneLoopStudio({
         }),
       );
     } catch (err) {
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       const backendReason = studioDeployOutcomeMessage({
         error: err instanceof Error ? err.message : 'Deploy failed.',
         runStatus: 'failed',
@@ -804,6 +810,18 @@ export default function OneLoopStudio({
                 <p data-testid="studio-gate-reason" className="text-sm text-white/80">
                   {gateReceipt.reason}
                 </p>
+                <p className="text-sm text-white/55">
+                  {gateReceipt.version === 'eventrelay.gate-receipt.v2'
+                    ? 'Server decision. Later stages require separate Loop approval.'
+                    : 'Local diagnostic only — not an authorization receipt.'}
+                </p>
+                {gateReceipt.transitionId ? (
+                  <p className="break-all text-sm opacity-60">
+                    Transition: {gateReceipt.transitionId}
+                    {' · '}
+                    {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
+                  </p>
+                ) : null}
                 {scopedDeployReceipt ? (
                   <p className="mt-1">
                     <a

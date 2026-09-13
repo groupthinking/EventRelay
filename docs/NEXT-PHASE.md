@@ -8,11 +8,13 @@ The former P3 “Act on the same run” document described an earlier cut. Same-
 
 ## Next owned slice
 
-Origin G.A.T.E. is the only next cut authorized by root policy. UVAI Loop must confirm the exact slice before implementation, including whether previously parked live-URL verification is in scope. This document is a plan, not a new authorization or a claim that the slice has shipped.
+Origin G.A.T.E. is the only cut authorized by root policy. The requested implementation now covers the `studio.deploy` proposed-to-live acceptance boundary: session-derived identity, scoped independent Ed25519 attestations, exact artifact/run/target binding, signed retained receipts, and atomic replay protection. See the [current contract](gate-transition-contract.md).
 
-**Goal:** make the approved consequential transition depend on trustworthy evidence and authority, without changing the existing fail-closed decision vocabulary or creating a second product.
+**Goal:** make the approved consequential transition depend on trustworthy evidence and authority, without changing the fail-closed decision vocabulary or creating a second product.
 
-The current contract and Studio chip are already implemented. The remaining boundary to resolve is that the Studio caller supplies `anonymous` authority and the adapter treats a validated HTTPS hostname URL as its `real` evidence signal. That is not independently authenticated authority, provider ownership, deployment health, or artifact verification.
+Studio distinguishes authoritative server decisions from local diagnostics. A valid HTTPS hostname is no longer upgraded into verified deployment evidence. The legacy deployment kickoff is held because regenerating from a video cannot guarantee the approved artifact bytes.
+
+**Operational acceptance remains pending.** An authorized runtime owner must register real Loop/verifier public keys and supply fresh, actual artifact/provider evidence for an authenticated acceptance run. No production registry, issuer keys, deployment, or later-phase approval is created by the tests or this document. The gate verifies external verifier attestations; provider execution/health verification is not implemented by this cut.
 
 ## Proposed implementation sequence
 
@@ -37,7 +39,7 @@ No step authorizes deploying, adding credentials, mutating production data, or w
 From repository root:
 
 ```bash
-npm exec --workspace=apps/web --no -- vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/studio-workflow.test.ts src/lib/__tests__/auth-paths.test.ts
+npm exec --workspace=apps/web --no -- vitest run src/lib/__tests__/origin-gate.test.ts src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/studio-workflow.test.ts src/lib/__tests__/auth-paths.test.ts src/app/api/gate/transitions/__tests__/route.test.ts src/app/api/workflows/studio-deploy/__tests__/route.test.ts src/components/__tests__/OneLoopStudio.gate.test.tsx
 ```
 
 Then add checks for the approved implementation boundary; this command alone does not prove server-side authorization or a live deployment.
