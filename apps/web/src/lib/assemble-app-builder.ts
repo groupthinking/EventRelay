@@ -165,9 +165,12 @@ function pinnedDependencies(resolved: Record<string, string | null> = {}): Assem
 
 function sliceText(ingredients: AppBuilderSandboxIngredients): string {
   const transcript = ingredients.transcript.full_text ?? '';
-  const visual = ingredients.visualEvents.map((event) => event.content).join('\n');
+  const segments = (ingredients.transcript.segments ?? []).map((segment) => segment.text).join('\n');
+  const visual = ingredients.visualEvents
+    .map((event) => `${event.element_type ?? ''} ${event.content}`)
+    .join('\n');
   const sop = ingredients.sopSteps.map((step) => `${step.title}\n${step.description}`).join('\n');
-  return `${transcript}\n${visual}\n${sop}`;
+  return `${transcript}\n${segments}\n${visual}\n${sop}`;
 }
 
 function namedUnsupported(ingredients: AppBuilderSandboxIngredients): UnresolvedRequirement[] {

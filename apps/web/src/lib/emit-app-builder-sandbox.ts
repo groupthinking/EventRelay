@@ -196,7 +196,7 @@ function tsconfigJson(): string {
         strict: true,
         noEmit: true,
         skipLibCheck: true,
-        lib: ['ES2022', 'DOM'],
+        lib: ['ES2022', 'DOM', 'DOM.Iterable'],
       },
       include: ['src/**/*.ts', 'vite.config.ts'],
     },
@@ -361,7 +361,7 @@ function saveState(state: ChecklistState): void {
 }
 
 const state = loadState();
-const boxes = document.querySelectorAll<HTMLInputElement>('input[data-sop-id]');
+const boxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-sop-id]'));
 for (const box of boxes) {
   const id = box.dataset.sopId;
   if (!id) continue;
