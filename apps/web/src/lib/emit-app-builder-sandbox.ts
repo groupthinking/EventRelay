@@ -13,6 +13,12 @@ export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
 
+/** Exact pins for the assembled workspace — no caret ranges. */
+export const APP_BUILDER_PINNED_DEPS = {
+  typescript: '5.7.3',
+  vite: '6.4.3',
+} as const;
+
 const SOURCE_HASH = /^[a-f0-9]{64}$/;
 const TRANSCRIPT_EXCERPT = 900;
 
@@ -56,6 +62,12 @@ export type AppBuilderSandboxPreview = {
   gates: readonly ['npm run build', 'npm run typecheck'];
 };
 
+export type AppBuilderSandboxIngredients = {
+  transcript: AppBuilderTranscript;
+  visualEvents: AppBuilderVisualEvent[];
+  sopSteps: AppBuilderSopStep[];
+};
+
 export type AppBuilderSandbox = {
   contract: typeof APP_BUILDER_CONTRACT;
   cut: typeof APP_BUILDER_CUT;
@@ -64,6 +76,7 @@ export type AppBuilderSandbox = {
   sourceHash: string;
   packId: string;
   preview: AppBuilderSandboxPreview;
+  ingredients: AppBuilderSandboxIngredients;
   files: Record<string, string>;
 };
 
@@ -122,12 +135,14 @@ function sopList(steps: AppBuilderSopStep[]): string {
   if (steps.length === 0) {
     return '<p class="empty" data-testid="sop-empty">No SOP steps on this pack.</p>';
   }
-  return `<ol class="sop" data-testid="sop-steps">${steps
+  const items = steps
     .map((step) => {
-      const stamp = step.timestamp != null ? ` <span class="stamp">${escapeHtml(String(step.timestamp))}s</span>` : '';
-      return `<li><strong>${escapeHtml(step.title)}</strong>${stamp}<p>${escapeHtml(step.description)}</p></li>`;
+      const stamp =
+        step.timestamp != null ? ` <span class="stamp">${escapeHtml(String(step.timestamp))}s</span>` : '';
+      return `<li><label><input type="checkbox" data-testid="sop-check" data-sop-id="${escapeHtml(step.id)}" /> <strong>${escapeHtml(step.title)}</strong>${stamp}<p>${escapeHtml(step.description)}</p></label></li>`;
     })
-    .join('')}</ol>`;
+    .join('');
+  return `<ol class="sop" data-testid="sop-steps">${items}</ol><p class="honesty" data-testid="sop-checklist-note">Local checklist only — checking a step is not evidence the procedure was performed.</p>`;
 }
 
 function transcriptBlock(transcript: AppBuilderTranscript | null | undefined): string {
@@ -162,8 +177,8 @@ function packageJson(): string {
         preview: 'vite preview --host 0.0.0.0 --port 8080',
       },
       devDependencies: {
-        typescript: '^5.7.0',
-        vite: '^6.0.0',
+        typescript: APP_BUILDER_PINNED_DEPS.typescript,
+        vite: APP_BUILDER_PINNED_DEPS.vite,
       },
     },
     null,
@@ -181,7 +196,7 @@ function tsconfigJson(): string {
         strict: true,
         noEmit: true,
         skipLibCheck: true,
-        lib: ['ES2022', 'DOM'],
+        lib: ['ES2022', 'DOM', 'DOM.Iterable'],
       },
       include: ['src/**/*.ts', 'vite.config.ts'],
     },
@@ -248,6 +263,14 @@ h2 { font-size: 1.1rem; margin: 0 0 12px; }
 .stamp { color: var(--accent); font-size: 12px; }
 .transcript { white-space: pre-wrap; }
 button, [role="button"] { cursor: pointer; }
+.honesty {
+  font-size: 0.92rem;
+  border-left: 3px solid var(--accent);
+  padding: 8px 12px;
+  margin: 16px 0 0;
+}
+.sop label { display: block; cursor: pointer; }
+.sop input[type="checkbox"] { margin-right: 8px; accent-color: var(--accent); }
 `;
 }
 
@@ -265,6 +288,7 @@ function indexHtml(input: AppBuilderSandboxInput): string {
       <p class="eyebrow">UVAI▶ App Builder sandbox</p>
       <h1>Video Pack ${escapeHtml(input.videoId)}</h1>
       <p class="lede">Running preview from paste-URL ingest. Payload is transcript, visual events, and SOP steps — not invented architecture.</p>
+      <p class="honesty" data-testid="assembly-honesty">This workspace is a pack viewer and SOP checklist. It does not recreate the demonstrated application. No live deploy URL. G.A.T.E. studio.deploy stays parked.</p>
       <dl class="meta">
         <div><dt>Source</dt><dd>${escapeHtml(input.sourceUrl)}</dd></div>
         <div><dt>source_hash</dt><dd>${escapeHtml(input.sourceHash)}</dd></div>
@@ -311,6 +335,43 @@ if (root) {
   root.dataset.hydrated = 'true';
   root.dataset.videoId = pack.videoId;
 }
+
+const storageKey = \`uvai:sop-check:\${pack.videoId}:\${pack.sourceHash}\`;
+
+type ChecklistState = Record<string, boolean>;
+
+function loadState(): ChecklistState {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== 'object') return {};
+    return parsed as ChecklistState;
+  } catch {
+    return {};
+  }
+}
+
+function saveState(state: ChecklistState): void {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(state));
+  } catch {
+    // quota / private mode — checklist stays session-only
+  }
+}
+
+const state = loadState();
+const boxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-sop-id]'));
+for (const box of boxes) {
+  const id = box.dataset.sopId;
+  if (!id) continue;
+  box.checked = state[id] === true;
+  box.addEventListener('change', () => {
+    const next = loadState();
+    next[id] = box.checked;
+    saveState(next);
+  });
+}
 `;
 }
 
@@ -352,6 +413,7 @@ Payload: transcript + visual events + SOP steps. Architecture and code snippets 
 4. \`node scripts/browser-smoke.mjs\` — visible UI must include \`${input.videoId}\`.
 5. \`npm run build\` and \`npm run typecheck\` must pass.
 6. Optional \`mission.canvas\` is JSON Canvas 1.0 (https://github.com/groupthinking/jsoncanvas spec/1.0) from transcript + visual events + SOP only. Omitted when that slice is empty. Open in Obsidian or any JSON Canvas app. Keyframe \`image_path\` becomes a file node only when a captured frame was persisted.
+7. Assembly (not emit-only): from the EventRelay repo run \`node apps/web/scripts/assemble-app-builder.mjs --from-sandbox sandbox.json --out <dir>\` or the focused Vitest gates. HTTP \`/api/video/assemble\` returns the identity receipt with gates labeled untested.
 
 This cut does not claim a live deploy URL and does not run G.A.T.E. \`studio.deploy\`.
 `;
@@ -445,6 +507,11 @@ export function emitAppBuilderSandbox(input: AppBuilderSandboxInput): AppBuilder
     sourceHash,
     packId,
     preview: PREVIEW,
+    ingredients: {
+      transcript: normalized.transcript ?? { full_text: '', segments: [] },
+      visualEvents: normalized.visualEvents ?? [],
+      sopSteps: normalized.sopSteps ?? [],
+    },
     files: {
       'startup.sh': startupSh(),
       'package.json': packageJson(),

@@ -36,6 +36,8 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
   { method: 'GET', path: '/api/video/sandbox', summary: 'Materialize an App Builder Workspace sandbox from a stored Video Pack (startup.sh, 8080, browser-smoke, build/typecheck).' },
   { method: 'POST', path: '/api/video/sandbox', summary: 'Same sandbox emit by paste-URL identity. Requires a ready pack from POST /api/video/pack.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'GET', path: '/api/video/assemble', summary: 'Same stored-pack lookup as sandbox plus a planned assembly receipt (file hashes, pinned deps, unresolved requirements). Gates are labeled untested — HTTP does not run npm.' },
+  { method: 'POST', path: '/api/video/assemble', summary: 'Planned assembly receipt by paste-URL identity. Requires a ready pack. Does not install, build, or typecheck on the server.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
   { method: 'POST', path: '/api/workflows/video-to-actions', summary: 'Start the Studio analysis workflow.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
 ];
 
