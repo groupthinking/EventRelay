@@ -179,6 +179,8 @@ function withOAuthRetry(clientName, baseUrl, clientMetadataUrl) {
 }
 
 async function runAuthClient(serverUrl) {
+  const protocolVersion =
+    process.env.MCP_CONFORMANCE_PROTOCOL_VERSION ?? '2025-11-25';
   const client = new Client(
     { name: 'eventrelay-conformance-client', version: '1.0.0' },
     { capabilities: {} }
@@ -188,6 +190,41 @@ async function runAuthClient(serverUrl) {
     new URL(serverUrl),
     CIMD_CLIENT_METADATA_URL
   )(fetch);
+
+  // The 2026 draft is stateless: it carries lifecycle metadata on each
+  // request instead of performing the pre-2026 initialize handshake. Driving
+  // it through Client.connect() sends a second initialize request after OAuth
+  // and the official server correctly rejects that stale lifecycle.
+  if (protocolVersion === '2026-07-28') {
+    const response = await oauthFetch(serverUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+        'MCP-Protocol-Version': protocolVersion,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'tools/list',
+        params: {
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': protocolVersion,
+            'io.modelcontextprotocol/clientCapabilities': {},
+            'io.modelcontextprotocol/clientInfo': {
+              name: 'eventrelay-conformance-client',
+              version: '1.0.0',
+            },
+          },
+        },
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Stateless MCP request failed: ${response.status} ${await response.text()}`);
+    }
+    return;
+  }
+
   const transport = new StreamableHTTPClientTransport(new URL(serverUrl), {
     fetch: oauthFetch,
   });
