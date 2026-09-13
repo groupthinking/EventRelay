@@ -714,8 +714,11 @@ export async function POST(request: Request) {
                 status: 'error',
                 duration: parseFloat(((Date.now() - startTime) / 1000).toFixed(1)),
                 data: {
-                  totalAgents: 0,
-                  completedAgents: 0,
+                  // Same stage-progress contract as the quality-gate terminal
+                  // event in generateAgentEvents, so a client reads one shape
+                  // from either path. A hard failure completed no stages.
+                  totalStages: 4,
+                  completedStages: 0,
                   mode: streamMode,
                 },
                 timestamp: new Date().toISOString(),

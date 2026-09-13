@@ -16,13 +16,16 @@ env:
   # Pushes to `main` run against production by default. PRs must run against
   # the PR's own Vercel preview instead, either from the `E2E_BASE_URL`
   # repository variable or by auto-discovering the deployment URL below.
-  #   2. Provide `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret.
+  # `VERCEL_AUTOMATION_BYPASS_SECRET` must exist as a repository secret.
   #      Vercel previews return HTTP 401 to anonymous traffic; the test harness
   #      forwards this value as the `x-vercel-protection-bypass` header on every
-  #      request (see tests/e2e/pipeline.test.ts). Generate it under Vercel →
-  #      Project → Settings → Deployment Protection → Protection Bypass for
-  #      Automation. If no PR preview can be resolved, the workflow fails closed
-  #      rather than silently skipping the gate or probing production.
+  #      request (see tests/e2e/pipeline.test.ts). It is the project's
+  #      "Protection Bypass for Automation" value, under Vercel → Project →
+  #      Settings → Deployment Protection. Without it the suite fails fast with
+  #      an explicit missing-secret message rather than silently asserting
+  #      against Vercel's login page. If no PR preview can be resolved, the
+  #      workflow fails closed rather than silently skipping the gate or probing
+  #      production.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -47,7 +50,10 @@ jobs:
     name: E2E Pipeline Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
+    # No `continue-on-error` here. It used to sit on this job and neutralized the
+    # explicit `exit 1` in "Fail the job if tests failed" below, so the check
+    # reported success on every run regardless of the test verdict — 6 failing
+    # tests showed as a green check. The job verdict must reflect the tests.
 
     steps:
       - name: Checkout
@@ -120,8 +126,14 @@ jobs:
 
       - name: Run E2E tests
         id: e2e_tests
-        continue-on-error: true
         run: |
+          # The verdict travels out via PIPESTATUS, not via this step's exit code.
+          # Piping to `tee` makes the pipeline return tee's status, and the
+          # default `bash -e` shell here does not set pipefail, so this step exits
+          # 0 even when vitest fails. That is what allows the reporting steps
+          # below to run and post results; "Fail the job if tests failed" then
+          # converts a red verdict into a real job failure. The
+          # `continue-on-error` this step used to carry was therefore redundant.
           npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tee test-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
