@@ -32,6 +32,26 @@ function getBaseUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
+
+/**
+ * Headers for the same-origin self-fetches this route makes to /api/transcribe
+ * and /api/extract-events.
+ *
+ * Both targets are session-gated by proxy.ts (neither is in the public
+ * allowlist in `@/lib/auth-paths`), and a route-handler `fetch` does not carry
+ * the caller's cookies. Without the server-to-server token the proxy sees an
+ * anonymous request and returns 401, which this handler then swallows into
+ * "Verified captions or speech-to-text were unavailable." — a misleading
+ * failure that looks like a missing transcript rather than a broken internal
+ * hop. The token is the same trust mechanism the proxy already accepts.
+ */
+function internalHeaders(): Record<string, string> {
+  const token = process.env.INTERNAL_REQUEST_TOKEN?.trim();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'x-eventrelay-internal': token } : {}),
+  };
+}
 function buildEvidenceEnvelope(
   result: TranscriptionResult,
   requestedUrl: string,
@@ -244,10 +264,18 @@ export async function POST(request: Request) {
       const baseUrl = getBaseUrl(request);
       const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: internalHeaders(),
         body: JSON.stringify({ url }),
         signal: AbortSignal.timeout(15000),
       });
+      if (transcribeRes.status === 401 || transcribeRes.status === 403) {
+        // Internal hop rejected by the auth gate — a deployment fault, not a
+        // missing transcript. Say so instead of reporting "captions unavailable".
+        console.error(
+          '[video] internal /api/transcribe call was rejected by the auth gate; ' +
+            'set INTERNAL_REQUEST_TOKEN so server-to-server hops bypass the session check.',
+        );
+      }
       const transcribeResult = await transcribeRes.json();
       frontendEvidence = buildEvidenceEnvelope(transcribeResult, url);
       if (frontendEvidence) {
@@ -266,7 +294,7 @@ export async function POST(request: Request) {
         const baseUrl = getBaseUrl(request);
         const extractRes = await fetch(`${baseUrl}/api/extract-events`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: internalHeaders(),
           body: JSON.stringify({ transcript, videoUrl: url }),
           signal: AbortSignal.timeout(15000),
         });
