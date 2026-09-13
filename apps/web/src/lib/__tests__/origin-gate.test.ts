@@ -1,5 +1,10 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createClient } from 'redis';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { canonicalGateJson, hashCanonical } from '@/lib/gate-transition';
 import { evaluateOriginGate, type OriginGateEvaluation, type OriginGateStore } from '@/lib/origin-gate';
 import { COMMIT_ORIGIN_GATE_SCRIPT, createOriginGateStore, ORIGIN_GATE_POLICY_KEY } from '@/lib/origin-gate-store';
@@ -33,13 +38,13 @@ function input(changes = {}) {
   return { ...proposal, approval: attestation('approval'), evidence: attestation('deployment'), ...changes };
 }
 function setup(trust: unknown = policy) {
-  const receipts = new Map<string, unknown>();
+  const receipts = new Map<string, OriginGateEvaluation>();
   const transitions = new Map<string, string>();
   const nonces = new Map<string, string>();
   const store: OriginGateStore = {
     readPolicy: vi.fn(async () => trust),
     commit: vi.fn<OriginGateStore['commit']>(async ({ requestHash, transitionKey, nonceKeys, evaluation }) => {
-      if (receipts.has(requestHash)) return { status: 'existing', evaluation: receipts.get(requestHash) };
+      if (receipts.get(requestHash)?.decision === 'PASS') return { status: 'existing', evaluation: receipts.get(requestHash) };
       if (evaluation.decision === 'PASS') {
         if (transitions.has(transitionKey) || nonceKeys.some((key) => nonces.has(key))) return { status: 'conflict' };
         transitions.set(transitionKey, requestHash);
@@ -194,6 +199,13 @@ describe('Origin G.A.T.E. signed server boundary', () => {
     expect((await evaluateOriginGate(input(), { ...context, now: now + 60_001 })).decision).toBe('HOLD');
   });
 
+  it('does not claim retention when the per-user receipt quota is exhausted', async () => {
+    const { context, store } = setup();
+    vi.mocked(store.commit).mockResolvedValue({ status: 'quota' });
+    const result = await evaluateOriginGate({ transitionId: 'quota-test', kind: 'studio.deploy', fromState: 'proposed', toState: 'live' }, context);
+    expect(result).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_RETENTION_LIMIT', receipt: { retained: false } });
+  });
+
   it('HOLDs storage and signing failures instead of permitting a transition', async () => {
     const { context, store } = setup();
     vi.mocked(store.commit).mockRejectedValue(new Error('offline'));
@@ -201,6 +213,183 @@ describe('Origin G.A.T.E. signed server boundary', () => {
     expect(result.decision).toBe('HOLD');
     expect(result.receipt.retained).toBe(false);
     expect((await evaluateOriginGate(input(), { ...context, signingSecret: '' })).decision).toBe('HOLD');
+  });
+});
+
+// Opt-in executes the production Lua against a disposable Unix-socket Redis, never a configured store.
+describe.runIf(process.env.ORIGIN_GATE_REDIS_TESTS === '1')('Origin G.A.T.E. isolated Redis atomic commits', () => {
+  let server: ChildProcess;
+  let directory: string;
+  let redis: ReturnType<typeof createClient>;
+  const receiptKey = (result: OriginGateEvaluation) => `er:gate:v2:receipt:${result.receipt.request_hash}`;
+  const pending = (transitionId: string) => ({ transitionId, kind: 'studio.deploy', fromState: 'proposed', toState: 'live' });
+  const futureProposal = () => input({
+    approval: attestation('approval', { issuedAt: new Date(now + 60_000).toISOString(), expiresAt: new Date(now + 180_000).toISOString() }),
+    evidence: attestation('deployment', { expiresAt: new Date(now + 180_000).toISOString() }),
+  });
+  const evaluate = (proposal: unknown, time = now, subject = binding.subject) => evaluateOriginGate(proposal, {
+    subject, now: time, signingSecret: setup().context.signingSecret, store: createOriginGateStore(),
+  });
+  const quotaKey = async () => {
+    const keys = await redis.keys('er:gate:v2:pending:*');
+    expect(keys).toHaveLength(1);
+    return keys[0];
+  };
+
+  beforeAll(async () => {
+    const binary = ['redis-server', 'redis6-server'].find((name) => spawnSync(name, ['--version']).status === 0);
+    if (!binary) throw new Error('ORIGIN_GATE_REDIS_TESTS requires redis-server or redis6-server; no external store is used.');
+    directory = await mkdtemp(join(tmpdir(), 'origin-gate-test-'));
+    const socketPath = join(directory, 'redis.sock');
+    server = spawn(binary, ['--port', '0', '--unixsocket', socketPath, '--unixsocketperm', '700', '--save', '', '--appendonly', 'no'], {
+      env: { PATH: process.env.PATH, NODE_ENV: 'test' }, stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Isolated Redis did not become ready')), 5000);
+      server.once('error', (error) => { clearTimeout(timeout); reject(error); });
+      server.once('exit', (code) => { clearTimeout(timeout); reject(new Error(`Isolated Redis exited: ${code}`)); });
+      server.stdout!.on('data', (data: Buffer) => {
+        if (/ready to accept connections/i.test(data.toString())) { clearTimeout(timeout); resolve(); }
+      });
+    });
+    redis = createClient({ socket: { path: socketPath, reconnectStrategy: false } });
+    await redis.connect();
+  });
+  afterAll(async () => {
+    if (redis?.isOpen) redis.destroy();
+    if (server && server.exitCode === null) {
+      await new Promise<void>((resolve) => { server.once('exit', () => resolve()); server.kill(); });
+    }
+    if (directory) await rm(directory, { recursive: true, force: true });
+  });
+  beforeEach(async () => {
+    await redis.flushDb();
+    await redis.set(ORIGIN_GATE_POLICY_KEY, JSON.stringify(policy));
+    vi.stubEnv('KV_REST_API_URL', '');
+    vi.stubEnv('KV_REST_API_TOKEN', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://offline-gate.example.test');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'offline-only');
+    vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => {
+      expect(url).toBe('https://offline-gate.example.test');
+      const args = JSON.parse(String(options.body)) as Array<string | number>;
+      expect(['GET', 'EVAL']).toContain(args[0]);
+      const result = await redis.sendCommand(args.map(String));
+      return { ok: true, json: async () => ({ result }) };
+    }));
+  });
+  afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+
+  it.each(['HOLD', 'REJECT', 'ESCALATE'])('bounds %s receipt and quota-index retention to 24 hours', async (decision) => {
+    const proposal = decision === 'HOLD' ? pending('pending-test') : decision === 'REJECT' ? input({ evidence: undefined }) : input({ approval: attestation('approval', { issuer: 'unknown-issuer' }) });
+    const result = await evaluate(proposal);
+    expect(result).toMatchObject({ decision, receipt: { retained: true } });
+    expect(await redis.ttl(receiptKey(result))).toBeGreaterThan(0);
+    expect(await redis.ttl(receiptKey(result))).toBeLessThanOrEqual(86400);
+    expect(await redis.zCard(await quotaKey())).toBe(1);
+    expect(await redis.ttl(await quotaKey())).toBeGreaterThan(0);
+    expect(await redis.ttl(await quotaKey())).toBeLessThanOrEqual(86400);
+    expect(await redis.keys('er:gate:v2:transition:*')).toEqual([]);
+    expect(await redis.keys('er:gate:v2:nonce:*')).toEqual([]);
+  });
+
+  it('atomically caps one subject at 100 pending receipts, including concurrent requests', async () => {
+    const results = await Promise.all(Array.from({ length: 105 }, (_, i) => evaluate(pending(`pending-${i}`))));
+    expect(results.filter((result) => result.receipt.retained)).toHaveLength(100);
+    expect(results.filter((result) => result.reason_code === 'GATE_HOLD_RETENTION_LIMIT')).toHaveLength(5);
+    expect(await redis.keys('er:gate:v2:receipt:*')).toHaveLength(100);
+    expect(await redis.zCard(await quotaKey())).toBe(100);
+    expect(await quotaKey()).not.toContain(binding.subject);
+    const retained = results.find((result) => result.receipt.retained)!;
+    expect((await evaluate(pending(retained.receipt.transition_id))).receipt.retained).toBe(true);
+    expect(await redis.zCard(await quotaKey())).toBe(100);
+    expect((await evaluate(pending('other-owner'), now, 'owner-other')).receipt.retained).toBe(true);
+    expect((await evaluate(input())).decision).toBe('PASS');
+  });
+
+  it('prunes expired quota members using storage time rather than caller time', async () => {
+    await Promise.all(Array.from({ length: 99 }, (_, i) => evaluate(pending(`pending-${i}`))));
+    const key = await quotaKey();
+    await redis.zAdd(key, { score: 0, value: 'expired-receipt' });
+    expect(await redis.zCard(key)).toBe(100);
+    const result = await evaluate(pending('new-after-expiry'), now - 86400_000);
+    expect(result.receipt.retained).toBe(true);
+    expect(await redis.zCard(key)).toBe(100);
+    expect(await redis.zScore(key, 'expired-receipt')).toBeNull();
+  });
+
+  it('re-evaluates a future-dated HOLD and atomically promotes it to one permanent PASS', async () => {
+    const proposal = futureProposal();
+    const held = await evaluate(proposal);
+    expect(held).toMatchObject({ decision: 'HOLD', reason_code: 'GATE_HOLD_STALE_EVIDENCE', receipt: { retained: true } });
+    const [first, retry] = await Promise.all([evaluate(proposal, now + 65_000), evaluate(proposal, now + 66_000)]);
+    expect(first.decision).toBe('PASS');
+    expect(retry).toEqual(first);
+    expect(first.receipt.request_hash).toBe(held.receipt.request_hash);
+    expect(await redis.ttl(receiptKey(first))).toBe(-1);
+    expect(await redis.keys('er:gate:v2:pending:*')).toEqual([]);
+    for (const pattern of ['er:gate:v2:transition:*', 'er:gate:v2:nonce:*']) {
+      const keys = await redis.keys(pattern);
+      expect(keys).toHaveLength(pattern.includes('nonce') ? 2 : 1);
+      for (const key of keys) expect(await redis.ttl(key)).toBe(-1);
+    }
+  });
+
+  it('keeps accepted receipts immutable and replay markers permanent after a negative retry', async () => {
+    const accepted = await evaluate(input());
+    const raw = await redis.get(receiptKey(accepted));
+    const expired = await evaluate(input(), now + 60_001);
+    expect(expired.decision).toBe('HOLD');
+    expect(expired.receipt.retained).toBe(false);
+    expect(await redis.get(receiptKey(accepted))).toBe(raw);
+    expect(await redis.ttl(receiptKey(accepted))).toBe(-1);
+    const replayed = await evaluate(input({ approval: attestation('approval', { nonce: 'fresh-approval' }), evidence: attestation('deployment', { nonce: 'fresh-evidence' }) }));
+    expect(replayed).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_REPLAY', receipt: { retained: false } });
+    const changed = { ...binding, transitionId: 'another-transition' };
+    expect(await evaluate(input({ transitionId: changed.transitionId, approval: attestation('approval', { binding: changed }), evidence: attestation('deployment', { binding: changed }) }))).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_REPLAY' });
+  });
+
+  it('cannot promote a held receipt if the policy changes before commit', async () => {
+    const proposal = futureProposal();
+    const held = await evaluate(proposal);
+    const raw = await redis.get(receiptKey(held));
+    const evaluation = await evaluateOriginGate(proposal, { ...setup().context, now: now + 65_000 });
+    expect(evaluation.decision).toBe('PASS');
+    expect(evaluation.receipt.request_hash).toBe(held.receipt.request_hash);
+    const store = createOriginGateStore();
+    await store.readPolicy();
+    await redis.set(ORIGIN_GATE_POLICY_KEY, JSON.stringify({ ...policy, issuers: [] }));
+    await expect(store.commit({ evaluation, requestHash: evaluation.receipt.request_hash, transitionKey: 'transition-test', nonceKeys: ['approval', 'verifier'] })).rejects.toThrow();
+    expect(await redis.get(receiptKey(held))).toBe(raw);
+    expect(await redis.zCard(await quotaKey())).toBe(1);
+    expect(await redis.keys('er:gate:v2:transition:*')).toEqual([]);
+    expect(await redis.keys('er:gate:v2:nonce:*')).toEqual([]);
+  });
+
+  it('does not promote a held request after another request accepts its transition', async () => {
+    const proposal = futureProposal();
+    const held = await evaluate(proposal);
+    const raw = await redis.get(receiptKey(held));
+    const accepted = await evaluate(input({
+      approval: attestation('approval', { nonce: 'other-approval' }),
+      evidence: attestation('deployment', { nonce: 'other-evidence' }),
+    }));
+    expect(accepted.decision).toBe('PASS');
+    expect(await evaluate(proposal, now + 65_000)).toMatchObject({ decision: 'REJECT', reason_code: 'GATE_REJECT_REPLAY', receipt: { retained: false } });
+    expect(await redis.get(receiptKey(held))).toBe(raw);
+    expect(await redis.ttl(receiptKey(accepted))).toBe(-1);
+    expect(await redis.zCard(await quotaKey())).toBe(1);
+  });
+
+  it('bounds a legacy permanent non-PASS receipt when it is next re-evaluated', async () => {
+    const proposal = pending('legacy-hold');
+    const held = await evaluate(proposal);
+    await redis.persist(receiptKey(held));
+    await redis.del(await quotaKey());
+    expect(await redis.ttl(receiptKey(held))).toBe(-1);
+    expect((await evaluate(proposal, now + 1000)).receipt.retained).toBe(true);
+    expect(await redis.ttl(receiptKey(held))).toBeGreaterThan(0);
+    expect(await redis.ttl(receiptKey(held))).toBeLessThanOrEqual(86400);
+    expect(await redis.zCard(await quotaKey())).toBe(1);
   });
 });
 
@@ -233,7 +422,8 @@ describe('Origin G.A.T.E. Upstash REST adapter', () => {
     expect(args[0]).toBe('EVAL');
     expect(args[1]).toBe(COMMIT_ORIGIN_GATE_SCRIPT);
     expect(args).toContain(ORIGIN_GATE_POLICY_KEY);
-    expect(args.at(-1)).toBe(rawPolicy);
+    expect(args.slice(-3)).toEqual([rawPolicy, 86400, 100]);
+    expect(args).toContain(`er:gate:v2:pending:${hashCanonical(binding.subject)}`);
   });
 
   it('refuses a PASS commit without a loaded policy snapshot', async () => {

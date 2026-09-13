@@ -445,12 +445,12 @@ export function studioDeployOutcomeMessage(input: {
 }
 
 export function studioDeployButtonLabel(_hasReceipt: boolean): string {
-  return 'Attempt deploy';
+  return 'Check preflight';
 }
 
 export function studioDeployEnabledHint(hasReceipt: boolean): string {
-  if (hasReceipt) return 'A live URL was returned. That is the receipt — not the enabled button.';
-  return 'Starts an attempt. UNKNOWN checks are not a deploy receipt.';
+  const hint = 'Preflight only. Deployment is unavailable.';
+  return hasReceipt ? `${hint} An existing receipt does not authorize another deployment.` : `${hint} No deployment will be started.`;
 }
 
 export type StudioPlayerPhase = 'empty' | 'loading' | 'ready' | 'error';

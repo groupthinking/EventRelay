@@ -402,9 +402,12 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBeNull();
 
-    expect(studioDeployButtonLabel(false)).toBe('Attempt deploy');
-    expect(studioDeployButtonLabel(true)).toBe('Attempt deploy');
-    expect(studioDeployEnabledHint(false)).toMatch(/unknown checks are not a deploy receipt/i);
+    expect(studioDeployButtonLabel(false)).toBe('Check preflight');
+    expect(studioDeployButtonLabel(true)).toBe('Check preflight');
+    for (const hasReceipt of [false, true]) {
+      expect(studioDeployEnabledHint(hasReceipt)).toMatch(/preflight only/i);
+      expect(studioDeployEnabledHint(hasReceipt)).toMatch(/deployment is unavailable/i);
+    }
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioDeployOutcomeMessage');

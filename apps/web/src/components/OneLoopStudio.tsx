@@ -1344,10 +1344,11 @@ export default function OneLoopStudio({
             onClick={() => void deploy()}
             disabled={deployBusy || !hasPayload || Boolean(holdReason)}
             title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+            aria-describedby="studio-preflight-hint"
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
-            {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
+            {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
           </button>
           <button
             type="button"
@@ -1360,6 +1361,9 @@ export default function OneLoopStudio({
             <GitPullRequest className="h-4 w-4" aria-hidden />
             {openingPrs ? 'Opening PRs…' : `Open GitHub PRs (${approvedSpecIds.length})`}
           </button>
+          <p id="studio-preflight-hint" className="basis-full text-sm opacity-60">
+            {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+          </p>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
               {holdReason}

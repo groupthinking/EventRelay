@@ -23,6 +23,20 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Studio authoritative gate receipt', () => {
+  it('labels idle and pending actions as preflight only, with deployment unavailable', async () => {
+    let finish!: (result: Awaited<ReturnType<typeof startStudioDeploy>>) => void;
+    vi.mocked(startStudioDeploy).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    const button = screen.getByRole('button', { name: 'Check preflight' });
+    expect(screen.getByText(/preflight only.*deployment is unavailable/i)).toBeTruthy();
+    expect(button.getAttribute('aria-describedby')).toBe('studio-preflight-hint');
+    fireEvent.click(button);
+    expect(screen.getByRole('button', { name: 'Checking preflight…' }).hasAttribute('disabled')).toBe(true);
+    await act(async () => finish({ ok: false, status: 409, gate }));
+    expect(screen.getByRole('button', { name: 'Check preflight' })).toBeTruthy();
+    expect(screen.queryByText(/attempting deploy|attempt deploy/i)).toBeNull();
+  });
+
   it('displays a server HOLD as runtime evidence, not a deployment', async () => {
     vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: 409, gate });
     render(<OneLoopStudio showAgentWorkflowUi={false} />);

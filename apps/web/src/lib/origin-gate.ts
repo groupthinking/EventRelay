@@ -79,7 +79,7 @@ export interface OriginGateStore {
     transitionKey: string;
     nonceKeys: string[];
     evaluation: OriginGateEvaluation;
-  }): Promise<{ status: 'stored' | 'conflict' } | { status: 'existing'; evaluation: unknown }>;
+  }): Promise<{ status: 'stored' | 'conflict' | 'quota' } | { status: 'existing'; evaluation: unknown }>;
 }
 export interface OriginGateContext {
   subject: string | null;
@@ -182,6 +182,7 @@ export async function evaluateOriginGate(input: unknown, context: OriginGateCont
         evaluation,
       });
       if (result.status === 'conflict') return issue(replay, false);
+      if (result.status === 'quota') return issue({ decision: 'HOLD', code: 'GATE_HOLD_RETENTION_LIMIT', reason: 'Temporary receipt storage limit reached. No transition is permitted; retry after retained non-PASS receipts expire.' }, false);
       if (result.status === 'existing') return validStoredReceipt(result.evaluation, evaluation, context.signingSecret) ? result.evaluation : issue(unavailable, false);
       return evaluation;
     } catch {
