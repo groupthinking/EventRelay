@@ -1,213 +1,119 @@
-# 🎯 EventRelay — AI Video Processing & Event Extraction Platform
+# UVAI — Universal Video Action Intelligence
 
 <!-- ✅ AI agent access verified: write/sync capability confirmed via test task resolution -->
 
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Node >= 20](https://img.shields.io/badge/Node-%3E%3D20-green)
-![Python >= 3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)
 
-AI-powered video transcript capture, structured event extraction, and agent execution for YouTube content. Paste a URL → get a word-for-word transcript, typed events, actionable tasks, workflow packages, and deployable next steps.
+Paste a YouTube URL → inspect a hashed **Video Pack** → export grounded build rails → attempt to ship with evidence. The product is **UVAI** at [uvai.io](https://uvai.io); **EventRelay** is the internal runtime and repository name, not a second public product. The differentiator is action and shipping, not transcription.
 
-## Architecture
+## Start here
 
-```
-┌──────────────────────────────────────────────────────────┐
-│  Next.js Frontend  (apps/web)         localhost:3000     │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
-│  │  Dashboard   │  │ /api/video   │  │ /api/extract-  │  │
-│  │  (React +    │──│ (proxy to    │──│  events        │  │
-│  │   Zustand)   │  │  backend)    │  │ (OpenAI        │  │
-│  └─────────────┘  └──────┬───────┘  │  Responses API) │  │
-│                          │          └────────────────┘  │
-│  ┌────────────────┐      │                              │
-│  │ /api/transcribe │      │   OpenAI STT fallback       │
-│  └────────────────┘      │                              │
-└──────────────────────────┼──────────────────────────────┘
-                           │
-┌──────────────────────────┼──────────────────────────────┐
-│  FastAPI Backend  (src/)           localhost:8000        │
-│                          │                              │
-│  ┌───────────────────────▼─────────────────────────┐    │
-│  │  /api/v1/transcript-action                      │    │
-│  │  YouTube transcript → 3 Gemini agents:          │    │
-│  │    • transcript_action (summary + tasks)        │    │
-│  │    • personality_agent (intent analysis)        │    │
-│  │    • strategy_agent   (strategic insights)      │    │
-│  └─────────────────────────────────────────────────┘    │
-│                                                         │
-│  /api/v1/health  /api/v1/capabilities  /api/v1/videos   │
-│  /api/v1/events  /api/v1/agents        /api/v1/chat     │
-└─────────────────────────────────────────────────────────┘
+- [AGENTS.md](AGENTS.md): locked product, pricing, storage, and scope rules.
+- [Repository map](docs/REPO_MAP.md): current entry points and where code lives.
+- [Build-out roadmap](docs/MASTER_ROADMAP.md): inspected capabilities, remaining work, and acceptance criteria.
+- [Next authorized cut](docs/NEXT-PHASE.md): Origin G.A.T.E.; later product work remains held.
+- [G.A.T.E. contract](docs/gate-transition-contract.md): PASS, HOLD, REJECT, and ESCALATE.
+
+## Current product path
+
+```text
+/ — URL entry and Get Pro
+  → /studio — OneLoopStudio
+  → hashed Video Pack — Gemini 3.8 Flash via Vercel AI Gateway
+  → Upstash REST pack persistence
+  → inspect transcript, visual evidence, SOP, and build rails
+  → export / App Builder workspace / optional workflow actions
+  → Attempt deploy → visible G.A.T.E. decision
 ```
 
-**Hybrid AI:** Gemini handles deep analysis (personality, strategy), OpenAI Responses API handles structured event/action extraction with JSON Schema strict mode, and OpenAI STT provides transcription fallback when YouTube captions are unavailable.
+`/dashboard` and its retired skins redirect to `/studio`; they are not separate products. App Builder's deterministic sandbox emitter produces a workspace displaying pack evidence. Exporting that workspace is not proof that the app shown in a video has been recreated, installed, tested, or deployed.
 
-## Quick Start
+The existing Studio gate checks a returned HTTPS URL with a hostname before showing a live result. It does **not** independently probe the deployment or establish provider-backed ownership. See the [contract boundary](docs/gate-transition-contract.md#current-evidence-boundary) before making a live-success claim.
 
-### Prerequisites
+## Locked offers
 
-- Python >= 3.11
-- Node.js >= 20
-- API keys: `GEMINI_API_KEY` and `OPENAI_API_KEY`
+| Offer | Price | Boundary |
+| --- | --- | --- |
+| Workflow Pro | $39/mo or $390/yr | Existing Get Pro checkout |
+| Maintain | $199/mo per live product | Do not infer checkout availability |
+| Ship | Per-job quote | Do not infer checkout availability |
 
-### Setup
+Do not restore the retired EventRelay Pro catalog or invent additional products or prices.
+
+## Development
+
+Requirements come from [package.json](package.json) and [pyproject.toml](pyproject.toml): Node.js 22+, npm 10.8.0 as the pinned package manager, and Python 3.10+ for the internal backend.
+
+From the repository root:
 
 ```bash
-# Clone
-git clone https://github.com/groupthinking/EventRelay.git
-cd EventRelay
-
-# Backend — include the youtube extra for full video path (yt-dlp + youtube-transcript-api)
-python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,youtube]"
-
-# Frontend
-npm install
-
-# API keys (add to shell profile or .env)
-export GEMINI_API_KEY="your-key"
-export OPENAI_API_KEY="your-key"
-
-# Local auth is opt-in: leave EVENTRELAY_API_KEY unset for open local dev.
-# To require auth locally, set a shared key (frontend Next also needs this):
-# export EVENTRELAY_API_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-# Production still fails closed with HTTP 503 if neither EVENTRELAY_API_KEY nor
-# ALLOW_UNAUTHENTICATED=1 is configured.
+npm ci
+npm run dev:web
 ```
 
-### Run
+Use the root npm lockfile; do not create an `apps/web/package-lock.json`. `/` is the public entry page and `/studio` is the workbench.
+
+When the selected workflow needs the Python backend:
 
 ```bash
-# Terminal 1: Backend
-./scripts/dev_backend.sh
-# Or manually:
-# PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --port 8000
-
-# Terminal 2: Frontend
-cd apps/web && BACKEND_URL=http://localhost:8000 npx next dev --port 3000
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[dev,youtube]'
+PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --reload --port 8000
 ```
 
-Check readiness: `curl -s localhost:8000/health` should show `"auth_mode":"open_dev"` (or `"api_key"`) and include dependency fields like `"yt_dlp_executable_ready"` / `"ffmpeg_ready"` / `"ffprobe_ready"`.
+Set the web runtime's `BACKEND_URL` to the intended backend. A missing backend must produce an honest unavailable/handoff result, not a fabricated deployment receipt. Provider credentials and auth configuration stay in the environment, never in Git.
 
-Open http://localhost:3000 — paste a YouTube URL and run the studio workflow. The older dashboard remains available at http://localhost:3000/dashboard.
+### Configuration boundaries
 
-## How It Works
+| Area | Configuration / source of truth |
+| --- | --- |
+| Video Pack extraction | Vercel AI Gateway; model defined in `apps/web/src/lib/video-pack-extractor.ts` |
+| Production Video Pack storage | `KV_REST_API_URL` + `KV_REST_API_TOKEN`, or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` |
+| Web authentication | Existing NextAuth configuration and `apps/web/src/lib/auth-paths.ts`; do not replace the auth stack as cleanup |
+| Backend-dependent workflows | `BACKEND_URL` and the backend's own auth/provider configuration |
+| Billing | Existing Stripe setup under `apps/web/src/lib/billing/`; keep server-side catalog validation |
 
-1. **Paste URL** → Dashboard sends to `/api/video`
-2. **Transcribe** → Backend fetches YouTube transcript (falls back to OpenAI STT if unavailable)
-3. **Analyze** → 3 Gemini agents run: summary, personality mapping, strategy
-4. **Extract** → OpenAI Responses API returns structured events, actions, topics via strict JSON Schema
-5. **Display** → Dashboard shows everything in tabs: insights, transcript, events, agents
+Redis TCP URLs are **not** the Video Pack store. Backend SQL stores and auxiliary integrations serve other entities; they do not replace the locked Upstash REST pack contract. Direct provider keys used by legacy runtime paths are not a new requirement for every Studio user.
 
-## UVAI Studio + Realtime Voice
+## Verification
 
-The public first screen is `apps/web/src/components/VideoWorkflowStudio.tsx`: a lightweight video-to-workflow studio with YouTube preview, frame proof, outcome chips, workflow progress, safety gating, and result actions for preview/export/deploy/save.
-
-Optional voice input is hidden behind a small toggle. The browser creates an `RTCPeerConnection`, sends microphone audio, receives model audio, and opens an `oai-events` data channel. The server endpoint `POST /api/realtime/session` accepts raw SDP and uses `OPENAI_API_KEY` to post multipart `FormData` fields named `sdp` and `session` to OpenAI `/v1/realtime/calls` with `gpt-realtime-2`. The client registers a sample `check_calendar(date, time)` function tool with `session.update`.
-
-Do not use this app to clone or synthesize a YouTube speaker's voice without explicit consent. Speaker audio should be used for transcript, diarization, tone/context, and source-reference playback only.
-
-## API Endpoints
-
-### Frontend Routes (Next.js)
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | `/api/video` | Process YouTube URL → transcript + AI analysis |
-| POST | `/api/extract-events` | Structured event/action extraction (OpenAI) |
-| POST | `/api/transcribe` | Transcription with YouTube/OpenAI STT fallback |
-| POST | `/api/chat` | Chat with AI about video content |
-| GET | `/api/dashboard` | Backend health check proxy |
-| POST | `/api/realtime/session` | Realtime 2 WebRTC SDP exchange for optional voice input |
-
-### Backend Routes (FastAPI)
-
-| Method | Route | Description |
-|--------|-------|-------------|
-| POST | `/api/v1/transcript-action` | Core pipeline: transcript → agents → results |
-| GET | `/api/v1/health` | Service health check |
-| GET | `/api/v1/capabilities` | Available features and providers |
-| POST | `/api/v1/videos/process` | Async video processing job |
-| GET | `/api/v1/videos/{job_id}/status` | Job status polling |
-| POST | `/api/v1/events/extract` | Backend event extraction |
-| POST | `/api/v1/agents/dispatch` | Dispatch agent execution |
-| POST | `/api/v1/chat` | Conversational AI about videos |
-
-Full API docs at http://localhost:8000/docs (Swagger UI).
-
-## Project Structure
-
-```
-EventRelay/
-├── apps/web/                        # Next.js frontend
-│   └── src/
-│       ├── app/
-│       │   ├── dashboard/page.tsx   # Main dashboard UI
-│       │   └── api/                 # API routes (video, extract-events, transcribe, chat)
-│       ├── components/              # TranscriptViewer, EventList, AgentDashboard, ResultsViewer
-│       ├── store/                   # Zustand state management
-│       └── lib/                     # API client, services, types
-├── src/youtube_extension/           # FastAPI backend
-│   ├── main.py                      # App entry point
-│   └── backend/
-│       ├── api/v1/                  # Router + Pydantic models
-│       └── services/ai/             # Gemini service, health monitoring
-├── tests/unit/                      # Python unit tests
-├── docs/                            # Documentation
-├── .github/                         # CI workflows, Copilot agent configs
-├── Dockerfile                       # Production container
-└── package.json                     # Monorepo root (npm workspaces)
-```
-
-## Testing
+Run focused tests for the changed surface, then the broader checks required by that change:
 
 ```bash
-# Python unit tests (15 tests)
-PYTHONPATH=src python3 -m pytest tests/unit/test_api_v1_models.py -v --override-ini="addopts="
-
-# Frontend build check
+npm exec --workspace=apps/web -- vitest run src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/emit-app-builder-sandbox.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/video-pack-store.test.ts src/app/api/video/sandbox/__tests__/route.test.ts
+npm --workspace=apps/web run type-check
+npm --workspace=apps/web run lint
 npm run build:web
-
-# Lint
-npm --prefix apps/web run lint
 ```
 
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GEMINI_API_KEY` | Yes | Google AI Studio key for Gemini agents |
-| `OPENAI_API_KEY` | Yes | OpenAI key for event extraction, STT, and Realtime voice sessions |
-| `AI_GATEWAY_API_KEY` | No | Vercel AI Gateway key for frontend chat fallback, embeddings, and Veo video generation |
-| `OPENAI_SAFETY_IDENTIFIER` | No | Optional stable end-user or tenant identifier for OpenAI safety monitoring |
-| `BACKEND_URL` | No | Backend URL (default: `http://localhost:8000`) |
-| `YOUTUBE_API_KEY` | No | YouTube Data API for enhanced metadata |
-| `VERCEL_TOKEN` | No | Vercel access token for MCP / deployment automation |
-| `VERCEL_TEAM_ID` | No | Team scope for the Vercel MCP server |
-
-## Deployment
+For backend model changes:
 
 ```bash
-# Docker
-docker build -t eventrelay .
-docker run -p 8000:8000 -e GEMINI_API_KEY=... -e OPENAI_API_KEY=... eventrelay
-
-# Vercel (frontend)
-vercel deploy --prod
+PYTHONPATH=src python3 -m pytest tests/unit/test_api_v1_models.py -v --override-ini='addopts='
 ```
 
-For AI Gateway fallback and experimental video generation in deployed environments,
-add `AI_GATEWAY_API_KEY` to the Vercel project environment variables (dashboard
-or `vercel env add AI_GATEWAY_API_KEY`). For agent tooling, also configure
-`VERCEL_TOKEN` and `VERCEL_TEAM_ID`. See [docs/vercel-ai-setup.md](docs/vercel-ai-setup.md).
+Default video fixture: `auJzb1D-fag`. Preserve separately documented historical fixtures when checking their original cuts. A passing unit suite, generated bundle, or old smoke receipt is not a fresh production end-to-end result.
 
-## Contributing
+## Repository layout
 
-- Follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `chore:`, etc.
-- Run tests before opening PRs
-- See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) for detailed guidelines
+| Path | Responsibility |
+| --- | --- |
+| `apps/web/` | Next.js App Router product and server routes |
+| `src/youtube_extension/` | Internal Python/FastAPI runtime |
+| `src/agents/`, `mcp-servers/`, `tools/mcp/` | Internal orchestration and tooling |
+| `sdk/` | Client SDKs; keep Python response types aligned with backend models |
+| `packages/` | Shared code; root npm workspace membership is defined in `package.json` |
+| `tests/`, `apps/web/src/**/__tests__/` | Backend and web verification |
+| `docs/`, `scripts/`, `.github/` | Documentation, operational helpers, and CI |
+
+## Contributing and deployment
+
+Use a feature branch and reviewable Conventional Commits. Verify the actual diff, preserve unrelated state, and do not delete working code or historical evidence solely because it is old. Production promotion requires current receipts and operator authorization; this README is not a deployment approval.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), the [production runbook](docs/deployment/VERCEL_PRODUCTION_RUNBOOK.md), and [AGENTS.md](AGENTS.md). Historical architecture documents are design records, not proof of today's implementation or service health.
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE).

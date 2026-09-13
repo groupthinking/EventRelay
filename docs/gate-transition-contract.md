@@ -1,77 +1,107 @@
 # G.A.T.E. transition contract
 
-Governed Acceptance & Transition Engine. This is the Origin hardgate in-repo — not a second product, not a project database, and not a builder.
+Governed Acceptance & Transition Engine. Origin hardgate, not a second product, builder, or project database.
 
 ## Split (locked)
 
-| Layer | Question |
+| Layer | Question / owner |
 | --- | --- |
-| **Zero-Sim** | Is the evidence real? |
-| **G.A.T.E.** | Do verified evidence + authority permit this state transition? |
-| **EventRelay** | Durable runtime / receipts (versioned, hashable, citable). |
+| **Zero-Sim** | Is the evidence real (`real`, `unverified`, `unreal`)? |
+| **G.A.T.E.** | Do verified evidence and authority permit this exact transition? |
+| **EventRelay** | Internal runtime and retained, versioned receipts. |
 
-G.A.T.E. does **not** build the artifact. It does **not** become Mission Workspace or the Outcome Graph. Flywheel center stays Mission Workspace + Outcome Graph + acceptance; EventRelay + Zero-Sim/G.A.T.E. are continuous, not post-build only.
+Plane stays **proposed** until config and actual receipts verify. SeeScriptShip lock is not install/run/deploy. An evidence workspace, export, completed workflow, or valid URL is not deployment proof.
 
-Plane = **proposed** until config + receipts are verified. SeeScriptShip lock ≠ install / run / deploy.
+## Authorized scope
+
+Only `studio.deploy`, `proposed` → `live`, is implemented here. This cut verifies attestations and retains acceptance decisions. It does not build, run, deploy, roll back, or unlock another phase. Grounded specification and every subsequent roadmap phase still require separate UVAI Loop approval.
+
+Authoritative modules:
+
+- `apps/web/src/lib/origin-gate.ts`: strict input, independent signatures, binding, policy, signed receipts.
+- `apps/web/src/lib/origin-gate-store.ts`: existing Upstash REST runtime adapter, atomic receipt/nonce/transition writes.
+- `POST /api/gate/transitions`: authenticated acceptance boundary; `200` only for PASS, `409` for other gate decisions.
+- `POST /api/workflows/studio-deploy`: authenticated **preflight only**. It cannot start the legacy video-to-job workflow, which would regenerate bytes rather than deploy an approved artifact. No receipt supplied to this route enables execution.
+
+Both routes use the existing Studio owner/session check, same-origin mutation protection, bounded JSON reader, and `Cache-Control: no-store`. HTTP authentication/input failures may return `401`, `403`, `400`, or `413` before evaluation; unexpected boundary failures return `503`, never authorization.
 
 ## Decisions
 
-Every consequential state transition resolves to exactly one of:
-
 | Decision | When |
 | --- | --- |
-| **PASS** | Zero-Sim `real`, authority actor is known (`anonymous` \| `signed-in` \| `system`), and required evidence for the claimed `from→to` is present and verified. |
-| **HOLD** | Required evidence is **missing**, or evidence is present but **weak / unverified**. The plane stays proposed. Caller may retry with a real receipt. |
-| **REJECT** | Zero-Sim `unreal`, or the caller **claims** `to=live` with a live URL that fails the verified-receipt bar (https + hostname). |
-| **ESCALATE** | Authority actor is unknown, or a supplied Zero-Sim verdict is not `real` \| `unverified` \| `unreal`. G.A.T.E. will not invent a decision. |
+| **PASS** | Session subject, exact artifact/run/transition/target binding, scoped Loop approval, independent verifier evidence with Zero-Sim `real`, fresh valid signatures, unchanged trusted policy, and atomic retention all verify. |
+| **HOLD** | Required evidence is missing, unverified, stale, or the signing/retention runtime is unavailable. |
+| **REJECT** | Evidence is unreal, a live claim has no signed verification receipt, signatures/bindings are mismatched, authority is denied/revoked/out of scope, a nonce or accepted transition is reused, or the request violates the strict contract. |
+| **ESCALATE** | Authority, configured verification key, or signed verdict is unknown. |
 
-### Missing vs weak (documented)
+Missing evidence is not invented. A registered role is not enough without its valid signature. Two different issuer names sharing one cryptographic key are not independent approval and verification.
 
-- **Missing** (`GATE_HOLD_MISSING_EVIDENCE`): no required receipt. For `studio.deploy`, the required receipt is a verified live URL — a workflow `completed` status or run id is not enough.
-- **Weak** (`GATE_HOLD_WEAK_EVIDENCE`): refs exist but Zero-Sim is `unverified`. G.A.T.E. does not upgrade that to `real`.
-- **Unreal** (`GATE_REJECT_UNREAL_EVIDENCE`): Zero-Sim says the evidence is not real (malformed hash, invented/unparseable live URL treated as a live claim).
+## Request and attestations
 
-G.A.T.E. never invents evidence. If a fact is not in the request, it HOLDs or REJECTs; it does not fetch, simulate, or stub a receipt.
+The acceptance request contains:
 
-## Contract
+- `transitionId`, `kind: "studio.deploy"`, `fromState: "proposed"`, `toState: "live"`.
+- `runId`, lowercase SHA-256 `artifactHash`.
+- `target: { provider: "vercel", projectId, environment: "preview" | "production", liveUrl }` with a normalized, validated HTTPS hostname URL.
+- `approval` and `evidence`, each `{ payload, signature }`.
 
-Module: `apps/web/src/lib/gate-transition.ts`
+Missing artifact fields may produce a HOLD. Unknown fields, including browser `authority` or `subject`, are rejected. The subject is derived from the verified server session.
 
+Each payload has `version: "origin.attestation.v1"`, `type: "approval" | "deployment"`, `issuer`, `nonce`, ISO `issuedAt` / `expiresAt`, `binding`, and `verdict`. The exact binding repeats the transition, authenticated `subject`, run, artifact hash, and complete target. Deployment evidence additionally requires `providerReceiptId` and lowercase SHA-256 `providerReceiptHash`.
+
+- Approval verdict: `allow` or `deny`; other values escalate.
+- Deployment verdict: Zero-Sim `real`, `unverified`, or `unreal`; other values escalate.
+- Both attestations expire within 15 minutes of issuance. Future issuance beyond 30 seconds and expired attestations HOLD.
+- Signature: Ed25519, base64url, over the UTF-8 bytes of `origin.attestation.v1\n` followed by `canonicalGateJson(payload)` from `gate-transition.ts`.
+
+The trusted external deployment verifier is responsible for inspecting the actual provider receipt and matching its artifact, target, and deployment. G.A.T.E. authenticates that signed attestation; **this implementation does not independently call Vercel or establish deployment health**. An unsigned caller-supplied provider receipt ID/hash is not sufficient.
+
+## Trust configuration and activation
+
+The runtime reads JSON from `er:gate:v2:trusted-policy` in the **existing Upstash REST** resource:
+
+```typescript
+{
+  version: 1,
+  issuers: Array<{
+    id: string;
+    role: 'loop' | 'deployment-verifier';
+    publicKey: string; // Ed25519 SPKI PEM; public material only
+    projectIds: string[];
+    revoked: boolean;
+  }>;
+}
 ```
-evaluateTransition({
-  transitionId, kind, fromState, toState,
-  evidenceRefs,   // hashes / ids / uris — only what the caller has
-  authority,      // { actor, claim? }
-  zeroSim?,       // supplied result, or assessed fail-closed from refs
-}) → { decision, reason, reason_code, receipt }
-```
 
-Receipt (`eventrelay.gate-receipt.v1`) is EventRelay-shaped: versioned, canonical-JSON SHA-256 (`receipt_hash`), id `er:gate:v1:{transitionId}`. Suitable to store or cite later. This module does not persist it (Upstash remains the Video Pack store only).
+Only an authorized runtime administrator registers or revokes these keys with Loop approval. There is deliberately no public policy-write endpoint, auto-enrollment, generated production approval, or private issuer key in this app. Protect the existing runtime credentials: anyone who can replace the trust registry is inside this trust boundary.
 
-Zero-Sim assessment (when the caller does not supply a verdict):
+Receipt authentication uses the existing server-only `NEXTAUTH_SECRET` (minimum 32 characters), domain-separated from session use. Retention uses `KV_REST_API_URL` / `KV_REST_API_TOKEN` or `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`. Redis TCP is not substituted. Missing credentials, unusable signing configuration, or runtime outage cannot PASS. No new integration or credential is implied by this contract.
 
-- empty refs → `unverified` / `ZERO_SIM_MISSING_EVIDENCE`
-- malformed SHA-256 or a presented `live_url` that fails https+hostname → `unreal`
-- otherwise → `unverified` (format-valid refs are **not** upgraded to `real`)
+Activation requires an authorized registry, independently managed issuer keys, actual artifact/provider evidence, and a real authenticated acceptance run. Tests generate ephemeral keys and fixtures only; they do not activate policy or prove deployment. Production keys/policy/data must not be mutated merely to demonstrate a green result.
 
-The Studio adapter may assert Zero-Sim `real` only after `studioVerifiedLiveUrl` succeeds. That bar is locked by #1707 / #1710 — it is not a network probe that the deploy exists.
+## v2 receipts and retries
 
-## Gated transition (PR1)
+`eventrelay.gate-receipt.v2` includes the decision/reason, authenticated subject, transition, evidence references, run, artifact hash, target, policy hash, request hash, issue time, and `retained`. `receipt_hash` is the SHA-256 of its canonical body; `signature` is HMAC-SHA-256 over `origin.gate-receipt.v2\n{receipt_hash}`. This is runtime-authenticated evidence, not a portable public-key signature or a deploy bearer token.
 
-**`studio.deploy`**: `proposed` → `live` on the OneLoopStudio Deploy attempt.
+The runtime owns `er:gate:v2:receipt:*`, `er:gate:v2:transition:*`, and `er:gate:v2:nonce:*`. It atomically compares the exact policy snapshot before PASS and reserves transition/nonce keys with the retained receipt. Identical valid retries return the original authenticated receipt; conflicting requests reject. Current policy and expiry are checked again on retry. Revocation cannot be bypassed by replaying a prior PASS. Altered stored receipts fail closed.
 
-- Anonymous Deploy remains an **attempt** (button: Attempt deploy). Enabled ≠ receipt.
-- G.A.T.E. runs on every Attempt deploy that is not an auth redirect — including when `startStudioDeploy` fails (e.g. `BACKEND_URL is not configured`) — and **before** `studioDeployOutcomeMessage`.
-- Studio **must** render a visible decision chip (`data-testid="studio-gate-receipt"`): **PASS | HOLD | REJECT | ESCALATE**, the short reason, and `receipt.id` / `receipt_hash` (`eventrelay.gate-receipt.v1`). Missing backend config is **HOLD** (`GATE_HOLD_MISSING_EVIDENCE`) plus the backend reason — not a silent/no-chip failure.
-- **PASS** only with a verified `https://` live URL that has a hostname.
-- Workflow `completed` without that URL → **HOLD**. Copy must not say “Deploy completed”.
-- Presented live URL that fails the hostname bar → **REJECT**.
-- Unknown authority actor → **ESCALATE**.
+Records have no automatic expiry: removing nonce/transition keys removes replay protection. Retention lifecycle changes need explicit ownership and approval. G.A.T.E. remains a policy engine; these are internal runtime records, not a new project database. Storage failure returns `retained: false`; it never pretends a receipt was saved. Signing-secret rotation invalidates prior receipt authentication and requires an owned operational procedure rather than implicit reacceptance.
 
-Mission advance is not implemented in this repo; do not invent a Mission Workspace gate here.
+## Studio and v1 compatibility
 
-## Tests
+`gate-transition.ts` retains its client-safe v1 diagnostic contract and decision vocabulary. v1 content-addressed receipts are **not** authorization. The Studio URL adapter no longer upgrades a syntactically valid URL into Zero-Sim `real`; a valid raw live claim stays unverified/REJECT without authoritative evidence. This supersedes the earlier #1707 / #1710 URL-only bar without accepting any weaker URL.
+
+Studio displays server v2 decisions, transition IDs, and receipt-retention status distinctly from local diagnostics, retains existing auth redirects, clears receipts on selection changes, and ignores late responses for another selected video. A decision chip or completed workflow never starts deployment. Mission advance is not implemented.
+
+## Verification
+
+From repository root:
 
 ```bash
-cd apps/web && npx vitest run src/lib/__tests__/gate-transition.test.ts
+npm exec --workspace=apps/web --no -- vitest run src/lib/__tests__/origin-gate.test.ts src/lib/__tests__/gate-transition.test.ts src/lib/__tests__/studio-workflow.test.ts src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/auth-paths.test.ts src/app/api/gate/transitions/__tests__/route.test.ts src/app/api/workflows/studio-deploy/__tests__/route.test.ts src/components/__tests__/OneLoopStudio.gate.test.tsx
+npm run type-check --workspace=apps/web
 ```
+
+Coverage includes signed acceptance, missing/weak/unreal/unknown evidence, binding/signature tampering, scope/revocation, expiry, independent keys, retries/concurrency, altered receipts, runtime failure, protected API boundaries, no workflow kickoff, and selected-video receipt isolation. Browser acceptance and a real configured-runtime PASS are distinct checks; local fixtures cannot replace either.
+
+Sandbox verification on 2026-09-13: the focused suite plus `src/lib/studio/__tests__/security.test.ts` passed **178 tests across 9 files**, and the web type-check passed. `/studio` rendered at 758 × 752 in dark mode. Full authenticated browser acceptance remains blocked: browser submissions returned `403 invalid_origin`, and a direct same-origin local submission returned `503 authentication_unavailable`. The existing Upstash integration reports connected, but the sandbox-injected environment did not expose a recognized REST credential pair on repeated checks. These are sandbox observations, not evidence of a production outage. No production configuration was changed and no operational PASS or next-phase authorization is claimed.

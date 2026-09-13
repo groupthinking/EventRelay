@@ -308,6 +308,7 @@ export default function OneLoopStudio({
     setApprovedSpecIds([]);
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(null);
+    setGateReceipt(null);
   }, [selectedVideoId]);
 
   useEffect(() => {
@@ -616,12 +617,15 @@ export default function OneLoopStudio({
     setDeployReceiptVideoId(attemptVideoId);
     setGateReceipt(null);
     try {
-      const started = await startStudioDeploy({
-        url: next,
-        transcript: usableProvidedTranscript(selected?.transcript),
-      });
+      const started = await startStudioDeploy({ url: next });
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       if (started.status === 401 || started.status === 403) {
         window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
+        return;
+      }
+      if (started.gate) {
+        setGateReceipt(started.gate);
+        setMessage(started.gate.reason);
         return;
       }
       if (!started.ok || !started.runId) {
@@ -638,6 +642,7 @@ export default function OneLoopStudio({
       }
       setDeployRunId(started.runId);
       const polled = await pollStudioDeploy(started.runId);
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       const backendReason = studioDeployPollResidual(polled);
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
@@ -665,6 +670,7 @@ export default function OneLoopStudio({
         }),
       );
     } catch (err) {
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       const backendReason = studioDeployOutcomeMessage({
         error: err instanceof Error ? err.message : 'Deploy failed.',
         runStatus: 'failed',
@@ -804,6 +810,18 @@ export default function OneLoopStudio({
                 <p data-testid="studio-gate-reason" className="text-sm text-white/80">
                   {gateReceipt.reason}
                 </p>
+                <p className="text-sm text-white/55">
+                  {gateReceipt.version === 'eventrelay.gate-receipt.v2'
+                    ? 'Server decision. Later stages require separate Loop approval.'
+                    : 'Local diagnostic only — not an authorization receipt.'}
+                </p>
+                {gateReceipt.transitionId ? (
+                  <p className="break-all text-sm opacity-60">
+                    Transition: {gateReceipt.transitionId}
+                    {' · '}
+                    {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
+                  </p>
+                ) : null}
                 {scopedDeployReceipt ? (
                   <p className="mt-1">
                     <a
@@ -1326,10 +1344,11 @@ export default function OneLoopStudio({
             onClick={() => void deploy()}
             disabled={deployBusy || !hasPayload || Boolean(holdReason)}
             title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+            aria-describedby="studio-preflight-hint"
             className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
           >
             <Rocket className="h-4 w-4" aria-hidden />
-            {deployBusy ? 'Attempting deploy…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
+            {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
           </button>
           <button
             type="button"
@@ -1342,6 +1361,9 @@ export default function OneLoopStudio({
             <GitPullRequest className="h-4 w-4" aria-hidden />
             {openingPrs ? 'Opening PRs…' : `Open GitHub PRs (${approvedSpecIds.length})`}
           </button>
+          <p id="studio-preflight-hint" className="basis-full text-sm opacity-60">
+            {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+          </p>
           {holdReason && (
             <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
               {holdReason}

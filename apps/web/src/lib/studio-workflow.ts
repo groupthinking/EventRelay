@@ -6,6 +6,7 @@
  */
 
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { StudioGateReceiptView } from '@/lib/gate-transition';
 import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
 import {
   extractBackendLiveUrl,
@@ -187,13 +188,26 @@ export function isTransientWorkflowRunReadError(err: unknown): boolean {
   );
 }
 
-/** Start durable Studio deploy (WDK C). Returns immediately with runId. */
+/** Studio preflight returns a server gate decision; legacy runs remain pollable. */
 export interface StudioDeployStart {
   ok: boolean;
   status: number;
   runId?: string;
   message?: string;
   error?: string;
+  gate?: StudioGateReceiptView;
+}
+
+function serverGateView(value: unknown): StudioGateReceiptView | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const gate = value as Record<string, unknown>;
+  if (!gate.receipt || typeof gate.receipt !== 'object') return undefined;
+  const receipt = gate.receipt as Record<string, unknown>;
+  const decision = gate.decision;
+  if (decision !== 'PASS' && decision !== 'HOLD' && decision !== 'REJECT' && decision !== 'ESCALATE') return undefined;
+  if (receipt.version !== 'eventrelay.gate-receipt.v2' || receipt.decision !== decision || typeof receipt.id !== 'string' || typeof receipt.receipt_hash !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.receipt_hash) || typeof gate.reason !== 'string' || typeof gate.reason_code !== 'string') return undefined;
+  if (decision === 'PASS' && (receipt.retained !== true || typeof receipt.signature !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.signature))) return undefined;
+  return { decision, reason: gate.reason, reason_code: gate.reason_code, receiptId: receipt.id, receiptHash: receipt.receipt_hash, version: receipt.version, transitionId: str(receipt.transition_id), retained: receipt.retained === true };
 }
 
 export interface StudioDeployPoll {
@@ -213,7 +227,7 @@ export interface StudioDeployPoll {
   message?: string;
 }
 
-/** Start durable Studio deploy (WDK C). */
+/** Request gate preflight only; transcript generation is not deployment evidence. */
 export async function startStudioDeploy(input: {
   url: string;
   projectType?: string;
@@ -226,12 +240,7 @@ export async function startStudioDeploy(input: {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url: input.url,
-        projectType: input.projectType,
-        outcome: input.outcome,
-        ...(input.transcript ? { transcript: input.transcript } : {}),
-      }),
+      body: JSON.stringify({ url: input.url }),
       signal: input.signal ?? AbortSignal.timeout(30_000),
     });
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
@@ -241,6 +250,7 @@ export async function startStudioDeploy(input: {
       runId: str(payload.runId),
       message: str(payload.message),
       error: str(payload.error),
+      gate: serverGateView(payload.gate),
     };
   } catch (err) {
     if (isStudioDeployAbortTimeout(err)) {

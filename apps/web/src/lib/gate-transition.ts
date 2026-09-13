@@ -55,7 +55,7 @@ export interface GateTransitionRequest {
 }
 
 export interface GateReceipt {
-  version: typeof GATE_RECEIPT_VERSION;
+  version: typeof GATE_RECEIPT_VERSION | 'eventrelay.gate-receipt.v2';
   id: string;
   kind: string;
   transition_id: string;
@@ -97,7 +97,9 @@ export interface StudioGateReceiptView {
   reason_code: string;
   receiptId: string;
   receiptHash: string;
-  version: typeof GATE_RECEIPT_VERSION;
+  transitionId?: string;
+  retained?: boolean;
+  version: typeof GATE_RECEIPT_VERSION | 'eventrelay.gate-receipt.v2';
 }
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
@@ -340,14 +342,14 @@ export function evaluateTransition(request: GateTransitionRequest): GateEvaluati
   const liveRefs = request.evidenceRefs.filter((ref) => ref.kind === 'live_url');
   const verifiedLive = liveRefs.map(liveRefValue).find((url): url is string => Boolean(url));
   const claimedLiveWithoutReceipt =
-    toState === 'live' && liveRefs.some((ref) => presentedLiveValue(ref)) && !verifiedLive;
+    toState === 'live' && liveRefs.some((ref) => presentedLiveValue(ref));
 
   if (claimedLiveWithoutReceipt) {
     return finish(
       request,
       'REJECT',
       'GATE_REJECT_CLAIM_MISMATCH',
-      'Claimed live transition without a verified https live URL (hostname required).',
+      'Claimed live transition without a trusted artifact-bound receipt. A URL is not deployment verification.',
       zeroSim,
     );
   }
@@ -427,7 +429,7 @@ export function evaluateStudioDeployTransition(
   }
 
   const zeroSim: ZeroSimResult | undefined = verified
-    ? { verdict: 'real', reason_code: 'ZERO_SIM_REAL' }
+    ? { verdict: 'unverified', reason_code: 'ZERO_SIM_UNVERIFIED' }
     : presented
       ? { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' }
       : undefined;

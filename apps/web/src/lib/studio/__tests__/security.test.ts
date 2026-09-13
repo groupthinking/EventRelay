@@ -5,8 +5,11 @@ import { readStudioJson, requireStudioOwner, requireStudioMutationOrigin } from 
 
 const secret = 'offline-studio-test-secret-not-a-real-credential';
 const endpoint = 'https://uvai.example/api/studio/chats';
+const previewUrlKeys = ['V0_SANDBOX_URL', 'V0_RUNTIME_URL', 'V0_BUILD_URL'] as const;
+const previewOrigin = 'https://preview.example.test';
 
 beforeEach(() => {
+  for (const key of previewUrlKeys) vi.stubEnv(key, '');
   vi.stubEnv('NEXTAUTH_SECRET', secret);
   vi.stubEnv('NEXTAUTH_URL', 'https://uvai.example');
   vi.stubEnv('NODE_ENV', 'production');
@@ -92,6 +95,65 @@ describe('Studio mutation origin checks', () => {
     expect(() => requireStudioMutationOrigin(new NextRequest(endpoint, {
       method: 'POST', headers: { origin: 'https://uvai.example', 'sec-fetch-site': 'cross-site' },
     }))).toThrow(expect.objectContaining({ status: 403 }));
+  });
+});
+
+describe('Studio development preview origins', () => {
+  beforeEach(() => vi.stubEnv('NODE_ENV', 'development'));
+
+  function proxiedRequest(origin: string | null = previewOrigin, extraHeaders: Record<string, string> = {}) {
+    const headers = new Headers(extraHeaders);
+    if (origin !== null) headers.set('origin', origin);
+    return new NextRequest('http://localhost:3000/api/studio/chats', { method: 'POST', headers });
+  }
+
+  it.each(previewUrlKeys)('accepts only the exact HTTPS origin configured by %s', (key) => {
+    vi.stubEnv(key, `${previewOrigin}/preview/path?view=studio`);
+    expect(() => requireStudioMutationOrigin(proxiedRequest())).not.toThrow();
+  });
+
+  it('preserves direct same-origin development requests without preview configuration', () => {
+    expect(() => requireStudioMutationOrigin(proxiedRequest('http://localhost:3000'))).not.toThrow();
+  });
+
+  it.each(['production', 'test'])('ignores preview origins in %s mode', (mode) => {
+    vi.stubEnv('NODE_ENV', mode);
+    for (const key of previewUrlKeys) vi.stubEnv(key, previewOrigin);
+    expect(() => requireStudioMutationOrigin(proxiedRequest()))
+      .toThrow(expect.objectContaining({ status: 403, code: 'invalid_origin' }));
+  });
+
+  it.each(['', 'not a URL', 'null', 'http://preview.example.test', 'https://user:password@preview.example.test', 'javascript:alert(1)'])('adds no trust for invalid configuration %s', (configuredUrl) => {
+    for (const key of previewUrlKeys) vi.stubEnv(key, configuredUrl);
+    expect(() => requireStudioMutationOrigin(proxiedRequest()))
+      .toThrow(expect.objectContaining({ status: 403, code: 'invalid_origin' }));
+  });
+
+  it.each([
+    null, 'null', 'https://other.example.test', 'https://preview.example.test.attacker.test',
+    'http://preview.example.test', 'https://preview.example.test:444', 'https://preview.example.test:443',
+    'https://preview.example.test/', 'https://preview.example.test/path',
+    'https://preview.example.test?query=1', 'https://preview.example.test#fragment',
+    'https://user@preview.example.test', 'https://preview.example.test https://attacker.test',
+  ])('rejects untrusted or non-serialized Origin %s', (origin) => {
+    vi.stubEnv('V0_SANDBOX_URL', previewOrigin);
+    expect(() => requireStudioMutationOrigin(proxiedRequest(origin)))
+      .toThrow(expect.objectContaining({ status: 403, code: 'invalid_origin' }));
+  });
+
+  it('does not let forwarded headers introduce a trusted preview origin', () => {
+    expect(() => requireStudioMutationOrigin(proxiedRequest(previewOrigin, {
+      host: 'preview.example.test',
+      forwarded: 'host=preview.example.test;proto=https',
+      'x-forwarded-host': 'preview.example.test',
+      'x-forwarded-proto': 'https',
+    }))).toThrow(expect.objectContaining({ status: 403 }));
+  });
+
+  it('rejects cross-site requests even for a configured preview origin', () => {
+    vi.stubEnv('V0_SANDBOX_URL', previewOrigin);
+    expect(() => requireStudioMutationOrigin(proxiedRequest(previewOrigin, { 'sec-fetch-site': 'cross-site' })))
+      .toThrow(expect.objectContaining({ status: 403 }));
   });
 });
 

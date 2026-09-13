@@ -25,9 +25,26 @@ export async function requireStudioOwner(request: NextRequest): Promise<StudioOw
   return Object.freeze({ subject });
 }
 
+function isDevelopmentPreviewOrigin(origin: string | null): boolean {
+  if (!origin || process.env.NODE_ENV !== 'development') return false;
+
+  // The sandbox proxy can expose a public origin while Next sees a local URL.
+  // Only platform configuration adds trust; request/forwarding headers never do.
+  return [process.env.V0_SANDBOX_URL, process.env.V0_RUNTIME_URL, process.env.V0_BUILD_URL].some((value) => {
+    if (!value) return false;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'https:' && !url.username && !url.password && url.origin === origin;
+    } catch {
+      return false;
+    }
+  });
+}
+
 export function requireStudioMutationOrigin(request: NextRequest): void {
   const origin = request.headers.get('origin');
-  if (origin !== request.nextUrl.origin || request.headers.get('sec-fetch-site') === 'cross-site') {
+  if (request.headers.get('sec-fetch-site') === 'cross-site' ||
+      (origin !== request.nextUrl.origin && !isDevelopmentPreviewOrigin(origin))) {
     throw new StudioError(403, 'invalid_origin', 'This request must originate from Studio.');
   }
 }

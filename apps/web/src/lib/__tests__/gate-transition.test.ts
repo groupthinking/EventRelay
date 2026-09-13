@@ -39,13 +39,13 @@ function baseRequest(
 }
 
 describe('G.A.T.E. transition contract', () => {
-  it('PASS when Zero-Sim is real, authority is known, and live evidence is verified', () => {
+  it('REJECTs self-asserted real evidence and a known actor label without trusted receipts', () => {
     const result = evaluateTransition(baseRequest());
-    expect(result.decision).toBe('PASS');
-    expect(result.reason_code).toBe('GATE_PASS');
-    expect(result.reason).toMatch(/permit/i);
+    expect(result.decision).toBe('REJECT');
+    expect(result.reason_code).toBe('GATE_REJECT_CLAIM_MISMATCH');
+    expect(result.reason).toMatch(/artifact-bound/i);
     expect(result.receipt.version).toBe(GATE_RECEIPT_VERSION);
-    expect(result.receipt.decision).toBe('PASS');
+    expect(result.receipt.decision).toBe('REJECT');
     expect(result.receipt.receipt_hash).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -133,7 +133,7 @@ describe('G.A.T.E. transition contract', () => {
 });
 
 describe('evaluateStudioDeployTransition', () => {
-  it('PASS only for a verified https live URL with hostname', () => {
+  it('REJECTs a raw https URL without a trusted artifact-bound receipt', () => {
     const result = evaluateStudioDeployTransition({
       transitionId: 'wrun_live',
       runId: 'wrun_live',
@@ -143,8 +143,8 @@ describe('evaluateStudioDeployTransition', () => {
       authority: { actor: 'anonymous' },
       issuedAt: ISSUED_AT,
     });
-    expect(result.decision).toBe('PASS');
-    expect(result.reason_code).toBe('GATE_PASS');
+    expect(result.decision).toBe('REJECT');
+    expect(result.reason_code).toBe('GATE_REJECT_CLAIM_MISMATCH');
   });
 
   it('HOLD when workflow completed without a live receipt (no Deploy completed claim)', () => {
@@ -486,7 +486,7 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ');
   });
 
-  it('PASS when a verified live URL arrives after a timeout abort residual', () => {
+  it('REJECTs a raw live URL even after a timeout abort residual', () => {
     const result = evaluateStudioDeployTransition({
       transitionId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
       runId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
@@ -497,7 +497,7 @@ describe('evaluateStudioDeployTransition', () => {
       authority: { actor: 'anonymous' },
       issuedAt: ISSUED_AT,
     });
-    expect(result.decision).toBe('PASS');
+    expect(result.decision).toBe('REJECT');
     expect(result.receipt.id).toBe('er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ');
   });
 });
@@ -512,7 +512,7 @@ describe('studioGateReceiptView', () => {
         issuedAt: ISSUED_AT,
       }),
     );
-    expect(pass.decision).toBe('PASS');
+    expect(pass.decision).toBe('REJECT');
     expect(pass.reason.length).toBeGreaterThan(0);
     expect(pass.receiptId).toBe('er:gate:v1:wrun_live');
     expect(pass.receiptHash).toMatch(/^[a-f0-9]{64}$/);
