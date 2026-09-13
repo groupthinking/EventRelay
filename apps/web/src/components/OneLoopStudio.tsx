@@ -14,7 +14,8 @@ import {
 } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
-import { useDashboardStore } from '@/store/dashboard-store';
+import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
+import GroundedSpecReview from '@/components/GroundedSpecReview';
 import {
   actionsFromStudioRun,
   buildStudioShipPackage,
@@ -960,6 +961,22 @@ export default function OneLoopStudio({
                   : 'Nothing yet.')}
           </div>
         </section>
+
+        {selected?.videoPack?.pack ? (
+          <GroundedSpecReview
+            key={selected.id}
+            videoId={selected.id}
+            pack={selected.videoPack.pack}
+            acknowledgment={selected.specReviewAcknowledgment}
+            persistenceAvailable={dashboardPersistenceSucceeded()}
+            onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
+            onAcknowledge={(value) => {
+              if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
+              updateVideo(selected.id, { specReviewAcknowledgment: value });
+              return dashboardPersistenceSucceeded();
+            }}
+          />
+        ) : null}
 
         {promotePack ? (
           <PackWorkbench

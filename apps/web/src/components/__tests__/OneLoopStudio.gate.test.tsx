@@ -23,6 +23,20 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Studio authoritative gate receipt', () => {
+  it('reopens a stored pack without running analysis or gate actions', async () => {
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
+    useDashboardStore.setState({ videos: [{ ...video, status: 'failed', videoPack: { packId: pack.id, sourceHash: pack.provenance.source_hash, version: pack.version, pack } }], selectedVideoId: null });
+    const process = vi.spyOn(useDashboardStore.getState(), 'processVideo');
+    const deployCalls = vi.mocked(startStudioDeploy).mock.calls.length;
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Stored packs' }), { target: { value: video.id } });
+    expect(screen.getByTestId('grounded-spec-review')).toBeTruthy();
+    expect(screen.getByText('Task checklist')).toBeTruthy();
+    expect(process).not.toHaveBeenCalled();
+    expect(vi.mocked(startStudioDeploy).mock.calls.length).toBe(deployCalls);
+  });
+
   it.each(['PASS', 'HOLD', 'REJECT', 'ESCALATE'] as const)('displays server %s without inventing deployment links or execution', async (decision) => {
     const receipt = { ...gate, decision, retained: true, reason: `${decision}: isolated server decision.`, reason_code: `GATE_${decision}` };
     vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: decision === 'PASS' ? 200 : 409, gate: receipt });

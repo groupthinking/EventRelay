@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
@@ -93,6 +94,7 @@ export interface VideoPackVisualContext {
 }
 
 export interface VideoPackV0Json {
+  grounded_spec?: GroundedSpecRecord;
   version: typeof IDENTITY_VERSION;
   id: string;
   video_id: string;
@@ -185,7 +187,7 @@ export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
 ): VideoPackV0Json {
-  return applyKeyframeImageHonesty({
+  const pack = applyKeyframeImageHonesty({
     ...identity,
     transcript: spec.transcript,
     keyframes: spec.keyframes,
@@ -205,6 +207,18 @@ export function applyExtractedSpec(
       notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
     },
   });
+  if (!spec.grounded_spec) return pack;
+  if (spec.grounded_spec.status !== 'available') return { ...pack, grounded_spec: spec.grounded_spec };
+  const source = sourceForGroundedSpec(pack);
+  const checked = parseGroundedSpec(spec.grounded_spec.spec, pack, pack.video_id);
+  if (!source || !checked || checked.status !== 'available') return {
+    ...pack, grounded_spec: checked && checked.status !== 'available' ? checked : invalidGroundedSpec('Source identity is not valid for this specification.'),
+  };
+  const bound = { ...checked.spec, source };
+  return { ...pack, grounded_spec: {
+    status: 'available', spec: bound,
+    contentHash: createHash('sha256').update(canonicalReviewContent(bound, pack)).digest('hex'),
+  } };
 }
 
 export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {

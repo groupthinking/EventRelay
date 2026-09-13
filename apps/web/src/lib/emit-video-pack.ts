@@ -1,3 +1,4 @@
+import { decodeGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import type {
   VideoPackKeyframe,
   VideoPackRequirement,
@@ -7,6 +8,7 @@ import type {
 import { readPackFormation, type VideoPackArchitecture, type VideoPackArtifact, type VideoPackStack } from '@/lib/video-pack-types';
 
 export interface EmittedVideoPack {
+  grounded_spec?: GroundedSpecRecord;
   version: string;
   id: string;
   video_id: string;
@@ -70,6 +72,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   const visualContext = data?.visual_context;
   const keyframes = Array.isArray(data?.keyframes) ? data.keyframes : undefined;
   const requirements = Array.isArray(data?.requirements) ? data.requirements : undefined;
+  const grounding = data ? decodeGroundedSpec(data) : undefined;
 
   return {
     version,
@@ -78,6 +81,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
     sourceUrl,
     sourceHash,
     pack: {
+      ...(grounding ? { grounded_spec: grounding } : {}),
       version,
       id: packId,
       video_id: videoId,
