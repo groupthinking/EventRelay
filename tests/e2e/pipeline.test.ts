@@ -44,7 +44,14 @@ function withBypass(init?: RequestInit): RequestInit {
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
   headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
+  // Deliberately NOT sending `x-vercel-set-bypass-cookie`. That header asks
+  // Vercel to persist the bypass as a cookie and answers every request with
+  // `307 → /`. `fetch` has no cookie jar, so the redirect target is requested
+  // with the same header and 307s again — an unbounded loop that ends in
+  // "TypeError: fetch failed / redirect count exceeded", failing the whole
+  // suite even though the secret is correct. The bypass header alone is
+  // accepted per-request and returns 200 directly, which is all a stateless
+  // test client needs. The cookie form only helps a browser that persists it.
   return { ...init, headers };
 }
 
@@ -336,7 +343,7 @@ describe('EventRelay E2E — Live Deployment', () => {
       }
     });
 
-    it('terminal pipeline_status includes duration and agent count when present', async () => {
+    it('terminal pipeline_status includes duration and stage progress', async () => {
       const res = await fetchWithTimeout(
         `${BASE_URL}/api/pipeline/stream`,
         {
@@ -364,8 +371,13 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(typeof terminal.duration).toBe('number');
       const data = terminal.data as Record<string, unknown> | undefined;
       if (data) {
-        expect(data.totalAgents).toBeDefined();
-        expect(data.completedAgents).toBeDefined();
+        // Both terminal paths — quality-gate completion and hard failure —
+        // report stage progress under these names, so a client can rely on a
+        // single shape regardless of how the stream ended.
+        expect(data.totalStages).toBeDefined();
+        expect(data.completedStages).toBeDefined();
+        expect(typeof data.totalStages).toBe('number');
+        expect(typeof data.completedStages).toBe('number');
       }
     });
   });
