@@ -252,7 +252,6 @@ def test_current_upstream_skills_suite_is_pinned_and_fully_accounted_for() -> No
         "sep-2640-client-verify-digest",
         "sep-2640-client-verify-size",
         "sep-2640-client-verify-frontmatter",
-        "sep-2640-client-verify-unlisted-uri",
     }
 
     assert skills_server <= excluded_server
