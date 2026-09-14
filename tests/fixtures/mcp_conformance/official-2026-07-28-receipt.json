@@ -1,17 +1,14 @@
-Warning: truncated output (original token count: 39352)
-Total output lines: 3687
-
 {
   "schema_version": "eventrelay.mcp-conformance-receipt.v1",
   "baseline_revision": "2026-07-28",
-  "generated_at": "2026-09-13T18:04:24Z",
+  "generated_at": "2026-09-14T07:06:42Z",
   "overall_ok": true,
   "conformance": {
     "package": "git+https://github.com/modelcontextprotocol/conformance.git#7169291ec0b68eb370fddcd9947313ab0d5e4156",
     "commit": "7169291ec0b68eb370fddcd9947313ab0d5e4156"
   },
   "implementation": {
-    "commit": "d7884028c6470b2b1a2e8fb90744b8c16ce23004",
+    "commit": "e574ba7dbe9bf6278b79b5de592f8c8d790d4f25",
     "sdk_version": "^1.30.0"
   },
   "versions": {
@@ -141,8 +138,7 @@ Total output lines: 3687
             "sep-2640-client-no-prefetch",
             "sep-2640-client-verify-digest",
             "sep-2640-client-verify-size",
-            "sep-2640-client-verify-frontmatter",
-            "sep-2640-client-verify-unlisted-uri"
+            "sep-2640-client-verify-frontmatter"
           ]
         }
       ]
@@ -170,7 +166,7 @@ Total output lines: 3687
           "name": "ToolsList",
           "description": "Server lists available tools with valid structure",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:01:50.864Z",
+          "timestamp": "2026-09-14T07:04:00.195Z",
           "specReferences": [
             {
               "id": "MCP-Tools-List",
@@ -207,7 +203,7 @@ Total output lines: 3687
               "url": "https://github.com/modelcontextprotocol/modelcontextprotocol/pull/1603"
             }
           ],
-          "timestamp": "2026-09-13T18:01:50.864Z",
+          "timestamp": "2026-09-14T07:04:00.195Z",
           "status": "SUCCESS",
           "details": {
             "toolCount": 2,
@@ -230,7 +226,7 @@ Total output lines: 3687
           "source": {
             "introducedIn": "2026-07-28"
           },
-          "timestamp": "2026-09-13T18:01:50.914Z",
+          "timestamp": "2026-09-14T07:04:00.242Z",
           "status": "SUCCESS",
           "details": {
             "toolCount": 2,
@@ -256,7 +252,7 @@ Total output lines: 3687
           "name": "WireSchemaValid",
           "description": "Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:01:50.914Z",
+          "timestamp": "2026-09-14T07:04:00.242Z",
           "specReferences": [
             {
               "id": "MCP-Schema",
@@ -269,7 +265,7 @@ Total output lines: 3687
           }
         }
       ],
-      "stdout": "Running client scenario 'tools-list' against server: http://127.0.0.1:42821/mcp\nResults saved to /tmp/mcp-conformance-server-ak9ev1d0/server-tools-list-2026-09-13T18-01-50-574Z\nChecks:\n\u001b[90m2026-09-13T18:01:50.864Z\u001b[0m [tools-list                    ] \u001b[32mSUCCESS\u001b[0m Server lists available tools with valid structure\n\u001b[90m2026-09-13T18:01:50.864Z\u001b[0m [tools-name-format             ] \u001b[32mSUCCESS\u001b[0m Tool names SHOULD be 1-128 characters and match ^[A-Za-z0-9_.-]+$\n\u001b[90m2026-09-13T18:01:50.914Z\u001b[0m [tools-list-deterministic-order] \u001b[32mSUCCESS\u001b[0m Consecutive tools/list requests return the same tools in the same order\n\u001b[90m2026-09-13T18:01:50.914Z\u001b[0m [wire-schema-valid             ] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 4/4, 0 failed, 0 warnings\n",
+      "stdout": "Running client scenario 'tools-list' against server: http://127.0.0.1:38219/mcp\nResults saved to /tmp/mcp-conformance-server-tdq0wb3m/server-tools-list-2026-09-14T07-04-00-087Z\nChecks:\n\u001b[90m2026-09-14T07:04:00.195Z\u001b[0m [tools-list                    ] \u001b[32mSUCCESS\u001b[0m Server lists available tools with valid structure\n\u001b[90m2026-09-14T07:04:00.195Z\u001b[0m [tools-name-format             ] \u001b[32mSUCCESS\u001b[0m Tool names SHOULD be 1-128 characters and match ^[A-Za-z0-9_.-]+$\n\u001b[90m2026-09-14T07:04:00.242Z\u001b[0m [tools-list-deterministic-order] \u001b[32mSUCCESS\u001b[0m Consecutive tools/list requests return the same tools in the same order\n\u001b[90m2026-09-14T07:04:00.242Z\u001b[0m [wire-schema-valid             ] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 4/4, 0 failed, 0 warnings\n",
       "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n"
     },
     {
@@ -293,7 +289,7 @@ Total output lines: 3687
           "name": "ToolsCallSimpleText",
           "description": "Tool returns simple text content",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:02:12.900Z",
+          "timestamp": "2026-09-14T07:04:22.705Z",
           "specReferences": [
             {
               "id": "MCP-Tools-Call",
@@ -319,7 +315,7 @@ Total output lines: 3687
           "name": "WireSchemaValid",
           "description": "Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:02:12.900Z",
+          "timestamp": "2026-09-14T07:04:22.706Z",
           "specReferences": [
             {
               "id": "MCP-Schema",
@@ -332,7 +328,7 @@ Total output lines: 3687
           }
         }
       ],
-      "stdout": "Running client scenario 'tools-call-simple-text' against server: http://127.0.0.1:34759/mcp\nResults saved to /tmp/mcp-conformance-server-5txtsfhx/server-tools-call-simple-text-2026-09-13T18-02-12-657Z\nChecks:\n\u001b[90m2026-09-13T18:02:12.900Z\u001b[0m [tools-call-simple-text] \u001b[32mSUCCESS\u001b[0m Tool returns simple text content\n\u001b[90m2026-09-13T18:02:12.900Z\u001b[0m [wire-schema-valid     ] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 2/2, 0 failed, 0 warnings\n",
+      "stdout": "Running client scenario 'tools-call-simple-text' against server: http://127.0.0.1:58901/mcp\nResults saved to /tmp/mcp-conformance-server-m0ocr_5p/server-tools-call-simple-text-2026-09-14T07-04-22-519Z\nChecks:\n\u001b[90m2026-09-14T07:04:22.705Z\u001b[0m [tools-call-simple-text] \u001b[32mSUCCESS\u001b[0m Tool returns simple text content\n\u001b[90m2026-09-14T07:04:22.706Z\u001b[0m [wire-schema-valid     ] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 2/2, 0 failed, 0 warnings\n",
       "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n"
     },
     {
@@ -356,7 +352,7 @@ Total output lines: 3687
           "name": "ToolsCallError",
           "description": "Tool returns error correctly",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:02:32.085Z",
+          "timestamp": "2026-09-14T07:04:46.865Z",
           "specReferences": [
             {
               "id": "MCP-Error-Handling",
@@ -383,7 +379,7 @@ Total output lines: 3687
           "name": "WireSchemaValid",
           "description": "Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:02:32.085Z",
+          "timestamp": "2026-09-14T07:04:46.865Z",
           "specReferences": [
             {
               "id": "MCP-Schema",
@@ -396,7 +392,7 @@ Total output lines: 3687
           }
         }
       ],
-      "stdout": "Running client scenario 'tools-call-error' against server: http://127.0.0.1:54349/mcp\nResults saved to /tmp/mcp-conformance-server-uuvf7phz/server-tools-call-error-2026-09-13T18-02-31-967Z\nChecks:\n\u001b[90m2026-09-13T18:02:32.085Z\u001b[0m [tools-call-error ] \u001b[32mSUCCESS\u001b[0m Tool returns error correctly\n\u001b[90m2026-09-13T18:02:32.085Z\u001b[0m [wire-schema-valid] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 2/2, 0 failed, 0 warnings\n",
+      "stdout": "Running client scenario 'tools-call-error' against server: http://127.0.0.1:42195/mcp\nResults saved to /tmp/mcp-conformance-server-9t1tgrzi/server-tools-call-error-2026-09-14T07-04-46-720Z\nChecks:\n\u001b[90m2026-09-14T07:04:46.865Z\u001b[0m [tools-call-error ] \u001b[32mSUCCESS\u001b[0m Tool returns error correctly\n\u001b[90m2026-09-14T07:04:46.865Z\u001b[0m [wire-schema-valid] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 2/2, 0 failed, 0 warnings\n",
       "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n"
     },
     {
@@ -421,7 +417,7 @@ Total output lines: 3687
           "name": "ServerInitialize",
           "description": "Server responds to initialize request with valid structure",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:02:51.822Z",
+          "timestamp": "2026-09-14T07:05:10.122Z",
           "specReferences": [
             {
               "id": "MCP-Initialize",
@@ -429,7 +425,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "serverUrl": "http://127.0.0.1:35009/mcp",
+            "serverUrl": "http://127.0.0.1:53003/mcp",
             "connected": true
           }
         },
@@ -438,7 +434,7 @@ Total output lines: 3687
           "name": "ServerSessionIdVisibleAscii",
           "description": "Server-provided session ID uses only visible ASCII characters",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:02:51.834Z",
+          "timestamp": "2026-09-14T07:05:10.129Z",
           "specReferences": [
             {
               "id": "MCP-Session-Management",
@@ -454,7 +450,7 @@ Total output lines: 3687
           "name": "WireSchemaValid",
           "description": "Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:02:51.834Z",
+          "timestamp": "2026-09-14T07:05:10.130Z",
           "specReferences": [
             {
               "id": "MCP-Schema",
@@ -467,7 +463,7 @@ Total output lines: 3687
           }
         }
       ],
-      "stdout": "Running client scenario 'server-initialize' against server: http://127.0.0.1:35009/mcp\nResults saved to /tmp/mcp-conformance-server-3ml2wzlf/server-server-initialize-2026-09-13T18-02-51-704Z\nChecks:\n\u001b[90m2026-09-13T18:02:51.822Z\u001b[0m [server-initialize              ] \u001b[32mSUCCESS\u001b[0m Server responds to initialize request with valid structure\n\u001b[90m2026-09-13T18:02:51.834Z\u001b[0m [server-session-id-visible-ascii] \u001b[36mINFO   \u001b[0m Server-provided session ID uses only visible ASCII characters\n\u001b[90m2026-09-13T18:02:51.834Z\u001b[0m [wire-schema-valid              ] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 2/2, 0 failed, 0 warnings\n",
+      "stdout": "Running client scenario 'server-initialize' against server: http://127.0.0.1:53003/mcp\nResults saved to /tmp/mcp-conformance-server-hhct57iv/server-server-initialize-2026-09-14T07-05-09-896Z\nChecks:\n\u001b[90m2026-09-14T07:05:10.122Z\u001b[0m [server-initialize              ] \u001b[32mSUCCESS\u001b[0m Server responds to initialize request with valid structure\n\u001b[90m2026-09-14T07:05:10.129Z\u001b[0m [server-session-id-visible-ascii] \u001b[36mINFO   \u001b[0m Server-provided session ID uses only visible ASCII characters\n\u001b[90m2026-09-14T07:05:10.130Z\u001b[0m [wire-schema-valid              ] \u001b[32mSUCCESS\u001b[0m Every JSON-RPC message the implementation sent is valid per the spec JSON schema for the negotiated spec version\n\nTest Results:\nPassed: 2/2, 0 failed, 0 warnings\n",
       "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\n"
     },
     {
@@ -492,7 +488,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received POST request for /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.642Z",
+          "timestamp": "2026-09-14T07:05:35.519Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -519,7 +515,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 401 response for POST /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.644Z",
+          "timestamp": "2026-09-14T07:05:35.521Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -543,7 +539,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.654Z",
+          "timestamp": "2026-09-14T07:05:35.533Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp"
@@ -554,7 +550,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 404 response for GET /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.656Z",
+          "timestamp": "2026-09-14T07:05:35.534Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp",
@@ -574,7 +570,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.658Z",
+          "timestamp": "2026-09-14T07:05:35.537Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource"
@@ -585,7 +581,7 @@ Total output lines: 3687
           "name": "PRMPathBasedRequested",
           "description": "Client requested PRM metadata at path-based location",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.658Z",
+          "timestamp": "2026-09-14T07:05:35.538Z",
           "specReferences": [
             {
               "id": "RFC-9728",
@@ -606,7 +602,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for GET /.well-known/oauth-protected-resource",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.659Z",
+          "timestamp": "2026-09-14T07:05:35.538Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource",
@@ -615,12 +611,12 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "96",
-              "etag": "W/\"60-XRQsWuJ17u7ya3EP4r9aZm/2VZ4\""
+              "etag": "W/\"60-lFRljVBdN8WJ2fwNGKmWYn01US4\""
             },
             "body": {
-              "resource": "http://localhost:46377",
+              "resource": "http://localhost:43145",
               "authorization_servers": [
-                "http://localhost:41197/tenant1"
+                "http://localhost:45403/tenant1"
               ]
             }
           }
@@ -630,7 +626,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /.well-known/oauth-authorization-server/tenant1",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.667Z",
+          "timestamp": "2026-09-14T07:05:35.549Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server/tenant1"
@@ -641,7 +637,7 @@ Total output lines: 3687
           "name": "AuthorizationServerMetadata",
           "description": "Client requested authorization server metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.667Z",
+          "timestamp": "2026-09-14T07:05:35.549Z",
           "specReferences": [
             {
               "id": "RFC-8414-metadata-request",
@@ -662,7 +658,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for GET /.well-known/oauth-authorization-server/tenant1",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.667Z",
+          "timestamp": "2026-09-14T07:05:35.549Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server/tenant1",
@@ -671,13 +667,13 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "479",
-              "etag": "W/\"1df-aLdDSOKeh8gpDWjw8W++ia1zXSc\""
+              "etag": "W/\"1df-r/33G/cvFa/h6vDWyQ3oQD7WdTc\""
             },
             "body": {
-              "issuer": "http://localhost:41197/tenant1",
-              "authorization_endpoint": "http://localhost:41197/tenant1/authorize",
-              "token_endpoint": "http://localhost:41197/tenant1/token",
-              "registration_endpoint": "http://localhost:41197/tenant1/register",
+              "issuer": "http://localhost:45403/tenant1",
+              "authorization_endpoint": "http://localhost:45403/tenant1/authorize",
+              "token_endpoint": "http://localhost:45403/tenant1/token",
+              "registration_endpoint": "http://localhost:45403/tenant1/register",
               "response_types_supported": [
                 "code"
               ],
@@ -700,7 +696,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received POST request for /tenant1/register",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.673Z",
+          "timestamp": "2026-09-14T07:05:35.557Z",
           "details": {
             "method": "POST",
             "path": "/tenant1/register",
@@ -718,7 +714,7 @@ Total output lines: 3687
           "name": "ClientRegistration",
           "description": "Client registered with authorization server",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.674Z",
+          "timestamp": "2026-09-14T07:05:35.557Z",
           "specReferences": [
             {
               "id": "MCP-Dynamic-client-registration",
@@ -735,7 +731,7 @@ Total output lines: 3687
           "name": "DCR application_type specified",
           "description": "Client specified application_type \"native\" during Dynamic Client Registration",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.674Z",
+          "timestamp": "2026-09-14T07:05:35.557Z",
           "specReferences": [
             {
               "id": "MCP-Dynamic-client-registration",
@@ -751,7 +747,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 201 response for POST /tenant1/register",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.674Z",
+          "timestamp": "2026-09-14T07:05:35.557Z",
           "details": {
             "method": "POST",
             "path": "/tenant1/register",
@@ -777,17 +773,17 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /tenant1/authorize",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.681Z",
+          "timestamp": "2026-09-14T07:05:35.564Z",
           "details": {
             "method": "GET",
             "path": "/tenant1/authorize",
             "query": {
               "response_type": "code",
               "client_id": "test-client-id",
-              "code_challenge": "DBaVmLYxrcNWmfQpWjYqutGlI_7AGw5VG35Mq8D749k",
+              "code_challenge": "Vd49RXXgQIeKbGcVN_UxpgocOI-bkU_SVHqWMBF0faQ",
               "code_challenge_method": "S256",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:46377"
+              "resource": "http://localhost:43145"
             }
           }
         },
@@ -796,7 +792,7 @@ Total output lines: 3687
           "name": "AuthorizationRequest",
           "description": "Client made authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.681Z",
+          "timestamp": "2026-09-14T07:05:35.564Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-authorization-endpoint",
@@ -807,10 +803,10 @@ Total output lines: 3687
             "query": {
               "response_type": "code",
               "client_id": "test-client-id",
-              "code_challenge": "DBaVmLYxrcNWmfQpWjYqutGlI_7AGw5VG35Mq8D749k",
+              "code_challenge": "Vd49RXXgQIeKbGcVN_UxpgocOI-bkU_SVHqWMBF0faQ",
               "code_challenge_method": "S256",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:46377"
+              "resource": "http://localhost:43145"
             }
           }
         },
@@ -819,7 +815,7 @@ Total output lines: 3687
           "name": "PKCE Code Challenge",
           "description": "Client sent code_challenge in authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.681Z",
+          "timestamp": "2026-09-14T07:05:35.564Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -832,7 +828,7 @@ Total output lines: 3687
           "name": "PKCE S256 Method",
           "description": "Client used S256 code challenge method",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.681Z",
+          "timestamp": "2026-09-14T07:05:35.564Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -848,19 +844,19 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 302 response for GET /tenant1/authorize",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.683Z",
+          "timestamp": "2026-09-14T07:05:35.565Z",
           "details": {
             "method": "GET",
             "path": "/tenant1/authorize",
             "statusCode": 302,
             "headers": {
               "x-powered-by": "Express",
-              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A41197%2Ftenant1",
+              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A45403%2Ftenant1",
               "vary": "Accept",
               "content-type": "text/plain; charset=utf-8",
               "content-length": "117"
             },
-            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A41197%2Ftenant1"
+            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A45403%2Ftenant1"
           }
         },
         {
@@ -868,7 +864,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.686Z",
+          "timestamp": "2026-09-14T07:05:35.568Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp"
@@ -879,7 +875,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 404 response for GET /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.686Z",
+          "timestamp": "2026-09-14T07:05:35.569Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp",
@@ -899,7 +895,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.689Z",
+          "timestamp": "2026-09-14T07:05:35.570Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource"
@@ -910,7 +906,7 @@ Total output lines: 3687
           "name": "PRMPathBasedRequested",
           "description": "Client requested PRM metadata at path-based location",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.689Z",
+          "timestamp": "2026-09-14T07:05:35.570Z",
           "specReferences": [
             {
               "id": "RFC-9728",
@@ -931,7 +927,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for GET /.well-known/oauth-protected-resource",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.690Z",
+          "timestamp": "2026-09-14T07:05:35.570Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource",
@@ -940,12 +936,12 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "96",
-              "etag": "W/\"60-XRQsWuJ17u7ya3EP4r9aZm/2VZ4\""
+              "etag": "W/\"60-lFRljVBdN8WJ2fwNGKmWYn01US4\""
             },
             "body": {
-              "resource": "http://localhost:46377",
+              "resource": "http://localhost:43145",
               "authorization_servers": [
-                "http://localhost:41197/tenant1"
+                "http://localhost:45403/tenant1"
               ]
             }
           }
@@ -955,7 +951,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /.well-known/oauth-authorization-server/tenant1",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.693Z",
+          "timestamp": "2026-09-14T07:05:35.573Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server/tenant1"
@@ -966,7 +962,7 @@ Total output lines: 3687
           "name": "AuthorizationServerMetadata",
           "description": "Client requested authorization server metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.693Z",
+          "timestamp": "2026-09-14T07:05:35.573Z",
           "specReferences": [
             {
               "id": "RFC-8414-metadata-request",
@@ -987,7 +983,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for GET /.well-known/oauth-authorization-server/tenant1",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.693Z",
+          "timestamp": "2026-09-14T07:05:35.573Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server/tenant1",
@@ -996,13 +992,13 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "479",
-              "etag": "W/\"1df-aLdDSOKeh8gpDWjw8W++ia1zXSc\""
+              "etag": "W/\"1df-r/33G/cvFa/h6vDWyQ3oQD7WdTc\""
             },
             "body": {
-              "issuer": "http://localhost:41197/tenant1",
-              "authorization_endpoint": "http://localhost:41197/tenant1/authorize",
-              "token_endpoint": "http://localhost:41197/tenant1/token",
-              "registration_endpoint": "http://localhost:41197/tenant1/register",
+              "issuer": "http://localhost:45403/tenant1",
+              "authorization_endpoint": "http://localhost:45403/tenant1/authorize",
+              "token_endpoint": "http://localhost:45403/tenant1/token",
+              "registration_endpoint": "http://localhost:45403/tenant1/register",
               "response_types_supported": [
                 "code"
               ],
@@ -1025,16 +1021,16 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received POST request for /tenant1/token",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.698Z",
+          "timestamp": "2026-09-14T07:05:35.578Z",
           "details": {
             "method": "POST",
             "path": "/tenant1/token",
             "body": {
               "grant_type": "authorization_code",
               "code": "test-auth-code",
-              "code_verifier": "A2rXkBiy206xrUvN66E16E2ROn865.HZtogOloPRhJk",
+              "code_verifier": "gV7brn2CJWhZH-7TA88DWjivUgStrXW17uxzZk7h1H0",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:46377",
+              "resource": "http://localhost:43145",
               "client_id": "test-client-id"
             }
           }
@@ -1044,7 +1040,7 @@ Total output lines: 3687
           "name": "TokenRequest",
           "description": "Client requested access token",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.699Z",
+          "timestamp": "2026-09-14T07:05:35.579Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-token-request",
@@ -1061,7 +1057,7 @@ Total output lines: 3687
           "name": "PKCE Code Verifier",
           "description": "Client sent code_verifier in token request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.699Z",
+          "timestamp": "2026-09-14T07:05:35.579Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -1074,7 +1070,7 @@ Total output lines: 3687
           "name": "PKCE Verifier Validation",
           "description": "code_verifier correctly matches code_challenge (S256)",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.699Z",
+          "timestamp": "2026-09-14T07:05:35.579Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -1083,8 +1079,8 @@ Total output lines: 3687
           ],
           "details": {
             "matches": true,
-            "storedChallenge": "DBaVmLYxrcNWmfQpWjYqutGlI_7AGw5VG35Mq8D749k",
-            "computedChallenge": "DBaVmLYxrcNWmfQpWjYqutGlI_7AGw5VG35Mq8D749k"
+            "storedChallenge": "Vd49RXXgQIeKbGcVN_UxpgocOI-bkU_SVHqWMBF0faQ",
+            "computedChallenge": "Vd49RXXgQIeKbGcVN_UxpgocOI-bkU_SVHqWMBF0faQ"
           }
         },
         {
@@ -1092,7 +1088,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for POST /tenant1/token",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.699Z",
+          "timestamp": "2026-09-14T07:05:35.579Z",
           "details": {
             "method": "POST",
             "path": "/tenant1/token",
@@ -1101,10 +1097,10 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "83",
-              "etag": "W/\"53-Y1Q68kDDjHWluFGk6H51O6vkhAQ\""
+              "etag": "W/\"53-wSEcdpntHIecDm9Fh/fvsN/47eg\""
             },
             "body": {
-              "access_token": "test-token-1789322600699",
+              "access_token": "test-token-1789369535579",
               "token_type": "Bearer",
               "expires_in": 3600
             }
@@ -1115,7 +1111,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received POST request for /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.705Z",
+          "timestamp": "2026-09-14T07:05:35.583Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -1142,7 +1138,7 @@ Total output lines: 3687
           "name": "ValidBearerToken",
           "description": "Client provided valid bearer token",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.705Z",
+          "timestamp": "2026-09-14T07:05:35.583Z",
           "specReferences": [
             {
               "id": "MCP-Access-token-usage",
@@ -1159,7 +1155,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for POST /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:20.706Z",
+          "timestamp": "2026-09-14T07:05:35.584Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -1195,7 +1191,7 @@ Total output lines: 3687
           "name": "Resource parameter in authorization request",
           "description": "Client included resource parameter in authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.728Z",
+          "timestamp": "2026-09-14T07:05:35.606Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1207,7 +1203,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:46377"
+            "resource": "http://localhost:43145"
           }
         },
         {
@@ -1215,7 +1211,7 @@ Total output lines: 3687
           "name": "Resource parameter in token request",
           "description": "Client included resource parameter in token request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.728Z",
+          "timestamp": "2026-09-14T07:05:35.606Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1227,7 +1223,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:46377"
+            "resource": "http://localhost:43145"
           }
         },
         {
@@ -1235,7 +1231,7 @@ Total output lines: 3687
           "name": "Resource parameter is valid canonical URI",
           "description": "Resource parameter is a valid canonical URI (has scheme, no fragment)",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.728Z",
+          "timestamp": "2026-09-14T07:05:35.606Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1247,7 +1243,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:46377"
+            "resource": "http://localhost:43145"
           }
         },
         {
@@ -1255,7 +1251,7 @@ Total output lines: 3687
           "name": "Resource parameter consistency",
           "description": "Resource parameter is consistent between authorization and token requests",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.728Z",
+          "timestamp": "2026-09-14T07:05:35.606Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1267,8 +1263,8 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "authorizationResource": "http://localhost:46377",
-            "tokenResource": "http://localhost:46377"
+            "authorizationResource": "http://localhost:43145",
+            "tokenResource": "http://localhost:43145"
           }
         },
         {
@@ -1276,7 +1272,7 @@ Total output lines: 3687
           "name": "Resource parameter matches protected resource metadata",
           "description": "Client sent the resource identifier exactly as published in protected resource metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:20.728Z",
+          "timestamp": "2026-09-14T07:05:35.606Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1296,14 +1292,14 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "prmResource": "http://localhost:46377",
-            "authorizationResource": "http://localhost:46377",
-            "tokenResource": "http://localhost:46377"
+            "prmResource": "http://localhost:43145",
+            "authorizationResource": "http://localhost:43145",
+            "tokenResource": "http://localhost:43145"
           }
         }
       ],
       "stdout": "",
-      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/metadata-var2\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:46377/mcp\n(node:878) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-9rjyjhyu/auth/metadata-var2-2026-09-13T18-03-20-372Z\nChecks:\n\u001b[90m2026-09-13T18:03:20.642Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-13T18:03:20.644Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-13T18:03:20.654Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-13T18:03:20.656Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 404 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-13T18:03:20.658Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource\n\u001b[90m2026-09-13T18:03:20.658Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-13T18:03:20.659Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource\n\n\u001b[90m2026-09-13T18:03:20.667Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server/tenant1\n\u001b[90m2026-09-13T18:03:20.667Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-13T18:03:20.667Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server/tenant1\n\n\u001b[90m2026-09-13T18:03:20.673Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /tenant1/register\n\u001b[90m2026-09-13T18:03:20.674Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-13T18:03:20.674Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-13T18:03:20.674Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /tenant1/register\n\n\u001b[90m2026-09-13T18:03:20.681Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /tenant1/authorize\n\u001b[90m2026-09-13T18:03:20.681Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-13T18:03:20.681Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-13T18:03:20.681Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-13T18:03:20.683Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /tenant1/authorize\n\n\u001b[90m2026-09-13T18:03:20.686Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-13T18:03:20.686Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 404 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-13T18:03:20.689Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource\n\u001b[90m2026-09-13T18:03:20.689Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-13\n...[truncated]"
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/metadata-var2\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:43145/mcp\n(node:859) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-puuv8hga/auth/metadata-var2-2026-09-14T07-05-35-169Z\nChecks:\n\u001b[90m2026-09-14T07:05:35.519Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-14T07:05:35.521Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-14T07:05:35.533Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:05:35.534Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 404 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:05:35.537Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource\n\u001b[90m2026-09-14T07:05:35.538Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:05:35.538Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource\n\n\u001b[90m2026-09-14T07:05:35.549Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server/tenant1\n\u001b[90m2026-09-14T07:05:35.549Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:05:35.549Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server/tenant1\n\n\u001b[90m2026-09-14T07:05:35.557Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /tenant1/register\n\u001b[90m2026-09-14T07:05:35.557Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-14T07:05:35.557Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-14T07:05:35.557Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /tenant1/register\n\n\u001b[90m2026-09-14T07:05:35.564Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /tenant1/authorize\n\u001b[90m2026-09-14T07:05:35.564Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-14T07:05:35.564Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-14T07:05:35.564Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-14T07:05:35.565Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /tenant1/authorize\n\n\u001b[90m2026-09-14T07:05:35.568Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:05:35.569Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 404 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:05:35.570Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource\n\u001b[90m2026-09-14T07:05:35.570Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14\n...[truncated]"
     },
     {
       "leg": "client",
@@ -1327,7 +1323,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received POST request for /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:42.506Z",
+          "timestamp": "2026-09-14T07:05:56.795Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -1354,7 +1350,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 401 response for POST /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:42.508Z",
+          "timestamp": "2026-09-14T07:05:56.800Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -1362,7 +1358,7 @@ Total output lines: 3687
             "mcpMethod": "tools/list",
             "headers": {
               "x-powered-by": "Express",
-              "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"Missing Authorization header\", resource_metadata=\"http://localhost:36495/.well-known/oauth-protected-resource/mcp\"",
+              "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"Missing Authorization header\", resource_metadata=\"http://localhost:44753/.well-known/oauth-protected-resource/mcp\"",
               "content-type": "application/json; charset=utf-8",
               "content-length": "76",
               "etag": "W/\"4c-ptrIdu+3yjAtarglCEu6XVLnz2c\""
@@ -1378,7 +1374,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:42.532Z",
+          "timestamp": "2026-09-14T07:05:56.814Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp"
@@ -1389,7 +1385,7 @@ Total output lines: 3687
           "name": "PRMPathBasedRequested",
           "description": "Client requested PRM metadata at path-based location",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:42.532Z",
+          "timestamp": "2026-09-14T07:05:56.815Z",
           "specReferences": [
             {
               "id": "RFC-9728",
@@ -1410,7 +1406,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:42.533Z",
+          "timestamp": "2026-09-14T07:05:56.815Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp",
@@ -1419,12 +1415,12 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "92",
-              "etag": "W/\"5c-SpYMGFaoQCsHlsgP7K68Fes9Ok8\""
+              "etag": "W/\"5c-DGilbXmXnZhVVogZXYc3gnQ4idk\""
             },
             "body": {
-              "resource": "http://localhost:36495/mcp",
+              "resource": "http://localhost:44753/mcp",
               "authorization_servers": [
-                "http://localhost:35965"
+                "http://localhost:35109"
               ]
             }
           }
@@ -1434,7 +1430,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /.well-known/oauth-authorization-server",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:03:42.541Z",
+          "timestamp": "2026-09-14T07:05:56.824Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server"
@@ -1445,220 +1441,7 @@ Total output lines: 3687
           "name": "AuthorizationServerMetadata",
           "description": "Client requested authorization server metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:03:42.541Z",
-          "specReferences": [
-            {
-              "id": "RFC-8414-metadata-request",
-              "url": "https://www.rfc-editor.org/rfc/rfc8414.html#section-3.1"
-            },
-            {
-              "id": "MCP-Authorization-metadata-discovery",
-              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-server-metadata-discovery"
-            }
- …9352 tokens truncated…on_type \"native\" during Dynamic Client Registration",
-          "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.741Z",
-          "specReferences": [
-            {
-              "id": "MCP-Dynamic-client-registration",
-              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/client#dynamic-client-registration"
-            }
-          ],
-          "details": {
-            "application_type": "native"
-          }
-        },
-        {
-          "id": "outgoing-auth-response",
-          "name": "Outgoing-auth-response",
-          "description": "Sent 201 response for POST /register",
-          "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.741Z",
-          "details": {
-            "method": "POST",
-            "path": "/register",
-            "statusCode": 201,
-            "headers": {
-              "x-powered-by": "Express",
-              "content-type": "application/json; charset=utf-8",
-              "content-length": "232",
-              "etag": "W/\"e8-sLtgjQU6OOLUwuq7FGHVfyA5KSA\""
-            },
-            "body": {
-              "client_id": "test-client-1789322642740",
-              "client_secret": "test-secret-1789322642740",
-              "client_name": "eventrelay-conformance-client",
-              "redirect_uris": [
-                "http://localhost:3000/callback"
-              ],
-              "token_endpoint_auth_method": "client_secret_post"
-            }
-          }
-        },
-        {
-          "id": "incoming-auth-request",
-          "name": "Incoming-auth-request",
-          "description": "Received GET request for /authorize",
-          "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.748Z",
-          "details": {
-            "method": "GET",
-            "path": "/authorize",
-            "query": {
-              "response_type": "code",
-              "client_id": "test-client-1789322642740",
-              "code_challenge": "V_kciI-BlzuketKCC-vAoESPRWdYureUc-Dixa-mgf4",
-              "code_challenge_method": "S256",
-              "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:44327/mcp"
-            }
-          }
-        },
-        {
-          "id": "authorization-request",
-          "name": "AuthorizationRequest",
-          "description": "Client made authorization request",
-          "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.749Z",
-          "specReferences": [
-            {
-              "id": "OAUTH-2.1-authorization-endpoint",
-              "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-authorization-endpoint"
-            }
-          ],
-          "details": {
-            "query": {
-              "response_type": "code",
-              "client_id": "test-client-1789322642740",
-              "code_challenge": "V_kciI-BlzuketKCC-vAoESPRWdYureUc-Dixa-mgf4",
-              "code_challenge_method": "S256",
-              "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:44327/mcp"
-            }
-          }
-        },
-        {
-          "id": "pkce-code-challenge-sent",
-          "name": "PKCE Code Challenge",
-          "description": "Client sent code_challenge in authorization request",
-          "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.749Z",
-          "specReferences": [
-            {
-              "id": "MCP-PKCE-requirement",
-              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
-            }
-          ]
-        },
-        {
-          "id": "pkce-s256-method-used",
-          "name": "PKCE S256 Method",
-          "description": "Client used S256 code challenge method",
-          "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.749Z",
-          "specReferences": [
-            {
-              "id": "MCP-PKCE-requirement",
-              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
-            }
-          ],
-          "details": {
-            "method": "S256"
-          }
-        },
-        {
-          "id": "outgoing-auth-response",
-          "name": "Outgoing-auth-response",
-          "description": "Sent 302 response for GET /authorize",
-          "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.751Z",
-          "details": {
-            "method": "GET",
-            "path": "/authorize",
-            "statusCode": 302,
-            "headers": {
-              "x-powered-by": "Express",
-              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A46671",
-              "vary": "Accept",
-              "content-type": "text/plain; charset=utf-8",
-              "content-length": "107"
-            },
-            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A46671"
-          }
-        },
-        {
-          "id": "incoming-request",
-          "name": "Incoming-request",
-          "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
-          "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.753Z",
-          "details": {
-            "method": "GET",
-            "path": "/.well-known/oauth-protected-resource/mcp"
-          }
-        },
-        {
-          "id": "prm-pathbased-requested",
-          "name": "PRMPathBasedRequested",
-          "description": "Client requested PRM metadata at path-based location",
-          "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.753Z",
-          "specReferences": [
-            {
-              "id": "RFC-9728",
-              "url": "https://www.rfc-editor.org/rfc/rfc9728.html#section-3.1"
-            },
-            {
-              "id": "MCP-2025-06-18-PRM-discovery",
-              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#protected-resource-metadata-discovery-requirements"
-            }
-          ],
-          "details": {
-            "url": "/.well-known/oauth-protected-resource/mcp",
-            "path": "/.well-known/oauth-protected-resource/mcp"
-          }
-        },
-        {
-          "id": "outgoing-response",
-          "name": "Outgoing-response",
-          "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
-          "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.754Z",
-          "details": {
-            "method": "GET",
-            "path": "/.well-known/oauth-protected-resource/mcp",
-            "statusCode": 200,
-            "headers": {
-              "x-powered-by": "Express",
-              "content-type": "application/json; charset=utf-8",
-              "content-length": "92",
-              "etag": "W/\"5c-zQqLQdRJZLIjGwSKb8Ka+BInGwo\""
-            },
-            "body": {
-              "resource": "http://localhost:44327/mcp",
-              "authorization_servers": [
-                "http://localhost:46671"
-              ]
-            }
-          }
-        },
-        {
-          "id": "incoming-auth-request",
-          "name": "Incoming-auth-request",
-          "description": "Received GET request for /.well-known/oauth-authorization-server",
-          "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.757Z",
-          "details": {
-            "method": "GET",
-            "path": "/.well-known/oauth-authorization-server"
-          }
-        },
-        {
-          "id": "authorization-server-metadata",
-          "name": "AuthorizationServerMetadata",
-          "description": "Client requested authorization server metadata",
-          "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.757Z",
+          "timestamp": "2026-09-14T07:05:56.824Z",
           "specReferences": [
             {
               "id": "RFC-8414-metadata-request",
@@ -1679,7 +1462,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for GET /.well-known/oauth-authorization-server",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.757Z",
+          "timestamp": "2026-09-14T07:05:56.824Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server",
@@ -1687,14 +1470,14 @@ Total output lines: 3687
             "headers": {
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
-              "content-length": "461",
-              "etag": "W/\"1cd-wZNknx14mnyYWhxX5JOBMB9Nv5E\""
+              "content-length": "462",
+              "etag": "W/\"1ce-9+qNU6r5gcWyU1yynt6BJkQ+KbY\""
             },
             "body": {
-              "issuer": "http://localhost:46671",
-              "authorization_endpoint": "http://localhost:46671/authorize",
-              "token_endpoint": "http://localhost:46671/token",
-              "registration_endpoint": "http://localhost:46671/register",
+              "issuer": "http://localhost:35109",
+              "authorization_endpoint": "http://localhost:35109/authorize",
+              "token_endpoint": "http://localhost:35109/token",
+              "registration_endpoint": "http://localhost:35109/register",
               "response_types_supported": [
                 "code"
               ],
@@ -1707,7 +1490,303 @@ Total output lines: 3687
               ],
               "authorization_response_iss_parameter_supported": true,
               "token_endpoint_auth_methods_supported": [
-                "client_secret_post"
+                "client_secret_basic"
+              ]
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received POST request for /register",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.832Z",
+          "details": {
+            "method": "POST",
+            "path": "/register",
+            "body": {
+              "client_name": "eventrelay-conformance-client",
+              "redirect_uris": [
+                "http://localhost:3000/callback"
+              ],
+              "application_type": "native"
+            }
+          }
+        },
+        {
+          "id": "client-registration",
+          "name": "ClientRegistration",
+          "description": "Client registered with authorization server",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.833Z",
+          "specReferences": [
+            {
+              "id": "MCP-Dynamic-client-registration",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/client#dynamic-client-registration"
+            }
+          ],
+          "details": {
+            "endpoint": "/register",
+            "clientName": "eventrelay-conformance-client",
+            "tokenEndpointAuthMethod": "client_secret_basic"
+          }
+        },
+        {
+          "id": "sep-837-application-type-present",
+          "name": "DCR application_type specified",
+          "description": "Client specified application_type \"native\" during Dynamic Client Registration",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.833Z",
+          "specReferences": [
+            {
+              "id": "MCP-Dynamic-client-registration",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/client#dynamic-client-registration"
+            }
+          ],
+          "details": {
+            "application_type": "native"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 201 response for POST /register",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.834Z",
+          "details": {
+            "method": "POST",
+            "path": "/register",
+            "statusCode": 201,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "233",
+              "etag": "W/\"e9-TsFEyTm0ienG77/9QG0wTwTXNZ8\""
+            },
+            "body": {
+              "client_id": "test-client-1789369556833",
+              "client_secret": "test-secret-1789369556833",
+              "client_name": "eventrelay-conformance-client",
+              "redirect_uris": [
+                "http://localhost:3000/callback"
+              ],
+              "token_endpoint_auth_method": "client_secret_basic"
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received GET request for /authorize",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.843Z",
+          "details": {
+            "method": "GET",
+            "path": "/authorize",
+            "query": {
+              "response_type": "code",
+              "client_id": "test-client-1789369556833",
+              "code_challenge": "JR4TRTlMU5J3xDvLluVsrrhng6ZlexJr9YsUZlsQ2XQ",
+              "code_challenge_method": "S256",
+              "redirect_uri": "http://localhost:3000/callback",
+              "resource": "http://localhost:44753/mcp"
+            }
+          }
+        },
+        {
+          "id": "authorization-request",
+          "name": "AuthorizationRequest",
+          "description": "Client made authorization request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.845Z",
+          "specReferences": [
+            {
+              "id": "OAUTH-2.1-authorization-endpoint",
+              "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-authorization-endpoint"
+            }
+          ],
+          "details": {
+            "query": {
+              "response_type": "code",
+              "client_id": "test-client-1789369556833",
+              "code_challenge": "JR4TRTlMU5J3xDvLluVsrrhng6ZlexJr9YsUZlsQ2XQ",
+              "code_challenge_method": "S256",
+              "redirect_uri": "http://localhost:3000/callback",
+              "resource": "http://localhost:44753/mcp"
+            }
+          }
+        },
+        {
+          "id": "pkce-code-challenge-sent",
+          "name": "PKCE Code Challenge",
+          "description": "Client sent code_challenge in authorization request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.845Z",
+          "specReferences": [
+            {
+              "id": "MCP-PKCE-requirement",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
+            }
+          ]
+        },
+        {
+          "id": "pkce-s256-method-used",
+          "name": "PKCE S256 Method",
+          "description": "Client used S256 code challenge method",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.845Z",
+          "specReferences": [
+            {
+              "id": "MCP-PKCE-requirement",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
+            }
+          ],
+          "details": {
+            "method": "S256"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 302 response for GET /authorize",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.848Z",
+          "details": {
+            "method": "GET",
+            "path": "/authorize",
+            "statusCode": 302,
+            "headers": {
+              "x-powered-by": "Express",
+              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A35109",
+              "vary": "Accept",
+              "content-type": "text/plain; charset=utf-8",
+              "content-length": "107"
+            },
+            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A35109"
+          }
+        },
+        {
+          "id": "incoming-request",
+          "name": "Incoming-request",
+          "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.853Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp"
+          }
+        },
+        {
+          "id": "prm-pathbased-requested",
+          "name": "PRMPathBasedRequested",
+          "description": "Client requested PRM metadata at path-based location",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.853Z",
+          "specReferences": [
+            {
+              "id": "RFC-9728",
+              "url": "https://www.rfc-editor.org/rfc/rfc9728.html#section-3.1"
+            },
+            {
+              "id": "MCP-2025-06-18-PRM-discovery",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#protected-resource-metadata-discovery-requirements"
+            }
+          ],
+          "details": {
+            "url": "/.well-known/oauth-protected-resource/mcp",
+            "path": "/.well-known/oauth-protected-resource/mcp"
+          }
+        },
+        {
+          "id": "outgoing-response",
+          "name": "Outgoing-response",
+          "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.853Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "92",
+              "etag": "W/\"5c-DGilbXmXnZhVVogZXYc3gnQ4idk\""
+            },
+            "body": {
+              "resource": "http://localhost:44753/mcp",
+              "authorization_servers": [
+                "http://localhost:35109"
+              ]
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received GET request for /.well-known/oauth-authorization-server",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.858Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-authorization-server"
+          }
+        },
+        {
+          "id": "authorization-server-metadata",
+          "name": "AuthorizationServerMetadata",
+          "description": "Client requested authorization server metadata",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:05:56.858Z",
+          "specReferences": [
+            {
+              "id": "RFC-8414-metadata-request",
+              "url": "https://www.rfc-editor.org/rfc/rfc8414.html#section-3.1"
+            },
+            {
+              "id": "MCP-Authorization-metadata-discovery",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-server-metadata-discovery"
+            }
+          ],
+          "details": {
+            "url": "/.well-known/oauth-authorization-server",
+            "path": "/.well-known/oauth-authorization-server"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 200 response for GET /.well-known/oauth-authorization-server",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:05:56.858Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-authorization-server",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "462",
+              "etag": "W/\"1ce-9+qNU6r5gcWyU1yynt6BJkQ+KbY\""
+            },
+            "body": {
+              "issuer": "http://localhost:35109",
+              "authorization_endpoint": "http://localhost:35109/authorize",
+              "token_endpoint": "http://localhost:35109/token",
+              "registration_endpoint": "http://localhost:35109/register",
+              "response_types_supported": [
+                "code"
+              ],
+              "grant_types_supported": [
+                "authorization_code",
+                "refresh_token"
+              ],
+              "code_challenge_methods_supported": [
+                "S256"
+              ],
+              "authorization_response_iss_parameter_supported": true,
+              "token_endpoint_auth_methods_supported": [
+                "client_secret_basic"
               ]
             }
           }
@@ -1717,18 +1796,16 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received POST request for /token",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.763Z",
+          "timestamp": "2026-09-14T07:05:56.865Z",
           "details": {
             "method": "POST",
             "path": "/token",
             "body": {
               "grant_type": "authorization_code",
               "code": "test-auth-code",
-              "code_verifier": "uycvbPx4ukyy4jt_OBlXmDBbTi-4iVc2dSXrBPwqe7H",
+              "code_verifier": "G_QzX0fb.y5wWT6MdTi0k6viDG9QvhDn9gpOIUKp9su",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:44327/mcp",
-              "client_id": "test-client-1789322642740",
-              "client_secret": "test-secret-1789322642740"
+              "resource": "http://localhost:44753/mcp"
             }
           }
         },
@@ -1737,7 +1814,7 @@ Total output lines: 3687
           "name": "TokenRequest",
           "description": "Client requested access token",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.763Z",
+          "timestamp": "2026-09-14T07:05:56.870Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-token-request",
@@ -1754,7 +1831,7 @@ Total output lines: 3687
           "name": "PKCE Code Verifier",
           "description": "Client sent code_verifier in token request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.763Z",
+          "timestamp": "2026-09-14T07:05:56.870Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -1767,7 +1844,7 @@ Total output lines: 3687
           "name": "PKCE Verifier Validation",
           "description": "code_verifier correctly matches code_challenge (S256)",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.763Z",
+          "timestamp": "2026-09-14T07:05:56.870Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -1776,16 +1853,16 @@ Total output lines: 3687
           ],
           "details": {
             "matches": true,
-            "storedChallenge": "V_kciI-BlzuketKCC-vAoESPRWdYureUc-Dixa-mgf4",
-            "computedChallenge": "V_kciI-BlzuketKCC-vAoESPRWdYureUc-Dixa-mgf4"
+            "storedChallenge": "JR4TRTlMU5J3xDvLluVsrrhng6ZlexJr9YsUZlsQ2XQ",
+            "computedChallenge": "JR4TRTlMU5J3xDvLluVsrrhng6ZlexJr9YsUZlsQ2XQ"
           }
         },
         {
           "id": "token-endpoint-auth-method",
           "name": "Token endpoint authentication method",
-          "description": "Client correctly used client_secret_post for token endpoint",
+          "description": "Client correctly used HTTP Basic authentication (client_secret_basic) for token endpoint",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.763Z",
+          "timestamp": "2026-09-14T07:05:56.870Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-token-request",
@@ -1793,10 +1870,10 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "expectedAuthMethod": "client_secret_post",
-            "actualAuthMethod": "client_secret_post",
-            "hasAuthorizationHeader": false,
-            "hasBodyClientSecret": true
+            "expectedAuthMethod": "client_secret_basic",
+            "actualAuthMethod": "client_secret_basic",
+            "hasAuthorizationHeader": true,
+            "hasBodyClientSecret": false
           }
         },
         {
@@ -1804,7 +1881,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for POST /token",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.764Z",
+          "timestamp": "2026-09-14T07:05:56.871Z",
           "details": {
             "method": "POST",
             "path": "/token",
@@ -1813,10 +1890,10 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "83",
-              "etag": "W/\"53-EbCK/uOMa408NjQiZ2c5+VbVo7Y\""
+              "etag": "W/\"53-1VK2Haxv2v9FX2MLSRE1xcuJW4o\""
             },
             "body": {
-              "access_token": "test-token-1789322642763",
+              "access_token": "test-token-1789369556870",
               "token_type": "Bearer",
               "expires_in": 3600
             }
@@ -1827,7 +1904,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received POST request for /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.768Z",
+          "timestamp": "2026-09-14T07:05:56.875Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -1854,7 +1931,7 @@ Total output lines: 3687
           "name": "ValidBearerToken",
           "description": "Client provided valid bearer token",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.769Z",
+          "timestamp": "2026-09-14T07:05:56.875Z",
           "specReferences": [
             {
               "id": "MCP-Access-token-usage",
@@ -1871,7 +1948,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for POST /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:02.769Z",
+          "timestamp": "2026-09-14T07:05:56.881Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -1907,7 +1984,7 @@ Total output lines: 3687
           "name": "Resource parameter in authorization request",
           "description": "Client included resource parameter in authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.798Z",
+          "timestamp": "2026-09-14T07:05:56.900Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1919,7 +1996,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:44327/mcp"
+            "resource": "http://localhost:44753/mcp"
           }
         },
         {
@@ -1927,7 +2004,7 @@ Total output lines: 3687
           "name": "Resource parameter in token request",
           "description": "Client included resource parameter in token request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.798Z",
+          "timestamp": "2026-09-14T07:05:56.900Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1939,7 +2016,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:44327/mcp"
+            "resource": "http://localhost:44753/mcp"
           }
         },
         {
@@ -1947,7 +2024,7 @@ Total output lines: 3687
           "name": "Resource parameter is valid canonical URI",
           "description": "Resource parameter is a valid canonical URI (has scheme, no fragment)",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.798Z",
+          "timestamp": "2026-09-14T07:05:56.900Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1959,7 +2036,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:44327/mcp"
+            "resource": "http://localhost:44753/mcp"
           }
         },
         {
@@ -1967,7 +2044,7 @@ Total output lines: 3687
           "name": "Resource parameter consistency",
           "description": "Resource parameter is consistent between authorization and token requests",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.798Z",
+          "timestamp": "2026-09-14T07:05:56.900Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -1979,8 +2056,8 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "authorizationResource": "http://localhost:44327/mcp",
-            "tokenResource": "http://localhost:44327/mcp"
+            "authorizationResource": "http://localhost:44753/mcp",
+            "tokenResource": "http://localhost:44753/mcp"
           }
         },
         {
@@ -1988,7 +2065,7 @@ Total output lines: 3687
           "name": "Resource parameter matches protected resource metadata",
           "description": "Client sent the resource identifier exactly as published in protected resource metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:02.798Z",
+          "timestamp": "2026-09-14T07:05:56.900Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -2008,14 +2085,809 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "prmResource": "http://localhost:44327/mcp",
-            "authorizationResource": "http://localhost:44327/mcp",
-            "tokenResource": "http://localhost:44327/mcp"
+            "prmResource": "http://localhost:44753/mcp",
+            "authorizationResource": "http://localhost:44753/mcp",
+            "tokenResource": "http://localhost:44753/mcp"
           }
         }
       ],
       "stdout": "",
-      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/token-endpoint-auth-post\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:44327/mcp\n(node:1245) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-5nmoxwxa/auth/token-endpoint-auth-post-2026-09-13T18-04-02-437Z\nChecks:\n\u001b[90m2026-09-13T18:04:02.712Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-13T18:04:02.715Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-13T18:04:02.724Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-13T18:04:02.724Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-13T18:04:02.725Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-13T18:04:02.734Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-13T18:04:02.734Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-13T18:04:02.734Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-13T18:04:02.740Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /register\n\u001b[90m2026-09-13T18:04:02.740Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-13T18:04:02.741Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-13T18:04:02.741Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /register\n\n\u001b[90m2026-09-13T18:04:02.748Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /authorize\n\u001b[90m2026-09-13T18:04:02.749Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-13T18:04:02.749Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-13T18:04:02.749Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-13T18:04:02.751Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /authorize\n\n\u001b[90m2026-09-13T18:04:02.753Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-13T18:04:02.753Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-13T18:04:02.754Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-13T18:04:02.757Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-13T18:04:02.757Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-13T18:04:02.757Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-13T18:04:02.763Z\u001b[0m [incoming-auth-req\n...[truncated]"
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/token-endpoint-auth-basic\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:44753/mcp\n(node:1042) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-ugvguzh1/auth/token-endpoint-auth-basic-2026-09-14T07-05-56-366Z\nChecks:\n\u001b[90m2026-09-14T07:05:56.795Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-14T07:05:56.800Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-14T07:05:56.814Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:05:56.815Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:05:56.815Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:05:56.824Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:05:56.824Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:05:56.824Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:05:56.832Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /register\n\u001b[90m2026-09-14T07:05:56.833Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-14T07:05:56.833Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-14T07:05:56.834Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /register\n\n\u001b[90m2026-09-14T07:05:56.843Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /authorize\n\u001b[90m2026-09-14T07:05:56.845Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-14T07:05:56.845Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-14T07:05:56.845Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-14T07:05:56.848Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /authorize\n\n\u001b[90m2026-09-14T07:05:56.853Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:05:56.853Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:05:56.853Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:05:56.858Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:05:56.858Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:05:56.858Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:05:56.865Z\u001b[0m [incoming-auth-r\n...[truncated]"
+    },
+    {
+      "leg": "client",
+      "scenario": "auth/token-endpoint-auth-post",
+      "spec_version": "2026-07-28",
+      "required": true,
+      "exit_code": 0,
+      "summary": {
+        "ok": true,
+        "counts": {
+          "INFO": 18,
+          "SUCCESS": 19
+        },
+        "blocking": []
+      },
+      "warnings": [],
+      "failures": [],
+      "checks": [
+        {
+          "id": "incoming-request",
+          "name": "Incoming-request",
+          "description": "Received POST request for /mcp (method: tools/list)",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.733Z",
+          "details": {
+            "method": "POST",
+            "path": "/mcp",
+            "body": {
+              "jsonrpc": "2.0",
+              "id": 1,
+              "method": "tools/list",
+              "params": {
+                "_meta": {
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                  "io.modelcontextprotocol/clientCapabilities": {},
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "eventrelay-conformance-client",
+                    "version": "1.0.0"
+                  }
+                }
+              }
+            },
+            "mcpMethod": "tools/list"
+          }
+        },
+        {
+          "id": "outgoing-response",
+          "name": "Outgoing-response",
+          "description": "Sent 401 response for POST /mcp (method: tools/list)",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.746Z",
+          "details": {
+            "method": "POST",
+            "path": "/mcp",
+            "statusCode": 401,
+            "mcpMethod": "tools/list",
+            "headers": {
+              "x-powered-by": "Express",
+              "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"Missing Authorization header\", resource_metadata=\"http://localhost:38905/.well-known/oauth-protected-resource/mcp\"",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "76",
+              "etag": "W/\"4c-ptrIdu+3yjAtarglCEu6XVLnz2c\""
+            },
+            "body": {
+              "error": "invalid_token",
+              "error_description": "Missing Authorization header"
+            }
+          }
+        },
+        {
+          "id": "incoming-request",
+          "name": "Incoming-request",
+          "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.759Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp"
+          }
+        },
+        {
+          "id": "prm-pathbased-requested",
+          "name": "PRMPathBasedRequested",
+          "description": "Client requested PRM metadata at path-based location",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.759Z",
+          "specReferences": [
+            {
+              "id": "RFC-9728",
+              "url": "https://www.rfc-editor.org/rfc/rfc9728.html#section-3.1"
+            },
+            {
+              "id": "MCP-2025-06-18-PRM-discovery",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#protected-resource-metadata-discovery-requirements"
+            }
+          ],
+          "details": {
+            "url": "/.well-known/oauth-protected-resource/mcp",
+            "path": "/.well-known/oauth-protected-resource/mcp"
+          }
+        },
+        {
+          "id": "outgoing-response",
+          "name": "Outgoing-response",
+          "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.760Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "92",
+              "etag": "W/\"5c-MPOp7uNnm4hgOsaOlDitUdS+TnY\""
+            },
+            "body": {
+              "resource": "http://localhost:38905/mcp",
+              "authorization_servers": [
+                "http://localhost:43491"
+              ]
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received GET request for /.well-known/oauth-authorization-server",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.773Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-authorization-server"
+          }
+        },
+        {
+          "id": "authorization-server-metadata",
+          "name": "AuthorizationServerMetadata",
+          "description": "Client requested authorization server metadata",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.773Z",
+          "specReferences": [
+            {
+              "id": "RFC-8414-metadata-request",
+              "url": "https://www.rfc-editor.org/rfc/rfc8414.html#section-3.1"
+            },
+            {
+              "id": "MCP-Authorization-metadata-discovery",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-server-metadata-discovery"
+            }
+          ],
+          "details": {
+            "url": "/.well-known/oauth-authorization-server",
+            "path": "/.well-known/oauth-authorization-server"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 200 response for GET /.well-known/oauth-authorization-server",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.773Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-authorization-server",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "461",
+              "etag": "W/\"1cd-RlgUuV7Trp/JzWTNCkEVmWx9Fv4\""
+            },
+            "body": {
+              "issuer": "http://localhost:43491",
+              "authorization_endpoint": "http://localhost:43491/authorize",
+              "token_endpoint": "http://localhost:43491/token",
+              "registration_endpoint": "http://localhost:43491/register",
+              "response_types_supported": [
+                "code"
+              ],
+              "grant_types_supported": [
+                "authorization_code",
+                "refresh_token"
+              ],
+              "code_challenge_methods_supported": [
+                "S256"
+              ],
+              "authorization_response_iss_parameter_supported": true,
+              "token_endpoint_auth_methods_supported": [
+                "client_secret_post"
+              ]
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received POST request for /register",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.782Z",
+          "details": {
+            "method": "POST",
+            "path": "/register",
+            "body": {
+              "client_name": "eventrelay-conformance-client",
+              "redirect_uris": [
+                "http://localhost:3000/callback"
+              ],
+              "application_type": "native"
+            }
+          }
+        },
+        {
+          "id": "client-registration",
+          "name": "ClientRegistration",
+          "description": "Client registered with authorization server",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.782Z",
+          "specReferences": [
+            {
+              "id": "MCP-Dynamic-client-registration",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/client#dynamic-client-registration"
+            }
+          ],
+          "details": {
+            "endpoint": "/register",
+            "clientName": "eventrelay-conformance-client",
+            "tokenEndpointAuthMethod": "client_secret_post"
+          }
+        },
+        {
+          "id": "sep-837-application-type-present",
+          "name": "DCR application_type specified",
+          "description": "Client specified application_type \"native\" during Dynamic Client Registration",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.782Z",
+          "specReferences": [
+            {
+              "id": "MCP-Dynamic-client-registration",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/client#dynamic-client-registration"
+            }
+          ],
+          "details": {
+            "application_type": "native"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 201 response for POST /register",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.783Z",
+          "details": {
+            "method": "POST",
+            "path": "/register",
+            "statusCode": 201,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "232",
+              "etag": "W/\"e8-a9yAtbV35eSjBwTl4v79VRRaSJg\""
+            },
+            "body": {
+              "client_id": "test-client-1789369578782",
+              "client_secret": "test-secret-1789369578782",
+              "client_name": "eventrelay-conformance-client",
+              "redirect_uris": [
+                "http://localhost:3000/callback"
+              ],
+              "token_endpoint_auth_method": "client_secret_post"
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received GET request for /authorize",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.790Z",
+          "details": {
+            "method": "GET",
+            "path": "/authorize",
+            "query": {
+              "response_type": "code",
+              "client_id": "test-client-1789369578782",
+              "code_challenge": "DIJqbhflnFivMoAVxjalVmrYk9NdXER5wenDegXiavo",
+              "code_challenge_method": "S256",
+              "redirect_uri": "http://localhost:3000/callback",
+              "resource": "http://localhost:38905/mcp"
+            }
+          }
+        },
+        {
+          "id": "authorization-request",
+          "name": "AuthorizationRequest",
+          "description": "Client made authorization request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.790Z",
+          "specReferences": [
+            {
+              "id": "OAUTH-2.1-authorization-endpoint",
+              "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-authorization-endpoint"
+            }
+          ],
+          "details": {
+            "query": {
+              "response_type": "code",
+              "client_id": "test-client-1789369578782",
+              "code_challenge": "DIJqbhflnFivMoAVxjalVmrYk9NdXER5wenDegXiavo",
+              "code_challenge_method": "S256",
+              "redirect_uri": "http://localhost:3000/callback",
+              "resource": "http://localhost:38905/mcp"
+            }
+          }
+        },
+        {
+          "id": "pkce-code-challenge-sent",
+          "name": "PKCE Code Challenge",
+          "description": "Client sent code_challenge in authorization request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.790Z",
+          "specReferences": [
+            {
+              "id": "MCP-PKCE-requirement",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
+            }
+          ]
+        },
+        {
+          "id": "pkce-s256-method-used",
+          "name": "PKCE S256 Method",
+          "description": "Client used S256 code challenge method",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.790Z",
+          "specReferences": [
+            {
+              "id": "MCP-PKCE-requirement",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
+            }
+          ],
+          "details": {
+            "method": "S256"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 302 response for GET /authorize",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.799Z",
+          "details": {
+            "method": "GET",
+            "path": "/authorize",
+            "statusCode": 302,
+            "headers": {
+              "x-powered-by": "Express",
+              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A43491",
+              "vary": "Accept",
+              "content-type": "text/plain; charset=utf-8",
+              "content-length": "107"
+            },
+            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A43491"
+          }
+        },
+        {
+          "id": "incoming-request",
+          "name": "Incoming-request",
+          "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.804Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp"
+          }
+        },
+        {
+          "id": "prm-pathbased-requested",
+          "name": "PRMPathBasedRequested",
+          "description": "Client requested PRM metadata at path-based location",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.804Z",
+          "specReferences": [
+            {
+              "id": "RFC-9728",
+              "url": "https://www.rfc-editor.org/rfc/rfc9728.html#section-3.1"
+            },
+            {
+              "id": "MCP-2025-06-18-PRM-discovery",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#protected-resource-metadata-discovery-requirements"
+            }
+          ],
+          "details": {
+            "url": "/.well-known/oauth-protected-resource/mcp",
+            "path": "/.well-known/oauth-protected-resource/mcp"
+          }
+        },
+        {
+          "id": "outgoing-response",
+          "name": "Outgoing-response",
+          "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.804Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-protected-resource/mcp",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "92",
+              "etag": "W/\"5c-MPOp7uNnm4hgOsaOlDitUdS+TnY\""
+            },
+            "body": {
+              "resource": "http://localhost:38905/mcp",
+              "authorization_servers": [
+                "http://localhost:43491"
+              ]
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received GET request for /.well-known/oauth-authorization-server",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.808Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-authorization-server"
+          }
+        },
+        {
+          "id": "authorization-server-metadata",
+          "name": "AuthorizationServerMetadata",
+          "description": "Client requested authorization server metadata",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.808Z",
+          "specReferences": [
+            {
+              "id": "RFC-8414-metadata-request",
+              "url": "https://www.rfc-editor.org/rfc/rfc8414.html#section-3.1"
+            },
+            {
+              "id": "MCP-Authorization-metadata-discovery",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-server-metadata-discovery"
+            }
+          ],
+          "details": {
+            "url": "/.well-known/oauth-authorization-server",
+            "path": "/.well-known/oauth-authorization-server"
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 200 response for GET /.well-known/oauth-authorization-server",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.808Z",
+          "details": {
+            "method": "GET",
+            "path": "/.well-known/oauth-authorization-server",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "461",
+              "etag": "W/\"1cd-RlgUuV7Trp/JzWTNCkEVmWx9Fv4\""
+            },
+            "body": {
+              "issuer": "http://localhost:43491",
+              "authorization_endpoint": "http://localhost:43491/authorize",
+              "token_endpoint": "http://localhost:43491/token",
+              "registration_endpoint": "http://localhost:43491/register",
+              "response_types_supported": [
+                "code"
+              ],
+              "grant_types_supported": [
+                "authorization_code",
+                "refresh_token"
+              ],
+              "code_challenge_methods_supported": [
+                "S256"
+              ],
+              "authorization_response_iss_parameter_supported": true,
+              "token_endpoint_auth_methods_supported": [
+                "client_secret_post"
+              ]
+            }
+          }
+        },
+        {
+          "id": "incoming-auth-request",
+          "name": "Incoming-auth-request",
+          "description": "Received POST request for /token",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.814Z",
+          "details": {
+            "method": "POST",
+            "path": "/token",
+            "body": {
+              "grant_type": "authorization_code",
+              "code": "test-auth-code",
+              "code_verifier": "BfQtR7i_ZPJ2NP0IW8U_7lRXx_fjj-ZsIgOxQt_ij9O",
+              "redirect_uri": "http://localhost:3000/callback",
+              "resource": "http://localhost:38905/mcp",
+              "client_id": "test-client-1789369578782",
+              "client_secret": "test-secret-1789369578782"
+            }
+          }
+        },
+        {
+          "id": "token-request",
+          "name": "TokenRequest",
+          "description": "Client requested access token",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.820Z",
+          "specReferences": [
+            {
+              "id": "OAUTH-2.1-token-request",
+              "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-token-request"
+            }
+          ],
+          "details": {
+            "endpoint": "/token",
+            "grantType": "authorization_code"
+          }
+        },
+        {
+          "id": "pkce-code-verifier-sent",
+          "name": "PKCE Code Verifier",
+          "description": "Client sent code_verifier in token request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.820Z",
+          "specReferences": [
+            {
+              "id": "MCP-PKCE-requirement",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
+            }
+          ]
+        },
+        {
+          "id": "pkce-verifier-matches-challenge",
+          "name": "PKCE Verifier Validation",
+          "description": "code_verifier correctly matches code_challenge (S256)",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.820Z",
+          "specReferences": [
+            {
+              "id": "MCP-PKCE-requirement",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#authorization-code-protection"
+            }
+          ],
+          "details": {
+            "matches": true,
+            "storedChallenge": "DIJqbhflnFivMoAVxjalVmrYk9NdXER5wenDegXiavo",
+            "computedChallenge": "DIJqbhflnFivMoAVxjalVmrYk9NdXER5wenDegXiavo"
+          }
+        },
+        {
+          "id": "token-endpoint-auth-method",
+          "name": "Token endpoint authentication method",
+          "description": "Client correctly used client_secret_post for token endpoint",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.820Z",
+          "specReferences": [
+            {
+              "id": "OAUTH-2.1-token-request",
+              "url": "https://www.ietf.org/archive/id/draft-ietf-oauth-v2-1-13.html#name-token-request"
+            }
+          ],
+          "details": {
+            "expectedAuthMethod": "client_secret_post",
+            "actualAuthMethod": "client_secret_post",
+            "hasAuthorizationHeader": false,
+            "hasBodyClientSecret": true
+          }
+        },
+        {
+          "id": "outgoing-auth-response",
+          "name": "Outgoing-auth-response",
+          "description": "Sent 200 response for POST /token",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.821Z",
+          "details": {
+            "method": "POST",
+            "path": "/token",
+            "statusCode": 200,
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "83",
+              "etag": "W/\"53-v3DP1KvzxFbGoOg6KgdqQ3gNmUY\""
+            },
+            "body": {
+              "access_token": "test-token-1789369578820",
+              "token_type": "Bearer",
+              "expires_in": 3600
+            }
+          }
+        },
+        {
+          "id": "incoming-request",
+          "name": "Incoming-request",
+          "description": "Received POST request for /mcp (method: tools/list)",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.825Z",
+          "details": {
+            "method": "POST",
+            "path": "/mcp",
+            "body": {
+              "jsonrpc": "2.0",
+              "id": 1,
+              "method": "tools/list",
+              "params": {
+                "_meta": {
+                  "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                  "io.modelcontextprotocol/clientCapabilities": {},
+                  "io.modelcontextprotocol/clientInfo": {
+                    "name": "eventrelay-conformance-client",
+                    "version": "1.0.0"
+                  }
+                }
+              }
+            },
+            "mcpMethod": "tools/list"
+          }
+        },
+        {
+          "id": "valid-bearer-token",
+          "name": "ValidBearerToken",
+          "description": "Client provided valid bearer token",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.829Z",
+          "specReferences": [
+            {
+              "id": "MCP-Access-token-usage",
+              "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#access-token-usage"
+            }
+          ],
+          "details": {
+            "token": "test-token-1789...",
+            "scopes": []
+          }
+        },
+        {
+          "id": "outgoing-response",
+          "name": "Outgoing-response",
+          "description": "Sent 200 response for POST /mcp (method: tools/list)",
+          "status": "INFO",
+          "timestamp": "2026-09-14T07:06:18.829Z",
+          "details": {
+            "method": "POST",
+            "path": "/mcp",
+            "statusCode": 200,
+            "mcpMethod": "tools/list",
+            "headers": {
+              "x-powered-by": "Express",
+              "content-type": "application/json; charset=utf-8",
+              "content-length": "155",
+              "etag": "W/\"9b-xk6XA9FW/IVEIYOxTp3pyn13rxM\""
+            },
+            "body": {
+              "jsonrpc": "2.0",
+              "id": 1,
+              "result": {
+                "tools": [
+                  {
+                    "name": "test-tool",
+                    "inputSchema": {
+                      "type": "object"
+                    }
+                  }
+                ],
+                "resultType": "complete",
+                "ttlMs": 0,
+                "cacheScope": "private"
+              }
+            }
+          }
+        },
+        {
+          "id": "resource-parameter-in-authorization",
+          "name": "Resource parameter in authorization request",
+          "description": "Client included resource parameter in authorization request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.840Z",
+          "specReferences": [
+            {
+              "id": "RFC-8707-Resource-Indicators",
+              "url": "https://www.rfc-editor.org/rfc/rfc8707.html"
+            },
+            {
+              "id": "MCP-Resource-Parameter-Implementation",
+              "url": "https://modelcontextprotocol.io/specification/draft/basic/authorization#resource-parameter-implementation"
+            }
+          ],
+          "details": {
+            "resource": "http://localhost:38905/mcp"
+          }
+        },
+        {
+          "id": "resource-parameter-in-token",
+          "name": "Resource parameter in token request",
+          "description": "Client included resource parameter in token request",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.840Z",
+          "specReferences": [
+            {
+              "id": "RFC-8707-Resource-Indicators",
+              "url": "https://www.rfc-editor.org/rfc/rfc8707.html"
+            },
+            {
+              "id": "MCP-Resource-Parameter-Implementation",
+              "url": "https://modelcontextprotocol.io/specification/draft/basic/authorization#resource-parameter-implementation"
+            }
+          ],
+          "details": {
+            "resource": "http://localhost:38905/mcp"
+          }
+        },
+        {
+          "id": "resource-parameter-valid-uri",
+          "name": "Resource parameter is valid canonical URI",
+          "description": "Resource parameter is a valid canonical URI (has scheme, no fragment)",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.840Z",
+          "specReferences": [
+            {
+              "id": "RFC-8707-Resource-Indicators",
+              "url": "https://www.rfc-editor.org/rfc/rfc8707.html"
+            },
+            {
+              "id": "MCP-Resource-Parameter-Implementation",
+              "url": "https://modelcontextprotocol.io/specification/draft/basic/authorization#resource-parameter-implementation"
+            }
+          ],
+          "details": {
+            "resource": "http://localhost:38905/mcp"
+          }
+        },
+        {
+          "id": "resource-parameter-consistency",
+          "name": "Resource parameter consistency",
+          "description": "Resource parameter is consistent between authorization and token requests",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.840Z",
+          "specReferences": [
+            {
+              "id": "RFC-8707-Resource-Indicators",
+              "url": "https://www.rfc-editor.org/rfc/rfc8707.html"
+            },
+            {
+              "id": "MCP-Resource-Parameter-Implementation",
+              "url": "https://modelcontextprotocol.io/specification/draft/basic/authorization#resource-parameter-implementation"
+            }
+          ],
+          "details": {
+            "authorizationResource": "http://localhost:38905/mcp",
+            "tokenResource": "http://localhost:38905/mcp"
+          }
+        },
+        {
+          "id": "resource-parameter-matches-prm",
+          "name": "Resource parameter matches protected resource metadata",
+          "description": "Client sent the resource identifier exactly as published in protected resource metadata",
+          "status": "SUCCESS",
+          "timestamp": "2026-09-14T07:06:18.840Z",
+          "specReferences": [
+            {
+              "id": "RFC-8707-Resource-Indicators",
+              "url": "https://www.rfc-editor.org/rfc/rfc8707.html"
+            },
+            {
+              "id": "MCP-Resource-Parameter-Implementation",
+              "url": "https://modelcontextprotocol.io/specification/draft/basic/authorization#resource-parameter-implementation"
+            },
+            {
+              "id": "MCP-Canonical-Server-URI",
+              "url": "https://modelcontextprotocol.io/specification/draft/basic/authorization#canonical-server-uri"
+            },
+            {
+              "id": "RFC-9728-resource-identity",
+              "url": "https://www.rfc-editor.org/rfc/rfc9728.html#section-3.3"
+            }
+          ],
+          "details": {
+            "prmResource": "http://localhost:38905/mcp",
+            "authorizationResource": "http://localhost:38905/mcp",
+            "tokenResource": "http://localhost:38905/mcp"
+          }
+        }
+      ],
+      "stdout": "",
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/token-endpoint-auth-post\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:38905/mcp\n(node:1225) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-xej1sxdi/auth/token-endpoint-auth-post-2026-09-14T07-06-18-049Z\nChecks:\n\u001b[90m2026-09-14T07:06:18.733Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-14T07:06:18.746Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-14T07:06:18.759Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:06:18.759Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:06:18.760Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:06:18.773Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:06:18.773Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:06:18.773Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:06:18.782Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /register\n\u001b[90m2026-09-14T07:06:18.782Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-14T07:06:18.782Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-14T07:06:18.783Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /register\n\n\u001b[90m2026-09-14T07:06:18.790Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /authorize\n\u001b[90m2026-09-14T07:06:18.790Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-14T07:06:18.790Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-14T07:06:18.790Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-14T07:06:18.799Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /authorize\n\n\u001b[90m2026-09-14T07:06:18.804Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:06:18.804Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:06:18.804Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:06:18.808Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:06:18.808Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:06:18.808Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:06:18.814Z\u001b[0m [incoming-auth-req\n...[truncated]"
     },
     {
       "leg": "client",
@@ -2039,7 +2911,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received POST request for /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.962Z",
+          "timestamp": "2026-09-14T07:06:42.441Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -2066,7 +2938,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 401 response for POST /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.965Z",
+          "timestamp": "2026-09-14T07:06:42.444Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -2074,7 +2946,7 @@ Total output lines: 3687
             "mcpMethod": "tools/list",
             "headers": {
               "x-powered-by": "Express",
-              "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"Missing Authorization header\", resource_metadata=\"http://localhost:33307/.well-known/oauth-protected-resource/mcp\"",
+              "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"Missing Authorization header\", resource_metadata=\"http://localhost:38605/.well-known/oauth-protected-resource/mcp\"",
               "content-type": "application/json; charset=utf-8",
               "content-length": "76",
               "etag": "W/\"4c-ptrIdu+3yjAtarglCEu6XVLnz2c\""
@@ -2090,7 +2962,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.974Z",
+          "timestamp": "2026-09-14T07:06:42.458Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp"
@@ -2101,7 +2973,7 @@ Total output lines: 3687
           "name": "PRMPathBasedRequested",
           "description": "Client requested PRM metadata at path-based location",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.974Z",
+          "timestamp": "2026-09-14T07:06:42.458Z",
           "specReferences": [
             {
               "id": "RFC-9728",
@@ -2122,7 +2994,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.975Z",
+          "timestamp": "2026-09-14T07:06:42.459Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp",
@@ -2131,12 +3003,12 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "92",
-              "etag": "W/\"5c-Ki9PKix0cezmkT0ScanCUIzw05U\""
+              "etag": "W/\"5c-5GjGGCzdDNTw+iePgQKbkmAmCEU\""
             },
             "body": {
-              "resource": "http://localhost:33307/mcp",
+              "resource": "http://localhost:38605/mcp",
               "authorization_servers": [
-                "http://localhost:38307"
+                "http://localhost:36187"
               ]
             }
           }
@@ -2146,7 +3018,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /.well-known/oauth-authorization-server",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.980Z",
+          "timestamp": "2026-09-14T07:06:42.466Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server"
@@ -2157,7 +3029,7 @@ Total output lines: 3687
           "name": "AuthorizationServerMetadata",
           "description": "Client requested authorization server metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.981Z",
+          "timestamp": "2026-09-14T07:06:42.466Z",
           "specReferences": [
             {
               "id": "RFC-8414-metadata-request",
@@ -2178,7 +3050,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for GET /.well-known/oauth-authorization-server",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.981Z",
+          "timestamp": "2026-09-14T07:06:42.466Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server",
@@ -2187,13 +3059,13 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "447",
-              "etag": "W/\"1bf-Vy+UAtw6ws9crg2iQyJKQcKC0F4\""
+              "etag": "W/\"1bf-vxn2Nxd4cBzxf1pCN30CO6j5NPU\""
             },
             "body": {
-              "issuer": "http://localhost:38307",
-              "authorization_endpoint": "http://localhost:38307/authorize",
-              "token_endpoint": "http://localhost:38307/token",
-              "registration_endpoint": "http://localhost:38307/register",
+              "issuer": "http://localhost:36187",
+              "authorization_endpoint": "http://localhost:36187/authorize",
+              "token_endpoint": "http://localhost:36187/token",
+              "registration_endpoint": "http://localhost:36187/register",
               "response_types_supported": [
                 "code"
               ],
@@ -2216,7 +3088,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received POST request for /register",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.986Z",
+          "timestamp": "2026-09-14T07:06:42.471Z",
           "details": {
             "method": "POST",
             "path": "/register",
@@ -2234,7 +3106,7 @@ Total output lines: 3687
           "name": "ClientRegistration",
           "description": "Client registered with authorization server",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.986Z",
+          "timestamp": "2026-09-14T07:06:42.471Z",
           "specReferences": [
             {
               "id": "MCP-Dynamic-client-registration",
@@ -2252,7 +3124,7 @@ Total output lines: 3687
           "name": "DCR application_type specified",
           "description": "Client specified application_type \"native\" during Dynamic Client Registration",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.986Z",
+          "timestamp": "2026-09-14T07:06:42.471Z",
           "specReferences": [
             {
               "id": "MCP-Dynamic-client-registration",
@@ -2268,7 +3140,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 201 response for POST /register",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.986Z",
+          "timestamp": "2026-09-14T07:06:42.472Z",
           "details": {
             "method": "POST",
             "path": "/register",
@@ -2277,10 +3149,10 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "174",
-              "etag": "W/\"ae-+WKW8ihjfh5FiJi1qgvWWDN3Nxk\""
+              "etag": "W/\"ae-H80fMx0/yeAq/Jc9FV00qX5lgFo\""
             },
             "body": {
-              "client_id": "test-client-1789322663986",
+              "client_id": "test-client-1789369602471",
               "client_name": "eventrelay-conformance-client",
               "redirect_uris": [
                 "http://localhost:3000/callback"
@@ -2294,17 +3166,17 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /authorize",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.993Z",
+          "timestamp": "2026-09-14T07:06:42.478Z",
           "details": {
             "method": "GET",
             "path": "/authorize",
             "query": {
               "response_type": "code",
-              "client_id": "test-client-1789322663986",
-              "code_challenge": "gP3p8UoDUUDIzCyb2FJxvVqgC-zLdjm6K2d-9IL_5xg",
+              "client_id": "test-client-1789369602471",
+              "code_challenge": "-K5ZyuzZ7JIH_VhBo8mZT1WE5Hbhd9QevlrQmSst99U",
               "code_challenge_method": "S256",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:33307/mcp"
+              "resource": "http://localhost:38605/mcp"
             }
           }
         },
@@ -2313,7 +3185,7 @@ Total output lines: 3687
           "name": "AuthorizationRequest",
           "description": "Client made authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.993Z",
+          "timestamp": "2026-09-14T07:06:42.478Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-authorization-endpoint",
@@ -2323,11 +3195,11 @@ Total output lines: 3687
           "details": {
             "query": {
               "response_type": "code",
-              "client_id": "test-client-1789322663986",
-              "code_challenge": "gP3p8UoDUUDIzCyb2FJxvVqgC-zLdjm6K2d-9IL_5xg",
+              "client_id": "test-client-1789369602471",
+              "code_challenge": "-K5ZyuzZ7JIH_VhBo8mZT1WE5Hbhd9QevlrQmSst99U",
               "code_challenge_method": "S256",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:33307/mcp"
+              "resource": "http://localhost:38605/mcp"
             }
           }
         },
@@ -2336,7 +3208,7 @@ Total output lines: 3687
           "name": "PKCE Code Challenge",
           "description": "Client sent code_challenge in authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.993Z",
+          "timestamp": "2026-09-14T07:06:42.478Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -2349,7 +3221,7 @@ Total output lines: 3687
           "name": "PKCE S256 Method",
           "description": "Client used S256 code challenge method",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.993Z",
+          "timestamp": "2026-09-14T07:06:42.478Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -2365,19 +3237,19 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 302 response for GET /authorize",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.995Z",
+          "timestamp": "2026-09-14T07:06:42.480Z",
           "details": {
             "method": "GET",
             "path": "/authorize",
             "statusCode": 302,
             "headers": {
               "x-powered-by": "Express",
-              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A38307",
+              "location": "http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A36187",
               "vary": "Accept",
               "content-type": "text/plain; charset=utf-8",
               "content-length": "107"
             },
-            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A38307"
+            "body": "Found. Redirecting to http://localhost:3000/callback?code=test-auth-code&iss=http%3A%2F%2Flocalhost%3A36187"
           }
         },
         {
@@ -2385,7 +3257,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received GET request for /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.998Z",
+          "timestamp": "2026-09-14T07:06:42.483Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp"
@@ -2396,7 +3268,7 @@ Total output lines: 3687
           "name": "PRMPathBasedRequested",
           "description": "Client requested PRM metadata at path-based location",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:23.998Z",
+          "timestamp": "2026-09-14T07:06:42.483Z",
           "specReferences": [
             {
               "id": "RFC-9728",
@@ -2417,7 +3289,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for GET /.well-known/oauth-protected-resource/mcp",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:23.998Z",
+          "timestamp": "2026-09-14T07:06:42.483Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-protected-resource/mcp",
@@ -2426,12 +3298,12 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "92",
-              "etag": "W/\"5c-Ki9PKix0cezmkT0ScanCUIzw05U\""
+              "etag": "W/\"5c-5GjGGCzdDNTw+iePgQKbkmAmCEU\""
             },
             "body": {
-              "resource": "http://localhost:33307/mcp",
+              "resource": "http://localhost:38605/mcp",
               "authorization_servers": [
-                "http://localhost:38307"
+                "http://localhost:36187"
               ]
             }
           }
@@ -2441,7 +3313,7 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received GET request for /.well-known/oauth-authorization-server",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:24.001Z",
+          "timestamp": "2026-09-14T07:06:42.486Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server"
@@ -2452,7 +3324,7 @@ Total output lines: 3687
           "name": "AuthorizationServerMetadata",
           "description": "Client requested authorization server metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.001Z",
+          "timestamp": "2026-09-14T07:06:42.486Z",
           "specReferences": [
             {
               "id": "RFC-8414-metadata-request",
@@ -2473,7 +3345,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for GET /.well-known/oauth-authorization-server",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:24.001Z",
+          "timestamp": "2026-09-14T07:06:42.486Z",
           "details": {
             "method": "GET",
             "path": "/.well-known/oauth-authorization-server",
@@ -2482,13 +3354,13 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "447",
-              "etag": "W/\"1bf-Vy+UAtw6ws9crg2iQyJKQcKC0F4\""
+              "etag": "W/\"1bf-vxn2Nxd4cBzxf1pCN30CO6j5NPU\""
             },
             "body": {
-              "issuer": "http://localhost:38307",
-              "authorization_endpoint": "http://localhost:38307/authorize",
-              "token_endpoint": "http://localhost:38307/token",
-              "registration_endpoint": "http://localhost:38307/register",
+              "issuer": "http://localhost:36187",
+              "authorization_endpoint": "http://localhost:36187/authorize",
+              "token_endpoint": "http://localhost:36187/token",
+              "registration_endpoint": "http://localhost:36187/register",
               "response_types_supported": [
                 "code"
               ],
@@ -2511,17 +3383,17 @@ Total output lines: 3687
           "name": "Incoming-auth-request",
           "description": "Received POST request for /token",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:24.005Z",
+          "timestamp": "2026-09-14T07:06:42.492Z",
           "details": {
             "method": "POST",
             "path": "/token",
             "body": {
               "grant_type": "authorization_code",
               "code": "test-auth-code",
-              "code_verifier": "VeW92TtgvO6PUmMjmEgSQ8lO4HwIgZ-bebtSSVxk8DS",
+              "code_verifier": "R1cx40bX9H9Nib3ie7yj-vCQ4-lDegSpUNpf.dzxOmn",
               "redirect_uri": "http://localhost:3000/callback",
-              "resource": "http://localhost:33307/mcp",
-              "client_id": "test-client-1789322663986"
+              "resource": "http://localhost:38605/mcp",
+              "client_id": "test-client-1789369602471"
             }
           }
         },
@@ -2530,7 +3402,7 @@ Total output lines: 3687
           "name": "TokenRequest",
           "description": "Client requested access token",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.005Z",
+          "timestamp": "2026-09-14T07:06:42.492Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-token-request",
@@ -2547,7 +3419,7 @@ Total output lines: 3687
           "name": "PKCE Code Verifier",
           "description": "Client sent code_verifier in token request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.005Z",
+          "timestamp": "2026-09-14T07:06:42.492Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -2560,7 +3432,7 @@ Total output lines: 3687
           "name": "PKCE Verifier Validation",
           "description": "code_verifier correctly matches code_challenge (S256)",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.005Z",
+          "timestamp": "2026-09-14T07:06:42.492Z",
           "specReferences": [
             {
               "id": "MCP-PKCE-requirement",
@@ -2569,8 +3441,8 @@ Total output lines: 3687
           ],
           "details": {
             "matches": true,
-            "storedChallenge": "gP3p8UoDUUDIzCyb2FJxvVqgC-zLdjm6K2d-9IL_5xg",
-            "computedChallenge": "gP3p8UoDUUDIzCyb2FJxvVqgC-zLdjm6K2d-9IL_5xg"
+            "storedChallenge": "-K5ZyuzZ7JIH_VhBo8mZT1WE5Hbhd9QevlrQmSst99U",
+            "computedChallenge": "-K5ZyuzZ7JIH_VhBo8mZT1WE5Hbhd9QevlrQmSst99U"
           }
         },
         {
@@ -2578,7 +3450,7 @@ Total output lines: 3687
           "name": "Token endpoint authentication method",
           "description": "Client correctly used no authentication (public client) for token endpoint",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.005Z",
+          "timestamp": "2026-09-14T07:06:42.492Z",
           "specReferences": [
             {
               "id": "OAUTH-2.1-token-request",
@@ -2597,7 +3469,7 @@ Total output lines: 3687
           "name": "Outgoing-auth-response",
           "description": "Sent 200 response for POST /token",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:24.006Z",
+          "timestamp": "2026-09-14T07:06:42.493Z",
           "details": {
             "method": "POST",
             "path": "/token",
@@ -2606,10 +3478,10 @@ Total output lines: 3687
               "x-powered-by": "Express",
               "content-type": "application/json; charset=utf-8",
               "content-length": "83",
-              "etag": "W/\"53-apbdRQz16aDu2pBxek5uAPjUhMA\""
+              "etag": "W/\"53-0A58EVNEOzHWi7oBQ72u+kHjbzM\""
             },
             "body": {
-              "access_token": "test-token-1789322664005",
+              "access_token": "test-token-1789369602493",
               "token_type": "Bearer",
               "expires_in": 3600
             }
@@ -2620,7 +3492,7 @@ Total output lines: 3687
           "name": "Incoming-request",
           "description": "Received POST request for /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:24.010Z",
+          "timestamp": "2026-09-14T07:06:42.497Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -2647,7 +3519,7 @@ Total output lines: 3687
           "name": "ValidBearerToken",
           "description": "Client provided valid bearer token",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.010Z",
+          "timestamp": "2026-09-14T07:06:42.497Z",
           "specReferences": [
             {
               "id": "MCP-Access-token-usage",
@@ -2664,7 +3536,7 @@ Total output lines: 3687
           "name": "Outgoing-response",
           "description": "Sent 200 response for POST /mcp (method: tools/list)",
           "status": "INFO",
-          "timestamp": "2026-09-13T18:04:24.010Z",
+          "timestamp": "2026-09-14T07:06:42.498Z",
           "details": {
             "method": "POST",
             "path": "/mcp",
@@ -2700,7 +3572,7 @@ Total output lines: 3687
           "name": "Resource parameter in authorization request",
           "description": "Client included resource parameter in authorization request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.037Z",
+          "timestamp": "2026-09-14T07:06:42.525Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -2712,7 +3584,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:33307/mcp"
+            "resource": "http://localhost:38605/mcp"
           }
         },
         {
@@ -2720,7 +3592,7 @@ Total output lines: 3687
           "name": "Resource parameter in token request",
           "description": "Client included resource parameter in token request",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.037Z",
+          "timestamp": "2026-09-14T07:06:42.525Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -2732,7 +3604,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:33307/mcp"
+            "resource": "http://localhost:38605/mcp"
           }
         },
         {
@@ -2740,7 +3612,7 @@ Total output lines: 3687
           "name": "Resource parameter is valid canonical URI",
           "description": "Resource parameter is a valid canonical URI (has scheme, no fragment)",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.037Z",
+          "timestamp": "2026-09-14T07:06:42.525Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -2752,7 +3624,7 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "resource": "http://localhost:33307/mcp"
+            "resource": "http://localhost:38605/mcp"
           }
         },
         {
@@ -2760,7 +3632,7 @@ Total output lines: 3687
           "name": "Resource parameter consistency",
           "description": "Resource parameter is consistent between authorization and token requests",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.037Z",
+          "timestamp": "2026-09-14T07:06:42.525Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -2772,8 +3644,8 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "authorizationResource": "http://localhost:33307/mcp",
-            "tokenResource": "http://localhost:33307/mcp"
+            "authorizationResource": "http://localhost:38605/mcp",
+            "tokenResource": "http://localhost:38605/mcp"
           }
         },
         {
@@ -2781,7 +3653,7 @@ Total output lines: 3687
           "name": "Resource parameter matches protected resource metadata",
           "description": "Client sent the resource identifier exactly as published in protected resource metadata",
           "status": "SUCCESS",
-          "timestamp": "2026-09-13T18:04:24.037Z",
+          "timestamp": "2026-09-14T07:06:42.525Z",
           "specReferences": [
             {
               "id": "RFC-8707-Resource-Indicators",
@@ -2801,14 +3673,14 @@ Total output lines: 3687
             }
           ],
           "details": {
-            "prmResource": "http://localhost:33307/mcp",
-            "authorizationResource": "http://localhost:33307/mcp",
-            "tokenResource": "http://localhost:33307/mcp"
+            "prmResource": "http://localhost:38605/mcp",
+            "authorizationResource": "http://localhost:38605/mcp",
+            "tokenResource": "http://localhost:38605/mcp"
           }
         }
       ],
       "stdout": "",
-      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/token-endpoint-auth-none\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:33307/mcp\n(node:1428) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-zeopptud/auth/token-endpoint-auth-none-2026-09-13T18-04-23-680Z\nChecks:\n\u001b[90m2026-09-13T18:04:23.962Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-13T18:04:23.965Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-13T18:04:23.974Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-13T18:04:23.974Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-13T18:04:23.975Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-13T18:04:23.980Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-13T18:04:23.981Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-13T18:04:23.981Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-13T18:04:23.986Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /register\n\u001b[90m2026-09-13T18:04:23.986Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-13T18:04:23.986Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-13T18:04:23.986Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /register\n\n\u001b[90m2026-09-13T18:04:23.993Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /authorize\n\u001b[90m2026-09-13T18:04:23.993Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-13T18:04:23.993Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-13T18:04:23.993Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-13T18:04:23.995Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /authorize\n\n\u001b[90m2026-09-13T18:04:23.998Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-13T18:04:23.998Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-13T18:04:23.998Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-13T18:04:24.001Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-13T18:04:24.001Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-13T18:04:24.001Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-13T18:04:24.005Z\u001b[0m [incoming-auth-req\n...[truncated]"
+      "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/token-endpoint-auth-none\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:38605/mcp\n(node:1409) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-58e2gb3s/auth/token-endpoint-auth-none-2026-09-14T07-06-42-017Z\nChecks:\n\u001b[90m2026-09-14T07:06:42.441Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-14T07:06:42.444Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-14T07:06:42.458Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:06:42.458Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:06:42.459Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:06:42.466Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:06:42.466Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:06:42.466Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:06:42.471Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /register\n\u001b[90m2026-09-14T07:06:42.471Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-14T07:06:42.471Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-14T07:06:42.472Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /register\n\n\u001b[90m2026-09-14T07:06:42.478Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /authorize\n\u001b[90m2026-09-14T07:06:42.478Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-14T07:06:42.478Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-14T07:06:42.478Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-14T07:06:42.480Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /authorize\n\n\u001b[90m2026-09-14T07:06:42.483Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:06:42.483Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:06:42.483Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:06:42.486Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:06:42.486Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:06:42.486Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:06:42.492Z\u001b[0m [incoming-auth-req\n...[truncated]"
     }
   ]
 }
