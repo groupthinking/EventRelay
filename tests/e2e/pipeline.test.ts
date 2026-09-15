@@ -44,7 +44,14 @@ function withBypass(init?: RequestInit): RequestInit {
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
   headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
+  // Deliberately NOT sending `x-vercel-set-bypass-cookie`. That header asks
+  // Vercel to persist the bypass as a cookie and answers every request with
+  // `307 → /`. `fetch` has no cookie jar, so the redirect target is requested
+  // with the same header and 307s again — an unbounded loop that ends in
+  // "TypeError: fetch failed / redirect count exceeded", failing the whole
+  // suite even though the secret is correct. The bypass header alone is
+  // accepted per-request and returns 200 directly, which is all a stateless
+  // test client needs. The cookie form only helps a browser that persists it.
   return { ...init, headers };
 }
 
@@ -102,8 +109,39 @@ function parseSSEEvents(raw: string): Array<Record<string, unknown>> {
 // ─── Tests ──────────────────────────────────────────────────────────
 
 describe('EventRelay E2E — Live Deployment', () => {
-  // Smoke check: is the site up?
+  // Smoke check: is the site up, and is it the app we intend to test?
+  //
+  // Vercel Deployment Protection intercepts anonymous traffic to a preview in two
+  // shapes: HTML routes 302 to vercel.com/sso-api, API routes return a bare 401.
+  // The default `redirect: 'follow'` hides the first shape completely — fetch
+  // lands on a 200 "Login – Vercel" page, so `res.ok` is true and the suite runs
+  // every assertion against Vercel's login markup instead of the deployment. The
+  // page happens to contain a <title> and a viewport meta tag, so the meta and
+  // liveness tests pass; only the content and API assertions fail, with messages
+  // that blame the app ("expected 0 to be greater than or equal to 3") rather than
+  // naming the missing bypass secret. Probe with `redirect: 'manual'` so the 302
+  // stays visible and fail once, with the remedy.
   beforeAll(async () => {
+    const probe = await fetchWithTimeout(BASE_URL, { redirect: 'manual' }, 15_000);
+    const location = probe.headers.get('location') || '';
+    const ssoRedirect =
+      [301, 302, 303, 307, 308].includes(probe.status) &&
+      /vercel\.com\/sso-api/i.test(location);
+
+    if (ssoRedirect || probe.status === 401) {
+      throw new Error(
+        `Deployment protection blocked this run — ${BASE_URL} returned ${probe.status}` +
+          `${location ? ` → ${location}` : ''} instead of the app, so every assertion ` +
+          `below would execute against Vercel's login page rather than the deployment. ` +
+          `Set the VERCEL_AUTOMATION_BYPASS_SECRET repository secret to the project's ` +
+          `"Protection Bypass for Automation" value (Vercel → Project → Settings → ` +
+          `Deployment Protection); this suite forwards it as the ` +
+          `x-vercel-protection-bypass header on every request.`,
+      );
+    }
+
+    // Liveness check, following redirects as before so a legitimate same-host
+    // redirect on `/` still counts as up.
     const res = await fetchWithTimeout(BASE_URL, {}, 15_000);
     if (!res.ok) {
       throw new Error(
@@ -305,7 +343,7 @@ describe('EventRelay E2E — Live Deployment', () => {
       }
     });
 
-    it('terminal pipeline_status includes duration and agent count when present', async () => {
+    it('terminal pipeline_status includes duration and stage progress', async () => {
       const res = await fetchWithTimeout(
         `${BASE_URL}/api/pipeline/stream`,
         {
@@ -333,8 +371,13 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(typeof terminal.duration).toBe('number');
       const data = terminal.data as Record<string, unknown> | undefined;
       if (data) {
-        expect(data.totalAgents).toBeDefined();
-        expect(data.completedAgents).toBeDefined();
+        // Both terminal paths — quality-gate completion and hard failure —
+        // report stage progress under these names, so a client can rely on a
+        // single shape regardless of how the stream ended.
+        expect(data.totalStages).toBeDefined();
+        expect(data.completedStages).toBeDefined();
+        expect(typeof data.totalStages).toBe('number');
+        expect(typeof data.completedStages).toBe('number');
       }
     });
   });

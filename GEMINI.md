@@ -1,18 +1,16 @@
-# EventRelay — Gemini CLI Context
+# UVAI — Gemini CLI Context
 
-This file provides project context for Gemini CLI when working in the EventRelay repository.
+Read [AGENTS.md](AGENTS.md) first; its locked facts and scope override historical plans. Use [docs/NEXT-PHASE.md](docs/NEXT-PHASE.md) for the next authorized cut and [docs/MASTER_ROADMAP.md](docs/MASTER_ROADMAP.md) for the remaining build-out.
 
 ## Project Overview
 
-EventRelay is an AI-powered video automation platform that transforms YouTube videos into
-actionable workflows. It captures transcripts, extracts events, dispatches them to MCP
-(Model Context Protocol) agents, and builds a RAG-based knowledge store. The backend is
-Python/FastAPI and the frontend is a Next.js/React/TypeScript monorepo.
+UVAI (Universal Video Action Intelligence) turns a YouTube URL into a hashed Video Pack and grounded build rails. EventRelay is the internal Python/FastAPI runtime and repository name, not a public product. The web app uses Next.js App Router, React, and TypeScript. `/` is the entry page; `OneLoopStudio` at `/studio` is the workbench. Legacy `/dashboard` skins redirect there.
 
 ## Single Workflow
 
-**EventRelay has ONE workflow:** YouTube link → transcript → events → agents → outputs.
-Never introduce alternative flows or manual triggers that bypass this pipeline.
+**One product loop:** YouTube URL → Video Pack → inspect evidence and build rails → export / act / attempt to ship. Do not introduce a parallel product or bypass evidence gating. A generated evidence workspace is not proof of recreating or deploying the source app.
+
+Origin G.A.T.E. is the only authorized next cut. Mission Workspace, Agent Factory, ExperienceOS, and held `asRecord` / claim work require the authority described in `AGENTS.md`.
 
 ## Repository Structure
 
@@ -75,11 +73,13 @@ mypy src/
 ### Frontend (Next.js / Turbo monorepo)
 
 ```bash
-npm install          # install all workspace deps
-turbo run build      # build all workspaces
-turbo run dev        # dev servers
-turbo run lint
-turbo run test
+# Node.js >=22; packageManager is npm@10.8.0; root lockfile only
+npm ci
+npm run build
+npm run dev
+npm run lint
+npm run test
+npm --workspace=apps/web run type-check
 ```
 
 ## Code Style
@@ -88,7 +88,7 @@ turbo run test
 - **Formatter**: Black, 88-char line length
 - **Linter**: Ruff (E, W, F, I, B, C4, UP; E501 ignored)
 - **Type checking**: mypy strict (`disallow_untyped_defs = true`)
-- Target Python 3.9+; config in `pyproject.toml`
+- Target Python 3.10+; `pyproject.toml` is authoritative
 
 ### TypeScript
 - Strict mode TypeScript (`apps/web/tsconfig.json`)
@@ -106,11 +106,12 @@ turbo run test
 
 - **Event-driven**: events follow `<domain>.<entity>.<action>` (e.g. `youtube.video.captured`)
 - **Dependency injection**: service container pattern in `backend/containers/`
-- **Multi-provider AI**: Gemini (primary), OpenAI, Anthropic, Grok
-- **MCP integration**: agent orchestration via Model Context Protocol
-- **Database**: SQLite (dev), PostgreSQL (prod) via SQLAlchemy / Alembic
-- **Auth**: NextAuth.js (frontend), python-jose (backend)
-- **Monorepo**: Turbo for JS workspaces (`apps/*`, `packages/*`, `mcp-servers/*`)
+- **Product AI**: Gemini 3.8 Flash via Vercel AI Gateway for Video Pack extraction; other providers remain in internal runtime paths
+- **MCP integration**: internal orchestration via Model Context Protocol
+- **Video Pack store**: Upstash REST only; Redis TCP and backend SQL are not the pack store
+- **Other runtime data**: inspect the owning service before modifying SQLAlchemy / Alembic or auxiliary integrations
+- **Auth**: existing NextAuth.js web configuration; backend middleware has a separate policy
+- **Monorepo**: Turbo; root npm workspaces are `apps/*`, not every shared-code or MCP directory
 
 ## Key Policies
 
@@ -120,13 +121,10 @@ turbo run test
 - **Type safety**: mypy strict (Python), TypeScript strict (frontend)
 - **Minimal changes**: make surgical, precise modifications; never delete working code without justification
 
-## Environment Variables (required)
+## Configuration boundaries
 
-```bash
-GEMINI_API_KEY=...        # Google Gemini API
-OPENAI_API_KEY=...        # OpenAI API
-YOUTUBE_API_KEY=...       # YouTube Data API v3
-DATABASE_URL=sqlite:///./.runtime/app.db
-GITHUB_TOKEN=...          # for github MCP server
-STITCH_ACCESS_TOKEN=...   # for stitch MCP server (optional)
-```
+- Video Pack AI uses Vercel AI Gateway; inspect the current extractor and runtime configuration instead of requiring every legacy provider key.
+- Production packs require `KV_REST_API_URL` + `KV_REST_API_TOKEN`, or the equivalent `UPSTASH_REDIS_REST_*` pair.
+- Backend-dependent actions use `BACKEND_URL` plus the backend's own configured credentials. Missing configuration is not evidence of a successful action.
+- Auth, billing, and CLI/MCP credentials belong to their existing integrations. Never print secrets or commit environment files.
+- Inspect `.gemini/settings.json` and run `/mcp` before assuming an optional tooling service is connected. See [README.md](README.md) for the current development path.

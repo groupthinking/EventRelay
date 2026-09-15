@@ -304,3 +304,10 @@ def test_reconciliation_keeps_closed_canonical_issues_tracked(tmp_path: Path) ->
         "- Ready PRs without exactly one canonical issue: **0**"
         in outcome["issueUpdates"][0]["body"]
     )
+
+
+def test_reconciliation_workflow_excludes_dependabot_from_untracked() -> None:
+    """Dependabot dependency PRs should not be counted as canonical-issue drift."""
+    script = _get_script(_load_workflow())
+    assert "dependabot[bot]" in script
+    assert "isDependencyAutomationPR" in script
