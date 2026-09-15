@@ -62,6 +62,19 @@ class TestVideoProcessJobRequest:
         )
         assert "youtu.be" in req.video_url
 
+    def test_optional_ready_transcript(self):
+        ready = (
+            "Studio Video Pack for auJzb1D-fag already has a usable "
+            "transcript ready for deploy."
+        )
+        req = VideoProcessJobRequest(
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+            transcript=ready,
+            options={"pipeline": "video-to-software"},
+        )
+        assert req.transcript == ready
+        assert req.options["pipeline"] == "video-to-software"
+
 
 class TestVideoJobStatusResponse:
     def test_defaults(self):

@@ -28,6 +28,7 @@ except ImportError:  # pragma: no cover - import guard
 logger = logging.getLogger(__name__)
 
 _PROXY_ENV_VAR = "WEBSHARE_PROXY_URL"
+_ALLOWED_SCHEMES = ("http", "https", "socks5", "socks5h")
 
 # Matches the ``user[:password]@`` userinfo segment of any URL.
 #
@@ -67,8 +68,14 @@ def get_proxy_url() -> str | None:
     url = os.getenv(_PROXY_ENV_VAR, "").strip()
     if not url:
         return None
-    parsed = urllib.parse.urlparse(url)
-    if parsed.scheme not in ("http", "https", "socks5") or not parsed.hostname:
+    try:
+        parsed = urllib.parse.urlparse(url)
+        valid = parsed.scheme in _ALLOWED_SCHEMES and bool(parsed.hostname)
+        if valid:
+            _ = parsed.port
+    except ValueError:
+        valid = False
+    if not valid:
         logger.warning(
             "%s is set but malformed — falling back to direct connection",
             _PROXY_ENV_VAR,
