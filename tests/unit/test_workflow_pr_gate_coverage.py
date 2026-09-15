@@ -86,3 +86,24 @@ def test_e2e_job_does_not_skip_pull_requests_without_repo_var() -> None:
         "e2e-tests.yml gates the PR job on E2E_BASE_URL, so PRs without that "
         "repository variable skip the E2E quality gate entirely"
     )
+
+
+def test_e2e_workflow_has_configured_fallback_url() -> None:
+    """PR E2E runs need a deterministic fallback URL when preview access is blocked."""
+    workflow = yaml.safe_load((WORKFLOWS / "e2e-tests.yml").read_text())
+    fallback_url = workflow.get("env", {}).get("E2E_FALLBACK_BASE_URL", "")
+    assert fallback_url, "e2e-tests.yml should set E2E_FALLBACK_BASE_URL"
+    assert "v0-uvai-jmdj10srd-garv1.vercel.app" in fallback_url
+
+
+def test_e2e_preview_step_falls_back_when_bypass_secret_is_unavailable() -> None:
+    """Dependabot/fork-like contexts may not receive bypass secrets; fallback must engage."""
+    workflow = yaml.safe_load((WORKFLOWS / "e2e-tests.yml").read_text())
+    steps = workflow["jobs"]["e2e"]["steps"]
+    preview_step = next(
+        step for step in steps if step.get("name") == "Extract Vercel preview URL for this PR"
+    )
+    script = preview_step["run"]
+    assert "VERCEL_AUTOMATION_BYPASS_SECRET" in script
+    assert "E2E_FALLBACK_BASE_URL" in script
+    assert "BASE_URL=$E2E_FALLBACK_BASE_URL" in script

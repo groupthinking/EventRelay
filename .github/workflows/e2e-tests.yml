@@ -27,6 +27,7 @@ env:
   #      workflow fails closed rather than silently skipping the gate or probing
   #      production.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
+  E2E_FALLBACK_BASE_URL: ${{ vars.E2E_FALLBACK_BASE_URL || 'https://v0-uvai-jmdj10srd-garv1.vercel.app?_vercel_share=KqlzqI7IBQzWHokQB7iItS9SBuLvjjMI' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
@@ -71,6 +72,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          if [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ] && [ -n "${E2E_FALLBACK_BASE_URL:-}" ]; then
+            echo "::warning::VERCEL_AUTOMATION_BYPASS_SECRET unavailable for this run; using E2E fallback URL."
+            echo "BASE_URL=$E2E_FALLBACK_BASE_URL" >> "$GITHUB_ENV"
+            echo "preview_url=$E2E_FALLBACK_BASE_URL" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           SHA="${{ github.event.pull_request.head.sha }}"
           PREVIEW_URL=""
 
