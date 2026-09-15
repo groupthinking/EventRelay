@@ -53,8 +53,8 @@ jobs:
           # license, which is not code we redistribute. It updates on nearly every browserslist
           # refresh, so allow it by purl rather than adding CC-BY-4.0 to the global allow-licenses.
           # Sharp's prebuilt libvips runtime packages are LGPL-3.0-or-later. Keep this exception
-          # package-scoped instead of allowing LGPL globally; these binaries were already present,
-          # and the patched Sharp release only refreshes their versions.
+          # package-scoped and explicit instead of allowing LGPL globally; these binaries were
+          # already present, and the patched Sharp release only refreshes their versions.
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0,
             BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD
