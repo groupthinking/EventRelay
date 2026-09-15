@@ -1,0 +1,36 @@
+$schema: https://api.gitbook.com/gitbook-docs.yaml
+version: 1
+site:
+  title: UVAI
+  structure:
+    - type: section
+      key: section-docs
+      title: Documentation
+      path: docs
+      default: true
+      children:
+        - type: space
+          key: space-docs
+          title: Repository documentation
+          path: reference
+          default: true
+          content:
+            directory: ./docs
+    - type: section
+      key: section-sdk
+      title: Internal Runtime SDKs
+      path: sdk
+      children:
+        - type: space
+          key: space-sdk-python
+          title: Python SDK
+          path: python
+          default: true
+          content:
+            directory: ./sdk/python
+        - type: space
+          key: space-sdk-typescript
+          title: TypeScript SDK
+          path: typescript
+          content:
+            directory: ./sdk/typescript
