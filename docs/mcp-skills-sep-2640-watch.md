@@ -1,21 +1,27 @@
 # MCP Skills extension (SEP-2640) — watch state and trust boundaries
 
-**Issue:** [groupthinking/EventRelay#1640](https://github.com/groupthinking/EventRelay/issues/1640)  
-**Decision date:** 2026-09-08  
-**Current posture:** **WATCH → TEST** (no implementation yet)
+**Issue:** [groupthinking/EventRelay#1640](https://github.com/groupthinking/EventRelay/issues/1640)
+**Decision date:** 2026-09-15
+**Current posture:** **ADOPT → TEST** (fixture-only; no live import or execution)
 
 ## Decision
 
-Do not implement production behavior for `io.modelcontextprotocol/skills` until one activation trigger is verified:
-
-1. SEP-2640 is merged/accepted, or
-2. an official MCP SDK ships a reference implementation with a pinned draft revision suitable for interop testing.
+Implement only bounded fixture and official-conformance coverage for
+`io.modelcontextprotocol/skills`. Production retrieval, client import, and
+skill execution remain disabled until their own observable receipts exist.
 
 ## Verified state
 
-- The MCP Skills working group published stable-format rendering for `io.modelcontextprotocol/skills` on 2026-09-04 (`ext-skills` commit `f1f8605`).
-- The extension repository labels the work experimental and not an official MCP specification or recommendation.
-- [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) is still open and remains the canonical proposal.
+- MCP Core Maintainers accepted [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) on 2026-09-03.
+- The Skills working group published the stable `io.modelcontextprotocol/skills`
+  specification on 2026-09-04 and made `resultType`, `ttlMs`, and `cacheScope`
+  mandatory on 2026-09-10 ([commit `d866efd`](https://github.com/modelcontextprotocol/ext-skills/commit/d866efdba298b55b8156c7b7aa1bdebc1b625f4c)).
+- The official conformance suite added seven Skills scenarios on 2026-09-11
+  ([commit `7169291`](https://github.com/modelcontextprotocol/conformance/commit/7169291ec0b68eb370fddcd9947313ab0d5e4156)).
+- The official MCP client-support matrix currently marks ChatGPT's Skills
+  support as **Partial** ([commit `2997f33`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/2997f33bf6e4aab3db48d755fc877c8feab32c71)).
+  This repository does not treat that matrix entry as proof of a live ChatGPT
+  import wire contract.
 
 ## Trust boundaries to preserve
 
@@ -29,19 +35,24 @@ If/when we run the conformance spike, preserve these invariants:
 - Cache writes must be isolated by origin+skill, or every read must re-verify digest.
 - No silent skill-name shadowing across servers or local skills.
 
-## Bounded action at trigger time (fixture-only)
+## Implemented bounded actions (fixture-only)
 
-When an activation trigger is verified, run a **draft-only**, **feature-flagged** conformance spike:
+The official suite is pinned with explicit supported, failed, and excluded
+scenario accounting. The Agent Factory host also has a fixture-only ChatGPT
+handoff contract that:
 
-1. Add sample server capability for `io.modelcontextprotocol/skills`.
-2. Exercise `skills/list`, `skills/get`, and normal `resources/read`.
-3. Store compound identity `{server_identity, skill_uri}`.
-4. Verify byte size + SHA-256 before exposing skill files to model context.
-5. Reject digest drift, cross-origin reads, silent name collisions, and unapproved execution.
-6. Emit EventRelay receipts for listing, approval, retrieval, verification, and denial.
+1. Requires the Resources and Skills extension capabilities.
+2. Validates a direct `skills/get` complete response without depending on listing.
+3. Stores compound identity `{server_identity, skill_uri}`.
+4. Verifies static-resource byte size + SHA-256 before a handoff can be prepared.
+5. Rejects digest drift, cross-origin reads, path traversal, invalid cache metadata,
+   mismatched manifest/frontmatter names, dynamic resources, and unapproved execution.
+6. Emits a deterministic, machine-readable receipt while performing zero network,
+   import, tool, or external-effect operations.
 
 ## Non-goals / safety boundary
 
-- Do not present SEP-2640 as an official standard while the SEP remains open.
+- Do not claim live ChatGPT compatibility or conformance from fixture coverage or
+  the official MCP client matrix.
 - Do not equate remote MCP-served skills with local trusted skills.
 - Do not enable remote skill execution, deployment, merge, or production configuration changes.
