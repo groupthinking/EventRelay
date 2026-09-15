@@ -5,7 +5,7 @@ export const CHATGPT_SKILL_IMPORT_RECEIPT_VERSION =
   'eventrelay.chatgpt-mcp-skill-import-receipt.v1' as const;
 export const MCP_SKILLS_SPEC_COMMIT =
   'd866efdba298b55b8156c7b7aa1bdebc1b625f4c' as const;
-export const MCP_CLIENT_MATRIX_COMMIT =
+export const MCP_CLIENT_MATRIX_REVISION =
   '2997f33bf6e4aab3db48d755fc877c8feab32c71' as const;
 
 type CacheScope = 'public' | 'private';
@@ -48,7 +48,7 @@ export type FixtureChatGptSkillImportReceipt = {
   client_support: {
     status: 'partial';
     evidence_kind: 'official-mcp-client-matrix';
-    evidence_commit: typeof MCP_CLIENT_MATRIX_COMMIT;
+    evidence_revision: typeof MCP_CLIENT_MATRIX_REVISION;
     live_client_observed: false;
     conformance_claim: 'not-claimed';
   };
@@ -212,7 +212,7 @@ export function createFixtureChatGptSkillImport(
     client_support: {
       status: 'partial' as const,
       evidence_kind: 'official-mcp-client-matrix' as const,
-      evidence_commit: MCP_CLIENT_MATRIX_COMMIT,
+      evidence_revision: MCP_CLIENT_MATRIX_REVISION,
       live_client_observed: false as const,
       conformance_claim: 'not-claimed' as const,
     },
