@@ -4,8 +4,11 @@ import {
   captureKeyframeFrame,
   captureYoutubeStillFrame,
   cropStoryboardTile,
+  frameCacheKey,
+  loadCapturedFrameJpeg,
   parseStoryboardSpec,
   resetKeyframeFrameCaptureForTests,
+  setKeyframeFrameRedisForTests,
   selectStoryboardTile,
   selectYoutubeStillIndex,
   youtubeStillUrls,
@@ -77,6 +80,7 @@ describe('storyboard tile crop', () => {
 describe('YouTube public stills fallback', () => {
   afterEach(() => {
     resetKeyframeFrameCaptureForTests();
+    setKeyframeFrameRedisForTests(null);
   });
 
   it('maps t_s into numbered stills 1-3, never default thumbs', () => {
@@ -112,6 +116,19 @@ describe('YouTube public stills fallback', () => {
   });
 
   it('uses stills bytes after storyboard miss and persists an app-served path', async () => {
+    const stored = new Map<string, unknown>();
+    setKeyframeFrameRedisForTests({
+      async get<TData>(key: string) {
+        return (stored.get(key) ?? null) as TData | null;
+      },
+      async set(key: string, value: unknown) {
+        stored.set(key, value);
+        return 'OK';
+      },
+      async eval() {
+        throw new Error('not used');
+      },
+    });
     const jpegBytes = solidJpeg(16, 9, [12, 24, 180]);
     const result = await captureKeyframeFrame({
       videoId: 'QjZ5ohr7sGA',
@@ -129,7 +146,54 @@ describe('YouTube public stills fallback', () => {
     expect(result!.imagePath).toBe('/api/video/pack/frames/QjZ5ohr7sGA/8');
     expect(result!.bytes[0]).toBe(0xff);
     expect(result!.bytes[1]).toBe(0xd8);
+    expect(stored.get(frameCacheKey('QjZ5ohr7sGA', 8))).toEqual(
+      Buffer.from(result!.bytes).toString('base64'),
+    );
     expect(JSON.stringify(result)).not.toMatch(/i\.ytimg\.com|img\.youtube\.com|hqdefault|maxresdefault/);
+  });
+
+  it('keeps capture partial when no durable frame store is available', async () => {
+    const jpegBytes = solidJpeg(16, 9, [12, 24, 180]);
+    const result = await captureKeyframeFrame({
+      videoId: 'QjZ5ohr7sGA',
+      t_s: 8,
+      spanS: 30,
+      fetchStoryboardSpec: async () => null,
+      fetchBytes: async (url) => (/\/(hq)?1\.jpg$/.test(url) ? jpegBytes : null),
+    });
+    expect(result).toBeNull();
+    expect(await loadCapturedFrameJpeg('QjZ5ohr7sGA', 8)).toBeNull();
+  });
+
+  it('reloads a persisted app-served frame from the durable frame store', async () => {
+    const stored = new Map<string, unknown>();
+    setKeyframeFrameRedisForTests({
+      async get<TData>(key: string) {
+        return (stored.get(key) ?? null) as TData | null;
+      },
+      async set(key: string, value: unknown) {
+        stored.set(key, value);
+        return 'OK';
+      },
+      async eval() {
+        throw new Error('not used');
+      },
+    });
+    const bytes = solidJpeg(16, 9, [12, 24, 180]);
+    const captured = await captureKeyframeFrame({
+      videoId: 'QjZ5ohr7sGA',
+      t_s: 8,
+      spanS: 30,
+      fetchStoryboardSpec: async () => null,
+      fetchBytes: async (url) => (/\/(hq)?1\.jpg$/.test(url) ? bytes : null),
+    });
+
+    expect(captured?.imagePath).toBe('/api/video/pack/frames/QjZ5ohr7sGA/8');
+    expect(captured).not.toBeNull();
+
+    resetKeyframeFrameCaptureForTests();
+
+    expect(await loadCapturedFrameJpeg('QjZ5ohr7sGA', 8)).toEqual(captured!.bytes);
   });
 
   it('stays null when storyboard and stills both miss', async () => {
