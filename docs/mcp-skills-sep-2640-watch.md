@@ -43,10 +43,12 @@ handoff contract that:
 
 1. Requires the Resources and Skills extension capabilities.
 2. Validates a direct `skills/get` complete response without depending on listing.
-3. Stores compound identity `{server_identity, skill_uri}`.
+3. Stores compound identity `{server_identity, skill_uri}` and binds approval to
+   that identity plus the verified manifest digest.
 4. Verifies static-resource byte size + SHA-256 before a handoff can be prepared.
-5. Rejects digest drift, cross-origin reads, path traversal, invalid cache metadata,
-   mismatched manifest/frontmatter names, dynamic resources, and unapproved execution.
+5. Rejects digest drift, cross-origin reads, decoded path traversal, invalid cache
+   metadata, any mismatch in the complete verbatim frontmatter object, top-level
+   dynamic resources, and unapproved execution.
 6. Emits a deterministic, machine-readable receipt while performing zero network,
    import, tool, or external-effect operations.
 

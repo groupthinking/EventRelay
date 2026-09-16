@@ -1,3 +1,4 @@
+import { parseDocument } from 'yaml';
 import { canonicalGateJson, hashCanonical } from '@/lib/gate-transition';
 
 export const MCP_SKILLS_EXTENSION_ID = 'io.modelcontextprotocol/skills' as const;
@@ -13,11 +14,18 @@ export const MCP_CLIENT_MATRIX_REVISION = [
 ].join('');
 
 type CacheScope = 'public' | 'private';
+type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+export type SkillFrontmatter = {
+  name: string;
+  description: string;
+  [key: string]: unknown;
+};
 
 export type SkillManifestResource = {
   uri: string;
-  digest: string | 'dynamic';
-  size: number | 'dynamic';
+  digest: string;
+  size: number;
 };
 
 export type SkillGetResult = {
@@ -26,10 +34,15 @@ export type SkillGetResult = {
   cacheScope: CacheScope;
   skill: {
     uri: string;
-    name: string;
-    description: string;
-    resources: SkillManifestResource[];
+    frontmatter: SkillFrontmatter;
+    resources: SkillManifestResource[] | 'dynamic';
   };
+};
+
+export type ApprovedSkillManifest = {
+  serverIdentity: string;
+  skillUri: string;
+  manifestDigest: string;
 };
 
 export type FixtureChatGptSkillImportInput = {
@@ -41,7 +54,7 @@ export type FixtureChatGptSkillImportInput = {
   };
   result: SkillGetResult;
   resourceContents: Record<string, string>;
-  approvedManifestDigest?: string | null;
+  approvedManifest?: ApprovedSkillManifest | null;
   issuedAt?: string;
 };
 
@@ -78,7 +91,11 @@ export type FixtureChatGptSkillImportReceipt = {
   };
   authorization: {
     status: 'NOT_GRANTED' | 'VALID_FOR_MANIFEST' | 'INVALIDATED';
-    approved_manifest_digest: string | null;
+    approved_compound_identity: {
+      server_identity: string;
+      skill_uri: string;
+      manifest_digest: string;
+    } | null;
     authority_effect: 'none';
     untrusted_skill_content_cannot_grant_authority: true;
   };
@@ -92,36 +109,114 @@ export type FixtureChatGptSkillImportReceipt = {
 };
 
 const SHA256_DIGEST = /^sha256:[a-f0-9]{64}$/;
-const SKILL_URI = /^skill:\/\/(.+)\/SKILL\.md$/;
+const SHA256_HEX = /^[a-f0-9]{64}$/;
 const SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const MAX_RESOURCES = 512;
+const MAX_TOTAL_BYTES = 16_777_216;
 
 function hold(message: string): never {
   throw new Error(`ChatGPT fixture handoff held: ${message}`);
 }
 
-function parseFrontmatterName(content: string): string {
-  const match = /^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/.exec(content);
-  if (!match) hold('SKILL.md frontmatter is missing.');
-  const nameLine = match[1]
-    .split('\n')
-    .find((line) => /^name\s*:/.test(line.trim()));
-  if (!nameLine) hold('SKILL.md frontmatter name is missing.');
-  const name = nameLine.slice(nameLine.indexOf(':') + 1).trim().replace(/^['"]|['"]$/g, '');
-  if (!SKILL_NAME.test(name)) hold('SKILL.md frontmatter name is invalid.');
-  return name;
+function jsonValue(value: unknown, path = 'frontmatter'): JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (Array.isArray(value)) return value.map((entry, index) => jsonValue(entry, `${path}[${index}]`));
+  if (typeof value !== 'object') hold(`${path} contains a non-JSON value.`);
+  const record = value as Record<string, unknown>;
+  const output: Record<string, JsonValue> = {};
+  for (const [key, entry] of Object.entries(record)) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      hold(`${path} contains an unsafe key.`);
+    }
+    output[key] = jsonValue(entry, `${path}.${key}`);
+  }
+  return output;
 }
 
-function skillRoot(uri: string): { path: string; name: string } {
-  const match = SKILL_URI.exec(uri);
-  if (!match) hold('skill URI must end in /SKILL.md.');
-  const path = match[1];
-  const segments = path.split('/');
-  if (segments.some((segment) => !segment || segment === '.' || segment === '..')) {
+function parseFrontmatter(content: string): Record<string, JsonValue> {
+  const match = /^---[\t ]*\r?\n([\s\S]*?)\r?\n---(?:[\t ]*\r?\n|$)/.exec(content);
+  if (!match) hold('SKILL.md frontmatter is missing.');
+  const document = parseDocument(match[1], {
+    schema: 'core',
+    merge: false,
+    uniqueKeys: true,
+  });
+  if (document.errors.length > 0) hold('SKILL.md frontmatter is invalid YAML.');
+  const parsed = document.toJS({ maxAliasCount: 0 });
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    hold('SKILL.md frontmatter must be an object.');
+  }
+  return jsonValue(parsed) as Record<string, JsonValue>;
+}
+
+function decodePathSegment(raw: string): string {
+  let decoded = raw;
+  for (let depth = 0; depth < 4; depth += 1) {
+    let next: string;
+    try {
+      next = decodeURIComponent(decoded);
+    } catch {
+      hold('skill URI contains invalid percent encoding.');
+    }
+    if (next === decoded) break;
+    decoded = next;
+  }
+  if (
+    !decoded ||
+    decoded === '.' ||
+    decoded === '..' ||
+    decoded.includes('/') ||
+    decoded.includes('\\') ||
+    decoded.includes('%') ||
+    /[\u0000-\u001f\u007f]/.test(decoded)
+  ) {
     hold('skill URI path is not confined.');
   }
-  const name = segments.at(-1)!;
+  return decoded;
+}
+
+type NormalizedSkillUri = {
+  canonical: string;
+  authority: string;
+  segments: string[];
+};
+
+function normalizeSkillUri(uri: string): NormalizedSkillUri {
+  const match = /^skill:\/\/([^/?#]+)(\/[^?#]*)$/.exec(uri);
+  if (!match) hold('skill URI must use the skill scheme without query or fragment.');
+  let parsed: URL;
+  try {
+    parsed = new URL(uri);
+  } catch {
+    hold('skill URI is invalid.');
+  }
+  if (
+    parsed.protocol !== 'skill:' ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    hold('skill URI authority is invalid.');
+  }
+  const authority = parsed.hostname.toLowerCase();
+  if (!authority) hold('skill URI authority is missing.');
+  const segments = match[2].slice(1).split('/').map(decodePathSegment);
+  const canonical = `skill://${authority}/${segments.map((segment) => encodeURIComponent(segment)).join('/')}`;
+  return { canonical, authority, segments };
+}
+
+function skillRoot(uri: string): NormalizedSkillUri & { rootSegments: string[]; name: string } {
+  const normalized = normalizeSkillUri(uri);
+  if (normalized.segments.length < 2 || normalized.segments.at(-1) !== 'SKILL.md') {
+    hold('skill URI must end in /SKILL.md.');
+  }
+  const rootSegments = normalized.segments.slice(0, -1);
+  const name = rootSegments.at(-1)!;
   if (!SKILL_NAME.test(name)) hold('skill URI final segment is invalid.');
-  return { path, name };
+  return { ...normalized, rootSegments, name };
 }
 
 function verifyManifest(
@@ -129,24 +224,27 @@ function verifyManifest(
   resources: readonly SkillManifestResource[],
   contents: Readonly<Record<string, string>>,
 ): Array<{ uri: string; digest: string; size: number }> {
-  const { path } = skillRoot(skillUri);
-  const root = `skill://${path}/`;
+  const skill = skillRoot(skillUri);
   if (resources.length === 0) hold('skill manifest is empty.');
+  if (resources.length > MAX_RESOURCES) hold('skill manifest exceeds the resource limit.');
 
   const seen = new Set<string>();
+  let totalSize = 0;
   const verified = resources.map((resource) => {
-    if (seen.has(resource.uri)) hold('skill manifest contains a duplicate URI.');
-    seen.add(resource.uri);
-    if (!resource.uri.startsWith(root)) hold('resource URI escapes the skill root.');
-    const suffix = resource.uri.slice(root.length);
-    if (!suffix || suffix.split('/').some((segment) => !segment || segment === '.' || segment === '..')) {
-      hold('resource URI path is not confined.');
-    }
-    if (resource.digest === 'dynamic' || resource.size === 'dynamic') {
-      hold('dynamic resources are not accepted by this fixture-only contract.');
+    const normalized = normalizeSkillUri(resource.uri);
+    if (seen.has(normalized.canonical)) hold('skill manifest contains a duplicate URI.');
+    seen.add(normalized.canonical);
+    if (
+      normalized.authority !== skill.authority ||
+      normalized.segments.length <= skill.rootSegments.length ||
+      !skill.rootSegments.every((segment, index) => normalized.segments[index] === segment)
+    ) {
+      hold('resource URI escapes the skill root.');
     }
     if (!SHA256_DIGEST.test(resource.digest)) hold('resource digest is invalid.');
     if (!Number.isInteger(resource.size) || resource.size < 0) hold('resource size is invalid.');
+    totalSize += resource.size;
+    if (totalSize > MAX_TOTAL_BYTES) hold('skill manifest exceeds the total-size limit.');
 
     const content = contents[resource.uri];
     if (typeof content !== 'string') hold(`resource content is missing for ${resource.uri}.`);
@@ -154,10 +252,10 @@ function verifyManifest(
     const size = new TextEncoder().encode(content).byteLength;
     if (digest !== resource.digest) hold(`resource digest mismatch for ${resource.uri}.`);
     if (size !== resource.size) hold(`resource size mismatch for ${resource.uri}.`);
-    return { uri: resource.uri, digest, size };
+    return { uri: normalized.canonical, digest, size };
   });
 
-  if (!seen.has(skillUri)) hold('SKILL.md is absent from the manifest.');
+  if (!seen.has(skill.canonical)) hold('SKILL.md is absent from the manifest.');
   return verified.sort((left, right) => left.uri.localeCompare(right.uri));
 }
 
@@ -183,29 +281,55 @@ export function createFixtureChatGptSkillImport(
   if (input.result.cacheScope !== 'public' && input.result.cacheScope !== 'private') {
     hold('cacheScope must be public or private.');
   }
-  if (input.result.skill.uri !== input.requestedSkillUri) {
+  const requestedSkill = skillRoot(input.requestedSkillUri);
+  const returnedSkill = skillRoot(input.result.skill.uri);
+  if (returnedSkill.canonical !== requestedSkill.canonical) {
     hold('returned skill URI does not match the requested URI.');
   }
 
-  const { name: uriName } = skillRoot(input.result.skill.uri);
-  if (input.result.skill.name !== uriName) hold('manifest name does not match the skill URI.');
+  const manifestFrontmatter = jsonValue(input.result.skill.frontmatter) as Record<string, JsonValue>;
+  if (
+    typeof manifestFrontmatter.name !== 'string' ||
+    typeof manifestFrontmatter.description !== 'string'
+  ) {
+    hold('manifest frontmatter requires name and description strings.');
+  }
+  if (manifestFrontmatter.name !== returnedSkill.name) {
+    hold('manifest frontmatter name does not match the skill URI.');
+  }
   const skillText = input.resourceContents[input.result.skill.uri];
   if (typeof skillText !== 'string') hold('SKILL.md content is missing.');
-  if (parseFrontmatterName(skillText) !== uriName) {
-    hold('SKILL.md frontmatter name does not match the skill URI.');
+  const parsedFrontmatter = parseFrontmatter(skillText);
+  if (canonicalGateJson(parsedFrontmatter) !== canonicalGateJson(manifestFrontmatter)) {
+    hold('manifest frontmatter does not match SKILL.md frontmatter.');
   }
 
+  if (input.result.skill.resources === 'dynamic') {
+    hold('dynamic skill resources are not accepted by this fixture-only contract.');
+  }
   const resources = verifyManifest(
-    input.result.skill.uri,
+    returnedSkill.canonical,
     input.result.skill.resources,
     input.resourceContents,
   );
   const manifestDigest = hashCanonical(canonicalGateJson(resources));
-  const approvedManifestDigest = input.approvedManifestDigest ?? null;
+  const approved = input.approvedManifest ?? null;
+  let approvedCompoundIdentity: FixtureChatGptSkillImportReceipt['authorization']['approved_compound_identity'] =
+    null;
+  if (approved) {
+    if (!SHA256_HEX.test(approved.manifestDigest)) hold('approved manifest digest is invalid.');
+    approvedCompoundIdentity = {
+      server_identity: approved.serverIdentity.trim(),
+      skill_uri: skillRoot(approved.skillUri).canonical,
+      manifest_digest: approved.manifestDigest,
+    };
+  }
   const authorizationStatus: FixtureChatGptSkillImportReceipt['authorization']['status'] =
-    approvedManifestDigest === null
+    approvedCompoundIdentity === null
       ? 'NOT_GRANTED'
-      : approvedManifestDigest === manifestDigest
+      : approvedCompoundIdentity.server_identity === serverIdentity &&
+          approvedCompoundIdentity.skill_uri === returnedSkill.canonical &&
+          approvedCompoundIdentity.manifest_digest === manifestDigest
         ? 'VALID_FOR_MANIFEST'
         : 'INVALIDATED';
 
@@ -228,7 +352,7 @@ export function createFixtureChatGptSkillImport(
     issued_at: input.issuedAt ?? new Date().toISOString(),
     compound_identity: {
       server_identity: serverIdentity,
-      skill_uri: input.result.skill.uri,
+      skill_uri: returnedSkill.canonical,
     },
     manifest: {
       digest: manifestDigest,
@@ -242,7 +366,7 @@ export function createFixtureChatGptSkillImport(
     },
     authorization: {
       status: authorizationStatus,
-      approved_manifest_digest: approvedManifestDigest,
+      approved_compound_identity: approvedCompoundIdentity,
       authority_effect: 'none' as const,
       untrusted_skill_content_cannot_grant_authority: true as const,
     },
