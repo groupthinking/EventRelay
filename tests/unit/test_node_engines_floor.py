@@ -52,10 +52,15 @@ CI_WORKFLOWS = (
 # Direct runtime dependencies whose floor the deployed app must satisfy.
 RUNTIME_DEPS_UNDER_TEST = ("openai", "ai", "@ai-sdk/gateway")
 
+# CI installs and executes these packages directly, so the declared floor must
+# satisfy them too.
+CI_DEPS_UNDER_TEST = ("jsdom",)
+
 # Anchored: the whole range must be one `>=` clause. An unanchored search would
 # happily pull `>=24.0.0` out of `^20.0.0 || ^22.0.0 || >=24.0.0` and report a
 # floor of 24 for a range that accepts Node 20.
 _MIN_VERSION = re.compile(r"^>=\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$")
+_CARET_VERSION = re.compile(r"^\^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$")
 _DOCKER_NODE = re.compile(r"^FROM\s+node:(\d+)", re.MULTILINE)
 
 
@@ -107,6 +112,31 @@ def _parse_floor(spec: str | None) -> tuple[int, int, int] | None:
 def _load(path: Path) -> dict:
     assert path.exists(), f"{path} should exist"
     return json.loads(path.read_text())
+
+
+def _lowest_supported_for_major(
+    spec: str | None, major: int
+) -> tuple[int, int, int] | None:
+    """Return the minimum version a range allows for a specific major."""
+    if not spec:
+        return None
+
+    matching: list[tuple[int, int, int]] = []
+    for clause in (part.strip() for part in spec.split("||")):
+        floor = _parse_floor(clause)
+        if floor is not None and floor[0] == major:
+            matching.append(floor)
+            continue
+        match = _CARET_VERSION.match(clause)
+        if match is None:
+            continue
+        candidate = tuple(int(piece or 0) for piece in match.groups())
+        if candidate[0] == major:
+            matching.append(candidate)
+
+    if not matching:
+        return None
+    return min(matching)
 
 
 def _declared_floor() -> tuple[int, int, int]:
@@ -182,6 +212,34 @@ def test_declared_floor_satisfies_core_runtime_dependencies(dependency: str) -> 
     )
 
 
+@pytest.mark.parametrize("dependency", CI_DEPS_UNDER_TEST)
+def test_declared_floor_satisfies_ci_installed_dependencies(dependency: str) -> None:
+    """A CI-installed dependency must not demand a newer Node than we declare."""
+    declared = _declared_floor()
+    required = None
+    for path, meta in (_load(PACKAGE_LOCK).get("packages") or {}).items():
+        if not path or not isinstance(meta, dict):
+            continue
+        if path.split("node_modules/")[-1] != dependency:
+            continue
+        floor = _lowest_supported_for_major(
+            (meta.get("engines") or {}).get("node"), declared[0]
+        )
+        if floor is not None and (required is None or floor > required):
+            required = floor
+    assert required is not None, (
+        f"expected {dependency} to admit the repo's declared Node major in "
+        "package-lock.json. Re-read the range by hand and either widen the "
+        "parser or drop this dependency from CI_DEPS_UNDER_TEST — do not let "
+        "the check pass vacuously."
+    )
+    assert declared >= required, (
+        f"{dependency} requires Node >={'.'.join(map(str, required))} but "
+        f"package.json advertises >={'.'.join(map(str, declared))}, so the repo "
+        "promises a Node version this CI-installed dependency does not support"
+    )
+
+
 @pytest.mark.parametrize(
     ("spec", "expected"),
     [
@@ -208,6 +266,21 @@ def test_declared_floor_satisfies_core_runtime_dependencies(dependency: str) -> 
 )
 def test_parse_floor(spec: str | None, expected: tuple[int, int, int] | None) -> None:
     assert _parse_floor(spec) == expected
+
+
+@pytest.mark.parametrize(
+    ("spec", "major", "expected"),
+    [
+        ("^22.22.2 || ^24.15.0 || >=26.0.0", 22, (22, 22, 2)),
+        ("^20.19.0 || ^22.13.0 || >=24", 22, (22, 13, 0)),
+        ("^20.19.0 || >=22.12.0", 22, (22, 12, 0)),
+        ("^20.0.0 || ^22.0.0 || >=24.0.0", 23, None),
+    ],
+)
+def test_lowest_supported_for_major(
+    spec: str | None, major: int, expected: tuple[int, int, int] | None
+) -> None:
+    assert _lowest_supported_for_major(spec, major) == expected
 
 
 def test_pinned_node_majors_ignores_commented_and_unrelated_keys(
