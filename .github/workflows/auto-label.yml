@@ -27,6 +27,7 @@ concurrency:
 jobs:
   label:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/github-script@v9
         with:

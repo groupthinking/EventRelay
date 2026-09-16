@@ -8,6 +8,8 @@
 ## ✅ Resolution Status (re-verified against code, 2026-08-04)
 
 All P0/P1 security items in this plan are resolved in the current codebase.
+Coverage is enforced at the verified 88.1833% baseline in CI; raise the floor
+as coverage improves rather than bypassing the gate.
 The entries below are retained for the historical record — do not re-remediate.
 
 | Item | Status | Evidence |
@@ -287,17 +289,17 @@ dependencies: []
 ### Week 1: Security Critical
 | Day | Task | Owner | Status |
 |-----|------|-------|--------|
-| 1-2 | REM-001: Fix pickle vulnerability | Backend | ⬜ |
-| 2-3 | REM-002: npm audit fix | Frontend | ⬜ |
-| 3-4 | REM-003: Remove dangerouslySetInnerHTML | Frontend | ⬜ |
-| 5 | Verification and testing | QA | ⬜ |
+| 1-2 | REM-001: Fix pickle vulnerability | Backend | ✅ |
+| 2-3 | REM-002: npm audit fix | Frontend | ✅ |
+| 3-4 | REM-003: Remove dangerouslySetInnerHTML | Frontend | ✅ |
+| 5 | Verification and testing | QA | ✅ |
 
 ### Week 2-3: Stability
 | Day | Task | Owner | Status |
 |-----|------|-------|--------|
-| 1-3 | REM-004: Subprocess audit | Security | ⬜ |
+| 1-3 | REM-004: Subprocess audit | Security | ✅ |
 | 4-6 | REM-005: Test consolidation | Platform | ⬜ |
-| 7-8 | CI/CD updates | DevOps | ⬜ |
+| 7-8 | CI/CD updates | DevOps | ✅ |
 
 ### Week 4: Code Quality
 | Day | Task | Owner | Status |

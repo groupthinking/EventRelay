@@ -269,11 +269,47 @@ function workflowFailurePatch(url: string, startedAt: string, message: string): 
 
 const activeRunResumptions = new Set<string>();
 
-const noopStorage = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
+let persistenceSucceeded = false;
+export function dashboardPersistenceSucceeded(): boolean {
+  return persistenceSucceeded;
+}
+
+const dashboardStorage = {
+  getItem: (name: string) => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const value = window.localStorage.getItem(name);
+      persistenceSucceeded = true;
+      return value;
+    } catch { persistenceSucceeded = false; return null; }
+  },
+  setItem: (name: string, value: string) => {
+    persistenceSucceeded = false;
+    try {
+      if (typeof window === 'undefined') return;
+      window.localStorage.setItem(name, value);
+      persistenceSucceeded = true;
+    } catch { /* Keep the updated in-memory state usable when storage is denied or full. */ }
+  },
+  removeItem: (name: string) => {
+    try {
+      if (typeof window !== 'undefined') window.localStorage.removeItem(name);
+    } catch { persistenceSucceeded = false; }
+  },
 };
+
+function isStoredVideo(value: unknown): value is Video {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.id === 'string' && typeof row.title === 'string' && typeof row.url === 'string'
+    && typeof row.progress === 'number' && Number.isFinite(row.progress)
+    && ['processing', 'complete', 'failed'].includes(String(row.status));
+}
+function isStoredActivity(value: unknown): value is Activity {
+  if (!value || typeof value !== 'object') return false;
+  const row = value as Record<string, unknown>;
+  return typeof row.time === 'string' && typeof row.event === 'string' && ['success', 'info', 'error'].includes(String(row.type));
+}
 
 export const useDashboardStore = create<DashboardState>()(
   persist(
@@ -691,9 +727,16 @@ export const useDashboardStore = create<DashboardState>()(
         videos: state.videos,
         activities: state.activities,
       }),
-      storage: createJSONStorage(() =>
-        typeof window !== 'undefined' ? localStorage : noopStorage,
-      ),
+      storage: createJSONStorage(() => dashboardStorage),
+      merge: (persisted, current) => {
+        if (!persisted || typeof persisted !== 'object') return current;
+        const saved = persisted as Record<string, unknown>;
+        return {
+          ...current,
+          videos: Array.isArray(saved.videos) ? saved.videos.filter(isStoredVideo) : current.videos,
+          activities: Array.isArray(saved.activities) ? saved.activities.filter(isStoredActivity) : current.activities,
+        };
+      },
       skipHydration: true,
     },
   ),

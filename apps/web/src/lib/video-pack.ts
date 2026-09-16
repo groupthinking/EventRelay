@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
@@ -21,8 +22,22 @@ import {
   putPackRecord,
   type VideoPackRecord,
 } from '@/lib/video-pack-store';
+import { applyKeyframeImageHonesty } from '@/lib/keyframe-image-path';
+import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
 
 export const IDENTITY_VERSION = 'v0' as const;
+
+export {
+  KEYFRAME_IMAGES_OK,
+  KEYFRAME_IMAGES_OK_NOTE,
+  KEYFRAME_IMAGES_OK_STILLS_NOTE,
+  KEYFRAME_IMAGES_OK_STORYBOARD_NOTE,
+  KEYFRAME_IMAGES_PARTIAL,
+  KEYFRAME_IMAGES_PARTIAL_NOTE,
+  applyKeyframeImageHonesty,
+  applyKeyframeImageSourceNotes,
+  sanitizeKeyframeImagePath,
+} from '@/lib/keyframe-image-path';
 
 export const GOLDEN_IDENTITY_HASHES = {
   'auJzb1D-fag': '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
@@ -79,6 +94,7 @@ export interface VideoPackVisualContext {
 }
 
 export interface VideoPackV0Json {
+  grounded_spec?: GroundedSpecRecord;
   version: typeof IDENTITY_VERSION;
   id: string;
   video_id: string;
@@ -171,7 +187,7 @@ export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
 ): VideoPackV0Json {
-  return {
+  const pack = applyKeyframeImageHonesty({
     ...identity,
     transcript: spec.transcript,
     keyframes: spec.keyframes,
@@ -190,7 +206,19 @@ export function applyExtractedSpec(
       },
       notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
     },
+  });
+  if (!spec.grounded_spec) return pack;
+  if (spec.grounded_spec.status !== 'available') return { ...pack, grounded_spec: spec.grounded_spec };
+  const source = sourceForGroundedSpec(pack);
+  const checked = parseGroundedSpec(spec.grounded_spec.spec, pack, pack.video_id);
+  if (!source || !checked || checked.status !== 'available') return {
+    ...pack, grounded_spec: checked && checked.status !== 'available' ? checked : invalidGroundedSpec('Source identity is not valid for this specification.'),
   };
+  const bound = { ...checked.spec, source };
+  return { ...pack, grounded_spec: {
+    status: 'available', spec: bound,
+    contentHash: createHash('sha256').update(canonicalReviewContent(bound, pack)).digest('hex'),
+  } };
 }
 
 export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
@@ -230,6 +258,7 @@ function processingEnvelope(identity: {
   return {
     status: 'processing' as const,
     data: {
+      version: IDENTITY_VERSION,
       id: identity.id,
       video_id: identity.video_id,
       source_url: identity.source_url,
@@ -238,7 +267,7 @@ function processingEnvelope(identity: {
   };
 }
 
-function recordToResponse(record: VideoPackRecord): NextResponse {
+async function recordToResponse(record: VideoPackRecord): Promise<NextResponse> {
   switch (record.state) {
     case 'ready':
       if (isIdentityOnlyPack(record.pack)) {
@@ -247,7 +276,11 @@ function recordToResponse(record: VideoPackRecord): NextResponse {
           { status: 503 },
         );
       }
-      return NextResponse.json({ status: 'success', data: record.pack });
+      const hydrated = await hydrateKeyframeImages(record.pack);
+      if (JSON.stringify(hydrated.keyframes) !== JSON.stringify(record.pack.keyframes)) {
+        await putPackRecord({ state: 'ready', pack: hydrated });
+      }
+      return NextResponse.json({ status: 'success', data: applyKeyframeImageHonesty(hydrated) });
     case 'processing':
       return NextResponse.json(
         processingEnvelope({
@@ -295,7 +328,7 @@ async function persistExtract(identity: VideoPackV0Json): Promise<void> {
       sourceUrl: identity.source_url,
       videoId: identity.video_id,
     });
-    const pack = applyExtractedSpec(identity, spec);
+    const pack = await hydrateKeyframeImages(applyExtractedSpec(identity, spec));
     if (isIdentityOnlyPack(pack)) {
       await putPackRecord({
         state: 'error',
@@ -356,12 +389,18 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
     // A new POST retries after a visible failure; GET keeps serving the error.
   }
 
-  const claimed = await claimPackProcessing({
-    video_id: identity.video_id,
-    source_url: identity.source_url,
-    source_hash: sourceHash,
-    id: identity.id,
-  });
+  let claimed: Awaited<ReturnType<typeof claimPackProcessing>>;
+  try {
+    claimed = await claimPackProcessing({
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: sourceHash,
+      id: identity.id,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Video pack claim failed.';
+    return NextResponse.json({ status: 'error', error: message }, { status: 503 });
+  }
   if (claimed !== 'claimed') {
     return recordToResponse(claimed);
   }
