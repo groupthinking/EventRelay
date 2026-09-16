@@ -144,6 +144,10 @@ async function getRedis(): Promise<VideoPackRedisClient | null> {
   return promise;
 }
 
+export async function getVideoPackRedisForServer(): Promise<VideoPackRedisClient | null> {
+  return getRedis();
+}
+
 function asRecord(value: unknown): VideoPackRecord | null {
   if (value === null || typeof value !== 'object') return null;
   const row = value as VideoPackRecord;
