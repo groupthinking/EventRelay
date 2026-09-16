@@ -62,7 +62,7 @@
     "use-sync-external-store": "^1.6.0",
     "v0": "3.0.7-canary.1f8fe89",
     "workflow": "^4.8.5",
-    "yaml": "^2.8.1",
+    "yaml": "^2.9.1",
     "zod": "^4.5.4",
     "zustand": "^5.0.15"
   },
