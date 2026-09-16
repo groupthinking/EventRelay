@@ -1,11 +1,27 @@
+import { decodeGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
+import type {
+  VideoPackKeyframe,
+  VideoPackRequirement,
+  VideoPackTranscriptSegment,
+  VideoPackVisualContext,
+} from '@/lib/video-pack';
 import { readPackFormation, type VideoPackArchitecture, type VideoPackArtifact, type VideoPackStack } from '@/lib/video-pack-types';
 
 export interface EmittedVideoPack {
+  grounded_spec?: GroundedSpecRecord;
   version: string;
   id: string;
   video_id: string;
   source_url: string;
   provenance: { source_hash: string };
+  transcript?: {
+    language?: string | null;
+    full_text: string;
+    segments?: VideoPackTranscriptSegment[];
+  };
+  visual_context?: VideoPackVisualContext | null;
+  keyframes?: VideoPackKeyframe[];
+  requirements?: VideoPackRequirement[];
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   stack?: VideoPackStack;
@@ -50,6 +66,13 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   }
 
   const formation = data ? readPackFormation(data) : { architecture: null, artifacts: [], stack: { tools: [] } };
+  const transcriptRecord = asRecord(data?.transcript);
+  const transcriptText =
+    typeof transcriptRecord?.full_text === 'string' ? transcriptRecord.full_text : '';
+  const visualContext = data?.visual_context;
+  const keyframes = Array.isArray(data?.keyframes) ? data.keyframes : undefined;
+  const requirements = Array.isArray(data?.requirements) ? data.requirements : undefined;
+  const grounding = data ? decodeGroundedSpec(data) : undefined;
 
   return {
     version,
@@ -58,11 +81,26 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
     sourceUrl,
     sourceHash,
     pack: {
+      ...(grounding ? { grounded_spec: grounding } : {}),
       version,
       id: packId,
       video_id: videoId,
       source_url: sourceUrl,
       provenance: { source_hash: sourceHash },
+      ...(transcriptText
+        ? {
+            transcript: {
+              language: typeof transcriptRecord?.language === 'string' ? transcriptRecord.language : null,
+              full_text: transcriptText,
+              segments: Array.isArray(transcriptRecord?.segments)
+                ? (transcriptRecord.segments as VideoPackTranscriptSegment[])
+                : [],
+            },
+          }
+        : {}),
+      ...(visualContext ? { visual_context: visualContext as VideoPackVisualContext } : {}),
+      ...(keyframes ? { keyframes: keyframes as VideoPackKeyframe[] } : {}),
+      ...(requirements ? { requirements: requirements as VideoPackRequirement[] } : {}),
       ...(formation.architecture ? { architecture: formation.architecture } : {}),
       ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),

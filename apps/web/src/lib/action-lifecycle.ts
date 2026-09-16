@@ -160,3 +160,29 @@ export function isComplete(state: PromptLifecycle): boolean {
     state.actions.every((a) => a.status === 'fulfilled' || a.status === 'failed')
   );
 }
+
+function normalizeActionInput(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(normalizeActionInput);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, normalizeActionInput(entry)]),
+    );
+  }
+  return value;
+}
+
+export function actionSignature(action: Pick<AgentAction, 'tool' | 'input'>): string {
+  return `${action.tool}:${JSON.stringify(normalizeActionInput(action.input))}`;
+}
+
+export function dedupeAgentActions(actions: AgentAction[]): AgentAction[] {
+  const seen = new Set<string>();
+  return actions.filter((action) => {
+    const signature = actionSignature(action);
+    if (seen.has(signature)) return false;
+    seen.add(signature);
+    return true;
+  });
+}
