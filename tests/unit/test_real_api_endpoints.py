@@ -605,6 +605,7 @@ class TestCostDashboardEndpoint:
         assert response.status_code == 200
         data = response.json()
         assert "error" in data
+        assert data["error"] == "Internal server error"
 
 
 # ===========================================================================

@@ -22,6 +22,10 @@ class CodeGeneratorAgent:
         return {
             "fastapi_endpoint": textwrap.dedent(
                 """
+                import logging
+
+                logger = logging.getLogger(__name__)
+
                 @app.post("/api/v1/{endpoint_name}")
                 async def {function_name}({parameters}):
                     \"\"\"
@@ -42,9 +46,11 @@ class CodeGeneratorAgent:
                         }}
                     except ValidationError as e:
                         raise HTTPException(status_code=400, detail=str(e))
-                    except Exception as e:
-                        logger.error(f"Unexpected error: {{e}}", exc_info=True)
-                        raise HTTPException(status_code=500, detail="Internal server error")
+                    except Exception:
+                        logger.exception("Generated endpoint failed")
+                        raise HTTPException(
+                            status_code=500, detail="Internal server error"
+                        )
             """
             ),
             "rest_api": textwrap.dedent(

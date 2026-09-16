@@ -586,7 +586,7 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "failed"
-        assert data["error"] == "something went wrong"
+        assert data["error"] == "Internal server error"
 
     def test_process_video_exception(self):
         mock_processor = AsyncMock()
@@ -827,6 +827,7 @@ class TestCloudApiEndpoints:
         assert response.status_code == 200  # returns degraded, not 500
         data = response.json()
         assert data["success"] is False
+        assert data["error"] == "Internal server error"
 
     # -------- GET /api/v3/cloud-status --------
 
