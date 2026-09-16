@@ -82,8 +82,16 @@ describe('auth path policy', () => {
     // uvai.io failure after #1609: pack never emits, UI shows no source_hash.
     expect(isPublicApiPath('/api/video/pack')).toBe(true);
     expect(isPublicApiPath('/api/v1/video/pack')).toBe(true);
+    expect(isPublicApiPath('/api/video/sandbox')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video/sandbox')).toBe(true);
+    expect(isPublicApiPath('/api/video/assemble')).toBe(true);
+    expect(isPublicApiPath('/api/v1/video/assemble')).toBe(true);
     expect(needsAuthentication('/api/video/pack')).toBe(false);
     expect(needsAuthentication('/api/v1/video/pack')).toBe(false);
+    expect(needsAuthentication('/api/video/sandbox')).toBe(false);
+    expect(needsAuthentication('/api/v1/video/sandbox')).toBe(false);
+    expect(needsAuthentication('/api/video/assemble')).toBe(false);
+    expect(needsAuthentication('/api/v1/video/assemble')).toBe(false);
     // Exact allowlist only — siblings stay gated.
     expect(isPublicApiPath('/api/video')).toBe(false);
     expect(isPublicApiPath('/api/video/generate')).toBe(false);
@@ -91,6 +99,22 @@ describe('auth path policy', () => {
     expect(isPublicApiPath('/api/video/packs')).toBe(false);
     expect(needsAuthentication('/api/video/packs')).toBe(true);
     expect(isPublicApiPath('/api/v1/video')).toBe(false);
+  });
+
+  it('keeps app-served pack frame GETs public like pack GET', () => {
+    // #1907 served JPEGs at /api/video/pack/frames/{videoId}/{t}, but
+    // middleware only public-listed exact /api/video/pack, so anonymous
+    // curl on uvai.io returned 401 Authentication required.
+    expect(isPublicApiPath('/api/video/pack/frames/QjZ5ohr7sGA/1')).toBe(true);
+    expect(isPublicApiPath('/api/video/pack/frames/XYMcBrFSJ4c/12.5')).toBe(true);
+    expect(isPublicApiPath('/api/video/pack/frames/CWUy2zynCqc/0')).toBe(true);
+    expect(needsAuthentication('/api/video/pack/frames/QjZ5ohr7sGA/1')).toBe(false);
+    // Prefix is exact-segment — do not widen pack siblings.
+    expect(isPublicApiPath('/api/video/pack/frameshift')).toBe(false);
+    expect(isPublicApiPath('/api/video/pack/admin')).toBe(false);
+    expect(needsAuthentication('/api/video/generate')).toBe(true);
+    expect(isAiRoute('/api/video/pack/frames/QjZ5ohr7sGA/1', 'GET')).toBe(false);
+    expect(isAiRoute('/api/video/pack/frames/QjZ5ohr7sGA/1', 'POST')).toBe(false);
   });
 
   it('does not gate marketing pages', () => {
@@ -174,6 +198,10 @@ describe('AI route classification (rate-limit budget)', () => {
   it('does not meter identity pack emit as AI work', () => {
     expect(isAiRoute('/api/video/pack', 'POST')).toBe(false);
     expect(isAiRoute('/api/v1/video/pack', 'POST')).toBe(false);
+    expect(isAiRoute('/api/video/sandbox', 'GET')).toBe(false);
+    expect(isAiRoute('/api/v1/video/sandbox', 'POST')).toBe(false);
+    expect(isAiRoute('/api/video/assemble', 'GET')).toBe(false);
+    expect(isAiRoute('/api/v1/video/assemble', 'POST')).toBe(false);
     expect(isAiRoute('/api/video', 'POST')).toBe(true);
     expect(isAiRoute('/api/video/generate', 'POST')).toBe(true);
   });

@@ -39,13 +39,13 @@ function baseRequest(
 }
 
 describe('G.A.T.E. transition contract', () => {
-  it('PASS when Zero-Sim is real, authority is known, and live evidence is verified', () => {
+  it('REJECTs self-asserted real evidence and a known actor label without trusted receipts', () => {
     const result = evaluateTransition(baseRequest());
-    expect(result.decision).toBe('PASS');
-    expect(result.reason_code).toBe('GATE_PASS');
-    expect(result.reason).toMatch(/permit/i);
+    expect(result.decision).toBe('REJECT');
+    expect(result.reason_code).toBe('GATE_REJECT_CLAIM_MISMATCH');
+    expect(result.reason).toMatch(/artifact-bound/i);
     expect(result.receipt.version).toBe(GATE_RECEIPT_VERSION);
-    expect(result.receipt.decision).toBe('PASS');
+    expect(result.receipt.decision).toBe('REJECT');
     expect(result.receipt.receipt_hash).toMatch(/^[a-f0-9]{64}$/);
   });
 
@@ -112,6 +112,13 @@ describe('G.A.T.E. transition contract', () => {
     const assessed = assessZeroSim({ evidenceRefs: [] });
     expect(assessed.verdict).toBe('unverified');
     expect(assessed.reason_code).toBe('ZERO_SIM_MISSING_EVIDENCE');
+
+    const forcedReal = assessZeroSim({
+      result: { verdict: 'real', reason_code: 'ZERO_SIM_REAL' },
+      evidenceRefs: [],
+    });
+    expect(forcedReal.verdict).toBe('unverified');
+    expect(forcedReal.reason_code).toBe('ZERO_SIM_MISSING_EVIDENCE');
   });
 
   it('emits a versioned receipt whose hash matches canonical JSON without the hash field', () => {
@@ -126,7 +133,7 @@ describe('G.A.T.E. transition contract', () => {
 });
 
 describe('evaluateStudioDeployTransition', () => {
-  it('PASS only for a verified https live URL with hostname', () => {
+  it('REJECTs a raw https URL without a trusted artifact-bound receipt', () => {
     const result = evaluateStudioDeployTransition({
       transitionId: 'wrun_live',
       runId: 'wrun_live',
@@ -136,8 +143,8 @@ describe('evaluateStudioDeployTransition', () => {
       authority: { actor: 'anonymous' },
       issuedAt: ISSUED_AT,
     });
-    expect(result.decision).toBe('PASS');
-    expect(result.reason_code).toBe('GATE_PASS');
+    expect(result.decision).toBe('REJECT');
+    expect(result.reason_code).toBe('GATE_REJECT_CLAIM_MISMATCH');
   });
 
   it('HOLD when workflow completed without a live receipt (no Deploy completed claim)', () => {
@@ -271,6 +278,228 @@ describe('evaluateStudioDeployTransition', () => {
     expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
     expect(view.receiptId).toBe('er:gate:v1:wrun_01M2ACYVYXBHM0YVMX1WHMQ1PJ');
   });
+
+  it('HOLD after #1875 process re-hit is not the YouTube bot wall', () => {
+    const backendReason =
+      'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AF8WD3G4VCB63KEBX311HV',
+      runId: 'wrun_01M2AF8WD3G4VCB63KEBX311HV',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AF8WD3G4VCB63KEBX311HV');
+  });
+
+  it('HOLD after a 524 miss is not Backend kickoff returned HTTP 524', () => {
+    const backendReason = 'Deploy job job_01M2AE6Z9Q2KZRBA0Z0Q455B0S still pending';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S',
+      runId: 'wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S',
+      jobId: 'job_01M2AE6Z9Q2KZRBA0Z0Q455B0S',
+      runStatus: 'running',
+      kind: 'job',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AE6Z9Q2KZRBA0Z0Q455B0S');
+  });
+
+  it('HOLD after origin reused the transcript is not the origin-no-live residual', () => {
+    const backendReason =
+      'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B05JJZNTD7MKANV0RN0J28',
+      runId: 'wrun_01M2B05JJZNTD7MKANV0RN0J28',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B05JJZNTD7MKANV0RN0J28');
+  });
+
+  it('HOLD on dogfood receipt is hostname miss, not origin-no-live', () => {
+    const backendReason =
+      'Studio transcript was reused. Origin deploy finished without a backend-supplied https hostname.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B1Q97XA9GHVSG1FZY92N19',
+      runId: 'wrun_01M2B1Q97XA9GHVSG1FZY92N19',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B1Q97XA9GHVSG1FZY92N19');
+  });
+
+  it('HOLD on wrun_01M2B9NW5JA5JQNBTWDRRSHXD6 is not the #1893 attempt-started waiting copy', () => {
+    const backendReason =
+      'Studio deploy run is still in progress after the EventRelay poll budget. Origin job remains pollable.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+      runId: 'wrun_01M2B9NW5JA5JQNBTWDRRSHXD6',
+      runStatus: 'running',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B9NW5JA5JQNBTWDRRSHXD6');
+    expect(view.reason).not.toMatch(/Deploy attempt started/i);
+    expect(view.reason).not.toMatch(/Waiting for a verified https live URL/i);
+    expect(view.reason).not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/HTTP 524/);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+  });
+
+  it('HOLD on wrun_01M2B768A7AVDRR5YQTNVJDZJ8 is kickoff-no-job bound to the new run, not stale #1853', () => {
+    const backendReason =
+      'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B768A7AVDRR5YQTNVJDZJ8',
+      runId: 'wrun_01M2B768A7AVDRR5YQTNVJDZJ8',
+      runStatus: 'completed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B768A7AVDRR5YQTNVJDZJ8');
+    expect(view.receiptId).not.toBe('er:gate:v1:wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
+    expect(view.reason).not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/HTTP 524/);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+  });
+
+  it('HOLD on wrun_01M2B5SRA5W5S4WQP2M4ZHY040 is kickoff-no-job, not hostname finished', () => {
+    const backendReason =
+      'Studio transcript was reused. Origin video-to-software kickoff returned no job id after the EventRelay wait budget.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2B5SRA5W5S4WQP2M4ZHY040',
+      runId: 'wrun_01M2B5SRA5W5S4WQP2M4ZHY040',
+      runStatus: 'failed',
+      kind: 'handoff',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).toContain(backendReason);
+    expect(view.reason).not.toMatch(/Origin deploy finished without a backend-supplied https hostname/i);
+    expect(view.reason).not.toMatch(/Origin video-to-software returned no verified live URL/i);
+    expect(view.reason).not.toMatch(/Ready transcript was not reused/i);
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/HTTP 524/);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2B5SRA5W5S4WQP2M4ZHY040');
+  });
+
+  it('HOLD after timeout abort is not the raw AbortSignal message', () => {
+    const backendReason =
+      'Deploy kickoff timed out before a verified live URL. Waiting for the origin job — not aborting the attempt.';
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      runId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      runStatus: 'running',
+      kind: 'job',
+      jobId: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      backendReason,
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason.toLowerCase()).not.toMatch(/deploy completed/);
+    const view = studioGateReceiptView(result, { backendReason });
+    expect(view.reason).not.toMatch(/aborted due to timeout/i);
+    expect(view.reason).not.toMatch(/Backend kickoff returned HTTP 524/i);
+    expect(view.reason).not.toMatch(/Sign in to confirm you.?re not a bot/i);
+    expect(view.reason).not.toMatch(/UNKNOWN checks are not a live URL/);
+    expect(view.reason).not.toMatch(/Failed to read workflow run/);
+    expect(view.reason).not.toMatch(/Failed to read workflow return value/);
+    expect(view.reason).not.toMatch(/BACKEND_URL is not configured/);
+    expect(view.receiptId).toBe('er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ');
+  });
+
+  it('REJECTs a raw live URL even after a timeout abort residual', () => {
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      runId: 'wrun_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      jobId: 'job_01M2AKRAVZ0SEBM670BGXEMCQZ',
+      liveUrl: 'https://xy.vercel.app',
+      runStatus: 'completed',
+      kind: 'live',
+      authority: { actor: 'anonymous' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('REJECT');
+    expect(result.receipt.id).toBe('er:gate:v1:wrun_01M2AKRAVZ0SEBM670BGXEMCQZ');
+  });
 });
 
 describe('studioGateReceiptView', () => {
@@ -283,7 +512,7 @@ describe('studioGateReceiptView', () => {
         issuedAt: ISSUED_AT,
       }),
     );
-    expect(pass.decision).toBe('PASS');
+    expect(pass.decision).toBe('REJECT');
     expect(pass.reason.length).toBeGreaterThan(0);
     expect(pass.receiptId).toBe('er:gate:v1:wrun_live');
     expect(pass.receiptHash).toMatch(/^[a-f0-9]{64}$/);
@@ -344,5 +573,21 @@ describe('Studio deploy call site', () => {
     const failBlock = deployFn.slice(failIdx, deployFn.indexOf('return;', failIdx));
     expect(failBlock).toContain('evaluateStudioDeployTransition');
     expect(failBlock).toContain('studioGateReceiptView');
+    expect(deployFn).toMatch(/setGateReceipt\(\s*null\s*\)/);
+    const runIdIdx = deployFn.indexOf('setDeployRunId(started.runId)');
+    const pollIdx = deployFn.indexOf('pollStudioDeploy(started.runId)');
+    expect(runIdIdx).toBeGreaterThan(-1);
+    expect(pollIdx).toBeGreaterThan(runIdIdx);
+    const betweenStartAndPoll = deployFn.slice(runIdIdx, pollIdx);
+    expect(betweenStartAndPoll).not.toContain('evaluateStudioDeployTransition');
+    expect(betweenStartAndPoll).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
+    expect(betweenStartAndPoll).not.toContain(
+      'Deploy attempt started. Waiting for a verified https live URL.',
+    );
+    expect(betweenStartAndPoll).toContain('started.runId');
+    expect(betweenStartAndPoll).not.toContain('wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
+    const afterPoll = deployFn.slice(pollIdx);
+    expect(afterPoll).toContain('evaluateStudioDeployTransition');
+    expect(afterPoll).toContain('studioDeployPollResidual');
   });
 });

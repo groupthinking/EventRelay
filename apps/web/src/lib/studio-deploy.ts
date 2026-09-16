@@ -3,6 +3,8 @@
  * Kick off /api/pipeline with deployment_target=vercel and optionally poll job status.
  */
 
+import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
+
 export interface StudioDeployKickoff {
   ok: boolean;
   status: number;
@@ -117,7 +119,33 @@ export async function pollStudioJob(
           ? (body.data as Record<string, unknown>)
           : body;
       const jobStatus = str(data.status) || str(body.status);
-      const live_url = str(data.live_url) ?? str(body.live_url) ?? null;
+      const metadata =
+        data.metadata && typeof data.metadata === 'object'
+          ? (data.metadata as Record<string, unknown>)
+          : undefined;
+      const nestedResult =
+        metadata?.result && typeof metadata.result === 'object'
+          ? (metadata.result as Record<string, unknown>)
+          : undefined;
+      const deployment =
+        (data.deployment && typeof data.deployment === 'object'
+          ? (data.deployment as Record<string, unknown>)
+          : undefined) ||
+        (metadata?.deployment && typeof metadata.deployment === 'object'
+          ? (metadata.deployment as Record<string, unknown>)
+          : undefined);
+      const urls =
+        deployment?.urls && typeof deployment.urls === 'object'
+          ? (deployment.urls as Record<string, unknown>)
+          : undefined;
+      const live_url =
+        studioVerifiedLiveUrl(str(data.live_url)) ??
+        studioVerifiedLiveUrl(str(body.live_url)) ??
+        studioVerifiedLiveUrl(str(metadata?.live_url)) ??
+        studioVerifiedLiveUrl(str(nestedResult?.live_url)) ??
+        studioVerifiedLiveUrl(str(deployment?.live_url)) ??
+        studioVerifiedLiveUrl(str(urls?.vercel)) ??
+        null;
       const github_repo = str(data.github_repo) ?? str(body.github_repo) ?? null;
       last = {
         ok: res.ok,

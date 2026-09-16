@@ -6,7 +6,17 @@
  */
 
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { StudioGateReceiptView } from '@/lib/gate-transition';
 import type { VideoAnalysisResult } from '@/lib/gemini-video-analyzer';
+import {
+  extractBackendLiveUrl,
+  isStudioDeployAbortTimeout,
+  STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+  STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
+  STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
+  STUDIO_ORIGIN_STILL_POLLABLE_HOLD,
+  studioVerifiedLiveUrl,
+} from '@/lib/studio-pipeline-status';
 
 export interface VideoToActionsStart {
   ok: boolean;
@@ -58,19 +68,55 @@ function str(v: unknown): string | undefined {
 }
 
 const TERMINAL = new Set(['completed', 'failed', 'cancelled']);
+const TERMINAL_JOB = new Set([
+  'complete',
+  'completed',
+  'succeeded',
+  'failed',
+  'error',
+  'cancelled',
+]);
 
-/** Client poll window: long enough for one video-to-software attempt (~3 min). */
-export const STUDIO_DEPLOY_POLL_ATTEMPTS = 150;
+/** Client poll window: kickoff 45s + 10s + 45s retry + 36×10s job reads + slack. */
+export const STUDIO_DEPLOY_POLL_ATTEMPTS = 280;
 export const STUDIO_DEPLOY_POLL_DELAY_MS = 2000;
 
 function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
-  const jobId = poll.result?.jobId?.trim();
-  const jobStatus = poll.result?.jobStatus?.trim();
-  if (jobId && jobStatus && !TERMINAL.has(jobStatus)) {
-    return `Deploy job ${jobId} still ${jobStatus}`;
+  return studioDeployPollResidual(poll, attempts) ?? STUDIO_ORIGIN_STILL_POLLABLE_HOLD;
+}
+
+/** Classify a poll snapshot: live URL → null; otherwise a precise HOLD residual. */
+export function studioDeployPollResidual(
+  poll: StudioDeployPoll,
+  _attempts: number = STUDIO_DEPLOY_POLL_ATTEMPTS,
+): string | null {
+  if (studioVerifiedLiveUrl(poll.result?.live_url)) {
+    return null;
   }
-  if (poll.error?.trim()) return poll.error.trim();
-  return `Deploy still ${poll.runStatus || 'running'} after ${attempts} polls — waiting for a verified https live URL (runId ${poll.runId})`;
+  const runStatus = (poll.runStatus || '').toLowerCase();
+  const jobId = poll.result?.jobId?.trim();
+  const jobStatus = (poll.result?.jobStatus || '').trim();
+  const jobStatusKey = jobStatus.toLowerCase();
+  const terminalRun = TERMINAL.has(runStatus);
+
+  if (!terminalRun) {
+    if (jobId && jobStatus && !TERMINAL_JOB.has(jobStatusKey)) {
+      return `Deploy job ${jobId} still ${jobStatus}`;
+    }
+    if (jobId && !TERMINAL_JOB.has(jobStatusKey)) {
+      return `Deploy job ${jobId} still ${jobStatus || 'pending'}`;
+    }
+    return STUDIO_ORIGIN_STILL_POLLABLE_HOLD;
+  }
+
+  const detail = poll.result?.message?.trim() || poll.error?.trim();
+  if (jobId) {
+    return detail || STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
+  }
+  if (detail) {
+    return detail;
+  }
+  return STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD;
 }
 
 /** WDK failed-run cause, not a generic unread-return placeholder. */
@@ -142,13 +188,27 @@ export function isTransientWorkflowRunReadError(err: unknown): boolean {
   );
 }
 
-/** Start durable Studio deploy (WDK C). Returns immediately with runId. */
+/** Studio preflight returns a server gate decision; legacy runs remain pollable. */
 export interface StudioDeployStart {
   ok: boolean;
   status: number;
   runId?: string;
   message?: string;
   error?: string;
+  gate?: StudioGateReceiptView;
+}
+
+function serverGateView(value: unknown): StudioGateReceiptView | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const gate = value as Record<string, unknown>;
+  if (!gate.receipt || typeof gate.receipt !== 'object') return undefined;
+  const receipt = gate.receipt as Record<string, unknown>;
+  const decision = gate.decision;
+  if (decision !== 'PASS' && decision !== 'HOLD' && decision !== 'REJECT' && decision !== 'ESCALATE') return undefined;
+  if (receipt.version !== 'eventrelay.gate-receipt.v2' || receipt.decision !== decision || typeof receipt.id !== 'string' || typeof receipt.receipt_hash !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.receipt_hash) || typeof gate.reason !== 'string' || typeof gate.reason_code !== 'string') return undefined;
+  if (receipt.reason !== gate.reason || receipt.reason_code !== gate.reason_code) return undefined;
+  if (decision === 'PASS' && (receipt.retained !== true || typeof receipt.signature !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.signature))) return undefined;
+  return { decision, reason: gate.reason, reason_code: gate.reason_code, receiptId: receipt.id, receiptHash: receipt.receipt_hash, version: receipt.version, transitionId: str(receipt.transition_id), retained: receipt.retained === true };
 }
 
 export interface StudioDeployPoll {
@@ -168,7 +228,7 @@ export interface StudioDeployPoll {
   message?: string;
 }
 
-/** Start durable Studio deploy (WDK C). */
+/** Request gate preflight only; transcript generation is not deployment evidence. */
 export async function startStudioDeploy(input: {
   url: string;
   projectType?: string;
@@ -176,26 +236,33 @@ export async function startStudioDeploy(input: {
   transcript?: string;
   signal?: AbortSignal;
 }): Promise<StudioDeployStart> {
-  const response = await fetch('/api/workflows/studio-deploy', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      url: input.url,
-      projectType: input.projectType,
-      outcome: input.outcome,
-      ...(input.transcript ? { transcript: input.transcript } : {}),
-    }),
-    signal: input.signal ?? AbortSignal.timeout(30_000),
-  });
-  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
-  return {
-    ok: Boolean(payload.ok) && response.ok && Boolean(str(payload.runId)),
-    status: response.status,
-    runId: str(payload.runId),
-    message: str(payload.message),
-    error: str(payload.error),
-  };
+  try {
+    const response = await fetch('/api/workflows/studio-deploy', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: input.url }),
+      signal: input.signal ?? AbortSignal.timeout(30_000),
+    });
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    return {
+      ok: Boolean(payload.ok) && response.ok && Boolean(str(payload.runId)),
+      status: response.status,
+      runId: str(payload.runId),
+      message: str(payload.message),
+      error: str(payload.error),
+      gate: serverGateView(payload.gate),
+    };
+  } catch (err) {
+    if (isStudioDeployAbortTimeout(err)) {
+      return {
+        ok: false,
+        status: 408,
+        error: STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function getStudioDeployStatus(
@@ -225,7 +292,7 @@ export async function getStudioDeployStatus(
           kind: str(resultRaw.kind),
           jobId: str(resultRaw.jobId),
           jobStatus: str(resultRaw.jobStatus),
-          live_url: str(resultRaw.live_url) ?? null,
+          live_url: extractBackendLiveUrl(resultRaw) ?? studioVerifiedLiveUrl(str(resultRaw.live_url)) ?? null,
           github_repo: str(resultRaw.github_repo) ?? null,
           message: str(resultRaw.message),
         }
@@ -246,13 +313,35 @@ export async function pollStudioDeploy(
     if (opts?.signal?.aborted) {
       return { ...last, error: last.error || 'aborted', message: 'Polling aborted' };
     }
-    last = await getStudioDeployStatus(runId, { signal: opts?.signal });
+    try {
+      last = await getStudioDeployStatus(runId, { signal: opts?.signal });
+    } catch (err) {
+      if (!isStudioDeployAbortTimeout(err)) {
+        throw err;
+      }
+      last = {
+        ok: false,
+        status: 408,
+        runId,
+        message: STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+      };
+    }
     if (
       last.runStatus &&
       TERMINAL.has(last.runStatus) &&
       !isUnreadWorkflowReturn(last) &&
       !isUnreadWorkflowRun(last)
     ) {
+      if (
+        isStudioDeployAbortTimeout(last.error) ||
+        isStudioDeployAbortTimeout(last.result?.message)
+      ) {
+        return {
+          ...last,
+          error: STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+          message: last.message || STUDIO_DEPLOY_ABORT_RETRY_MESSAGE,
+        };
+      }
       return last;
     }
     if (last.status === 404) return last;

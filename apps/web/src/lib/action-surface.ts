@@ -5,6 +5,14 @@ import type {
   VideoPackArtifact,
   VideoPackStackTool,
 } from '@/lib/video-pack-types';
+import {
+  emitAppBuilderSandbox,
+  sopStepsFromPack,
+  visualEventsFromPack,
+  type AppBuilderSopStep,
+  type AppBuilderTranscript,
+  type AppBuilderVisualEvent,
+} from '@/lib/emit-app-builder-sandbox';
 import { zipUtf8Files } from '@/lib/zip-store';
 
 /**
@@ -41,7 +49,7 @@ export interface ScaffoldPackage {
   files: Record<string, string>;
 }
 
-function safeProjectName(name: string): string {
+export function safeProjectName(name: string): string {
   return (
     name
       .toLowerCase()
@@ -114,6 +122,17 @@ export type StudioPackExportFormation = {
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   tools?: VideoPackStackTool[];
+};
+
+export type StudioShipVideoPack = {
+  videoId: string;
+  sourceUrl: string;
+  sourceHash: string;
+  packId?: string;
+  /** Visual-context + frame slice. Studio must not name pack frames as events. */
+  visual?: Parameters<typeof visualEventsFromPack>[0];
+  /** Pack requirements (SOP). Ignored when Studio already compiled steps. */
+  requirements?: Parameters<typeof sopStepsFromPack>[0]['requirements'];
 };
 
 export function buildScaffoldPackage(input: {
@@ -223,6 +242,47 @@ export function buildScaffoldPackage(input: {
   }
 
   return { projectName: name, files };
+}
+
+/**
+ * Studio Export ship artifact: when a hashed Video Pack is present, merge the
+ * App Builder Workspace sandbox (startup.sh / 8080 / smoke / build+typecheck)
+ * over the SOP/scaffold files. Sandbox files win on collision.
+ */
+export function buildStudioShipPackage(input: {
+  projectName?: string;
+  actions: ActionCardLike[];
+  projectScaffold?: unknown;
+  linkedSop?: LinkedSop;
+  packFormation?: StudioPackExportFormation;
+  videoPack?: StudioShipVideoPack | null;
+  transcript?: AppBuilderTranscript | null;
+  visualEvents?: AppBuilderVisualEvent[];
+  sopSteps?: AppBuilderSopStep[];
+}): ScaffoldPackage {
+  const scaffold = buildScaffoldPackage(input);
+  if (!input.videoPack) {
+    return scaffold;
+  }
+  const sandbox = emitAppBuilderSandbox({
+    videoId: input.videoPack.videoId,
+    sourceUrl: input.videoPack.sourceUrl,
+    sourceHash: input.videoPack.sourceHash,
+    packId: input.videoPack.packId,
+    transcript: input.transcript,
+    visualEvents: input.visualEvents ?? visualEventsFromPack(input.videoPack.visual ?? {}),
+    sopSteps:
+      input.sopSteps ??
+      input.linkedSop?.steps ??
+      sopStepsFromPack({ requirements: input.videoPack.requirements }),
+  });
+  const files = { ...scaffold.files, ...sandbox.files };
+  delete files['ARCHITECTURE.md'];
+  delete files['artifacts.json'];
+  return {
+    projectName: scaffold.projectName,
+    files,
+  };
 }
 
 /** Human-readable preview lines for a project_scaffold blob. */

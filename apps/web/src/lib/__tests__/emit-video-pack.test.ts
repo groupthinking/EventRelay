@@ -68,6 +68,7 @@ describe('verifyIdentityPack (CoS: fail closed)', () => {
     expect(citation.pack.stack?.tools.map((tool) => tool.name)).toEqual(['Cloudflare', 'x402']);
     expect(citation.pack.architecture?.stages[0]?.id).toBe('decode');
     expect(citation.pack.artifacts?.[0]?.path_hint).toBe('src/mcp_x402_gateway.ts');
+    expect(citation.pack.transcript?.full_text).toBe('Cloudflare Workers pay via x402.');
     expect(JSON.stringify(citation.pack)).not.toMatch(/shopify/i);
     expect(citation.sourceHash).toBe(HASH);
   });

@@ -1,4 +1,31 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+
+describe('sandbox development environment policy', () => {
+  const config = JSON.parse(readFileSync(new URL('../../../../turbo.json', import.meta.url), 'utf8'));
+  const requiredNames = [
+    'NEXTAUTH_SECRET', 'NEXTAUTH_URL',
+    'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_OAUTH_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_SECRET',
+    'AUTH_ALLOWED_EMAIL_DOMAIN',
+    'KV_REST_API_URL', 'KV_REST_API_TOKEN', 'UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN',
+    'V0_SANDBOX_URL', 'V0_RUNTIME_URL', 'V0_BUILD_URL',
+  ];
+
+  it('passes only the explicitly required names to the uncached development task', () => {
+    expect(config.tasks.dev).toEqual({ cache: false, persistent: true, passThroughEnv: requiredNames });
+  });
+
+  it('does not expand global, build, or test environment access', () => {
+    expect(config.globalPassThroughEnv ?? []).toEqual([]);
+    expect(config.globalEnv ?? []).toEqual([]);
+    for (const task of ['build', 'test', 'lint']) {
+      expect(config.tasks[task].passThroughEnv ?? []).toEqual([]);
+      expect(config.tasks[task].env ?? []).toEqual([]);
+    }
+    const manifest = JSON.parse(readFileSync(new URL('../../../../package.json', import.meta.url), 'utf8'));
+    expect(manifest.scripts.dev).toBe('turbo run dev');
+  });
+});
 
 /**
  * Hermeticity guard for the test environment.
@@ -44,4 +71,11 @@ describe('test environment isolation', () => {
     expect(process.env.NEXT_PUBLIC_BACKEND_URL ?? '').not.toMatch(/^http/);
     expect(process.env.NEXT_PUBLIC_API_URL ?? '').not.toMatch(/^http/);
   });
+
+  it.each(['NEXT_PUBLIC_BACKEND_URL', 'NEXT_PUBLIC_API_URL'] as const)(
+    'pins %s to a blank test default',
+    (key) => {
+      expect(process.env[key]).toBe('');
+    },
+  );
 });
