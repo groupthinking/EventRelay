@@ -40,7 +40,7 @@ export default function HomeProCheckout() {
           type="button"
           onClick={() => setAnnual(false)}
           aria-pressed={!annual}
-          className={`rounded-xl px-5 py-2 text-sm font-semibold transition ${!annual ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+          className={`rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${!annual ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
         >
           Monthly checkout
         </button>
@@ -48,7 +48,7 @@ export default function HomeProCheckout() {
           type="button"
           onClick={() => setAnnual(true)}
           aria-pressed={annual}
-          className={`rounded-xl px-5 py-2 text-sm font-semibold transition ${annual ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
+          className={`rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${annual ? 'bg-white/[0.1] text-white' : 'text-white/40'}`}
         >
           Annual checkout
         </button>
@@ -64,7 +64,7 @@ export default function HomeProCheckout() {
         Same checkout as Pricing. Core paste and Studio stay available without paying.
       </p>
       <p className="mt-4 text-center">
-        <Link href="/pricing" className="text-sm text-white/45 underline-offset-4 hover:text-white/70 hover:underline">
+        <Link href="/pricing" className="text-sm text-white/45 underline-offset-4 hover:text-white/70 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950">
           See all plans
         </Link>
       </p>

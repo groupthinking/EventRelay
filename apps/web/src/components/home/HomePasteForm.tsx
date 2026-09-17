@@ -37,11 +37,11 @@ export default function HomePasteForm() {
           placeholder="https://www.youtube.com/watch?v=auJzb1D-fag"
           autoComplete="off"
           inputMode="url"
-          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/70"
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
         />
         <button
           type="submit"
-          className="btn btn-primary justify-center px-6 py-3.5 text-sm sm:min-w-[9rem]"
+          className="btn btn-primary justify-center px-6 py-3.5 text-sm sm:min-w-[9rem] focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
         >
           Run in Studio
         </button>

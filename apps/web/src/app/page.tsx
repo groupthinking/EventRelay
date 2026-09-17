@@ -66,6 +66,19 @@ export default async function HomePage() {
             <HomePasteForm />
           </div>
 
+
+          <div className="mt-6 grid w-full max-w-3xl gap-3 text-left sm:grid-cols-3" aria-label="How the workflow starts">
+            <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+              <span className="font-semibold text-white">1. Paste a YouTube URL</span>
+            </p>
+            <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+              <span className="font-semibold text-white">2. Start a hashed Video Pack</span>
+            </p>
+            <p className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-3 text-sm text-white/60">
+              <span className="font-semibold text-white">3. Open the Studio workbench</span>
+            </p>
+          </div>
+
           <div className="mt-10 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
             {OFFERS.map((offer) => (
               <article

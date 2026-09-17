@@ -129,4 +129,19 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(docs).toContain('/api/video/pack');
     expect(docs).toContain('/api/workflows/video-to-actions');
   });
+
+  it('keeps the Home conversion path factual and its core controls visibly focusable', () => {
+    const home = readSource('app/page.tsx');
+    const paste = readSource('components/home/HomePasteForm.tsx');
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const checkoutButton = readSource('components/billing/ProCheckoutButton.tsx');
+
+    expect(home).toContain('Paste a YouTube URL. Open the Studio workbench.');
+    expect(home).toContain('Paste a YouTube URL');
+    expect(home).toContain('Start a hashed Video Pack');
+    expect(home).toContain('Open the Studio workbench');
+    expect(paste).toContain('focus-visible:ring-2');
+    expect(checkout).toContain('focus-visible:ring-2');
+    expect(checkoutButton).toContain('focus-visible:ring-2');
+  });
 });
