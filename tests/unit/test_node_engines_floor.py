@@ -54,7 +54,8 @@ RUNTIME_DEPS_UNDER_TEST = ("openai", "ai", "@ai-sdk/gateway")
 
 # CI installs and executes these packages directly, so the declared floor must
 # satisfy them too.
-CI_DEPS_UNDER_TEST = ("jsdom",)
+CI_DEPS_UNDER_TEST = ("jsdom", "vitest")
+EXACT_NODE_RANGE_DEPS = ("jsdom",)
 
 # Anchored: the whole range must be one `>=` clause. An unanchored search would
 # happily pull `>=24.0.0` out of `^20.0.0 || ^22.0.0 || >=24.0.0` and report a
@@ -141,11 +142,24 @@ def _lowest_supported_for_major(
 
 def _declared_floor() -> tuple[int, int, int]:
     engines = _load(PACKAGE_JSON).get("engines") or {}
-    floor = _parse_floor(engines.get("node"))
-    assert (
-        floor is not None
-    ), "root package.json must declare engines.node as a >= range"
+    spec = engines.get("node")
+    floor = _lowest_supported_for_major(spec, 22)
+    assert floor is not None, "root package.json must declare a supported Node 22 range"
     return floor
+
+
+def _locked_engine_ranges(name: str) -> set[str]:
+    """Return every non-empty Node engine range for a locked dependency."""
+    ranges: set[str] = set()
+    for path, meta in (_load(PACKAGE_LOCK).get("packages") or {}).items():
+        if not path or not isinstance(meta, dict):
+            continue
+        if path.split("node_modules/")[-1] != name:
+            continue
+        spec = (meta.get("engines") or {}).get("node")
+        if spec:
+            ranges.add(spec)
+    return ranges
 
 
 def test_declared_floor_is_node_22() -> None:
@@ -238,6 +252,42 @@ def test_declared_floor_satisfies_ci_installed_dependencies(dependency: str) -> 
         f"package.json advertises >={'.'.join(map(str, declared))}, so the repo "
         "promises a Node version this CI-installed dependency does not support"
     )
+
+
+@pytest.mark.parametrize("dependency", EXACT_NODE_RANGE_DEPS)
+def test_declared_node_range_matches_ci_dependency_support(dependency: str) -> None:
+    """The repository must not advertise versions rejected by a gating dependency."""
+    declared = (_load(PACKAGE_JSON).get("engines") or {}).get("node")
+    locked = _locked_engine_ranges(dependency)
+
+    assert locked == {declared}, (
+        f"package.json advertises Node {declared!r}, but locked {dependency} "
+        f"declares {sorted(locked)!r}. Keep the full supported ranges aligned; "
+        "matching only their Node 22 floors would also admit unsupported Node "
+        "23, early Node 24, or Node 25 releases."
+    )
+
+
+def test_frontend_ci_uses_clean_installs_and_builds_the_web_image() -> None:
+    """Gating web jobs must reject lock drift and exercise the production image."""
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    jobs = workflow["jobs"]
+
+    for job_name in ("build", "lint-frontend", "test-frontend"):
+        runs = [
+            step.get("run")
+            for step in jobs[job_name]["steps"]
+            if isinstance(step, dict) and step.get("run")
+        ]
+        assert "npm ci --legacy-peer-deps" in runs
+        assert not any(command.startswith("npm install ") for command in runs)
+
+    build_runs = [
+        step.get("run")
+        for step in jobs["build"]["steps"]
+        if isinstance(step, dict) and step.get("run")
+    ]
+    assert "docker build --file apps/web/Dockerfile ." in build_runs
 
 
 @pytest.mark.parametrize(
