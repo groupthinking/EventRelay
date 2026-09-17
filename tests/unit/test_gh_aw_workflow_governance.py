@@ -5,8 +5,12 @@ import re
 from pathlib import Path
 
 import conftest as suite_conftest
-import tomllib
 import yaml
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -23,13 +27,12 @@ def _load_frontmatter(path: Path) -> dict:
     return yaml.safe_load(frontmatter)
 
 
+
 def test_coverage_workflow_is_authoritative() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/coverage.yml")
     job = workflow["jobs"]["coverage"]
     steps = job["steps"]
-    run_step = next(
-        step for step in steps if step.get("name") == "Run tests with coverage"
-    )
+    run_step = next(step for step in steps if step.get("name") == "Run tests with coverage")
     artifact_step = next(
         step for step in steps if step.get("name") == "Upload coverage artifacts"
     )
@@ -46,12 +49,9 @@ def test_coverage_workflow_is_authoritative() -> None:
     assert "--cov-fail-under=88.1833" in run_script
     assert "--cov-fail-under" not in pytest_addopts
     assert "--timeout=120" in run_script
-    assert (
-        ".[dev,youtube]"
-        in next(step for step in steps if step.get("name") == "Install dependencies")[
-            "run"
-        ]
-    )
+    assert ".[dev,youtube]" in next(
+        step for step in steps if step.get("name") == "Install dependencies"
+    )["run"]
     assert 88.1833 <= float(coverage_report["fail_under"]) <= 90
     assert int(coverage_report["precision"]) >= 4
     for suppression in ("|| true", "set +e"):
@@ -68,7 +68,9 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
     install_script = next(
         step for step in steps if step.get("name") == "Install dependencies"
     )["run"]
-    test_script = next(step for step in steps if step.get("name") == "Run tests")["run"]
+    test_script = next(
+        step for step in steps if step.get("name") == "Run tests"
+    )["run"]
 
     assert 'python -m pip install -e ".[dev,youtube]"' in install_script
     assert "--timeout=120" in test_script
@@ -81,6 +83,86 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
     assert "--override-ini" not in test_script
     for suppression in ("|| true", "2>/dev/null", "set +e"):
         assert suppression not in install_script
+
+
+def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
+    workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
+    workflow_on = workflow.get("on", workflow.get(True))
+    test_job = workflow["jobs"]["test"]
+    setup_python_steps = [
+        step
+        for step in test_job["steps"]
+        if str(step.get("uses", "")).startswith("actions/setup-python@")
+    ]
+    assert len(setup_python_steps) == 1
+    setup_python = setup_python_steps[0]
+    run_tests = next(
+        step for step in test_job["steps"] if step.get("name") == "Run tests"
+    )
+    lock_check = next(
+        step for step in test_job["steps"] if step.get("name") == "Check lockfile"
+    )
+
+    assert workflow_on["push"]["branches"] == ["main"]
+    assert workflow_on["pull_request"] is None
+    assert test_job.get("if") is None
+    assert test_job["strategy"] == {
+        "fail-fast": False,
+        "matrix": {"python-version": ["3.10", "3.11", "3.12"]},
+    }
+    python_versions = test_job["strategy"]["matrix"]["python-version"]
+    assert python_versions == [
+        "3.10",
+        "3.11",
+        "3.12",
+    ]
+    assert test_job["name"] == "test (Python ${{ matrix.python-version }})"
+    merge_policy = (ROOT / "MERGE_POLICY.md").read_text()
+    for python_version in python_versions:
+        assert f"`test (Python {python_version})`" in merge_policy
+    assert setup_python["with"]["python-version"] == "${{ matrix.python-version }}"
+    assert lock_check.get("if") is None
+    assert not lock_check.get("continue-on-error", False)
+    assert lock_check["run"] == "uv lock --check"
+    assert run_tests.get("if") is None
+    test_script = run_tests["run"]
+    assert test_script == (
+        "PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 "
+        "--cov=src/youtube_extension "
+        "--ignore=tests/unit/test_transcript_action_workflow.py -k \"not integration\""
+    )
+    assert not test_job.get("continue-on-error", False)
+    assert not run_tests.get("continue-on-error", False)
+    for suppression in ("|| true", "set +e", "--collect-only"):
+        assert suppression not in test_script
+
+    immutable_action = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
+    immutable_container = re.compile(r"^docker://[^@\s]+@sha256:[0-9a-f]{64}$")
+    immutable_image = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
+
+    def assert_immutable_uses(uses: str) -> None:
+        if uses.startswith("./"):
+            return
+        if uses.startswith("docker://"):
+            assert immutable_container.fullmatch(uses), uses
+            return
+        assert immutable_action.fullmatch(uses), uses
+
+    for job in workflow["jobs"].values():
+        reusable_workflow = job.get("uses")
+        if reusable_workflow:
+            assert_immutable_uses(reusable_workflow)
+        container = job.get("container")
+        if container:
+            image = container if isinstance(container, str) else container["image"]
+            assert immutable_image.fullmatch(image), image
+        for service in job.get("services", {}).values():
+            image = service if isinstance(service, str) else service["image"]
+            assert immutable_image.fullmatch(image), image
+        for step in job.get("steps", []):
+            uses = step.get("uses")
+            if uses:
+                assert_immutable_uses(uses)
 
 
 def test_obsolete_agentic_verification_loop_removed() -> None:
@@ -166,6 +248,7 @@ def test_controller_does_not_claim_an_unavailable_live_lane() -> None:
     assert "## Jules reporting requirement" not in source
 
 
+
 def test_gh_aw_validation_pins_runtime_version() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/gh-aw-validation.yml")
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
@@ -175,9 +258,7 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v0.88.7"]
     assert setup_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
     assert setup_cli_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
-    step_scripts = [
-        step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]
-    ]
+    step_scripts = [step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]]
     combined = "\n".join(step_scripts)
     assert "gh extension install github/gh-aw --pin v0.88.7" in combined
     assert "eventrelay-ci-investigator" not in combined
@@ -200,82 +281,11 @@ def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert 'payload.selected = {\n            kind: "issue",' not in workflow_source
-    assert (
-        'payload.selected = {\n            kind: "pull_request",' not in workflow_source
-    )
-    assert (
-        "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null"
-        in workflow_source
-    )
+    assert 'payload.selected = {\n            kind: "pull_request",' not in workflow_source
+    assert "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null" in workflow_source
 
 
 def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert "required-title-prefix" not in workflow_source
-
-
-def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
-    workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
-    workflow_on = workflow.get("on", workflow.get(True))
-    test_job = workflow["jobs"]["test"]
-    setup_python_steps = [
-        step
-        for step in test_job["steps"]
-        if str(step.get("uses", "")).startswith("actions/setup-python@")
-    ]
-    assert len(setup_python_steps) == 1
-    setup_python = setup_python_steps[0]
-    run_tests = next(
-        step for step in test_job["steps"] if step.get("name") == "Run tests"
-    )
-    assert workflow_on["push"]["branches"] == ["main"]
-    assert workflow_on["pull_request"] is None
-    assert test_job.get("if") is None
-    assert test_job["strategy"] == {
-        "fail-fast": False,
-        "matrix": {"python-version": ["3.10", "3.11", "3.12"]},
-    }
-    python_versions = test_job["strategy"]["matrix"]["python-version"]
-    assert python_versions == ["3.10", "3.11", "3.12"]
-    assert test_job.get("name", "test") == "test"
-    assert setup_python["with"]["python-version"] == "${{ matrix.python-version }}"
-    assert run_tests.get("if") is None
-    test_script = run_tests["run"]
-    assert test_script == (
-        "PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 "
-        "--cov=src/youtube_extension "
-        '--ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"'
-    )
-    assert not test_job.get("continue-on-error", False)
-    assert not run_tests.get("continue-on-error", False)
-    for suppression in ("|| true", "set +e", "--collect-only"):
-        assert suppression not in test_script
-
-    immutable_action = re.compile(r"^[^@\s]+@[0-9a-f]{40}(?:\s+#.*)?$")
-    immutable_container = re.compile(r"^docker://[^@\s]+@sha256:[0-9a-f]{64}$")
-    immutable_image = re.compile(r"^[^@\s]+@sha256:[0-9a-f]{64}$")
-
-    def assert_immutable_uses(uses: str) -> None:
-        if uses.startswith("./"):
-            return
-        if uses.startswith("docker://"):
-            assert immutable_container.fullmatch(uses), uses
-            return
-        assert immutable_action.fullmatch(uses), uses
-
-    for job in workflow["jobs"].values():
-        reusable_workflow = job.get("uses")
-        if reusable_workflow:
-            assert_immutable_uses(reusable_workflow)
-        container = job.get("container")
-        if container:
-            image = container if isinstance(container, str) else container["image"]
-            assert immutable_image.fullmatch(image), image
-        for service in job.get("services", {}).values():
-            image = service if isinstance(service, str) else service["image"]
-            assert immutable_image.fullmatch(image), image
-        for step in job.get("steps", []):
-            uses = step.get("uses")
-            if uses:
-                assert_immutable_uses(uses)
