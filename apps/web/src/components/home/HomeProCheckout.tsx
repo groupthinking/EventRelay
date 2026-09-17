@@ -36,7 +36,7 @@ export default function HomeProCheckout() {
       </p>
 
       <div
-        className="mt-5 inline-flex rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1.5"
+        className="mt-5 grid w-full grid-cols-1 gap-1.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1.5 sm:inline-grid sm:w-auto sm:grid-cols-2"
         role="group"
         aria-label="Billing cadence"
       >
@@ -44,7 +44,7 @@ export default function HomeProCheckout() {
           type="button"
           onClick={() => setAnnual(false)}
           aria-pressed={!annual}
-          className={`rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${!annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
+          className={`w-full rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${!annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
         >
           Monthly checkout
         </button>
@@ -52,7 +52,7 @@ export default function HomeProCheckout() {
           type="button"
           onClick={() => setAnnual(true)}
           aria-pressed={annual}
-          className={`rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
+          className={`w-full rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
         >
           Annual checkout
         </button>

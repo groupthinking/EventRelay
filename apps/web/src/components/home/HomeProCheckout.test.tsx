@@ -43,4 +43,17 @@ describe('HomeProCheckout', () => {
     expect(screen.getByText(/Bot-protected checkout/).className).toContain('text-white/70');
     expect(screen.getByText(/Same checkout as Pricing/).className).toContain('text-white/70');
   });
+
+  it('stacks billing cadence controls on narrow checkout cards', () => {
+    render(<HomeProCheckout />);
+
+    const cadence = screen.getByRole('group', { name: 'Billing cadence' });
+    const monthly = screen.getByRole('button', { name: 'Monthly checkout' });
+    const annual = screen.getByRole('button', { name: 'Annual checkout' });
+
+    expect(cadence.className).toContain('grid-cols-1');
+    expect(cadence.className).toContain('sm:grid-cols-2');
+    expect(monthly.className).toContain('w-full');
+    expect(annual.className).toContain('w-full');
+  });
 });
