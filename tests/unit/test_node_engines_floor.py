@@ -55,7 +55,10 @@ RUNTIME_DEPS_UNDER_TEST = ("openai", "ai", "@ai-sdk/gateway")
 # CI installs and executes these packages directly, so the declared floor must
 # satisfy them too.
 CI_DEPS_UNDER_TEST = ("jsdom", "vitest")
-EXACT_NODE_RANGE_DEPS = ("jsdom",)
+NODE_RANGE_DEPS = {
+    "jsdom": "node_modules/jsdom",
+    "vitest": "apps/web/node_modules/vitest",
+}
 
 # Anchored: the whole range must be one `>=` clause. An unanchored search would
 # happily pull `>=24.0.0` out of `^20.0.0 || ^22.0.0 || >=24.0.0` and report a
@@ -162,6 +165,41 @@ def _locked_engine_ranges(name: str) -> set[str]:
     return ranges
 
 
+def _range_intervals(
+    spec: str | None,
+) -> list[tuple[tuple[int, int, int], tuple[int, int, int] | None]]:
+    """Parse the caret/minimum union ranges used by the guarded Node packages."""
+    assert spec, "expected a non-empty Node engine range"
+    intervals = []
+    for clause in (part.strip() for part in spec.split("||")):
+        floor = _parse_floor(clause)
+        if floor is not None:
+            intervals.append((floor, None))
+            continue
+        match = _CARET_VERSION.match(clause)
+        assert match is not None, f"unsupported Node engine clause: {clause!r}"
+        lower = tuple(int(piece or 0) for piece in match.groups())
+        intervals.append((lower, (lower[0] + 1, 0, 0)))
+    return intervals
+
+
+def _range_is_subset(candidate: str, supported: str) -> bool:
+    """Return whether every interval in candidate is covered by supported."""
+    for candidate_low, candidate_high in _range_intervals(candidate):
+        covered = False
+        for supported_low, supported_high in _range_intervals(supported):
+            lower_ok = supported_low <= candidate_low
+            upper_ok = supported_high is None or (
+                candidate_high is not None and candidate_high <= supported_high
+            )
+            if lower_ok and upper_ok:
+                covered = True
+                break
+        if not covered:
+            return False
+    return True
+
+
 def test_declared_floor_is_node_22() -> None:
     """Root engines floor must remain on Node 22 for Vercel/runtime parity."""
     assert _declared_floor()[0] == 22
@@ -254,17 +292,22 @@ def test_declared_floor_satisfies_ci_installed_dependencies(dependency: str) -> 
     )
 
 
-@pytest.mark.parametrize("dependency", EXACT_NODE_RANGE_DEPS)
-def test_declared_node_range_matches_ci_dependency_support(dependency: str) -> None:
+@pytest.mark.parametrize(("dependency", "lock_path"), NODE_RANGE_DEPS.items())
+def test_declared_node_range_fits_ci_dependency_support(
+    dependency: str, lock_path: str
+) -> None:
     """The repository must not advertise versions rejected by a gating dependency."""
     declared = (_load(PACKAGE_JSON).get("engines") or {}).get("node")
-    locked = _locked_engine_ranges(dependency)
+    locked = (
+        (_load(PACKAGE_LOCK).get("packages") or {}).get(lock_path, {}).get("engines")
+        or {}
+    ).get("node")
 
-    assert locked == {declared}, (
-        f"package.json advertises Node {declared!r}, but locked {dependency} "
-        f"declares {sorted(locked)!r}. Keep the full supported ranges aligned; "
-        "matching only their Node 22 floors would also admit unsupported Node "
-        "23, early Node 24, or Node 25 releases."
+    assert locked, f"expected {lock_path} to declare engines.node"
+    assert _range_is_subset(declared, locked), (
+        f"package.json advertises Node {declared!r}, but {lock_path} "
+        f"({dependency}) supports only {locked!r}. Matching only Node 22 floors "
+        "would miss unsupported versions in later branches."
     )
 
 
@@ -288,6 +331,15 @@ def test_frontend_ci_uses_clean_installs_and_builds_the_web_image() -> None:
         if isinstance(step, dict) and step.get("run")
     ]
     assert "docker build --file apps/web/Dockerfile ." in build_runs
+
+    dockerfile = WEB_DOCKERFILE.read_text()
+    patch_copy = (
+        "COPY apps/web/scripts/patch-world-vercel-undici-fetch.mjs "
+        "./apps/web/scripts/"
+    )
+    assert dockerfile.index(patch_copy) < dockerfile.index(
+        "RUN npm ci --workspace=apps/web --legacy-peer-deps"
+    )
 
 
 @pytest.mark.parametrize(
@@ -331,6 +383,35 @@ def test_lowest_supported_for_major(
     spec: str | None, major: int, expected: tuple[int, int, int] | None
 ) -> None:
     assert _lowest_supported_for_major(spec, major) == expected
+
+
+@pytest.mark.parametrize(
+    ("candidate", "supported", "expected"),
+    [
+        (
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            True,
+        ),
+        (
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            "^22.12.0 || ^24.0.0 || >=26.0.0",
+            True,
+        ),
+        (
+            ">=22.22.2",
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            False,
+        ),
+        (
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            "^22.22.2 || ^24.15.0",
+            False,
+        ),
+    ],
+)
+def test_range_is_subset(candidate: str, supported: str, expected: bool) -> None:
+    assert _range_is_subset(candidate, supported) is expected
 
 
 def test_pinned_node_majors_ignores_commented_and_unrelated_keys(

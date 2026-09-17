@@ -15,6 +15,8 @@ COPY package.json package-lock.json ./
 
 # Copy workspace package.json
 COPY apps/web/package.json ./apps/web/
+# The workspace postinstall lifecycle calls this patcher during npm ci.
+COPY apps/web/scripts/patch-world-vercel-undici-fetch.mjs ./apps/web/scripts/
 
 # Copy the file: dependency sources required by package.json manifests
 COPY src/dataconnect-generated ./src/dataconnect-generated
