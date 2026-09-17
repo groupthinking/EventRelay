@@ -52,11 +52,99 @@ async function loadProxy(env: Partial<Record<EnvKey, string | undefined>>) {
   }
   vi.resetModules();
   const { NextRequest } = await import('next/server');
-  const { proxy } = await import('@/proxy');
-  return { proxy, NextRequest };
+  const { config, proxy } = await import('@/proxy');
+  return { config, proxy, NextRequest };
 }
 
 describe('login gate must fail closed (issue #1058)', () => {
+  it('logs a bounded attribution event for validated E2E probe headers', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'development',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    try {
+      await proxy(
+        new NextRequest('https://app.example.com/api/auth/session', {
+          headers: {
+            'user-agent': 'EventRelay-E2E/35117191915',
+            'x-eventrelay-probe': 'e2e',
+          },
+        }),
+      );
+
+      expect(infoSpy).toHaveBeenCalledWith({
+        event: 'e2e_probe_request',
+        method: 'GET',
+        path: '/api/auth/session',
+        runId: '35117191915',
+      });
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('ignores a probe marker without the bounded E2E user agent', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'development',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    try {
+      await proxy(
+        new NextRequest('https://app.example.com/api/auth/session', {
+          headers: {
+            'user-agent': 'unknown-client',
+            'x-eventrelay-probe': 'e2e',
+          },
+        }),
+      );
+
+      expect(infoSpy).not.toHaveBeenCalled();
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('matches and logs attributed public page routes without changing their response', async () => {
+    const { config, proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'development',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    try {
+      expect(config.matcher).toContainEqual({
+        source: '/:path*',
+        has: [{ type: 'header', key: 'x-eventrelay-probe', value: 'e2e' }],
+      });
+
+      const response = await proxy(
+        new NextRequest('https://app.example.com/features', {
+          headers: {
+            'user-agent': 'EventRelay-E2E/35170330724',
+            'x-eventrelay-probe': 'e2e',
+          },
+        }),
+      );
+
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+      expect(infoSpy).toHaveBeenCalledWith({
+        event: 'e2e_probe_request',
+        method: 'GET',
+        path: '/features',
+        runId: '35170330724',
+      });
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
   it('folds /dashboard into the public studio when NEXTAUTH_SECRET is missing in production', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: undefined,
