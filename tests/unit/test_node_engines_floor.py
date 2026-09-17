@@ -65,6 +65,7 @@ NODE_RANGE_DEPS = {
 # floor of 24 for a range that accepts Node 20.
 _MIN_VERSION = re.compile(r"^>=\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$")
 _CARET_VERSION = re.compile(r"^\^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$")
+_EXACT_VERSION = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$")
 _DOCKER_NODE = re.compile(r"^FROM\s+node:(\d+)", re.MULTILINE)
 
 
@@ -200,6 +201,43 @@ def _range_is_subset(candidate: str, supported: str) -> bool:
     return True
 
 
+def _version_satisfies(version: str, supported: str) -> bool:
+    """Return whether an exact version belongs to a guarded caret/minimum range."""
+    match = _EXACT_VERSION.match(version)
+    assert match is not None, f"unsupported exact version: {version!r}"
+    candidate = tuple(int(piece) for piece in match.groups())
+    return any(
+        lower <= candidate and (upper is None or candidate < upper)
+        for lower, upper in _range_intervals(supported)
+    )
+
+
+def _nearest_locked_dependency(
+    packages: dict, package_path: str, dependency: str
+) -> tuple[str, dict]:
+    """Resolve a dependency from a lock path using Node's nearest-ancestor order."""
+    ancestor = package_path
+    while True:
+        candidate = (
+            f"{ancestor}/node_modules/{dependency}"
+            if ancestor
+            else f"node_modules/{dependency}"
+        )
+        metadata = packages.get(candidate)
+        if isinstance(metadata, dict):
+            return candidate, metadata
+        if not ancestor:
+            break
+        ancestor = (
+            ancestor.rsplit("/node_modules/", 1)[0]
+            if "/node_modules/" in ancestor
+            else ""
+        )
+    raise AssertionError(
+        f"{package_path} cannot resolve locked dependency {dependency}"
+    )
+
+
 def test_declared_floor_is_node_22() -> None:
     """Root engines floor must remain on Node 22 for Vercel/runtime parity."""
     assert _declared_floor()[0] == 22
@@ -309,6 +347,77 @@ def test_declared_node_range_fits_ci_dependency_support(
         f"({dependency}) supports only {locked!r}. Matching only Node 22 floors "
         "would miss unsupported versions in later branches."
     )
+
+
+def test_jsdom_resolves_its_supported_undici_major() -> None:
+    """The nearest Undici package jsdom loads must satisfy its declared range."""
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    jsdom_path = "node_modules/jsdom"
+    jsdom = packages.get(jsdom_path) or {}
+    required = (jsdom.get("dependencies") or {}).get("undici")
+    resolved_path, resolved = _nearest_locked_dependency(packages, jsdom_path, "undici")
+
+    assert required, "expected jsdom to declare an Undici dependency"
+    resolved_version = str(resolved.get("version", ""))
+    assert _version_satisfies(resolved_version, required), (
+        f"jsdom requires Undici {required!r}, but Node resolution selects "
+        f"{resolved_version!r} at {resolved_path}"
+    )
+
+    for path, meta in packages.items():
+        if not path.endswith("node_modules/undici") or not isinstance(meta, dict):
+            continue
+        version = tuple(int(piece) for piece in meta["version"].split("."))
+        assert version[0] != 7 or version >= (7, 29, 0), (
+            f"{path} resolves vulnerable Undici {meta['version']}; "
+            "Undici 7 consumers must resolve 7.29.0 or newer"
+        )
+
+
+@pytest.mark.parametrize(
+    ("packages", "expected_path", "expected_version", "satisfies"),
+    [
+        (
+            {
+                "node_modules/undici": {"version": "8.10.2"},
+                "node_modules/jsdom/node_modules/undici": {"version": "6.28.1"},
+            },
+            "node_modules/jsdom/node_modules/undici",
+            "6.28.1",
+            False,
+        ),
+        (
+            {
+                "node_modules/undici": {"version": "6.28.1"},
+                "node_modules/jsdom/node_modules/undici": {"version": "8.10.2"},
+            },
+            "node_modules/jsdom/node_modules/undici",
+            "8.10.2",
+            True,
+        ),
+        (
+            {"node_modules/undici": {"version": "8.0.0"}},
+            "node_modules/undici",
+            "8.0.0",
+            False,
+        ),
+        (
+            {"node_modules/undici": {"version": "8.10.2"}},
+            "node_modules/undici",
+            "8.10.2",
+            True,
+        ),
+    ],
+)
+def test_nearest_locked_dependency_and_range_validation(
+    packages: dict, expected_path: str, expected_version: str, satisfies: bool
+) -> None:
+    path, metadata = _nearest_locked_dependency(
+        packages, "node_modules/jsdom", "undici"
+    )
+    assert path == expected_path
+    assert metadata["version"] == expected_version
+    assert _version_satisfies(metadata["version"], "^8.9.0") is satisfies
 
 
 def test_frontend_ci_uses_clean_installs_and_builds_the_web_image() -> None:
