@@ -493,6 +493,41 @@ class TestLoggingServiceCleanup:
         assert task.done()
         assert not task.cancelled()
 
+    async def test_await_task_completion_handles_cancelled_owned_task(self):
+        task = asyncio.create_task(asyncio.sleep(60))
+        task.cancel()
+
+        cancellation_requested, error = (
+            await LoggingService._await_task_completion(task)
+        )
+
+        assert cancellation_requested is False
+        assert isinstance(error, asyncio.CancelledError)
+
+    async def test_cleanup_preserves_simultaneous_caller_cancellation(self, service):
+        await service.cleanup()
+        owned_task = asyncio.create_task(asyncio.sleep(60))
+        service.flush_task = owned_task
+        service._write_to_files = AsyncMock()
+        await service.log_structured("INFO", "before simultaneous cancellation")
+
+        cleanup_task = asyncio.create_task(service.cleanup())
+        await asyncio.sleep(0)
+        assert owned_task.cancel()
+        assert cleanup_task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await cleanup_task
+
+        service._write_to_files.assert_awaited_once()
+        flushed_entries = service._write_to_files.await_args.args[0]
+        assert [entry.message for entry in flushed_entries] == [
+            "before simultaneous cancellation"
+        ]
+        assert owned_task.cancelled()
+        assert service.flush_task is None
+        assert service.log_buffer == []
+
     async def test_cleanup_waits_for_in_flight_periodic_flush(self, tmp_path):
         service = LoggingService(config={
             "log_directory": tmp_path / "logs",

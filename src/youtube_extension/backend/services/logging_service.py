@@ -233,33 +233,28 @@ class LoggingService:
         task: asyncio.Task,
     ) -> tuple[bool, Optional[BaseException]]:
         """Wait for an owned task without forwarding caller cancellation to it."""
-        cancellation_requested = False
-        current_task = asyncio.current_task()
-
-        while not task.done():
+        async def capture_outcome() -> Optional[BaseException]:
             try:
-                await asyncio.shield(task)
-            except asyncio.CancelledError:
-                if (
-                    task.done()
-                    and task.cancelled()
-                    and current_task
-                    and current_task.cancelling() == 0
-                ):
-                    break
-                cancellation_requested = True
-            except Exception:
-                break
+                await task
+            except BaseException as error:
+                return error
+            return None
 
-        if task.cancelled():
-            return cancellation_requested, asyncio.CancelledError()
+        outcome_task = asyncio.create_task(capture_outcome())
+        cancellation_requested = False
+
+        while not outcome_task.done():
+            try:
+                await asyncio.shield(outcome_task)
+            except asyncio.CancelledError:
+                cancellation_requested = True
 
         try:
-            task.result()
-        except Exception as error:
-            return cancellation_requested, error
+            await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            cancellation_requested = True
 
-        return cancellation_requested, None
+        return cancellation_requested, outcome_task.result()
 
     async def log_structured(
         self,
