@@ -20,10 +20,16 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('OneLoopStudio');
     expect(home).not.toContain('Loading studio');
     expect(home).toContain('Universal Video Action Intelligence');
+    expect(home).toContain('Paste a YouTube URL. Continue in Studio.');
+    expect(home).toContain('hashed Video Pack');
+    expect(home).toContain('transcript, event, and action outputs');
     expect(home).toContain('HomePasteForm');
-    expect(home).toContain('$199');
     expect(home).toContain('HomeProCheckout');
     expect(home).toContain('Get Pro');
+    expect(home).toContain('workflowProPriceLabel');
+    expect(home).not.toContain('Ship');
+    expect(home).not.toContain('Maintain');
+    expect(home).not.toContain('$199');
     expect(home).not.toContain('$19/mo');
     expect(home).not.toContain('$180');
   });
@@ -36,10 +42,9 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const structured = readSource('components/StructuredData.tsx');
     const ogAlt = readSource('app/opengraph-image.tsx');
     const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
-    expect(home).toContain('Paste a YouTube URL. Open the Studio workbench.');
-    expect(home).toContain('Starts a hashed Video Pack run in Studio (player, events, exports).');
+    expect(home).toContain('Paste a YouTube URL. Continue in Studio.');
+    expect(home).toContain('Paste a YouTube URL to start a hashed Video Pack');
     expect(home).toContain('Transcript quality varies by source');
-    expect(home).toContain('not a guaranteed production E2E');
     expect(layout).toContain('Transcript quality varies by source');
     expect(structured).toContain('Transcript quality varies by source');
     expect(sellCopy).not.toContain('Ship the work.');
@@ -51,6 +56,26 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(sellCopy).not.toMatch(/any video/i);
     expect(sellCopy).not.toMatch(/reliable.{0,40}transcript/i);
     expect(sellCopy).not.toMatch(/grounded transcript/i);
+  });
+
+  it('keeps the Home URL field labelled, described, announced, and keyboard-visible', () => {
+    const paste = readSource('components/home/HomePasteForm.tsx');
+    expect(paste).toContain('htmlFor="home-youtube-url"');
+    expect(paste).toContain("aria-invalid={error ? true : undefined}");
+    expect(paste).toContain(
+      "aria-describedby={error ? 'home-youtube-url-error' : 'home-youtube-url-help'}",
+    );
+    expect(paste).toContain('id="home-youtube-url-error"');
+    expect(paste).toContain('id="home-youtube-url-help"');
+    expect(paste).toContain('role="alert"');
+    expect(paste).toContain('focus-visible:ring-2');
+  });
+
+  it('keeps the checkout controls and pricing link keyboard-visible', () => {
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const button = readSource('components/billing/ProCheckoutButton.tsx');
+    expect(checkout).toContain('focus-visible:ring-2');
+    expect(button).toContain('focus-visible:ring-2');
   });
 
   it('keeps the live workbench only on /studio', () => {

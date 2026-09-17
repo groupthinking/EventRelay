@@ -44,14 +44,16 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page).toHaveTitle(/UVAI/i);
     await expect(page.getByText('Universal Video Action Intelligence')).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: /Paste a YouTube URL\. Open the Studio workbench\./i })
+      page.getByRole('heading', { name: /Paste a YouTube URL\. Continue in Studio\./i })
     ).toBeVisible();
     await expect(page.getByText(/Transcript quality varies by source/i)).toBeVisible();
     await expect(page.getByText('Loading studio')).toHaveCount(0);
     await expect(page.getByLabel(/YouTube URL/i)).toBeVisible();
     await expect(page.getByRole('button', { name: /Run in Studio/i })).toBeVisible();
-    await expect(page.getByText('$39')).toBeVisible();
-    await expect(page.getByText('$199/mo')).toBeVisible();
+    await expect(page.getByTestId('home-workflow-pro-selected-price')).toHaveText('$39/mo');
+    await expect(page.getByText(/Paste a YouTube URL/i).nth(1)).toBeVisible();
+    await expect(page.getByText('Open Studio')).toBeVisible();
+    await expect(page.getByText('Review the outputs')).toBeVisible();
     await expect(page.getByRole('link', { name: /Get Pro/i }).first()).toBeVisible();
     await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
     await expect(page.getByRole('button', { name: /Monthly checkout/i })).toBeVisible();

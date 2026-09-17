@@ -37,22 +37,24 @@ export default function HomePasteForm() {
           placeholder="https://www.youtube.com/watch?v=auJzb1D-fag"
           autoComplete="off"
           inputMode="url"
-          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/70"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? 'home-youtube-url-error' : 'home-youtube-url-help'}
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-300 focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
         />
         <button
           type="submit"
-          className="btn btn-primary justify-center px-6 py-3.5 text-sm sm:min-w-[9rem]"
+          className="btn btn-primary justify-center px-6 py-3.5 text-sm focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 sm:min-w-[9rem]"
         >
           Run in Studio
         </button>
       </div>
       {error ? (
-        <p className="mt-2 text-sm text-amber-300/90" role="alert">
+        <p id="home-youtube-url-error" className="mt-3 text-sm text-amber-200" role="alert">
           {error}
         </p>
       ) : (
-        <p className="mt-2 text-xs text-white/40">
-          Lands in Studio and starts the live video pack / analysis path.
+        <p id="home-youtube-url-help" className="mt-3 text-left text-xs leading-5 text-white/55">
+          A valid YouTube URL opens Studio and starts the existing hashed Video Pack path.
         </p>
       )}
     </form>

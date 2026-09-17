@@ -142,7 +142,7 @@ export default function ProCheckoutButton({
         onClick={handleCheckout}
         disabled={loading || !ready}
         className={clsx(
-          'btn btn-primary py-3.5 w-full text-sm text-center shadow-lg shadow-primary-500/30',
+          'btn btn-primary py-3.5 w-full text-sm text-center shadow-lg shadow-primary-500/30 focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950',
           (loading || !ready) && 'opacity-60 cursor-not-allowed',
           className,
         )}

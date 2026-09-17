@@ -16,18 +16,21 @@ export const metadata: Metadata = {
   alternates: { canonical: '/' },
 };
 
-const OFFERS = [
+const WORKFLOW_STEPS = [
   {
-    name: WORKFLOW_PRO_PRODUCT_NAME,
-    price: `${workflowProPriceLabel(false)} · ${workflowProPriceLabel(true)}`,
+    number: '01',
+    title: 'Paste a YouTube URL',
+    description: 'Use the URL you already have. Invalid links stay on this page with a clear error.',
   },
   {
-    name: 'Ship',
-    price: 'per-job quote',
+    number: '02',
+    title: 'Open Studio',
+    description: 'A valid link starts a hashed Video Pack and hands the source to the existing Studio workflow.',
   },
   {
-    name: 'Maintain',
-    price: '$199/mo',
+    number: '03',
+    title: 'Review the outputs',
+    description: 'Studio brings together source-dependent transcript, event, and action outputs for review.',
   },
 ] as const;
 
@@ -38,8 +41,8 @@ export default async function HomePage() {
     <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
       <Nav />
 
-      <section className="px-6 pb-20 pt-16 md:pt-24">
-        <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
+      <section className="px-6 pb-20 pt-14 md:pt-24">
+        <div className="mx-auto flex max-w-5xl flex-col items-center text-center">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 font-heading text-2xl font-black shadow-lg shadow-primary-500/25">
               U
@@ -54,31 +57,55 @@ export default async function HomePage() {
               New: configurable with Vercel Flags
             </p>
           )}
-          <h1 className="mt-8 max-w-3xl font-heading text-4xl font-black leading-tight tracking-tight md:text-6xl">
-            Paste a YouTube URL. Open the Studio workbench.
+          <h1 className="mt-8 max-w-4xl text-balance font-heading text-4xl font-black leading-tight tracking-tight md:text-6xl">
+            Paste a YouTube URL. Continue in Studio.
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-white/50 md:text-lg">
-            Starts a hashed Video Pack run in Studio (player, events, exports). Transcript quality
-            varies by source — not a guaranteed production E2E.
+          <p className="mt-5 max-w-2xl text-pretty text-base leading-8 text-white/65 md:text-lg">
+            Paste a YouTube URL to start a hashed Video Pack, then use Studio to review transcript,
+            event, and action outputs. Transcript quality varies by source.
           </p>
 
-          <div className="mt-10 w-full">
+          <div className="mt-10 w-full rounded-3xl border border-white/[0.09] bg-white/[0.03] p-4 shadow-2xl shadow-black/20 sm:p-6">
             <HomePasteForm />
           </div>
 
-          <div className="mt-10 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
-            {OFFERS.map((offer) => (
-              <article
-                key={offer.name}
-                className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-4"
+          <ol className="mt-10 grid w-full gap-3 text-left md:grid-cols-3">
+            {WORKFLOW_STEPS.map((step) => (
+              <li
+                key={step.number}
+                className="min-w-0 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-5"
               >
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">
-                  {offer.name}
+                <p className="font-mono text-xs font-bold tracking-[0.18em] text-teal-300">
+                  {step.number}
                 </p>
-                <p className="mt-2 font-heading text-lg font-bold text-white">{offer.price}</p>
-              </article>
+                <h2 className="mt-5 font-heading text-lg font-bold text-white">{step.title}</h2>
+                <p className="mt-2 text-sm leading-6 text-white/55">{step.description}</p>
+              </li>
             ))}
-          </div>
+          </ol>
+
+          <section
+            className="mt-10 w-full max-w-3xl rounded-2xl border border-teal-300/20 bg-teal-300/[0.04] px-5 py-5 text-left sm:px-6"
+            aria-labelledby="workflow-pro-summary"
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-teal-200/80">
+                  Workflow Pro
+                </p>
+                <h2 id="workflow-pro-summary" className="mt-2 font-heading text-xl font-bold text-white">
+                  {WORKFLOW_PRO_PRODUCT_NAME}
+                </h2>
+              </div>
+              <p className="font-heading text-xl font-bold text-white">
+                {workflowProPriceLabel(false)}{' '}
+                <span className="text-base font-medium text-white/45">or {workflowProPriceLabel(true)}</span>
+              </p>
+            </div>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
+              Keep the same existing checkout path when you are ready to continue.
+            </p>
+          </section>
 
           <div id="get-pro" className="mt-10 w-full max-w-lg" aria-label="Get Pro">
             <HomeProCheckout />
