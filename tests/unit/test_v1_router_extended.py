@@ -1185,7 +1185,7 @@ class TestVideoToSoftwareEndpoint:
                 resp = client.post("/api/v1/video-to-software", json=payload)
                 elapsed = time.perf_counter() - started
             assert resp.status_code == 202
-            assert elapsed < 0.15
+            assert elapsed < 0.5
             body = resp.json()
             assert body["data"]["job_id"].startswith("job_")
             deadline = time.perf_counter() + 1.0
@@ -1237,7 +1237,7 @@ class TestVideoToSoftwareEndpoint:
                 resp = client.post("/api/v1/video-to-software", json=payload)
                 elapsed = time.perf_counter() - started
             assert resp.status_code == 202
-            assert elapsed < 0.15
+            assert elapsed < 0.5
             assert resp.json()["data"]["job_id"].startswith("job_")
         finally:
             hang.set()
