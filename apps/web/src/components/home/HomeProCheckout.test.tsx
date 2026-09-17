@@ -35,4 +35,12 @@ describe('HomeProCheckout', () => {
       screen.getByRole('button', { name: 'Continue to UVAI Workflow Pro $390/yr checkout' }),
     ).toBeTruthy();
   });
+
+  it('uses readable secondary copy in the checkout card', () => {
+    render(<HomeProCheckout />);
+
+    expect(screen.getByText(/UVAI Workflow Pro ·/).className).toContain('text-white/70');
+    expect(screen.getByText(/Bot-protected checkout/).className).toContain('text-white/70');
+    expect(screen.getByText(/Same checkout as Pricing/).className).toContain('text-white/70');
+  });
 });

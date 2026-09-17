@@ -27,10 +27,10 @@ export default function HomeProCheckout() {
       >
         {workflowProPriceLabel(annual)}
       </p>
-      <p className="mt-1 text-xs text-white/35">
+      <p className="mt-1 text-xs text-white/70">
         {WORKFLOW_PRO_PRODUCT_NAME} · {workflowProPriceLabel(false)} or {workflowProPriceLabel(true)}
       </p>
-      <p className="mt-4 text-sm leading-7 text-white/45">
+      <p className="mt-4 text-sm leading-7 text-white/70">
         Bot-protected checkout for confirmed external dispatch. Stripe shows the exact amount
         and renewal terms before you pay.
       </p>
@@ -64,7 +64,7 @@ export default function HomeProCheckout() {
           label={`Continue to ${WORKFLOW_PRO_PRODUCT_NAME} ${workflowProPriceLabel(annual)} checkout`}
         />
       </div>
-      <p className="mt-3 text-center text-xs leading-5 text-white/30">
+      <p className="mt-3 text-center text-xs leading-5 text-white/70">
         Same checkout as Pricing. Core paste and Studio stay available without paying.
       </p>
       <p className="mt-4 text-center">
