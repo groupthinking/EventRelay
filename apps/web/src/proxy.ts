@@ -377,12 +377,18 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   return response;
 }
 
-// Next 16 discovers this file directly. The explicit allowlist means Workflow's
-// internal `/.well-known/workflow/*` requests are never intercepted.
+// Next 16 discovers this file directly. Ordinary traffic stays on the explicit
+// allowlist, so Workflow's internal `/.well-known/workflow/*` requests are never
+// intercepted. The header-conditioned entry lets attributed E2E page requests
+// reach logE2EProbe without globally applying auth or rate limiting to pages.
 export const config = {
   matcher: [
     '/dashboard',
     '/dashboard/:path*',
     '/api/:path*',
+    {
+      source: '/:path*',
+      has: [{ type: 'header', key: 'x-eventrelay-probe', value: 'e2e' }],
+    },
   ],
 };
