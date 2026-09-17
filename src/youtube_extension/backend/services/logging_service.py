@@ -13,7 +13,7 @@ import logging.handlers
 import os
 import time
 import traceback
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -446,6 +446,8 @@ class LoggingService:
         try:
             if self.flush_task:
                 self.flush_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self.flush_task
 
             await self.flush_logs()
 

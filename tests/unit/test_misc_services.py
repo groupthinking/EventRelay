@@ -492,8 +492,7 @@ class TestLoggingServiceCleanup:
         task = asyncio.create_task(dummy())
         service.flush_task = task
         await service.cleanup()
-        # task.cancel() was called; task is either cancelling or cancelled
-        assert task.cancelled() or task.cancelling() > 0 or task.done()
+        assert task.cancelled()
 
 
 class TestLoggingServiceBufferFlush:
