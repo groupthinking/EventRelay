@@ -35,9 +35,13 @@ jobs:
     # (main previously carried unresolved markers in 10 files because the
     # pipeline had no syntax gate — see PR #736.)
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: No committed merge-conflict markers
         run: |
           # Opening/closing conflict sentinels always carry a label after the
@@ -59,18 +63,22 @@ jobs:
             exit 1
           fi
           echo "No IDE self-identifiers found."
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
-          python-version: "3.12"
+          python-version: "${{ matrix.python-version }}"
       - name: Python source compiles (no import-time SyntaxErrors)
         run: python -m compileall -q src/
 
   build:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -84,7 +92,7 @@ jobs:
         run: npm run build:web
       - name: Build web production image
         run: docker build --file apps/web/Dockerfile .
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: build-artifacts
           path: |
@@ -93,12 +101,16 @@ jobs:
 
   lint-python:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
-          python-version: "3.12"
+          python-version: "${{ matrix.python-version }}"
       - run: pip install ruff
       - name: Lint Python (informational)
         continue-on-error: true
@@ -106,10 +118,14 @@ jobs:
 
   lint-frontend:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -122,12 +138,16 @@ jobs:
   # runs pytest; without this job, ~300 frontend tests including CWE-209 /
   # Stripe-leak regressions never gate merges.
   test-frontend:
-    name: test-frontend
+    name: test (Python ${{ matrix.python-version }})-frontend
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -146,7 +166,7 @@ jobs:
         run: npm --workspace=apps/web test -- --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-vitest-report.json"
       - name: Retain machine-readable test evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
         with:
           name: web-vitest-${{ github.sha }}
           path: ${{ runner.temp }}/web-vitest-report.json
@@ -155,12 +175,16 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
         with:
-          python-version: "3.12"
+          python-version: "${{ matrix.python-version }}"
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
