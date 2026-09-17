@@ -28,6 +28,7 @@ env:
   #      production. Every suite request also carries `X-EventRelay-Probe: e2e`
   #      and `User-Agent: EventRelay-E2E/<GITHUB_RUN_ID>`; proxy.ts emits the
   #      bounded `e2e_probe_request` event so Vercel logs can be filtered by run.
+  #      These headers are observability only and never authorize or bypass limits.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
