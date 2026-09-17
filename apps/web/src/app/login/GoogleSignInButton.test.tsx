@@ -40,6 +40,26 @@ describe('GoogleSignInButton', () => {
     });
   });
 
+  it('restores retry state and hides rejection details when sign-in rejects', async () => {
+    vi.mocked(signIn).mockRejectedValueOnce(new Error('provider response detail'));
+
+    render(<GoogleSignInButton callbackUrl="/studio" />);
+
+    const button = screen.getByRole('button', { name: 'Continue with Google' }) as HTMLButtonElement;
+    fireEvent.click(button);
+
+    expect(button.disabled).toBe(true);
+
+    await waitFor(() => {
+      expect(button.disabled).toBe(false);
+    });
+
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Google sign-in could not be started. Please try again.',
+    );
+    expect(screen.queryByText('provider response detail')).toBeNull();
+  });
+
   it('prevents duplicate Google sign-in requests while a redirect handoff is pending', () => {
     vi.mocked(signIn).mockReturnValue(new Promise(() => {}));
 
