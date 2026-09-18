@@ -11,8 +11,10 @@ import {
 } from '@/lib/video-pack-extractor';
 import {
   emptyPackFormation,
+  type VideoPackActionItem,
   type VideoPackArchitecture,
   type VideoPackArtifact,
+  type VideoPackChapter,
   type VideoPackStack,
 } from '@/lib/video-pack-types';
 import {
@@ -111,6 +113,8 @@ export interface VideoPackV0Json {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
   stack: VideoPackStack;
+  chapters: VideoPackChapter[];
+  action_items: VideoPackActionItem[];
   visual_context: VideoPackVisualContext | null;
   metrics: Record<string, number | string>;
   provenance: VideoPackProvenance;
@@ -172,6 +176,8 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
     architecture: null,
     artifacts: [],
     stack: { tools: [] },
+    chapters: [],
+    action_items: [],
     visual_context: null,
     metrics: {},
     provenance: {
@@ -183,12 +189,21 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
   };
 }
 
+const SPEC_JSON_SALVAGE_NOTE =
+  'Gemini spec JSON was truncated; salvage kept the verified prefix only (no invented tail fields).';
+
 export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
 ): VideoPackV0Json {
+  const salvaged = spec.spec_json_salvaged === true;
   const pack = applyKeyframeImageHonesty({
     ...identity,
+    ...(salvaged
+      ? {
+          metrics: { ...identity.metrics, spec_json_salvaged: 1 },
+        }
+      : {}),
     transcript: spec.transcript,
     keyframes: spec.keyframes,
     concepts: spec.concepts,
@@ -197,6 +212,8 @@ export function applyExtractedSpec(
     architecture: spec.architecture ?? emptyPackFormation().architecture,
     artifacts: spec.artifacts ?? emptyPackFormation().artifacts,
     stack: spec.stack ?? emptyPackFormation().stack,
+    chapters: spec.chapters ?? emptyPackFormation().chapters,
+    action_items: spec.action_items ?? emptyPackFormation().action_items,
     visual_context: spec.visual_context,
     provenance: {
       ...identity.provenance,
@@ -204,7 +221,9 @@ export function applyExtractedSpec(
         ...identity.provenance.tool_versions,
         extractor: VIDEO_PACK_EXTRACTOR_MODEL,
       },
-      notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+      notes: salvaged
+        ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
+        : 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
     },
   });
   if (!spec.grounded_spec) return pack;
