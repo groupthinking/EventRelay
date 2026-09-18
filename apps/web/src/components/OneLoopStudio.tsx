@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Download, GitPullRequest, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
@@ -235,6 +235,7 @@ export default function OneLoopStudio({
 }: {
   showAgentWorkflowUi: boolean;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -497,7 +498,7 @@ export default function OneLoopStudio({
       const started = await startVideoToActions(payload);
       if (!started.ok || !started.runId) {
         if (started.status === 401 || started.status === 403) {
-          window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
+          router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
           return;
         }
         setMessage(started.error || started.message || 'Could not start Act.');
@@ -638,7 +639,7 @@ export default function OneLoopStudio({
       const started = await startStudioDeploy({ url: next });
       if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       if (started.status === 401 || started.status === 403) {
-        window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
+        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
         return;
       }
       if (started.gate) {
