@@ -1,72 +1,118 @@
 # Sprint QA Checklist
 
-_Evidence-oriented quality assurance checklist for the current EventRelay sprint tasks. This document relies on existing repository commands and controls; it does not modify application behavior._
+_Internal, evidence-oriented QA checklist for sprint verification. Use exact command output and manual observations to decide whether a finding is a release blocker or a known limitation._
 
 ---
 
-## 📋 Overview
+## How to use this checklist
 
-This checklist verifies the responsive landing-page behavior, the Google sign-in retry flow, security regression boundaries, and repository hygiene. It separates release blockers from informational warnings and relies on exact automated commands or manual observations.
+- Do not mark an item complete without attached evidence.
+- For command-based checks, save the exact command and whether it passed or failed.
+- For manual checks, record the URL, browser width, and the observed result.
+- Classify every failure before filing it:
+  - **Release blocker:** breaks the shipped sprint scope, the core YouTube URL → Video Pack → studio loop, or a required security/control check.
+  - **Known limitation:** already understood, out of scope for the sprint, or caused by missing local/prod-only access while the app still fails closed.
 
-## 🎯 Responsive Landing Page
+## Evidence capture
 
-- [ ] **Viewport Integrity:** At 360px and 1280px widths, verify there is no horizontal scrolling.
-  - *Evidence:* Manual observation in browser dev tools.
-- [ ] **Element Visibility:** Confirm the heading, URL form, pricing summary, and checkout call to action are visible.
-  - *Evidence:* Manual observation.
-- [ ] **Keyboard Navigation:** Verify the URL input, submit button, billing cadence controls, checkout action, and pricing link are reachable via `Tab` with a visible focus state.
-  - *Evidence:* Manual keyboard navigation.
-- [ ] **URL Handoff:** Submit a valid YouTube URL and confirm it navigates to `/studio?video=...`.
-  - *Evidence:* `npm --workspace=eventrelay-web test -- src/lib/__tests__/studio-handoff.test.ts`
-- [ ] **Invalid Input:** Submit an invalid URL and confirm the existing error renders as an accessible alert.
-  - *Evidence:* Manual observation and `HomePasteForm` component tests.
+| Evidence type | What to record |
+| --- | --- |
+| Automated command | Full command, exit status, and the failing line or summary |
+| Manual browser check | Page URL, viewport size, action taken, and observed result |
+| Security/config check | Whether the system failed closed, plus any relevant log or response code |
 
-## 🔐 Google Sign-in Retry
+---
 
-- [ ] **Retry State Recovery:** Ensure a failed or non-navigating `signIn('google')` initiation restores a retryable button.
-  - *Evidence:* `npm --workspace=eventrelay-web test -- src/app/login/GoogleSignInButton.test.tsx`
-- [ ] **Accessible Error:** Verify the error text is accessible and non-sensitive (no OAuth credentials or tokens exposed).
-  - *Evidence:* `GoogleSignInButton.test.tsx` assertions on `role="alert"`.
-- [ ] **Duplicate Prevention:** Confirm a successful initiation prevents duplicate submission while navigation is occurring.
-  - *Evidence:* `GoogleSignInButton.test.tsx` assertions on the disabled state while in flight.
+## Release-blocking checks
 
-## 🛡️ Security Regression Boundaries
+### 1. Workspace hygiene
 
-- [ ] **Callback Sanitization:** Verify `safeCallbackPath()` prevents open redirects to untrusted domains.
-  - *Evidence:* `npm --workspace=eventrelay-web test -- src/lib/__tests__/auth-paths.test.ts`
-- [ ] **Public Routes:** Confirm `/api/auth/*` and other explicitly public routes remain accessible without a session.
-  - *Evidence:* `auth-paths.test.ts`
-- [ ] **Origin G.A.T.E.:** Verify signed artifact-bound transitions require valid cryptographic attestations.
-  - *Evidence:* `npm --workspace=eventrelay-web test -- src/lib/__tests__/origin-gate.test.ts`
-- [ ] **Sandbox Origin:** Confirm cross-origin requests are correctly rejected.
-  - *Evidence:* `npm --workspace=eventrelay-web test -- src/lib/__tests__/sandbox-origin.test.ts` (if applicable) or manual CORS verification.
-- [ ] **Protected Previews:** If a check depends on Vercel preview credentials, use local test substitutes. Do not weaken the control.
-  - *Evidence:* Documented local test equivalents for preview environments.
+- [ ] **Clean branch context**
+  - **Command:** `git branch --show-current`
+  - **Pass when:** QA is run from the intended sprint branch.
+- [ ] **No unexpected working tree changes**
+  - **Command:** `git status --short`
+  - **Pass when:** Only intended sprint files are modified.
+- [ ] **No whitespace or merge-marker issues**
+  - **Command:** `git diff --check`
+  - **Pass when:** The command exits cleanly.
+- [ ] **No secrets in the sprint diff**
+  - **Observation:** Review the changed files for `.env` values, tokens, credentials, or copied production payloads.
+  - **Pass when:** No secrets or sensitive values appear in the diff.
 
-## 🧹 Repository Hygiene
+### 2. Automated verification
 
-- [ ] **Branch Isolation:** Work is isolated on a dedicated feature branch.
-  - *Evidence:* `git branch --show-current`
-- [ ] **Draft PRs:** Changes are submitted as draft pull requests only.
-  - *Evidence:* `gh pr view <number> --json isDraft`
-- [ ] **No Secrets:** No credentials or deployment changes are committed.
-  - *Evidence:* `git diff --check` and manual review of the diff.
-- [ ] **Static Analysis:** Type checking and linting pass.
-  - *Evidence:* `npm --workspace=eventrelay-web run type-check` and `npm --workspace=eventrelay-web run lint`
+- [ ] **Python tests pass**
+  - **Command:** `pytest tests/ -v`
+  - **Pass when:** The suite exits successfully.
+- [ ] **Python lint passes**
+  - **Command:** `ruff check src/`
+  - **Pass when:** No lint violations remain.
+- [ ] **Web lint passes**
+  - **Command:** `npm run lint`
+  - **Pass when:** Turbo exits successfully with no lint failures.
+- [ ] **Web type-check passes**
+  - **Command:** `npm --workspace=apps/web run type-check`
+  - **Pass when:** TypeScript exits successfully.
+- [ ] **Web tests pass**
+  - **Command:** `npm run test`
+  - **Pass when:** Turbo exits successfully with no failing tests.
+- [ ] **Production web build passes**
+  - **Command:** `npm run build`
+  - **Pass when:** The build completes without errors.
 
-## ⚠️ Release Blockers vs. Limitations
+### 3. Manual sprint flow
 
-### Blockers
-- **Backend Coverage Gate:** The backend test suite executed successfully, but aggregate coverage (77.29%) fell below the `fail_under = 88.1833` threshold in `pyproject.toml`. This blocks a clean CI pipeline.
-- **Unmerged Drafts:** PR #1978 (OAuth fix) and PR #1980 (Agenda) remain unmerged drafts.
+Start the local stack before manual checks:
 
-### Known Limitations
-- **Landing Page Implementation:** The design task is scoped but not yet implemented.
-- **Production Access:** This checklist relies on local verification; it does not authorize or execute a production deployment. See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for production provisioning.
+```bash
+PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
+npm run dev:web
+```
 
-## 🔗 References
+- [ ] **Entry page accepts a valid YouTube URL**
+  - **Observation:** From `/`, submit a valid YouTube URL.
+  - **Pass when:** The app advances into the canonical studio flow rather than a dead-end or alternate workflow.
+- [ ] **Studio remains the canonical workspace**
+  - **Observation:** Navigate to `/dashboard`.
+  - **Pass when:** The app redirects into `/studio`.
+- [ ] **Core loop starts from the video URL**
+  - **Observation:** In `/studio`, confirm the selected video begins Video Pack processing or evidence loading.
+  - **Pass when:** The sprint still follows YouTube URL → Video Pack → studio output.
+- [ ] **Invalid input fails safely**
+  - **Observation:** Submit an invalid URL.
+  - **Pass when:** The UI shows a user-safe error and no raw stack trace or secret is exposed.
+- [ ] **No false live/deploy claim**
+  - **Observation:** If the sprint touches deploy or publish states, inspect the UI state shown to the operator.
+  - **Pass when:** The app does not claim a live success without a verified `https://` receipt and the required G.A.T.E. pass.
+- [ ] **Browser console and network stay clean**
+  - **Observation:** Review DevTools console and failing network requests while exercising the sprint path.
+  - **Pass when:** There are no uncaught errors, leaked credentials, or unexpected 5xx responses caused by the sprint change.
 
+---
+
+## Known limitations (do not block release by themselves)
+
+- Missing production-only credentials or third-party accounts during local QA, **if** the product fails closed and does not claim success.
+- External provider flakiness or rate limiting that cannot be reproduced as a code regression from the sprint diff.
+- Historical docs, retired gates, or old PR references that do not describe the current release path.
+- Out-of-scope roadmap work that was not part of the sprint's acceptance criteria.
+
+If a limitation stops a required acceptance path from completing, reclassify it as a **release blocker**.
+
+---
+
+## QA evidence log template
+
+| Item | Status | Evidence | Notes |
+| --- | --- | --- | --- |
+| Example: `npm run build` | Pass / Fail | Terminal output or CI link | Include the key line |
+| Example: `/studio` flow | Pass / Fail | URL + viewport + screenshot | Include observed behavior |
+
+---
+
+## References
+
+- [AGENTS.md](../AGENTS.md)
 - [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)
-- [Draft PR #1978: recover failed Google sign-in initiation](https://github.com/groupthinking/EventRelay/pull/1978)
-- [Draft PR #1980: add evidence-backed sprint demo agenda](https://github.com/groupthinking/EventRelay/pull/1980)
-- [Notion task: Prepare QA checklist](https://app.notion.com/p/3dd3c2339c0481019c8fdf22053d0a4d?pvs=204)
+- [NEXT-PHASE.md](NEXT-PHASE.md)
