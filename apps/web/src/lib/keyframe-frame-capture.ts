@@ -8,6 +8,10 @@ import {
   type KeyframeImageCaptureSource,
   type KeyframeImageHonestyPack,
 } from '@/lib/keyframe-image-path';
+import {
+  getVideoPackRedisForServer,
+  setVideoPackRedisForTests as setKeyframeFrameRedisForTests,
+} from '@/lib/video-pack-store';
 
 export const KEYFRAME_JPEG_CONTENT_TYPE = 'image/jpeg' as const;
 export const KEYFRAME_FRAME_CACHE_PREFIX = 'er:videopack:frame:v0:';
@@ -262,11 +266,31 @@ export function recallCapturedFrame(videoId: string, t_s: number): Uint8Array | 
   return memoryFrameCache.get(frameCacheKey(videoId, t_s)) ?? null;
 }
 
+function decodeStoredFrameBytes(value: unknown): Uint8Array | null {
+  if (typeof value !== 'string' || value.length === 0) return null;
+  try {
+    const bytes = Buffer.from(value, 'base64');
+    return bytes.length > 0 ? new Uint8Array(bytes) : null;
+  } catch {
+    return null;
+  }
+}
+
 async function persistCapturedJpeg(input: {
   videoId: string;
   t_s: number;
   bytes: Uint8Array;
 }): Promise<string | null> {
+  const redis = await getVideoPackRedisForServer();
+  if (redis) {
+    try {
+      await redis.set(frameCacheKey(input.videoId, input.t_s), Buffer.from(input.bytes).toString('base64'));
+      rememberCapturedFrame(input.videoId, input.t_s, input.bytes);
+      return appServedFramePath(input.videoId, input.t_s);
+    } catch (error) {
+      console.error('[keyframe-frame-capture] Redis persist failed:', error);
+    }
+  }
   const token = process.env.BLOB_READ_WRITE_TOKEN?.trim();
   if (token) {
     try {
@@ -287,8 +311,7 @@ async function persistCapturedJpeg(input: {
       console.error('[keyframe-frame-capture] Blob persist failed:', error);
     }
   }
-  rememberCapturedFrame(input.videoId, input.t_s, input.bytes);
-  return appServedFramePath(input.videoId, input.t_s);
+  return null;
 }
 
 function extractStoryboardSpec(payload: unknown): { spec: string; durationS?: number } | null {
@@ -514,8 +537,22 @@ export async function hydrateKeyframeImages<T extends HydratePack>(pack: T): Pro
 export async function loadCapturedFrameJpeg(videoId: string, t_s: number): Promise<Uint8Array | null> {
   const cached = recallCapturedFrame(videoId, t_s);
   if (cached) return cached;
+  const redis = await getVideoPackRedisForServer();
+  if (redis) {
+    try {
+      const stored = decodeStoredFrameBytes(await redis.get(frameCacheKey(videoId, t_s)));
+      if (stored) {
+        rememberCapturedFrame(videoId, t_s, stored);
+        return stored;
+      }
+    } catch (error) {
+      console.error('[keyframe-frame-capture] Redis load failed:', error);
+    }
+  }
   const captured = await (captureForTests ?? defaultCapture)({ videoId, t_s });
   if (!captured?.bytes?.length) return null;
   rememberCapturedFrame(videoId, t_s, captured.bytes);
   return captured.bytes;
 }
+
+export { setKeyframeFrameRedisForTests };
