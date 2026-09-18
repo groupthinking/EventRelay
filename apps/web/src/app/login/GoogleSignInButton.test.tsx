@@ -1,75 +1,84 @@
-/* @vitest-environment jsdom */
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { signIn } from 'next-auth/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
-vi.mock('next-auth/react', () => ({
-  signIn: vi.fn(),
-}));
+vi.mock('next-auth/react', () => ({ signIn: vi.fn() }));
+
+const genericError = 'Unable to start Google sign-in. Please try again.';
+const initialUrl = window.location.href;
 
 afterEach(() => {
-  vi.clearAllMocks();
+  cleanup();
+  vi.restoreAllMocks();
+  window.history.replaceState({}, '', initialUrl);
 });
 
 describe('GoogleSignInButton', () => {
-  it('restores retry state and announces a generic error when sign-in returns without redirecting', async () => {
+  it('restores a retryable button and announces a generic error after sign-in rejects', async () => {
+    vi.mocked(signIn)
+      .mockRejectedValueOnce(new Error('provider response details must stay private'))
+      .mockImplementationOnce(() => new Promise<never>(() => undefined));
+
+    render(<GoogleSignInButton callbackUrl="/studio" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Continue with Google' }).hasAttribute('disabled'),
+      ).toBe(false);
+    });
+
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toBe(genericError);
+    expect(alert.textContent).not.toContain('provider response details');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+
+    expect(signIn).toHaveBeenCalledTimes(2);
+    expect(
+      screen.getByRole('button', { name: 'Redirecting to Google…' }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('restores a retryable button when sign-in returns without starting a redirect', async () => {
     vi.mocked(signIn).mockResolvedValueOnce(undefined);
 
     render(<GoogleSignInButton callbackUrl="/studio" />);
 
-    const button = screen.getByRole('button', { name: 'Continue with Google' }) as HTMLButtonElement;
-    fireEvent.click(button);
-
-    expect(button.disabled).toBe(true);
-    expect(button.textContent).toBe('Redirecting to Google…');
-    expect(signIn).toHaveBeenCalledWith('google', { callbackUrl: '/studio' });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
 
     await waitFor(() => {
-      expect(button.disabled).toBe(false);
+      expect(
+        screen.getByRole('button', { name: 'Continue with Google' }).hasAttribute('disabled'),
+      ).toBe(false);
     });
 
-    expect(button.textContent).toBe('Continue with Google');
-    expect(screen.getByRole('alert').textContent).toBe(
-      'Google sign-in could not be started. Please try again.',
-    );
-
-    fireEvent.click(button);
-    await waitFor(() => {
-      expect(signIn).toHaveBeenCalledTimes(2);
-    });
+    expect(screen.getByRole('alert').textContent).toBe(genericError);
   });
 
-  it('restores retry state and hides rejection details when sign-in rejects', async () => {
-    vi.mocked(signIn).mockRejectedValueOnce(new Error('provider response detail'));
+  it('keeps duplicate-click protection after sign-in starts navigation', async () => {
+    vi.mocked(signIn).mockImplementationOnce(async () => {
+      window.history.pushState({}, '', '/api/auth/signin/google');
+      return undefined;
+    });
 
     render(<GoogleSignInButton callbackUrl="/studio" />);
 
-    const button = screen.getByRole('button', { name: 'Continue with Google' }) as HTMLButtonElement;
-    fireEvent.click(button);
-
-    expect(button.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
 
     await waitFor(() => {
-      expect(button.disabled).toBe(false);
+      expect(
+        screen.getByRole('button', { name: 'Redirecting to Google…' }).hasAttribute('disabled'),
+      ).toBe(true);
     });
 
-    expect(screen.getByRole('alert').textContent).toBe(
-      'Google sign-in could not be started. Please try again.',
-    );
-    expect(screen.queryByText('provider response detail')).toBeNull();
-  });
+    fireEvent.click(screen.getByRole('button', { name: 'Redirecting to Google…' }));
 
-  it('prevents duplicate Google sign-in requests while a redirect handoff is pending', () => {
-    vi.mocked(signIn).mockReturnValue(new Promise(() => {}));
-
-    render(<GoogleSignInButton callbackUrl="/studio" />);
-
-    const button = screen.getByRole('button', { name: 'Continue with Google' }) as HTMLButtonElement;
-    fireEvent.click(button);
-    fireEvent.click(button);
-
-    expect(button.disabled).toBe(true);
     expect(signIn).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 });

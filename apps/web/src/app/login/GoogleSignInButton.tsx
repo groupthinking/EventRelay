@@ -8,31 +8,34 @@ type GoogleSignInButtonProps = {
   callbackUrl: string;
 };
 
+const signInErrorMessage = 'Unable to start Google sign-in. Please try again.';
+
 export function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function handleSignIn() {
     setIsSubmitting(true);
-    setError(null);
+    setErrorMessage(null);
 
-    const locationBeforeSignIn = window.location.href;
+    const initialLocation = window.location.href;
 
     try {
       await signIn('google', { callbackUrl });
 
-      if (window.location.href === locationBeforeSignIn) {
-        setError('Google sign-in could not be started. Please try again.');
-        setIsSubmitting(false);
+      if (window.location.href !== initialLocation) {
+        return;
       }
     } catch {
-      setError('Google sign-in could not be started. Please try again.');
-      setIsSubmitting(false);
+      // Provider details must not be exposed in the client UI or logs.
     }
+
+    setErrorMessage(signInErrorMessage);
+    setIsSubmitting(false);
   }
 
   return (
-    <>
+    <div className="space-y-3">
       <button
         type="button"
         onClick={handleSignIn}
@@ -42,11 +45,11 @@ export function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
         <LogIn className="h-5 w-5" aria-hidden="true" />
         {isSubmitting ? 'Redirecting to Google…' : 'Continue with Google'}
       </button>
-      {error ? (
-        <p role="alert" className="mt-3 text-sm text-rose-300">
-          {error}
+      {errorMessage ? (
+        <p role="alert" className="text-sm text-rose-300">
+          {errorMessage}
         </p>
       ) : null}
-    </>
+    </div>
   );
 }

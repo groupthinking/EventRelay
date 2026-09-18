@@ -219,7 +219,7 @@ async def test_timed_out_database_check_marks_worker_unhealthy() -> None:
         database_check=hung_database_check,
     )
 
-    with pytest.raises(TimeoutError):
+    with pytest.raises(asyncio.TimeoutError):
         await worker.poll_once()
 
     assert not worker.state.is_live(max_staleness_seconds=1)

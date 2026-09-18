@@ -4,8 +4,21 @@ import { canonicalGateJson, hashCanonical } from '@/lib/gate-transition';
 export const MCP_SKILLS_EXTENSION_ID = 'io.modelcontextprotocol/skills' as const;
 export const CHATGPT_SKILL_IMPORT_RECEIPT_VERSION =
   'eventrelay.chatgpt-mcp-skill-import-receipt.v1' as const;
-export const MCP_SKILLS_SPEC_COMMIT =
-  'd866efdba298b55b8156c7b7aa1bdebc1b625f4c' as const;
+export const MCP_SKILLS_NORMATIVE_CONTRACT = {
+  repository: 'modelcontextprotocol/modelcontextprotocol',
+  path: 'seps/2640-skills-extension.md',
+  commit: '1eb5bbe8ac933bdb595fedc687b8ed545e440491',
+} as const;
+export const MCP_SKILLS_DESIGN_HISTORY = {
+  repository: 'modelcontextprotocol/ext-skills',
+  path: 'specs/skills.md',
+  commit: 'd866efdba298b55b8156c7b7aa1bdebc1b625f4c',
+} as const;
+export const MCP_SKILLS_EVIDENCE_SOURCE_MIGRATION = {
+  repository: 'modelcontextprotocol/modelcontextprotocol',
+  path: 'seps/2640-skills-extension.md',
+  commit: 'f56f204f6290f6531b14d5734eb3e0a10f0eb201',
+} as const;
 // Public Git object ID. Split to prevent generic secret scanners from
 // misclassifying this high-entropy evidence locator as an API credential.
 export const MCP_CLIENT_MATRIX_REVISION = [
@@ -71,7 +84,10 @@ export type FixtureChatGptSkillImportReceipt = {
   };
   wire_contract: {
     extension_id: typeof MCP_SKILLS_EXTENSION_ID;
-    specification_commit: typeof MCP_SKILLS_SPEC_COMMIT;
+    specification_commit: typeof MCP_SKILLS_NORMATIVE_CONTRACT.commit;
+    normative_contract: typeof MCP_SKILLS_NORMATIVE_CONTRACT;
+    design_history: typeof MCP_SKILLS_DESIGN_HISTORY;
+    evidence_source_migration: typeof MCP_SKILLS_EVIDENCE_SOURCE_MIGRATION;
   };
   decision: 'READY_FOR_FIXTURE_HANDOFF';
   issued_at: string;
@@ -182,12 +198,24 @@ type NormalizedSkillUri = {
   segments: string[];
 };
 
-function normalizeSkillUri(uri: string): NormalizedSkillUri {
-  const match = /^skill:\/\/([^/?#]+)(\/[^?#]*)$/.exec(uri);
+function requireString(value: unknown, field: string): string {
+  if (typeof value !== 'string') hold(`${field} must be a string.`);
+  return value;
+}
+
+function requireTrimmedString(value: unknown, field: string): string {
+  const trimmed = requireString(value, field).trim();
+  if (!trimmed) hold(`${field} is required.`);
+  return trimmed;
+}
+
+function normalizeSkillUri(uri: unknown): NormalizedSkillUri {
+  const rawUri = requireString(uri, 'skill URI');
+  const match = /^skill:\/\/([^/?#]+)(\/[^?#]*)$/.exec(rawUri);
   if (!match) hold('skill URI must use the skill scheme without query or fragment.');
   let parsed: URL;
   try {
-    parsed = new URL(uri);
+    parsed = new URL(rawUri);
   } catch {
     hold('skill URI is invalid.');
   }
@@ -268,8 +296,7 @@ function verifyManifest(
 export function createFixtureChatGptSkillImport(
   input: FixtureChatGptSkillImportInput,
 ): FixtureChatGptSkillImportReceipt {
-  const serverIdentity = input.serverIdentity.trim();
-  if (!serverIdentity) hold('server identity is required.');
+  const serverIdentity = requireTrimmedString(input.serverIdentity, 'server identity');
   if (!input.capabilities.resources) hold('resources capability is required.');
   if (!input.capabilities.extensions?.[MCP_SKILLS_EXTENSION_ID]) {
     hold('MCP Skills extension capability is required.');
@@ -307,6 +334,9 @@ export function createFixtureChatGptSkillImport(
   if (input.result.skill.resources === 'dynamic') {
     hold('dynamic skill resources are not accepted by this fixture-only contract.');
   }
+  if (!Array.isArray(input.result.skill.resources)) {
+    hold('skill resources must be a static manifest array.');
+  }
   const resources = verifyManifest(
     returnedSkill.canonical,
     input.result.skill.resources,
@@ -319,11 +349,13 @@ export function createFixtureChatGptSkillImport(
   if (approved) {
     if (!SHA256_HEX.test(approved.manifestDigest)) hold('approved manifest digest is invalid.');
     approvedCompoundIdentity = {
-      server_identity: approved.serverIdentity.trim(),
+      server_identity: requireTrimmedString(approved.serverIdentity, 'approved server identity'),
       skill_uri: skillRoot(approved.skillUri).canonical,
       manifest_digest: approved.manifestDigest,
     };
   }
+  const issuedAt =
+    input.issuedAt === undefined ? new Date().toISOString() : requireString(input.issuedAt, 'issuedAt');
   const authorizationStatus: FixtureChatGptSkillImportReceipt['authorization']['status'] =
     approvedCompoundIdentity === null
       ? 'NOT_GRANTED'
@@ -346,10 +378,13 @@ export function createFixtureChatGptSkillImport(
     },
     wire_contract: {
       extension_id: MCP_SKILLS_EXTENSION_ID,
-      specification_commit: MCP_SKILLS_SPEC_COMMIT,
+      specification_commit: MCP_SKILLS_NORMATIVE_CONTRACT.commit,
+      normative_contract: MCP_SKILLS_NORMATIVE_CONTRACT,
+      design_history: MCP_SKILLS_DESIGN_HISTORY,
+      evidence_source_migration: MCP_SKILLS_EVIDENCE_SOURCE_MIGRATION,
     },
     decision: 'READY_FOR_FIXTURE_HANDOFF' as const,
-    issued_at: input.issuedAt ?? new Date().toISOString(),
+    issued_at: issuedAt,
     compound_identity: {
       server_identity: serverIdentity,
       skill_uri: returnedSkill.canonical,
