@@ -295,7 +295,16 @@ class CacheService:
             category_name = category_dir.name
             markdown_files = list(category_dir.glob("*_analysis.md"))
             category_count = len(markdown_files)
-            category_size = sum(f.stat().st_size for f in markdown_files)
+            category_size = 0
+
+            for file_path in markdown_files:
+                file_stats = file_path.stat()
+                category_size += file_stats.st_size
+                mtime = file_stats.st_mtime
+                if mtime < oldest_time:
+                    oldest_time = mtime
+                if mtime > newest_time:
+                    newest_time = mtime
 
             stats["categories"][category_name] = {
                 "count": category_count,
@@ -305,14 +314,6 @@ class CacheService:
 
             stats["total_cached_videos"] += category_count
             stats["total_size_mb"] += category_size
-
-            # Track timestamps
-            for f in markdown_files:
-                mtime = f.stat().st_mtime
-                if mtime < oldest_time:
-                    oldest_time = mtime
-                if mtime > newest_time:
-                    newest_time = mtime
 
         # Set timestamp info
         if oldest_time != float("inf"):

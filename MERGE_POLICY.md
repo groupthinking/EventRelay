@@ -89,22 +89,23 @@ The real contexts, as observed on live pull requests:
 
 | Surface | Check-run names |
 | --- | --- |
-| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test`, `test-frontend` |
+| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test (Python 3.10)`, `test (Python 3.11)`, `test (Python 3.12)`, `test-frontend` |
 | Static analysis | `CodeQL` |
 | Security | `Security Scan - python`, `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy` |
 | Secrets | `gitleaks (working tree)` |
 | Dependencies | `dependency-review` |
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
-`lint-frontend`, `build`, `test`, `test-frontend`, `CodeQL`,
+`lint-frontend`, `build`, `test (Python 3.10)`, `test (Python 3.11)`,
+`test (Python 3.12)`, `test-frontend`, `CodeQL`,
 `gitleaks (working tree)`, `dependency-review`, `Security Scan - python`,
 `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy`.
 
-> **`test` vs `test-frontend`.** The CI job id/name `test` runs **Python**
-> pytest only. Frontend unit tests (apps/web vitest, including CWE-209 /
-> billing disclosure regressions) are the separate required check
-> **`test-frontend`** (#1449). Do not treat a green `test` check as evidence
-> that web unit tests ran.
+> **Python matrix vs `test-frontend`.** The three `test (Python …)` checks run
+> **Python** pytest only. Frontend unit tests (apps/web vitest, including CWE-209
+> / billing disclosure regressions) are the separate required check
+> **`test-frontend`** (#1449). Do not treat green Python checks as evidence that
+> web unit tests ran.
 
 All six were verified to report `success` on a documentation-only pull request
 (#1408 head `27b2ecf`, and again on #1410 head `7af6028`), so none of them can

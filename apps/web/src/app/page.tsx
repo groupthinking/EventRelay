@@ -10,9 +10,9 @@ import {
 import { customBadge } from '@/flags';
 
 export const metadata: Metadata = {
-  title: 'UVAI — Universal Video Action Intelligence',
+  title: 'UVAI — YouTube URL to Studio',
   description:
-    'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
+    'Paste a YouTube URL to open a hashed Video Pack in Studio. Transcript quality varies by source.',
   alternates: { canonical: '/' },
 };
 
@@ -38,51 +38,91 @@ export default async function HomePage() {
     <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
       <Nav />
 
-      <section className="px-6 pb-20 pt-16 md:pt-24">
-        <div className="mx-auto flex max-w-4xl flex-col items-center text-center">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 font-heading text-2xl font-black shadow-lg shadow-primary-500/25">
-              U
-            </div>
-            <span className="font-heading text-4xl font-black tracking-tight md:text-5xl">UVAI</span>
-          </div>
-          <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.28em] text-teal-300/80">
-            Universal Video Action Intelligence
-          </p>
-          {showCustomBadge && (
-            <p className="mt-4 rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-semibold text-teal-200">
-              New: configurable with Vercel Flags
-            </p>
-          )}
-          <h1 className="mt-8 max-w-3xl font-heading text-4xl font-black leading-tight tracking-tight md:text-6xl">
-            Paste a YouTube URL. Open the Studio workbench.
-          </h1>
-          <p className="mt-5 max-w-2xl text-base leading-8 text-white/50 md:text-lg">
-            Starts a hashed Video Pack run in Studio (player, events, exports). Transcript quality
-            varies by source — not a guaranteed production E2E.
-          </p>
-
-          <div className="mt-10 w-full">
-            <HomePasteForm />
-          </div>
-
-          <div className="mt-10 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
-            {OFFERS.map((offer) => (
-              <article
-                key={offer.name}
-                className="rounded-2xl border border-white/[0.08] bg-white/[0.03] px-4 py-4"
-              >
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/40">
-                  {offer.name}
+      <section aria-labelledby="home-heading" className="px-5 pb-16 pt-12 sm:px-6 md:pb-24 md:pt-20">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-12">
+            <div className="min-w-0">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 font-heading text-xl font-black shadow-lg shadow-primary-500/25">
+                  U
+                </div>
+                <span className="font-heading text-3xl font-black tracking-tight sm:text-4xl">UVAI</span>
+              </div>
+              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.28em] text-teal-200">
+                Universal Video Action Intelligence
+              </p>
+              {showCustomBadge && (
+                <p className="mt-4 inline-flex rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-semibold text-teal-100">
+                  New: configurable with Vercel Flags
                 </p>
-                <p className="mt-2 font-heading text-lg font-bold text-white">{offer.price}</p>
-              </article>
-            ))}
+              )}
+
+              <h1
+                id="home-heading"
+                className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance sm:text-5xl md:mt-8 md:text-6xl"
+              >
+                Turn a YouTube URL into a hashed Video Pack in Studio.
+              </h1>
+              <p className="mt-5 max-w-2xl text-base leading-8 text-white/70 md:text-lg">
+                Paste a YouTube URL to open Studio and review transcript, event, and action outputs
+                from your source. Transcript quality varies by source. No guaranteed production
+                outcome.
+              </p>
+
+              <div className="mt-8 w-full max-w-2xl md:mt-10">
+                <HomePasteForm />
+              </div>
+            </div>
+
+            <aside
+              id="get-pro"
+              aria-labelledby="workflow-pro-heading"
+              className="min-w-0 rounded-[2rem] border border-teal-300/20 bg-surface-900/70 p-1 shadow-2xl shadow-black/30"
+            >
+              <div className="px-5 pb-1 pt-5 sm:px-7 sm:pt-7">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">
+                  Workflow Pro
+                </p>
+                <h2 id="workflow-pro-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
+                  Get Pro through the existing checkout.
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-white/65">
+                  Choose a billing cadence for the existing Workflow Pro checkout. Stripe confirms
+                  the amount and renewal terms before payment.
+                </p>
+              </div>
+              <HomeProCheckout />
+            </aside>
           </div>
 
-          <div id="get-pro" className="mt-10 w-full max-w-lg" aria-label="Get Pro">
-            <HomeProCheckout />
-          </div>
+          <section aria-labelledby="offer-summary-heading" className="mt-12 border-t border-white/[0.08] pt-8 md:mt-16 md:pt-10">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">Options</p>
+                <h2 id="offer-summary-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
+                  Start in Studio, then choose the right level of support.
+                </h2>
+              </div>
+              <p className="max-w-sm text-sm leading-6 text-white/65">
+                Workflow Pro is the available self-serve checkout. Ship and Maintain remain
+                request-based options.
+              </p>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {OFFERS.map((offer) => (
+                <article
+                  key={offer.name}
+                  className="min-w-0 rounded-2xl border border-white/[0.1] bg-white/[0.035] px-5 py-5"
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/65">
+                    {offer.name}
+                  </p>
+                  <p className="mt-2 font-heading text-lg font-bold text-white">{offer.price}</p>
+                </article>
+              ))}
+            </div>
+          </section>
         </div>
       </section>
 
