@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
 import { startStudioDeploy } from '@/lib/studio-workflow';
 
-vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams() }));
+const navigation = { push: vi.fn() };
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: navigation.push }),
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
 vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({ useYouTubePlayer: () => ({ containerRef: { current: null }, ready: false, failed: false, seekTo: vi.fn() }) }));
@@ -23,6 +28,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Studio authoritative gate receipt', () => {
+  it('uses client routing for an unauthorized deploy preflight', async () => {
+    vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: 401 });
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+
+    fireEvent.click(screen.getByTestId('studio-deploy-button'));
+
+    await waitFor(() => {
+      expect(navigation.push).toHaveBeenCalledWith('/login?callbackUrl=%2Fstudio');
+    });
+  });
+
   it('reopens a stored pack without running analysis or gate actions', async () => {
     const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
     const pack = reviewPackFixture();
