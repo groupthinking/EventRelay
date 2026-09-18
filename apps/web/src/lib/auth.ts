@@ -2,6 +2,7 @@ import 'server-only';
 
 import type { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import { nextAuthUseSecureCookies } from '@/lib/auth-jwt';
 
 const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
 const googleClientId = (
@@ -73,9 +74,7 @@ export const authOptions: NextAuthOptions = {
   // Force secure cookies in production regardless of NEXTAUTH_URL's scheme so a
   // stray http:// value cannot silently downgrade cookie security; also enable
   // them whenever NEXTAUTH_URL is explicitly https (e.g. https previews).
-  useSecureCookies:
-    process.env.NODE_ENV === 'production' ||
-    (process.env.NEXTAUTH_URL?.startsWith('https://') ?? false),
+  useSecureCookies: nextAuthUseSecureCookies(),
   callbacks: {
     async signIn({ user, account }) {
       // Enforce the domain allowlist for every provider, not just Google, so a
