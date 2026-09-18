@@ -165,6 +165,32 @@ def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
                 assert_immutable_uses(uses)
 
 
+def test_ci_python_matrix_matches_declared_support_and_lock_metadata() -> None:
+    workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    uv_lock = tomllib.loads((ROOT / "uv.lock").read_text())
+
+    expected_versions = ["3.10", "3.11", "3.12"]
+    classifiers = pyproject["project"]["classifiers"]
+    declared_versions = [
+        classifier.rsplit(" :: ", maxsplit=1)[-1]
+        for classifier in classifiers
+        if classifier.startswith("Programming Language :: Python :: 3.")
+        and classifier != "Programming Language :: Python :: 3"
+    ]
+
+    assert workflow["jobs"]["test"]["strategy"]["matrix"]["python-version"] == expected_versions
+    assert pyproject["project"]["requires-python"] == ">=3.10"
+    assert declared_versions == expected_versions
+    assert uv_lock["requires-python"] == ">=3.10"
+
+    markers = uv_lock["resolution-markers"]
+    assert any("python_full_version < '3.11'" == marker for marker in markers)
+    for supported_minor in ("3.11", "3.12"):
+        assert any(f"python_full_version == '{supported_minor}.*'" in marker for marker in markers)
+    assert not any("3.9" in marker for marker in markers)
+
+
 def test_obsolete_agentic_verification_loop_removed() -> None:
     assert not (ROOT / ".github/agentic/verification-loop.aw.yml").exists()
 
