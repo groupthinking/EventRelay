@@ -293,12 +293,14 @@ class CacheService:
                 continue
 
             category_name = category_dir.name
-            markdown_files = list(category_dir.glob("*_analysis.md"))
-            category_count = len(markdown_files)
+            markdown_file_stats = [
+                (file_path, file_path.stat())
+                for file_path in category_dir.glob("*_analysis.md")
+            ]
+            category_count = len(markdown_file_stats)
             category_size = 0
 
-            for file_path in markdown_files:
-                file_stats = file_path.stat()
+            for _file_path, file_stats in markdown_file_stats:
                 category_size += file_stats.st_size
                 mtime = file_stats.st_mtime
                 if mtime < oldest_time:
