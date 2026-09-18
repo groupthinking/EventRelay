@@ -258,6 +258,25 @@ async def test_completion_is_conditional_on_the_original_claim(tmp_path):
     assert _get_item(first, "2026-07-25").status == "sent"
 
 
+def test_retry_delay_caps_exponential_before_equal_jitter(tmp_path, monkeypatch):
+    monitor = APICostMonitor(db_path=str(tmp_path / "retry-cap.db"))
+    monitor.webhook_retry_base_seconds = 10
+    monitor.webhook_retry_max_seconds = 25
+    uniform_calls: list[tuple[float, float]] = []
+
+    def return_upper_jitter_bound(low: float, high: float) -> float:
+        uniform_calls.append((low, high))
+        return high
+
+    monkeypatch.setattr(monitor_module.random, "uniform", return_upper_jitter_bound)
+    now = datetime(2026, 9, 16, 12, 0, tzinfo=timezone.utc)
+
+    retry_at = monitor._retry_at(attempt=4, now=now)
+
+    assert uniform_calls == [(0, 12.5)]
+    assert retry_at == now + timedelta(seconds=25)
+
+
 async def test_failure_persists_equal_jitter_backoff_and_respects_due_time(
     tmp_path, monkeypatch
 ):

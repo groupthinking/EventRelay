@@ -56,7 +56,7 @@ mypy src/                                # Type check
 ### Frontend (Next.js)
 
 ```bash
-# Node.js >=22; packageManager is npm@10.8.0; root lockfile only
+# Node.js 24.x; packageManager is npm@10.9.8; root lockfile only
 npm ci
 
 # Root scripts invoke the local Turbo binary
@@ -93,7 +93,7 @@ npm --workspace=apps/web run type-check
 - `pythonpath = src`, `testpaths = tests`
 - Async mode: `asyncio_mode = "auto"`
 - Markers: `unit`, `integration`, `slow`, `asyncio`, `database`, `security`, `e2e`, `performance`
-- Coverage target: 90% minimum, source: `src/youtube_extension`
+- Coverage target: 88.1833% minimum, source: `src/youtube_extension`
 
 ### Frontend
 - Tests in `apps/web/src/components/__tests__/` and `apps/web/src/__tests__/`
@@ -116,6 +116,10 @@ npm --workspace=apps/web run type-check
 - **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
 - **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
 - **Vercel docs context**: Use `https://vercel.com/docs/llms-full.txt` when you need complete Vercel platform context for AI Gateway, Hosting, or MCP-related work.
+- **E2E Attribution**: Synthetic requests must carry `X-EventRelay-Probe: e2e` and `User-Agent: EventRelay-E2E/<run-id>` to enable Vercel log filtering.
+- **Vercel Filesystem**: The `/var/task` environment is read-only. Do not write persistent data to local disk.
+- **Preview Verification**: Missing PR previews fail closed. Do not fall back to production.
+- **Gate Tests**: Redis is required for gate tests.
 
 ## SDK ↔ Backend Contract Alignment
 
