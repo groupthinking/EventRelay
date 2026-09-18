@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 import hashlib
+import os
 import sys
 import time
 from pathlib import Path
@@ -146,6 +148,8 @@ class TestGetCacheStatisticsPopulated:
         second = cat / "bbbbbbbbbbb_analysis.md"
         first.write_text("a")
         second.write_text("bb")
+        os.utime(first, (100, 100))
+        os.utime(second, (200, 200))
         stat_calls = {first: 0, second: 0}
         real_stat = Path.stat
 
@@ -161,6 +165,8 @@ class TestGetCacheStatisticsPopulated:
         assert stat_calls == {first: 1, second: 1}
         assert stats["categories"]["coding"]["count"] == 2
         assert stats["total_cached_videos"] == 2
+        assert stats["oldest_cache"] == datetime.fromtimestamp(100).isoformat()
+        assert stats["newest_cache"] == datetime.fromtimestamp(200).isoformat()
 
 
 # ===========================================================================
