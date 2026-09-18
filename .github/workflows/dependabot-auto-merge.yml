@@ -249,10 +249,12 @@ jobs:
                 'lint-python',
                 'lint-frontend',
                 'build',
-                'test',
-                // Python pytest only. The apps/web vitest suite is the separate
-                // required check `test-frontend` (#1449) -- a green `test` is
-                // not evidence that web unit tests ran.
+                'test (Python 3.10)',
+                'test (Python 3.11)',
+                'test (Python 3.12)',
+                // These three matrix jobs run Python pytest only. The apps/web
+                // vitest suite is the separate required check `test-frontend`
+                // (#1449); green Python jobs do not prove web unit tests ran.
                 'test-frontend',
                 'CodeQL',
                 'gitleaks (working tree)',
