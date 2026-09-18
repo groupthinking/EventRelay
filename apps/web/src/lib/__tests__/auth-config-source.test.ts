@@ -35,6 +35,13 @@ describe('auth configuration source safety', () => {
     );
   });
 
+  it('routes secure-cookie policy through auth-jwt for JWT verification', () => {
+    const auth = readSource('lib/auth.ts');
+    const jwt = readSource('lib/auth-jwt.ts');
+    expect(auth).toContain('nextAuthUseSecureCookies');
+    expect(jwt).toContain('NODE_ENV === \'production\'');
+  });
+
   it('keeps the root route as a sell Home instead of redirecting to the dashboard', () => {
     const source = readSource('app/page.tsx');
     expect(source).not.toContain("redirect('/dashboard')");
