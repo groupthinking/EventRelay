@@ -31,6 +31,7 @@ import {
 const WINDOW_SECONDS = 60;
 const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
+const E2E_USER_AGENT = /^EventRelay-E2E\/([A-Za-z0-9._-]{1,64})$/;
 
 // Login gating (activate-when-configured) + server-to-server bypass.
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
@@ -265,8 +266,23 @@ if (
   );
 }
 
+function logE2EProbe(request: NextRequest, pathname: string): void {
+  if (request.headers.get('x-eventrelay-probe') !== 'e2e') return;
+
+  const match = request.headers.get('user-agent')?.match(E2E_USER_AGENT);
+  if (!match) return;
+
+  console.info({
+    event: 'e2e_probe_request',
+    method: request.method,
+    path: pathname,
+    runId: match[1],
+  });
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
+  logE2EProbe(request, pathname);
 
   // Server-to-server loopback calls bypass both rate limiting and auth.
   if (INTERNAL_TOKEN && request.headers.get('x-eventrelay-internal') === INTERNAL_TOKEN) {
@@ -361,12 +377,18 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   return response;
 }
 
-// Next 16 discovers this file directly. The explicit allowlist means Workflow's
-// internal `/.well-known/workflow/*` requests are never intercepted.
+// Next 16 discovers this file directly. Ordinary traffic stays on the explicit
+// allowlist, so Workflow's internal `/.well-known/workflow/*` requests are never
+// intercepted. The header-conditioned entry lets attributed E2E page requests
+// reach logE2EProbe without globally applying auth or rate limiting to pages.
 export const config = {
   matcher: [
     '/dashboard',
     '/dashboard/:path*',
     '/api/:path*',
+    {
+      source: '/:path*',
+      has: [{ type: 'header', key: 'x-eventrelay-probe', value: 'e2e' }],
+    },
   ],
 };

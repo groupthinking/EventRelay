@@ -74,7 +74,7 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-      - run: npm install --legacy-peer-deps
+      - run: npm ci --legacy-peer-deps
       - name: TypeScript type-check (apps/web)
         continue-on-error: true
         run: cd apps/web && npm run type-check
@@ -82,6 +82,8 @@ jobs:
         run: cd apps/web && npm run lint
       - name: Build web app
         run: npm run build:web
+      - name: Build web production image
+        run: docker build --file apps/web/Dockerfile .
       - uses: actions/upload-artifact@v7
         with:
           name: build-artifacts
@@ -111,7 +113,7 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-      - run: npm install --legacy-peer-deps
+      - run: npm ci --legacy-peer-deps
       - name: Lint Frontend (informational)
         continue-on-error: true
         run: cd apps/web && npm run lint
@@ -129,7 +131,7 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-      - run: npm install --legacy-peer-deps
+      - run: npm ci --legacy-peer-deps
       - name: Install Redis for Video Pack and Origin G.A.T.E. integration tests
         run: sudo apt-get update && sudo apt-get install -y redis-server
       - name: Unit tests (apps/web)
