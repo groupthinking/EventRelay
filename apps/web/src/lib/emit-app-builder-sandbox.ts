@@ -288,7 +288,7 @@ function indexHtml(input: AppBuilderSandboxInput): string {
       <p class="eyebrow">UVAI▶ App Builder sandbox</p>
       <h1>Video Pack ${escapeHtml(input.videoId)}</h1>
       <p class="lede">Running preview from paste-URL ingest. Payload is transcript, visual events, and SOP steps — not invented architecture.</p>
-      <p class="honesty" data-testid="assembly-honesty">This workspace is a pack viewer and SOP checklist. It does not recreate the demonstrated application. No live deploy URL. G.A.T.E. studio.deploy stays parked.</p>
+      <p class="honesty" data-testid="assembly-honesty">This workspace is a pack viewer and SOP checklist compiled from your Video Pack. It does not recreate the demonstrated application. When the pack is stored, Build live in Studio opens <code>/d/${escapeHtml(input.videoId)}</code> on this site. Origin G.A.T.E. studio.deploy to external hosts stays separate.</p>
       <dl class="meta">
         <div><dt>Source</dt><dd>${escapeHtml(input.sourceUrl)}</dd></div>
         <div><dt>source_hash</dt><dd>${escapeHtml(input.sourceHash)}</dd></div>

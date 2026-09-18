@@ -125,4 +125,36 @@ describe('fixture-only Video Pack → Agent Factory handoff', () => {
       /mission\.canvas is required/i,
     );
   });
+
+  it('marks Factory Deliver ready only with a verified live URL and healthy check', () => {
+    const held = createFixtureFactoryHandoff({
+      sandbox: sandbox(),
+      liveUrl: 'https://uvai.io/d/auJzb1D-fag',
+      hostedHealth: {
+        ok: false,
+        status: 503,
+        checked_at: NOW,
+      },
+      issuedAt: NOW,
+    });
+    expect(held.factory_deliver).toMatchObject({
+      ready: false,
+      reason_code: 'FACTORY_DELIVER_HEALTH_FAILED',
+    });
+
+    const ready = createFixtureFactoryHandoff({
+      sandbox: sandbox(),
+      liveUrl: 'https://uvai.io/d/auJzb1D-fag',
+      hostedHealth: {
+        ok: true,
+        status: 200,
+        checked_at: NOW,
+      },
+      issuedAt: NOW,
+    });
+    expect(ready.factory_deliver).toMatchObject({
+      ready: true,
+      reason_code: 'FACTORY_DELIVER_READY',
+    });
+  });
 });
