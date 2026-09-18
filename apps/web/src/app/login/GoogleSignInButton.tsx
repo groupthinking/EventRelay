@@ -22,6 +22,7 @@ export function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
 
     try {
       await signIn('google', { callbackUrl });
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
 
       if (window.location.href !== initialLocation) {
         return;

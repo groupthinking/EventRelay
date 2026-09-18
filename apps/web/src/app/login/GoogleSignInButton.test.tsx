@@ -81,4 +81,26 @@ describe('GoogleSignInButton', () => {
     expect(signIn).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('alert')).toBeNull();
   });
+
+  it('keeps the button disabled when navigation starts right after sign-in resolves', async () => {
+    vi.mocked(signIn).mockImplementationOnce(async () => {
+      setTimeout(() => {
+        window.history.pushState({}, '', '/api/auth/signin/google');
+      }, 0);
+      return undefined;
+    });
+
+    render(<GoogleSignInButton callbackUrl="/studio" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Google' }));
+
+    await waitFor(() => {
+      expect(window.location.pathname).toBe('/api/auth/signin/google');
+    });
+
+    expect(
+      screen.getByRole('button', { name: 'Redirecting to Google…' }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });
