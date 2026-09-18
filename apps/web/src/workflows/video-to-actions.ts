@@ -18,7 +18,11 @@ import {
   type TranscriptSegment,
 } from '@/lib/analysis-evidence';
 import type { VideoAnalysisResult, VerifiedVideoEvidence } from '@/lib/gemini-video-analyzer';
-import { buildActionAgentSource, usableProvidedTranscript } from '@/lib/video-to-actions-input';
+import {
+  buildActionAgentSource,
+  sanitizeActEvents,
+  usableProvidedTranscript,
+} from '@/lib/video-to-actions-input';
 
 export interface VideoToActionsEvent {
   type?: string;
@@ -70,13 +74,15 @@ export async function videoToActionsWorkflow(
   }
 
   const providedTranscript = usableProvidedTranscript(input.transcript);
-  const actionAgent = await actionAgentStep(
-    providedTranscript || evidence.transcript,
-    input.videoTitle,
-    input.events,
-  );
-  const provider = actionAgent.provider || (await providerLabelStep());
-  const actions = actionAgent.actions.map((action) => ({
+  const acted = await actionAgentStep({
+    transcript: buildActionAgentSource(
+      providedTranscript || evidence.transcript,
+      sanitizeActEvents(input.events),
+    ),
+    videoTitle: input.videoTitle,
+  });
+  const provider = acted.provider || (await providerLabelStep());
+  const actions = acted.actions.map((action) => ({
     tool: action.tool,
     status: action.status,
     result: action.result,
@@ -92,32 +98,6 @@ export async function videoToActionsWorkflow(
     analysis,
     provenance,
     quality,
-  };
-}
-
-async function actionAgentStep(
-  transcript: string,
-  videoTitle?: string,
-  events?: VideoToActionsEvent[],
-): Promise<{
-  provider: string;
-  actions: Array<{ tool: string; status: string; result?: string }>;
-}> {
-  'use step';
-
-  const { runActionAgent } = await import('@/lib/action-agent');
-  const result = await runActionAgent({
-    transcript: buildActionAgentSource(transcript, events),
-    videoTitle,
-    executeTools: false,
-  });
-  return {
-    provider: result.provider,
-    actions: result.actions.map((action) => ({
-      tool: action.tool,
-      status: action.status,
-      result: action.result,
-    })),
   };
 }
 
@@ -205,4 +185,18 @@ async function providerLabelStep(): Promise<string> {
 
   const { getGeminiRoutingLabel } = await import('@/lib/gemini-client');
   return getGeminiRoutingLabel();
+}
+
+async function actionAgentStep(input: {
+  transcript: string;
+  videoTitle?: string;
+}): Promise<{ provider: string; actions: Array<{ tool: string; status: string; result?: string }> }> {
+  'use step';
+
+  const { runActionAgent } = await import('@/lib/action-agent');
+  return runActionAgent({
+    transcript: input.transcript,
+    videoTitle: input.videoTitle,
+    executeTools: false,
+  });
 }

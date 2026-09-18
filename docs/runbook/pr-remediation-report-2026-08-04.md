@@ -6,12 +6,12 @@
 **Parameters as invoked:** `auto_merge_policy: label:automerge`, `merge_method: <unfilled>`, `non_github_hosts: []`
 
 > **Historical as of 2026-08-04. Superseded in part — do not action the gate
-> recommendations below.** `agent-completion/truth-gate` and `Agent completion
+> recommendations below.** The retired agent-completion gate and `Agent completion
 > enforcement` were retired outright in #1434 (closing #1432), together with
 > `agent-completion-enforcement.yml`, `agent_completion_gate.py`, and
 > `.github/agent-lock/trusted-publishers.json`. The deadlock this report measures
 > was structural, not a payload bug: `PR Governance` requires a linked issue, that
-> issue arms the truth gate, and the armed gate then demands an intent snapshot only
+> issue arms the retired gate, and the armed gate then demands an intent snapshot only
 > dispatch-originated work can have. The observations below remain an accurate
 > record of the queue on the run date; the remedies do not.
 
@@ -29,8 +29,8 @@ every open PR carries a terminal state and, where blocked, a staged next command
 - **30 open PRs, every one a draft, all targeting protected `main`.**
 - **No PR carries the `automerge` label**, so under `auto_merge_policy: label:automerge`
   none is eligible for autonomous merge. The runbook's Publish Gate is human-by-default.
-- The dominant red check is the repo's **own governance gate**
-  (`agent-completion/truth-gate/pr-*`), not code defects:
+- The dominant red check is the repo's **own governance gate** (now retired), not
+  code defects:
   - **12 PRs** fail only because the gate itself errored with `invalid_payload`
     (a gate-infra bug): #996, #1020, #1040, #1043, #1045, #1049, #1080, #1117, #1123, #1145, #1154, #1155.
   - The rest fail the gate on `draft_pr` / `missing_agent_result` /
@@ -38,7 +38,7 @@ every open PR carries a terminal state and, where blocked, a staged next command
     which are functions of the PR being an un-promoted draft, not of the diff.
 - **`main` itself is red.** Per #1156's own description, `dependency-review` and `gitleaks`
   fail on `main`, so every open PR inherits red checks no author can fix. Multiple PRs note
-  the truth-gate is repo-wide/pre-existing and that #1108, #1103, #1098 were **merged
+  the retired gate is repo-wide/pre-existing and that #1108, #1103, #1098 were **merged
   regardless** — i.e. the maintainer overrides this gate by hand, per-PR.
 - **CodeRabbit review loop could not engage**: CR reports "Review skipped: excluded by label
   configuration" or "rate limited" on almost every PR, so the runbook's step-4 review loop
@@ -65,7 +65,7 @@ remediation.
 
 ## Oldest-first status table
 
-| PR | Author | Age (d) | Title | Combined CI | Truth-gate | Conflicts | Action taken | Terminal state |
+| PR | Author | Age (d) | Title | Combined CI | Retired gate (historical) | Conflicts | Action taken | Terminal state |
 |----|--------|--------:|-------|-------------|-----------|-----------|--------------|----------------|
 | #734 | groupthinking | 23 | pin cloud callbacks vs DNS rebinding | failure | draft_pr + evidence | — | observed | DEFERRED(draft) |
 | #810 | groupthinking | 18 | sanitize API logs (CWE-117) | failure | scope_drift + draft_pr | — | observed | DEFERRED(draft) |
@@ -104,7 +104,7 @@ remediation.
 
 ## HALTED PRs — blocker + staged next command
 
-These 5 have a **passing truth-gate and all-green (or mergeable) checks**; they are the
+These 5 have a **passing (historical) gate status and all-green (or mergeable) checks**; they are the
 prime candidates for a human to promote and merge. All are drafts, so step 1 for each is
 "mark ready for review", then merge on the base branch's protection policy.
 
@@ -123,7 +123,7 @@ prime candidates for a human to promote and merge. All are drafts, so step 1 for
 
 ## Systemic findings for the maintainer (higher-leverage than any single PR)
 
-1. **`agent-completion/truth-gate` emits `invalid_payload` on 12 of 30 PRs.** This is the gate
+1. **The retired agent-completion gate emitted `invalid_payload` on 12 of 30 PRs.** This is the gate
    workflow failing to process, not the PRs failing review. Fixing the gate would flip a large
    fraction of the queue from red to evaluable in one change. Candidate owner: whatever builds
    the gate payload (see #1154 "scope agent gate to real dispatch evidence" and #1155/#1123,

@@ -2,12 +2,26 @@ import 'server-only';
 
 import { backendHeaders } from '@/lib/pipeline-backend';
 import { checkBackendHealth, getBackendConfig } from '@/lib/pipeline-backend-health';
+import {
+  extractBackendLiveUrl,
+  STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
+  STUDIO_ORIGIN_NO_HOSTNAME_HOLD,
+} from '@/lib/studio-pipeline-status';
+import { usableProvidedTranscript } from '@/lib/video-to-actions-input';
+
+export { extractBackendLiveUrl, STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD, STUDIO_ORIGIN_NO_HOSTNAME_HOLD };
+export { usableProvidedTranscript as usableKickoffTranscript };
 
 export interface AsyncJobKickoff {
-  kind: 'job' | 'handoff' | 'failed';
+  kind: 'job' | 'handoff' | 'failed' | 'live';
   jobId?: string;
   statusUrl?: string;
   message?: string;
+  live_url?: string | null;
+  github_repo?: string | null;
+  httpStatus?: number;
+  /** Timeout / 408 — WDK should retry the step, not FatalError the run. */
+  retryable?: boolean;
 }
 
 export interface AsyncJobStatus {
@@ -25,11 +39,65 @@ function str(v: unknown): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Pass through a backend-supplied live URL only — never invent one. */
+function firstLiveUrl(...values: unknown[]): string | null {
+  return extractBackendLiveUrl(...values);
+}
+
+const YOUTUBE_REFETCH_RE =
+  /sign in to confirm you.?re not a bot|cookies-from-browser|--cookies for the authentication|\[youtube\].*not a bot/i;
+
+export const STUDIO_READY_TRANSCRIPT_HOLD =
+  'Ready transcript was not reused. Deploy must not re-fetch YouTube. No verified deploy receipt.';
+
+/** Honest HOLD when origin reused the transcript but produced no live URL. */
+export const STUDIO_ORIGIN_NO_LIVE_HOLD =
+  'Studio transcript was reused. Origin video-to-software returned no verified live URL.';
+
+/** Honest HOLD when a ready transcript exists — never the yt-dlp bot string. */
+export function studioDeployYoutubeRefetchHold(message?: string): string {
+  if (message && YOUTUBE_REFETCH_RE.test(message)) {
+    return STUDIO_READY_TRANSCRIPT_HOLD;
+  }
+  return message || STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
+}
+
+/** Cloudflare/origin gateway timeout — kickoff must async-handoff, not HOLD HTTP 524. */
+export function isGatewayTimeoutKickoff(status?: number, message?: string): boolean {
+  if (status === 524 || status === 504 || status === 408) return true;
+  if (!message) return false;
+  return /http 524|error code:\s*524|cloudflare|timed out before a verified live url|aborted due to timeout/i.test(
+    message,
+  );
+}
+
+/** Ready-transcript miss: YouTube re-fetch → reuse HOLD; timeout/524 → origin miss. */
+export function studioDeployReadyTranscriptHold(message?: string): string {
+  if (message && YOUTUBE_REFETCH_RE.test(message)) {
+    return STUDIO_READY_TRANSCRIPT_HOLD;
+  }
+  if (!message || isGatewayTimeoutKickoff(undefined, message)) {
+    return STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD;
+  }
+  return message;
+}
+
 /**
  * Kick off FastAPI async video processing (same contract as POST /api/pipeline async).
  * Used from WDK steps — no self-HTTP to /api/pipeline.
+ * When a usable transcript is already ready, do not start URL-only /videos/process
+ * (that path re-hits YouTube / yt-dlp).
  */
-export async function kickoffAsyncVideoJob(url: string): Promise<AsyncJobKickoff> {
+export async function kickoffAsyncVideoJob(
+  url: string,
+  opts?: { transcript?: string },
+): Promise<AsyncJobKickoff> {
   const health = await checkBackendHealth();
   if (!health.available) {
     return {
@@ -38,11 +106,35 @@ export async function kickoffAsyncVideoJob(url: string): Promise<AsyncJobKickoff
     };
   }
 
+  const transcript = usableProvidedTranscript(opts?.transcript);
   const { url: backendUrl } = getBackendConfig();
+  const shipped = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
+  if (shipped.kind === 'live' || shipped.kind === 'job') return shipped;
+  if (transcript && isGatewayTimeoutKickoff(shipped.httpStatus, shipped.message)) {
+    const retried = await tryVideoToSoftwareDeploy(backendUrl, url, transcript);
+    if (retried.kind === 'live' || retried.kind === 'job') return retried;
+    return {
+      kind: 'failed',
+      retryable: true,
+      message: studioDeployReadyTranscriptHold(retried.message),
+    };
+  }
+  if (transcript) {
+    return {
+      kind: 'failed',
+      message: studioDeployReadyTranscriptHold(shipped.message),
+    };
+  }
+
   const response = await fetch(`${backendUrl}/api/v1/videos/process`, {
     method: 'POST',
     headers: backendHeaders(),
-    body: JSON.stringify({ video_url: url, language: 'en' }),
+    body: JSON.stringify({
+      video_url: url,
+      language: 'en',
+      ...(transcript ? { transcript } : {}),
+      options: { pipeline: 'video-to-software' },
+    }),
     signal: AbortSignal.timeout(15_000),
   });
 
@@ -79,36 +171,242 @@ export async function fetchAsyncVideoJob(jobId: string): Promise<AsyncJobStatus>
     return { ok: false, message: 'BACKEND_URL is not configured' };
   }
 
-  const response = await fetch(
-    `${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`,
-    {
-      cache: 'no-store',
-      headers: backendHeaders(),
-      signal: AbortSignal.timeout(15_000),
-    },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${backendUrl}/api/v1/jobs/${encodeURIComponent(jobId)}`,
+      {
+        cache: 'no-store',
+        headers: backendHeaders(),
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+  } catch (err) {
+    console.error('[pipeline-async-job] job status read failed', err);
+    return {
+      ok: false,
+      httpStatus: isAbortTimeout(err) ? 408 : undefined,
+      message: isAbortTimeout(err)
+        ? 'Deploy job status read timed out; retrying'
+        : err instanceof Error
+          ? err.message
+          : 'Deploy job status read failed',
+    };
+  }
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   const data =
     payload.data && typeof payload.data === 'object'
       ? (payload.data as Record<string, unknown>)
       : payload;
 
+  const metadata = asRecord(data.metadata);
+  const outputs = asRecord(metadata?.outputs);
+  const nestedMeta = asRecord(metadata?.metadata);
+  const deployment =
+    asRecord(data.deployment) ||
+    asRecord(outputs?.deployment) ||
+    asRecord(metadata?.deployment);
+
   return {
     ok: response.ok,
     httpStatus: response.status,
     jobStatus: str(data.status) || str(payload.status),
-    live_url: str(data.live_url) ?? str(payload.live_url) ?? null,
+    live_url: firstLiveUrl(data, payload, metadata, outputs, deployment, nestedMeta),
     github_repo: str(data.github_repo) ?? str(payload.github_repo) ?? null,
-    message: str(payload.error) || str(payload.detail) || str(data.message),
+    message:
+      str(payload.error) ||
+      str(payload.detail) ||
+      str(data.error) ||
+      str(data.message),
   };
 }
 
 export function isTerminalJobStatus(status: string | undefined): boolean {
   return (
+    status === 'complete' ||
     status === 'completed' ||
     status === 'succeeded' ||
     status === 'failed' ||
     status === 'error' ||
     status === 'cancelled'
   );
+}
+
+export type StudioDeployPollDecision =
+  | {
+      action: 'live';
+      live_url: string;
+      jobStatus?: string;
+      github_repo?: string | null;
+    }
+  | {
+      action: 'job';
+      jobStatus?: string;
+      live_url?: string | null;
+      github_repo?: string | null;
+      message?: string;
+    }
+  | { action: 'continue'; message?: string; jobStatus?: string }
+  | { action: 'retry'; message: string }
+  | { action: 'fail'; message: string };
+
+/**
+ * One WDK job-status read → continue, live, terminal job, or honest fail.
+ * Timeout / 408 / gateway abort must continue — never a raw abort HOLD.
+ */
+export function decideStudioDeployPoll(
+  status: AsyncJobStatus,
+  opts: { jobId: string; transcript?: string },
+): StudioDeployPollDecision {
+  if (status.live_url) {
+    return {
+      action: 'live',
+      live_url: status.live_url,
+      jobStatus: status.jobStatus || 'completed',
+      github_repo: status.github_repo,
+    };
+  }
+
+  const statusTimeout =
+    status.httpStatus === 408 ||
+    isGatewayTimeoutKickoff(status.httpStatus, status.message);
+
+  if (status.httpStatus === 404) {
+    return {
+      action: 'continue',
+      jobStatus: status.jobStatus,
+      message: `Deploy job ${opts.jobId} still pending`,
+    };
+  }
+
+  if (!status.ok && !statusTimeout) {
+    const raw =
+      status.message || `Deploy job ${opts.jobId} status HTTP ${status.httpStatus ?? 'error'}`;
+    const msg = usableProvidedTranscript(opts.transcript)
+      ? studioDeployReadyTranscriptHold(raw)
+      : raw;
+    if (status.httpStatus && status.httpStatus >= 500) {
+      return { action: 'retry', message: msg };
+    }
+    return { action: 'fail', message: msg };
+  }
+
+  if (status.jobStatus === 'failed' || status.jobStatus === 'error') {
+    const raw = status.message || `Deploy job ${opts.jobId} ${status.jobStatus}`;
+    return {
+      action: 'fail',
+      message: usableProvidedTranscript(opts.transcript)
+        ? studioDeployReadyTranscriptHold(raw)
+        : raw,
+    };
+  }
+
+  if (isTerminalJobStatus(status.jobStatus)) {
+    return {
+      action: 'job',
+      jobStatus: status.jobStatus,
+      live_url: status.live_url,
+      github_repo: status.github_repo,
+      message:
+        status.message ||
+        (status.live_url ? undefined : STUDIO_ORIGIN_NO_HOSTNAME_HOLD),
+    };
+  }
+
+  const pending = `Deploy job ${opts.jobId} still ${status.jobStatus || 'pending'}`;
+  const raw = status.message;
+  const remapped =
+    raw && usableProvidedTranscript(opts.transcript)
+      ? studioDeployYoutubeRefetchHold(raw)
+      : raw;
+  return {
+    action: 'continue',
+    jobStatus: status.jobStatus,
+    message:
+      !remapped || remapped === STUDIO_READY_TRANSCRIPT_HOLD ? pending : remapped,
+  };
+}
+
+/**
+ * Real deploy attempt (FastAPI video-to-software). Pass through a backend
+ * live URL only — never invent one. 401/403 and other non-live outcomes
+ * return null so the caller can fall through to the process job.
+ */
+async function tryVideoToSoftwareDeploy(
+  backendUrl: string,
+  url: string,
+  transcript?: string,
+): Promise<AsyncJobKickoff> {
+  try {
+    const response = await fetch(`${backendUrl}/api/v1/video-to-software`, {
+      method: 'POST',
+      headers: backendHeaders(),
+      body: JSON.stringify({
+        video_url: url,
+        project_type: 'web',
+        deployment_target: 'vercel',
+        ...(transcript ? { transcript } : {}),
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+    const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    const data = asRecord(payload.data) || {};
+    const handedOffJobId = str(data.job_id) || str(data.jobId) || str(payload.job_id) || str(payload.jobId);
+    if (response.status === 202 && handedOffJobId) {
+      return {
+        kind: 'job',
+        jobId: handedOffJobId,
+        statusUrl: `/api/jobs/${handedOffJobId}`,
+      };
+    }
+    if (response.status === 202 && !handedOffJobId) {
+      return {
+        kind: 'failed',
+        retryable: true,
+        httpStatus: 202,
+        message: STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD,
+      };
+    }
+    const miss =
+      str(payload.error) ||
+      str(payload.detail) ||
+      (response.ok
+        ? STUDIO_ORIGIN_NO_HOSTNAME_HOLD
+        : `Backend kickoff returned HTTP ${response.status}`);
+    if (!response.ok) {
+      return { kind: 'failed', message: miss, httpStatus: response.status };
+    }
+    const result = asRecord(payload.result);
+    const deployment = asRecord(payload.deployment) || asRecord(result?.deployment);
+    const live_url = firstLiveUrl(payload, data, result, deployment);
+    if (!live_url) {
+      return { kind: 'failed', message: miss };
+    }
+    return {
+      kind: 'live',
+      live_url,
+      github_repo: str(payload.github_repo) ?? str(result?.github_repo) ?? null,
+      message: str(payload.message) || str(result?.message),
+    };
+  } catch (err) {
+    console.error('[pipeline-async-job] video-to-software kickoff failed', err);
+    return {
+      kind: 'failed',
+      httpStatus: isAbortTimeout(err) ? 408 : undefined,
+      retryable: isAbortTimeout(err) ? true : undefined,
+      message: isAbortTimeout(err)
+        ? 'video-to-software timed out before a verified live URL'
+        : err instanceof Error
+          ? err.message
+          : 'video-to-software kickoff failed',
+    };
+  }
+}
+
+export function isAbortTimeout(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const rec = err as { name?: unknown; code?: unknown; message?: unknown };
+  if (rec.name === 'TimeoutError') return true;
+  if (rec.code === 23 || rec.code === 'TIMEOUT_ERR') return true;
+  return typeof rec.message === 'string' && /aborted due to timeout/i.test(rec.message);
 }
