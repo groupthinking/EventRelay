@@ -751,7 +751,7 @@ export default function OneLoopStudio({
     elapsedSeconds: elapsed,
   });
   const statusText = transcriptWorking
-    ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
+    ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}. Pipeline keeps running if this page refreshes.`
     : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
 
   return (
@@ -965,9 +965,14 @@ export default function OneLoopStudio({
               <div>
                 <p className="text-sm text-white/80">{transcriptStage.label}</p>
                 {transcriptWorking && !selected?.transcript && (
-                  <p className="font-mono text-[11px] text-white/40">
-                    {studioTranscriptEtaLabel(elapsed)}
-                  </p>
+                  <>
+                    <p className="font-mono text-[11px] text-white/40">
+                      {studioTranscriptEtaLabel(elapsed)}
+                    </p>
+                    <p className="font-mono text-[11px] text-white/40">
+                      Gemini watch time: {elapsed}s elapsed.
+                    </p>
+                  </>
                 )}
               </div>
               {showTranscriptRetry ? (
