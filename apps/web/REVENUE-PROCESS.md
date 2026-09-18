@@ -50,6 +50,7 @@ npm run dev
 |------|------|
 | `src/lib/billing/checkout-config.ts` | Pure price/URL resolution |
 | `src/lib/billing/stripe-checkout.ts` | Stripe session creation |
+| `src/lib/billing/pro-feature-gate.ts` | Pro verification + checkout handoff for gated downloads |
 | `src/lib/billing/turnstile.ts` | Cloudflare siteverify |
 | `src/lib/billing/grok-lead.ts` | Grok/Composer metadata on paid tier |
 | `src/lib/billing/kaizen-trace.ts` | Structured trace for renewal/debug |
@@ -66,6 +67,8 @@ npm run dev
 |---------|------|-----|
 | AI chat | 5/day | Unlimited, `grok-composer` lead model |
 | Agent dispatch | Blocked (402) | Allowed |
+| Workspace ZIP export | Blocked (402 + checkout) | Download enabled |
+| `/api/v1/refinery/dataset` | Blocked (402 + checkout) | Metadata + JSONL download |
 | API headers | — | `X-Lead-Model`, `X-Billing-Plan` on backend proxy |
 
 ## Returning users

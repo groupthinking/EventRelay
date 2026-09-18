@@ -533,7 +533,7 @@ export default function OneLoopStudio({
     }
   };
 
-  const exportPkg = () => {
+  const exportPkg = async () => {
     const filename = studioExportFilename(
       safeProjectName(selected?.title || 'uvai-project'),
     );
@@ -581,7 +581,21 @@ export default function OneLoopStudio({
           : selected?.videoPack?.pack.transcript,
         sopSteps: linkedSop?.steps,
       });
-      downloadScaffoldPackage(pkg);
+      const result = await downloadScaffoldPackage(pkg);
+      if (!result.ok) {
+        if (result.status === 402 && result.checkoutUrl) {
+          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
+          window.location.href = result.checkoutUrl;
+          return;
+        }
+        const toast = studioExportToastMessage({
+          ok: false,
+          error: result.error,
+        });
+        setExportToast(toast);
+        return;
+      }
+      const filename = result.filename || studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
