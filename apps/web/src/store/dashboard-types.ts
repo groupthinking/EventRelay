@@ -2,6 +2,7 @@ import type { ExtractedEvent, AgentExecution } from '@/lib/types';
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
 import type { LinkedSop } from '@/lib/linked-sop';
+import type { SpecReviewAcknowledgment } from '@/lib/grounded-build-spec';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -51,6 +52,7 @@ export interface Video {
   runId?: string;
   /** Hashed VideoPack v0 citation emitted from paste-URL. */
   videoPack?: VideoPackCitation;
+  specReviewAcknowledgment?: SpecReviewAcknowledgment;
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
   failure?: {

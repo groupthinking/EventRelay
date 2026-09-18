@@ -83,7 +83,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Agent dispatch error:', error);
     return NextResponse.json(
-      { error: 'Failed to dispatch agents', details: String(error) },
+      { error: 'Failed to dispatch agents' },
       { status: 502 },
     );
   }

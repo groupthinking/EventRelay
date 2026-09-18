@@ -1,7 +1,7 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import net from 'node:net';
 import { createClient, type RedisClientType } from 'redis';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { GOLDEN_IDENTITY_HASHES, applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
 import {
   PROCESSING_STALE_MS,
@@ -117,9 +117,22 @@ function createRedis(initial: unknown = null) {
 
 afterEach(() => {
   resetVideoPackStoreForTests();
+  vi.unstubAllEnvs();
 });
 
 describe('video-pack store', () => {
+  it('fails closed in production when Redis durability is unavailable', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    vi.stubEnv('KV_REST_API_URL', '');
+    vi.stubEnv('KV_REST_API_TOKEN', '');
+
+    await expect(claimPackProcessing(IDENTITY)).rejects.toThrow(
+      /durable video pack storage is not configured/i,
+    );
+  });
+
   it('returns null for an unknown source_hash', async () => {
     expect(await getPackRecord(HASH)).toBeNull();
   });

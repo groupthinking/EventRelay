@@ -4,6 +4,22 @@ on:
   schedule:
     - cron: "17 13 * * *"
   workflow_dispatch:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - edited
+      - synchronize
+      - ready_for_review
+      - converted_to_draft
+      - closed
+  issues:
+    types:
+      - opened
+      - reopened
+      - closed
+  create:
+  delete:
 
 permissions:
   contents: read
@@ -17,6 +33,7 @@ concurrency:
 jobs:
   report:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Reconcile canonical delivery state
         uses: actions/github-script@v8
@@ -28,10 +45,19 @@ jobs:
             const escapedRepoFullName = repoFullName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const now = Date.now();
             const staleAfterMs = 14 * 24 * 60 * 60 * 1000;
-            const closingPattern = new RegExp(
-              `(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+(?:${escapedRepoFullName})?#(\\d+)`,
-              "gi"
-            );
+            const closingPattern = /(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#(\d+)/gi;
+            const isDependencyAutomationPR = pr =>
+              pr.user?.login === "dependabot[bot]" &&
+              /^build\(deps(?:-[^)]+)?\):/i.test(pr.title || "");
+
+            // Extract closing-issue references from a PR body, accepting only references that are
+            // unqualified (`#N`) or explicitly qualified with THIS repository
+            // (`owner/repo#N`). Cross-repo references like `Closes otherorg/otherrepo#42` are
+            // ignored so they are never mapped onto local issue numbers.
+            const extractIssueNumbers = (body) =>
+              [...(body || "").matchAll(closingPattern)]
+                .filter(m => !m[1] || m[1] === repoFullName)
+                .map(m => Number(m[2]));
 
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
@@ -53,14 +79,14 @@ jobs:
             // references like "Closes #999999" from creating fictitious duplicate groups.
             const allIssueNumbers = new Set();
             for (const pr of pulls) {
-              const nums = [...(pr.body || "").matchAll(closingPattern)].map(m => Number(m[1]));
+              const nums = extractIssueNumbers(pr.body);
               nums.forEach(n => allIssueNumbers.add(n));
             }
             const validIssues = new Set();
             for (const issueNum of allIssueNumbers) {
               try {
                 const resp = await github.rest.issues.get({ owner, repo, issue_number: issueNum });
-                if (!resp.data.pull_request && resp.data.state === "open") {
+                if (!resp.data.pull_request) {
                   validIssues.add(issueNum);
                 }
               } catch (err) {
@@ -72,12 +98,14 @@ jobs:
             const untracked = [];
             const issueToPulls = new Map();
             for (const pr of pulls) {
-              const issues = [...(pr.body || "").matchAll(closingPattern)]
-                .map(match => Number(match[1]));
+              const issues = extractIssueNumbers(pr.body);
               // Restrict to validated issue references only.
               const validUnique = [...new Set(issues)].filter(n => validIssues.has(n));
               // Drafts mirror the governance workflow's deferred-enforcement rule and are excluded.
-              if (validUnique.length !== 1 && !pr.draft) untracked.push(pr);
+              // Dependabot dependency bumps are automation-managed and excluded from this drift gate.
+              if (validUnique.length !== 1 && !pr.draft && !isDependencyAutomationPR(pr)) {
+                untracked.push(pr);
+              }
               for (const issue of validUnique) {
                 const existing = issueToPulls.get(issue) || [];
                 existing.push(pr.number);

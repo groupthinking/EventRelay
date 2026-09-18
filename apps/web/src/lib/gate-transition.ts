@@ -55,7 +55,7 @@ export interface GateTransitionRequest {
 }
 
 export interface GateReceipt {
-  version: typeof GATE_RECEIPT_VERSION;
+  version: typeof GATE_RECEIPT_VERSION | 'eventrelay.gate-receipt.v2';
   id: string;
   kind: string;
   transition_id: string;
@@ -97,7 +97,9 @@ export interface StudioGateReceiptView {
   reason_code: string;
   receiptId: string;
   receiptHash: string;
-  version: typeof GATE_RECEIPT_VERSION;
+  transitionId?: string;
+  retained?: boolean;
+  version: typeof GATE_RECEIPT_VERSION | 'eventrelay.gate-receipt.v2';
 }
 
 const SHA256_HEX = /^[a-f0-9]{64}$/;
@@ -217,10 +219,39 @@ export function assessZeroSim(input: {
   result?: ZeroSimResult;
   evidenceRefs?: GateEvidenceRef[];
 }): ZeroSimResult {
-  if (input.result) {
-    return input.result;
-  }
   const refs = input.evidenceRefs ?? [];
+  if (input.result) {
+    const candidate = input.result;
+    if (candidate.verdict === 'unreal') {
+      return candidate;
+    }
+    if (candidate.verdict === 'real') {
+      if (refs.length === 0) {
+        return { verdict: 'unverified', reason_code: 'ZERO_SIM_MISSING_EVIDENCE' };
+      }
+      for (const ref of refs) {
+        if (ref.hash && !SHA256_HEX.test(ref.hash)) {
+          return { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' };
+        }
+        if (ref.kind === 'live_url' && presentedLiveValue(ref) && !liveRefValue(ref)) {
+          return { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' };
+        }
+      }
+      return candidate;
+    }
+    if (refs.length === 0) {
+      return { verdict: 'unverified', reason_code: 'ZERO_SIM_MISSING_EVIDENCE' };
+    }
+    for (const ref of refs) {
+      if (ref.hash && !SHA256_HEX.test(ref.hash)) {
+        return { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' };
+      }
+      if (ref.kind === 'live_url' && presentedLiveValue(ref) && !liveRefValue(ref)) {
+        return { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' };
+      }
+    }
+    return { verdict: 'unverified', reason_code: 'ZERO_SIM_UNVERIFIED' };
+  }
   if (refs.length === 0) {
     return { verdict: 'unverified', reason_code: 'ZERO_SIM_MISSING_EVIDENCE' };
   }
@@ -268,10 +299,11 @@ function finish(
 }
 
 export function evaluateTransition(request: GateTransitionRequest): GateEvaluation {
-  const transitionId = request.transitionId.trim();
-  const kind = request.kind.trim();
-  const fromState = request.fromState.trim();
-  const toState = request.toState.trim();
+  const transitionId = (request.transitionId ?? '').trim();
+  const kind = (request.kind ?? '').trim();
+  const fromState = (request.fromState ?? '').trim();
+  const toState = (request.toState ?? '').trim();
+  const actor = request.authority?.actor ?? '';
   if (!transitionId || !kind || !fromState || !toState) {
     return finish(
       request,
@@ -282,12 +314,12 @@ export function evaluateTransition(request: GateTransitionRequest): GateEvaluati
     );
   }
 
-  if (!KNOWN_AUTHORITY_ACTORS.has(request.authority.actor)) {
+  if (!actor || !KNOWN_AUTHORITY_ACTORS.has(actor)) {
     return finish(
       request,
       'ESCALATE',
       'GATE_ESCALATE_AUTHORITY_UNKNOWN',
-      `Authority actor "${request.authority.actor}" is not a known G.A.T.E. actor.`,
+      `Authority actor "${actor || 'unknown'}" is not a known G.A.T.E. actor.`,
       request.zeroSim ?? { verdict: 'unverified', reason_code: 'ZERO_SIM_UNVERIFIED' },
     );
   }
@@ -310,14 +342,14 @@ export function evaluateTransition(request: GateTransitionRequest): GateEvaluati
   const liveRefs = request.evidenceRefs.filter((ref) => ref.kind === 'live_url');
   const verifiedLive = liveRefs.map(liveRefValue).find((url): url is string => Boolean(url));
   const claimedLiveWithoutReceipt =
-    toState === 'live' && liveRefs.some((ref) => presentedLiveValue(ref)) && !verifiedLive;
+    toState === 'live' && liveRefs.some((ref) => presentedLiveValue(ref));
 
   if (claimedLiveWithoutReceipt) {
     return finish(
       request,
       'REJECT',
       'GATE_REJECT_CLAIM_MISMATCH',
-      'Claimed live transition without a verified https live URL (hostname required).',
+      'Claimed live transition without a trusted artifact-bound receipt. A URL is not deployment verification.',
       zeroSim,
     );
   }
@@ -397,7 +429,7 @@ export function evaluateStudioDeployTransition(
   }
 
   const zeroSim: ZeroSimResult | undefined = verified
-    ? { verdict: 'real', reason_code: 'ZERO_SIM_REAL' }
+    ? { verdict: 'unverified', reason_code: 'ZERO_SIM_UNVERIFIED' }
     : presented
       ? { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' }
       : undefined;

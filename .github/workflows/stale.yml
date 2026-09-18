@@ -1,6 +1,11 @@
 # YAML configuration for Stale Bot
 name: Close stale issues
 
+# Prevent concurrent runs to avoid resource exhaustion
+concurrency:
+  group: stale-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   schedule:
     - cron: '0 0 * * *' # Run daily at midnight UTC
@@ -12,6 +17,7 @@ permissions:
 jobs:
   stale:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Close stale issues and PRs
         uses: actions/stale@v11
