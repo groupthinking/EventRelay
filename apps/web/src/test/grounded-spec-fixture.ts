@@ -17,6 +17,8 @@ export function browserSpecFixture() {
     },
     keyframes: [], concepts: [], requirements: [], code_snippets: [],
     artifacts: [], stack: { tools: [] },
+    chapters: [],
+    action_items: [],
     visual_context: {
       visual_elements: [{ timestamp: 5, element_type: 'interface', content: 'A task list with checkboxes.' }],
     },

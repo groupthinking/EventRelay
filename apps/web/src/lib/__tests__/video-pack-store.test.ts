@@ -49,6 +49,8 @@ function readyPack() {
     artifacts: [],
     stack: { tools: [] },
     visual_context: null,
+    chapters: [],
+    action_items: [],
   });
 }
 

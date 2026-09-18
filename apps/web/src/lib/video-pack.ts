@@ -11,8 +11,10 @@ import {
 } from '@/lib/video-pack-extractor';
 import {
   emptyPackFormation,
+  type VideoPackActionItem,
   type VideoPackArchitecture,
   type VideoPackArtifact,
+  type VideoPackChapter,
   type VideoPackStack,
 } from '@/lib/video-pack-types';
 import {
@@ -111,6 +113,8 @@ export interface VideoPackV0Json {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
   stack: VideoPackStack;
+  chapters: VideoPackChapter[];
+  action_items: VideoPackActionItem[];
   visual_context: VideoPackVisualContext | null;
   metrics: Record<string, number | string>;
   provenance: VideoPackProvenance;
@@ -172,6 +176,8 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
     architecture: null,
     artifacts: [],
     stack: { tools: [] },
+    chapters: [],
+    action_items: [],
     visual_context: null,
     metrics: {},
     provenance: {
@@ -197,6 +203,8 @@ export function applyExtractedSpec(
     architecture: spec.architecture ?? emptyPackFormation().architecture,
     artifacts: spec.artifacts ?? emptyPackFormation().artifacts,
     stack: spec.stack ?? emptyPackFormation().stack,
+    chapters: spec.chapters ?? emptyPackFormation().chapters,
+    action_items: spec.action_items ?? emptyPackFormation().action_items,
     visual_context: spec.visual_context,
     provenance: {
       ...identity.provenance,

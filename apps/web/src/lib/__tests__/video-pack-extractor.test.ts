@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
   KEYFRAME_IMAGES_OK,
@@ -27,6 +27,10 @@ import {
 
 const CANON = 'auJzb1D-fag';
 const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
+
+vi.mock('@/lib/youtube-metadata', () => ({
+  fetchYouTubeMetadata: vi.fn(async () => null),
+}));
 
 /** Live Eggs GET/pack failure class — Gemini cut mid-string around position 8050. */
 const EGGS_ID = 'vuLPccrooHU';
@@ -102,6 +106,23 @@ const SPEC_JSON = {
     summary: 'Short zoo clip with elephants',
     frame_analysis_count: 1,
   },
+  chapters: [
+    {
+      start: 0,
+      end: 5.2,
+      topic: 'At the zoo',
+      key_points: ['Elephants have long trunks'],
+    },
+  ],
+  action_items: [
+    {
+      id: 'action-1',
+      type: 'implementation',
+      title: 'Visit the elephant enclosure',
+      description: 'Observe how the speaker describes the elephants.',
+      difficulty: 'easy' as const,
+    },
+  ],
 };
 
 const MNNFAT_ID = 'MNNfat_QP0E';
@@ -257,6 +278,8 @@ describe('extractVideoPackSpec', () => {
         requirements: [],
         code_snippets: [],
         visual_context: null,
+        chapters: [],
+        action_items: [],
       }),
     }));
 
@@ -553,6 +576,13 @@ describe('applyExtractedSpec', () => {
     expect(merged.requirements[0]?.title).toBe('Show the enclosure');
     expect(merged.keyframes[0]?.desc).toBe('Elephants at the enclosure');
     expect(merged.provenance.tool_versions.extractor).toBe('google/gemini-3.8-flash');
+    expect(merged.chapters[0]).toMatchObject({
+      start: 0,
+      end: 5.2,
+      topic: 'At the zoo',
+      key_points: ['Elephants have long trunks'],
+    });
+    expect(merged.action_items[0]?.title).toBe('Visit the elephant enclosure');
   });
 
   it('copies architecture, artifacts, and stack.tools without changing source_hash', () => {
