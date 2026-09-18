@@ -4,6 +4,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { StructuredData } from '@/components/StructuredData';
+import { AuthSessionProvider } from '@/components/AuthSessionProvider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -104,7 +105,7 @@ export default function RootLayout({
         <div className="relative z-10">
           {/* Keep JSON-LD away from preview scripts injected into the head. */}
           <StructuredData />
-          {children}
+          <AuthSessionProvider>{children}</AuthSessionProvider>
         </div>
         {shouldLoadAnalytics && <Analytics />}
         {shouldLoadAnalytics && <SpeedInsights />}

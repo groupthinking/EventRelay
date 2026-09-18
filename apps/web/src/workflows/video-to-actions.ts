@@ -73,9 +73,10 @@ export async function videoToActionsWorkflow(
     throw new FatalError('Analysis quality gate failed: missing provenance');
   }
 
+  const providedTranscript = usableProvidedTranscript(input.transcript);
   const acted = await actionAgentStep({
     transcript: buildActionAgentSource(
-      usableProvidedTranscript(input.transcript) || evidence.transcript,
+      providedTranscript || evidence.transcript,
       sanitizeActEvents(input.events),
     ),
     videoTitle: input.videoTitle,
@@ -92,6 +93,7 @@ export async function videoToActionsWorkflow(
     transcriptChars: evidence.transcript.length,
     actionCount: actions.length,
     provider,
+    usedProvidedTranscript: Boolean(providedTranscript),
     actions,
     analysis,
     provenance,
