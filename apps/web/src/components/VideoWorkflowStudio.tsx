@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   ChevronRight,
   CheckCircle2,
@@ -363,6 +364,7 @@ function EmptyFrame() {
  * Renders the Video Workflow Studio interface.
  */
 export default function VideoWorkflowStudio() {
+  const router = useRouter();
   const [videoUrl, setVideoUrl] = useState('');
   const [selectedOutcome, setSelectedOutcome] = useState<OutcomeId>('app');
   const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
@@ -551,6 +553,7 @@ export default function VideoWorkflowStudio() {
       setActionMessage(`Workflow ${started.runId} running — polling transcript + actions…`);
 
       const polled = await pollVideoToActions(started.runId, {
+        statusUrl: started.statusUrl,
         attempts: 24,
         delayMs: 2000,
       });
@@ -610,7 +613,7 @@ export default function VideoWorkflowStudio() {
       });
       if (started.status === 401 || started.status === 403) {
         setActionMessage('Sign in to deploy. Redirecting to Google sign-in…');
-        window.location.assign('/login?callbackUrl=/studio');
+        router.push('/login?callbackUrl=/studio');
         return;
       }
       if (started.status === 400) {

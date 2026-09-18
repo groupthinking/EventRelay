@@ -12,6 +12,7 @@ export default function HomePasteForm() {
   const router = useRouter();
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
+  const helpId = error ? 'home-youtube-url-error' : 'home-youtube-url-help';
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -26,7 +27,7 @@ export default function HomePasteForm() {
 
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-2xl">
-      <label htmlFor="home-youtube-url" className="sr-only">
+      <label htmlFor="home-youtube-url" className="mb-2 block text-left text-sm font-semibold text-white/80">
         YouTube URL
       </label>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -37,9 +38,9 @@ export default function HomePasteForm() {
           placeholder="https://www.youtube.com/watch?v=auJzb1D-fag"
           autoComplete="off"
           inputMode="url"
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? 'home-youtube-url-error' : 'home-youtube-url-help'}
-          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-300 focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
+          aria-invalid={Boolean(error)}
+          aria-describedby={helpId}
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/70 focus-visible:ring-2 focus-visible:ring-teal-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
         />
         <button
           type="submit"
@@ -49,12 +50,12 @@ export default function HomePasteForm() {
         </button>
       </div>
       {error ? (
-        <p id="home-youtube-url-error" className="mt-3 text-sm text-amber-200" role="alert">
+        <p id="home-youtube-url-error" className="mt-2 text-left text-sm text-amber-300/90" role="alert">
           {error}
         </p>
       ) : (
-        <p id="home-youtube-url-help" className="mt-3 text-left text-xs leading-5 text-white/55">
-          A valid YouTube URL opens Studio and starts the existing hashed Video Pack path.
+        <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-white/55">
+          Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
         </p>
       )}
     </form>

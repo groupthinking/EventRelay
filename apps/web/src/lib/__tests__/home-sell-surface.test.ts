@@ -34,6 +34,18 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('$180');
   });
 
+  it('presents a responsive YouTube URL-to-Studio conversion hierarchy', () => {
+    const home = readSource('app/page.tsx');
+
+    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack in Studio.');
+    expect(home).toContain('transcript, event, and action outputs');
+    expect(home).toContain('Transcript quality varies by source.');
+    expect(home).toContain('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]');
+    expect(home).toContain('min-w-0');
+    expect(home).toContain('HomePasteForm');
+    expect(home).toContain('HomeProCheckout');
+  });
+
   it('does not claim arbitrary-video production E2E or a guaranteed transcript', () => {
     const home = readSource('app/page.tsx');
     const checkout = readSource('components/home/HomeProCheckout.tsx');
@@ -42,9 +54,10 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const structured = readSource('components/StructuredData.tsx');
     const ogAlt = readSource('app/opengraph-image.tsx');
     const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
-    expect(home).toContain('Paste a YouTube URL. Continue in Studio.');
-    expect(home).toContain('Paste a YouTube URL to start a hashed Video Pack');
+    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack in Studio.');
+    expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('Transcript quality varies by source');
+    expect(home).toMatch(/No guaranteed production\s+outcome\./);
     expect(layout).toContain('Transcript quality varies by source');
     expect(structured).toContain('Transcript quality varies by source');
     expect(sellCopy).not.toContain('Ship the work.');
@@ -61,10 +74,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
   it('keeps the Home URL field labelled, described, announced, and keyboard-visible', () => {
     const paste = readSource('components/home/HomePasteForm.tsx');
     expect(paste).toContain('htmlFor="home-youtube-url"');
-    expect(paste).toContain("aria-invalid={error ? true : undefined}");
-    expect(paste).toContain(
-      "aria-describedby={error ? 'home-youtube-url-error' : 'home-youtube-url-help'}",
-    );
+    expect(paste).toContain('aria-invalid={Boolean(error)}');
+    expect(paste).toContain('aria-describedby={helpId}');
     expect(paste).toContain('id="home-youtube-url-error"');
     expect(paste).toContain('id="home-youtube-url-help"');
     expect(paste).toContain('role="alert"');
