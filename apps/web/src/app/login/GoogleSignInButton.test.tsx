@@ -11,11 +11,34 @@ const initialUrl = window.location.href;
 
 afterEach(() => {
   cleanup();
+  vi.mocked(signIn).mockReset();
   vi.restoreAllMocks();
   window.history.replaceState({}, '', initialUrl);
 });
 
 describe('GoogleSignInButton', () => {
+  it('keeps a failed initiation retryable when rapid clicks race before the disabled state renders', async () => {
+    vi.mocked(signIn)
+      .mockRejectedValueOnce(new Error('provider response details must stay private'))
+      .mockImplementationOnce(() => new Promise<never>(() => undefined));
+
+    render(<GoogleSignInButton callbackUrl="/studio" />);
+
+    const button = screen.getByRole('button', { name: 'Continue with Google' });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: 'Continue with Google' }).hasAttribute('disabled'),
+      ).toBe(false);
+    });
+
+    expect(signIn).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('alert').textContent).toBe(genericError);
+  });
+
   it('restores a retryable button and announces a generic error after sign-in rejects', async () => {
     vi.mocked(signIn)
       .mockRejectedValueOnce(new Error('provider response details must stay private'))
