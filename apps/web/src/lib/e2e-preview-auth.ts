@@ -1,7 +1,7 @@
 const VERCEL_SSO_PATH = /vercel\.com\/sso-api/i;
 
 export function buildVercelProtectionBypassHeaders(
-  secret: string | null | undefined,
+  secret: string | null | undefined = process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
 ): Record<string, string> {
   const token = secret?.trim();
   return token ? { 'x-vercel-protection-bypass': token } : {};

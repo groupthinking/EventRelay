@@ -1,10 +1,12 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildVercelProtectionBypassHeaders,
   isVercelProtectionResponse,
 } from '../e2e-preview-auth';
 
 describe('E2E preview auth helpers', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   it('sends only the per-request Vercel bypass header', () => {
     expect(buildVercelProtectionBypassHeaders('')).toEqual({});
     expect(buildVercelProtectionBypassHeaders('preview-secret')).toEqual({
@@ -13,6 +15,18 @@ describe('E2E preview auth helpers', () => {
     expect(buildVercelProtectionBypassHeaders('preview-secret')).not.toHaveProperty(
       'x-vercel-set-bypass-cookie',
     );
+  });
+
+  it('reads Vercel bypass secret from env for each call', () => {
+    vi.stubEnv('VERCEL_AUTOMATION_BYPASS_SECRET', 'first-secret');
+    expect(buildVercelProtectionBypassHeaders()).toEqual({
+      'x-vercel-protection-bypass': 'first-secret',
+    });
+
+    vi.stubEnv('VERCEL_AUTOMATION_BYPASS_SECRET', 'second-secret');
+    expect(buildVercelProtectionBypassHeaders()).toEqual({
+      'x-vercel-protection-bypass': 'second-secret',
+    });
   });
 
   it.each([
