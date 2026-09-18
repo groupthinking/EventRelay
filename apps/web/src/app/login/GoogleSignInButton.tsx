@@ -29,9 +29,20 @@ export function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
     setIsSubmitting(true);
     setError(null);
 
+    const initialLocation = window.location.href;
+
     try {
       await signIn('google', { callbackUrl });
+
+      if (window.location.href !== initialLocation) {
+        return;
+      }
+
       recoveryTimer.current = window.setTimeout(() => {
+        if (window.location.href !== initialLocation) {
+          return;
+        }
+
         setError(GOOGLE_SIGN_IN_ERROR);
         setIsSubmitting(false);
       }, GOOGLE_SIGN_IN_HANDOFF_RECOVERY_MS);
@@ -42,21 +53,21 @@ export function GoogleSignInButton({ callbackUrl }: GoogleSignInButtonProps) {
   }
 
   return (
-    <div className="w-full">
+    <div className="space-y-3">
       <button
         type="button"
         onClick={handleSignIn}
         disabled={isSubmitting}
         className={clsx(
           'flex w-full items-center justify-center gap-3 rounded-lg bg-white px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:cursor-wait disabled:opacity-70',
-          'focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950'
+          'focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-300 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950',
         )}
       >
         <LogIn className="h-5 w-5" aria-hidden="true" />
         {isSubmitting ? 'Redirecting to Google…' : 'Continue with Google'}
       </button>
       {error ? (
-        <p role="alert" className="mt-3 text-sm text-red-300">
+        <p role="alert" className="text-sm text-rose-300">
           {error}
         </p>
       ) : null}

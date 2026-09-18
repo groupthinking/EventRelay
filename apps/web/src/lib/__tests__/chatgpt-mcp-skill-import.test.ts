@@ -90,7 +90,21 @@ describe('fixture-only MCP Skill → ChatGPT handoff', () => {
       },
       wire_contract: {
         extension_id: MCP_SKILLS_EXTENSION_ID,
-        specification_commit: 'd866efdba298b55b8156c7b7aa1bdebc1b625f4c',
+        normative_contract: {
+          repository: 'modelcontextprotocol/modelcontextprotocol',
+          path: 'seps/2640-skills-extension.md',
+          commit: '1eb5bbe8ac933bdb595fedc687b8ed545e440491',
+        },
+        design_history: {
+          repository: 'modelcontextprotocol/ext-skills',
+          path: 'specs/skills.md',
+          commit: 'd866efdba298b55b8156c7b7aa1bdebc1b625f4c',
+        },
+        evidence_source_migration: {
+          repository: 'modelcontextprotocol/modelcontextprotocol',
+          path: 'seps/2640-skills-extension.md',
+          commit: 'f56f204f6290f6531b14d5734eb3e0a10f0eb201',
+        },
       },
       compound_identity: {
         server_identity: 'https://mcp.eventrelay.example',
@@ -101,6 +115,24 @@ describe('fixture-only MCP Skill → ChatGPT handoff', () => {
     expect(first.manifest.resource_count).toBe(2);
     expect(first.manifest.digest).toMatch(/^[a-f0-9]{64}$/);
     expect(first.receipt_hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('pins the normative MCP Skills source to the accepted core SEP, not research/archive evidence', () => {
+    const receipt = createFixtureChatGptSkillImport(fixture());
+
+    expect(receipt.wire_contract.normative_contract.repository).toBe(
+      'modelcontextprotocol/modelcontextprotocol',
+    );
+    expect(receipt.wire_contract.normative_contract.path).toBe('seps/2640-skills-extension.md');
+    expect(receipt.wire_contract.normative_contract.commit).toBe(
+      '1eb5bbe8ac933bdb595fedc687b8ed545e440491',
+    );
+    expect(receipt.wire_contract.normative_contract.repository).not.toBe(
+      receipt.wire_contract.design_history.repository,
+    );
+    expect(receipt.wire_contract.normative_contract.path).not.toMatch(
+      /(?:^|\/)(?:docs\/archive|archive)\//,
+    );
   });
 
   it('treats GO-style skill content and cache metadata as having no authority effect', () => {
@@ -216,6 +248,16 @@ describe('fixture-only MCP Skill → ChatGPT handoff', () => {
     const dynamic = fixture();
     dynamic.result.skill.resources = 'dynamic';
     expect(() => createFixtureChatGptSkillImport(dynamic)).toThrow(/dynamic skill resources/i);
+  });
+
+  it('fails closed on malformed wire-data shapes instead of throwing runtime type errors', () => {
+    const badServerIdentity = fixture() as any;
+    badServerIdentity.serverIdentity = { origin: 'https://mcp.eventrelay.example' };
+    expect(() => createFixtureChatGptSkillImport(badServerIdentity)).toThrow(/server identity/i);
+
+    const badResources = fixture() as any;
+    badResources.result.skill.resources = null;
+    expect(() => createFixtureChatGptSkillImport(badResources)).toThrow(/resources/i);
   });
 
   it('validates direct skills/get by URI without relying on skills/list', () => {

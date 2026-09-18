@@ -25,7 +25,12 @@ env:
   #      an explicit missing-secret message rather than silently asserting
   #      against Vercel's login page. If no PR preview can be resolved, the
   #      workflow fails closed rather than silently skipping the gate or probing
-  #      production.
+  #      production. Every suite request also carries `X-EventRelay-Probe: e2e`
+  #      and `User-Agent: EventRelay-E2E/<GITHUB_RUN_ID>`; proxy.ts emits the
+  #      bounded `e2e_probe_request` event so Vercel logs can be filtered by run.
+  #      These headers are observability only and never authorize or bypass limits.
+  #      Search `e2e_probe_request` plus the run ID to isolate a suite execution.
+  #      The marker-only matcher leaves ordinary public-page traffic untouched.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -73,8 +78,10 @@ jobs:
         run: |
           SHA="${{ github.event.pull_request.head.sha }}"
           PREVIEW_URL=""
+          MAX_PREVIEW_LOOKUP_ATTEMPTS=12
+          PREVIEW_LOOKUP_DELAY_SECONDS=10
 
-          for i in $(seq 1 30); do
+          for i in $(seq 1 "$MAX_PREVIEW_LOOKUP_ATTEMPTS"); do
             DEPLOYMENT_STATUS=0
             DEPLOY_ID=$(gh api \
               "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
@@ -82,6 +89,10 @@ jobs:
             if [ -s deployments.err ]; then
               echo "gh api deployments stderr:" >&2
               cat deployments.err >&2
+              if grep -qi 'rate limit' deployments.err; then
+                echo "::error::GitHub API rate limit reached while resolving the Vercel preview. Preserve this draft and rerun the required E2E check after the quota resets." >&2
+                exit 1
+              fi
             fi
             rm -f deployments.err
 
@@ -97,6 +108,10 @@ jobs:
               if [ -s deployment-status.err ]; then
                 echo "gh api deployment statuses stderr:" >&2
                 cat deployment-status.err >&2
+                if grep -qi 'rate limit' deployment-status.err; then
+                  echo "::error::GitHub API rate limit reached while resolving the Vercel preview. Preserve this draft and rerun the required E2E check after the quota resets." >&2
+                  exit 1
+                fi
               fi
               rm -f deployment-status.err
 
@@ -109,7 +124,7 @@ jobs:
               break
             fi
 
-            sleep 10
+            sleep "$PREVIEW_LOOKUP_DELAY_SECONDS"
           done
 
           if [ -n "$PREVIEW_URL" ]; then

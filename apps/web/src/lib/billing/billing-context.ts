@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { getToken } from 'next-auth/jwt';
+import { getNextAuthJwtFromRequest, type NextAuthJwtRequest } from '@/lib/auth-jwt';
 import { normalizeBillingEmail } from './entitlement-store';
 import { verifyBillingEmailCookie } from './billing-cookie';
 
@@ -17,7 +17,7 @@ export async function resolveTrustedBillingEmail(
   const secret = process.env.NEXTAUTH_SECRET;
   if (secret) {
     try {
-      const token = await getToken({ req: request as Parameters<typeof getToken>[0]['req'], secret });
+      const token = await getNextAuthJwtFromRequest(request as unknown as NextAuthJwtRequest, secret);
       const sessionEmail = typeof token?.email === 'string' ? token.email : null;
       if (sessionEmail?.trim()) {
         return normalizeBillingEmail(sessionEmail);

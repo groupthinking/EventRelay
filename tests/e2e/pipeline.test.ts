@@ -14,13 +14,14 @@
  *   BASE_URL — deployment URL (default: https://uvai.io)
  *   TEST_YOUTUBE_URL — short video for pipeline test
  *     (default: https://www.youtube.com/watch?v=auJzb1D-fag)
+ *   GITHUB_RUN_ID — included in the E2E User-Agent for production attribution
  *
  * Red/Green Signal:
  *   - GREEN: all tests pass → stdout: "✅ ALL TESTS PASSED"
  *   - RED: any failure → stdout: "🔴 FAILURE DETECTED" + details
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { afterEach, describe, it, expect, beforeAll, vi } from 'vitest';
 
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
@@ -31,19 +32,24 @@ const TEST_YOUTUBE_URL =
 // to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
 // "Protection Bypass for Automation" secret. It is attached as a header on
 // every request so the preview is reachable. Unset (the default — e.g. when
-// BASE_URL is production) → no header is added and behaviour is unchanged.
-const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+// BASE_URL is production) → no bypass header is added; E2E attribution remains.
+const E2E_RUN_ID = process.env.GITHUB_RUN_ID?.trim() || 'local';
+const E2E_USER_AGENT = `EventRelay-E2E/${E2E_RUN_ID}`;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-/** Merge the Vercel protection-bypass header into a request init, when configured. */
-function withBypass(init?: RequestInit): RequestInit {
-  if (!VERCEL_BYPASS_SECRET) return init ?? {};
+/** Add stable E2E attribution and the optional Vercel protection bypass. */
+function withE2EHeaders(init?: RequestInit): RequestInit {
   // Normalize via the Headers constructor so any HeadersInit shape (plain
   // object, Headers instance, or [key, value][] array) is preserved — a bare
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
-  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
+  headers.set('User-Agent', E2E_USER_AGENT);
+  headers.set('X-EventRelay-Probe', 'e2e');
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+  if (bypassSecret) {
+    headers.set('x-vercel-protection-bypass', bypassSecret);
+  }
   // Deliberately NOT sending `x-vercel-set-bypass-cookie`. That header asks
   // Vercel to persist the bypass as a cookie and answers every request with
   // `307 → /`. `fetch` has no cookie jar, so the redirect target is requested
@@ -67,7 +73,7 @@ async function fetchWithTimeout(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...withBypass(init), signal: controller.signal });
+      const res = await fetch(url, { ...withE2EHeaders(init), signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {
@@ -89,6 +95,56 @@ async function fetchWithTimeout(
   }
   throw lastError || new Error('fetchWithTimeout: max retries exceeded');
 }
+
+describe('E2E request attribution', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('adds the probe and GitHub run identity headers to every request', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    let capturedInit: RequestInit | undefined;
+
+    try {
+      await fetchWithTimeout(
+        'https://example.test/api/health',
+        { headers: { Accept: 'application/json' } },
+        100,
+        1,
+      );
+      capturedInit = fetchSpy.mock.calls[0]?.[1];
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const headers = new Headers(capturedInit?.headers);
+    const runId = process.env.GITHUB_RUN_ID?.trim() || 'local';
+
+    expect(headers.get('user-agent')).toBe(`EventRelay-E2E/${runId}`);
+    expect(headers.get('x-eventrelay-probe')).toBe('e2e');
+    expect(headers.get('accept')).toBe('application/json');
+  });
+
+  it('forwards the configured preview bypass on every request without persisting it', async () => {
+    vi.stubEnv('VERCEL_AUTOMATION_BYPASS_SECRET', 'preview-bypass-test-value');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      const bypassed = headers.get('x-vercel-protection-bypass') === 'preview-bypass-test-value';
+      return new Response(null, { status: bypassed ? 204 : 401 });
+    });
+
+    try {
+      const response = await fetchWithTimeout('https://preview.example.test/api/health', undefined, 100, 1);
+      const headers = new Headers(fetchSpy.mock.calls[0]?.[1]?.headers);
+
+      expect(response.status).toBe(204);
+      expect(headers.get('x-vercel-protection-bypass')).toBe('preview-bypass-test-value');
+      expect(headers.has('x-vercel-set-bypass-cookie')).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+});
 
 /** Parse an SSE text stream into an array of parsed JSON events. */
 function parseSSEEvents(raw: string): Array<Record<string, unknown>> {

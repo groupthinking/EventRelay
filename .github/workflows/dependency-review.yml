@@ -27,10 +27,23 @@ concurrency:
 jobs:
   dependency-review:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Submit dependency snapshots
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: advanced-security/component-detection-dependency-submission-action@31f25a8de68ae5ce2ca274bc28546a78683c15ce # v0.1.4
+        with:
+          snapshot-sha: ${{ github.event.pull_request.head.sha }}
+          snapshot-ref: ${{ format('refs/heads/{0}', github.event.pull_request.head.ref) }}
 
       - name: Dependency Review
         uses: actions/dependency-review-action@v5
