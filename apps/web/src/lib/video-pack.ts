@@ -29,6 +29,9 @@ import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
 
 export const IDENTITY_VERSION = 'v0' as const;
 
+/** Bump when stored packs must re-extract (e.g. Cut B1 chapters + action_items). */
+export const VIDEO_PACK_STRUCTURE_SCHEMA_VERSION = 'b1-structured-v1' as const;
+
 export {
   KEYFRAME_IMAGES_OK,
   KEYFRAME_IMAGES_OK_NOTE,
@@ -220,6 +223,7 @@ export function applyExtractedSpec(
       tool_versions: {
         ...identity.provenance.tool_versions,
         extractor: VIDEO_PACK_EXTRACTOR_MODEL,
+        pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
       },
       notes: salvaged
         ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
@@ -242,6 +246,13 @@ export function applyExtractedSpec(
 
 export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
   return pack.transcript.full_text === `cite:youtube:${pack.video_id}`;
+}
+
+/** True when a ready extracted pack predates the current structured schema (pre-B1 cache). */
+export function packNeedsStructuredRefresh(pack: VideoPackV0Json): boolean {
+  if (isIdentityOnlyPack(pack)) return false;
+  const marked = pack.provenance.tool_versions?.pack_structure;
+  return marked !== VIDEO_PACK_STRUCTURE_SCHEMA_VERSION;
 }
 
 const SOURCE_HASH = /^[a-f0-9]{64}$/;
@@ -398,7 +409,9 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
   const sourceHash = identity.provenance.source_hash;
 
   const existing = await getPackRecord(sourceHash);
-  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack)) {
+  const reclaimStructuredRefresh =
+    existing?.state === 'ready' && packNeedsStructuredRefresh(existing.pack);
+  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack) && !reclaimStructuredRefresh) {
     return recordToResponse(existing);
   }
   if (existing?.state === 'processing' && !isProcessingStale(existing)) {
@@ -410,12 +423,16 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
 
   let claimed: Awaited<ReturnType<typeof claimPackProcessing>>;
   try {
-    claimed = await claimPackProcessing({
-      video_id: identity.video_id,
-      source_url: identity.source_url,
-      source_hash: sourceHash,
-      id: identity.id,
-    });
+    claimed = await claimPackProcessing(
+      {
+        video_id: identity.video_id,
+        source_url: identity.source_url,
+        source_hash: sourceHash,
+        id: identity.id,
+      },
+      new Date(),
+      { reclaimReady: reclaimStructuredRefresh },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Video pack claim failed.';
     return NextResponse.json({ status: 'error', error: message }, { status: 503 });
