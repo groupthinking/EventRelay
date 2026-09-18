@@ -63,6 +63,10 @@ pip install -e '.[dev,youtube]'
 PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --reload --port 8000
 ```
 
+Local readiness checks now bootstrap the parent directory for sqlite URLs
+(`DATABASE_URL` / `API_COST_DATABASE_URL`) so the default dev path
+`sqlite:///./.runtime/app.db` does not require a manual `.runtime` mkdir first.
+
 Set the web runtime's `BACKEND_URL` to the intended backend. A missing backend must produce an honest unavailable/handoff result, not a fabricated deployment receipt. Provider credentials and auth configuration stay in the environment, never in Git.
 
 ### Configuration boundaries
