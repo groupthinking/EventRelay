@@ -32,7 +32,7 @@ workflow; this README is the index.
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
-| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Drift report: PRs without canonical issues, competing PRs, stale branches; auto-comments on untracked PRs and auto-closes superseded drafts |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; repository state changes | Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
 
 ## Key Workflows
 
