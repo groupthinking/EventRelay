@@ -52,6 +52,10 @@ describe('VideoWorkflowStudio', () => {
     vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: 401 });
     render(<VideoWorkflowStudio />);
 
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe(
+      '/login?callbackUrl=%2Fstudio',
+    );
+
     fireEvent.change(screen.getByLabelText('Paste a YouTube link'), {
       target: { value: 'https://www.youtube.com/watch?v=auJzb1D-fag' },
     });
@@ -70,6 +74,6 @@ describe('VideoWorkflowStudio', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run deploy handoff' }));
       await Promise.resolve();
     });
-    expect(navigation.push).toHaveBeenCalledWith('/login?callbackUrl=/studio');
+    expect(navigation.push).toHaveBeenCalledWith('/login?callbackUrl=%2Fstudio');
   });
 });
