@@ -481,19 +481,144 @@ class TestLoggingServiceCleanup:
         assert len(service.log_buffer) == 0
 
     async def test_cleanup_with_flush_task_none(self, service):
-        service.flush_task = None
+        await service.cleanup()
+        assert service.flush_task is None
         await service.cleanup()  # Should not raise
 
     async def test_cleanup_with_flush_task_set(self, service):
-        # Create a long-running dummy task and assign it
-        async def dummy():
-            await asyncio.sleep(100)
-
-        task = asyncio.create_task(dummy())
-        service.flush_task = task
+        task = service.flush_task
+        assert task is not None
+        assert not task.done()
         await service.cleanup()
-        # task.cancel() was called; task is either cancelling or cancelled
-        assert task.cancelled() or task.cancelling() > 0 or task.done()
+        assert task.done()
+        assert not task.cancelled()
+
+    async def test_await_task_completion_handles_cancelled_owned_task(self):
+        task = asyncio.create_task(asyncio.sleep(60))
+        task.cancel()
+
+        cancellation_requested, error = (
+            await LoggingService._await_task_completion(task)
+        )
+
+        assert cancellation_requested is False
+        assert isinstance(error, asyncio.CancelledError)
+
+    async def test_cleanup_preserves_simultaneous_caller_cancellation(self, service):
+        await service.cleanup()
+        owned_task = asyncio.create_task(asyncio.sleep(60))
+        service.flush_task = owned_task
+        service._write_to_files = AsyncMock()
+        await service.log_structured("INFO", "before simultaneous cancellation")
+
+        cleanup_task = asyncio.create_task(service.cleanup())
+        await asyncio.sleep(0)
+        assert owned_task.cancel()
+        assert cleanup_task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await cleanup_task
+
+        service._write_to_files.assert_awaited_once()
+        flushed_entries = service._write_to_files.await_args.args[0]
+        assert [entry.message for entry in flushed_entries] == [
+            "before simultaneous cancellation"
+        ]
+        assert owned_task.cancelled()
+        assert service.flush_task is None
+        assert service.log_buffer == []
+
+    async def test_cleanup_waits_for_in_flight_periodic_flush(self, tmp_path):
+        service = LoggingService(config={
+            "log_directory": tmp_path / "logs",
+            "enable_remote_logging": False,
+            "flush_interval": 0,
+        })
+        write_started = asyncio.Event()
+        allow_write = asyncio.Event()
+        written_entries = []
+
+        async def blocking_write(entries):
+            write_started.set()
+            await allow_write.wait()
+            written_entries.extend(entries)
+
+        service._write_to_files = blocking_write
+        await service.log_structured("INFO", "before cleanup")
+        await asyncio.wait_for(write_started.wait(), timeout=1)
+
+        cleanup_task = asyncio.create_task(service.cleanup())
+        await asyncio.sleep(0)
+
+        assert service._flush_stop_event.is_set()
+        assert not cleanup_task.done()
+        allow_write.set()
+        await cleanup_task
+        assert [entry.message for entry in written_entries] == ["before cleanup"]
+        assert service.log_buffer == []
+
+    async def test_cleanup_final_flush_runs_after_periodic_task_failure(self, service):
+        await service.cleanup()
+
+        async def fail_periodic_flush():
+            raise RuntimeError("periodic flush failed")
+
+        service.flush_task = asyncio.create_task(fail_periodic_flush())
+        await asyncio.sleep(0)
+        service._write_to_files = AsyncMock()
+        await service.log_structured("INFO", "after periodic failure")
+
+        await service.cleanup()
+
+        service._write_to_files.assert_awaited_once()
+        flushed_entries = service._write_to_files.await_args.args[0]
+        assert [entry.message for entry in flushed_entries] == [
+            "after periodic failure"
+        ]
+        assert service.flush_task is None
+        assert service.log_buffer == []
+
+    async def test_cancelled_cleanup_finishes_in_flight_flush_before_reraising(
+        self, tmp_path
+    ):
+        service = LoggingService(config={
+            "log_directory": tmp_path / "logs",
+            "enable_remote_logging": False,
+            "flush_interval": 0,
+        })
+        write_started = asyncio.Event()
+        allow_write = asyncio.Event()
+        written_entries = []
+
+        async def blocking_write(entries):
+            write_started.set()
+            await allow_write.wait()
+            written_entries.extend(entries)
+
+        service._write_to_files = blocking_write
+        await service.log_structured("INFO", "before cancelled cleanup")
+        await asyncio.wait_for(write_started.wait(), timeout=1)
+        periodic_task = service.flush_task
+        assert periodic_task is not None
+
+        cleanup_task = asyncio.create_task(service.cleanup())
+        await service._flush_stop_event.wait()
+        cleanup_task.cancel()
+        await asyncio.sleep(0)
+
+        assert not cleanup_task.done()
+        assert not periodic_task.cancelled()
+        allow_write.set()
+        with pytest.raises(asyncio.CancelledError):
+            await cleanup_task
+
+        assert [entry.message for entry in written_entries] == [
+            "before cancelled cleanup"
+        ]
+        assert periodic_task.done()
+        assert not periodic_task.cancelled()
+        assert service.flush_task is None
+        assert service.log_buffer == []
 
 
 class TestLoggingServiceBufferFlush:
