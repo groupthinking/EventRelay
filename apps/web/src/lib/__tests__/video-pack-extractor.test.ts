@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
   KEYFRAME_IMAGES_OK,
@@ -286,6 +286,31 @@ describe('extractVideoPackSpec', () => {
     await expect(
       extractVideoPackSpec({ sourceUrl: SOURCE_URL, videoId: CANON }, { generateText }),
     ).rejects.toBeInstanceOf(VideoPackExtractError);
+  });
+
+  it('derives action_items from requirements when the model omits them', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        action_items: [],
+        chapters: [],
+      }),
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+
+    expect(spec.action_items).toEqual([
+      expect.objectContaining({
+        id: 'req-1',
+        title: 'Show the enclosure',
+        description: 'The speaker points at the elephants.',
+        type: 'implementation',
+      }),
+    ]);
   });
 
   it('asks Gemini for keyframe t_s + desc only and forbids invented image_path URLs', async () => {
