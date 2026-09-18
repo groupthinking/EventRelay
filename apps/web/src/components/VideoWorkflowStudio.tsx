@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { clsx } from 'clsx';
 import { useRealtimeVoice } from '@/hooks/use-realtime-voice';
+import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import {
   studioRunQuality,
   studioStatusLabel,
@@ -45,6 +46,7 @@ type RunState = 'idle' | 'working' | 'ready';
 type ResultAction = 'preview' | 'export' | 'deploy' | 'save';
 
 const DEFAULT_PROMPT = 'Turn this video into a polished workflow I can review, export, and deploy.';
+const studioLoginHref = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
 
 interface GeneratedPackage {
   title: string;
@@ -613,7 +615,7 @@ export default function VideoWorkflowStudio() {
       });
       if (started.status === 401 || started.status === 403) {
         setActionMessage('Sign in to deploy. Redirecting to Google sign-in…');
-        router.push('/login?callbackUrl=/studio');
+        router.push(studioLoginHref);
         return;
       }
       if (started.status === 400) {
@@ -788,7 +790,7 @@ export default function VideoWorkflowStudio() {
 
           <div className="flex items-center gap-2">
             <Link
-              href="/login?callbackUrl=/studio"
+              href={studioLoginHref}
               className="hidden rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 sm:inline-flex"
             >
               Sign in
