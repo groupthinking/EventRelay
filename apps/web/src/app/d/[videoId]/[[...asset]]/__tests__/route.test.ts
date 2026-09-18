@@ -36,6 +36,7 @@ function extractedSpec() {
       desc: event.content,
     })),
     concepts: ['flat tire replacement'],
+    code_snippets: [],
     requirements: QJ_SOP_STEPS.map((step) => ({
       id: step.id,
       title: step.title,
@@ -43,6 +44,7 @@ function extractedSpec() {
       priority: 'HIGH',
       tags: [],
     })),
+    artifacts: [],
     stack: { tools: [] },
     visual_context: {
       visual_elements: QJ_VISUAL_EVENTS.map((event) => ({
