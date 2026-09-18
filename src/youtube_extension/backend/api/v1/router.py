@@ -781,7 +781,6 @@ async def process_video_markdown_v1(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded"
         )
 
-    health_service.increment_metric("requests_total")
     health_service.increment_metric("process_video_markdown_total")
 
     try:

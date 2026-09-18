@@ -5,6 +5,7 @@ Unit tests for FastAPI middleware: rate limiting, API key auth, and security hea
 from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -18,6 +19,7 @@ from youtube_extension.backend.middleware.rate_limiting import (
     RateLimitMiddleware,
     create_rate_limit_middleware,
 )
+from youtube_extension.backend.middleware.metrics import PrometheusMetricsMiddleware
 from youtube_extension.backend.middleware.security_headers import (
     SecurityHeadersMiddleware,
     create_security_headers_middleware,
@@ -333,3 +335,50 @@ class TestSecurityHeadersMiddleware:
             enable_hsts=False, hsts_max_age=3600
         )
         assert issubclass(middleware_cls, SecurityHeadersMiddleware)
+
+
+class _RecordingHealthService:
+    def __init__(self) -> None:
+        self.application_checker = types.SimpleNamespace(request_count=0)
+        self.metric_calls: list[tuple[str, float]] = []
+
+    def increment_metric(self, name: str, amount: float = 1.0) -> None:
+        self.metric_calls.append((name, amount))
+
+    def record_request(self) -> None:
+        self.application_checker.request_count += 1
+
+
+class TestPrometheusMetricsMiddleware:
+    def test_tracks_labeled_requests_without_duplicate_total_counter(
+        self, monkeypatch
+    ):
+        health_service = _RecordingHealthService()
+        service_container = types.ModuleType(
+            "youtube_extension.backend.containers.service_container"
+        )
+        service_container.get_service = lambda name: health_service
+        monkeypatch.setitem(
+            sys.modules,
+            "youtube_extension.backend.containers.service_container",
+            service_container,
+        )
+
+        app = FastAPI()
+        app.add_middleware(PrometheusMetricsMiddleware)
+
+        @app.get("/test")
+        def test_route():
+            return {"status": "ok"}
+
+        client = TestClient(app, raise_server_exceptions=False)
+
+        first_response = client.get("/test")
+        second_response = client.get("/test")
+
+        assert first_response.headers["x-request-count"] == "1"
+        assert second_response.headers["x-request-count"] == "2"
+
+        metric_names = [name for name, _ in health_service.metric_calls]
+        assert 'requests_total{method="GET",endpoint="/test",status="200"}' in metric_names
+        assert "requests_total" not in metric_names

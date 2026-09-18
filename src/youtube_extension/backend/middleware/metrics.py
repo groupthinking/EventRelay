@@ -75,6 +75,7 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
 
         start_time = time.time()
         status_code = 500
+        response: Response | None = None
 
         try:
             response = await call_next(request)
@@ -89,13 +90,20 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
             # 2. Decrement active connections gauge (if mock allows amount, decrement is possible; otherwise ignored)
             _safe_increment(health_service, "active_connections", -1.0)
 
+            request_count = None
+            try:
+                health_service.record_request()
+                application_checker = getattr(health_service, "application_checker", None)
+                request_count = getattr(application_checker, "request_count", None)
+            except Exception:
+                request_count = None
+
             # Record metrics with tags/labels
             status_str = str(status_code)
 
             # Request count counter
             req_key = f'requests_total{{method="{method}",endpoint="{endpoint}",status="{status_str}"}}'
             _safe_increment(health_service, req_key, 1.0)
-            _safe_increment(health_service, "requests_total", 1.0)
 
             # Error count counter (>= 400)
             if status_code >= 400:
@@ -132,3 +140,6 @@ class PrometheusMetricsMiddleware(BaseHTTPMiddleware):
                 struct_logger.info("request_processed", **log_payload)
             else:
                 logger.info(f"request_processed: {log_payload}")
+
+            if response is not None and request_count is not None:
+                response.headers["X-Request-Count"] = str(request_count)
