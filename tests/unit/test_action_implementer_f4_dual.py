@@ -7,7 +7,10 @@ Shim re-exports the adapter class only.
 
 from __future__ import annotations
 
+import importlib
+import sys
 import warnings
+from pathlib import Path
 
 
 def test_shim_exports_same_class_as_adapter():
@@ -43,6 +46,22 @@ def test_offline_builder_warns_and_reexports_agent():
         warnings.simplefilter("always", DeprecationWarning)
         offline_mod.ActionImplementer()
     assert any(issubclass(w.category, DeprecationWarning) for w in caught)
+
+
+def test_offline_builder_import_does_not_eager_load_unrelated_agents():
+    for module_name in (
+        "agents",
+        "agents.action_implementer",
+        "agents.gemini_video_master_agent",
+    ):
+        sys.modules.pop(module_name, None)
+
+    offline_mod = importlib.import_module("agents.action_implementer")
+
+    assert offline_mod.ActionImplementer.role == "offline_plan_builder"
+    assert "agents.gemini_video_master_agent" not in sys.modules
+    init_src = Path(__file__).resolve().parents[2] / "src" / "agents" / "__init__.py"
+    assert "from .gemini_video_master_agent import" not in init_src.read_text()
 
 
 def test_registry_registers_adapter_once():

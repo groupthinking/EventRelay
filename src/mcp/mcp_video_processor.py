@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 from utils.path_utils import select_readable_file, select_writable_dir
+from youtube_extension.utils.proxy import get_transcript_proxy_config
 
 # MCP integration imports
 try:
@@ -691,7 +692,9 @@ class MCPVideoProcessor:
             # executor — otherwise it stalls the event loop and defeats the
             # @timeout_protection / circuit-breaker hanging protection.
             loop = asyncio.get_event_loop()
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(
+                proxy_config=get_transcript_proxy_config()
+            )
             transcript = await loop.run_in_executor(
                 None,
                 lambda: yt_api.fetch(
@@ -715,15 +718,31 @@ class MCPVideoProcessor:
             # These are blocking network calls — run them in an executor to keep
             # the event loop free and let the timeout protection work.
             loop = asyncio.get_event_loop()
-            yt_api = YouTubeTranscriptApi()
+            yt_api = YouTubeTranscriptApi(
+                proxy_config=get_transcript_proxy_config()
+            )
             transcript_list = await loop.run_in_executor(
                 None, lambda: yt_api.list(video_id)
             )
-            for transcript_item in transcript_list:
+
+            async def _fetch_transcript(item):
                 try:
-                    transcript = await loop.run_in_executor(
-                        None, lambda item=transcript_item: item.fetch().to_raw_data()
+                    return await loop.run_in_executor(
+                        None, lambda i=item: i.fetch().to_raw_data()
                     )
+                except Exception as inner_e:
+                    self.mcp_logger.warning(
+                        "⚠️ MCP route failed", error=inner_e, video_id=video_id
+                    )
+                    return None
+
+            tasks = [
+                asyncio.create_task(_fetch_transcript(item)) for item in transcript_list
+            ]
+
+            try:
+                for task in tasks:
+                    transcript = await task
                     if transcript and len(transcript) > 0:
                         self.mcp_logger.info(
                             "✅ MCP-routed extraction successful",
@@ -731,11 +750,11 @@ class MCPVideoProcessor:
                             video_id=video_id,
                         )
                         return transcript
-                except Exception as inner_e:
-                    self.mcp_logger.warning(
-                        "⚠️ MCP route failed", error=inner_e, video_id=video_id
-                    )
-                    continue
+            finally:
+                for task in tasks:
+                    if not task.done():
+                        task.cancel()
+
             raise NoTranscriptFound("No routed transcript found")
 
         # Method 1: Direct API with circuit breaker protection

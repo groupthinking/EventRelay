@@ -2,16 +2,17 @@ import 'server-only';
 
 import type { NextAuthOptions } from 'next-auth';
 import GoogleProvider from 'next-auth/providers/google';
+import { nextAuthUseSecureCookies } from '@/lib/auth-jwt';
 
 const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
 const googleClientId = (
-  process.env.GOOGLE_OAUTH_CLIENT_ID ||
   process.env.GOOGLE_CLIENT_ID ||
+  process.env.GOOGLE_OAUTH_CLIENT_ID ||
   ''
 ).trim();
 const googleClientSecret = (
-  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
   process.env.GOOGLE_CLIENT_SECRET ||
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
   ''
 ).trim();
 
@@ -19,8 +20,8 @@ const googleClientSecret = (
  * NextAuth configuration (Google OAuth by default).
  *
  * Required env to activate login-gating: NEXTAUTH_SECRET, NEXTAUTH_URL,
- *   GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET.
- * Also accepts NextAuth's common GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET names.
+ *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+ * Temporarily accepts legacy GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET.
  * Optional: AUTH_ALLOWED_EMAIL_DOMAIN restricts sign-in to a single domain
  *   (e.g. `yourcompany.com` → only *@yourcompany.com).
  *
@@ -31,7 +32,7 @@ function buildProviders(): NextAuthOptions['providers'] {
   if (!googleClientId || !googleClientSecret) {
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        '[auth] Google OAuth client id/secret missing — set GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET or GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.',
+        '[auth] Google OAuth client id/secret missing — set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET; legacy GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET remain supported temporarily.',
       );
     }
   }
@@ -73,9 +74,7 @@ export const authOptions: NextAuthOptions = {
   // Force secure cookies in production regardless of NEXTAUTH_URL's scheme so a
   // stray http:// value cannot silently downgrade cookie security; also enable
   // them whenever NEXTAUTH_URL is explicitly https (e.g. https previews).
-  useSecureCookies:
-    process.env.NODE_ENV === 'production' ||
-    (process.env.NEXTAUTH_URL?.startsWith('https://') ?? false),
+  useSecureCookies: nextAuthUseSecureCookies(),
   callbacks: {
     async signIn({ user, account }) {
       // Enforce the domain allowlist for every provider, not just Google, so a

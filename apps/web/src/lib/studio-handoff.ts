@@ -43,10 +43,22 @@ export function submitHomePaste(raw: string): string | null {
 }
 
 export type StudioQueryStartedKey = { current: string | null };
+let strictModeAutoStartedVideoId: string | null = null;
 
 /**
- * One-shot ?video= / ?url= kick. Safe under Strict Mode: the same startedKey
- * ref suppresses a second start() for the same video id.
+ * Clear the module-level Strict Mode auto-start guard. Studio calls this on a
+ * genuine unmount so re-navigating to the same ?video= later in the same SPA
+ * session (or retrying after a failed run) can auto-start again. The guard only
+ * exists to swallow React's synchronous Strict Mode double-mount, so it must be
+ * released once the component truly leaves the tree.
+ */
+export function resetStudioQueryAutoStart(): void {
+  strictModeAutoStartedVideoId = null;
+}
+
+/**
+ * One-shot ?video= / ?url= kick. Safe under Strict Mode remounts: both the
+ * caller ref and a module-level key suppress duplicate start() calls.
  */
 export type StudioSearchParams = {
   get(name: string): string | null;
@@ -94,8 +106,14 @@ export function applyStudioQueryAutoStart(input: {
     return 'invalid';
   }
   input.onResolved?.(handoff.watchUrl);
-  if (input.startedKey.current === handoff.videoId) return 'already';
+  if (
+    input.startedKey.current === handoff.videoId ||
+    strictModeAutoStartedVideoId === handoff.videoId
+  ) {
+    return 'already';
+  }
   input.startedKey.current = handoff.videoId;
+  strictModeAutoStartedVideoId = handoff.videoId;
   input.start(handoff.watchUrl);
   return 'started';
 }

@@ -1,107 +1,71 @@
-# EventRelay Repository Map
+# UVAI repository map
 
-A directory-level map of this repository, kept separate from
-[`ARCHITECTURE_DIAGRAM.md`](./ARCHITECTURE_DIAGRAM.md), which documents the
-runtime data flow (YouTube link → transcript → events → agents → outputs)
-in detail. This file answers "where does X live?"; `ARCHITECTURE_DIAGRAM.md`
-answers "how does data move through the system?".
+UVAI is the public product; EventRelay is the internal runtime and repository name. This map answers **where the current code lives**, not whether a deployed service is healthy. Locked rules remain in [AGENTS.md](../AGENTS.md).
+
+## Current entry points
+
+| Responsibility | Source |
+| --- | --- |
+| Public URL entry and Get Pro | [`apps/web/src/app/page.tsx`](../apps/web/src/app/page.tsx) |
+| Canonical Studio route | [`apps/web/src/app/studio/page.tsx`](../apps/web/src/app/studio/page.tsx) |
+| Workbench, same-run actions, deploy result | [`OneLoopStudio.tsx`](../apps/web/src/components/OneLoopStudio.tsx) |
+| Public/authenticated API policy and dashboard redirect helpers | [`auth-paths.ts`](../apps/web/src/lib/auth-paths.ts) |
+| Pack HTTP endpoint | [`api/video/pack/route.ts`](../apps/web/src/app/api/video/pack/route.ts) |
+| Grounded model extraction | [`video-pack-extractor.ts`](../apps/web/src/lib/video-pack-extractor.ts) |
+| Pack identity and format | [`video-pack.ts`](../apps/web/src/lib/video-pack.ts) |
+| Upstash REST pack persistence | [`video-pack-store.ts`](../apps/web/src/lib/video-pack-store.ts) |
+| Evidence-workspace emitter | [`emit-app-builder-sandbox.ts`](../apps/web/src/lib/emit-app-builder-sandbox.ts) |
+| Sandbox HTTP endpoint | [`api/video/sandbox/route.ts`](../apps/web/src/app/api/video/sandbox/route.ts) |
+| Four-way transition decision and hashed receipt | [`gate-transition.ts`](../apps/web/src/lib/gate-transition.ts) |
+| Studio URL/result validation | [`studio-pipeline-status.ts`](../apps/web/src/lib/studio-pipeline-status.ts) |
+| Workflow start/poll adapters | [`studio-workflow.ts`](../apps/web/src/lib/studio-workflow.ts) |
+
+`/dashboard` is not a second workbench. G.A.T.E. currently gates Studio's displayed deployment outcome; it is not a builder, independent deployment probe, or project database.
 
 ## Top-level layout
 
-```
+```text
 EventRelay/
-├── src/                     # Python backend package (youtube_extension, agents, mcp, core, ...)
-│   └── youtube_extension/
-│       ├── backend/         # FastAPI app: api/v1/, services/, models/, middleware/
-│       ├── services/        # Orchestration: agents/, workflows/, ai/
-│       ├── mcp/              # MCP ecosystem coordinator
-│       └── main.py           # FastAPI entry point
-├── apps/
-│   ├── web/                 # Next.js/React frontend (port 3000)
-│   └── backend/             # Backend workspace app wrapper
-├── packages/                # Shared monorepo packages (database, embeddings, etc.)
-├── mcp-servers/             # Standalone MCP server implementations (langextract, vercel)
-├── sdk/                     # Published client SDKs
-│   ├── python/               # eventrelay_sdk (must stay aligned with backend/api/v1/models.py)
-│   └── typescript/
-├── tests/                   # Python tests: unit/, integration/, e2e/, fixtures/, workflows/
-├── docs/                    # Extended documentation (this file, architecture, audits, guides)
-├── infrastructure/          # Kubernetes manifests, Terraform, Cloud Run, database setup
-├── scripts/                 # Operational and CI helper scripts (scripts/ci, scripts/maintenance, ...)
-├── shared/                  # Cross-cutting shared code/config
-├── tools/mcp/               # Local MCP servers used by agent tooling (e.g. git_workflow_server.mjs)
-├── config/                  # Runtime configuration
-├── data/, dataconnect/      # Data fixtures and Firebase Data Connect schema
-├── supabase/                # Supabase functions/setup (auxiliary integration)
-├── .github/                 # CI/CD workflows, agent instructions, MCP server config
-│   ├── workflows/            # GitHub Actions + gh-aw agentic workflows (see workflows/README.md)
-│   ├── agents/                # Per-domain Copilot agent instruction files
-│   ├── agent/                 # Agent plans, rules, and task tracking
-│   └── mcp-servers.json       # MCP servers wired into the Copilot cloud agent host
-├── .agents/skills/, .claude/skills/  # Agent Skills (SKILL.md folders), mirrored per host
-└── SKILL.md, AGENTS.md, CLAUDE.md, GEMINI.md  # Root-level agent/host instruction files
+├── apps/web/                  Next.js App Router product and server routes
+├── apps/backend/              Backend workspace wrapper
+├── src/youtube_extension/     Internal FastAPI backend and services
+├── src/agents/                Internal agent implementations
+├── mcp-servers/               Internal MCP implementations
+├── tools/mcp/                 Repository tooling servers
+├── packages/                  Shared code
+├── sdk/                       Python and TypeScript clients
+├── tests/                     Backend and integration tests
+├── docs/                      Current guidance plus dated historical records
+├── scripts/                   CI, development, deployment, maintenance helpers
+├── infrastructure/            Deployment/infrastructure definitions
+├── .github/                   CI and host-specific agent configuration
+├── .claude/skills/            Repository skills, also usable through Grok compatibility
+├── .grok/workflows/           Repository automation, not product lineage
+└── AGENTS.md, CLAUDE.md,
+    GEMINI.md                  Root policy and host-specific guidance
 ```
 
-## Directory relationships
+Directory presence does not establish an active deployment or npm workspace. Root [package.json](../package.json) currently declares `apps/*` as npm workspaces; use its scripts and root lockfile. Other stores and prototypes do not replace Upstash REST for Video Packs.
 
-```mermaid
-flowchart TB
-    subgraph Frontend["apps/web (Next.js)"]
-        UI["Dashboard UI"]
-    end
+## Verification locations
 
-    subgraph Backend["src/youtube_extension (FastAPI)"]
-        API["api/v1 router"]
-        SVC["services/"]
-    end
+- Web library tests: `apps/web/src/lib/__tests__/`.
+- Web component tests: `apps/web/src/components/__tests__/`.
+- Route tests: beside routes under `apps/web/src/app/api/`.
+- Backend tests: `tests/`; API response models must stay aligned with `sdk/python/eventrelay_sdk/types.py`.
+- Commands and requirements: [README.md](../README.md), [package.json](../package.json), [apps/web/package.json](../apps/web/package.json), and [pyproject.toml](../pyproject.toml).
 
-    subgraph MCP["MCP ecosystem"]
-        MCPCoord["src/youtube_extension/mcp"]
-        MCPServers["mcp-servers/*"]
-        MCPTools["tools/mcp/*"]
-    end
+## Documentation authority and history
 
-    subgraph Agents["Agent orchestration"]
-        AgentsDir["src/agents"]
-        AgentInstr[".github/agents/*.agent.md"]
-        Skills[".agents/skills, .claude/skills"]
-    end
+| Document | Use |
+| --- | --- |
+| [MASTER_ROADMAP.md](MASTER_ROADMAP.md) | Current inspected baseline, proposed build-out, and acceptance criteria |
+| [NEXT-PHASE.md](NEXT-PHASE.md) | Bounded next cut; Origin G.A.T.E. only under root authorization |
+| [GOAL.md](GOAL.md) | Goal template for that approved cut |
+| [gate-transition-contract.md](gate-transition-contract.md) | Existing contract, tests, and limits |
+| [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) | Historical runtime/issue map, not current health |
+| [video_to_gtm_architecture.md](video_to_gtm_architecture.md) | Historical March architecture proposal |
+| [App Builder cut record](../apps/web/src/lib/app-builder-sandbox-PLAN.md) | Recorded second-video emit smoke; not a current deployment receipt |
+| [Workflow catalog](../.github/workflows/README.md) | CI and automation navigation; inspect current workflow definitions before execution |
 
-    subgraph Ops["CI / infra"]
-        Workflows[".github/workflows/*"]
-        Infra["infrastructure/*"]
-        Scripts["scripts/*"]
-    end
-
-    UI -->|REST| API
-    API --> SVC
-    SVC --> MCPCoord
-    MCPCoord --> MCPServers
-    MCPCoord --> MCPTools
-    SVC --> AgentsDir
-    AgentInstr -.->|guides| AgentsDir
-    Skills -.->|guides| AgentsDir
-    Workflows --> Infra
-    Workflows --> Scripts
-```
-
-## Dependency summary
-
-- **Python** (`pyproject.toml`, `requirements.txt`, `uv.lock`): FastAPI, SQLAlchemy +
-  Alembic, google-genai / anthropic / openai clients, pytest + coverage.
-- **JavaScript/TypeScript** (`package.json`, workspaces under `apps/*`): Turbo
-  monorepo, Next.js (`apps/web`), `@modelcontextprotocol/sdk` (used by
-  `tools/mcp/git_workflow_server.mjs`), Vitest.
-- See `README.md` for the full setup/quickstart commands referenced by
-  `AGENTS.md` / `CLAUDE.md` / `GEMINI.md`.
-
-## Related documents
-
-- [`ARCHITECTURE_DIAGRAM.md`](./ARCHITECTURE_DIAGRAM.md) — detailed runtime
-  data-flow diagram (current vs. target state).
-- [`AGENT_CAPABILITIES_CHECKLIST.md`](./AGENT_CAPABILITIES_CHECKLIST.md) —
-  checklist of agent/tooling capabilities (agents, tools, MCP, git operations,
-  issues, code, dependencies, database, actions, role assignment) mapped to
-  what is actually implemented in this repository.
-- [`.github/workflows/README.md`](../.github/workflows/README.md) — catalog of
-  every GitHub Actions / gh-aw workflow.
+When a dated record conflicts with locked policy, preserve the record as history and follow the current policy. Do not add another competing roadmap.

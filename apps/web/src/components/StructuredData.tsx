@@ -28,6 +28,9 @@ const howToJsonLd = {
 
 export function StructuredData() {
   return (
-    <script type="application/ld+json">{JSON.stringify(howToJsonLd)}</script>
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(howToJsonLd) }}
+    />
   );
 }

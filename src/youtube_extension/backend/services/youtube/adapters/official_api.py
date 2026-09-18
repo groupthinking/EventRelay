@@ -17,7 +17,10 @@ from typing import Any, Optional
 import httpx
 
 from youtube_extension.utils import extract_video_id
-from youtube_extension.utils.proxy import get_transcript_proxy_config
+from youtube_extension.utils.proxy import (
+    get_transcript_proxy_config,
+    redact_proxy_credentials,
+)
 
 # Fallback transcript retrieval
 try:
@@ -262,7 +265,11 @@ class RealYouTubeAPIService:
                 except CouldNotRetrieveTranscript as e:
                     logger.error(f"❌ Could not retrieve transcript for {video_id}: {e}")
                 except Exception as e:
-                    logger.warning(f"youtube-transcript-api fetch failed for {video_id}: {e}")
+                    logger.warning(
+                        "youtube-transcript-api fetch failed for %s: %s",
+                        video_id,
+                        redact_proxy_credentials(e),
+                    )
 
             # Fallback via robust service if needed
             if (not transcript_data) and HAS_ROBUST_TRANSCRIPT_FALLBACK:
@@ -578,10 +585,12 @@ class RealYouTubeAPIService:
 
             return True, video_id, "Video is public and accessible"
 
-        except ValueError as e:
-            return False, "", f"Invalid URL format: {e}"
-        except Exception as e:
-            return False, "", f"Video validation failed: {e}"
+        except ValueError:
+            logger.warning("Video URL validation failed: invalid URL format", exc_info=True)
+            return False, "", "Invalid URL format"
+        except Exception:
+            logger.error("Video URL validation failed", exc_info=True)
+            return False, "", "Video validation failed"
 
     async def close(self):
         """Close the HTTP client"""

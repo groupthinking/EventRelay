@@ -40,6 +40,7 @@ import {
   MAX_DURATION_MS,
   PIPELINE_BACKEND_TIMEOUT_MS,
   PIPELINE_GEMINI_TIMEOUT_MS,
+  PIPELINE_RESPONSE_BUFFER_MS,
   PIPELINE_HEALTH_TIMEOUT_MS,
   PipelineDeadline,
   maxDuration,
@@ -65,9 +66,79 @@ describe('pipeline timeouts', () => {
 
     expect(PIPELINE_BACKEND_TIMEOUT_MS).toBeLessThanOrEqual(MAX_DURATION_MS);
     expect(PIPELINE_GEMINI_TIMEOUT_MS).toBeLessThanOrEqual(MAX_DURATION_MS);
+    expect(PIPELINE_RESPONSE_BUFFER_MS).toBeGreaterThan(0);
+    expect(PIPELINE_RESPONSE_BUFFER_MS).toBeLessThan(MAX_DURATION_MS);
+
+    expect(PIPELINE_BACKEND_TIMEOUT_MS).toBe(25_000);
+    expect(PIPELINE_RESPONSE_BUFFER_MS).toBe(2_000);
+    expect(PIPELINE_GEMINI_TIMEOUT_MS).toBe(15_000);
 
     const deadline = PipelineDeadline.fromMaxDuration();
     expect(deadline.budgetMs(PIPELINE_BACKEND_TIMEOUT_MS)).toBeGreaterThan(0);
+  });
+
+
+
+  describe('PipelineDeadline', () => {
+    it('creates a deadline from max duration', () => {
+      const mockNow = 1000000;
+      vi.spyOn(Date, 'now').mockReturnValue(mockNow);
+
+      const deadline = PipelineDeadline.fromMaxDuration();
+      // Using type assertion to access private endsAt
+      expect((deadline as any).endsAt).toBe(mockNow + MAX_DURATION_MS);
+    });
+
+    it('calculates remaining time correctly', () => {
+      const deadline = new PipelineDeadline(20000);
+
+      vi.spyOn(Date, 'now').mockReturnValue(15000);
+      expect(deadline.remainingMs()).toBe(5000);
+
+      vi.spyOn(Date, 'now').mockReturnValue(25000);
+      expect(deadline.remainingMs()).toBe(0); // Should not be negative
+    });
+
+    it('provides correct budget based on remaining time', () => {
+      const deadline = new PipelineDeadline(20000);
+      vi.spyOn(Date, 'now').mockReturnValue(15000); // 5000ms remaining
+
+      expect(deadline.budgetMs(3000)).toBe(3000); // Requested < remaining
+      expect(deadline.budgetMs(8000)).toBe(5000); // Requested > remaining
+    });
+
+    it('creates an AbortSignal within budget', () => {
+      const deadline = new PipelineDeadline(20000);
+      vi.spyOn(Date, 'now').mockReturnValue(15000); // 5000ms remaining
+
+      const signal = deadline.signalFor(3000);
+      expect(signal).toBeInstanceOf(AbortSignal);
+    });
+
+    it('throws error when creating signal if budget is 0', () => {
+      const deadline = new PipelineDeadline(10000);
+      vi.spyOn(Date, 'now').mockReturnValue(15000); // 0ms remaining
+
+      expect(() => deadline.signalFor(5000)).toThrow('Pipeline deadline exceeded');
+    });
+
+    it('runs promise within budget', async () => {
+      const deadline = new PipelineDeadline(20000);
+      vi.spyOn(Date, 'now').mockReturnValue(15000); // 5000ms remaining
+
+      const promise = Promise.resolve('success');
+      const result = await deadline.runWithBudget(promise, 3000, 'test');
+      expect(result).toBe('success');
+    });
+
+    it('throws error when running promise if budget is 0', async () => {
+      const deadline = new PipelineDeadline(10000);
+      vi.spyOn(Date, 'now').mockReturnValue(15000); // 0ms remaining
+
+      const promise = Promise.resolve('success');
+      await expect(deadline.runWithBudget(promise, 5000, 'test'))
+        .rejects.toThrow('test: pipeline deadline exceeded');
+    });
   });
 });
 

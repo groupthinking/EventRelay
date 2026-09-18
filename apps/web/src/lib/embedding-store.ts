@@ -3,6 +3,8 @@ import 'server-only';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+const IS_VERCEL = process.env.VERCEL === '1';
+
 /** Where embedding data lives */
 const EMBEDDING_DIR = path.join(process.cwd(), 'data', 'embeddings');
 
@@ -21,6 +23,7 @@ export interface VideoEmbeddings {
 
 /** Ensure the embedding directory exists. */
 async function ensureDir(): Promise<void> {
+  if (IS_VERCEL) return;
   await fs.mkdir(EMBEDDING_DIR, { recursive: true });
 }
 
@@ -35,6 +38,10 @@ function getFilePath(videoId: string): string {
  * Save embedding chunks for a specific video to disk.
  */
 export async function saveEmbeddings(videoId: string, chunks: ChunkEmbedding[]): Promise<void> {
+  if (IS_VERCEL) {
+    console.log(`[info/serverless] Skipping local embedding write for video: ${videoId}`);
+    return;
+  }
   await ensureDir();
   const filePath = getFilePath(videoId);
 
@@ -53,6 +60,7 @@ export async function saveEmbeddings(videoId: string, chunks: ChunkEmbedding[]):
  * Returns null if the embeddings do not exist yet.
  */
 export async function loadEmbeddings(videoId: string): Promise<VideoEmbeddings | null> {
+  if (IS_VERCEL) return null;
   try {
     const filePath = getFilePath(videoId);
     const raw = await fs.readFile(filePath, 'utf-8');

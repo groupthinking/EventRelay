@@ -20,7 +20,23 @@
     "test": {},
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "NEXTAUTH_SECRET",
+        "NEXTAUTH_URL",
+        "GOOGLE_CLIENT_ID",
+        "GOOGLE_CLIENT_SECRET",
+        "GOOGLE_OAUTH_CLIENT_ID",
+        "GOOGLE_OAUTH_CLIENT_SECRET",
+        "AUTH_ALLOWED_EMAIL_DOMAIN",
+        "KV_REST_API_URL",
+        "KV_REST_API_TOKEN",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "V0_SANDBOX_URL",
+        "V0_RUNTIME_URL",
+        "V0_BUILD_URL"
+      ]
     }
   }
 }
