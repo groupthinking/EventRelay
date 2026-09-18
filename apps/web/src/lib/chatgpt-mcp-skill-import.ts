@@ -4,8 +4,21 @@ import { canonicalGateJson, hashCanonical } from '@/lib/gate-transition';
 export const MCP_SKILLS_EXTENSION_ID = 'io.modelcontextprotocol/skills' as const;
 export const CHATGPT_SKILL_IMPORT_RECEIPT_VERSION =
   'eventrelay.chatgpt-mcp-skill-import-receipt.v1' as const;
-export const MCP_SKILLS_SPEC_COMMIT =
-  'd866efdba298b55b8156c7b7aa1bdebc1b625f4c' as const;
+export const MCP_SKILLS_NORMATIVE_CONTRACT = {
+  repository: 'modelcontextprotocol/modelcontextprotocol',
+  path: 'seps/2640-skills-extension.md',
+  commit: '1eb5bbe8ac933bdb595fedc687b8ed545e440491',
+} as const;
+export const MCP_SKILLS_DESIGN_HISTORY = {
+  repository: 'modelcontextprotocol/ext-skills',
+  path: 'specs/skills.md',
+  commit: 'd866efdba298b55b8156c7b7aa1bdebc1b625f4c',
+} as const;
+export const MCP_SKILLS_EVIDENCE_SOURCE_MIGRATION = {
+  repository: 'modelcontextprotocol/modelcontextprotocol',
+  path: 'seps/2640-skills-extension.md',
+  commit: 'f56f204f6290f6531b14d5734eb3e0a10f0eb201',
+} as const;
 // Public Git object ID. Split to prevent generic secret scanners from
 // misclassifying this high-entropy evidence locator as an API credential.
 export const MCP_CLIENT_MATRIX_REVISION = [
@@ -71,7 +84,10 @@ export type FixtureChatGptSkillImportReceipt = {
   };
   wire_contract: {
     extension_id: typeof MCP_SKILLS_EXTENSION_ID;
-    specification_commit: typeof MCP_SKILLS_SPEC_COMMIT;
+    specification_commit: typeof MCP_SKILLS_NORMATIVE_CONTRACT.commit;
+    normative_contract: typeof MCP_SKILLS_NORMATIVE_CONTRACT;
+    design_history: typeof MCP_SKILLS_DESIGN_HISTORY;
+    evidence_source_migration: typeof MCP_SKILLS_EVIDENCE_SOURCE_MIGRATION;
   };
   decision: 'READY_FOR_FIXTURE_HANDOFF';
   issued_at: string;
@@ -362,7 +378,10 @@ export function createFixtureChatGptSkillImport(
     },
     wire_contract: {
       extension_id: MCP_SKILLS_EXTENSION_ID,
-      specification_commit: MCP_SKILLS_SPEC_COMMIT,
+      specification_commit: MCP_SKILLS_NORMATIVE_CONTRACT.commit,
+      normative_contract: MCP_SKILLS_NORMATIVE_CONTRACT,
+      design_history: MCP_SKILLS_DESIGN_HISTORY,
+      evidence_source_migration: MCP_SKILLS_EVIDENCE_SOURCE_MIGRATION,
     },
     decision: 'READY_FOR_FIXTURE_HANDOFF' as const,
     issued_at: issuedAt,
