@@ -218,6 +218,16 @@ describe('fixture-only MCP Skill → ChatGPT handoff', () => {
     expect(() => createFixtureChatGptSkillImport(dynamic)).toThrow(/dynamic skill resources/i);
   });
 
+  it('fails closed on malformed wire-data shapes instead of throwing runtime type errors', () => {
+    const badServerIdentity = fixture() as any;
+    badServerIdentity.serverIdentity = { origin: 'https://mcp.eventrelay.example' };
+    expect(() => createFixtureChatGptSkillImport(badServerIdentity)).toThrow(/server identity/i);
+
+    const badResources = fixture() as any;
+    badResources.result.skill.resources = null;
+    expect(() => createFixtureChatGptSkillImport(badResources)).toThrow(/resources/i);
+  });
+
   it('validates direct skills/get by URI without relying on skills/list', () => {
     const receipt = createFixtureChatGptSkillImport(fixture());
     expect(receipt.decision).toBe('READY_FOR_FIXTURE_HANDOFF');
