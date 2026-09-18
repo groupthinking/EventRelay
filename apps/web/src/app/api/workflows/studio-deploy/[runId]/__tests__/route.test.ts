@@ -51,6 +51,36 @@ describe('GET /api/workflows/studio-deploy/:runId', () => {
     expect(json.error).not.toBe('Failed to read workflow return value');
   });
 
+  it('passes through a live URL from unread return-value errors', async () => {
+    const failed = Object.assign(new Error('Workflow run failed'), {
+      live_url: 'https://xy.vercel.app',
+    });
+    const unread = Object.assign(new Error('Failed to read workflow return value'), {
+      cause: failed,
+    });
+    const rejected = Promise.reject(unread);
+    rejected.catch(() => undefined);
+    getRun.mockReturnValue(
+      runHandle({
+        status: 'failed',
+        returnValue: rejected,
+      }),
+    );
+
+    const { GET } = await import('../route');
+    const res = await GET(new Request('https://uvai.io/api/workflows/studio-deploy/wrun_live'), {
+      params: Promise.resolve({ runId: 'wrun_live' }),
+    });
+    const json = (await res.json()) as Record<string, unknown>;
+    expect(res.status).toBe(200);
+    expect(json.runStatus).toBe('failed');
+    expect(json.result).toEqual({
+      kind: 'live',
+      live_url: 'https://xy.vercel.app',
+    });
+    expect(json.error).toBeUndefined();
+  });
+
   it('does not HOLD with Failed to read workflow run when getRun fetch gets a Request', async () => {
     const parseErr = new TypeError('Failed to parse URL from [object Request]');
     Object.assign(parseErr, {
