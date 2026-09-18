@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { getNextAuthJwtFromRequest } from '@/lib/auth-jwt';
 import {
   CANONICAL_STUDIO_PATH,
   isAiRoute,
@@ -320,7 +320,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (AUTH_ENABLED && request.method !== 'OPTIONS' && needsAuthentication(pathname)) {
     // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
     // monorepo; the types are structurally identical, so bridge them.
-    const token = await getToken({ req: request as any, secret: AUTH_SECRET });
+    const token = await getNextAuthJwtFromRequest(request, AUTH_SECRET!);
     if (!token) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 });

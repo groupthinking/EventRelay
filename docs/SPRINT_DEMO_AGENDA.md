@@ -1,60 +1,67 @@
-# EventRelay Sprint Demo Agenda
+# Sprint Demo Agenda
 
-> **Demo boundary:** This is an internal walkthrough of repository behavior and local/test evidence. It is **not** a production deployment, a payment demonstration, or authorization to change authentication, billing, deployment, or production configuration.
+**Purpose.** This internal agenda demonstrates the public UVAI Home-to-Studio path and reports sprint evidence accurately. It does not authorize production deployment, payment, OAuth configuration, Origin G.A.T.E. transitions, or a merge. Assign the owner placeholders before the meeting.
 
-**Demo owner:** `Assign before meeting`
-**Target duration:** 15 minutes
-**Source task:** [Confirm sprint demo agenda](https://app.notion.com/p/3dd3c2339c04810ca45be4d289f3e240)
+## Evidence boundary
 
-## Evidence status at preparation
+Only demonstrate a behavior as verified when the listed command passed on the branch or pull-request head being discussed. A local interaction is not production evidence. A draft pull request is not a reviewed change. If a required check is unavailable, use the named fallback and state the limitation plainly.
 
-| Area | Evidence | Qualification for the demo |
-|---|---|---|
-| Public Home-to-Studio handoff | [`HomePasteForm`](../apps/web/src/components/home/HomePasteForm.tsx), [`studio-handoff`](../apps/web/src/lib/studio-handoff.ts), and [`studio-handoff.test.ts`](../apps/web/src/lib/__tests__/studio-handoff.test.ts) | Demonstrate locally or describe through test evidence. The path validates a YouTube source, requests a Video Pack, and routes to `/studio?video=...`; no production result is implied. |
-| Public Home sell surface | [`page.tsx`](../apps/web/src/app/page.tsx), [`home-sell-surface.test.ts`](../apps/web/src/lib/__tests__/home-sell-surface.test.ts), and [`landing-style-safety.test.ts`](../apps/web/src/lib/__tests__/landing-style-safety.test.ts) | Source and automated-test evidence from the current base branch. |
-| Landing-page refinement | [Draft PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) | Draft only. At preparation, `test-frontend` and `test` are successful, while `E2E Pipeline Tests`, `report`, and `Vercel` are failing. Do not present the refinement as reviewed, deployed, or production-ready. |
-| Google sign-in retry | [Draft PR #1971](https://github.com/groupthinking/EventRelay/pull/1971) | Do **not** demonstrate. The PR is draft with no review decision, a failed Vercel check, a canceled report, and pending checks at preparation. |
-| Production readiness | [`LAUNCH_CHECKLIST.md`](LAUNCH_CHECKLIST.md) and [`RUNBOOK.md`](guides/RUNBOOK.md) | These documents identify configuration and backend prerequisites; they do not prove that the demonstrated behavior is deployed. |
+## Run of show
 
-## Timed run sheet
+| Time | Owner | Demo action | Expected visible result | Required evidence and fallback |
+|---|---|---|---|---|
+| 0:00–1:00 | **Demo lead: _assign_** | Open `/` and state the demo goal: a prospective visitor can understand the YouTube URL-to-Studio workflow. | The primary heading and URL input are visible. | Source: [`apps/web/src/app/page.tsx`](https://github.com/groupthinking/EventRelay/blob/main/apps/web/src/app/page.tsx). If no local server is available, use a code walkthrough and do not make a hosted-product claim. |
+| 1:00–3:00 | **Product owner: _assign_** | Enter the standard safe fixture URL in the Home form and submit it. | The route becomes `/studio?video=...`. | Run the command on the [canonical landing-page PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) head: `npm --workspace=eventrelay-web exec -- vitest run src/lib/__tests__/studio-handoff.test.ts src/lib/__tests__/home-sell-surface.test.ts`. If unavailable or failing, show the form and explain that the fresh handoff result is pending. |
+| 3:00–4:30 | **Product owner: _assign_** | Enter an invalid non-YouTube value. Then show the pricing summary and cadence controls without starting checkout. | An accessible invalid-URL message appears; monthly and annual controls plus the pricing link are visible. | Use the same landing PR head and add `src/lib/billing/__tests__/checkout-config.test.ts`. Do not trigger Turnstile or checkout. If the check is unavailable, describe the expected control only. |
+| 4:30–6:00 | **Engineering owner: _assign_** | Explain the Google sign-in recovery behavior: rejected or non-navigating initiation returns the button to a retryable state with generic error copy. | The audience sees the code or test narrative, not a real OAuth completion. | Draft [PR #1984](https://github.com/groupthinking/EventRelay/pull/1984) contains the implementation and its component test. Only demonstrate it as a reviewed outcome after review and its remote check failures are resolved. Until then, explain it as a tested candidate. |
+| 6:00–7:30 | **QA owner: _assign_** | Summarize the local quality gates for the two sprint changes. | The team sees exact commands and the distinction between local tests and remote checks. | Reference [draft QA checklist PR #1993](https://github.com/groupthinking/EventRelay/pull/1993). If that document is still pending review, present the commands directly and do not claim full release readiness. |
+| 7:30–9:00 | **Engineering owner: _assign_** | State the Origin G.A.T.E. boundary and the production launch limitations. | The audience understands that consequential workflow transitions and production readiness were not demonstrated. | Reference [`docs/gate-transition-contract.md`](https://github.com/groupthinking/EventRelay/blob/main/docs/gate-transition-contract.md) and [`docs/LAUNCH_CHECKLIST.md`](https://github.com/groupthinking/EventRelay/blob/main/docs/LAUNCH_CHECKLIST.md). Do not attempt a live deployment, provider action, payment, or configuration change. |
+| 9:00–10:00 | **Demo lead: _assign_** | Close with the active PR status, known blockers, and decisions needed from reviewers. | The team receives a precise next-step record. | Use the closing record below. If a status changes during the meeting, read the current PR status rather than relying on this document. |
 
-| Minutes | Segment owner | Demo action | Expected visible result | Evidence | Fallback |
-|---:|---|---|---|---|---|
-| 0–2 | `Assign owner` | State the demo boundary and explain the UVAI YouTube URL-to-Studio goal. | The audience understands that the session is a local/test walkthrough, not a production launch or checkout demonstration. | This boundary; [`page.tsx`](../apps/web/src/app/page.tsx) | Read this opening statement and proceed to the evidence table. Do not make a live service claim. |
-| 2–6 | `Assign owner` | In a local environment, enter the fixture URL `https://www.youtube.com/watch?v=auJzb1D-fag` on `/` and submit the public form. | The form builds a canonical YouTube watch URL, initiates the Video Pack request, and routes to `/studio?video=...`. | [`HomePasteForm`](../apps/web/src/components/home/HomePasteForm.tsx); [`studio-handoff`](../apps/web/src/lib/studio-handoff.ts); [`studio-handoff.test.ts`](../apps/web/src/lib/__tests__/studio-handoff.test.ts) | Show the focused test output and source links. Do not claim that an external backend analysis or deployment completed. |
-| 6–8 | `Assign owner` | Enter a non-YouTube value in the same form. | The form keeps the visitor on Home and exposes the accessible message “Need a valid YouTube URL.”; no pack request should be initiated. | [`HomePasteForm`](../apps/web/src/components/home/HomePasteForm.tsx); [`studio-handoff.test.ts`](../apps/web/src/lib/__tests__/studio-handoff.test.ts) | Read the invalid-input test assertion. Do not bypass validation or invent a destination. |
-| 8–10 | `Assign owner` | Review the evidence for the public Home surface and its boundaries. Do not invoke checkout. | The audience can see that Home is the sell surface and Studio is the workbench, with no claim of a guaranteed transcript or arbitrary-video production E2E behavior. | [`home-sell-surface.test.ts`](../apps/web/src/lib/__tests__/home-sell-surface.test.ts); [`landing-style-safety.test.ts`](../apps/web/src/lib/__tests__/landing-style-safety.test.ts) | Read the recorded focused test results. Keep billing controls visible only; do not begin a checkout session. |
-| 10–12 | `Assign owner` | State the authentication resilience status. | No sign-in retry interaction is shown. The audience sees that it remains a draft, pending-review item with incomplete checks. | [Draft PR #1971](https://github.com/groupthinking/EventRelay/pull/1971) | Record “authentication retry deferred pending passing checks and review” as a blocker. Do not represent the feature as complete. |
-| 12–15 | `Assign owner` | Close with current draft PR status, limitations, and required decisions. | The audience leaves with the exact distinction between local/test evidence, draft changes, and production readiness prerequisites. | [Draft PR #1981](https://github.com/groupthinking/EventRelay/pull/1981); [`LAUNCH_CHECKLIST.md`](LAUNCH_CHECKLIST.md); [`RUNBOOK.md`](guides/RUNBOOK.md) | End the walkthrough without deploying, publishing, modifying configuration, changing access, or charging a payment method. |
+## Presenter checklist
 
-## Verification evidence for the walkthrough
-
-Run these commands against the agenda branch immediately before the meeting and record their output in the meeting notes rather than changing this document mid-demo:
+Before the meeting, record the relevant pull-request head and the terminal output from these commands. Run the landing checks on the [canonical landing PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) head and the sign-in checks on [PR #1984](https://github.com/groupthinking/EventRelay/pull/1984) head.
 
 ```bash
-npm --workspace eventrelay-web exec -- vitest run \
+npm --workspace=eventrelay-web exec -- vitest run \
   src/lib/__tests__/studio-handoff.test.ts \
   src/lib/__tests__/home-sell-surface.test.ts \
-  src/lib/__tests__/landing-style-safety.test.ts
-npm --workspace eventrelay-web run lint
-npm --workspace eventrelay-web run type-check
-npm run build:web
+  src/lib/billing/__tests__/checkout-config.test.ts
+
+npm --workspace=eventrelay-web exec -- vitest run \
+  src/app/login/GoogleSignInButton.test.tsx \
+  src/lib/__tests__/auth-paths.test.ts \
+  src/__tests__/proxy-auth-gate.test.ts
+
+npm --workspace=eventrelay-web run type-check
+npm --workspace=eventrelay-web run lint
+git diff --check
 ```
 
-At agenda preparation, the focused command above passed **3 test files and 23 tests**. The full frontend lint command completed with no errors and reported three existing Studio navigation warnings on the base branch; those warnings are outside this documentation-only change. The frontend type check and production web build both passed. Re-run the commands before the meeting and treat the fresh output—not this timestamped preparation result—as the authoritative evidence.
+For a local responsive demonstration, use the Home Playwright specification present on the branch being demonstrated. This is local UI evidence only; it does not replace preview-dependent end-to-end evidence.
 
-The current focused evidence establishes the following limited claims. The handoff test covers canonical URL creation, valid Home submission to `/studio?video=...`, the Video Pack request, and rejection of invalid source input. The sell-surface test confirms that Home does not mount the Studio workbench and that it hands validated input to the canonical Studio path. The style-safety test protects the currently asserted component constraints. These checks do **not** establish external analysis completion, payment completion, production deployment, or production configuration readiness.
+## Required fallback language
 
-## Known limitations and blockers
+**Local URL handoff unavailable:** “The Home-to-Studio route is implemented, but we do not have fresh local verification for this demo. The exact test command is listed in the agenda.”
 
-| Item | Current status | Required handling |
-|---|---|---|
-| Landing-page refinement | [PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) is an open draft with no review decision. Its `test-frontend` and `test` checks are successful, but `E2E Pipeline Tests`, `report`, and `Vercel` are failing. | Reference it as draft evidence only. Do not demonstrate it as reviewed or deployed. |
-| Google sign-in retry | [PR #1971](https://github.com/groupthinking/EventRelay/pull/1971) is an open draft with no review decision, a failed Vercel check, a canceled report, and pending checks. | Omit the interaction. Record the work as deferred until review and verification are complete. |
-| Vercel deployment evidence | The separate Vercel deployment integration can succeed while the `v0-uvai` Vercel check fails or is canceled. | Treat neither status by itself as proof of a production deployment. Do not deploy during this agenda. |
-| Durable backend and production configuration | The launch checklist identifies environment, entitlement durability, provider, and backend prerequisites. The runbook describes local backend operation and troubleshooting. | Do not change configuration or start an external deployment as part of the demo. |
-| Billing | The Home surface may display Workflow Pro information. | Keep checkout out of scope; do not create a checkout session, charge a card, or modify billing configuration. |
+**Google sign-in change not yet reviewed:** “The retry behavior is a tested candidate in draft PR #1984. It does not change OAuth credentials, callback policy, or the server authentication gate, and it is not presented as a merged result.”
 
-## Close and next decisions
+**Remote preview unavailable:** “Remote preview-dependent checks are blocked. We are showing local evidence only and are not asserting production readiness.”
 
-The closing speaker should ask the team to make only the following non-executing decisions after the demo: whether to prioritize remediation of the failing and pending checks on PRs #1981 and #1971; who will own a fresh review of those draft pull requests; and whether the production readiness prerequisites in the launch checklist have an approved owner and environment-specific evidence. The meeting must not approve itself as evidence for production readiness, billing activation, authentication changes, or deployment.
+**Checkout request:** “The checkout component is shown without initiating payment. Billing and entitlements require the separately authorized test-mode and production evidence in the launch checklist.”
+
+## Closing record
+
+At the end of the meeting, record these facts:
+
+1. The landing-page Notion task remains **In progress**. [PR #1976](https://github.com/groupthinking/EventRelay/pull/1976) is closed as a duplicate; [PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) is the canonical landing-page implementation and remains blocked on preview-dependent evidence.
+2. Google sign-in recovery is represented by draft [PR #1984](https://github.com/groupthinking/EventRelay/pull/1984). The local test coverage is relevant evidence, but open remote Vercel and E2E failures prevent a readiness claim.
+3. The [QA checklist task](https://app.notion.com/p/3dd3c2339c0481019c8fdf22053d0a4d?pvs=204) and this agenda are documentation-only follow-ups. They do not change application behavior or production configuration.
+4. No merge, deployment, payment, secret change, access change, or public release follows from this meeting.
+
+## References
+
+[1]: https://app.notion.com/p/3dd3c2339c0481439d43eafdeacd4136?pvs=204 "Design sprint landing page task"
+[2]: https://app.notion.com/p/3dd3c2339c0481a2a35dce563f281ab1?pvs=204 "Fix login bug task"
+[3]: https://app.notion.com/p/3dd3c2339c04810ca45be4d289f3e240?pvs=204 "Confirm sprint demo agenda task"
+[4]: https://app.notion.com/p/3dd3c2339c0481019c8fdf22053d0a4d?pvs=204 "Prepare QA checklist task"

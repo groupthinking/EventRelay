@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Download, GitPullRequest, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
@@ -14,6 +14,7 @@ import {
 } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
+import { StudioAuthNavLink } from '@/components/StudioAuthNavLink';
 import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -234,6 +235,7 @@ export default function OneLoopStudio({
 }: {
   showAgentWorkflowUi: boolean;
 }) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -496,7 +498,7 @@ export default function OneLoopStudio({
       const started = await startVideoToActions(payload);
       if (!started.ok || !started.runId) {
         if (started.status === 401 || started.status === 403) {
-          window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
+          router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
           return;
         }
         setMessage(started.error || started.message || 'Could not start Act.');
@@ -509,6 +511,7 @@ export default function OneLoopStudio({
           : `Act ${started.runId} started.`,
       );
       const polled = await pollVideoToActions(started.runId, {
+        statusUrl: started.statusUrl,
         attempts: 24,
         delayMs: 2000,
       });
@@ -531,7 +534,7 @@ export default function OneLoopStudio({
     }
   };
 
-  const exportPkg = () => {
+  const exportPkg = async () => {
     const filename = studioExportFilename(
       safeProjectName(selected?.title || 'uvai-project'),
     );
@@ -579,7 +582,21 @@ export default function OneLoopStudio({
           : selected?.videoPack?.pack.transcript,
         sopSteps: linkedSop?.steps,
       });
-      downloadScaffoldPackage(pkg);
+      const result = await downloadScaffoldPackage(pkg);
+      if (!result.ok) {
+        if (result.status === 402 && result.checkoutUrl) {
+          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
+          window.location.href = result.checkoutUrl;
+          return;
+        }
+        const toast = studioExportToastMessage({
+          ok: false,
+          error: result.error,
+        });
+        setExportToast(toast);
+        return;
+      }
+      const filename = result.filename || studioExportFilename(pkg.projectName);
       const kind =
         packFormation.architecture || packFormation.artifacts.length > 0
           ? 'pack'
@@ -622,7 +639,7 @@ export default function OneLoopStudio({
       const started = await startStudioDeploy({ url: next });
       if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       if (started.status === 401 || started.status === 403) {
-        window.location.href = `/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`;
+        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
         return;
       }
       if (started.gate) {
@@ -739,16 +756,7 @@ export default function OneLoopStudio({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0b0c10] text-[#f4f1ea]">
-      <Nav
-        rightSlot={
-          <Link
-            href={`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`}
-            className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/5"
-          >
-            Sign in
-          </Link>
-        }
-      />
+      <Nav rightSlot={<StudioAuthNavLink />} />
 
       <header className="border-b border-white/10 bg-[#11131a]">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">

@@ -139,6 +139,29 @@ class TestGetCacheStatisticsPopulated:
         stats = cache.get_cache_statistics()
         assert stats["categories"]["coding"]["count"] == 2
 
+    def test_legacy_statistics_stat_each_analysis_file_once(self, cache, monkeypatch):
+        cat = cache.cache_dir / "coding"
+        cat.mkdir()
+        first = cat / "auJzb1D-fag_analysis.md"
+        second = cat / "bbbbbbbbbbb_analysis.md"
+        first.write_text("a")
+        second.write_text("bb")
+        stat_calls = {first: 0, second: 0}
+        real_stat = Path.stat
+
+        def counting_stat(path, *args, **kwargs):
+            if path in stat_calls:
+                stat_calls[path] += 1
+            return real_stat(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "stat", counting_stat)
+
+        stats = cache.get_cache_statistics()
+
+        assert stat_calls == {first: 1, second: 1}
+        assert stats["categories"]["coding"]["count"] == 2
+        assert stats["total_cached_videos"] == 2
+
 
 # ===========================================================================
 # clear_cache
