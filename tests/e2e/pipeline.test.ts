@@ -33,8 +33,17 @@ const TEST_YOUTUBE_URL =
 // "Protection Bypass for Automation" secret. It is attached as a header on
 // every request so the preview is reachable. Unset (the default — e.g. when
 // BASE_URL is production) → no bypass header is added; E2E attribution remains.
-const E2E_RUN_ID = process.env.GITHUB_RUN_ID?.trim() || 'local';
-const E2E_USER_AGENT = `EventRelay-E2E/${E2E_RUN_ID}`;
+const E2E_RUN_ID_MAX_LENGTH = 64;
+
+function getE2ERunId(): string {
+  const token = (process.env.GITHUB_RUN_ID || 'local')
+    .trim()
+    .replace(/[^A-Za-z0-9._-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, E2E_RUN_ID_MAX_LENGTH);
+
+  return token || 'local';
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -44,7 +53,7 @@ function withE2EHeaders(init?: RequestInit): RequestInit {
   // object, Headers instance, or [key, value][] array) is preserved — a bare
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
-  headers.set('User-Agent', E2E_USER_AGENT);
+  headers.set('User-Agent', `EventRelay-E2E/${getE2ERunId()}`);
   headers.set('X-EventRelay-Probe', 'e2e');
   const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
   if (bypassSecret) {
@@ -123,6 +132,44 @@ describe('E2E request attribution', () => {
     expect(headers.get('user-agent')).toBe(`EventRelay-E2E/${runId}`);
     expect(headers.get('x-eventrelay-probe')).toBe('e2e');
     expect(headers.get('accept')).toBe('application/json');
+  });
+
+  it('normalizes the GitHub run identity into a proxy-matchable token', async () => {
+    vi.stubEnv('GITHUB_RUN_ID', '  workflow run/42?retry=1  ');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    let capturedInit: RequestInit | undefined;
+
+    try {
+      await fetchWithTimeout('https://example.test/api/health', undefined, 100, 1);
+      capturedInit = fetchSpy.mock.calls[0]?.[1];
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const headers = new Headers(capturedInit?.headers);
+
+    expect(headers.get('user-agent')).toBe('EventRelay-E2E/workflow-run-42-retry-1');
+  });
+
+  it('caps the GitHub run identity to the proxy log bound', async () => {
+    vi.stubEnv('GITHUB_RUN_ID', `run-${'a'.repeat(80)}`);
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    let capturedInit: RequestInit | undefined;
+
+    try {
+      await fetchWithTimeout('https://example.test/api/health', undefined, 100, 1);
+      capturedInit = fetchSpy.mock.calls[0]?.[1];
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const headers = new Headers(capturedInit?.headers);
+
+    expect(headers.get('user-agent')).toBe(`EventRelay-E2E/run-${'a'.repeat(60)}`);
   });
 
   it('forwards the configured preview bypass on every request without persisting it', async () => {
