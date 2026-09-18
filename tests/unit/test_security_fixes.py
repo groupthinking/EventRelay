@@ -31,6 +31,7 @@ PRODUCTION_DOCKERFILE = (
 # brace-expansion, so both files are asserted directly.
 ROOT_PACKAGE_JSON = project_root / "package.json"
 ROOT_PACKAGE_LOCK = project_root / "package-lock.json"
+WEB_PACKAGE_JSON = project_root / "apps" / "web" / "package.json"
 
 # brace-expansion GHSA-mh99-v99m-4gvg (unbounded expansion -> heap exhaustion).
 # The remediation is a hard 100000-entry cap on expansion output.
@@ -679,6 +680,26 @@ class TestSecurityBestPractices:
                 f"{path} resolves to brace-expansion {version}, which predates "
                 f"the GHSA-mh99-v99m-4gvg cap introduced in {minimum}"
             )
+
+    def test_next_js_is_pinned_to_16_3_3_in_workspace_and_lockfile(self):
+        """The web app must pin Next.js 16.3.3 in manifests and the root lockfile."""
+        assert ROOT_PACKAGE_JSON.exists(), f"{ROOT_PACKAGE_JSON} not found"
+        assert WEB_PACKAGE_JSON.exists(), f"{WEB_PACKAGE_JSON} not found"
+        assert ROOT_PACKAGE_LOCK.exists(), f"{ROOT_PACKAGE_LOCK} not found"
+
+        root_manifest = json.loads(ROOT_PACKAGE_JSON.read_text())
+        web_manifest = json.loads(WEB_PACKAGE_JSON.read_text())
+        lock = json.loads(ROOT_PACKAGE_LOCK.read_text())
+
+        assert (root_manifest.get("devDependencies") or {}).get("next") == "16.3.3"
+        assert (root_manifest.get("overrides") or {}).get("next") == "16.3.3"
+        assert (web_manifest.get("dependencies") or {}).get("next") == "16.3.3"
+        assert (web_manifest.get("devDependencies") or {}).get(
+            "eslint-config-next"
+        ) == "16.3.3"
+        assert (lock.get("packages") or {}).get("node_modules/next", {}).get(
+            "version"
+        ) == "16.3.3"
 
 
 if __name__ == "__main__":
