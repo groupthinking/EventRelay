@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Download, GitPullRequest, Play, Rocket } from 'lucide-react';
+import { Download, GitPullRequest, Hammer, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
@@ -32,6 +32,11 @@ import {
   studioDeployPollResidual,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
+import {
+  packBuildLiveOutcomeMessage,
+  studioPackLiveReceiptForSelection,
+  verifyPackBuildLive,
+} from '@/lib/pack-build-live';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioActionCard,
@@ -249,6 +254,9 @@ export default function OneLoopStudio({
   const [deployRunId, setDeployRunId] = useState<string | null>(null);
   const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
   const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
+  const [buildBusy, setBuildBusy] = useState(false);
+  const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
+  const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
   const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
@@ -269,6 +277,11 @@ export default function OneLoopStudio({
     selectedVideoId,
     receiptVideoId: deployReceiptVideoId,
     liveUrl: deployReceiptUrl,
+  });
+  const scopedPackLiveUrl = studioPackLiveReceiptForSelection({
+    selectedVideoId,
+    receiptVideoId: packLiveReceiptVideoId,
+    liveUrl: packLiveReceiptUrl,
   });
   const packFormation = useMemo(
     () => studioPackFormation(selected?.videoPack),
@@ -707,6 +720,38 @@ export default function OneLoopStudio({
     }
   };
 
+  const buildLive = async () => {
+    const videoId = selectedVideoId ?? getYouTubeId((selected?.url || url).trim());
+    if (!videoId || !selected?.videoPack) {
+      setMessage('Analyze a video and wait for a stored Video Pack before Build live.');
+      return;
+    }
+    setBuildBusy(true);
+    const attemptVideoId = videoId;
+    setPackLiveReceiptUrl(null);
+    setPackLiveReceiptVideoId(attemptVideoId);
+    try {
+      const built = await verifyPackBuildLive({
+        videoId: attemptVideoId,
+        origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+      });
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      if (built.ok) {
+        setPackLiveReceiptUrl(built.liveUrl);
+        setPackLiveReceiptVideoId(attemptVideoId);
+        setMessage(packBuildLiveOutcomeMessage(built));
+        window.open(built.liveUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      setMessage(packBuildLiveOutcomeMessage(built));
+    } catch (err) {
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      setMessage(err instanceof Error ? err.message : 'Build live failed.');
+    } finally {
+      setBuildBusy(false);
+    }
+  };
+
   const openApprovedSpecsPrs = async () => {
     if (!linkedSop || linkedSop.steps.length === 0) {
       setMessage('Analyze a video with SOP steps before opening GitHub pull requests.');
@@ -863,6 +908,20 @@ export default function OneLoopStudio({
                       className="break-all text-sm text-[#e8b86d] underline"
                     >
                       {scopedDeployReceipt}
+                    </a>
+                  </p>
+                ) : null}
+                {scopedPackLiveUrl ? (
+                  <p className="mt-1">
+                    <span className="text-sm text-white/55">Pack build: </span>
+                    <a
+                      data-testid="studio-pack-live-url"
+                      href={scopedPackLiveUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="break-all text-sm text-[#e8b86d] underline"
+                    >
+                      {scopedPackLiveUrl}
                     </a>
                   </p>
                 ) : null}
@@ -1384,6 +1443,21 @@ export default function OneLoopStudio({
           >
             <Download className="h-4 w-4" aria-hidden />
             {promotePack ? 'Export pack' : 'Export'}
+          </button>
+          <button
+            type="button"
+            data-testid="studio-build-live-button"
+            onClick={() => void buildLive()}
+            disabled={buildBusy || !selected?.videoPack}
+            title={
+              selected?.videoPack
+                ? 'Compile the stored Video Pack to a hosted app at /d/{videoId}.'
+                : 'Run analysis and store a Video Pack first.'
+            }
+            className="inline-flex items-center gap-2 rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm text-[#e8b86d] disabled:opacity-40"
+          >
+            <Hammer className="h-4 w-4" aria-hidden />
+            {buildBusy ? 'Building…' : scopedPackLiveUrl ? 'Open live app' : 'Build live'}
           </button>
           <button
             type="button"

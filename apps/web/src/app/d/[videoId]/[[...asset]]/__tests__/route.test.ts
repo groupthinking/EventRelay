@@ -1,13 +1,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  QJ_PACK_ID,
   QJ_SOP_STEPS,
-  QJ_SOURCE_HASH,
   QJ_SOURCE_URL,
   QJ_TRANSCRIPT,
   QJ_VIDEO_ID,
   QJ_VISUAL_EVENTS,
 } from '@/lib/__fixtures__/qj-z5ohr7sga-emit';
+import {
+  XYMC_SOP_STEPS,
+  XYMC_TRANSCRIPT,
+  XYMC_VIDEO_ID,
+  XYMC_VISUAL_EVENTS,
+  XYMC_SOURCE_URL,
+} from '@/lib/__fixtures__/xymcbrfsj4c-emit';
 
 afterEach(() => {
   vi.resetModules();
@@ -59,6 +64,37 @@ function extractedSpec() {
   };
 }
 
+function xymcExtractedSpec() {
+  return {
+    transcript: XYMC_TRANSCRIPT,
+    keyframes: XYMC_VISUAL_EVENTS.map((event) => ({
+      t_s: event.timestamp,
+      desc: event.content,
+    })),
+    concepts: ['boring AI automations'],
+    code_snippets: [],
+    requirements: XYMC_SOP_STEPS.map((step) => ({
+      id: step.id,
+      title: step.title,
+      detail: step.description,
+      priority: 'HIGH',
+      tags: [],
+    })),
+    artifacts: [],
+    stack: { tools: [] },
+    visual_context: {
+      visual_elements: XYMC_VISUAL_EVENTS.map((event) => ({
+        timestamp: event.timestamp,
+        element_type: event.element_type ?? 'scene',
+        content: event.content,
+        confidence: 0.9,
+      })),
+      summary: 'n8n, Make, Retell AI demos.',
+      frame_analysis_count: 4,
+    },
+  };
+}
+
 describe('GET /d/[videoId]/[[...asset]]', () => {
   it('serves the hosted compiled app index from a ready pack', async () => {
     const loaded = await loadHostedRoute();
@@ -98,6 +134,25 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     const body = await res.text();
     expect(body).toContain('querySelector');
     expect(body).not.toContain('type ChecklistState');
+  });
+
+  it('serves the hosted compiled app index for XYMcBrFSJ4c banked pack', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(XYMC_VIDEO_ID, XYMC_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: loaded.applyExtractedSpec(identity, xymcExtractedSpec()),
+    });
+
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${XYMC_VIDEO_ID}`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: XYMC_VIDEO_ID }) },
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    expect(body).toContain('nine boring AI automations');
+    expect(body).toContain(`/d/${XYMC_VIDEO_ID}/src/main.ts`);
   });
 
   it('returns and records hosted health checks at /d/{videoId}/health', async () => {
