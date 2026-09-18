@@ -14,6 +14,7 @@ import {
 } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
+import { StudioAuthNavLink } from '@/components/StudioAuthNavLink';
 import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
@@ -509,6 +510,7 @@ export default function OneLoopStudio({
           : `Act ${started.runId} started.`,
       );
       const polled = await pollVideoToActions(started.runId, {
+        statusUrl: started.statusUrl,
         attempts: 24,
         delayMs: 2000,
       });
@@ -739,16 +741,7 @@ export default function OneLoopStudio({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0b0c10] text-[#f4f1ea]">
-      <Nav
-        rightSlot={
-          <Link
-            href={`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`}
-            className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/5"
-          >
-            Sign in
-          </Link>
-        }
-      />
+      <Nav rightSlot={<StudioAuthNavLink />} />
 
       <header className="border-b border-white/10 bg-[#11131a]">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
