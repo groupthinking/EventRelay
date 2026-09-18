@@ -19,6 +19,13 @@ DEFAULT_RECEIPT = (
     REPO_ROOT / "tests/fixtures/mcp_conformance/official-2026-07-28-receipt.json"
 )
 CONFORMANCE_COMMIT = "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+SCOPE_STEP_UP_SDK_COMMIT = "60321700871029401a2e3bed8fdf4f02c9ec3331"
+UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_ISSUE = (
+    "https://github.com/modelcontextprotocol/conformance/issues/480"
+)
+UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR = (
+    "https://github.com/modelcontextprotocol/conformance/pull/481"
+)
 CONFORMANCE_PACKAGE = (
     f"git+https://github.com/modelcontextprotocol/conformance.git#{CONFORMANCE_COMMIT}"
 )
@@ -372,6 +379,13 @@ def build_receipt(run_records: list[dict[str, Any]]) -> dict[str, Any]:
         "conformance": {
             "package": CONFORMANCE_PACKAGE,
             "commit": CONFORMANCE_COMMIT,
+            "scope_step_up_sdk_commit": SCOPE_STEP_UP_SDK_COMMIT,
+            "scope_step_up_conformance_tracking": {
+                "issue": UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_ISSUE,
+                "pull_request": UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR,
+                "status": "unmerged",
+                "official_claim_excluded": True,
+            },
         },
         "implementation": {
             "commit": implementation_commit,
