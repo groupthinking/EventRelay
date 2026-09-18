@@ -68,7 +68,10 @@ if not ok or type(current) ~= 'table' then
   return claim()
 end
 
+local allow_ready_reclaim = ARGV[4] == '1'
+
 if current['state'] == 'ready'
+  and allow_ready_reclaim ~= true
   and type(current['pack']) == 'table'
   and type(current['pack']['provenance']) == 'table'
   and type(current['pack']['transcript']) == 'table'
@@ -217,9 +220,15 @@ export async function putPackRecord(record: VideoPackRecord): Promise<void> {
   memoryStore.set(key, record);
 }
 
+export type ClaimPackProcessingOptions = {
+  /** When true, replace a ready pack so Studio Run can re-extract (structured schema upgrade). */
+  reclaimReady?: boolean;
+};
+
 export async function claimPackProcessing(
   identity: PackProcessingIdentity,
   now: Date = new Date(),
+  options: ClaimPackProcessingOptions = {},
 ): Promise<'claimed' | VideoPackRecord> {
   assertDurableVideoPackStorageConfigured();
   const processing: Extract<VideoPackRecord, { state: 'processing' }> = {
@@ -236,6 +245,7 @@ export async function claimPackProcessing(
   if (process.env.NODE_ENV === 'production' && !redis) {
     throw new Error('Durable video pack storage is unavailable in production.');
   }
+  const reclaimReady = options.reclaimReady === true ? '1' : '0';
   if (redis) {
     try {
       const result = await redis.eval<unknown>(
@@ -245,6 +255,7 @@ export async function claimPackProcessing(
           JSON.stringify(processing),
           new Date(now.getTime() - PROCESSING_STALE_MS).toISOString(),
           identity.source_hash,
+          reclaimReady,
         ],
       );
       if (!Array.isArray(result) || result.length < 2) {
@@ -267,7 +278,7 @@ export async function claimPackProcessing(
   }
 
   const local = memoryStore.get(key);
-  if (local?.state === 'ready') {
+  if (local?.state === 'ready' && !options.reclaimReady) {
     return local;
   }
   if (local?.state === 'processing' && !isProcessingStale(local, now.getTime())) {

@@ -74,6 +74,10 @@ class TestUpgradeToV0:
         result = upgrade_to_v0({})
         assert result["chapters"] == []
 
+    def test_sets_action_items_default(self):
+        result = upgrade_to_v0({})
+        assert result["action_items"] == []
+
     def test_sets_keyframes_default(self):
         result = upgrade_to_v0({})
         assert result["keyframes"] == []

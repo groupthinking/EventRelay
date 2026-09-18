@@ -28,6 +28,10 @@ import {
 const CANON = 'auJzb1D-fag';
 const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
 
+vi.mock('@/lib/youtube-metadata', () => ({
+  fetchYouTubeMetadata: vi.fn(async () => null),
+}));
+
 /** Live Eggs GET/pack failure class — Gemini cut mid-string around position 8050. */
 const EGGS_ID = 'vuLPccrooHU';
 const EGGS_URL = `https://www.youtube.com/watch?v=${EGGS_ID}`;
@@ -102,6 +106,23 @@ const SPEC_JSON = {
     summary: 'Short zoo clip with elephants',
     frame_analysis_count: 1,
   },
+  chapters: [
+    {
+      start: 0,
+      end: 5.2,
+      topic: 'At the zoo',
+      key_points: ['Elephants have long trunks'],
+    },
+  ],
+  action_items: [
+    {
+      id: 'action-1',
+      type: 'implementation',
+      title: 'Visit the elephant enclosure',
+      description: 'Observe how the speaker describes the elephants.',
+      difficulty: 'easy' as const,
+    },
+  ],
 };
 
 const MNNFAT_ID = 'MNNfat_QP0E';
@@ -257,12 +278,39 @@ describe('extractVideoPackSpec', () => {
         requirements: [],
         code_snippets: [],
         visual_context: null,
+        chapters: [],
+        action_items: [],
       }),
     }));
 
     await expect(
       extractVideoPackSpec({ sourceUrl: SOURCE_URL, videoId: CANON }, { generateText }),
     ).rejects.toBeInstanceOf(VideoPackExtractError);
+  });
+
+  it('derives action_items from requirements when the model omits them', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        action_items: [],
+        chapters: [],
+      }),
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+
+    expect(spec.action_items).toEqual([
+      expect.objectContaining({
+        id: 'req-1',
+        title: 'Show the enclosure',
+        description: 'The speaker points at the elephants.',
+        type: 'implementation',
+      }),
+    ]);
   });
 
   it('asks Gemini for keyframe t_s + desc only and forbids invented image_path URLs', async () => {
@@ -419,6 +467,46 @@ describe('extractVideoPackSpec', () => {
     expect(spec.stack.tools).toEqual([]);
   });
 
+  it('salvages auJzb1D-fag JSON truncated inside grounded_spec instead of failing parse', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const bulky = {
+      ...SPEC_JSON,
+      grounded_spec: {
+        version: '1',
+        outputClass: 'browser-interactive',
+        sourceStatus: 'partial',
+        confidence: 0.8,
+        limitations: Array.from(
+          { length: 400 },
+          (_, index) => `Synthetic limitation line ${index} ${'detail '.repeat(30)}`,
+        ),
+        app: { name: 'Zoo visit', purpose: 'Watch elephants at the enclosure' },
+        screens: [{ id: 'main', name: 'Main', purpose: 'View the animals' }],
+        state: [],
+        requirements: [],
+        acceptanceCriteria: [],
+        unresolved: [],
+        unsupported: [],
+      },
+    };
+    const raw = JSON.stringify(bulky);
+    const cutAt = Math.min(8050, raw.length - 1);
+    const truncated = raw.slice(0, cutAt);
+    expect(jsonParseError(truncated)).toMatch(/Unterminated string|Unexpected end of JSON/i);
+
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({ text: truncated }));
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+
+    expect(spec.spec_json_salvaged).toBe(true);
+    expect(spec.transcript.full_text).toContain('elephants');
+    expect(spec.chapters?.[0]?.topic).toBe('At the zoo');
+    expect(spec.action_items?.[0]?.title).toBe('Visit the elephant enclosure');
+    expect(spec.grounded_spec?.status).not.toBe('available');
+  });
+
   it('salvages Gemini JSON truncated mid-string at position ~8050 (Eggs / vuLPccrooHU class)', async () => {
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     const { truncated, spokenPrefix, parseError } = buildMidStringTruncationAt(8050);
@@ -445,6 +533,7 @@ describe('extractVideoPackSpec', () => {
     expect(spec.concepts).toEqual([]);
     expect(spec.requirements).toEqual([]);
     expect(spec.stack.tools).toEqual([]);
+    expect(spec.spec_json_salvaged).toBe(true);
     expect(JSON.stringify(spec)).not.toMatch(/shopify/i);
   });
 
@@ -478,6 +567,7 @@ describe('extractVideoPackSpec', () => {
     expect(spec.code_snippets[0]?.content).not.toContain('later-invented-should-not-appear');
     expect(spec.stack.tools).toEqual([]);
     expect(spec.artifacts).toEqual([]);
+    expect(spec.spec_json_salvaged).toBe(true);
   });
 
   it('fails closed with a position-bearing error when truncated JSON is not a spec object', async () => {
@@ -553,6 +643,13 @@ describe('applyExtractedSpec', () => {
     expect(merged.requirements[0]?.title).toBe('Show the enclosure');
     expect(merged.keyframes[0]?.desc).toBe('Elephants at the enclosure');
     expect(merged.provenance.tool_versions.extractor).toBe('google/gemini-3.8-flash');
+    expect(merged.chapters[0]).toMatchObject({
+      start: 0,
+      end: 5.2,
+      topic: 'At the zoo',
+      key_points: ['Elephants have long trunks'],
+    });
+    expect(merged.action_items[0]?.title).toBe('Visit the elephant enclosure');
   });
 
   it('copies architecture, artifacts, and stack.tools without changing source_hash', () => {

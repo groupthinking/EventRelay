@@ -49,6 +49,8 @@ function readyPack() {
     artifacts: [],
     stack: { tools: [] },
     visual_context: null,
+    chapters: [],
+    action_items: [],
   });
 }
 
@@ -87,9 +89,11 @@ function createRedis(initial: unknown = null) {
       const processing = JSON.parse(String(args[0])) as VideoPackRecord;
       const staleBefore = String(args[1]);
       const sourceHash = String(args[2]);
+      const reclaimReady = String(args[3] ?? '0') === '1';
       const current = decodeStored(stored);
       if (
         current?.state === 'ready' &&
+        !reclaimReady &&
         current.pack.provenance.source_hash === sourceHash &&
         typeof current.pack.transcript?.full_text === 'string'
       ) {
@@ -186,6 +190,19 @@ describe('video-pack store', () => {
     expect(decodeStored(redis.getStored())).toEqual(ready);
     expect(redis.getEvalCalls()).toBe(1);
     expect(redis.getSetCalls()).toBe(0);
+  });
+
+  it('reclaims a ready pack when structured schema refresh is requested', async () => {
+    const ready: VideoPackRecord = { state: 'ready', pack: readyPack() };
+    const redis = createRedis(JSON.stringify(ready));
+    setVideoPackRedisForTests(redis.client);
+
+    const result = await claimPackProcessing(IDENTITY, new Date('2026-09-05T06:00:00.000Z'), {
+      reclaimReady: true,
+    });
+
+    expect(result).toBe('claimed');
+    expect(decodeStored(redis.getStored())?.state).toBe('processing');
   });
 
   it('replaces a ready-shaped value whose provenance does not match its key', async () => {
@@ -342,6 +359,7 @@ describe.skipIf(!hasRedisServer)('video-pack store Redis integration', () => {
         JSON.stringify(processing),
         '2026-09-05T01:00:00.000Z',
         HASH,
+        '0',
       ],
     });
 
