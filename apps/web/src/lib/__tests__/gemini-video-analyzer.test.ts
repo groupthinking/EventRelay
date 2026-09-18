@@ -1,6 +1,16 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import type { TranscriptionResult } from '@/lib/transcription-service';
 
-const { gatewayChatMock } = vi.hoisted(() => ({ gatewayChatMock: vi.fn() }));
+const { gatewayChatMock, fetchTranscriptMock } = vi.hoisted(() => ({
+  gatewayChatMock: vi.fn(),
+  fetchTranscriptMock: vi.fn(
+    async (): Promise<TranscriptionResult> => ({
+      success: false,
+      transcript: '',
+      error: 'unavailable in tests',
+    }),
+  ),
+}));
 
 vi.mock('@/lib/vercel-ai-gateway', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/vercel-ai-gateway')>();
@@ -12,12 +22,13 @@ vi.mock('@/lib/vercel-ai-gateway', async (importOriginal) => {
 });
 
 vi.mock('@/lib/transcription-service', () => ({
-  fetchTranscript: vi.fn(async () => ({ success: false, error: 'unavailable in tests' })),
+  fetchTranscript: fetchTranscriptMock,
 }));
 
 import {
   AnalysisParseError,
   analyzeVideoWithGemini,
+  buildTranscriptOnlyAnalysis,
   parseAnalysisResult,
 } from '@/lib/gemini-video-analyzer';
 
@@ -56,7 +67,29 @@ const TEST_EVIDENCE = {
 
 afterEach(() => {
   gatewayChatMock.mockReset();
+  fetchTranscriptMock.mockReset();
+  fetchTranscriptMock.mockResolvedValue({
+    success: false,
+    transcript: '',
+    error: 'unavailable in tests',
+  });
   vi.useRealTimers();
+});
+
+describe('buildTranscriptOnlyAnalysis', () => {
+  it('preserves the exact transcript without inventing structured analysis', () => {
+    const transcript = '  one two three four \n';
+    const result = buildTranscriptOnlyAnalysis(transcript);
+
+    expect(result.transcript).toEqual([{ start: 0, duration: 0, text: transcript }]);
+    expect(result.summary).toContain('Captured 4 words');
+    expect(result.events).toEqual([]);
+    expect(result.actions).toEqual([]);
+    expect(result.topics).toEqual([]);
+    expect(result.architectureCode).toBe('');
+    expect(result.ingestScript).toBe('');
+    expect(result.e22Snippets).toEqual([]);
+  });
 });
 
 describe('parseAnalysisResult', () => {
@@ -121,5 +154,82 @@ describe('analyzeVideoWithGemini retry on parse failure', () => {
     await vi.advanceTimersByTimeAsync(20_000); // cover 2s + 4s backoffs
     await assertion;
     expect(gatewayChatMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('returns the captured transcript when structured analysis aborts', async () => {
+    const transcript = 'A real transcript that remains useful after structured analysis times out.';
+    fetchTranscriptMock.mockResolvedValueOnce({
+      success: true,
+      transcript,
+      wordCount: 10,
+      source: 'openai-web-search',
+    });
+    const abortError = new Error('This operation was aborted');
+    abortError.name = 'AbortError';
+    gatewayChatMock.mockRejectedValueOnce(abortError);
+
+    const result = await analyzeVideoWithGemini('https://www.youtube.com/watch?v=auJzb1D-fag');
+
+    expect(result.transcript).toEqual([{ start: 0, duration: 0, text: transcript }]);
+    expect(result.actions).toEqual([]);
+    expect(result.events).toEqual([]);
+    expect(result.degraded).toBe(true);
+    expect(result.degradationReason).toBe('structured-analysis-timeout');
+    expect(gatewayChatMock).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['timed out', 'deadline_exceeded'])(
+    'returns a marked transcript-only result for %s failures',
+    async (message) => {
+      const transcript =
+        'A captured transcript long enough to remain useful when structured analysis times out.';
+      fetchTranscriptMock.mockResolvedValueOnce({
+        success: true,
+        transcript,
+        wordCount: 13,
+        source: 'youtube',
+      });
+      gatewayChatMock.mockRejectedValueOnce(new Error(message));
+
+      const result = await analyzeVideoWithGemini(
+        'https://www.youtube.com/watch?v=auJzb1D-fag',
+      );
+
+      expect(result.transcript).toEqual([
+        { start: 0, duration: 0, text: transcript },
+      ]);
+      expect(result.actions).toEqual([]);
+      expect(result.events).toEqual([]);
+      expect(result.degraded).toBe(true);
+      expect(result.degradationReason).toBe('structured-analysis-timeout');
+    },
+  );
+
+  it('does not treat an untyped aborted message as a timeout', async () => {
+    fetchTranscriptMock.mockResolvedValueOnce({
+      success: true,
+      transcript: 'A captured transcript long enough to select structured analysis.',
+      wordCount: 10,
+      source: 'youtube',
+    });
+    gatewayChatMock.mockRejectedValueOnce(new Error('Generation aborted by policy'));
+
+    await expect(
+      analyzeVideoWithGemini('https://www.youtube.com/watch?v=auJzb1D-fag'),
+    ).rejects.toThrow('Generation aborted by policy');
+  });
+
+  it('keeps non-timeout provider failures fail-closed after transcript capture', async () => {
+    fetchTranscriptMock.mockResolvedValueOnce({
+      success: true,
+      transcript: 'A captured transcript long enough to select structured analysis.',
+      wordCount: 10,
+      source: 'youtube',
+    });
+    gatewayChatMock.mockRejectedValueOnce(new Error('PERMISSION_DENIED'));
+
+    await expect(
+      analyzeVideoWithGemini('https://www.youtube.com/watch?v=auJzb1D-fag'),
+    ).rejects.toThrow('PERMISSION_DENIED');
   });
 });

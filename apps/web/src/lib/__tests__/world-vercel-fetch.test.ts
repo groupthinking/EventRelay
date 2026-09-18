@@ -24,4 +24,19 @@ describe('withWorldVercelFetch (issue #1538)', () => {
     expect(seen).not.toBe(original);
     expect(globalThis.fetch).toBe(original);
   });
+
+  it('accepts fetch(Request) used by getRun instead of parsing Request as a URL', async () => {
+    let err: unknown;
+    await withWorldVercelFetch(async () => {
+      try {
+        await globalThis.fetch(new Request('https://127.0.0.1:9/'));
+      } catch (caught) {
+        err = caught;
+      }
+    });
+    const text = err instanceof Error ? `${err.message} ${String(err.cause ?? '')}` : String(err);
+    expect(text).not.toMatch(/Failed to parse URL from \[object Request\]/);
+    expect(text).not.toMatch(/ERR_INVALID_URL/);
+    expect(text).not.toMatch(/\[object Request\]/);
+  });
 });

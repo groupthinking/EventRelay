@@ -13,7 +13,7 @@
  */
 
 import type { FunctionDeclaration } from '@google/genai';
-import { backendHeaders } from '@/lib/pipeline-backend';
+import { backendHeaders, resolveConfiguredBackendUrl } from '@/lib/pipeline-backend';
 
 // ── JSON Schema (shared by OpenAI strict tools + Gemini declarations) ──
 
@@ -72,15 +72,7 @@ function strArray(input: Record<string, unknown>, key: string): string[] {
  * callers can safely append `/api/...`.
  */
 export function resolveBackendBaseUrl(): string | null {
-  const raw = (process.env.BACKEND_URL || '').trim();
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    return raw.replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
+  return resolveConfiguredBackendUrl();
 }
 
 // ── Tool definitions ──

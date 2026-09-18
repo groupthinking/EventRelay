@@ -99,3 +99,29 @@ def test_session_orchestration_manager_knowledge_and_schedule(tmp_path):
     integrations = manager.get_integrations()
     assert "github" in integrations
     assert integrations["github"]["installed"] is True
+
+
+def test_session_orchestration_manager_preserves_concurrent_timeline_updates(
+    tmp_path,
+):
+    state_file = tmp_path / "shared_state.json"
+    manager_one = SessionOrchestrationManager(state_path=state_file)
+    session = manager_one.create_session(
+        prompt="Test concurrency",
+        playbook="bolt-performance-remediation",
+        tags=["performance"],
+        acu_limit=10,
+    )
+
+    manager_two = SessionOrchestrationManager(state_path=state_file)
+
+    assert manager_one.send_message(session["id"], "first update") is True
+    assert manager_two.send_message(session["id"], "second update") is True
+
+    reloaded = SessionOrchestrationManager(state_path=state_file)
+    timeline_contents = [
+        event["content"] for event in reloaded.inspect_timeline(session["id"])
+    ]
+
+    assert "first update" in timeline_contents
+    assert "second update" in timeline_contents

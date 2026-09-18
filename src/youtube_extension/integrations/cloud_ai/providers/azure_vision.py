@@ -20,6 +20,7 @@ from ..base import (
     DetectionResult,
     VideoAnalysisResult,
 )
+from ..blocking_io import run_blocking
 from ..exceptions import (
     AuthenticationError,
     CloudAIError,
@@ -268,7 +269,7 @@ class AzureVision(BaseCloudAI):
             # CLOUD_AI_MEDIA_ROOT before opening anything; the read then uses
             # the resolved path rather than the raw string, off the event loop.
             safe_path = resolve_local_media_path(image_url, provider=self.provider.value)
-            return await asyncio.to_thread(_read_file_bytes, str(safe_path))
+            return await run_blocking(_read_file_bytes, str(safe_path))
 
     async def _await_ocr_call(self, deadline: float, func: Any, *args: Any, **kwargs: Any) -> Any:
         """Run a blocking Azure SDK call in a worker thread, bounded by a

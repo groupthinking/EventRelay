@@ -315,6 +315,8 @@ class TestTranscriptActionRequest:
         [
             "http://169.254.169.254/aaaaaaaaaaa",  # SSRF: cloud metadata
             "--config-locations=/etc/passwd",  # CWE-88: arg injection
+            "https://www.youtube.com/watch?v=auJzb1D-fag --config-locations=/etc/passwd",
+            "https://www.youtube.com/watch?v=auJzb1D-fag\n--config-locations=/etc/passwd",
             "https://vimeo.com/123456789",  # non-YouTube host
             "https://not-youtube.com/watch?v=12345678901",
             "https://m.youtu.be/auJzb1D-fag",  # fabricated youtu.be subdomain
@@ -326,6 +328,11 @@ class TestTranscriptActionRequest:
             TranscriptActionRequest(video_url=url)
         with pytest.raises(ValidationError, match="Invalid YouTube URL"):
             ChatRequest(message="hi", video_url=url)
+
+    def test_url_with_valid_query_params_is_accepted(self):
+        valid = "https://www.youtube.com/watch?v=auJzb1D-fag&t=42s"
+        assert TranscriptActionRequest(video_url=valid).video_url == valid
+        assert ChatRequest(message="hi", video_url=valid).video_url == valid
 
 
 # ===========================================================================

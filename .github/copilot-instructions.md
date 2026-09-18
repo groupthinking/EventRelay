@@ -3,6 +3,9 @@
 ## 🎯 Project Overview
 EventRelay is an AI-powered agentic video execution platform that captures YouTube content, extracts events from transcripts, and dispatches intelligent agents to take real-world actions. The system combines FastAPI backend, React frontend, Gemini/Veo orchestration, and MCP/A2A agent workflows.
 
+## 👥 User Persona Map
+Use [`.github/copilot-personas.md`](copilot-personas.md) to tailor explanations and implementation guidance to the user's working context. Infer personas conservatively, ask when context is ambiguous, and never let persona-specific guidance override repository policy or the single YouTube-link-to-agent-execution workflow.
+
 ## 🔄 Core Workflow
 **EventRelay has ONE and ONLY ONE workflow:**
 
