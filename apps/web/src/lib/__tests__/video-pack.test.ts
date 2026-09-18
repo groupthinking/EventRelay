@@ -2,9 +2,12 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
+  VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
+  applyExtractedSpec,
   buildIdentityPack,
   identityHash,
   identityPayload,
+  packNeedsStructuredRefresh,
   resolveYouTubeVideoId,
 } from '@/lib/video-pack';
 
@@ -54,5 +57,51 @@ describe('video-pack identity', () => {
     expect(pack.source_url).toBe(`https://www.youtube.com/watch?v=${CANON_B}`);
     expect(pack.transcript.full_text).toBe(`cite:youtube:${CANON_B}`);
     expect(pack.transcript.segments).toEqual([]);
+  });
+});
+
+describe('pack structured refresh (B1c)', () => {
+  const preB1Ready = () => {
+    const identity = buildIdentityPack(CANON_B, undefined, '2026-09-11T00:00:00.000Z');
+    const pack = applyExtractedSpec(identity, {
+      transcript: {
+        language: 'en',
+        full_text: 'Cached speech before structured schema.',
+        segments: [{ idx: 0, start_s: 0, end_s: 4, text: 'Cached speech.' }],
+      },
+      keyframes: [],
+      concepts: ['cached'],
+      requirements: [{ id: 'r1', title: 'Do something', detail: null, priority: 'normal', tags: [] }],
+      code_snippets: [],
+      artifacts: [],
+      stack: { tools: [] },
+      visual_context: null,
+    });
+    delete pack.provenance.tool_versions.pack_structure;
+    pack.chapters = [];
+    pack.action_items = [];
+    return pack;
+  };
+
+  it('flags pre-B1 ready packs missing pack_structure marker', () => {
+    expect(packNeedsStructuredRefresh(preB1Ready())).toBe(true);
+  });
+
+  it('does not refresh identity-only or current-schema packs', () => {
+    expect(packNeedsStructuredRefresh(buildIdentityPack(CANON_A))).toBe(false);
+    const current = preB1Ready();
+    current.provenance.tool_versions.pack_structure = VIDEO_PACK_STRUCTURE_SCHEMA_VERSION;
+    current.chapters = [{ start: 0, end: 10, topic: 'Intro', key_points: ['Point'] }];
+    current.action_items = [
+      {
+        id: 'a1',
+        type: 'implementation',
+        title: 'Ship',
+        description: 'Do the thing',
+        difficulty: 'easy',
+        priority: null,
+      },
+    ];
+    expect(packNeedsStructuredRefresh(current)).toBe(false);
   });
 });

@@ -5,7 +5,14 @@ import type {
   VideoPackTranscriptSegment,
   VideoPackVisualContext,
 } from '@/lib/video-pack';
-import { readPackFormation, type VideoPackArchitecture, type VideoPackArtifact, type VideoPackStack } from '@/lib/video-pack-types';
+import {
+  readPackFormation,
+  type VideoPackActionItem,
+  type VideoPackArchitecture,
+  type VideoPackArtifact,
+  type VideoPackChapter,
+  type VideoPackStack,
+} from '@/lib/video-pack-types';
 
 export interface EmittedVideoPack {
   grounded_spec?: GroundedSpecRecord;
@@ -25,6 +32,8 @@ export interface EmittedVideoPack {
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   stack?: VideoPackStack;
+  chapters?: VideoPackChapter[];
+  action_items?: VideoPackActionItem[];
 }
 
 export interface VideoPackCitation {
@@ -65,7 +74,15 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
     );
   }
 
-  const formation = data ? readPackFormation(data) : { architecture: null, artifacts: [], stack: { tools: [] } };
+  const formation = data
+    ? readPackFormation(data)
+    : {
+        architecture: null,
+        artifacts: [],
+        stack: { tools: [] },
+        chapters: [],
+        action_items: [],
+      };
   const transcriptRecord = asRecord(data?.transcript);
   const transcriptText =
     typeof transcriptRecord?.full_text === 'string' ? transcriptRecord.full_text : '';
@@ -104,6 +121,8 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(formation.architecture ? { architecture: formation.architecture } : {}),
       ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
+      ...(formation.chapters.length > 0 ? { chapters: formation.chapters } : {}),
+      ...(formation.action_items.length > 0 ? { action_items: formation.action_items } : {}),
     },
   };
 }
