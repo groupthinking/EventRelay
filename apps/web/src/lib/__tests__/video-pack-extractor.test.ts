@@ -467,6 +467,46 @@ describe('extractVideoPackSpec', () => {
     expect(spec.stack.tools).toEqual([]);
   });
 
+  it('salvages auJzb1D-fag JSON truncated inside grounded_spec instead of failing parse', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const bulky = {
+      ...SPEC_JSON,
+      grounded_spec: {
+        version: '1',
+        outputClass: 'browser-interactive',
+        sourceStatus: 'partial',
+        confidence: 0.8,
+        limitations: Array.from(
+          { length: 400 },
+          (_, index) => `Synthetic limitation line ${index} ${'detail '.repeat(30)}`,
+        ),
+        app: { name: 'Zoo visit', purpose: 'Watch elephants at the enclosure' },
+        screens: [{ id: 'main', name: 'Main', purpose: 'View the animals' }],
+        state: [],
+        requirements: [],
+        acceptanceCriteria: [],
+        unresolved: [],
+        unsupported: [],
+      },
+    };
+    const raw = JSON.stringify(bulky);
+    const cutAt = Math.min(8050, raw.length - 1);
+    const truncated = raw.slice(0, cutAt);
+    expect(jsonParseError(truncated)).toMatch(/Unterminated string|Unexpected end of JSON/i);
+
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({ text: truncated }));
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+
+    expect(spec.spec_json_salvaged).toBe(true);
+    expect(spec.transcript.full_text).toContain('elephants');
+    expect(spec.chapters?.[0]?.topic).toBe('At the zoo');
+    expect(spec.action_items?.[0]?.title).toBe('Visit the elephant enclosure');
+    expect(spec.grounded_spec?.status).not.toBe('available');
+  });
+
   it('salvages Gemini JSON truncated mid-string at position ~8050 (Eggs / vuLPccrooHU class)', async () => {
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     const { truncated, spokenPrefix, parseError } = buildMidStringTruncationAt(8050);
@@ -493,6 +533,7 @@ describe('extractVideoPackSpec', () => {
     expect(spec.concepts).toEqual([]);
     expect(spec.requirements).toEqual([]);
     expect(spec.stack.tools).toEqual([]);
+    expect(spec.spec_json_salvaged).toBe(true);
     expect(JSON.stringify(spec)).not.toMatch(/shopify/i);
   });
 
@@ -526,6 +567,7 @@ describe('extractVideoPackSpec', () => {
     expect(spec.code_snippets[0]?.content).not.toContain('later-invented-should-not-appear');
     expect(spec.stack.tools).toEqual([]);
     expect(spec.artifacts).toEqual([]);
+    expect(spec.spec_json_salvaged).toBe(true);
   });
 
   it('fails closed with a position-bearing error when truncated JSON is not a spec object', async () => {

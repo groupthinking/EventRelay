@@ -189,12 +189,21 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
   };
 }
 
+const SPEC_JSON_SALVAGE_NOTE =
+  'Gemini spec JSON was truncated; salvage kept the verified prefix only (no invented tail fields).';
+
 export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
 ): VideoPackV0Json {
+  const salvaged = spec.spec_json_salvaged === true;
   const pack = applyKeyframeImageHonesty({
     ...identity,
+    ...(salvaged
+      ? {
+          metrics: { ...identity.metrics, spec_json_salvaged: 1 },
+        }
+      : {}),
     transcript: spec.transcript,
     keyframes: spec.keyframes,
     concepts: spec.concepts,
@@ -212,7 +221,9 @@ export function applyExtractedSpec(
         ...identity.provenance.tool_versions,
         extractor: VIDEO_PACK_EXTRACTOR_MODEL,
       },
-      notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+      notes: salvaged
+        ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
+        : 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
     },
   });
   if (!spec.grounded_spec) return pack;

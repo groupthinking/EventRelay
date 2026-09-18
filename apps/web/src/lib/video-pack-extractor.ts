@@ -76,6 +76,8 @@ export interface ExtractedVisualContext {
 }
 
 export interface ExtractedVideoPackSpec {
+  /** Set when parse recovered from truncated Gemini JSON (prefix salvage only). */
+  spec_json_salvaged?: boolean;
   grounded_spec?: GroundedSpecExtraction;
   transcript: {
     language: string | null;
@@ -291,6 +293,19 @@ function closeContainers(stack: JsonContainer[]): string {
  * Close a Gemini-truncated JSON object without inventing field values.
  * Keeps the emitted prefix of a cut string; drops keys that never received a value.
  */
+/**
+ * When Gemini truncates inside the bulky grounded_spec object, drop that key and
+ * repair the core pack prefix so transcript/architecture fields can still parse.
+ */
+function salvageByDroppingGroundedSpec(cleaned: string): string | null {
+  const marker = /,\s*"grounded_spec"\s*:/;
+  const match = marker.exec(cleaned);
+  if (!match || match.index === undefined) {
+    return null;
+  }
+  return repairTruncatedJson(cleaned.slice(0, match.index));
+}
+
 function repairTruncatedJson(source: string): string {
   const start = source.indexOf('{');
   if (start === -1) {
@@ -420,7 +435,12 @@ function ensureStructuredPackSections(
   return { chapters, action_items };
 }
 
-function parseSpecJson(raw: string, videoId: string): ExtractedVideoPackSpec {
+interface ParsedSpecJson {
+  spec: ExtractedVideoPackSpec;
+  specJsonSalvaged: boolean;
+}
+
+function parseSpecJson(raw: string, videoId: string): ParsedSpecJson {
   const cleaned = stripJsonCodeFence(raw);
   let parsed: unknown | undefined;
   let firstError: unknown;
@@ -436,6 +456,13 @@ function parseSpecJson(raw: string, videoId: string): ExtractedVideoPackSpec {
       return parseJsonValue(cleaned.slice(start, end + 1));
     },
     () => parseJsonValue(repairTruncatedJson(cleaned)),
+    () => {
+      const stripped = salvageByDroppingGroundedSpec(cleaned);
+      if (!stripped) {
+        throw new SyntaxError('No grounded_spec marker for salvage');
+      }
+      return parseJsonValue(stripped);
+    },
   ];
 
   let recovered = false;
@@ -471,7 +498,8 @@ function parseSpecJson(raw: string, videoId: string): ExtractedVideoPackSpec {
   const visualElementsRaw = Array.isArray(visual?.visual_elements) ? visual.visual_elements : [];
 
   const grounding = parseGroundedSpec(root.grounded_spec, root, videoId, recovered);
-  return {
+  const spec: ExtractedVideoPackSpec = {
+    ...(recovered ? { spec_json_salvaged: true } : {}),
     ...(grounding ? { grounded_spec: grounding } : {}),
     transcript: {
       language: typeof transcript.language === 'string' ? transcript.language : null,
@@ -562,6 +590,7 @@ function parseSpecJson(raw: string, videoId: string): ExtractedVideoPackSpec {
     chapters: parsePackChapters(root.chapters),
     action_items: parsePackActionItems(root.action_items),
   };
+  return { spec, specJsonSalvaged: recovered };
 }
 
 function isIdentityOnlySpec(spec: ExtractedVideoPackSpec, videoId: string): boolean {
@@ -633,7 +662,7 @@ export async function extractVideoPackSpec(
 
   let spec: ExtractedVideoPackSpec;
   try {
-    spec = parseSpecJson(result.text, input.videoId);
+    spec = parseSpecJson(result.text, input.videoId).spec;
   } catch (error) {
     if (error instanceof VideoPackExtractError) throw error;
     throw new VideoPackExtractError(formatUnparseableSpecError(error));

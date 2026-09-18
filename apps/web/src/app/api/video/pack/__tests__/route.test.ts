@@ -407,6 +407,93 @@ describe('GET /api/video/pack (anonymous read)', () => {
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
   });
 
+  it('returns 200 after truncated auJzb1D-fag spec salvage (not GET 503)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/video-pack-extractor')>(
+      '@/lib/video-pack-extractor',
+    );
+    const bulky = {
+      transcript: {
+        language: 'en',
+        full_text: 'Me at the zoo. The elephants have really long trunks.',
+        segments: [{ idx: 0, start_s: 0, end_s: 5.2, text: 'Me at the zoo.' }],
+      },
+      keyframes: [{ t_s: 1.2, desc: 'Elephants at the enclosure' }],
+      concepts: ['zoo', 'elephants'],
+      requirements: [
+        {
+          id: 'req-1',
+          title: 'Show the enclosure',
+          detail: 'The speaker points at the elephants.',
+          priority: 'normal',
+          tags: ['visual'],
+        },
+      ],
+      code_snippets: [],
+      artifacts: [],
+      stack: { tools: [] },
+      visual_context: null,
+      chapters: [{ start: 0, end: 5.2, topic: 'At the zoo', key_points: ['Elephants have long trunks'] }],
+      action_items: [
+        {
+          id: 'action-1',
+          type: 'implementation',
+          title: 'Visit the elephant enclosure',
+          description: 'Observe how the speaker describes the elephants.',
+          difficulty: 'easy',
+        },
+      ],
+      grounded_spec: {
+        version: '1',
+        outputClass: 'browser-interactive',
+        sourceStatus: 'partial',
+        confidence: 0.8,
+        limitations: Array.from(
+          { length: 400 },
+          (_, index) => `Synthetic limitation line ${index} ${'detail '.repeat(30)}`,
+        ),
+        app: { name: 'Zoo visit', purpose: 'Watch elephants' },
+        screens: [{ id: 'main', name: 'Main', purpose: 'View' }],
+        state: [],
+        requirements: [],
+        acceptanceCriteria: [],
+        unresolved: [],
+        unsupported: [],
+      },
+    };
+    const truncated = JSON.stringify(bulky).slice(0, 8050);
+
+    extractVideoPackSpec.mockImplementation((input, deps) =>
+      actual.extractVideoPackSpec(input, {
+        generateText: async () => ({ text: truncated }),
+        hasGatewayKey: () => true,
+      }),
+    );
+
+    const { POST, GET, flush } = await loadPackRoute();
+    const accepted = await POST(postRequest({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' }));
+    expect(accepted.status).toBe(202);
+    await flush();
+
+    const res = await GET(getRequest(`video_id=${CANON_A}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status?: string;
+      error?: string;
+      data?: {
+        transcript?: { full_text?: string };
+        metrics?: Record<string, number | string>;
+        chapters?: Array<{ topic?: string }>;
+        action_items?: Array<{ title?: string }>;
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.error).toBeUndefined();
+    expect(body.data?.transcript?.full_text).toContain('elephants');
+    expect(body.data?.metrics?.spec_json_salvaged).toBe(1);
+    expect(body.data?.chapters?.[0]?.topic).toBe('At the zoo');
+    expect(body.data?.action_items?.[0]?.title).toBe('Visit the elephant enclosure');
+  });
+
   it('does not serve an identity-only pack as success after cite-only extract', async () => {
     extractVideoPackSpec.mockRejectedValue(new VideoPackExtractError('Gemini 3.8 Flash returned no extracted spec content.'));
     const { POST, GET, flush } = await loadPackRoute();
