@@ -68,7 +68,7 @@ jobs:
                 }
                 return line;
               }).join("\n");
-              return prose.replace(/(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g, "\0");
+              return prose.replace(/(`+)[^\n]*?\1/g, "\0");
             };
 
             // Extract closing-issue references from a PR body, accepting only references that are
