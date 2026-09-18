@@ -277,12 +277,67 @@ def test_gh_aw_validation_tracks_poutine_policy_paths() -> None:
     assert ".poutine.yml" in workflow_on["pull_request"]["paths"]
 
 
-def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
+def test_pr_iteration_requires_explicit_issue_pr_dispatch_and_repo_concurrency() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    workflow_on = workflow.get("on", workflow.get(True))
+
+    assert workflow_on is not None
+    assert workflow_on["workflow_dispatch"] is None
+    assert workflow_on["issues"]["types"] == ["labeled"]
+    assert workflow_on["pull_request"]["types"] == ["labeled"]
+    assert workflow_on["issue_comment"]["types"] == ["created"]
+    assert workflow_on["push"]["branches"] == ["main"]
+    assert workflow_on["schedule"] == [{"cron": "0 9 * * 1-5"}]
+    assert workflow["concurrency"] == {
+        "group": "pr-iteration-loop-${{ github.repository }}",
+        "cancel-in-progress": False,
+    }
+
+
+def test_pr_iteration_selection_uses_fingerprint_and_skip_reasons() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
-    assert 'payload.selected = {\n            kind: "issue",' not in workflow_source
-    assert 'payload.selected = {\n            kind: "pull_request",' not in workflow_source
-    assert "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null" in workflow_source
+    assert "selection: {" in workflow_source
+    assert "fingerprint" in workflow_source
+    assert "skipped: []" in workflow_source
+    assert "payload.selection.reasons.push" in workflow_source
+    assert "payload.selection.duplicate_owner" in workflow_source
+
+
+def test_pr_iteration_no_candidate_short_circuits_before_dependency_install() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    pre_agent_steps = workflow["pre-agent-steps"]
+    selection_step = pre_agent_steps[0]
+    install_step = pre_agent_steps[1]
+
+    assert selection_step["name"] == "Select deterministic checkpoint seed"
+    assert selection_step["id"] == "select-checkpoint"
+    assert "core.setOutput(\"should_proceed\", \"false\")" in selection_step["with"]["script"]
+    assert "No candidate selected; exiting before dependency installation" in selection_step["with"]["script"]
+    assert install_step["name"] == "Install repository dependencies and language servers"
+    assert install_step["if"] == "steps.select-checkpoint.outputs.should_proceed == 'true'"
+
+
+def test_pr_iteration_safe_outputs_disallow_automation_merge() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    safe_outputs = workflow["safe-outputs"]
+    workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
+
+    assert "merge-pull-request" not in safe_outputs
+    assert safe_outputs["push-to-pull-request-branch"]["target"] == "triggering"
+    assert "required-title-prefix" not in safe_outputs["push-to-pull-request-branch"]
+    assert '.filter((pr) => pr.head?.ref?.startsWith("pr-iteration/"))' in workflow_source
+
+
+def test_pr_iteration_eval_requires_deterministic_observed_outcome_match() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    evals = workflow["evals"]
+
+    deterministic_eval = next(item for item in evals if item["id"] == "deterministic_postcondition")
+    question = deterministic_eval["question"]
+    assert "claimed_outcome" in question
+    assert "observed_outcome" in question
+    assert "match result" in question
 
 
 def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
