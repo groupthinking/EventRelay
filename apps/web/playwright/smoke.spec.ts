@@ -1,21 +1,35 @@
 import { test, expect, request } from '@playwright/test';
+import {
+  buildVercelProtectionBypassHeaders,
+  isVercelProtectionResponse,
+} from '../src/lib/e2e-preview-auth';
 
 test.describe('UVAI Production-Path Smoke Suite', () => {
   // Fail-closed gate: Verify BASE_URL is reachable and does not return unauthenticated or server errors.
   test.beforeAll(async () => {
     const baseURL = test.info().project.use.baseURL || 'https://uvai.io';
-    const requestContext = await request.newContext({ baseURL });
+    const requestContext = await request.newContext({
+      baseURL,
+      extraHTTPHeaders: buildVercelProtectionBypassHeaders(
+        process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+      ),
+    });
     console.info(`[Playwright] Initiating smoke tests against target: ${baseURL}`);
 
     try {
-      const response = await requestContext.get('/');
+      const response = await requestContext.get('/', {
+        failOnStatusCode: false,
+        maxRedirects: 0,
+      });
       const status = response.status();
+      const location = response.headers()['location'] || '';
 
-      // If the page is unauthenticated (e.g. 401), missing (404), or broken (5xx),
-      // we abort immediately and fail closed.
-      if (status === 401) {
+      // If preview protection intercepts the request, or the page is missing or
+      // broken, abort immediately and fail closed.
+      if (isVercelProtectionResponse(status, location)) {
         throw new Error(
-          `[FAIL-CLOSED] Target ${baseURL} returned 401 Unauthorized. Vercel Protection Bypass may be misconfigured.`
+          `[FAIL-CLOSED] Target ${baseURL} returned ${status}` +
+            `${location ? ` → ${location}` : ''}. Vercel Protection Bypass may be misconfigured.`
         );
       }
       if (status >= 500) {
