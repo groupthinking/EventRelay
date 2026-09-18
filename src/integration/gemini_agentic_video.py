@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 ProcessingMode = Literal["agentic", "static"]
+SUPPORTED_PROCESSING_MODES = frozenset({"agentic", "static"})
 
 
 @dataclass(frozen=True)
@@ -75,6 +77,8 @@ class GeminiAgenticVideoService:
         for video in videos:
             if not GeminiAgenticVideoService._is_supported_uri(video.uri):
                 raise ValueError("Video URI must be a supported YouTube or file URI")
+            if video.processing not in SUPPORTED_PROCESSING_MODES:
+                raise ValueError("Video processing mode must be 'agentic' or 'static'")
             item = {
                 "type": "video",
                 "uri": video.uri,
@@ -142,8 +146,16 @@ class GeminiAgenticVideoService:
         output_text = getattr(response, "output_text", None)
         if output_text is not None:
             return str(output_text)
-        return "".join(
+        outputs_text = "".join(
             str(getattr(output, "text", ""))
             for output in (getattr(response, "outputs", None) or [])
             if getattr(output, "text", None) is not None
+        )
+        if outputs_text:
+            return outputs_text
+        return "".join(
+            str(getattr(content, "text", ""))
+            for step in (getattr(response, "steps", None) or [])
+            for content in (getattr(step, "content", None) or [])
+            if getattr(content, "text", None) is not None
         )

@@ -1,10 +1,7 @@
+import threading
 from types import SimpleNamespace
 
 import pytest
-from google.genai._gaos.types.interactions.interaction import Interaction
-from google.genai._gaos.types.interactions.modeloutputstep import ModelOutputStep
-from google.genai._gaos.types.interactions.textcontent import TextContent
-from google.genai._gaos.types.interactions.usage import Usage
 
 from src.integration.gemini_agentic_video import (
     GeminiAgenticVideoService,
@@ -15,18 +12,18 @@ from src.integration.gemini_agentic_video import (
 class FakeInteractions:
     def __init__(self) -> None:
         self.request = None
+        self.thread_id = None
 
     def create(self, **kwargs):
         self.request = kwargs
-        return Interaction(
-            id="interaction-123",
-            created="2026-09-09T20:00:00Z",
-            status="completed",
-            updated="2026-09-09T20:00:01Z",
+        self.thread_id = threading.get_ident()
+        return SimpleNamespace(
             steps=[
-                ModelOutputStep(content=[TextContent(text="grounded result")])
+                SimpleNamespace(
+                    content=[SimpleNamespace(text="grounded result"), SimpleNamespace()]
+                )
             ],
-            usage=Usage(total_tokens=321),
+            usage=SimpleNamespace(total_tokens=321),
         )
 
 
@@ -35,6 +32,7 @@ async def test_agentic_youtube_request_returns_execution_receipt():
     interactions = FakeInteractions()
     client = SimpleNamespace(interactions=interactions)
     service = GeminiAgenticVideoService(client=client)
+    caller_thread_id = threading.get_ident()
 
     receipt = await service.analyze(
         [VideoInput("https://youtu.be/auJzb1D-fag")],
@@ -55,8 +53,10 @@ async def test_agentic_youtube_request_returns_execution_receipt():
             },
         ],
     }
+    assert interactions.thread_id != caller_thread_id
     assert receipt.output_text == "grounded result"
     assert receipt.total_tokens == 321
+    assert receipt.model == "gemini-3.7-flash"
     assert receipt.sources == ("https://youtu.be/auJzb1D-fag",)
     assert receipt.processing_modes == ("agentic",)
 
@@ -79,9 +79,15 @@ def test_mixed_mode_keeps_each_video_processing_policy():
     "uri",
     ["x", "https://example.com/video.mp4", "ftp://youtu.be/auJzb1D-fag"],
 )
-def test_malformed_video_uri_fails_before_calling_provider(uri):
+@pytest.mark.asyncio
+async def test_malformed_video_uri_fails_before_calling_provider(uri):
+    interactions = FakeInteractions()
+    service = GeminiAgenticVideoService(client=SimpleNamespace(interactions=interactions))
+
     with pytest.raises(ValueError):
-        GeminiAgenticVideoService.build_input([VideoInput(uri)], "question")
+        await service.analyze([VideoInput(uri)], "question")
+
+    assert interactions.request is None
 
 
 @pytest.mark.parametrize(
@@ -91,3 +97,11 @@ def test_malformed_video_uri_fails_before_calling_provider(uri):
 def test_invalid_requests_fail_before_calling_provider(videos, prompt):
     with pytest.raises(ValueError):
         GeminiAgenticVideoService.build_input(videos, prompt)
+
+
+def test_invalid_processing_mode_fails_validation():
+    with pytest.raises(ValueError):
+        GeminiAgenticVideoService.build_input(
+            [VideoInput("gs://bucket/clip.mp4", "dynamic", "video/mp4")],
+            "question",
+        )
