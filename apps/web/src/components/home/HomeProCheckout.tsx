@@ -35,11 +35,11 @@ export default function HomeProCheckout() {
         and renewal terms before you pay.
       </p>
 
-      <div
+      <fieldset
         className="mt-5 grid w-full grid-cols-1 gap-1.5 rounded-2xl border border-white/[0.08] bg-white/[0.04] p-1.5 sm:inline-grid sm:w-auto sm:grid-cols-2"
-        role="group"
         aria-label="Billing cadence"
       >
+        <legend className="sr-only">Billing cadence</legend>
         <button
           type="button"
           onClick={() => setAnnual(false)}
@@ -56,7 +56,7 @@ export default function HomeProCheckout() {
         >
           Annual checkout
         </button>
-      </div>
+      </fieldset>
 
       <div className="mt-6">
         <ProCheckoutButton

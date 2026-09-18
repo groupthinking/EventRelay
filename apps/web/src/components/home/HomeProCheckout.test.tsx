@@ -18,6 +18,7 @@ describe('HomeProCheckout', () => {
     render(<HomeProCheckout />);
 
     const cadence = screen.getByRole('group', { name: 'Billing cadence' });
+    expect(cadence.tagName).toBe('FIELDSET');
     const monthly = screen.getByRole('button', { name: 'Monthly checkout' });
     const annual = screen.getByRole('button', { name: 'Annual checkout' });
 

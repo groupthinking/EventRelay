@@ -33,6 +33,7 @@ describe('HomePasteForm', () => {
     render(<HomePasteForm />);
 
     const input = screen.getByLabelText('YouTube URL');
+    expect(input.getAttribute('type')).toBe('url');
     fireEvent.change(input, { target: { value: 'not a YouTube URL' } });
     fireEvent.submit(input.closest('form')!);
 
@@ -54,5 +55,8 @@ describe('HomePasteForm', () => {
 
     expect(mocks.push).toHaveBeenCalledWith('/studio?video=fixture');
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText(/You can paste a watch or share URL\./).textContent).toContain(
+      'You can paste a watch or share URL.',
+    );
   });
 });
