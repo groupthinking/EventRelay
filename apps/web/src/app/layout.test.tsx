@@ -1,4 +1,5 @@
 /* @vitest-environment jsdom */
+import type { ReactNode } from 'react';
 import { act } from 'react';
 import { hydrateRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
@@ -13,6 +14,9 @@ vi.mock('next/font/google', () => {
 
 vi.mock('@vercel/analytics/next', () => ({ Analytics: () => null }));
 vi.mock('@vercel/speed-insights/next', () => ({ SpeedInsights: () => null }));
+vi.mock('@/components/AuthSessionProvider', () => ({
+  AuthSessionProvider: ({ children }: { children: ReactNode }) => children,
+}));
 
 const jsonLdSelector = 'script[type="application/ld+json"]';
 const layout = (

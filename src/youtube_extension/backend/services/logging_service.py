@@ -164,6 +164,7 @@ class LoggingService:
         self.error_aggregator = ErrorAggregator()
         self.log_buffer: list[StructuredLogEntry] = []
         self.buffer_lock = asyncio.Lock()
+        self._flush_stop_event = asyncio.Event()
         self.flush_task: Optional[asyncio.Task] = None
         self.metrics_cache: dict[str, Any] = {}
         self.start_time = time.time()
@@ -172,7 +173,7 @@ class LoggingService:
         self._setup_outputs()
 
         # Start background tasks
-        asyncio.create_task(self._start_periodic_flush())
+        self.flush_task = asyncio.create_task(self._start_periodic_flush())
 
     def _load_config(self, config: Optional[dict[str, Any]]) -> dict[str, Any]:
         """Load logging configuration with defaults"""
@@ -213,12 +214,47 @@ class LoggingService:
 
     async def _start_periodic_flush(self):
         """Start periodic flushing of log buffer"""
-        while True:
+        while not self._flush_stop_event.is_set():
             try:
-                await asyncio.sleep(self.config['flush_interval'])
-                await self.flush_logs()
-            except Exception as e:
-                self.logger.error(f"Error in periodic flush: {e}")
+                await asyncio.wait_for(
+                    self._flush_stop_event.wait(),
+                    timeout=self.config['flush_interval'],
+                )
+            except asyncio.TimeoutError:
+                try:
+                    await self.flush_logs()
+                except Exception as error:
+                    self.logger.error(f"Error in periodic flush: {error}")
+            except Exception as error:
+                self.logger.error(f"Error in periodic flush: {error}")
+
+    @staticmethod
+    async def _await_task_completion(
+        task: asyncio.Task,
+    ) -> tuple[bool, Optional[BaseException]]:
+        """Wait for an owned task without forwarding caller cancellation to it."""
+        async def capture_outcome() -> Optional[BaseException]:
+            try:
+                await task
+            except BaseException as error:
+                return error
+            return None
+
+        outcome_task = asyncio.create_task(capture_outcome())
+        cancellation_requested = False
+
+        while not outcome_task.done():
+            try:
+                await asyncio.shield(outcome_task)
+            except asyncio.CancelledError:
+                cancellation_requested = True
+
+        try:
+            await asyncio.sleep(0)
+        except asyncio.CancelledError:
+            cancellation_requested = True
+
+        return cancellation_requested, outcome_task.result()
 
     async def log_structured(
         self,
@@ -443,14 +479,26 @@ class LoggingService:
 
     async def cleanup(self) -> None:
         """Cleanup resources and flush remaining logs"""
-        try:
-            if self.flush_task:
-                self.flush_task.cancel()
+        cancellation_requested = False
+        self._flush_stop_event.set()
 
-            await self.flush_logs()
+        periodic_task = self.flush_task
+        if periodic_task:
+            cancelled, periodic_error = await self._await_task_completion(periodic_task)
+            cancellation_requested = cancellation_requested or cancelled
+            if self.flush_task is periodic_task:
+                self.flush_task = None
+            if periodic_error and not isinstance(periodic_error, asyncio.CancelledError):
+                self.logger.error(f"Error stopping periodic log flush: {periodic_error}")
 
-        except Exception as e:
-            self.logger.error(f"Error during logging service cleanup: {e}")
+        final_flush_task = asyncio.create_task(self.flush_logs())
+        cancelled, flush_error = await self._await_task_completion(final_flush_task)
+        cancellation_requested = cancellation_requested or cancelled
+        if flush_error:
+            self.logger.error(f"Error during final logging service flush: {flush_error}")
+
+        if cancellation_requested:
+            raise asyncio.CancelledError
 
 
 # Global logging service instance

@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { getToken } from 'next-auth/jwt';
+import { getNextAuthJwtFromRequest } from '@/lib/auth-jwt';
 import type { NextRequest } from 'next/server';
 import { StudioError } from './errors';
 
@@ -12,12 +12,7 @@ export async function requireStudioOwner(request: NextRequest): Promise<StudioOw
     throw new StudioError(503, 'authentication_unavailable', 'Studio authentication is unavailable.');
   }
 
-  const token = await getToken({
-    req: request,
-    secret,
-    // Match auth.ts, including its production secure-cookie override.
-    secureCookie: process.env.NODE_ENV === 'production' || Boolean(process.env.NEXTAUTH_URL?.startsWith('https://')),
-  });
+  const token = await getNextAuthJwtFromRequest(request, secret);
   const subject = token?.sub;
   if (typeof subject !== 'string' || !subject.trim() || subject.length > 512) {
     throw new StudioError(401, 'authentication_required', 'Sign in to use the app builder.');
