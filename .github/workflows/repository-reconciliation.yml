@@ -48,6 +48,21 @@ jobs:
             const isDependencyAutomationPR = pr =>
               pr.user?.login === "dependabot[bot]" &&
               /^build\(deps(?:-[^)]+)?\):/i.test(pr.title || "");
+            const issueHasDispatchContract = issue => {
+              const labels = (issue.labels || [])
+                .map(label => typeof label === "string" ? label : label?.name)
+                .filter(Boolean)
+                .map(name => name.toLowerCase());
+              if (labels.includes("agent-task")) {
+                return true;
+              }
+              const body = (issue.body || "").toLowerCase();
+              return (
+                body.includes("agent run id") &&
+                body.includes("declared file scope") &&
+                body.includes("pre-dispatch confirmation")
+              );
+            };
 
             // Extract closing-issue references from a PR body, accepting only references that are
             // unqualified (`#N`) or explicitly qualified with THIS repository
@@ -118,11 +133,15 @@ jobs:
               nums.forEach(n => allIssueNumbers.add(n));
             }
             const validIssues = new Set();
+            const dispatchContractIssues = new Set();
             for (const issueNum of allIssueNumbers) {
               try {
                 const resp = await github.rest.issues.get({ owner, repo, issue_number: issueNum });
                 if (!resp.data.pull_request) {
                   validIssues.add(issueNum);
+                  if (issueHasDispatchContract(resp.data)) {
+                    dispatchContractIssues.add(issueNum);
+                  }
                 }
               } catch (err) {
                 if (err.status !== 404) throw err;
@@ -132,10 +151,15 @@ jobs:
 
             const untracked = [];
             const issueToPulls = new Map();
+            let truthGateArmedCount = 0;
             for (const pr of pulls) {
               const issues = extractIssueNumbers(pr.body);
               // Restrict to validated issue references only.
               const validUnique = [...new Set(issues)].filter(n => validIssues.has(n));
+              const dispatchContracts = validUnique.filter(n => dispatchContractIssues.has(n));
+              if (dispatchContracts.length === 1) {
+                truthGateArmedCount += 1;
+              }
               // Drafts mirror the governance workflow's deferred-enforcement rule and are excluded.
               // Dependabot dependency bumps are automation-managed and excluded from this drift gate.
               if (validUnique.length !== 1 && !pr.draft && !isDependencyAutomationPR(pr)) {
@@ -169,6 +193,7 @@ jobs:
               `- Open PRs: **${pulls.length}**`,
               `- Total remote branches: **${totalBranches}**`,
               `- Ready PRs without exactly one canonical issue: **${untracked.length}**`,
+              `- Truth-gate armed PRs (real dispatch contracts): **${truthGateArmedCount}**`,
               `- Issues with competing implementation PRs: **${duplicates.length}**`,
               `- Unattached branches older than 14 days: **${staleBranches.length}**`,
               "",

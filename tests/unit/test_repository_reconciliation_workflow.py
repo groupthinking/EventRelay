@@ -363,6 +363,72 @@ def test_reconciliation_workflow_excludes_dependabot_from_untracked() -> None:
     assert "isDependencyAutomationPR" in script
 
 
+def test_truth_gate_arming_ignores_non_contract_issue_links(tmp_path: Path) -> None:
+    """PR issue links should not arm truth-gate unless the issue is a dispatch contract."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 2101,
+                    "title": "fix: tighten cache invalidation",
+                    "body": "## Canonical issue\\n\\nCloses #2008",
+                    "draft": False,
+                    "head": {
+                        "ref": "copilot/fix-ci-truth-gate-arming",
+                        "repo": {"full_name": "groupthinking/EventRelay"},
+                    },
+                }
+            ],
+            "branches": [],
+            "issuesByNumber": {
+                "2008": {"state": "open", "labels": [{"name": "bug"}], "body": "General CI fix"}
+            },
+            "existingReport": {"number": 1584, "title": "[automation] Repository drift report"},
+        },
+    )
+
+    assert (
+        "- Truth-gate armed PRs (real dispatch contracts): **0**"
+        in outcome["issueUpdates"][0]["body"]
+    )
+
+
+def test_truth_gate_arming_accepts_agent_task_contract_links(tmp_path: Path) -> None:
+    """A linked issue with dispatch-contract declaration should arm truth-gate."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 2102,
+                    "title": "fix: gate arming contract guard",
+                    "body": "## Canonical issue\\n\\nCloses #2010",
+                    "draft": False,
+                    "head": {
+                        "ref": "copilot/fix-ci-truth-gate-arming",
+                        "repo": {"full_name": "groupthinking/EventRelay"},
+                    },
+                }
+            ],
+            "branches": [],
+            "issuesByNumber": {
+                "2010": {
+                    "state": "open",
+                    "labels": [{"name": "agent-task"}],
+                    "body": "## Agent run ID\nx\n## Declared file scope\ny\n## Pre-dispatch confirmation\nz",
+                }
+            },
+            "existingReport": {"number": 1584, "title": "[automation] Repository drift report"},
+        },
+    )
+
+    assert (
+        "- Truth-gate armed PRs (real dispatch contracts): **1**"
+        in outcome["issueUpdates"][0]["body"]
+    )
+
+
 def test_reconciliation_defers_without_writing_when_github_rate_limits(
     tmp_path: Path,
 ) -> None:
