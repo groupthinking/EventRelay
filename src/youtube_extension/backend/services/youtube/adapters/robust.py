@@ -20,7 +20,11 @@ from typing import Any, Optional
 
 import httpx
 
-from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+from youtube_extension.utils.proxy import (
+    get_proxy_url,
+    get_transcript_proxy_config,
+    redact_proxy_credentials,
+)
 
 # Import our cost monitor
 try:
@@ -140,7 +144,7 @@ class RobustYouTubeService:
         try:
             return await self._get_metadata_ytdlp(video_url, video_id)
         except Exception as e:
-            logger.warning(f"yt-dlp fallback failed: {e}")
+            logger.warning("yt-dlp fallback failed: %s", redact_proxy_credentials(e))
 
         raise Exception("All YouTube metadata APIs failed")
 
@@ -167,7 +171,9 @@ class RobustYouTubeService:
                 timeout=30,
             )
             if result.returncode != 0:
-                raise Exception(f"yt-dlp failed: {result.stderr}")
+                raise Exception(
+                    f"yt-dlp failed: {redact_proxy_credentials(result.stderr)}"
+                )
             return json.loads(result.stdout)
 
         data = await asyncio.get_event_loop().run_in_executor(None, _get_ytdlp_metadata)
@@ -487,7 +493,10 @@ class RobustYouTubeService:
                 segments = transcript_data.get("segments", [])
                 return True, len(segments)
         except Exception as e:
-            logger.debug(f"Transcript availability check failed: {e}")
+            logger.debug(
+                "Transcript availability check failed: %s",
+                redact_proxy_credentials(e),
+            )
 
         return False, 0
 
@@ -521,7 +530,11 @@ class RobustYouTubeService:
                         f"YouTubeTranscriptApi.fetch() returned {len(transcript) if transcript else 0} segments"
                     )
                 except Exception as fetch_err:
-                    api_error = f"YouTubeTranscriptApi.fetch failed: {type(fetch_err).__name__}: {fetch_err}"
+                    api_error = (
+                        "YouTubeTranscriptApi.fetch failed: "
+                        f"{type(fetch_err).__name__}: "
+                        f"{redact_proxy_credentials(fetch_err)}"
+                    )
                     logger.warning(api_error)
                     transcript_errors.append(api_error)
                     # Try instance list() as fallback — reuse the same proxy
@@ -543,7 +556,11 @@ class RobustYouTubeService:
                             f"YouTubeTranscriptApi.list() returned {len(transcript) if transcript else 0} segments"
                         )
                     except Exception as list_err:
-                        api_error = f"YouTubeTranscriptApi.list() fallback failed: {type(list_err).__name__}: {list_err}"
+                        api_error = (
+                            "YouTubeTranscriptApi.list() fallback failed: "
+                            f"{type(list_err).__name__}: "
+                            f"{redact_proxy_credentials(list_err)}"
+                        )
                         logger.warning(api_error)
                         transcript_errors.append(api_error)
                         transcript = []
@@ -592,7 +609,8 @@ class RobustYouTubeService:
 
             except Exception as e:
                 error_msg = (
-                    f"YouTube Transcript API outer exception: {type(e).__name__}: {e}"
+                    "YouTube Transcript API outer exception: "
+                    f"{type(e).__name__}: {redact_proxy_credentials(e)}"
                 )
                 logger.warning(error_msg)
                 transcript_errors.append(error_msg)

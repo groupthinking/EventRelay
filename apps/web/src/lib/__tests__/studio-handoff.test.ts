@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   applyStudioQueryAutoStart,
+  resetStudioQueryAutoStart,
   resolveStudioHandoff,
+  studioQueryFromSearchParams,
   studioVideoHref,
   submitHomePaste,
   youtubeWatchUrlFromInput,
@@ -71,6 +73,55 @@ describe('submitHomePaste kicks pack emit then hands off to Studio', () => {
 });
 
 describe('applyStudioQueryAutoStart (?video= one-shot, Strict Mode safe)', () => {
+  afterEach(() => {
+    // Release the module-level Strict Mode guard so tests stay isolated.
+    resetStudioQueryAutoStart();
+  });
+
+  it('re-starts the same video after a genuine unmount clears the guard', () => {
+    const start = vi.fn();
+    const firstMountKey = { current: null as string | null };
+    const first = applyStudioQueryAutoStart({
+      query: FIXTURE_WATCH,
+      startedKey: firstMountKey,
+      start,
+    });
+    expect(first).toBe('started');
+
+    // Genuine unmount releases the module-level guard.
+    resetStudioQueryAutoStart();
+
+    // Fresh mount (fresh ref) re-navigates to the same video.
+    const remountKey = { current: null as string | null };
+    const remount = applyStudioQueryAutoStart({
+      query: FIXTURE_WATCH,
+      startedKey: remountKey,
+      start,
+    });
+    expect(remount).toBe('started');
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it('suppresses duplicate start when a Strict Mode remount gets a fresh ref object', () => {
+    const remountWatchUrl = 'https://www.youtube.com/watch?v=pBsT6v-ciO8';
+    const firstMountKey = { current: null as string | null };
+    const remountKey = { current: null as string | null };
+    const start = vi.fn();
+    const first = applyStudioQueryAutoStart({
+      query: remountWatchUrl,
+      startedKey: firstMountKey,
+      start,
+    });
+    const remount = applyStudioQueryAutoStart({
+      query: remountWatchUrl,
+      startedKey: remountKey,
+      start,
+    });
+    expect(first).toBe('started');
+    expect(remount).toBe('already');
+    expect(start).toHaveBeenCalledTimes(1);
+  });
+
   it('starts once with the canonical watch URL across a Strict Mode double effect', () => {
     const startedKey = { current: null as string | null };
     const start = vi.fn();
@@ -122,5 +173,52 @@ describe('applyStudioQueryAutoStart (?video= one-shot, Strict Mode safe)', () =>
     ).toBe('invalid');
     expect(start).not.toHaveBeenCalled();
     expect(onInvalidQuery).toHaveBeenCalledWith('not a youtube url');
+  });
+});
+
+describe('studioQueryFromSearchParams (unencoded Home/share handoff)', () => {
+  const HAYDEN_ID = 'pBsT6v-ciO8';
+  const HAYDEN_WATCH = `https://www.youtube.com/watch?v=${HAYDEN_ID}`;
+
+  it('reads Hayden\'s unencoded /studio?video= watch URL as one video param', () => {
+    const params = new URL(
+      `https://uvai.io/studio?video=https://www.youtube.com/watch?v=${HAYDEN_ID}`,
+    ).searchParams;
+    expect(params.get('video')).toBe(HAYDEN_WATCH);
+    expect(params.get('v')).toBeNull();
+    expect(studioQueryFromSearchParams(params)).toBe(HAYDEN_WATCH);
+  });
+
+  it('reconstructs watch?v= when a proxy splits video and v onto sibling params', () => {
+    const split = new URLSearchParams(`video=https://www.youtube.com/watch&v=${HAYDEN_ID}`);
+    expect(split.get('video')).toBe('https://www.youtube.com/watch');
+    expect(split.get('v')).toBe(HAYDEN_ID);
+    expect(studioQueryFromSearchParams(split)).toBe(HAYDEN_WATCH);
+  });
+
+  it('keeps an encoded ?video= watch URL intact', () => {
+    const encoded = new URLSearchParams(`video=${encodeURIComponent(HAYDEN_WATCH)}`);
+    expect(encoded.get('video')).toBe(HAYDEN_WATCH);
+    expect(studioQueryFromSearchParams(encoded)).toBe(HAYDEN_WATCH);
+  });
+
+  it('starts analysis from the Hayden URL via searchParams', () => {
+    const startedKey = { current: null as string | null };
+    const start = vi.fn();
+    const onResolved = vi.fn();
+    const params = new URL(
+      `https://uvai.io/studio?video=https://www.youtube.com/watch?v=${HAYDEN_ID}`,
+    ).searchParams;
+
+    const result = applyStudioQueryAutoStart({
+      searchParams: params,
+      startedKey,
+      start,
+      onResolved,
+    });
+
+    expect(result).toBe('started');
+    expect(start).toHaveBeenCalledWith(HAYDEN_WATCH);
+    expect(onResolved).toHaveBeenCalledWith(HAYDEN_WATCH);
   });
 });

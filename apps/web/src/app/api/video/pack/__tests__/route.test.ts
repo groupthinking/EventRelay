@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GOLDEN_IDENTITY_HASHES, identityHash } from '@/lib/video-pack';
+import {
+  GOLDEN_IDENTITY_HASHES,
+  KEYFRAME_IMAGES_OK,
+  KEYFRAME_IMAGES_OK_NOTE,
+  KEYFRAME_IMAGES_PARTIAL,
+  KEYFRAME_IMAGES_PARTIAL_NOTE,
+  identityHash,
+} from '@/lib/video-pack';
+import { KEYFRAME_JPEG_CONTENT_TYPE } from '@/lib/keyframe-frame-capture';
 import { VideoPackExtractError } from '@/lib/video-pack-extractor';
 
 const CANON_A = 'auJzb1D-fag';
@@ -44,6 +52,7 @@ afterEach(() => {
   extractVideoPackSpec.mockReset();
   vi.resetModules();
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function postRequest(body: unknown) {
@@ -68,6 +77,8 @@ async function loadPackRoute() {
   videoPack.setVideoPackSchedulerForTests((work) => {
     scheduled.push(work);
   });
+  const capture = await import('@/lib/keyframe-frame-capture');
+  capture.resetKeyframeFrameCaptureForTests();
   const route = await import('../route');
   return {
     POST: route.POST,
@@ -79,6 +90,7 @@ async function loadPackRoute() {
     seedVideoPackRecordForTests: store.seedVideoPackRecordForTests,
     buildIdentityPack: videoPack.buildIdentityPack,
     applyExtractedSpec: videoPack.applyExtractedSpec,
+    setKeyframeFrameCaptureForTests: capture.setKeyframeFrameCaptureForTests,
   };
 }
 
@@ -117,6 +129,24 @@ describe('POST /api/video/pack', () => {
     expect(peek.status).toBe(202);
 
     finish?.(specFor(CANON_B));
+  });
+
+  it('does not return 202 in production when Redis durability is unavailable', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', '');
+    vi.stubEnv('KV_REST_API_URL', '');
+    vi.stubEnv('KV_REST_API_TOKEN', '');
+
+    const { POST, scheduled } = await loadPackRoute();
+    const res = await POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as { status?: string; error?: string };
+    expect(body.status).toBe('error');
+    expect(body.error).toMatch(/durable video pack storage is not configured/i);
+    expect(scheduled).toHaveLength(0);
+    expect(extractVideoPackSpec).not.toHaveBeenCalled();
   });
 
   it('fails closed with a visible error when Gateway extract is unavailable', async () => {
@@ -230,6 +260,151 @@ describe('GET /api/video/pack (anonymous read)', () => {
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     expect(body.data.transcript.full_text).not.toBe(`cite:youtube:${CANON_B}`);
     expect(body.data.concepts).toEqual([`topic-${CANON_B}`]);
+  });
+
+  it('annotates stored null image_path keyframes as PARTIAL without inventing URLs', async () => {
+    const loaded = await loadPackRoute();
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-12T16:39:08.716Z',
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: {
+        ...pack,
+        keyframes: [
+          { t_s: 1, image_path: null, desc: `Keyframe from ${CANON_B}` },
+          { t_s: 12, image_path: null, desc: 'Second described frame' },
+        ],
+        metrics: {},
+        provenance: {
+          ...pack.provenance,
+          notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+        },
+      },
+    });
+
+    const res = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: {
+        keyframes: Array<{ t_s: number; image_path?: string | null; desc?: string | null }>;
+        metrics: Record<string, number | string>;
+        provenance: { source_hash: string; notes: string };
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.keyframes).toHaveLength(2);
+    expect(body.data.keyframes.every((frame) => frame.image_path === null)).toBe(true);
+    expect(body.data.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(body.data.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/https?:\/\//);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com/);
+  });
+
+  it('hydrates stored null keyframes with captured app-served paths and seals ok', async () => {
+    const loaded = await loadPackRoute();
+    loaded.setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
+      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]),
+      contentType: KEYFRAME_JPEG_CONTENT_TYPE,
+      imagePath: `/api/video/pack/frames/${videoId}/${t_s}`,
+    }));
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-12T16:39:08.716Z',
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: {
+        ...pack,
+        keyframes: [
+          { t_s: 1, image_path: null, desc: `Keyframe from ${CANON_B}` },
+          { t_s: 12, image_path: null, desc: 'Second described frame' },
+        ],
+        metrics: { keyframes_images: KEYFRAME_IMAGES_PARTIAL },
+        provenance: {
+          ...pack.provenance,
+          notes: `${pack.provenance.notes} ${KEYFRAME_IMAGES_PARTIAL_NOTE}`.trim(),
+        },
+      },
+    });
+
+    const res = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: {
+        keyframes: Array<{ t_s: number; image_path?: string | null }>;
+        metrics: Record<string, number | string>;
+        provenance: { source_hash: string; notes: string };
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.keyframes.map((frame) => frame.image_path)).toEqual([
+      `/api/video/pack/frames/${CANON_B}/1`,
+      `/api/video/pack/frames/${CANON_B}/12`,
+    ]);
+    expect(body.data.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(body.data.provenance.notes).toContain(KEYFRAME_IMAGES_OK_NOTE);
+    expect(body.data.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com/);
+  });
+
+  it('hydrates cached null keyframes via stills bytes and seals stills-ok', async () => {
+    const loaded = await loadPackRoute();
+    loaded.setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
+      bytes: Uint8Array.from([0xff, 0xd8, 0xff, 0xd9]),
+      contentType: KEYFRAME_JPEG_CONTENT_TYPE,
+      imagePath: `/api/video/pack/frames/${videoId}/${t_s}`,
+      source: 'stills' as const,
+    }));
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-12T16:39:08.716Z',
+    );
+    const pack = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: {
+        ...pack,
+        keyframes: [
+          { t_s: 1, image_path: null, desc: `Keyframe from ${CANON_B}` },
+          { t_s: 12, image_path: null, desc: 'Second described frame' },
+        ],
+        metrics: { keyframes_images: KEYFRAME_IMAGES_PARTIAL },
+        provenance: {
+          ...pack.provenance,
+          notes: `${pack.provenance.notes} ${KEYFRAME_IMAGES_PARTIAL_NOTE}`.trim(),
+        },
+      },
+    });
+
+    const res = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      data: {
+        keyframes: Array<{ t_s: number; image_path?: string | null }>;
+        metrics: Record<string, number | string>;
+        provenance: { source_hash: string; notes: string };
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data.keyframes.every((frame) => typeof frame.image_path === 'string')).toBe(true);
+    expect(body.data.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_OK);
+    expect(body.data.metrics.keyframes_images_source).toBe('stills');
+    expect(body.data.provenance.notes).toMatch(/stills captured as JPEG bytes/i);
+    expect(body.data.provenance.notes).not.toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(JSON.stringify(body.data.keyframes)).not.toMatch(/i\.ytimg\.com|img\.youtube\.com|hqdefault/);
+    expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
   });
 
   it('does not serve an identity-only pack as success after cite-only extract', async () => {

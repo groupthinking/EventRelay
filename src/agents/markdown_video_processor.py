@@ -15,6 +15,8 @@ from typing import Any
 import aiohttp
 from dotenv import load_dotenv
 
+from youtube_extension.utils.proxy import redact_proxy_credentials
+
 # Load environment variables
 load_dotenv()
 
@@ -54,10 +56,14 @@ class MarkdownVideoProcessor:
             try:
                 transcript_data = await proxy.get_transcript(video_id)
             except Exception as e:
-                logger.warning(f"Transcript not available: {e}")
+                logger.warning(
+                    "Transcript not available: %s", redact_proxy_credentials(e)
+                )
 
         except Exception as e:
-            logger.warning(f"MCP proxy failed, using direct API: {e}")
+            logger.warning(
+                "MCP proxy failed, using direct API: %s", redact_proxy_credentials(e)
+            )
             # Fallback to direct API
             url = "https://www.googleapis.com/youtube/v3/videos"
             params = {

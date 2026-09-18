@@ -1260,3 +1260,25 @@ class TestGoogleCloudImageReadOffEventLoop:
             "offloading must preserve the underlying I/O error in the exception chain"
         )
         assert "No such file or directory" in str(exc_info.value)
+
+    async def test_local_file_read_routes_through_run_blocking(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("CLOUD_AI_MEDIA_ROOT", str(tmp_path))
+        provider = _make_provider()
+        provider._vision_client = self._client()
+        img_file = tmp_path / "frame.jpg"
+        img_file.write_bytes(b"disk-bytes")
+        mock_vision = self._vision_modules()
+        method_globals = type(provider).analyze_image.__globals__
+        run_blocking = AsyncMock(return_value=b"worker-bytes")
+
+        with (
+            self._patched_modules(mock_vision),
+            patch.dict(method_globals, {"run_blocking": run_blocking}),
+        ):
+            await provider.analyze_image(str(img_file), [AnalysisType.LABEL_DETECTION])
+
+        assert mock_vision.Image.return_value.content == b"worker-bytes"
+        run_blocking.assert_awaited_once()
+        read_func, read_path = run_blocking.await_args.args
+        assert read_func is method_globals["_read_file_bytes"]
+        assert read_path == str(img_file)

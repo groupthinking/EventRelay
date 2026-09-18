@@ -13,6 +13,7 @@ WORKFLOW_PATH = (
     Path(__file__).resolve().parents[2]
     / ".github/workflows/dependabot-auto-merge.yml"
 )
+CI_WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
 DEPENDABOT_CONFIG_PATH = Path(__file__).resolve().parents[2] / ".github/dependabot.yml"
 
 
@@ -129,6 +130,23 @@ def test_dependabot_ignores_eslint_v10() -> None:
         } in update.get("ignore", [])
 
 
+def test_dependabot_ignores_generated_gh_aw_action_locks() -> None:
+    config = _load_dependabot_config()
+    github_actions_updates = [
+        update
+        for update in config["updates"]
+        if update["package-ecosystem"] == "github-actions" and update["directory"] == "/"
+    ]
+
+    assert len(github_actions_updates) == 1, (
+        "Expected exactly one root github-actions Dependabot entry, got "
+        f"{len(github_actions_updates)}"
+    )
+    assert {"dependency-name": "github/gh-aw-actions/*"} in github_actions_updates[
+        0
+    ].get("ignore", [])
+
+
 # ---------------------------------------------------------------------------
 # Behavioural coverage for the merge gate (#1476).
 #
@@ -188,7 +206,9 @@ REQUIRED_CHECKS = [
     "lint-python",
     "lint-frontend",
     "build",
-    "test",
+    "test (Python 3.10)",
+    "test (Python 3.11)",
+    "test (Python 3.12)",
     # Python pytest only; apps/web vitest is the separate `test-frontend`
     # required check (#1449).
     "test-frontend",
@@ -263,15 +283,21 @@ def test_merge_gate_merges_a_green_patch_update(tmp_path: Path) -> None:
 def test_merge_gate_blocks_while_check_runs_are_unfinished(tmp_path: Path) -> None:
     """Commit statuses carry no CI on this repo -- on a typical Dependabot head
     the combined status is `success` off two Vercel statuses while `build` and
-    `test` are still queued. Gating on that alone merged with CI unfinished."""
+    `test (Python 3.12)` are still queued. Gating on that alone merged with CI
+    unfinished."""
     outcome = _run_merge_gate(
         tmp_path,
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
             "checkRuns": _all_required_green(
-                build={"status": "queued", "conclusion": None},
-                test={"status": "in_progress", "conclusion": None},
+                **{
+                    "build": {"status": "queued", "conclusion": None},
+                    "test (Python 3.12)": {
+                        "status": "in_progress",
+                        "conclusion": None,
+                    },
+                }
             ),
         },
     )
@@ -286,12 +312,14 @@ def test_merge_gate_blocks_on_a_failing_check_run(tmp_path: Path) -> None:
         {
             "commitMessage": DIRECT_PATCH_COMMIT,
             "combinedState": "success",
-            "checkRuns": _all_required_green(test={"conclusion": "failure"}),
+            "checkRuns": _all_required_green(
+                **{"test (Python 3.12)": {"conclusion": "failure"}}
+            ),
         },
     )
 
     assert outcome["merged"] is False
-    assert "test=failure" in outcome["log"][-1]
+    assert "test (Python 3.12)=failure" in outcome["log"][-1]
 
 
 def test_merge_gate_treats_skipped_and_neutral_as_satisfied(tmp_path: Path) -> None:
@@ -547,4 +575,22 @@ def test_required_checks_match_merge_policy() -> None:
         "Dependabot merge gate is out of sync with MERGE_POLICY.md gate 2.\n"
         f"  missing from gate: {sorted(policy_checks - gate_checks)}\n"
         f"  extra in gate    : {sorted(gate_checks - policy_checks)}"
+    )
+
+    ci_workflow = yaml.safe_load(CI_WORKFLOW_PATH.read_text())
+    ci_check_names: set[str] = set()
+    for job_id, job in ci_workflow["jobs"].items():
+        job_name = job.get("name", job_id)
+        matrix = job.get("strategy", {}).get("matrix", {})
+        python_versions = matrix.get("python-version")
+        if python_versions:
+            ci_check_names.update(
+                job_name.replace("${{ matrix.python-version }}", version)
+                for version in python_versions
+            )
+        else:
+            ci_check_names.add(job_name)
+    assert ci_check_names <= gate_checks, (
+        "Dependabot merge gate does not require every CI job.\n"
+        f"  missing CI checks: {sorted(ci_check_names - gate_checks)}"
     )

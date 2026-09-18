@@ -1,5 +1,18 @@
 import { renderDeployMarkdown, type LinkedSop } from '@/lib/linked-sop';
 import { officialTemplateFiles, pickOfficialTemplate } from '@/lib/official-templates';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
+import {
+  emitAppBuilderSandbox,
+  sopStepsFromPack,
+  visualEventsFromPack,
+  type AppBuilderSopStep,
+  type AppBuilderTranscript,
+  type AppBuilderVisualEvent,
+} from '@/lib/emit-app-builder-sandbox';
 import { zipUtf8Files } from '@/lib/zip-store';
 
 /**
@@ -36,7 +49,23 @@ export interface ScaffoldPackage {
   files: Record<string, string>;
 }
 
-function safeProjectName(name: string): string {
+export type ScaffoldDownloadResult =
+  | {
+      ok: true;
+      status: number;
+      filename: string;
+    }
+  | {
+      ok: false;
+      status: number;
+      error: string;
+      code?: string;
+      upgradeRequired?: boolean;
+      checkoutUrl?: string;
+      retryable?: boolean;
+    };
+
+export function safeProjectName(name: string): string {
   return (
     name
       .toLowerCase()
@@ -105,12 +134,31 @@ export function actionsFromStudioRun(input: {
   return out;
 }
 
+export type StudioPackExportFormation = {
+  architecture?: VideoPackArchitecture | null;
+  artifacts?: VideoPackArtifact[];
+  tools?: VideoPackStackTool[];
+};
+
+export type StudioShipVideoPack = {
+  videoId: string;
+  sourceUrl: string;
+  sourceHash: string;
+  packId?: string;
+  /** Visual-context + frame slice. Studio must not name pack frames as events. */
+  visual?: Parameters<typeof visualEventsFromPack>[0];
+  /** Pack requirements (SOP). Ignored when Studio already compiled steps. */
+  requirements?: Parameters<typeof sopStepsFromPack>[0]['requirements'];
+};
+
 export function buildScaffoldPackage(input: {
   projectName?: string;
   actions: ActionCardLike[];
   /** Optional Gemini project_scaffold blob from TranscriptActionAgent. */
   projectScaffold?: unknown;
   linkedSop?: LinkedSop;
+  /** Pack architecture / artifacts / stack when events[] is empty. */
+  packFormation?: StudioPackExportFormation;
 }): ScaffoldPackage {
   const name = safeProjectName(input.projectName || 'generated-project');
   const sop = input.linkedSop;
@@ -181,7 +229,76 @@ export function buildScaffoldPackage(input: {
       JSON.stringify(input.projectScaffold, null, 2) + '\n';
   }
 
+  const architecture = input.packFormation?.architecture;
+  if (architecture) {
+    const stageLines = architecture.stages
+      .map((stage) => `- ${stage.name}${stage.description ? ` — ${stage.description}` : ''}`)
+      .join('\n');
+    files['ARCHITECTURE.md'] = [
+      `# Architecture`,
+      '',
+      architecture.summary?.trim() || '',
+      stageLines ? `\n## Stages\n\n${stageLines}\n` : '',
+      architecture.mermaid ? `\n## Graph\n\n\`\`\`mermaid\n${architecture.mermaid}\n\`\`\`\n` : '',
+    ]
+      .filter((block) => block.length > 0)
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
+  const artifacts = input.packFormation?.artifacts ?? [];
+  if (artifacts.length > 0) {
+    files['artifacts.json'] = JSON.stringify(artifacts, null, 2) + '\n';
+  }
+
+  const tools = input.packFormation?.tools ?? [];
+  if (tools.length > 0 && !entityLines) {
+    const toolLines = tools.map((tool) => `- ${tool.name}`).join('\n');
+    files['README.md'] += `\n## Stack\n\n${toolLines}\n`;
+  }
+
   return { projectName: name, files };
+}
+
+/**
+ * Studio Export ship artifact: when a hashed Video Pack is present, merge the
+ * App Builder Workspace sandbox (startup.sh / 8080 / smoke / build+typecheck)
+ * over the SOP/scaffold files. Sandbox files win on collision.
+ */
+export function buildStudioShipPackage(input: {
+  projectName?: string;
+  actions: ActionCardLike[];
+  projectScaffold?: unknown;
+  linkedSop?: LinkedSop;
+  packFormation?: StudioPackExportFormation;
+  videoPack?: StudioShipVideoPack | null;
+  transcript?: AppBuilderTranscript | null;
+  visualEvents?: AppBuilderVisualEvent[];
+  sopSteps?: AppBuilderSopStep[];
+}): ScaffoldPackage {
+  const scaffold = buildScaffoldPackage(input);
+  if (!input.videoPack) {
+    return scaffold;
+  }
+  const sandbox = emitAppBuilderSandbox({
+    videoId: input.videoPack.videoId,
+    sourceUrl: input.videoPack.sourceUrl,
+    sourceHash: input.videoPack.sourceHash,
+    packId: input.videoPack.packId,
+    transcript: input.transcript,
+    visualEvents: input.visualEvents ?? visualEventsFromPack(input.videoPack.visual ?? {}),
+    sopSteps:
+      input.sopSteps ??
+      input.linkedSop?.steps ??
+      sopStepsFromPack({ requirements: input.videoPack.requirements }),
+  });
+  const files = { ...scaffold.files, ...sandbox.files };
+  delete files['ARCHITECTURE.md'];
+  delete files['artifacts.json'];
+  return {
+    projectName: scaffold.projectName,
+    files,
+  };
 }
 
 /** Human-readable preview lines for a project_scaffold blob. */
@@ -233,19 +350,84 @@ export function summarizeProjectScaffold(scaffold: unknown, maxItems = 6): strin
 }
 
 /** One zip so Chrome does not swallow official starter files after the first blob. */
-export function downloadScaffoldPackage(pkg: ScaffoldPackage): void {
-  if (typeof document === 'undefined') return;
-  const zip = zipUtf8Files(pkg.files);
-  const bytes = new ArrayBuffer(zip.byteLength);
-  new Uint8Array(bytes).set(zip);
-  const blob = new Blob([bytes], { type: 'application/zip' });
+function exportFallbackName(projectName: string): string {
+  const trimmed = projectName.trim();
+  if (!trimmed) return 'uvai-project.zip';
+  return trimmed.toLowerCase().endsWith('.zip') ? trimmed : `${trimmed}.zip`;
+}
+
+function attachmentFilename(disposition: string | null, fallback: string): string {
+  const match = disposition?.match(/filename="([^"]+)"/i);
+  return match?.[1]?.trim() || fallback;
+}
+
+async function readExportError(response: Response): Promise<ScaffoldDownloadResult> {
+  const body = await response
+    .json()
+    .catch(() => ({} as Record<string, unknown>));
+
+  return {
+    ok: false,
+    status: response.status,
+    error:
+      typeof body.error === 'string' && body.error.trim()
+        ? body.error
+        : 'Export failed.',
+    code: typeof body.code === 'string' ? body.code : undefined,
+    upgradeRequired: body.upgradeRequired === true,
+    checkoutUrl: typeof body.checkoutUrl === 'string' ? body.checkoutUrl : undefined,
+    retryable: body.retryable === true,
+  };
+}
+
+/** One zip so Chrome does not swallow official starter files after the first blob. */
+export async function downloadScaffoldPackage(
+  pkg: ScaffoldPackage,
+): Promise<ScaffoldDownloadResult> {
+  if (typeof document === 'undefined' || typeof fetch === 'undefined') {
+    return { ok: false, status: 0, error: 'Downloads require a browser context.' };
+  }
+
+  let response: Response | null = null;
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      response = await fetch('/api/workspace/export', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(pkg),
+      });
+      if (response.ok || response.status < 500) break;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+
+  if (!response) {
+    return {
+      ok: false,
+      status: 0,
+      error: lastError?.message || 'Export failed.',
+    };
+  }
+
+  if (!response.ok) {
+    return readExportError(response);
+  }
+
+  const blob = await response.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${pkg.projectName || 'uvai-project'}.zip`;
+  const filename = attachmentFilename(
+    response.headers.get('content-disposition'),
+    exportFallbackName(pkg.projectName || 'uvai-project'),
+  );
+  a.download = filename;
   a.rel = 'noopener';
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+  return { ok: true, status: response.status, filename };
 }

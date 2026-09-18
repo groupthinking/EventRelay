@@ -58,6 +58,7 @@ jobs:
           pytest tests/ \
             --timeout=120 \
             --cov=src/youtube_extension \
+            --cov-fail-under=88.1833 \
             --cov-report=lcov:reports/lcov.info \
             --cov-report=json:reports/coverage.json \
             --cov-report=term \

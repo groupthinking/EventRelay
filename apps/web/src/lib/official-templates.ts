@@ -2,12 +2,19 @@
  * Official starters for Export, and a hold-gate for Deploy.
  *
  * Templates are the vendor CLI/repo, not invented architecture.
- * Deploy stays held while this run's stack checks (Vercel Deployment Checks,
- * Shopify CLI, GitHub Actions) are still open — same rule as Vercel:
- * production does not promote until checks pass.
+ * Signed-in Deploy stays held only while runnable vendor checks (Vercel
+ * Deployment Checks, Shopify CLI, GitHub Actions) are still open.
+ * Anonymous viewers and non-runnable pack tools (SeaDance, Cluely, …)
+ * get honest skip/unknown — they do not hold Deploy.
  */
 
 import type { ChecklistItem, LinkedSop } from '@/lib/linked-sop';
+
+export type StudioViewer = 'anonymous' | 'signed-in';
+export type StackCheckStatus = 'pending' | 'done' | 'skip' | 'unknown';
+
+/** Stacks UVAI can actually verify in-product. Pack-named tools are unknown. */
+const RUNNABLE_STACKS = new Set(['vercel', 'shopify', 'github']);
 
 export interface OfficialTemplate {
   id: 'vercel-next' | 'shopify-cli';
@@ -48,6 +55,39 @@ export function stackCheckItems(sop: LinkedSop | null | undefined): ChecklistIte
   return (sop?.checklist || []).filter((item) => item.source === 'stack');
 }
 
+export function isRunnableStackCheck(item: ChecklistItem): boolean {
+  return item.source === 'stack' && Boolean(item.stack && RUNNABLE_STACKS.has(item.stack));
+}
+
+export function stackCheckStatus(
+  item: ChecklistItem,
+  completedIds: Iterable<string>,
+  viewer: StudioViewer = 'anonymous',
+): StackCheckStatus {
+  const done = new Set(completedIds);
+  if (done.has(item.id)) return 'done';
+  if (!isRunnableStackCheck(item)) return 'unknown';
+  if (viewer === 'anonymous') return 'skip';
+  return 'pending';
+}
+
+export function stackCheckStatusLabel(status: StackCheckStatus): string {
+  switch (status) {
+    case 'done':
+      return 'Done';
+    case 'pending':
+      return 'Pending';
+    case 'skip':
+      return 'Skip — not runnable while signed out';
+    case 'unknown':
+      return 'Unknown — UVAI cannot run this check';
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
 export function pickOfficialTemplate(sop: LinkedSop | null | undefined): OfficialTemplate | null {
   const stacks = detectedStacks(sop);
   if (stacks.has('vercel')) return NEXT;
@@ -58,9 +98,11 @@ export function pickOfficialTemplate(sop: LinkedSop | null | undefined): Officia
 export function deployHoldReason(
   sop: LinkedSop | null | undefined,
   completedIds: Iterable<string>,
+  viewer: StudioViewer = 'anonymous',
 ): string | null {
-  const done = new Set(completedIds);
-  const pending = stackCheckItems(sop).filter((item) => !done.has(item.id));
+  const pending = stackCheckItems(sop).filter(
+    (item) => stackCheckStatus(item, completedIds, viewer) === 'pending',
+  );
   if (pending.length === 0) return null;
   return `Production is held until ${pending.length} stack check(s) pass. Next: ${pending[0].title}`;
 }

@@ -50,6 +50,7 @@ jobs:
       github.repository == 'groupthinking/EventRelay' &&
       github.event.pull_request.draft == false
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Dependabot metadata
         id: metadata
@@ -106,6 +107,7 @@ jobs:
   dependabot-auto-merge-merge:
     if: vars.DEPENDABOT_AUTO_MERGE_ENABLED == 'true' && github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success'
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/github-script@v9
         with:
@@ -247,10 +249,12 @@ jobs:
                 'lint-python',
                 'lint-frontend',
                 'build',
-                'test',
-                // Python pytest only. The apps/web vitest suite is the separate
-                // required check `test-frontend` (#1449) -- a green `test` is
-                // not evidence that web unit tests ran.
+                'test (Python 3.10)',
+                'test (Python 3.11)',
+                'test (Python 3.12)',
+                // These three matrix jobs run Python pytest only. The apps/web
+                // vitest suite is the separate required check `test-frontend`
+                // (#1449); green Python jobs do not prove web unit tests ran.
                 'test-frontend',
                 'CodeQL',
                 'gitleaks (working tree)',
