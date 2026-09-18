@@ -2715,18 +2715,21 @@ class TestChatExtraCoVerage:
         finally:
             app.dependency_overrides[get_agent_orchestrator_service] = _make_orchestrator
 
-    def test_chat_video_detail_lookup_runs_on_worker_thread(self):
-        """``get_video_detail`` inside ``chat_v1`` must run off the event
-        loop thread, mirroring the ``/videos/{video_id}`` offload pattern."""
-        seen: dict[str, int] = {}
+    def test_chat_video_detail_lookups_run_on_worker_threads(self):
+        """Both ``get_video_detail`` calls in ``chat_v1`` run off the event loop."""
+        lookup_threads: list[int] = []
+
+        def _detail(video_id: str):
+            lookup_threads.append(threading.get_ident())
+            if len(lookup_threads) == 1:
+                return None
+            return {
+                "video_id": video_id,
+                "metadata": {"title": "Test", "transcript_text": "hello world"},
+            }
 
         svc = _make_data_svc()
-        svc.get_video_detail.side_effect = lambda _video_id: seen.__setitem__(
-            "lookup", threading.get_ident()
-        ) or {
-            "video_id": "vid-1",
-            "metadata": {"title": "Test", "transcript_text": "hello world"},
-        }
+        svc.get_video_detail.side_effect = _detail
 
         agent_result = MagicMock()
         agent_result.status = "ok"
@@ -2740,24 +2743,29 @@ class TestChatExtraCoVerage:
         orchestrator = MagicMock()
         orchestrator.execute_task = AsyncMock(return_value=task_result)
 
-        request = ChatRequest(query="hello", video_id="vid-1")
+        request = ChatRequest(
+            query="hello",
+            video_id="vid-1",
+            video_url="https://www.youtube.com/watch?v=auJzb1D-fag",
+        )
 
         async def _run():
-            seen["loop"] = threading.get_ident()
-            return await router_module.chat_v1(
+            loop_thread = threading.get_ident()
+            response = await router_module.chat_v1(
                 request=request,
                 orchestrator=orchestrator,
                 data_service=svc,
                 video_processing_service=_make_vps(),
             )
+            return loop_thread, response
 
-        response = asyncio.run(_run())
+        loop_thread, response = asyncio.run(_run())
 
         assert response.status == "success"
-        assert "lookup" in seen, "get_video_detail was never invoked"
-        assert seen["lookup"] != seen["loop"], (
+        assert len(lookup_threads) == 2
+        assert all(thread_id != loop_thread for thread_id in lookup_threads), (
             "get_video_detail ran on the event loop thread in chat_v1; "
-            "it must be offloaded"
+            "both lookups must be offloaded"
         )
 
 
