@@ -54,7 +54,35 @@ listBranches.__tag = "repos.listBranches";
 const listComments = async ({ issue_number }) => ({ data: (scenario.commentsByIssue || {})[issue_number] || [] });
 listComments.__tag = "issues.listComments";
 
+const graphql = async () => {
+  if (scenario.graphqlError) {
+    const err = new Error(scenario.graphqlError.message);
+    err.status = scenario.graphqlError.status;
+    throw err;
+  }
+  return {
+    repository: {
+      refs: {
+        totalCount: (scenario.branches || []).length,
+        pageInfo: { hasNextPage: false, endCursor: null },
+        nodes: (scenario.branches || []).map((branch) => ({
+          name: branch.name,
+          branchProtectionRule: branch.protected ? { id: "protected" } : null,
+          target: {
+            oid: branch.commit?.sha || branch.sha || "fixture-sha",
+            committedDate:
+              branch.committedDate ||
+              ((scenario.commitsBySha || {})[branch.commit?.sha || branch.sha]) ||
+              "2026-07-01T00:00:00Z",
+          },
+        })),
+      },
+    },
+  };
+};
+
 const github = {
+  graphql,
   paginate: async (fn, params) => {
     switch (fn.__tag) {
       case "pulls.list":
@@ -163,13 +191,12 @@ def test_reconciliation_workflow_triggers_on_schedule_and_dispatch() -> None:
 
 
 def test_reconciliation_workflow_reacts_to_repo_state_changes() -> None:
-    """The report must refresh when PR, issue, or branch state changes."""
+    """The report refreshes on governance state changes, not every code push."""
     triggers = _load_workflow()[True]
     assert triggers["pull_request_target"]["types"] == [
         "opened",
         "reopened",
         "edited",
-        "synchronize",
         "ready_for_review",
         "converted_to_draft",
         "closed",
@@ -209,6 +236,19 @@ def test_reconciliation_workflow_validates_issue_numbers_via_api() -> None:
     assert "404" in script
 
 
+def test_reconciliation_workflow_accepts_same_repo_qualified_closing_refs() -> None:
+    """Canonical issue detection must accept `Closes owner/repo#123` for this repo."""
+    script = _get_script(_load_workflow())
+    assert "escapedRepoFullName" in script, (
+        "Closing-reference parsing should escape the current repo name so fully qualified"
+        " same-repo references are accepted."
+    )
+    assert "repoFullName" in script, (
+        "Closing-reference parsing should derive the fully qualified repo prefix from"
+        " the current workflow repository context."
+    )
+
+
 def test_reconciliation_workflow_restricts_active_heads_to_same_repo() -> None:
     """activeHeads must only include branches from the same repository, not forks."""
     script = _get_script(_load_workflow())
@@ -234,6 +274,16 @@ def test_reconciliation_workflow_total_branches_metric_is_accurate() -> None:
     )
     # The label in the report must say "Total remote branches" (includes all fetched).
     assert "Total remote branches" in script
+
+
+def test_reconciliation_uses_graphql_branch_inventory_without_rest_pagination() -> None:
+    """Branch inventory must avoid one REST request per page and per stale branch."""
+    script = _get_script(_load_workflow())
+
+    assert "github.graphql" in script
+    assert 'refs(refPrefix: "refs/heads/"' in script
+    assert "committedDate" in script
+    assert "github.paginate(github.rest.repos.listBranches" not in script
 
 
 def test_reconciliation_workflow_report_is_idempotent() -> None:
@@ -311,3 +361,24 @@ def test_reconciliation_workflow_excludes_dependabot_from_untracked() -> None:
     script = _get_script(_load_workflow())
     assert "dependabot[bot]" in script
     assert "isDependencyAutomationPR" in script
+
+
+def test_reconciliation_defers_without_writing_when_github_rate_limits(
+    tmp_path: Path,
+) -> None:
+    """Rate exhaustion must not produce an incomplete drift report or a red PR check."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [],
+            "branches": [],
+            "graphqlError": {
+                "status": 403,
+                "message": "API rate limit exceeded for installation",
+            },
+        },
+    )
+
+    assert outcome["issueUpdates"] == []
+    assert outcome["issueCreates"] == []
+    assert any("Repository reconciliation deferred" in message for message in outcome["infos"])
