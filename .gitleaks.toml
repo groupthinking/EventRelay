@@ -17,6 +17,9 @@ paths = [
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.
   '''tests/.*''',
+  # Web API route leakage tests pin sanitized provider-shaped placeholders like
+  # sk-proj-****ABCD and sk_live_****ABCD to prevent browser-side echo regressions.
+  '''apps/web/src/app/api/__tests__/.*''',
 ]
 regexes = [
   # Lockfiles (e.g. uv.lock) record package artifact digests as
