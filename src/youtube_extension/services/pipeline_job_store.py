@@ -74,7 +74,10 @@ class PipelineJobStore:
             if not created_at_raw:
                 continue
             try:
-                created_at = datetime.fromisoformat(str(created_at_raw))
+                created_at_text = str(created_at_raw)
+                if created_at_text.endswith("Z"):
+                    created_at_text = f"{created_at_text[:-1]}+00:00"
+                created_at = datetime.fromisoformat(created_at_text)
             except ValueError:
                 continue
             if created_at.tzinfo is None:

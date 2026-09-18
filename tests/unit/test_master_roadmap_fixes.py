@@ -245,6 +245,7 @@ def test_persisted_video_job_is_expirable(tmp_path):
 
     payload = job.model_dump(mode="json")
     assert isinstance(payload["created_at"], str)  # JSON-serialisable
+    assert payload["created_at"].endswith("Z")
 
     store = PipelineJobStore(tmp_path)
     store.save("real_job", payload)
