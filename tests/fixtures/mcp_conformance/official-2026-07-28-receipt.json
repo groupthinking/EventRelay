@@ -5,7 +5,14 @@
   "overall_ok": true,
   "conformance": {
     "package": "git+https://github.com/modelcontextprotocol/conformance.git#7169291ec0b68eb370fddcd9947313ab0d5e4156",
-    "commit": "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+    "commit": "7169291ec0b68eb370fddcd9947313ab0d5e4156",
+    "scope_step_up_sdk_commit": "60321700871029401a2e3bed8fdf4f02c9ec3331",
+    "scope_step_up_conformance_tracking": {
+      "issue": "https://github.com/modelcontextprotocol/conformance/issues/480",
+      "pull_request": "https://github.com/modelcontextprotocol/conformance/pull/481",
+      "status": "unmerged",
+      "official_claim_excluded": true
+    }
   },
   "implementation": {
     "commit": "21aee55731debfbf11e0357d4bcaecb180ab9778",
@@ -3682,5 +3689,23 @@
       "stdout": "",
       "stderr": "npm warn Unknown env config \"http-proxy\". This will stop working in the next major version of npm.\nStarting scenario: auth/token-endpoint-auth-none\nExecuting client: node /workspace/scratch/979ac424385c/EventRelay/tests/testing/official_mcp_auth_client.mjs http://localhost:33579/mcp\n(node:1419) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.\n(Use `node --trace-deprecation ...` to show where the warning was created)\nResults saved to /tmp/mcp-conformance-client-c0erjx8f/auth/token-endpoint-auth-none-2026-09-14T07-18-42-905Z\nChecks:\n\u001b[90m2026-09-14T07:18:43.236Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received POST request for /mcp (method: tools/list)\n\u001b[90m2026-09-14T07:18:43.240Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 401 response for POST /mcp (method: tools/list)\n\n\u001b[90m2026-09-14T07:18:43.250Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:18:43.250Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:18:43.251Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:18:43.258Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:18:43.258Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:18:43.258Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:18:43.263Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received POST request for /register\n\u001b[90m2026-09-14T07:18:43.264Z\u001b[0m [client-registration                ] \u001b[32mSUCCESS\u001b[0m Client registered with authorization server\n\u001b[90m2026-09-14T07:18:43.264Z\u001b[0m [sep-837-application-type-present   ] \u001b[32mSUCCESS\u001b[0m Client specified application_type \"native\" during Dynamic Client Registration\n\u001b[90m2026-09-14T07:18:43.264Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 201 response for POST /register\n\n\u001b[90m2026-09-14T07:18:43.271Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /authorize\n\u001b[90m2026-09-14T07:18:43.271Z\u001b[0m [authorization-request              ] \u001b[32mSUCCESS\u001b[0m Client made authorization request\n\u001b[90m2026-09-14T07:18:43.271Z\u001b[0m [pkce-code-challenge-sent           ] \u001b[32mSUCCESS\u001b[0m Client sent code_challenge in authorization request\n\u001b[90m2026-09-14T07:18:43.271Z\u001b[0m [pkce-s256-method-used              ] \u001b[32mSUCCESS\u001b[0m Client used S256 code challenge method\n\u001b[90m2026-09-14T07:18:43.274Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 302 response for GET /authorize\n\n\u001b[90m2026-09-14T07:18:43.277Z\u001b[0m [incoming-request                   ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-protected-resource/mcp\n\u001b[90m2026-09-14T07:18:43.277Z\u001b[0m [prm-pathbased-requested            ] \u001b[32mSUCCESS\u001b[0m Client requested PRM metadata at path-based location\n\u001b[90m2026-09-14T07:18:43.277Z\u001b[0m [outgoing-response                  ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-protected-resource/mcp\n\n\u001b[90m2026-09-14T07:18:43.281Z\u001b[0m [incoming-auth-request              ] \u001b[36mINFO   \u001b[0m Received GET request for /.well-known/oauth-authorization-server\n\u001b[90m2026-09-14T07:18:43.281Z\u001b[0m [authorization-server-metadata      ] \u001b[32mSUCCESS\u001b[0m Client requested authorization server metadata\n\u001b[90m2026-09-14T07:18:43.281Z\u001b[0m [outgoing-auth-response             ] \u001b[36mINFO   \u001b[0m Sent 200 response for GET /.well-known/oauth-authorization-server\n\n\u001b[90m2026-09-14T07:18:43.287Z\u001b[0m [incoming-auth-req\n...[truncated]"
     }
-  ]
+  ],
+  "scope_step_up_receipt_policy": {
+    "configured_policy": {
+      "live_oauth": "disabled_by_default",
+      "challenge_surfaces": [
+        "tools/call",
+        "resources/read",
+        "prompts/get"
+      ]
+    },
+    "observed_enforcement": {
+      "challenge_status_code": 403,
+      "challenge_error": "insufficient_scope",
+      "pre_handler_enforcement": true
+    },
+    "exclusions": {
+      "official_conformance_claim": "excluded_until_upstream_pr_merges_and_is_executed"
+    }
+  }
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -14,6 +15,7 @@ import httpx
 _ROOT = Path(__file__).resolve().parents[2]
 _SCRIPT_PATH = _ROOT / "scripts/testing/official_mcp_conformance.py"
 _FIXTURE_SERVER_PATH = _ROOT / "tests/testing/official_mcp_fixture_server.py"
+_RECEIPT_PATH = _ROOT / "tests/fixtures/mcp_conformance/official-2026-07-28-receipt.json"
 
 
 def _load_module():
@@ -39,6 +41,19 @@ def _wait_for_port(port: int, timeout: float = 5.0) -> None:
                 return
         time.sleep(0.05)
     raise AssertionError(f"fixture server did not start on port {port}")
+
+
+def _start_fixture_server(port: int, *, scope_step_up: bool = False) -> subprocess.Popen[str]:
+    env = os.environ.copy()
+    if scope_step_up:
+        env["EVENTRELAY_FIXTURE_SCOPE_STEP_UP"] = "1"
+    return subprocess.Popen(
+        [sys.executable, str(_FIXTURE_SERVER_PATH), "--port", str(port)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
 
 
 def test_required_checks_fail_closed_on_warning() -> None:
@@ -86,12 +101,7 @@ def test_required_checks_fail_closed_on_runner_exit_code() -> None:
 
 def test_fixture_server_keeps_tools_list_order_stable() -> None:
     port = _free_port()
-    proc = subprocess.Popen(
-        [sys.executable, str(_FIXTURE_SERVER_PATH), "--port", str(port)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = _start_fixture_server(port)
     try:
         _wait_for_port(port)
         headers = {
@@ -134,12 +144,7 @@ def test_fixture_server_keeps_tools_list_order_stable() -> None:
 
 def test_fixture_server_returns_202_for_initialized_notification() -> None:
     port = _free_port()
-    proc = subprocess.Popen(
-        [sys.executable, str(_FIXTURE_SERVER_PATH), "--port", str(port)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = _start_fixture_server(port)
     try:
         _wait_for_port(port)
         with httpx.Client(timeout=5.0) as client:
@@ -188,12 +193,7 @@ def test_fixture_server_returns_202_for_initialized_notification() -> None:
 
 def test_fixture_server_does_not_reflect_invalid_protocol_version_header() -> None:
     port = _free_port()
-    proc = subprocess.Popen(
-        [sys.executable, str(_FIXTURE_SERVER_PATH), "--port", str(port)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
+    proc = _start_fixture_server(port)
     try:
         _wait_for_port(port)
         with httpx.Client(timeout=5.0) as client:
@@ -224,10 +224,135 @@ def test_fixture_server_does_not_reflect_invalid_protocol_version_header() -> No
         proc.terminate()
         proc.wait(timeout=5)
 
+
+def test_scope_step_up_tools_call_challenges_then_retries_once() -> None:
+    port = _free_port()
+    proc = _start_fixture_server(port, scope_step_up=True)
+    try:
+        _wait_for_port(port)
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+            "MCP-Protocol-Version": "2026-07-28",
+            "X-EventRelay-Fixture-Scopes": "mcp:tools:list",
+        }
+        payload = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "test_simple_text", "arguments": {}},
+        }
+        with httpx.Client(timeout=5.0) as client:
+            low_scope = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers=headers,
+                json=payload,
+            )
+            assert low_scope.status_code == 403
+            challenge = low_scope.headers.get("WWW-Authenticate", "")
+            assert "Bearer" in challenge
+            assert "insufficient_scope" in challenge
+            assert "mcp:tools:call" in challenge
+
+            full_scope = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers={
+                    **headers,
+                    "X-EventRelay-Fixture-Scopes": "mcp:tools:list mcp:tools:call tool:test_simple_text:execute",
+                },
+                json={**payload, "id": 2},
+            )
+            full_scope.raise_for_status()
+            result = full_scope.json()["result"]
+            assert result["content"][0]["text"].startswith("This is a simple text response")
+            assert result["scopeStepUp"]["handlerRunCount"] == 1
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_scope_step_up_resources_and_prompts_challenge_before_execution() -> None:
+    port = _free_port()
+    proc = _start_fixture_server(port, scope_step_up=True)
+    try:
+        _wait_for_port(port)
+        with httpx.Client(timeout=5.0) as client:
+            resource = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "MCP-Protocol-Version": "2026-07-28",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "resources/read",
+                    "params": {"uri": "resource://fixtures/static/text"},
+                },
+            )
+            assert resource.status_code == 403
+            assert "mcp:resources:read" in resource.headers["WWW-Authenticate"]
+            assert resource.json()["error"]["data"]["handler_ran"] is False
+
+            prompt = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "MCP-Protocol-Version": "2026-07-28",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "prompts/get",
+                    "params": {"name": "summarize_video", "arguments": {"video_id": "auJzb1D-fag"}},
+                },
+            )
+            assert prompt.status_code == 403
+            assert "mcp:prompts:get" in prompt.headers["WWW-Authenticate"]
+            assert prompt.json()["error"]["data"]["handler_ran"] is False
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_scope_step_up_rejects_malformed_target_and_peer_go_provenance() -> None:
+    port = _free_port()
+    proc = _start_fixture_server(port, scope_step_up=True)
+    try:
+        _wait_for_port(port)
+        with httpx.Client(timeout=5.0) as client:
+            response = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                    "MCP-Protocol-Version": "2026-07-28",
+                    "X-EventRelay-Fixture-Scopes": "mcp:tools:call tool:test_simple_text:execute",
+                    "X-EventRelay-Approval-Provenance": "peer-agent:GO",
+                },
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "tools/call",
+                    "params": {"name": "test_simple_text\nbad", "arguments": {}},
+                },
+            )
+        assert response.status_code == 403
+        body = response.json()
+        assert body["error"]["data"]["reason"] in {"malformed_target", "invalid_provenance"}
+        assert body["error"]["data"]["handler_ran"] is False
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
 def test_current_upstream_skills_suite_is_pinned_and_fully_accounted_for() -> None:
     module = _load_module()
 
     assert module.CONFORMANCE_COMMIT == "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+    assert module.SCOPE_STEP_UP_SDK_COMMIT == "60321700871029401a2e3bed8fdf4f02c9ec3331"
+    assert module.UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR == "https://github.com/modelcontextprotocol/conformance/pull/481"
 
     certified_server = {entry["scenario"] for entry in module.SERVER_SCENARIOS}
     certified_client = {entry["scenario"] for entry in module.CLIENT_SCENARIOS}
@@ -258,3 +383,18 @@ def test_current_upstream_skills_suite_is_pinned_and_fully_accounted_for() -> No
     assert skills_client <= excluded_client
     assert skills_server.isdisjoint(certified_server)
     assert skills_client.isdisjoint(certified_client)
+
+
+def test_receipt_fixture_tracks_unmerged_scope_step_up_conformance_claims() -> None:
+    receipt = json.loads(_RECEIPT_PATH.read_text())
+
+    tracking = receipt["conformance"]["scope_step_up_conformance_tracking"]
+    assert receipt["conformance"]["scope_step_up_sdk_commit"] == "60321700871029401a2e3bed8fdf4f02c9ec3331"
+    assert tracking["issue"] == "https://github.com/modelcontextprotocol/conformance/issues/480"
+    assert tracking["pull_request"] == "https://github.com/modelcontextprotocol/conformance/pull/481"
+    assert tracking["status"] == "unmerged"
+    assert tracking["official_claim_excluded"] is True
+    assert (
+        receipt["scope_step_up_receipt_policy"]["exclusions"]["official_conformance_claim"]
+        == "excluded_until_upstream_pr_merges_and_is_executed"
+    )
