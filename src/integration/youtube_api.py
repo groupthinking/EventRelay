@@ -12,6 +12,8 @@ from typing import Optional
 import httpx
 from youtube_transcript_api import YouTubeTranscriptApi
 
+from youtube_extension.utils.proxy import get_transcript_proxy_config
+
 
 @dataclass
 class VideoMetadata:
@@ -96,7 +98,9 @@ class YouTubeAPIService:
         loop = asyncio.get_event_loop()
         transcript = await loop.run_in_executor(
             None,
-            lambda: YouTubeTranscriptApi().fetch(video_id, languages=languages).to_raw_data()
+            lambda: YouTubeTranscriptApi(
+                proxy_config=get_transcript_proxy_config()
+            ).fetch(video_id, languages=languages).to_raw_data()
         )
 
         return [
