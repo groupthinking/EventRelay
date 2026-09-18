@@ -6,6 +6,7 @@ import { AlignLeft, Bot, Clock3, Search, ShieldCheck } from 'lucide-react';
 import FeedbackWidget from '@/components/FeedbackWidget';
 import InteractiveTranscript, { type TranscriptSegment } from '@/components/InteractiveTranscript';
 import {
+  actionsFromStudioRun,
   buildScaffoldPackage,
   downloadScaffoldPackage,
   summarizeProjectScaffold,
@@ -13,6 +14,7 @@ import {
 } from '@/lib/action-surface';
 import type { AgentAction } from '@/lib/action-lifecycle';
 import { hasRichDashboardInsights, isThinDashboardAnalysis } from '@/lib/dashboard-analysis';
+import { studioCanExport } from '@/lib/studio-pipeline-status';
 import { useActionAgentStore } from '@/store/action-agent-store';
 import type { SearchResult, Video } from '@/store/dashboard-types';
 
@@ -252,7 +254,12 @@ export function ActionsPanel({
             estimatedMinutes: a.estimatedMinutes,
           },
     );
-    const actions = fromTools.length > 0 ? fromTools : fromPlan;
+    const insightActions = fromTools.length > 0 ? fromTools : fromPlan;
+    const actions = actionsFromStudioRun({
+      insightActions,
+      events: video.events,
+      workflowActions: fulfilled,
+    });
     const pkg = buildScaffoldPackage({
       projectName: video.title || 'eventrelay-project',
       actions,
@@ -281,8 +288,11 @@ export function ActionsPanel({
     }
   };
 
-  const canExport =
-    fulfilled.length > 0 || plannedActions.length > 0 || projectScaffold != null;
+  const canExport = studioCanExport({
+    transcript,
+    eventCount: video.events?.length ?? 0,
+    hasProjectScaffold: projectScaffold != null,
+  });
 
   const actionOutcomeTitle = (action: AgentAction): string => {
     const title = typeof action.input?.title === 'string' ? action.input.title : '';

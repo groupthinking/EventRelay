@@ -47,6 +47,10 @@ class VideoProcessJobRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL")
     language: Optional[str] = Field("en", description="Transcript language")
     options: Optional[dict[str, Any]] = Field(default_factory=dict)
+    transcript: Optional[str] = Field(
+        None,
+        description="Ready transcript to reuse; skip YouTube extract when provided",
+    )
 
 
 class VideoProcessJobResponse(BaseModel):
@@ -65,6 +69,10 @@ class VideoJobStatusResponse(BaseModel):
     progress: float = Field(0.0, ge=0.0, le=100.0)
     video_url: Optional[str] = None
     transcript: Optional[str] = None
+    live_url: Optional[str] = Field(
+        None,
+        description="Verified https live URL when the job persisted one",
+    )
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     error_reason: Optional[str] = Field(

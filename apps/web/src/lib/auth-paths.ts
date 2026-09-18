@@ -10,6 +10,9 @@ const PUBLIC_API_PREFIXES = [
   // Studio "Act on findings" (WDK B) — public page, durable start + poll.
   // Sibling /api/workflows/* routes stay gated; this prefix is exact-segment.
   '/api/workflows/video-to-actions',
+  // App-served keyframe JPEGs — same anonymous surface as GET /api/video/pack.
+  // Exact pack path stays exact so /api/video/pack siblings stay gated.
+  '/api/video/pack/frames',
 ] as const;
 
 /** Exact public API paths (prefix match would over-expose siblings). */
@@ -39,6 +42,12 @@ const PUBLIC_API_EXACT = new Set([
   // Exact paths so /api/video, /api/video/generate, and a packs listing stay gated.
   '/api/video/pack',
   '/api/v1/video/pack',
+  // Deterministic sandbox emit from a stored pack (no model work).
+  '/api/video/sandbox',
+  '/api/v1/video/sandbox',
+  // Planned assembly receipt from a stored pack (no npm, no model work).
+  '/api/video/assemble',
+  '/api/v1/video/assemble',
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
@@ -146,7 +155,24 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
 };
 
 /** Identity hash only — not model work. Keep /api/video siblings on the AI budget. */
-const IDENTITY_PACK_PATHS = new Set(['/api/video/pack', '/api/v1/video/pack']);
+const IDENTITY_PACK_PATHS = new Set([
+  '/api/video/pack',
+  '/api/v1/video/pack',
+  '/api/video/sandbox',
+  '/api/v1/video/sandbox',
+  '/api/video/assemble',
+  '/api/v1/video/assemble',
+]);
+
+/** App-served frame JPEGs are identity-pack bytes, not model work. */
+const IDENTITY_PACK_PREFIXES = ['/api/video/pack/frames'] as const;
+
+function isIdentityPackSurface(pathname: string): boolean {
+  if (IDENTITY_PACK_PATHS.has(pathname)) return true;
+  return IDENTITY_PACK_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
 
 /**
  * Whether a request should be metered against the AI budget rather than the
@@ -156,7 +182,7 @@ const IDENTITY_PACK_PATHS = new Set(['/api/video/pack', '/api/v1/video/pack']);
  * limit) rather than silently widening the budget.
  */
 export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
-  if (IDENTITY_PACK_PATHS.has(pathname)) return false;
+  if (isIdentityPackSurface(pathname)) return false;
 
   const prefix = AI_ROUTE_PREFIXES.find((candidate) =>
     pathname.startsWith(candidate),

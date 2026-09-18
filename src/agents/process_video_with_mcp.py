@@ -32,6 +32,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from youtube_extension.utils.proxy import get_proxy_url, get_transcript_proxy_config
+
 # Load environment variables from project root .env if present
 try:
     from dotenv import load_dotenv  # type: ignore
@@ -219,7 +221,10 @@ class RealVideoProcessor:
             if YouTubeTranscriptApi is not None:
                 # youtube-transcript-api >=1.0 instance API
                 transcript = await loop.run_in_executor(
-                    None, lambda: YouTubeTranscriptApi().fetch(video_id).to_raw_data()
+                    None,
+                    lambda: YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    ).fetch(video_id).to_raw_data(),
                 )
                 if transcript:
                     return transcript
@@ -230,7 +235,10 @@ class RealVideoProcessor:
         try:
             if YouTubeTranscriptApi is not None:
                 transcript_list = await loop.run_in_executor(
-                    None, lambda: YouTubeTranscriptApi().list(video_id)  # type: ignore[union-attr]
+                    None,
+                    lambda: YouTubeTranscriptApi(
+                        proxy_config=get_transcript_proxy_config()
+                    ).list(video_id),  # type: ignore[union-attr]
                 )
                 fetch_tasks = [
                     loop.run_in_executor(None, lambda t=t: t.fetch().to_raw_data())
@@ -248,7 +256,11 @@ class RealVideoProcessor:
 
         # 3) yt-dlp fallback (mocked in tests)
         try:
-            with yt_dlp.YoutubeDL({"quiet": True}) as ydl:  # type: ignore[attr-defined]
+            ydl_options: dict[str, Any] = {"quiet": True}
+            proxy_url = get_proxy_url()
+            if proxy_url:
+                ydl_options["proxy"] = proxy_url
+            with yt_dlp.YoutubeDL(ydl_options) as ydl:  # type: ignore[attr-defined]
                 _ = ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
                 return [{"text": "Transcript extracted via yt-dlp", "start": 0.0, "duration": 0.0}]
         except Exception:
@@ -389,5 +401,4 @@ async def main() -> dict[str, Any]:
 
 if __name__ == "__main__":
     asyncio.run(main())
-
 

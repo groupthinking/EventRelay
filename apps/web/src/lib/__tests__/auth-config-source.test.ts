@@ -25,12 +25,21 @@ describe('auth configuration source safety', () => {
     expect(source).not.toContain('<Image');
   });
 
-  it('accepts both project-specific and common Google OAuth env names', () => {
+  it('prefers canonical Google OAuth env names while retaining legacy fallbacks', () => {
     const source = readSource('lib/auth.ts');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_ID');
-    expect(source).toContain('GOOGLE_CLIENT_ID');
-    expect(source).toContain('GOOGLE_OAUTH_CLIENT_SECRET');
-    expect(source).toContain('GOOGLE_CLIENT_SECRET');
+    expect(source.indexOf('process.env.GOOGLE_CLIENT_ID')).toBeLessThan(
+      source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_ID'),
+    );
+    expect(source.indexOf('process.env.GOOGLE_CLIENT_SECRET')).toBeLessThan(
+      source.indexOf('process.env.GOOGLE_OAUTH_CLIENT_SECRET'),
+    );
+  });
+
+  it('routes secure-cookie policy through auth-jwt for JWT verification', () => {
+    const auth = readSource('lib/auth.ts');
+    const jwt = readSource('lib/auth-jwt.ts');
+    expect(auth).toContain('nextAuthUseSecureCookies');
+    expect(jwt).toContain('NODE_ENV === \'production\'');
   });
 
   it('keeps the root route as a sell Home instead of redirecting to the dashboard', () => {
