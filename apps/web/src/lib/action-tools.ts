@@ -13,7 +13,7 @@
  */
 
 import type { FunctionDeclaration } from '@google/genai';
-import { backendHeaders } from '@/lib/pipeline-backend';
+import { backendHeaders, resolveConfiguredBackendUrl } from '@/lib/pipeline-backend';
 
 // ── JSON Schema (shared by OpenAI strict tools + Gemini declarations) ──
 
@@ -72,15 +72,7 @@ function strArray(input: Record<string, unknown>, key: string): string[] {
  * callers can safely append `/api/...`.
  */
 export function resolveBackendBaseUrl(): string | null {
-  const raw = (process.env.BACKEND_URL || '').trim();
-  if (!raw) return null;
-  try {
-    const url = new URL(raw);
-    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-    return raw.replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
+  return resolveConfiguredBackendUrl();
 }
 
 // ── Tool definitions ──
@@ -417,11 +409,14 @@ const getAgentSessionLogs: ActionTool = {
     properties: {
       agentType: {
         type: 'string',
-        description: 'Filter logs to a specific agent type, or omit for all agents',
+        description:
+          'Filter logs to a specific agent type. Pass an empty string for all agents.',
       },
       limit: { type: 'number', description: 'Maximum number of log entries to return (default 20)' },
     },
-    required: [],
+    // OpenAI strict tools require every properties key in required[]
+    // (prod wrun_01KZYCN3XJMP9ANBXEARCNM41F).
+    required: ['agentType', 'limit'],
     additionalProperties: false,
   },
   async execute(input, ctx) {

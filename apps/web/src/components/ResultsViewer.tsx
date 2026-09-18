@@ -1,7 +1,7 @@
 'use client';
 
 import { clsx } from 'clsx';
-import { Check } from 'lucide-react';
+import { ArrowRight, Check } from 'lucide-react';
 import type { AgentExecution, ExtractedEvent } from '@/lib/types';
 
 interface ResultsViewerProps {
@@ -42,7 +42,10 @@ export default function ResultsViewer({ executions, events, className }: Results
                   <Check className="h-4 w-4" aria-hidden="true" /> {exec.agent_type}
                 </span>
                 {event && (
-                  <span className="text-xs text-white/30">→ {event.title.slice(0, 50)}</span>
+                  <span className="inline-flex items-center gap-1 text-xs text-white/30">
+                    <ArrowRight className="h-3 w-3" aria-hidden="true" />
+                    {event.title.slice(0, 50)}
+                  </span>
                 )}
               </div>
               <pre className="text-xs text-white/60 bg-black/20 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap">

@@ -5,6 +5,9 @@
 
 set -euo pipefail
 
+# All paths below are relative to the repository root
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -63,15 +66,15 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 success "Kubernetes cluster is accessible"
 
-# Check if required files exist
+# Check if required files exist.
+# Every entry must resolve from the repo root; this is enforced by
+# tests/unit/test_one_click_deploy_precheck.py so the list cannot go stale.
 REQUIRED_FILES=(
-    "Dockerfile.production"
+    "apps/web/Dockerfile"
     "package.json"
-    "k8s/production/deployment.yaml"
-    "k8s/production/service.yaml"
-    "k8s/monitoring/monitoring.yaml"
-    "mcp_server.py"
-    "learning_app_processor.py"
+    "infrastructure/k8s/production/deployment.yaml"
+    "infrastructure/k8s/production/service.yaml"
+    "infrastructure/k8s/monitoring/monitoring.yaml"
 )
 
 for file in "${REQUIRED_FILES[@]}"; do
@@ -86,7 +89,7 @@ log "Step 2: Running Integration Tests"
 
 if [[ -d "venv" ]]; then
     source venv/bin/activate
-    if python3 tests/integration/test_runner.py; then
+    if python3 -m pytest tests/integration -v; then
         success "Integration tests passed"
     else
         error "Integration tests failed. Please fix issues before deployment."
@@ -101,7 +104,9 @@ log "Step 3: Building Docker Image"
 DOCKER_TAG="enhanced-framework:$(date +%Y%m%d-%H%M%S)"
 LATEST_TAG="enhanced-framework:latest"
 
-if docker build -f Dockerfile.production -t "$DOCKER_TAG" -t "$LATEST_TAG" .; then
+# enhanced-framework is the Next.js frontend (apps/web); the Python backend is
+# deployed separately as the mcp-server container in the production manifest.
+if docker build -f apps/web/Dockerfile -t "$DOCKER_TAG" -t "$LATEST_TAG" .; then
     success "Docker image built successfully: $DOCKER_TAG"
 else
     error "Docker image build failed"
@@ -111,21 +116,21 @@ fi
 log "Step 4: Validating Kubernetes Manifests"
 
 # Validate deployment manifest
-if kubectl apply --dry-run=client -f k8s/production/deployment.yaml; then
+if kubectl apply --dry-run=client -f infrastructure/k8s/production/deployment.yaml; then
     success "Deployment manifest is valid"
 else
     error "Deployment manifest validation failed"
 fi
 
 # Validate service manifest
-if kubectl apply --dry-run=client -f k8s/production/service.yaml; then
+if kubectl apply --dry-run=client -f infrastructure/k8s/production/service.yaml; then
     success "Service manifest is valid"
 else
     error "Service manifest validation failed"
 fi
 
 # Validate monitoring manifest
-if kubectl apply --dry-run=client -f k8s/monitoring/monitoring.yaml; then
+if kubectl apply --dry-run=client -f infrastructure/k8s/monitoring/monitoring.yaml; then
     success "Monitoring manifest is valid"
 else
     error "Monitoring manifest validation failed"
@@ -144,14 +149,14 @@ fi
 log "Step 6: Deploying to Kubernetes"
 
 # Deploy application
-if kubectl apply -f k8s/production/ -n "$NAMESPACE"; then
+if kubectl apply -f infrastructure/k8s/production/ -n "$NAMESPACE"; then
     success "Application deployed successfully"
 else
     error "Application deployment failed"
 fi
 
 # Deploy monitoring
-if kubectl apply -f k8s/monitoring/ -n "$NAMESPACE"; then
+if kubectl apply -f infrastructure/k8s/monitoring/ -n "$NAMESPACE"; then
     success "Monitoring stack deployed successfully"
 else
     error "Monitoring deployment failed"
@@ -199,9 +204,9 @@ if [[ "$SERVICE_IP" == "localhost" ]]; then
     kubectl port-forward -n "$NAMESPACE" service/"$DEPLOYMENT_NAME" 8080:80 &
     PORT_FORWARD_PID=$!
     sleep 5
-    HEALTH_URL="http://localhost:8080/health"
+    HEALTH_URL="http://localhost:8080/api"
 else
-    HEALTH_URL="http://$SERVICE_IP/health"
+    HEALTH_URL="http://$SERVICE_IP/api"
 fi
 
 # Perform health check

@@ -13,6 +13,7 @@ export default defineConfig([
     'out/**',
     'build/**',
     'next-env.d.ts',
+    'src/app/.well-known/workflow/**',
     'src/dataconnect-generated/**',
   ]),
 ]);

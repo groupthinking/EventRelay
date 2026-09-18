@@ -1,9 +1,20 @@
 import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
-import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
-import { hasGeminiKey } from '@/lib/gemini-client';
 import { saveTrainingExample } from '@/lib/training-store';
+import {
+  assessAnalysisEvidence,
+  calculateDurationCoverageSeconds,
+  normalizeTranscriptSegments,
+  transcriptTextFromSegments,
+  type AnalysisProvenance,
+  type EvidenceAssessment,
+  type TranscriptSegment,
+} from '@/lib/analysis-evidence';
+import {
+  parseVerifiedBackendTranscript,
+  type TranscriptionResult,
+} from '@/lib/transcription-service';
 
 // Backend URL with validation - skip if not a valid URL
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -21,18 +32,62 @@ function getBaseUrl(request: Request): string {
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
-async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
+
+/**
+ * Headers for the same-origin self-fetches this route makes to /api/transcribe
+ * and /api/extract-events.
+ *
+ * Both targets are session-gated by proxy.ts (neither is in the public
+ * allowlist in `@/lib/auth-paths`), and a route-handler `fetch` does not carry
+ * the caller's cookies. Without the server-to-server token the proxy sees an
+ * anonymous request and returns 401, which this handler then swallows into
+ * "Verified captions or speech-to-text were unavailable." — a misleading
+ * failure that looks like a missing transcript rather than a broken internal
+ * hop. The token is the same trust mechanism the proxy already accepts.
+ */
+function internalHeaders(): Record<string, string> {
+  const token = process.env.INTERNAL_REQUEST_TOKEN?.trim();
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'x-eventrelay-internal': token } : {}),
+  };
+}
+function buildEvidenceEnvelope(
+  result: TranscriptionResult,
+  requestedUrl: string,
+): {
+  transcript: string;
+  segments: TranscriptSegment[];
+  provenance: AnalysisProvenance;
+  quality: EvidenceAssessment;
+} | null {
+  const normalized = normalizeTranscriptSegments(result.segments);
+  const transcript = result.transcript?.trim() || transcriptTextFromSegments(normalized);
+  if (!result.success || result.verified !== true || transcript.length < 40) return null;
+
+  const segments = normalized.length > 0
+    ? normalized
+    : [{ start: 0, duration: 0, text: transcript }];
+  const sourceUrl = result.sourceUrl || requestedUrl;
+  let sourceHost = '';
+  try { sourceHost = new URL(sourceUrl).hostname; } catch { /* gate reports missing URL below */ }
+  const timedSegmentCount = segments.filter((segment) => segment.duration > 0).length;
+  const provenance: AnalysisProvenance = {
+    sourceUrl,
+    sourceHost,
+    acquisitionMethod: result.acquisitionMethod || 'unknown',
+    transcriptSource: result.source || 'unknown',
+    transcriptVerified: true,
+    acquiredAt: result.acquiredAt || new Date().toISOString(),
+    segmentCount: segments.length,
+    timedSegmentCount,
+    durationCoverageSeconds: calculateDurationCoverageSeconds(segments),
+    warnings: timedSegmentCount === segments.length
+      ? []
+      : ['Source timestamps were unavailable for part or all of the transcript.'],
+  };
+  const quality = assessAnalysisEvidence({ transcript, segments, provenance });
+  return quality.passed ? { transcript, segments, provenance, quality } : null;
 }
 
 
@@ -104,6 +159,14 @@ export async function POST(request: Request) {
                 raw_response: result,
               },
             });
+          }
+
+          const backendTranscript = parseVerifiedBackendTranscript(result, url);
+          const evidence = backendTranscript
+            ? buildEvidenceEnvelope(backendTranscript, url)
+            : null;
+          if (!evidence) {
+            throw new Error('Backend did not return trusted caption or speech-to-text evidence.');
           }
 
           const transcriptAction = result.outputs?.transcript_action?.data || {};
@@ -181,6 +244,8 @@ export async function POST(request: Request) {
             agents_used: result.orchestration_meta?.agents_used || [],
             errors: result.errors || [],
             raw_response: result,
+            provenance: evidence.provenance,
+            quality: evidence.quality,
           },
         });
       }
@@ -190,84 +255,32 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── Strategy 2: Gemini Agentic Analysis (primary frontend strategy) ──
-    // Uses Google Search grounding to retrieve transcripts, descriptions,
-    // and chapter data directly — no separate transcribe/extract steps needed.
-    if (hasGeminiKey()) {
-      try {
-        await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'gemini-agentic' }, url);
-        const startTime = Date.now();
-        const analysis = await withTimeout(
-          analyzeVideoWithGemini(url),
-          5_000,
-          'Gemini agentic analysis',
-        );
-        const elapsed = Date.now() - startTime;
-
-        // Direct waitUntil on publishEvent (CloudEvent) for completion — ancillary, does not block response
-        waitUntil(
-          publishEvent(EventTypes.PIPELINE_COMPLETED, {
-            strategy: 'gemini-agentic',
-            success: true,
-            transcriptSegments: analysis.transcript?.length || 0,
-            events: analysis.events?.length || 0,
-          }, url).catch(() => {}),
-        );
-
-        // Direct waitUntil on saveTrainingExample for Vertex AI fine-tuning (ancillary post-response)
-        waitUntil(
-          saveTrainingExample(url, analysis as unknown as Record<string, unknown>).catch((e) =>
-            console.warn('[Training] Failed to save example:', e),
-          ),
-        );
-
-        return NextResponse.json({
-          id: `vid_${Date.now().toString(36)}`,
-          status: 'complete',
-          processing_time_ms: elapsed,
-          result: {
-            success: true,
-            insights: {
-              summary: analysis.summary,
-              actions: analysis.actions || [],
-              topics: analysis.topics || [],
-              sentiment: 'Neutral',
-            },
-            transcript_segments: analysis.transcript?.length || 0,
-            transcript_source: 'gemini-agentic',
-            agents_used: ['gemini-agentic-engine'],
-            errors: [],
-            raw_response: {
-              title: analysis.title,
-              transcript: analysis.transcript,
-              events: analysis.events,
-              actions: analysis.actions,
-              architectureCode: analysis.architectureCode,
-              ingestScript: analysis.ingestScript,
-            },
-          },
-        });
-      } catch (e) {
-        console.warn('Gemini agentic analysis failed, falling back to transcribe chain:', e);
-      }
-    }
-
-    // ── Strategy 3: Frontend-only transcribe → extract chain (fallback) ──
+    // ── Strategy 2: verified transcript acquisition → extraction ──
     let transcript = '';
     let transcriptSource = 'none';
+    let frontendEvidence: ReturnType<typeof buildEvidenceEnvelope> = null;
     try {
       await publishEvent(EventTypes.TRANSCRIPT_STARTED, { url, strategy: 'frontend-chain' }, url);
       const baseUrl = getBaseUrl(request);
       const transcribeRes = await fetch(`${baseUrl}/api/transcribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: internalHeaders(),
         body: JSON.stringify({ url }),
         signal: AbortSignal.timeout(15000),
       });
+      if (transcribeRes.status === 401 || transcribeRes.status === 403) {
+        // Internal hop rejected by the auth gate — a deployment fault, not a
+        // missing transcript. Say so instead of reporting "captions unavailable".
+        console.error(
+          '[video] internal /api/transcribe call was rejected by the auth gate; ' +
+            'set INTERNAL_REQUEST_TOKEN so server-to-server hops bypass the session check.',
+        );
+      }
       const transcribeResult = await transcribeRes.json();
-      if (transcribeResult.success && transcribeResult.transcript) {
-        transcript = transcribeResult.transcript;
-        transcriptSource = transcribeResult.source || 'frontend';
+      frontendEvidence = buildEvidenceEnvelope(transcribeResult, url);
+      if (frontendEvidence) {
+        transcript = frontendEvidence.transcript;
+        transcriptSource = frontendEvidence.provenance.transcriptSource;
         await publishEvent(EventTypes.TRANSCRIPT_COMPLETED, { source: transcriptSource, wordCount: transcript.split(/\s+/).length }, url);
       }
     } catch (e) {
@@ -281,7 +294,7 @@ export async function POST(request: Request) {
         const baseUrl = getBaseUrl(request);
         const extractRes = await fetch(`${baseUrl}/api/extract-events`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: internalHeaders(),
           body: JSON.stringify({ transcript, videoUrl: url }),
           signal: AbortSignal.timeout(15000),
         });
@@ -295,7 +308,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const hasResults = transcript.length > 0;
+    const hasResults = transcript.length > 0 && frontendEvidence?.quality.passed === true;
 
     // Direct waitUntil on publishEvent for terminal pipeline event (CloudEvent) — ancillary, response should not wait
     waitUntil(
@@ -313,7 +326,7 @@ export async function POST(request: Request) {
       result: {
         success: hasResults,
         insights: {
-          summary: extraction.summary || (hasResults ? 'Transcript extracted successfully' : 'Could not extract transcript — configure GEMINI_API_KEY'),
+          summary: extraction.summary || (hasResults ? 'Verified transcript extracted successfully' : 'Verified captions or speech-to-text were unavailable.'),
           actions: extraction.actions || [],
           topics: extraction.topics || [],
           sentiment: 'Neutral',
@@ -321,11 +334,13 @@ export async function POST(request: Request) {
         transcript_segments: 0,
         transcript_source: transcriptSource,
         agents_used: ['frontend-pipeline'],
-        errors: hasResults ? [] : ['All strategies failed — ensure GEMINI_API_KEY is set'],
+        errors: hasResults ? [] : ['Verified captions or speech-to-text were unavailable.'],
         raw_response: {
           transcript: { text: transcript },
           extraction,
         },
+        provenance: frontendEvidence?.provenance,
+        quality: frontendEvidence?.quality,
       },
     });
   } catch (error) {

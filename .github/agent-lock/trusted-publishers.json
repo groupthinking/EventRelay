@@ -1,8 +1,0 @@
-{
-  "schema_version": 1,
-  "trusted_check_app_slugs": [],
-  "trusted_label_actors": [],
-  "trusted_human_exemption_actors": [],
-  "custom_role_policy": "fail_closed",
-  "notes": "Populate all three allowlists only through a protected default-branch change after the independent GitHub App and its identity have been verified. An empty allowlist intentionally blocks rather than downgrading agent work to not_applicable."
-}

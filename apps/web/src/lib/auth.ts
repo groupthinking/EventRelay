@@ -5,13 +5,13 @@ import GoogleProvider from 'next-auth/providers/google';
 
 const allowedDomain = process.env.AUTH_ALLOWED_EMAIL_DOMAIN?.trim().toLowerCase();
 const googleClientId = (
-  process.env.GOOGLE_OAUTH_CLIENT_ID ||
   process.env.GOOGLE_CLIENT_ID ||
+  process.env.GOOGLE_OAUTH_CLIENT_ID ||
   ''
 ).trim();
 const googleClientSecret = (
-  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
   process.env.GOOGLE_CLIENT_SECRET ||
+  process.env.GOOGLE_OAUTH_CLIENT_SECRET ||
   ''
 ).trim();
 
@@ -19,8 +19,8 @@ const googleClientSecret = (
  * NextAuth configuration (Google OAuth by default).
  *
  * Required env to activate login-gating: NEXTAUTH_SECRET, NEXTAUTH_URL,
- *   GOOGLE_OAUTH_CLIENT_ID, GOOGLE_OAUTH_CLIENT_SECRET.
- * Also accepts NextAuth's common GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET names.
+ *   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+ * Temporarily accepts legacy GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET.
  * Optional: AUTH_ALLOWED_EMAIL_DOMAIN restricts sign-in to a single domain
  *   (e.g. `yourcompany.com` → only *@yourcompany.com).
  *
@@ -31,7 +31,7 @@ function buildProviders(): NextAuthOptions['providers'] {
   if (!googleClientId || !googleClientSecret) {
     if (process.env.NODE_ENV === 'production') {
       console.error(
-        '[auth] Google OAuth client id/secret missing — set GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET or GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET.',
+        '[auth] Google OAuth client id/secret missing — set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET; legacy GOOGLE_OAUTH_CLIENT_ID / GOOGLE_OAUTH_CLIENT_SECRET remain supported temporarily.',
       );
     }
   }
@@ -113,13 +113,13 @@ export const authOptions: NextAuthOptions = {
 
     /**
      * Prevent open redirects after OAuth. Only same-origin absolute URLs or
-     * root-relative paths are allowed; everything else lands on /dashboard.
+     * root-relative paths are allowed; everything else lands on the studio.
      */
     async redirect({ url, baseUrl }) {
       try {
         if (url.startsWith('/')) {
           // protocol-relative //evil.com
-          if (url.startsWith('//')) return `${baseUrl}/dashboard`;
+          if (url.startsWith('//')) return `${baseUrl}/`;
           return `${baseUrl}${url}`;
         }
         const target = new URL(url);
@@ -130,7 +130,7 @@ export const authOptions: NextAuthOptions = {
       } catch {
         // fall through
       }
-      return `${baseUrl}/dashboard`;
+      return `${baseUrl}/`;
     },
   },
   events: {

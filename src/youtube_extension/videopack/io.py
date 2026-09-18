@@ -28,4 +28,7 @@ def read_pack(path: PathLike) -> VideoPackV0:
 
 
 def write_pack(path: PathLike, pack: VideoPackV0) -> None:
+    if hasattr(pack, "model_dump"):
+        save_json(path, pack.model_dump(mode="json"))
+        return
     save_json(path, json.loads(pack.json()))

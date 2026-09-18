@@ -62,7 +62,6 @@ Before a PR advances:
 - all current review findings are fixed and resolved with evidence;
 - a current-head independent review exists;
 - deployment evidence is bound to the same head, or deployment is explicitly non-applicable;
-- the truth gate reports the real remaining blockers;
 - the focused issue and #898 are updated with exact evidence.
 
 Vercel proves the Next.js application build and runtime only. It does not prove Python, Cloud Run, Cloud SQL, worker, webhook, or credential behavior unless those paths are explicitly exercised.

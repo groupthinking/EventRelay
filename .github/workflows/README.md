@@ -10,7 +10,9 @@ workflow; this README is the index.
 |----------|------|---------|---------|
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
-| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.88.7`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| Repo Assist | `repo-assist.md` / `.lock.yml` | manual (`workflow_dispatch`) | Read-only status reporter: checks `docs/AGENT_CAPABILITIES_CHECKLIST.md` and `docs/REPO_MAP.md` against the current tree and posts a single summary comment; never writes to branches, labels, or pull requests |
+| PR Iteration Loop | `pr-iteration-loop.md` / `.lock.yml` | issue opened; PR opened/ready; weekdays + weekly; push to `main` | Long-running verified loop that selects one failing/stale repository checkpoint, iterates on one canonical draft PR, records durable memory, and can publish a discussion digest with chart assets |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
 | Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
@@ -30,6 +32,7 @@ workflow; this README is the index.
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Drift report: PRs without canonical issues, competing PRs, stale branches; auto-comments on untracked PRs and auto-closes superseded drafts |
 
 ## Key Workflows
 
@@ -170,12 +173,15 @@ A full audit of this directory was performed (see
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
 
 
-| Agent completion enforcement | `agent-completion-enforcement.yml` | `pull_request_target`; manual | Creates the independent, head-bound `Agent completion enforcement` Check from protected default-branch code. |
-| PR Governance | `pr-governance.yml` | `pull_request_target` (opened/edited/reopened/synchronize/ready_for_review) | Validates that every ready PR links exactly one real open canonical issue and contains non-empty delivery evidence sections; fails on competing PRs. |
 | Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Non-destructive daily report of ready PRs missing a canonical issue, issues with competing implementation PRs, and stale unattached branches. |
 
 ## Agent-completion enforcement
 
-`pr-checks.yml` retains the advisory `agent-completion/truth-gate/pr-<number>` status; it is never required. `agent-completion-enforcement.yml` runs protected default-branch code, does not execute PR code, and creates the separate **Agent completion enforcement** Check directly on the PR head SHA. It accepts only an exact-head, machine-readable report published by the configured dedicated GitHub App. Stale, edited/deleted, ambiguous, or untrusted evidence fails closed. While the trust policy is unprovisioned (empty allowlists) the Check reports **neutral (advisory)** instead of red so its signal is not lost to constant noise; once the policy is provisioned, a missing report also fails closed.
+Removed. The retired `Agent completion enforcement` checks were unsatisfiable: the gate scored a
+pull request against an intent snapshot written only on `issues` events, so a pull
+request with a `Closes #<issue>` binding necessarily armed the gate and then
+failed it. It was red on ~100% of pull requests, including merged ones such as
+#1368.
 
-Before enabling the rule, provision `.github/agent-lock/trusted-publishers.json` through protected review with the trusted App and actor allowlists. Until then the Check is **neutral (advisory)** and blocks nothing; populating the allowlists (and adding the Check to required status checks) is what makes it blocking. Configure the repository ruleset to require **Agent completion enforcement**, one independent approval, and resolved conversations. Do not require `agent-completion/truth-gate`.
+Binding a pull request to one focused issue is now a policy-level requirement
+with no automated gate. See `MERGE_POLICY.md` at the repository root.

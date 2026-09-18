@@ -79,7 +79,7 @@ export default function ProRenewPanel({ annual, className }: ProRenewPanelProps)
           loading && 'opacity-60 cursor-not-allowed',
         )}
       >
-        {loading ? 'Opening renewal checkout…' : 'Renew Pro subscription →'}
+        {loading ? 'Opening renewal checkout…' : 'Renew Pro subscription'}
       </button>
       {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
     </div>

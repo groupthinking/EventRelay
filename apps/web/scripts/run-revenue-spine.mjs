@@ -59,14 +59,14 @@ async function ensureStripePrices(stripe) {
   if (monthly && annual) return { monthly, annual };
 
   const product =
-    (await stripe.products.search({ query: "name:'EventRelay Pro'" })).data[0] ||
-    (await stripe.products.create({ name: 'EventRelay Pro' }));
+    (await stripe.products.search({ query: "name:'UVAI Workflow Pro'" })).data[0] ||
+    (await stripe.products.create({ name: 'UVAI Workflow Pro' }));
 
   if (!monthly) {
     const price = await stripe.prices.create({
       product: product.id,
       currency: 'usd',
-      unit_amount: 1900,
+      unit_amount: 3900,
       recurring: { interval: 'month' },
     });
     monthly = price.id;
@@ -76,7 +76,7 @@ async function ensureStripePrices(stripe) {
     const price = await stripe.prices.create({
       product: product.id,
       currency: 'usd',
-      unit_amount: 18_000,
+      unit_amount: 39_000,
       recurring: { interval: 'year' },
     });
     annual = price.id;

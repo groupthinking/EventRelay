@@ -36,7 +36,7 @@ export async function grokChatCompletion(
         {
           role: 'system',
           content:
-            'You are the EventRelay Pro lead agent (Grok/Composer). Answer concisely for video intelligence users.',
+            'You are the UVAI Workflow Pro lead agent (Grok/Composer). Answer concisely for video intelligence users.',
         },
         { role: 'user', content: query },
       ],

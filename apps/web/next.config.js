@@ -7,6 +7,15 @@ try {
   // Allow builds to continue when optional Sentry runtime peers are unavailable.
 }
 
+// Vercel Workflow DevKit — enables "use workflow" / "use step" compilation.
+// https://workflow-sdk.dev/docs/getting-started/next
+let withWorkflow = (config) => config;
+try {
+  ({ withWorkflow } = require('workflow/next'));
+} catch {
+  // Optional when workflow package is not installed in a partial install.
+}
+
 const contentSecurityPolicy = [
   "default-src 'self'",
   "base-uri 'self'",
@@ -16,9 +25,9 @@ const contentSecurityPolicy = [
   "img-src 'self' data: blob: https://uvai.io https://api.uvai.io https://img.youtube.com https://i.ytimg.com https://*.ytimg.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.stripe.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
-  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
-  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://challenges.cloudflare.com https://va.vercel-scripts.com https://vitals.vercel-insights.com",
+  "connect-src 'self' https://api.uvai.io https://uvai-backend-gpwz4wb5na-uc.a.run.app https://api.openai.com https://generativelanguage.googleapis.com https://*.supabase.co wss://*.supabase.co https://*.upstash.io https://challenges.cloudflare.com https://vitals.vercel-insights.com https://*.vercel-insights.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io",
+  "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://js.stripe.com https://hooks.stripe.com https://challenges.cloudflare.com",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
@@ -41,9 +50,56 @@ const securityHeaders = [
   { key: 'Content-Security-Policy', value: contentSecurityPolicy },
 ];
 
+function firstHttpBackendUrl(...values) {
+  for (const raw of values) {
+    const value = typeof raw === 'string' ? raw.trim() : '';
+    if (!value) continue;
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return value.replace(/\/+$/, '');
+      }
+    } catch {
+      // skip invalid
+    }
+  }
+  return '';
+}
+
+// Verified Cloud Run hostname (live / and /api/v1/health = 200). Last resort
+// when Vercel did not inject BACKEND_URL — do not invent a different host.
+const VERIFIED_PRODUCTION_BACKEND_URL = 'https://api.uvai.io';
+
+const resolvedBackendUrl =
+  firstHttpBackendUrl(
+    process.env.BACKEND_URL,
+    process.env.NEXT_PUBLIC_BACKEND_URL,
+    process.env.NEXT_PUBLIC_API_URL,
+  ) ||
+  (process.env.NODE_ENV === 'production' ? VERIFIED_PRODUCTION_BACKEND_URL : '');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  ...(resolvedBackendUrl
+    ? {
+        env: {
+          BACKEND_URL: resolvedBackendUrl,
+          NEXT_PUBLIC_BACKEND_URL:
+            firstHttpBackendUrl(process.env.NEXT_PUBLIC_BACKEND_URL) || resolvedBackendUrl,
+          NEXT_PUBLIC_API_URL:
+            firstHttpBackendUrl(process.env.NEXT_PUBLIC_API_URL) || resolvedBackendUrl,
+        },
+      }
+    : {}),
+  // Keep local Chrome QA functional when the dev server is reached by its
+  // loopback IP instead of the canonical localhost name.
+  allowedDevOrigins: ['127.0.0.1'],
+  // #1538: webpack-bundling undici + @workflow/world-vercel produces two
+  // undici class copies. Agent.dispatch then throws #P even after the
+  // postinstall rewrite to undici.fetch (preview dpl_6g5ZcZwr still 500).
+  // Leave them as Node runtime requires so Agent and fetch share one module.
+  serverExternalPackages: ['undici', '@workflow/world-vercel'],
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
@@ -73,12 +129,54 @@ const nextConfig = {
       'www.uvai.io',
     ];
 
-    return legacyHosts.map((host) => ({
-      source: '/:path*',
-      has: [{ type: 'host', value: host }],
-      destination: 'https://uvai.io/:path*',
-      permanent: true,
-    }));
+    return [
+      {
+        source: '/dashboard',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/dashboard/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/app',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/app/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/prototype',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/prototype/:path*',
+        destination: '/studio',
+        permanent: true,
+      },
+      {
+        source: '/features',
+        destination: '/',
+        permanent: true,
+      },
+      {
+        source: '/playground',
+        destination: '/',
+        permanent: true,
+      },
+      ...legacyHosts.map((host) => ({
+        source: '/:path*',
+        has: [{ type: 'host', value: host }],
+        destination: 'https://uvai.io/:path*',
+        permanent: true,
+      })),
+    ];
   },
   async headers() {
     return [
@@ -99,4 +197,6 @@ const sentryWebpackPluginOptions = {
   disableClientWebpackPlugin: !process.env.SENTRY_AUTH_TOKEN,
 };
 
-module.exports = withSentryConfig(nextConfig, sentryWebpackPluginOptions);
+module.exports = withWorkflow(
+  withSentryConfig(nextConfig, sentryWebpackPluginOptions),
+);

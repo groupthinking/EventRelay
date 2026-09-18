@@ -29,6 +29,7 @@ type YTNamespace = {
       events?: {
         onReady?: (e: YTPlayerEvent) => void;
         onStateChange?: (e: YTPlayerEvent) => void;
+        onError?: (e: YTPlayerEvent) => void;
       };
     },
   ) => YTPlayer;
@@ -136,14 +137,18 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
 
   useEffect(() => {
     let cancelled = false;
+
+    // A failed player swaps the API container for a plain iframe. React then
+    // clears this callback ref; keep the failure state intact so the fallback
+    // cannot flicker back into an endless loading state.
+    if (!videoId || !container) return;
+
     readyRef.current = false;
     setReady(false);
     setFailed(false);
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
-
-    if (!videoId || !container) return;
 
     // If the API never initializes (blocked script, offline, CSP), surface a
     // failure after a grace period so the UI can fall back to a plain embed.
@@ -189,6 +194,15 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
                   /* noop */
                 }
               }
+            },
+            onError: () => {
+              if (cancelled) return;
+              clearTimeout(failTimer);
+              readyRef.current = false;
+              setReady(false);
+              setIsPlaying(false);
+              stopPolling();
+              setFailed(true);
             },
           },
         });

@@ -57,6 +57,29 @@ describe('POST /api/video', () => {
     expect(body.result.success).toBe(false);
     expect(body.result.agents_used).toContain('frontend-pipeline');
   });
+
+  it('does not accept model-derived text as a transcript', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          verified: false,
+          source: 'gemini-search',
+          transcript: 'I do not have direct access to the transcript. Paste the YouTube link into a transcript website instead.',
+        }),
+        text: async () => '{}',
+      } as unknown as Response),
+    );
+
+    const res = await POST(postRequest({ url: 'https://youtu.be/auJzb1D-fag' }));
+    const body = await res.json();
+    expect(body.status).toBe('failed');
+    expect(body.result.success).toBe(false);
+    expect(body.result.raw_response.transcript.text).toBe('');
+  });
 });
 
 describe('GET /api/video', () => {

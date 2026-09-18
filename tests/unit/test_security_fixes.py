@@ -26,6 +26,35 @@ PRODUCTION_DOCKERFILE = (
     project_root / "infrastructure" / "docker" / "Dockerfile.production"
 )
 
+# Root workspace manifests. The `overrides` block in package.json is the only
+# thing standing between the tree and a transitively-pulled vulnerable
+# brace-expansion, so both files are asserted directly.
+ROOT_PACKAGE_JSON = project_root / "package.json"
+ROOT_PACKAGE_LOCK = project_root / "package-lock.json"
+
+# brace-expansion GHSA-mh99-v99m-4gvg (unbounded expansion -> heap exhaustion).
+# The remediation is a hard 100000-entry cap on expansion output.
+#
+# GitHub's advisory record for this GHSA carries a single `<= 5.0.7` range and
+# -- unlike every other multi-line brace-expansion advisory -- no per-line 1.x
+# or 2.x entry, so neither `npm audit` nor the advisory metadata reveals where
+# the backports landed. They were measured directly instead: under
+# `--max-old-space-size=512`, 1.1.16 and 2.1.2 exhaust the heap on both the
+# numeric (`{1..50000000}`) and cartesian (`{a,b}` x 30) vectors, while 1.1.17
+# and 2.1.3 return a capped 100000 entries.
+#
+# Floors are therefore keyed by major line: a range must not admit any version
+# below the first patched release *of its own line*. This is exactly the defect
+# in #1115 -- `^1.1.16` and `^2.1.2` read as remediated (they do clear the
+# separate GHSA-3jxr-9vmj-r5cp) but still admit the OOM-vulnerable 1.1.16 and
+# 2.1.2 themselves. The tree resolved safely only because the carets happened
+# to float up.
+BRACE_EXPANSION_PATCHED = {
+    1: "1.1.17",
+    2: "2.1.3",
+    5: "5.0.8",
+}
+
 # Matches a PEP 508-ish requirement with a `>=` floor, with or without extras
 # and surrounding quotes, e.g. `"uvicorn[standard]>=0.24.0"` or `fastapi`.
 _REQUIREMENT_RE = re.compile(
@@ -48,6 +77,55 @@ def _version_key(version: str) -> tuple:
 
 def _fmt(key: tuple) -> str:
     return ".".join(str(value) for _, value in key)
+
+
+def _range_floor(spec: str) -> str:
+    """Lowest version a npm range literal admits.
+
+    Only the range operators actually used in this repo's ``overrides`` block
+    are recognised (``^``, ``~``, ``>=``, ``=``, bare exact). Anything else --
+    a union (``||``), a hyphen range, or a wildcard -- has no single
+    well-defined floor, so it is rejected rather than silently parsed into a
+    weaker assertion.
+    """
+    literal = spec.strip().lstrip("v")
+    for operator in ("^", "~", ">=", "="):
+        if literal.startswith(operator):
+            literal = literal[len(operator) :].strip()
+            break
+    if not re.fullmatch(r"\d+(?:\.\d+)*", literal):
+        raise AssertionError(
+            f"unsupported version range {spec!r}: this guard can only reason "
+            "about ranges with a single numeric floor"
+        )
+    return literal
+
+
+def _brace_expansion_minimum(version: str) -> str:
+    """First patched brace-expansion release on ``version``'s major line."""
+    major = int(version.split(".", 1)[0])
+    patched = BRACE_EXPANSION_PATCHED.get(major)
+    assert patched is not None, (
+        f"brace-expansion {version} is on major line {major}, which has no "
+        "recorded GHSA-mh99-v99m-4gvg remediation. Measure the cap on that "
+        "line and add it to BRACE_EXPANSION_PATCHED before allowing it."
+    )
+    return patched
+
+
+def _iter_brace_expansion_overrides(overrides: dict, path: str = "overrides"):
+    """Yield ``(json_path, range_literal)`` for every brace-expansion pin.
+
+    Overrides nest arbitrarily (``{"minimatch@3.1.5": {"brace-expansion": ...}}``),
+    so this walks the whole tree instead of reading known keys -- a pin added
+    under a new parent must be covered automatically.
+    """
+    for key, value in overrides.items():
+        child = f"{path}.{key}"
+        if isinstance(value, dict):
+            yield from _iter_brace_expansion_overrides(value, child)
+        elif key == "brace-expansion":
+            yield child, value
 
 
 def _pip_install_command(text: str) -> str:
@@ -300,6 +378,27 @@ class TestSecurityDocumentation:
         # Should have warning about secrets
         assert "secret" in content.lower() or "never commit" in content.lower()
 
+    def test_technical_notes_curl_uses_gemini_env_var(self):
+        """Verify TECHNICAL_NOTES curl snippets read key from $GEMINI_API_KEY."""
+        notes_path = (
+            project_root
+            / "docs"
+            / "knowledge_prototypes"
+            / "universal-automation-service"
+            / "TECHNICAL_NOTES.md"
+        )
+        if not notes_path.exists():
+            pytest.skip(f"File not found: {notes_path}")
+
+        headers = [
+            line.strip()
+            for line in notes_path.read_text().splitlines()
+            if "X-goog-api-key:" in line
+        ]
+        assert headers, "Expected at least one Gemini curl auth header snippet"
+        for header in headers:
+            assert "$GEMINI_API_KEY" in header
+
     def test_process_video_exists(self):
         """Verify process_video_with_mcp.py exists and has security patterns"""
         file_path = project_root / "src" / "agents" / "process_video_with_mcp.py"
@@ -409,11 +508,19 @@ class TestSecurityBestPractices:
         assert dockerfile.exists(), f"{dockerfile} not found"
 
         canonical = _canonical_floors()
-        installed = _installed_requirements(
-            _pip_install_command(dockerfile.read_text())
-        )
+        command = _pip_install_command(dockerfile.read_text())
+        tokens = shlex.split(command)
+        assert not any(
+            token == "--trusted-host" or token.startswith("--trusted-host=")
+            for token in tokens
+        ), "Dockerfile.production must use normal TLS certificate validation"
+        installed = _installed_requirements(command)
 
         assert installed, "Dockerfile.production declares no pinned dependencies"
+        assert "slowapi" in installed, (
+            "Dockerfile.production omits slowapi, which youtube_extension.main "
+            "imports unconditionally at startup"
+        )
 
         for name, floor in sorted(installed.items()):
             assert floor is not None, (
@@ -518,6 +625,61 @@ class TestSecurityBestPractices:
             f"'uvicorn {target}' would fail at startup"
         )
 
+    def test_brace_expansion_override_floors_exclude_oom_vulnerable_versions(self):
+        """Every brace-expansion override floor must be at or above the first
+        patched release on its own major line.
+
+        Asserting the *floor* rather than the resolved version is the point.
+        Resolution is checked separately below, but a safe resolution proves
+        nothing durable: it is a property of whatever the registry happened to
+        offer when the lockfile was written, not of what the manifest permits.
+        The floors in #1115 were `^1.1.16` / `^2.1.2` -- both admitting the
+        exact versions that OOM -- while the tree resolved to 1.1.18 / 2.1.4.
+        A lockfile refresh, a fresh `npm install`, or any consumer resolving
+        from package.json alone could legally land on the vulnerable version.
+        """
+        assert ROOT_PACKAGE_JSON.exists(), f"{ROOT_PACKAGE_JSON} not found"
+        manifest = json.loads(ROOT_PACKAGE_JSON.read_text())
+
+        pins = dict(_iter_brace_expansion_overrides(manifest.get("overrides", {})))
+        assert pins, (
+            "no brace-expansion override found in package.json; the transitive "
+            "pins guarding GHSA-mh99-v99m-4gvg have been dropped"
+        )
+
+        for json_path, spec in sorted(pins.items()):
+            floor = _range_floor(spec)
+            minimum = _brace_expansion_minimum(floor)
+            assert _version_key(floor) >= _version_key(minimum), (
+                f"{json_path} = {spec!r} admits brace-expansion {floor}, which "
+                f"predates the GHSA-mh99-v99m-4gvg cap introduced in {minimum}. "
+                f"Raise the floor to ^{minimum} or higher."
+            )
+
+    def test_brace_expansion_resolves_to_patched_versions(self):
+        """No copy of brace-expansion in the lockfile may sit below the cap.
+
+        The override floors constrain only the pins that are declared. This
+        catches any copy that arrives through a path no override covers.
+        """
+        assert ROOT_PACKAGE_LOCK.exists(), f"{ROOT_PACKAGE_LOCK} not found"
+        lock = json.loads(ROOT_PACKAGE_LOCK.read_text())
+
+        resolved = {
+            path: entry["version"]
+            for path, entry in lock.get("packages", {}).items()
+            if path.split("node_modules/")[-1] == "brace-expansion"
+            and "version" in entry
+        }
+        assert resolved, "lockfile contains no brace-expansion entry to verify"
+
+        for path, version in sorted(resolved.items()):
+            minimum = _brace_expansion_minimum(version)
+            assert _version_key(version) >= _version_key(minimum), (
+                f"{path} resolves to brace-expansion {version}, which predates "
+                f"the GHSA-mh99-v99m-4gvg cap introduced in {minimum}"
+            )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
@@ -565,3 +727,62 @@ class TestSecurityAgentEvalFix:
 
         assert bad_found, "Failed to detect dangerous eval"
         assert not safe_found, "Falsely detected literal_eval as dangerous"
+
+
+class TestMojoSharedMemoryPickleFix:
+    """Test Issue: pickle RCE risk in Mojo shared-memory transport.
+
+    A receiver that unpickles data read from a cross-process shared-memory
+    segment can be forced into arbitrary code execution by a malicious or
+    compromised writer. The shared-memory transport must serialize with
+    JSON instead.
+    """
+
+    def test_mcp_a2a_mojo_integration_does_not_import_pickle(self):
+        """Verify the module no longer imports the pickle module."""
+        module_path = project_root / "src" / "agents" / "unified" / "mcp_a2a_mojo_integration.py"
+        assert module_path.exists()
+        content = module_path.read_text()
+        assert "import pickle" not in content
+        assert "pickle.dumps" not in content
+        assert "pickle.loads" not in content
+
+    @pytest.mark.asyncio
+    async def test_shared_memory_send_serializes_as_json(self):
+        """Verify _shared_memory_send writes a JSON payload, not pickle bytes."""
+        from agents.a2a_framework import A2AMessage
+        from agents.unified.mcp_a2a_mojo_integration import (
+            MojoTransportLayer,
+            TransportStrategy,
+            UnifiedMessage,
+        )
+        from connectors.mcp_base import MCPContext
+
+        message = UnifiedMessage(
+            a2a_message=A2AMessage(
+                sender="agent_a",
+                recipient="agent_b",
+                message_type="task",
+                content={"payload": "value"},
+            ),
+            mcp_context=MCPContext(),
+            transport_strategy=TransportStrategy.SHARED_MEMORY,
+        )
+        layer = MojoTransportLayer()
+        try:
+            result = await layer._shared_memory_send(message)
+            assert result["status"] == "delivered"
+            assert result["method"] == "shared_memory"
+
+            shm = layer._shm_blocks[result["shm_name"]]
+            size = result["size_bytes"]
+            raw = bytes(shm.buf[4:4 + size])
+
+            # Must be parseable JSON (proves no pickle opcodes were written).
+            decoded = json.loads(raw.decode("utf-8"))
+            assert decoded["a2a_message"]["sender"] == "agent_a"
+            assert decoded["transport_strategy"] == "shared_memory"
+        finally:
+            for shm in layer._shm_blocks.values():
+                shm.close()
+                shm.unlink()

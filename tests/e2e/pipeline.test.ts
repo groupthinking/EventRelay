@@ -14,13 +14,14 @@
  *   BASE_URL — deployment URL (default: https://uvai.io)
  *   TEST_YOUTUBE_URL — short video for pipeline test
  *     (default: https://www.youtube.com/watch?v=auJzb1D-fag)
+ *   GITHUB_RUN_ID — included in the E2E User-Agent for production attribution
  *
  * Red/Green Signal:
  *   - GREEN: all tests pass → stdout: "✅ ALL TESTS PASSED"
  *   - RED: any failure → stdout: "🔴 FAILURE DETECTED" + details
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
@@ -31,20 +32,32 @@ const TEST_YOUTUBE_URL =
 // to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
 // "Protection Bypass for Automation" secret. It is attached as a header on
 // every request so the preview is reachable. Unset (the default — e.g. when
-// BASE_URL is production) → no header is added and behaviour is unchanged.
+// BASE_URL is production) → no bypass header is added; E2E attribution remains.
 const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+const E2E_RUN_ID = process.env.GITHUB_RUN_ID?.trim() || 'local';
+const E2E_USER_AGENT = `EventRelay-E2E/${E2E_RUN_ID}`;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-/** Merge the Vercel protection-bypass header into a request init, when configured. */
-function withBypass(init?: RequestInit): RequestInit {
-  if (!VERCEL_BYPASS_SECRET) return init ?? {};
+/** Add stable E2E attribution and the optional Vercel protection bypass. */
+function withE2EHeaders(init?: RequestInit): RequestInit {
   // Normalize via the Headers constructor so any HeadersInit shape (plain
   // object, Headers instance, or [key, value][] array) is preserved — a bare
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
-  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
+  headers.set('User-Agent', E2E_USER_AGENT);
+  headers.set('X-EventRelay-Probe', 'e2e');
+  if (VERCEL_BYPASS_SECRET) {
+    headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
+  }
+  // Deliberately NOT sending `x-vercel-set-bypass-cookie`. That header asks
+  // Vercel to persist the bypass as a cookie and answers every request with
+  // `307 → /`. `fetch` has no cookie jar, so the redirect target is requested
+  // with the same header and 307s again — an unbounded loop that ends in
+  // "TypeError: fetch failed / redirect count exceeded", failing the whole
+  // suite even though the secret is correct. The bypass header alone is
+  // accepted per-request and returns 200 directly, which is all a stateless
+  // test client needs. The cookie form only helps a browser that persists it.
   return { ...init, headers };
 }
 
@@ -60,7 +73,7 @@ async function fetchWithTimeout(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...withBypass(init), signal: controller.signal });
+      const res = await fetch(url, { ...withE2EHeaders(init), signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {
@@ -83,6 +96,34 @@ async function fetchWithTimeout(
   throw lastError || new Error('fetchWithTimeout: max retries exceeded');
 }
 
+describe('E2E request attribution', () => {
+  it('adds the probe and GitHub run identity headers to every request', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    let capturedInit: RequestInit | undefined;
+
+    try {
+      await fetchWithTimeout(
+        'https://example.test/api/health',
+        { headers: { Accept: 'application/json' } },
+        100,
+        1,
+      );
+      capturedInit = fetchSpy.mock.calls[0]?.[1];
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    const headers = new Headers(capturedInit?.headers);
+    const runId = process.env.GITHUB_RUN_ID?.trim() || 'local';
+
+    expect(headers.get('user-agent')).toBe(`EventRelay-E2E/${runId}`);
+    expect(headers.get('x-eventrelay-probe')).toBe('e2e');
+    expect(headers.get('accept')).toBe('application/json');
+  });
+});
+
 /** Parse an SSE text stream into an array of parsed JSON events. */
 function parseSSEEvents(raw: string): Array<Record<string, unknown>> {
   const events: Array<Record<string, unknown>> = [];
@@ -102,8 +143,39 @@ function parseSSEEvents(raw: string): Array<Record<string, unknown>> {
 // ─── Tests ──────────────────────────────────────────────────────────
 
 describe('EventRelay E2E — Live Deployment', () => {
-  // Smoke check: is the site up?
+  // Smoke check: is the site up, and is it the app we intend to test?
+  //
+  // Vercel Deployment Protection intercepts anonymous traffic to a preview in two
+  // shapes: HTML routes 302 to vercel.com/sso-api, API routes return a bare 401.
+  // The default `redirect: 'follow'` hides the first shape completely — fetch
+  // lands on a 200 "Login – Vercel" page, so `res.ok` is true and the suite runs
+  // every assertion against Vercel's login markup instead of the deployment. The
+  // page happens to contain a <title> and a viewport meta tag, so the meta and
+  // liveness tests pass; only the content and API assertions fail, with messages
+  // that blame the app ("expected 0 to be greater than or equal to 3") rather than
+  // naming the missing bypass secret. Probe with `redirect: 'manual'` so the 302
+  // stays visible and fail once, with the remedy.
   beforeAll(async () => {
+    const probe = await fetchWithTimeout(BASE_URL, { redirect: 'manual' }, 15_000);
+    const location = probe.headers.get('location') || '';
+    const ssoRedirect =
+      [301, 302, 303, 307, 308].includes(probe.status) &&
+      /vercel\.com\/sso-api/i.test(location);
+
+    if (ssoRedirect || probe.status === 401) {
+      throw new Error(
+        `Deployment protection blocked this run — ${BASE_URL} returned ${probe.status}` +
+          `${location ? ` → ${location}` : ''} instead of the app, so every assertion ` +
+          `below would execute against Vercel's login page rather than the deployment. ` +
+          `Set the VERCEL_AUTOMATION_BYPASS_SECRET repository secret to the project's ` +
+          `"Protection Bypass for Automation" value (Vercel → Project → Settings → ` +
+          `Deployment Protection); this suite forwards it as the ` +
+          `x-vercel-protection-bypass header on every request.`,
+      );
+    }
+
+    // Liveness check, following redirects as before so a legitimate same-host
+    // redirect on `/` still counts as up.
     const res = await fetchWithTimeout(BASE_URL, {}, 15_000);
     if (!res.ok) {
       throw new Error(
@@ -305,7 +377,7 @@ describe('EventRelay E2E — Live Deployment', () => {
       }
     });
 
-    it('terminal pipeline_status includes duration and agent count when present', async () => {
+    it('terminal pipeline_status includes duration and stage progress', async () => {
       const res = await fetchWithTimeout(
         `${BASE_URL}/api/pipeline/stream`,
         {
@@ -333,8 +405,13 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(typeof terminal.duration).toBe('number');
       const data = terminal.data as Record<string, unknown> | undefined;
       if (data) {
-        expect(data.totalAgents).toBeDefined();
-        expect(data.completedAgents).toBeDefined();
+        // Both terminal paths — quality-gate completion and hard failure —
+        // report stage progress under these names, so a client can rely on a
+        // single shape regardless of how the stream ended.
+        expect(data.totalStages).toBeDefined();
+        expect(data.completedStages).toBeDefined();
+        expect(typeof data.totalStages).toBe('number');
+        expect(typeof data.completedStages).toBe('number');
       }
     });
   });

@@ -1105,15 +1105,17 @@ MIT
 
         monetization = architecture.get("monetization", {})
         if monetization.get("payment_processor") == "stripe":
-            # Inject real Stripe keys from environment if available
-            stripe_secret = os.environ.get("STRIPE_SECRET_KEY", "sk_test_...")
-            stripe_publishable = os.environ.get("STRIPE_PUBLISHABLE_KEY", "pk_test_...")
+            # Inject real Stripe keys from environment if available; emit
+            # empty values (never placeholder-looking secrets) when absent,
+            # matching _generate_env_local
+            stripe_secret = os.environ.get("STRIPE_SECRET_KEY", "")
+            stripe_publishable = os.environ.get("STRIPE_PUBLISHABLE_KEY", "")
 
             env_vars.extend([
-                "# Stripe (LIVE keys injected from environment)",
+                "# Stripe (keys injected from environment)",
                 f"STRIPE_SECRET_KEY={stripe_secret}",
                 f"NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY={stripe_publishable}",
-                "STRIPE_WEBHOOK_SECRET=whsec_...",
+                "STRIPE_WEBHOOK_SECRET=",
                 ""
             ])
 

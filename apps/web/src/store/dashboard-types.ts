@@ -1,4 +1,8 @@
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
+import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { VideoPackCitation } from '@/lib/emit-video-pack';
+import type { LinkedSop } from '@/lib/linked-sop';
+import type { SpecReviewAcknowledgment } from '@/lib/grounded-build-spec';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -23,7 +27,7 @@ export interface Action {
   estimatedMinutes?: number | null;
 }
 
-export type PipelineMode = 'live' | 'serverless' | 'fallback' | 'handoff';
+export type PipelineMode = 'workflow' | 'live' | 'serverless' | 'fallback' | 'handoff';
 
 export interface Video {
   id: string;
@@ -44,9 +48,23 @@ export interface Video {
   jobId?: string;
   /** Poll URL for async job status. */
   statusUrl?: string;
+  /** Durable Workflow DevKit generation identity. */
+  runId?: string;
+  /** Hashed VideoPack v0 citation emitted from paste-URL. */
+  videoPack?: VideoPackCitation;
+  specReviewAcknowledgment?: SpecReviewAcknowledgment;
+  provenance?: AnalysisProvenance;
+  quality?: EvidenceAssessment;
+  failure?: {
+    stage: 'start' | 'acquisition' | 'analysis' | 'quality' | 'persistence' | 'deployment' | 'unknown';
+    message: string;
+    retryable: boolean;
+    failedAt: string;
+  };
   insights?: {
     summary: string;
-    actions: Action[];
+    /** Older backend results may persist action titles as strings; renderers normalize both shapes. */
+    actions: Array<Action | string>;
     sentiment: string;
     topics: string[];
     /**
@@ -55,6 +73,8 @@ export interface Video {
      * Canonical plan surface for F3; paired with Act on findings tools.
      */
     project_scaffold?: unknown;
+    /** Tools the video named, SOP in speech order, plus stack deploy checks. */
+    linkedSop?: LinkedSop;
   };
 }
 

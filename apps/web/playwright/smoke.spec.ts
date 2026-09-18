@@ -38,48 +38,63 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     }
   });
 
-  test('Homepage renders critical branding and CTA elements', async ({ page }) => {
+  test('Homepage is a sell page with paste action, not the studio workbench', async ({ page }) => {
     await page.goto('/');
 
-    // Assert title or logo is present
-    await expect(page).toHaveTitle(/EventRelay|UVAI|Video/i);
-
-    // Assert key product heading is visible
-    const heading = page.locator('h1');
-    await expect(heading).toContainText(/Turn any video into actions/i);
-
-    // Assert the primary CTA exists
-    const cta = page.locator('text=Analyze a video');
-    await expect(cta).toBeVisible();
+    await expect(page).toHaveTitle(/UVAI/i);
+    await expect(page.getByText('Universal Video Action Intelligence')).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Paste a YouTube URL\. Open the Studio workbench\./i })
+    ).toBeVisible();
+    await expect(page.getByText(/Transcript quality varies by source/i)).toBeVisible();
+    await expect(page.getByText('Loading studio')).toHaveCount(0);
+    await expect(page.getByLabel(/YouTube URL/i)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Run in Studio/i })).toBeVisible();
+    await expect(page.getByText('$39')).toBeVisible();
+    await expect(page.getByText('$199/mo')).toBeVisible();
+    await expect(page.getByRole('link', { name: /Get Pro/i }).first()).toBeVisible();
+    await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
+    await expect(page.getByRole('button', { name: /Monthly checkout/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Annual checkout/i })).toBeVisible();
+    await expect(page.getByTestId('pro-checkout-button')).toBeVisible();
+    await expect(page.getByTestId('turnstile-widget')).toBeVisible();
   });
 
-  test('Features page is reachable and contains template gallery indicators', async ({ page }) => {
-    await page.goto('/features');
+  test('Features and playground fold into Home', async ({ page }) => {
+    const features = await page.goto('/features');
+    expect(features?.status()).toBeLessThan(400);
+    await expect(page).toHaveURL(/\/(\?.*)?$/);
+    await expect(page.getByText('Universal Video Action Intelligence')).toBeVisible();
 
-    const content = await page.content();
-    // We expect the template showcase or features descriptive text
-    expect(content.toLowerCase()).toContain('workflow');
+    const playground = await page.goto('/playground');
+    expect(playground?.status()).toBeLessThan(400);
+    await expect(page).toHaveURL(/\/(\?.*)?$/);
   });
 
-  test('Pricing page renders monthly and annual subscription plans', async ({ page }) => {
+  test('Pricing page keeps Workflow Pro checkout at $39', async ({ page }) => {
     await page.goto('/pricing');
 
-    // Ensure all three tiers are clearly presented to users
-    await expect(page.locator('text=Free')).toBeVisible();
-    await expect(page.locator('text=Pro')).toBeVisible();
-    await expect(page.locator('text=Enterprise')).toBeVisible();
-
-    // Check for the billing toggles
-    await expect(page.locator('text=Monthly')).toBeVisible();
-    await expect(page.locator('text=Annual')).toBeVisible();
+    await expect(page.getByTestId('workflow-pro-catalog')).toContainText('$39/mo');
+    await expect(page.getByTestId('workflow-pro-catalog')).toContainText('$390/yr');
+    await expect(page.getByText('Monthly checkout')).toBeVisible();
+    await expect(page.getByText('Annual checkout')).toBeVisible();
   });
 
-  test('Dashboard path is handled gracefully', async ({ page }) => {
-    const response = await page.goto('/dashboard');
-    const status = response?.status();
+  test('Dashboard, app, and prototype paths fold into the studio workbench', async ({ page }) => {
+    for (const path of ['/dashboard', '/app', '/prototype'] as const) {
+      const response = await page.goto(path);
+      const status = response?.status();
+      expect(status).toBeLessThan(400);
+      await expect(page).toHaveURL(/\/studio(\?.*)?$/);
+    }
+    await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
+  });
 
-    // The dashboard is gated; it must redirect to login/auth, or render if authenticated.
-    // In either case, the deployment must handle it gracefully without returning a 5xx error.
-    expect(status).toBeLessThan(500);
+  test('Home paste navigates to Studio with the video query', async ({ page }) => {
+    await page.goto('/');
+    await page.getByLabel(/YouTube URL/i).fill('https://www.youtube.com/watch?v=auJzb1D-fag');
+    await page.getByRole('button', { name: /Run in Studio/i }).click();
+    await expect(page).toHaveURL(/\/studio\?video=/);
+    await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
   });
 });

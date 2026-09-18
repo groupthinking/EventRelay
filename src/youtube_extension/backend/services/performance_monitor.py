@@ -293,18 +293,25 @@ class PerformanceMonitor:
             return
 
         try:
-            now = datetime.now(timezone.utc)
-            records = [
-                PerformanceMetric(
-                    component=entry["component"],
-                    metric_name=entry["metric_name"],
-                    value=float(entry["value"]),
-                    timestamp=entry.get("timestamp") or now,
-                    unit=entry.get("unit", "ms"),
-                    tags=entry.get("tags") or {},
+            # Stamp each record with its own ``datetime.now`` exactly as the
+            # serial ``record_metric`` does. A single shared ``now`` for the
+            # whole batch gives every row an identical timestamp, which
+            # diverges from the parity this method's docstring promises and
+            # erases per-sample ordering for callers that submit genuinely
+            # distinct samples in one call.
+            records = []
+            for entry in metrics:
+                records.append(
+                    PerformanceMetric(
+                        component=entry["component"],
+                        metric_name=entry["metric_name"],
+                        value=float(entry["value"]),
+                        timestamp=entry.get("timestamp")
+                        or datetime.now(timezone.utc),
+                        unit=entry.get("unit", "ms"),
+                        tags=entry.get("tags") or {},
+                    )
                 )
-                for entry in metrics
-            ]
 
             # Mirror record_metric's buffer bookkeeping, but take the lock once
             # for the whole batch instead of once per metric.
@@ -368,31 +375,7 @@ class PerformanceMonitor:
 
     async def _store_metric(self, metric: PerformanceMetric):
         """Store metric in database"""
-
-        def _write() -> None:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-
-            cursor.execute('''
-                INSERT INTO performance_metrics
-                (component, metric_name, value, unit, tags, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (
-                metric.component,
-                metric.metric_name,
-                metric.value,
-                metric.unit,
-                json.dumps(metric.tags),
-                metric.timestamp.isoformat()
-            ))
-
-            conn.commit()
-            conn.close()
-
-        try:
-            await asyncio.to_thread(_write)
-        except Exception as e:
-            logger.error(f"Failed to store metric in database: {e}")
+        await self._store_metrics([metric])
 
     async def _check_alert_thresholds(self, metric: PerformanceMetric):
         """Check if metric exceeds alert thresholds"""

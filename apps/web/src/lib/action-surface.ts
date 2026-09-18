@@ -1,3 +1,20 @@
+import { renderDeployMarkdown, type LinkedSop } from '@/lib/linked-sop';
+import { officialTemplateFiles, pickOfficialTemplate } from '@/lib/official-templates';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
+import {
+  emitAppBuilderSandbox,
+  sopStepsFromPack,
+  visualEventsFromPack,
+  type AppBuilderSopStep,
+  type AppBuilderTranscript,
+  type AppBuilderVisualEvent,
+} from '@/lib/emit-app-builder-sandbox';
+import { zipUtf8Files } from '@/lib/zip-store';
+
 /**
  * Canonical action surface (F3).
  *
@@ -32,7 +49,7 @@ export interface ScaffoldPackage {
   files: Record<string, string>;
 }
 
-function safeProjectName(name: string): string {
+export function safeProjectName(name: string): string {
   return (
     name
       .toLowerCase()
@@ -42,27 +59,119 @@ function safeProjectName(name: string): string {
 }
 
 /** Build deterministic scaffold files from planned/fulfilled actions (workbench absorb). */
+export type StudioEventLike = {
+  type?: string;
+  title?: string;
+  description?: string;
+};
+
+export type StudioWorkflowActionLike = {
+  tool?: string;
+  status?: string;
+  result?: string;
+};
+
+/**
+ * Export uses this Studio run: Analyze actions, else events, else Act tools.
+ * Button is enabled on transcript/events; do not require insights.actions.
+ */
+export function actionsFromStudioRun(input: {
+  insightActions?: ActionCardLike[] | null;
+  events?: StudioEventLike[] | null;
+  workflowActions?: StudioWorkflowActionLike[] | null;
+}): ActionCardLike[] {
+  const out: ActionCardLike[] = [];
+  const seen = new Set<string>();
+
+  const push = (action: ActionCardLike) => {
+    const title = action.title.trim();
+    if (!title) return;
+    const key = title.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ ...action, title });
+  };
+
+  for (const action of input.insightActions || []) {
+    if (!action?.title) continue;
+    push(action);
+  }
+  for (const event of input.events || []) {
+    if (!event?.title) continue;
+    push({
+      title: event.title,
+      description: event.description,
+      category: event.type || 'event',
+    });
+  }
+  if (out.length === 0) {
+    for (const action of input.workflowActions || []) {
+      const title = (action.tool || '').trim();
+      if (!title) continue;
+      push({
+        title,
+        description: action.result || action.status,
+        category: 'act',
+      });
+    }
+  }
+  return out;
+}
+
+export type StudioPackExportFormation = {
+  architecture?: VideoPackArchitecture | null;
+  artifacts?: VideoPackArtifact[];
+  tools?: VideoPackStackTool[];
+};
+
+export type StudioShipVideoPack = {
+  videoId: string;
+  sourceUrl: string;
+  sourceHash: string;
+  packId?: string;
+  /** Visual-context + frame slice. Studio must not name pack frames as events. */
+  visual?: Parameters<typeof visualEventsFromPack>[0];
+  /** Pack requirements (SOP). Ignored when Studio already compiled steps. */
+  requirements?: Parameters<typeof sopStepsFromPack>[0]['requirements'];
+};
+
 export function buildScaffoldPackage(input: {
   projectName?: string;
   actions: ActionCardLike[];
   /** Optional Gemini project_scaffold blob from TranscriptActionAgent. */
   projectScaffold?: unknown;
+  linkedSop?: LinkedSop;
+  /** Pack architecture / artifacts / stack when events[] is empty. */
+  packFormation?: StudioPackExportFormation;
 }): ScaffoldPackage {
   const name = safeProjectName(input.projectName || 'generated-project');
-  const tasks = input.actions.map((a, i) => ({
-    id: `TASK-${String(i + 1).padStart(3, '0')}`,
-    title: a.title,
-    description: a.description || '',
-    category: a.category || 'build',
-    estimatedMinutes: a.estimatedMinutes ?? null,
-    source:
-      typeof a.start === 'number' && typeof a.end === 'number'
-        ? `${Math.round(a.start)}s-${Math.round(a.end)}s`
-        : undefined,
-    confidence: a.confidence,
-    tags: a.tags,
-    snippet: a.snippet,
-  }));
+  const sop = input.linkedSop;
+  const tasks = sop && sop.checklist.length > 0
+    ? sop.checklist.map((item, i) => ({
+        id: item.id || `TASK-${String(i + 1).padStart(3, '0')}`,
+        title: item.title,
+        description: item.source === 'stack' ? `Official ${item.stack || 'stack'} check` : 'Video SOP',
+        category: item.source === 'stack' ? 'deploy' : 'sop',
+        href: item.href,
+        timestamp: item.timestamp ?? null,
+        source: item.timestamp != null ? `${Math.round(item.timestamp)}s` : undefined,
+      }))
+    : input.actions.map((a, i) => ({
+        id: `TASK-${String(i + 1).padStart(3, '0')}`,
+        title: a.title,
+        description: a.description || '',
+        category: a.category || 'build',
+        estimatedMinutes: a.estimatedMinutes ?? null,
+        href: undefined as string | undefined,
+        timestamp: null as number | null,
+        source:
+          typeof a.start === 'number' && typeof a.end === 'number'
+            ? `${Math.round(a.start)}s-${Math.round(a.end)}s`
+            : undefined,
+        confidence: a.confidence,
+        tags: a.tags,
+        snippet: a.snippet,
+      }));
 
   const taskLines = tasks
     .map((t) => {
@@ -71,21 +180,109 @@ export function buildScaffoldPackage(input: {
     })
     .join('\n');
 
+  const entityLines = (sop?.entities || [])
+    .map((entity) => `- [${entity.name}](${entity.officialUrl})${entity.docsUrl && entity.docsUrl !== entity.officialUrl ? ` — [docs](${entity.docsUrl})` : ''}`)
+    .join('\n');
+
   const files: Record<string, string> = {
-    'README.md': `# ${name}\n\nGenerated from EventRelay video action surface.\n\n## Tasks\n\n${
+    'README.md': `# ${name}\n\nGenerated from a verified video transcript.\n\n${
+      entityLines ? `## Named tools\n\n${entityLines}\n\n` : ''
+    }## Tasks\n\n${
       taskLines || '- (no tasks yet — run Act on findings or re-analyze the video)'
     }\n`,
     'tasks.json': JSON.stringify(tasks, null, 2) + '\n',
-    'src/index.ts':
-      "export function main() {\n  console.log('Generated project scaffold loaded.');\n}\n\nmain();\n",
   };
+
+  const template = pickOfficialTemplate(sop);
+  const officialFiles = officialTemplateFiles(name, sop);
+  Object.assign(files, officialFiles);
+  if (!template) {
+    files['src/index.ts'] =
+      "export function main() {\n  console.log('Generated project scaffold loaded.');\n}\n\nmain();\n";
+  } else {
+    files['README.md'] += `\n## Official starter\n\n\`\`\`bash\n${template.clone}\n\`\`\`\n\n${template.docsUrl}\n`;
+  }
+
+  if (sop) {
+    files['linked-sop.json'] = JSON.stringify(sop, null, 2) + '\n';
+    files['DEPLOY.md'] = renderDeployMarkdown(sop);
+  }
 
   if (input.projectScaffold != null) {
     files['project_scaffold.json'] =
       JSON.stringify(input.projectScaffold, null, 2) + '\n';
   }
 
+  const architecture = input.packFormation?.architecture;
+  if (architecture) {
+    const stageLines = architecture.stages
+      .map((stage) => `- ${stage.name}${stage.description ? ` — ${stage.description}` : ''}`)
+      .join('\n');
+    files['ARCHITECTURE.md'] = [
+      `# Architecture`,
+      '',
+      architecture.summary?.trim() || '',
+      stageLines ? `\n## Stages\n\n${stageLines}\n` : '',
+      architecture.mermaid ? `\n## Graph\n\n\`\`\`mermaid\n${architecture.mermaid}\n\`\`\`\n` : '',
+    ]
+      .filter((block) => block.length > 0)
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
+  }
+
+  const artifacts = input.packFormation?.artifacts ?? [];
+  if (artifacts.length > 0) {
+    files['artifacts.json'] = JSON.stringify(artifacts, null, 2) + '\n';
+  }
+
+  const tools = input.packFormation?.tools ?? [];
+  if (tools.length > 0 && !entityLines) {
+    const toolLines = tools.map((tool) => `- ${tool.name}`).join('\n');
+    files['README.md'] += `\n## Stack\n\n${toolLines}\n`;
+  }
+
   return { projectName: name, files };
+}
+
+/**
+ * Studio Export ship artifact: when a hashed Video Pack is present, merge the
+ * App Builder Workspace sandbox (startup.sh / 8080 / smoke / build+typecheck)
+ * over the SOP/scaffold files. Sandbox files win on collision.
+ */
+export function buildStudioShipPackage(input: {
+  projectName?: string;
+  actions: ActionCardLike[];
+  projectScaffold?: unknown;
+  linkedSop?: LinkedSop;
+  packFormation?: StudioPackExportFormation;
+  videoPack?: StudioShipVideoPack | null;
+  transcript?: AppBuilderTranscript | null;
+  visualEvents?: AppBuilderVisualEvent[];
+  sopSteps?: AppBuilderSopStep[];
+}): ScaffoldPackage {
+  const scaffold = buildScaffoldPackage(input);
+  if (!input.videoPack) {
+    return scaffold;
+  }
+  const sandbox = emitAppBuilderSandbox({
+    videoId: input.videoPack.videoId,
+    sourceUrl: input.videoPack.sourceUrl,
+    sourceHash: input.videoPack.sourceHash,
+    packId: input.videoPack.packId,
+    transcript: input.transcript,
+    visualEvents: input.visualEvents ?? visualEventsFromPack(input.videoPack.visual ?? {}),
+    sopSteps:
+      input.sopSteps ??
+      input.linkedSop?.steps ??
+      sopStepsFromPack({ requirements: input.videoPack.requirements }),
+  });
+  const files = { ...scaffold.files, ...sandbox.files };
+  delete files['ARCHITECTURE.md'];
+  delete files['artifacts.json'];
+  return {
+    projectName: scaffold.projectName,
+    files,
+  };
 }
 
 /** Human-readable preview lines for a project_scaffold blob. */
@@ -136,20 +333,20 @@ export function summarizeProjectScaffold(scaffold: unknown, maxItems = 6): strin
   return lines.slice(0, maxItems);
 }
 
-/** Trigger browser downloads for each file in a scaffold package. */
+/** One zip so Chrome does not swallow official starter files after the first blob. */
 export function downloadScaffoldPackage(pkg: ScaffoldPackage): void {
   if (typeof document === 'undefined') return;
-  const entries = Object.entries(pkg.files);
-  for (const [path, content] of entries) {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = path.includes('/') ? path.split('/').pop() || path : path;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }
+  const zip = zipUtf8Files(pkg.files);
+  const bytes = new ArrayBuffer(zip.byteLength);
+  new Uint8Array(bytes).set(zip);
+  const blob = new Blob([bytes], { type: 'application/zip' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${pkg.projectName || 'uvai-project'}.zip`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

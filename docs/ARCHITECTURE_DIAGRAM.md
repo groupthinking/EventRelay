@@ -1,4 +1,6 @@
-# EventRelay Architecture — Current State & Target State
+# EventRelay architecture — historical runtime and issue map
+
+> Historical snapshot, marked 2026-09-13. “Current,” “healthy,” issue states, and target components below refer to the original analysis, not a fresh deployment check. The public product is UVAI; the current workbench is `/studio`, not a separate dashboard. Use [REPO_MAP.md](REPO_MAP.md) for current source locations, [MASTER_ROADMAP.md](MASTER_ROADMAP.md) for the build-out plan, and [../AGENTS.md](../AGENTS.md) for locked scope and storage policy. This record is retained for context, not as an execution queue.
 
 ## Color Legend
 
