@@ -1,4 +1,5 @@
 import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
+import { reasonEnvelope, type ReasonEnvelope } from '@/lib/api-reason-envelope';
 import type { VideoPackV0Json } from '@/lib/video-pack';
 
 /**
@@ -126,13 +127,42 @@ function assertDurableVideoPackStorageConfigured(): void {
   );
 }
 
+function logPackStoreEvent(payload: Record<string, unknown>): void {
+  console.log(JSON.stringify({ scope: 'video-pack-store', ...payload }));
+}
+
 /** Redis/KV key for a pack row keyed by canonical 64-char `source_hash`. */
 export function packStoreKey(sourceHash: string): string {
   return `${VIDEO_PACK_STORE_PREFIX}${sourceHash}`;
 }
 
-function logPackStoreEvent(payload: Record<string, unknown>): void {
-  console.log(JSON.stringify({ scope: 'video-pack-store', ...payload }));
+/** Reason envelope for lookup failures (distinct miss vs durable store read error). */
+export function packLookupFailureEnvelope(
+  lookup: Extract<PackLookupResult, { outcome: 'miss' } | { outcome: 'store_error' }>,
+): ReasonEnvelope {
+  if (lookup.outcome === 'miss') {
+    return reasonEnvelope(
+      false,
+      'HOSTED_PACK_NOT_FOUND',
+      'Video pack not found. Generate /api/video/pack first.',
+    );
+  }
+  return reasonEnvelope(
+    false,
+    'HOSTED_PACK_STORE_ERROR',
+    lookup.error || 'Video pack store read failed.',
+  );
+}
+
+function packLookupLogReasonCode(lookup: PackLookupResult): string | undefined {
+  if (lookup.outcome === 'miss') return 'HOSTED_PACK_NOT_FOUND';
+  if (lookup.outcome === 'store_error') return 'HOSTED_PACK_STORE_ERROR';
+  if (lookup.outcome === 'hit') {
+    if (lookup.record.state === 'error') return 'HOSTED_PACK_EXTRACT_FAILED';
+    if (lookup.record.state === 'processing') return 'HOSTED_PACK_PROCESSING';
+    if (lookup.record.state === 'ready') return 'HOSTED_SPEC_READY';
+  }
+  return undefined;
 }
 
 async function packStoreSignalFromRedis(
@@ -259,31 +289,36 @@ export async function getPackRecordWithMeta(sourceHash: string): Promise<PackLoo
       const parsed = decodeRecord(raw);
       if (parsed && recordHash(parsed) === sourceHash) {
         memoryStore.set(key, parsed);
+        const hit: PackLookupResult = { outcome: 'hit', record: parsed, store: baseSignal };
         logPackStoreEvent({
           event: 'pack_get',
           source_hash: sourceHash,
           outcome: 'hit',
+          reason_code: packLookupLogReasonCode(hit),
           backend: baseSignal.backend,
           duration_ms: Date.now() - started,
         });
-        return { outcome: 'hit', record: parsed, store: baseSignal };
+        return hit;
       }
       const local = readLocalPackRecord(key, sourceHash);
       if (local) {
+        const hit: PackLookupResult = { outcome: 'hit', record: local, store: baseSignal };
         logPackStoreEvent({
           event: 'pack_get',
           source_hash: sourceHash,
           outcome: 'hit',
+          reason_code: packLookupLogReasonCode(hit),
           backend: baseSignal.backend,
           cache: 'memory',
           duration_ms: Date.now() - started,
         });
-        return { outcome: 'hit', record: local, store: baseSignal };
+        return hit;
       }
       logPackStoreEvent({
         event: 'pack_get',
         source_hash: sourceHash,
         outcome: 'miss',
+        reason_code: 'HOSTED_PACK_NOT_FOUND',
         backend: baseSignal.backend,
         duration_ms: Date.now() - started,
       });
@@ -294,6 +329,7 @@ export async function getPackRecordWithMeta(sourceHash: string): Promise<PackLoo
         event: 'pack_get',
         source_hash: sourceHash,
         outcome: 'store_error',
+        reason_code: 'HOSTED_PACK_STORE_ERROR',
         backend: baseSignal.backend,
         error: message,
         duration_ms: Date.now() - started,
@@ -316,19 +352,22 @@ export async function getPackRecordWithMeta(sourceHash: string): Promise<PackLoo
 
   const local = readLocalPackRecord(key, sourceHash);
   if (local) {
+    const hit: PackLookupResult = { outcome: 'hit', record: local, store: { backend: 'memory', ok: true } };
     logPackStoreEvent({
       event: 'pack_get',
       source_hash: sourceHash,
       outcome: 'hit',
+      reason_code: packLookupLogReasonCode(hit),
       backend: 'memory',
       duration_ms: Date.now() - started,
     });
-    return { outcome: 'hit', record: local, store: { backend: 'memory', ok: true } };
+    return hit;
   }
   logPackStoreEvent({
     event: 'pack_get',
     source_hash: sourceHash,
     outcome: 'miss',
+    reason_code: 'HOSTED_PACK_NOT_FOUND',
     backend: baseSignal.backend,
     duration_ms: Date.now() - started,
   });

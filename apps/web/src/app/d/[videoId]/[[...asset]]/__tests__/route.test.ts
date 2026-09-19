@@ -174,21 +174,82 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
       { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
     );
     const body = (await second.json()) as {
+      ok: boolean;
+      reason_code: string;
       videoId: string;
       live_url: string;
-      health: { ok: boolean; status: number };
+      health: { ok: boolean; status: number; reason_code: string };
       store: { backend: string; ok: boolean };
       checks_recorded: number;
       factory_deliver: { ready: boolean; reason_code: string };
     };
 
     expect(second.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.reason_code).toBe('HOSTED_SPEC_READY');
     expect(body.videoId).toBe(QJ_VIDEO_ID);
     expect(body.live_url).toBe(`/d/${QJ_VIDEO_ID}`);
     expect(body.health.ok).toBe(true);
     expect(body.store).toMatchObject({ backend: 'memory', ok: true });
     expect(body.checks_recorded).toBeGreaterThanOrEqual(2);
     expect(body.factory_deliver).toMatchObject({ ready: true, reason_code: 'FACTORY_DELIVER_READY' });
+  });
+
+  it('returns XYMc health READY with store signal (AXIOM banked pack)', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(XYMC_VIDEO_ID, XYMC_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: loaded.applyExtractedSpec(identity, xymcExtractedSpec()),
+    });
+
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${XYMC_VIDEO_ID}/health`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: XYMC_VIDEO_ID, asset: ['health'] }) },
+    );
+    const body = (await res.json()) as {
+      ok: boolean;
+      reason_code: string;
+      health: { ok: boolean; reason_code: string };
+      store: { backend: string; ok: boolean };
+    };
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(true);
+    expect(body.reason_code).toBe('HOSTED_SPEC_READY');
+    expect(body.health.reason_code).toBe('HOSTED_SPEC_READY');
+    expect(body.store.backend).toBe('memory');
+    expect(body.store.ok).toBe(true);
+  });
+
+  it('returns QjZ health extract-failed with store signal and top-level envelope', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(QJ_VIDEO_ID, QJ_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'error',
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: identity.provenance.source_hash,
+      id: identity.id,
+      error: 'Vercel AI Gateway returned empty content',
+      failed_at: '2026-09-18T00:00:00.000Z',
+    });
+
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/health`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
+    );
+    const body = (await res.json()) as {
+      ok: boolean;
+      reason_code: string;
+      detail?: string;
+      health: { ok: boolean; reason_code: string };
+      store: { backend: string; ok: boolean };
+    };
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.health.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.store.backend).toBe('memory');
   });
 
   it('returns non-503 health for a missing pack with an honest reason_code', async () => {
@@ -198,11 +259,15 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
       { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
     );
     const body = (await res.json()) as {
+      ok: boolean;
+      reason_code: string;
       health: { ok: boolean; reason_code: string; detail: string };
       store: { backend: string; ok: boolean };
       factory_deliver: { ready: boolean; reason_code: string };
     };
     expect(res.status).toBe(200);
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
     expect(body.health.ok).toBe(false);
     expect(body.health.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
     expect(body.health.detail).toMatch(/pack not found/i);
@@ -233,13 +298,29 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
       { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
     );
     const body = (await res.json()) as {
+      ok: boolean;
+      reason_code: string;
       health: { ok: boolean; reason_code: string };
       store: { backend: string; ok: boolean };
     };
     expect(res.status).toBe(200);
-    expect(body.health.reason_code).toBe('HOSTED_PACK_STORE_ERROR');
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_STORE_ERROR');
     expect(body.store.backend).toBe('upstash');
     expect(body.store.ok).toBe(false);
+  });
+
+  it('returns asset unavailable JSON with ok/reason_code envelope', async () => {
+    const loaded = await loadHostedRoute();
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/src/missing.ts`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['src', 'missing.ts'] }) },
+    );
+    const body = (await res.json()) as { ok: boolean; reason_code: string; videoId: string };
+    expect(res.status).toBe(404);
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
+    expect(body.videoId).toBe(QJ_VIDEO_ID);
   });
 
   it('returns non-503 health when pack extraction failed (no gateway 503 envelope)', async () => {

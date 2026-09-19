@@ -193,14 +193,21 @@ function hostedHealthJsonResponse(
     duration_ms: Date.now() - started,
   });
   return NextResponse.json(
-    {
-      videoId,
-      live_url: livePath,
-      health,
-      store,
-      checks_recorded: hostedSpecHealthHistory(videoId).length,
-      factory_deliver: factoryDeliver,
-    },
+    reasonEnvelopeJson(
+      reasonEnvelope(
+        health.ok,
+        health.reason_code ?? 'HOSTED_SPEC_INCOMPLETE',
+        health.detail,
+      ),
+      {
+        videoId,
+        live_url: livePath,
+        health,
+        store,
+        checks_recorded: hostedSpecHealthHistory(videoId).length,
+        factory_deliver: factoryDeliver,
+      },
+    ),
     { status: 200 },
   );
 }
