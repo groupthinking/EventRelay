@@ -7,6 +7,10 @@ import { resolveVideoUrl } from '@/lib/video-url-request';
 import {
   VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
   hostedExtractReasonFromDetail,
+  isTransientVideoPackGatewayError,
+  jitteredExtractBackoffMs,
+  normalizeExtractFailureMessage,
+  sleepMs,
 } from '@/lib/video-pack-extract-reason';
 import {
   emptyPackFormation,
@@ -380,12 +384,38 @@ function resolveIdentityFromFields(
   return { identity };
 }
 
+const VIDEO_PACK_PERSIST_MAX_ATTEMPTS = 3;
+const VIDEO_PACK_PERSIST_RETRY_BASE_MS = process.env.NODE_ENV === 'test' ? 1 : 1000;
+
+async function extractSpecWithTransientRetry(identity: VideoPackV0Json): Promise<ExtractedVideoPackSpec> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < VIDEO_PACK_PERSIST_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await extractVideoPackSpec({
+        sourceUrl: identity.source_url,
+        videoId: identity.video_id,
+      });
+    } catch (error) {
+      lastError = error;
+      if (!isTransientVideoPackGatewayError(error) || attempt >= VIDEO_PACK_PERSIST_MAX_ATTEMPTS - 1) {
+        throw error;
+      }
+      const delayMs = jitteredExtractBackoffMs(attempt, VIDEO_PACK_PERSIST_RETRY_BASE_MS);
+      console.warn(
+        `[video-pack] transient extract failure (attempt ${attempt + 1}/${VIDEO_PACK_PERSIST_MAX_ATTEMPTS}); retry in ${delayMs}ms:`,
+        normalizeExtractFailureMessage(error),
+      );
+      await sleepMs(delayMs);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error('Video pack spec extract failed after transient retries.');
+}
+
 async function persistExtract(identity: VideoPackV0Json): Promise<void> {
   try {
-    const spec = await extractVideoPackSpec({
-      sourceUrl: identity.source_url,
-      videoId: identity.video_id,
-    });
+    const spec = await extractSpecWithTransientRetry(identity);
     const pack = await hydrateKeyframeImages(applyExtractedSpec(identity, spec));
     if (isIdentityOnlyPack(pack)) {
       await putPackRecord({

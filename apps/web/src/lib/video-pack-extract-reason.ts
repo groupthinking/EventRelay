@@ -36,6 +36,16 @@ export function classifyVideoPackExtractFailure(message: string): VideoPackExtra
     return 'HOSTED_PACK_GATEWAY_UNAVAILABLE';
   }
   if (
+    lower.includes('econnreset') ||
+    lower.includes('fetch failed') ||
+    lower.includes('high traffic') ||
+    lower.includes('overloaded') ||
+    lower.includes('resource_exhausted') ||
+    message.includes('429')
+  ) {
+    return 'HOSTED_PACK_GATEWAY_UNAVAILABLE';
+  }
+  if (
     lower.includes('after 4 attempts') ||
     lower.includes('after 3 attempts') ||
     (lower.includes('failed after') && lower.includes('attempt'))

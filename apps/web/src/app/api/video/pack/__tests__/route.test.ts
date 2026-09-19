@@ -187,6 +187,34 @@ describe('POST /api/video/pack', () => {
     expect(body.data).toBeUndefined();
   });
 
+  it('retries transient Gateway extract failures before persisting an error', async () => {
+    let attempts = 0;
+    extractVideoPackSpec.mockImplementation(async () => {
+      attempts += 1;
+      if (attempts < 3) {
+        throw new VideoPackExtractError(
+          'GatewayInternalServerError: Service temporarily unavailable',
+        );
+      }
+      return specFor(CANON_A);
+    });
+
+    const { POST, GET, flush } = await loadPackRoute();
+    const accepted = await POST(postRequest({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' }));
+    expect(accepted.status).toBe(202);
+    await flush();
+
+    const res = await GET(getRequest(`video_id=${CANON_A}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status?: string;
+      data?: { transcript?: { full_text?: string } };
+    };
+    expect(body.status).toBe('success');
+    expect(body.data?.transcript?.full_text).toContain('Spoken content');
+    expect(extractVideoPackSpec).toHaveBeenCalledTimes(3);
+  });
+
   it('returns a cached spec pack without calling the model', async () => {
     const loaded = await loadPackRoute();
     const identity = loaded.buildIdentityPack(CANON_B, `https://www.youtube.com/watch?v=${CANON_B}`, '2026-09-03T00:00:00.000Z');

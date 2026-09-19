@@ -252,6 +252,34 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(body.store.backend).toBe('memory');
   });
 
+  it('maps transient transport extract failures to HOSTED_PACK_GATEWAY_UNAVAILABLE', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(QJ_VIDEO_ID, QJ_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'error',
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: identity.provenance.source_hash,
+      id: identity.id,
+      error: 'fetch failed',
+      failed_at: '2026-09-18T00:00:00.000Z',
+    });
+
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/health`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
+    );
+    const body = (await res.json()) as {
+      ok: boolean;
+      reason_code: string;
+      health: { ok: boolean; reason_code: string };
+    };
+    expect(res.status).toBe(200);
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_GATEWAY_UNAVAILABLE');
+    expect(body.health.reason_code).toBe('HOSTED_PACK_GATEWAY_UNAVAILABLE');
+  });
+
   it('returns non-503 health for a missing pack with an honest reason_code', async () => {
     const loaded = await loadHostedRoute();
     const res = await loaded.GET(
