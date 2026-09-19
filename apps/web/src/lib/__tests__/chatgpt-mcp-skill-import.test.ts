@@ -250,14 +250,42 @@ describe('fixture-only MCP Skill → ChatGPT handoff', () => {
     expect(() => createFixtureChatGptSkillImport(dynamic)).toThrow(/dynamic skill resources/i);
   });
 
-  it('fails closed on malformed wire-data shapes instead of throwing runtime type errors', () => {
-    const badServerIdentity = fixture() as any;
-    badServerIdentity.serverIdentity = { origin: 'https://mcp.eventrelay.example' };
-    expect(() => createFixtureChatGptSkillImport(badServerIdentity)).toThrow(/server identity/i);
+  it('fails closed at every untrusted wire-object boundary without leaking TypeError', () => {
+    const malformedInputs: unknown[] = [
+      null,
+      { ...fixture(), serverIdentity: { origin: 'https://mcp.eventrelay.example' } },
+      { ...fixture(), capabilities: null },
+      { ...fixture(), capabilities: { resources: {}, extensions: null } },
+      { ...fixture(), result: null },
+      { ...fixture(), result: { ...fixture().result, skill: null } },
+      {
+        ...fixture(),
+        result: {
+          ...fixture().result,
+          skill: { ...fixture().result.skill, frontmatter: null },
+        },
+      },
+      {
+        ...fixture(),
+        result: {
+          ...fixture().result,
+          skill: { ...fixture().result.skill, resources: [null] },
+        },
+      },
+      { ...fixture(), resourceContents: null },
+      { ...fixture(), approvedManifest: [] },
+    ];
 
-    const badResources = fixture() as any;
-    badResources.result.skill.resources = null;
-    expect(() => createFixtureChatGptSkillImport(badResources)).toThrow(/resources/i);
+    for (const malformed of malformedInputs) {
+      try {
+        createFixtureChatGptSkillImport(malformed as FixtureChatGptSkillImportInput);
+        throw new Error('malformed fixture unexpectedly passed');
+      } catch (error) {
+        expect(error).toBeInstanceOf(Error);
+        expect((error as Error).name).not.toBe('TypeError');
+        expect((error as Error).message).toMatch(/^ChatGPT fixture handoff held:/);
+      }
+    }
   });
 
   it('validates direct skills/get by URI without relying on skills/list', () => {
