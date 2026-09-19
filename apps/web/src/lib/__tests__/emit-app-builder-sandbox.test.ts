@@ -162,6 +162,11 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(main).toContain('bindShellLayout');
     expect(main).toContain('bindChatRail');
     expect(main).toContain('bindOutlineNav');
+    expect(main).toContain("fetch('/api/chat'");
+    expect(main).toContain('postLiveChat');
+    expect(html).toContain('data-testid="shell-chat-send">Send</button>');
+    expect(html).not.toContain('Send (preview)');
+    expect(html).not.toContain('Sign in required');
   });
 
   it('renders transcript, visual events, and SOP — not architecture or code snippets', () => {

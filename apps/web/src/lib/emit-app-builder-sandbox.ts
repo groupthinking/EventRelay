@@ -12,7 +12,7 @@ import { parsePackActionItems } from '@/lib/video-pack-types';
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.6-three-panel-shell' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.8-live-chat-rail' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -470,6 +470,12 @@ html, body {
   border: 1px solid rgba(20, 184, 166, 0.35);
   color: var(--ink);
 }
+.chat-bubble-assistant {
+  align-self: flex-start;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  color: var(--ink);
+}
 .chat-cta-row {
   display: flex;
   flex-wrap: wrap;
@@ -915,7 +921,7 @@ function chatRailHtml(_videoId: string): string {
     </header>
     <div class="shell-chat-body" data-testid="shell-chat-messages">
       <div class="chat-bubble chat-bubble-system" data-testid="shell-chat-honesty">
-        Preview rail — messages you send here stay in this browser until a live UVAI session is connected. I only use pack fields already on this page; I will not invent ship receipts or G.A.T.E. PASS.
+        Live pack-grounded chat — Send posts to same-origin /api/chat with this page’s Video Pack id (anonymous OK; rate-limited, no chat PII stored). I only use stored pack fields (transcript, SOP, events); I will not invent ship receipts or G.A.T.E. PASS.
       </div>
       <div class="chat-cta-row" data-testid="shell-chat-ctas" role="group" aria-label="Pack actions">
         <button type="button" class="chat-cta" data-chat-cta="summarize" data-testid="chat-cta-summarize">Summarize</button>
@@ -931,9 +937,9 @@ function chatRailHtml(_videoId: string): string {
         aria-label="Message UVAI AI"
         data-testid="shell-chat-input"
       ></textarea>
-      <p class="composer-note">Local preview composer — not a deploy or G.A.T.E. claim.</p>
+      <p class="composer-note">Live assistant — not a deploy or G.A.T.E. claim.</p>
       <div class="composer-actions">
-        <button type="submit" data-testid="shell-chat-send">Send (preview)</button>
+        <button type="submit" data-testid="shell-chat-send">Send</button>
       </div>
     </form>
   </aside>
@@ -1279,34 +1285,87 @@ function bindChatRail(): void {
   const closeBtn = document.querySelector<HTMLButtonElement>('[data-testid="shell-chat-close"]');
   const ctas = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chat-cta]'));
 
-  function appendBubble(text: string, kind: 'user' | 'system'): void {
+  const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  let inFlight = false;
+
+  function appendBubble(text: string, kind: 'user' | 'assistant' | 'system'): void {
     if (!messages) return;
     const bubble = document.createElement('div');
-    bubble.className = kind === 'user' ? 'chat-bubble chat-bubble-user' : 'chat-bubble chat-bubble-system';
+    if (kind === 'user') {
+      bubble.className = 'chat-bubble chat-bubble-user';
+    } else if (kind === 'assistant') {
+      bubble.className = 'chat-bubble chat-bubble-assistant';
+    } else {
+      bubble.className = 'chat-bubble chat-bubble-system';
+    }
     bubble.textContent = text;
     messages.appendChild(bubble);
     bubble.scrollIntoView({ block: 'nearest' });
   }
 
+  function setComposerBusy(busy: boolean): void {
+    inFlight = busy;
+    if (send) {
+      send.disabled = busy || !input || input.value.trim().length === 0;
+      send.textContent = busy ? 'Sending…' : 'Send';
+    }
+    if (input) input.disabled = busy;
+  }
+
   if (input && send) {
     input.addEventListener('input', () => {
-      send.disabled = input.value.trim().length === 0;
+      if (!inFlight) send.disabled = input.value.trim().length === 0;
     });
     send.disabled = input.value.trim().length === 0;
+  }
+
+  async function postLiveChat(text: string): Promise<void> {
+    setComposerBusy(true);
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          query: text,
+          video_id: pack.videoId,
+          pack_id: pack.packId,
+          video_url: pack.sourceUrl,
+          history: chatHistory,
+        }),
+        signal: AbortSignal.timeout(60_000),
+      });
+      const data = (await response.json()) as { answer?: string };
+      const answer =
+        typeof data.answer === 'string' && data.answer.trim()
+          ? data.answer.trim()
+          : 'No assistant reply returned.';
+      if (!response.ok) {
+        appendBubble(answer, 'system');
+        return;
+      }
+      chatHistory.push({ role: 'user', content: text });
+      chatHistory.push({ role: 'assistant', content: answer });
+      appendBubble(answer, 'assistant');
+    } catch (error) {
+      console.error('[shell-chat] live chat failed', error);
+      appendBubble(
+        'Could not reach /api/chat. Check your connection or try again later (rate limits apply).',
+        'system',
+      );
+    } finally {
+      setComposerBusy(false);
+    }
   }
 
   if (form && input) {
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       const text = input.value.trim();
-      if (!text) return;
+      if (!text || inFlight) return;
       appendBubble(text, 'user');
       input.value = '';
-      if (send) send.disabled = true;
-      appendBubble(
-        'Preview only — your message was not sent to a model. Use UVAI Studio for live chat grounded on this pack.',
-        'system',
-      );
+      void postLiveChat(text);
     });
   }
 
