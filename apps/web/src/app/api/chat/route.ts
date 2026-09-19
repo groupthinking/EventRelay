@@ -8,7 +8,10 @@ import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/pai
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
 import { hasAiGatewayKey } from '@/lib/vercel-ai-gateway';
-
+import {
+  parseChatPackBinding,
+  resolveChatPackGrounding,
+} from '@/lib/chat-pack-grounding';
 type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -27,6 +30,24 @@ function isValidChatHistoryMessage(message: unknown): message is ChatHistoryMess
   );
 }
 
+type GatewayMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+function buildModelMessages(
+  systemPrompt: string | undefined,
+  history: ChatHistoryMessage[],
+  query: string,
+): GatewayMessage[] {
+  const messages: GatewayMessage[] = [];
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+  for (const entry of history) {
+    messages.push({ role: entry.role, content: entry.content });
+  }
+  messages.push({ role: 'user', content: query });
+  return messages;
+}
+
 export async function POST(request: Request) {
   let routing = resolvePaidTierRouting(false);
   try {
@@ -35,6 +56,32 @@ export async function POST(request: Request) {
     const quotaSubject = billingEmail ?? 'anonymous';
     const isPro = await isProSubscriber(billingEmail);
     routing = resolvePaidTierRouting(isPro);
+
+    let packSystemPrompt: string | undefined;
+    const packBinding = parseChatPackBinding(body);
+    if (
+      (typeof body.video_id === 'string' && body.video_id.trim())
+      || (typeof body.pack_id === 'string' && body.pack_id.trim())
+    ) {
+      if (!packBinding) {
+        return NextResponse.json(
+          {
+            answer:
+              'Pack binding failed: video_id and pack_id must refer to the same hosted Video Pack.',
+            code: 'pack_binding_invalid',
+          },
+          { status: 400 },
+        );
+      }
+      const grounded = await resolveChatPackGrounding(packBinding);
+      if (!grounded.ok) {
+        return NextResponse.json(
+          { answer: grounded.answer, code: grounded.code },
+          { status: grounded.status },
+        );
+      }
+      packSystemPrompt = grounded.systemPrompt;
+    }
 
     if (!isPro) {
       const quota = await checkFreeChatQuota(quotaSubject, FREE_CHAT_DAILY_LIMIT);
@@ -59,9 +106,17 @@ export async function POST(request: Request) {
       decision: `model=${routing.model} runtime=${routing.runtime} plan=${routing.plan}`,
     });
 
+    const history = Array.isArray(body.history)
+      ? body.history.filter(isValidChatHistoryMessage)
+      : [];
+    const query = body.query || body.message || '';
+
     if (isPro) {
       try {
-        const grok = await grokChatCompletion(body.query ?? '', routing.model);
+        const grok = await grokChatCompletion(query, routing.model, {
+          systemPrompt: packSystemPrompt,
+          history,
+        });
         return NextResponse.json({
           answer: grok.answer,
           routing,
@@ -94,10 +149,11 @@ export async function POST(request: Request) {
           'X-Lead-Runtime': routing.runtime,
         },
         body: JSON.stringify({
-          message: body.query,
+          message: query,
           video_url: body.video_url || '',
           video_id: body.video_id || '',
-          conversation_history: body.history || [],
+          pack_system_context: packSystemPrompt ?? '',
+          conversation_history: history,
           model: routing.model,
           lead_runtime: routing.runtime,
         }),
@@ -133,14 +189,9 @@ export async function POST(request: Request) {
       );
     }
 
-    const history = Array.isArray(body.history)
-      ? body.history.filter(isValidChatHistoryMessage)
-      : [];
-
-    const query = body.query || body.message || '';
     const { text } = await generateText({
       model: aiGateway(GATEWAY_CHAT_MODEL),
-      messages: [...history, { role: 'user', content: query }],
+      messages: buildModelMessages(packSystemPrompt, history, query),
     });
 
     return NextResponse.json({
