@@ -12,12 +12,22 @@ NEXT_VERSION = "15.5.24"
 
 
 def _load_json(path: Path) -> dict:
-    assert path.exists(), f"{path} should exist"
-    return json.loads(path.read_text())
+    if not path.exists():
+        raise FileNotFoundError(f"{path} should exist")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _lockfile_package_entries(packages: dict, package_name: str) -> dict[str, dict]:
+    suffix = f"node_modules/{package_name}"
+    return {
+        package_path: package_data
+        for package_path, package_data in packages.items()
+        if package_path == suffix or package_path.endswith(f"/{suffix}")
+    }
 
 
 class NextVersionPinTest(unittest.TestCase):
-    def test_active_manifests_pin_nextjs_15524(self) -> None:
+    def test_active_manifests_pin_next_version(self) -> None:
         root_package = _load_json(PACKAGE_JSON)
         web_package = _load_json(WEB_PACKAGE_JSON)
 
@@ -28,7 +38,7 @@ class NextVersionPinTest(unittest.TestCase):
             web_package["devDependencies"]["eslint-config-next"], NEXT_VERSION
         )
 
-    def test_workspace_lockfile_resolves_pinned_nextjs_15524(self) -> None:
+    def test_workspace_lockfile_resolves_pinned_next_version(self) -> None:
         packages = _load_json(PACKAGE_LOCK)["packages"]
 
         self.assertEqual(packages[""]["devDependencies"]["next"], NEXT_VERSION)
@@ -36,8 +46,9 @@ class NextVersionPinTest(unittest.TestCase):
         self.assertEqual(
             packages["apps/web"]["devDependencies"]["eslint-config-next"], NEXT_VERSION
         )
-        self.assertEqual(packages["node_modules/next"]["version"], NEXT_VERSION)
-        self.assertEqual(
-            packages["apps/web/node_modules/eslint-config-next"]["version"],
-            NEXT_VERSION,
-        )
+        for package_name in ("next", "eslint-config-next"):
+            entries = _lockfile_package_entries(packages, package_name)
+            self.assertTrue(entries, f"Expected {package_name} in package-lock packages")
+            for package_path, package_data in entries.items():
+                with self.subTest(package_path=package_path):
+                    self.assertEqual(package_data["version"], NEXT_VERSION)
