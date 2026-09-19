@@ -124,6 +124,9 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
     expect(screen.getByTestId('studio-pack-build-live-video-id').textContent).toBe(youtubeId);
     const artifactLink = screen.getByTestId('studio-pack-build-live-artifact-link');
     expect(artifactLink.getAttribute('href')).toBe(`/d/${youtubeId}`);
+    const proCta = screen.getByTestId('studio-pack-build-live-pro-cta');
+    expect(proCta.getAttribute('href')).toBe('/#get-pro');
+    expect(proCta.textContent).toMatch(/unlock workflow pro/i);
     expect(screen.getByTestId('studio-pack-build-live-reason-code').textContent).toBe(
       'FACTORY_DELIVER_READY',
     );
