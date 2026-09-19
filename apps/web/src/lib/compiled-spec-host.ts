@@ -1,3 +1,4 @@
+import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
 export { hostedSpecLivePath } from '@/lib/hosted-spec-paths';
@@ -8,6 +9,7 @@ export type HostedSpecHealthReasonCode =
   | 'HOSTED_PACK_NOT_FOUND'
   | 'HOSTED_PACK_PROCESSING'
   | 'HOSTED_PACK_EXTRACT_FAILED'
+  | 'HOSTED_PACK_STORE_ERROR'
   | 'HOSTED_PACK_IDENTITY_ONLY';
 
 export interface HostedSpecHealthCheck {
@@ -23,6 +25,7 @@ export type HostedPackResolution =
   | { kind: 'missing' }
   | { kind: 'processing' }
   | { kind: 'extract_error'; message: string }
+  | { kind: 'store_error'; message: string }
   | { kind: 'identity_only' };
 
 const HEALTH_HISTORY_LIMIT = 20;
@@ -82,6 +85,14 @@ export function hostedSpecHealthFromPackResolution(
         status: 200,
         checked_at,
         reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
+        detail: resolution.message,
+      };
+    case 'store_error':
+      return {
+        ok: false,
+        status: 200,
+        checked_at,
+        reason_code: 'HOSTED_PACK_STORE_ERROR',
         detail: resolution.message,
       };
     case 'identity_only':
@@ -253,11 +264,15 @@ export function hostedPackAssetUnavailableJson(
   videoId: string,
   health: HostedSpecHealthCheck,
 ): Record<string, unknown> {
-  return {
-    videoId: normalizedVideoId(videoId),
-    ok: false,
-    reason_code: health.reason_code ?? 'HOSTED_PACK_EXTRACT_FAILED',
-    detail: health.detail,
-    health,
-  };
+  return reasonEnvelopeJson(
+    reasonEnvelope(
+      false,
+      health.reason_code ?? 'HOSTED_PACK_EXTRACT_FAILED',
+      health.detail,
+    ),
+    {
+      videoId: normalizedVideoId(videoId),
+      health,
+    },
+  );
 }

@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import {
   evaluateHostedSpecHealth,
   factoryDeliverFromHostedSpec,
@@ -15,10 +15,20 @@ import {
 import { hostedLivePageUnavailableResponse } from '@/lib/hosted-spec-unavailable-server';
 import { sandboxFromVideoPack } from '@/lib/emit-app-builder-sandbox';
 import { buildIdentityPack, isIdentityOnlyPack } from '@/lib/video-pack';
-import { getPackRecord } from '@/lib/video-pack-store';
+import {
+  getPackRecordWithMeta,
+  getPackStoreSignal,
+  type PackStoreSignal,
+} from '@/lib/video-pack-store';
+
+import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
+
+function logHostedSpecEvent(payload: Record<string, unknown>): void {
+  console.log(JSON.stringify({ scope: 'hosted-spec', ...payload }));
+}
 
 type RouteContext = {
   params: Promise<{
@@ -61,35 +71,80 @@ function rewriteHostedIndex(html: string, videoId: string): string {
     .replace('src="/src/main.ts"', `src="${base}/src/main.ts"`);
 }
 
-async function resolveHostedPack(videoId: string): Promise<HostedPackResolution> {
+async function resolveHostedPack(
+  videoId: string,
+): Promise<{ resolution: HostedPackResolution; store: PackStoreSignal }> {
   const id = videoId.trim();
+  const store = await getPackStoreSignal();
   if (!id) {
-    return { kind: 'missing' };
+    return { resolution: { kind: 'missing' }, store };
   }
   const identity = buildIdentityPack(id);
-  const record = await getPackRecord(identity.provenance.source_hash);
-  if (!record) {
-    return { kind: 'missing' };
+  const lookup = await getPackRecordWithMeta(identity.provenance.source_hash);
+  const storeSignal = lookup.store;
+
+  if (lookup.outcome === 'store_error') {
+    return {
+      resolution: {
+        kind: 'store_error',
+        message: lookup.error || 'Video pack store read failed.',
+      },
+      store: storeSignal,
+    };
   }
+  if (lookup.outcome === 'miss') {
+    return { resolution: { kind: 'missing' }, store: storeSignal };
+  }
+
+  const record = lookup.record;
   if (record.state === 'processing') {
-    return { kind: 'processing' };
+    return { resolution: { kind: 'processing' }, store: storeSignal };
   }
   if (record.state === 'error') {
-    return { kind: 'extract_error', message: record.error };
+    return {
+      resolution: { kind: 'extract_error', message: record.error },
+      store: storeSignal,
+    };
   }
   if (isIdentityOnlyPack(record.pack)) {
-    return { kind: 'identity_only' };
+    return { resolution: { kind: 'identity_only' }, store: storeSignal };
   }
   const sandbox = sandboxFromVideoPack(record.pack);
-  return { kind: 'ready', files: sandbox.files };
+  return { resolution: { kind: 'ready', files: sandbox.files }, store: storeSignal };
 }
 
-async function resolveHostedPackSafe(videoId: string): Promise<HostedPackResolution> {
+async function resolveHostedPackSafe(
+  videoId: string,
+): Promise<{ resolution: HostedPackResolution; store: PackStoreSignal }> {
+  const started = Date.now();
   try {
-    return await resolveHostedPack(videoId);
+    const result = await resolveHostedPack(videoId);
+    const health = hostedSpecHealthFromPackResolution(result.resolution);
+    logHostedSpecEvent({
+      event: 'pack_resolve',
+      videoId: videoId.trim(),
+      reason_code: health.reason_code,
+      resolution_kind: result.resolution.kind,
+      store_backend: result.store.backend,
+      store_ok: result.store.ok,
+      duration_ms: Date.now() - started,
+    });
+    return result;
   } catch (error) {
     console.error('[hosted-spec] resolveHostedPack failed:', error);
-    return hostedPackResolutionFromThrownError(error);
+    const resolution = hostedPackResolutionFromThrownError(error);
+    const store = await getPackStoreSignal();
+    const health = hostedSpecHealthFromPackResolution(resolution);
+    logHostedSpecEvent({
+      event: 'pack_resolve',
+      videoId: videoId.trim(),
+      reason_code: health.reason_code,
+      resolution_kind: resolution.kind,
+      store_backend: store.backend,
+      store_ok: store.ok,
+      duration_ms: Date.now() - started,
+    });
+    return { resolution, store };
   }
 }
 
@@ -113,7 +168,9 @@ function hostedHealthJsonResponse(
   request: Request,
   videoId: string,
   resolution: HostedPackResolution,
+  store: PackStoreSignal,
 ): NextResponse {
+  const started = Date.now();
   const health =
     resolution.kind === 'ready'
       ? recordHostedSpecHealthCheck(videoId, evaluateHostedSpecHealth(resolution.files))
@@ -126,14 +183,31 @@ function hostedHealthJsonResponse(
     liveUrl,
     health,
   });
+  logHostedSpecEvent({
+    event: 'health',
+    videoId: videoId.trim(),
+    reason_code: health.reason_code,
+    health_ok: health.ok,
+    store_backend: store.backend,
+    store_ok: store.ok,
+    duration_ms: Date.now() - started,
+  });
   return NextResponse.json(
-    {
-      videoId,
-      live_url: livePath,
-      health,
-      checks_recorded: hostedSpecHealthHistory(videoId).length,
-      factory_deliver: factoryDeliver,
-    },
+    reasonEnvelopeJson(
+      reasonEnvelope(
+        health.ok,
+        health.reason_code ?? 'HOSTED_SPEC_INCOMPLETE',
+        health.detail,
+      ),
+      {
+        videoId,
+        live_url: livePath,
+        health,
+        store,
+        checks_recorded: hostedSpecHealthHistory(videoId).length,
+        factory_deliver: factoryDeliver,
+      },
+    ),
     { status: 200 },
   );
 }
@@ -167,34 +241,57 @@ function isHealthAssetRequest(request: Request, videoId: string, assetParts: str
 }
 
 export async function GET(request: Request, context: RouteContext): Promise<Response> {
+  const handlerStarted = Date.now();
   try {
     const { videoId, asset } = await context.params;
     const id = (videoId || '').trim();
     const parts = (asset ?? []).filter(Boolean);
 
     if (!id) {
-      return NextResponse.json({ error: 'videoId is required', videoId: id }, { status: 400 });
+      return NextResponse.json(
+        reasonEnvelopeJson(reasonEnvelope(false, 'HOSTED_VIDEO_ID_REQUIRED', 'videoId is required'), {
+          videoId: id,
+        }),
+        { status: 400 },
+      );
     }
 
     if (parts.some((part) => part === '.' || part === '..')) {
-      return NextResponse.json({ error: 'Invalid asset path', videoId: id }, { status: 400 });
+      return NextResponse.json(
+        reasonEnvelopeJson(reasonEnvelope(false, 'HOSTED_ASSET_PATH_INVALID', 'Invalid asset path'), {
+          videoId: id,
+        }),
+        { status: 400 },
+      );
     }
 
     const healthRequest = isHealthAssetRequest(request, id, parts);
 
     let resolution: HostedPackResolution;
+    let store: PackStoreSignal;
     try {
-      resolution = await resolveHostedPackSafe(id);
+      const resolved = await resolveHostedPackSafe(id);
+      resolution = resolved.resolution;
+      store = resolved.store;
     } catch (error) {
       console.error('[hosted-spec] unexpected resolve failure:', error);
       resolution = hostedPackResolutionFromThrownError(error);
+      store = await getPackStoreSignal();
     }
 
     if (healthRequest) {
-      return hostedHealthJsonResponse(request, id, resolution);
+      return hostedHealthJsonResponse(request, id, resolution, store);
     }
 
     if (resolution.kind !== 'ready') {
+      logHostedSpecEvent({
+        event: 'html_unavailable',
+        videoId: id,
+        reason_code: hostedSpecHealthFromPackResolution(resolution).reason_code,
+        resolution_kind: resolution.kind,
+        store_backend: store.backend,
+        duration_ms: Date.now() - handlerStarted,
+      });
       return hostedNotReadyResponse(request, id, resolution, parts);
     }
 
@@ -205,12 +302,14 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     if (typeof body !== 'string') {
       const health = evaluateHostedSpecHealth(files);
       return NextResponse.json(
-        {
-          videoId: id,
-          error: `Asset not found: ${assetPath}`,
-          reason_code: health.reason_code ?? 'HOSTED_SPEC_INCOMPLETE',
-          detail: health.detail,
-        },
+        reasonEnvelopeJson(
+          reasonEnvelope(
+            false,
+            health.reason_code ?? 'HOSTED_SPEC_INCOMPLETE',
+            health.detail ?? `Asset not found: ${assetPath}`,
+          ),
+          { videoId: id },
+        ),
         { status: 404 },
       );
     }
@@ -234,8 +333,9 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     const id = (videoId || '').trim();
     const parts = (asset ?? []).filter(Boolean);
     const resolution = hostedPackResolutionFromThrownError(error);
+    const store = await getPackStoreSignal();
     if (isHealthAssetRequest(request, id, parts)) {
-      return hostedHealthJsonResponse(request, id, resolution);
+      return hostedHealthJsonResponse(request, id, resolution, store);
     }
     if (isHostedLivePageRequest(request, id, parts)) {
       return hostedLivePageUnavailableResponse(id, resolution);
