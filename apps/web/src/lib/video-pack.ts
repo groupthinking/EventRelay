@@ -262,7 +262,8 @@ export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
 export function packNeedsStructuredRefresh(pack: VideoPackV0Json): boolean {
   if (isIdentityOnlyPack(pack)) return false;
   const marked = pack.provenance.tool_versions?.pack_structure;
-  return marked !== VIDEO_PACK_STRUCTURE_SCHEMA_VERSION;
+  if (marked !== VIDEO_PACK_STRUCTURE_SCHEMA_VERSION) return true;
+  return !Array.isArray(pack.chapters) || !Array.isArray(pack.action_items);
 }
 
 /** True when a ready pack predates the current Gateway retry/salvage pipeline (C1). */

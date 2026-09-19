@@ -5,6 +5,7 @@ import {
   KEYFRAME_IMAGES_OK_NOTE,
   KEYFRAME_IMAGES_PARTIAL,
   KEYFRAME_IMAGES_PARTIAL_NOTE,
+  VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
   identityHash,
 } from '@/lib/video-pack';
 import { KEYFRAME_JPEG_CONTENT_TYPE } from '@/lib/keyframe-frame-capture';
@@ -206,10 +207,11 @@ describe('POST /api/video/pack', () => {
   it('re-extracts a pre-B1 cached pack on Run (structured schema refresh)', async () => {
     extractVideoPackSpec.mockImplementation(async ({ videoId }: { videoId: string }) => specFor(videoId));
     const loaded = await loadPackRoute();
+    const staleCreatedAt = '2026-09-11T00:00:00.000Z';
     const identity = loaded.buildIdentityPack(
       CANON_B,
       `https://www.youtube.com/watch?v=${CANON_B}`,
-      '2026-09-11T00:00:00.000Z',
+      staleCreatedAt,
     );
     const stale = loaded.applyExtractedSpec(identity, {
       ...specFor(CANON_B),
@@ -235,7 +237,47 @@ describe('POST /api/video/pack', () => {
     };
     expect(body.data?.chapters?.[0]?.topic).toBe('Intro');
     expect(body.data?.action_items?.[0]?.title).toMatch(/Act on/);
-    expect(body.data?.provenance?.tool_versions?.pack_structure).toBeDefined();
+    expect(body.data?.provenance?.tool_versions?.pack_structure).toBe(VIDEO_PACK_STRUCTURE_SCHEMA_VERSION);
+    expect(Date.parse(body.data?.provenance?.created_at ?? '')).toBeGreaterThan(Date.parse(staleCreatedAt));
+    expect(extractVideoPackSpec).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-extracts a malformed cached pack even when B1 marker is present', async () => {
+    extractVideoPackSpec.mockImplementation(async ({ videoId }: { videoId: string }) => specFor(videoId));
+    const loaded = await loadPackRoute();
+    const staleCreatedAt = '2026-09-08T00:00:00.000Z';
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      staleCreatedAt,
+    );
+    const stale = loaded.applyExtractedSpec(identity, specFor(CANON_B)) as Record<string, unknown>;
+    Reflect.set(stale.provenance as object, 'tool_versions', {
+      ...(stale.provenance as { tool_versions?: Record<string, string> }).tool_versions,
+      pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
+    });
+    Reflect.deleteProperty(stale, 'chapters');
+    Reflect.deleteProperty(stale, 'action_items');
+    loaded.seedVideoPackRecordForTests({ state: 'ready', pack: stale as Parameters<typeof loaded.seedVideoPackRecordForTests>[0] extends { pack: infer T } ? T : never });
+
+    const res = await loaded.POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+    expect(res.status).toBe(202);
+    expect(loaded.scheduled).toHaveLength(1);
+    await loaded.flush();
+
+    const ready = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(ready.status).toBe(200);
+    const body = (await ready.json()) as {
+      data?: {
+        chapters?: Array<{ topic?: string }>;
+        action_items?: Array<{ title?: string }>;
+        provenance?: { created_at?: string; tool_versions?: Record<string, string> };
+      };
+    };
+    expect(body.data?.chapters?.[0]?.topic).toBe('Intro');
+    expect(body.data?.action_items?.[0]?.title).toMatch(/Act on/);
+    expect(body.data?.provenance?.tool_versions?.pack_structure).toBe(VIDEO_PACK_STRUCTURE_SCHEMA_VERSION);
+    expect(Date.parse(body.data?.provenance?.created_at ?? '')).toBeGreaterThan(Date.parse(staleCreatedAt));
     expect(extractVideoPackSpec).toHaveBeenCalledTimes(1);
   });
 
