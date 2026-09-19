@@ -175,7 +175,7 @@ describe('POST /api/chat billing gating', () => {
         action_items: 0.91,
         clarification: 0.09,
       },
-      rationale: 'User asks for concrete next steps and tooling.',
+      rationale: '',
     });
 
     await saveEntitlement({
@@ -204,7 +204,7 @@ describe('POST /api/chat billing gating', () => {
         action_items: 0.91,
         clarification: 0.09,
       },
-      rationale: 'User asks for concrete next steps and tooling.',
+      rationale: '',
     });
   });
 

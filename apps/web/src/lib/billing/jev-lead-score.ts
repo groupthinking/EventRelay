@@ -1,6 +1,10 @@
-import { gatewayChat, hasAiGatewayKey, stripJsonCodeFence } from '@/lib/vercel-ai-gateway';
+import { experimental_evaluate as evaluate } from 'ai';
+import { aiGateway } from '@/lib/ai-gateway';
+import { hasAiGatewayKey } from '@/lib/vercel-ai-gateway';
 
 const DEFAULT_JEV_MODEL = process.env.BILLING_JEV_MODEL?.trim() || 'typesafe-ai/jev';
+
+const LEAD_DECISION_QUESTION_ID = 'lead_decision';
 
 type LeadHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
@@ -18,14 +22,18 @@ export type JevLeadScore = {
   rationale: string;
 };
 
-type JevLeadPayload = {
-  decision?: unknown;
-  confidence?: unknown;
-  probabilities?: {
-    action_items?: unknown;
-    clarification?: unknown;
-  } | null;
-  rationale?: unknown;
+const LEAD_ROUTING_QUESTIONS = {
+  [LEAD_DECISION_QUESTION_ID]: {
+    type: 'choice' as const,
+    instructions:
+      'Should this chat be routed to action-first guidance or clarification-first guidance?',
+    criteria: {
+      action_items:
+        'User needs concrete next steps, an execution plan, or action-oriented guidance.',
+      clarification:
+        'The request is ambiguous and needs constraints or clarifying questions first.',
+    },
+  },
 };
 
 function toProbability(value: unknown, fallback: number): number {
@@ -35,54 +43,97 @@ function toProbability(value: unknown, fallback: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-export function parseJevLeadScore(text: string): Omit<JevLeadScore, 'model' | 'provider'> | null {
-  let payload: JevLeadPayload;
-  try {
-    payload = JSON.parse(stripJsonCodeFence(text)) as JevLeadPayload;
-  } catch {
-    return null;
-  }
-
-  const decision =
-    payload.decision === 'action_items' || payload.decision === 'clarification'
-      ? payload.decision
-      : null;
-  if (!decision) {
-    return null;
-  }
-
-  const confidence = toProbability(payload.confidence, 0.5);
-  const actionItemsProb = toProbability(payload.probabilities?.action_items, decision === 'action_items' ? confidence : 1 - confidence);
-  const clarificationProb = toProbability(payload.probabilities?.clarification, 1 - actionItemsProb);
-
-  return {
-    decision,
-    confidence,
-    probabilities: {
-      action_items: actionItemsProb,
-      clarification: clarificationProb,
-    },
-    rationale:
-      typeof payload.rationale === 'string' && payload.rationale.trim()
-        ? payload.rationale.trim().slice(0, 400)
-        : 'No rationale supplied by Jev.',
-  };
+function isJevLeadDecision(value: unknown): value is JevLeadDecision {
+  return value === 'action_items' || value === 'clarification';
 }
 
-function buildLeadScoringPrompt(query: string, history: LeadHistoryMessage[]): string {
+function readTypesafeConfidence(providerMetadata: unknown): number | null {
+  if (!providerMetadata || typeof providerMetadata !== 'object') {
+    return null;
+  }
+  const typesafe = (providerMetadata as { typesafe?: unknown }).typesafe;
+  if (!typesafe || typeof typesafe !== 'object') {
+    return null;
+  }
+  const confidence = (typesafe as { confidence?: unknown }).confidence;
+  if (typeof confidence === 'number' && !Number.isNaN(confidence)) {
+    return toProbability(confidence, 0.5);
+  }
+  if (confidence && typeof confidence === 'object') {
+    const perQuestion = (confidence as Record<string, unknown>)[LEAD_DECISION_QUESTION_ID];
+    if (typeof perQuestion === 'number' && !Number.isNaN(perQuestion)) {
+      return toProbability(perQuestion, 0.5);
+    }
+  }
+  return null;
+}
+
+function buildLeadEvaluationState(query: string, history: LeadHistoryMessage[]): string {
   const clippedHistory = history.slice(-4).map((entry) => `${entry.role}: ${entry.content}`);
   const historyBlock = clippedHistory.length ? clippedHistory.join('\n') : '(none)';
   return [
     'Classify whether this chat request should be routed to action-first guidance or clarification-first guidance.',
-    'Return strict JSON only with keys: decision, confidence, probabilities, rationale.',
-    'decision must be either "action_items" or "clarification".',
-    'confidence must be a number from 0 to 1.',
-    'probabilities must include numeric action_items and clarification from 0 to 1.',
-    'rationale must be a short sentence.',
     '',
     `query: ${query}`,
     `recent_history:\n${historyBlock}`,
   ].join('\n');
+}
+
+type LeadEvaluateAnswer = {
+  type: 'choice';
+  choice: string;
+  probabilities?: Record<string, number>;
+};
+
+export type JevEvaluatePayload = {
+  answers: Record<string, LeadEvaluateAnswer | undefined>;
+  providerMetadata?: unknown;
+  response?: { modelId?: string };
+};
+
+export function mapJevEvaluateResultToLeadScore(
+  result: JevEvaluatePayload,
+  modelFallback: string,
+): Omit<JevLeadScore, 'provider'> | null {
+  const answer = result.answers[LEAD_DECISION_QUESTION_ID];
+  if (!answer || answer.type !== 'choice' || !isJevLeadDecision(answer.choice)) {
+    return null;
+  }
+
+  const decision = answer.choice;
+  const actionItemsProb = toProbability(answer.probabilities?.action_items, 0.5);
+  const clarificationProb = toProbability(answer.probabilities?.clarification, 0.5);
+
+  const selectedProb = toProbability(
+    answer.probabilities?.[decision],
+    decision === 'action_items' ? actionItemsProb : clarificationProb,
+  );
+
+  const confidence =
+    readTypesafeConfidence(result.providerMetadata) ?? toProbability(selectedProb, 0.5);
+
+  const probabilities = {
+    action_items:
+      typeof answer.probabilities?.action_items === 'number'
+        ? toProbability(answer.probabilities.action_items, actionItemsProb)
+        : decision === 'action_items'
+          ? confidence
+          : 1 - confidence,
+    clarification:
+      typeof answer.probabilities?.clarification === 'number'
+        ? toProbability(answer.probabilities.clarification, clarificationProb)
+        : decision === 'clarification'
+          ? confidence
+          : 1 - confidence,
+  };
+
+  return {
+    model: result.response?.modelId?.trim() || modelFallback,
+    decision,
+    confidence,
+    probabilities,
+    rationale: '',
+  };
 }
 
 export async function scoreLeadWithJev(input: {
@@ -99,32 +150,20 @@ export async function scoreLeadWithJev(input: {
   }
 
   try {
-    const result = await gatewayChat({
-      model: DEFAULT_JEV_MODEL,
-      temperature: 0,
-      max_tokens: 220,
-      timeoutMs: 12_000,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are Jev, a typed decision model. Output only JSON and never include markdown.',
-        },
-        {
-          role: 'user',
-          content: buildLeadScoringPrompt(query, input.history),
-        },
-      ],
+    const result = await evaluate({
+      model: aiGateway.evaluationModel(DEFAULT_JEV_MODEL),
+      state: buildLeadEvaluationState(query, input.history),
+      questions: LEAD_ROUTING_QUESTIONS,
+      abortSignal: AbortSignal.timeout(12_000),
     });
 
-    const parsed = parseJevLeadScore(result.content);
-    if (!parsed) {
+    const mapped = mapJevEvaluateResultToLeadScore(result, DEFAULT_JEV_MODEL);
+    if (!mapped) {
       return null;
     }
 
     return {
-      ...parsed,
-      model: result.model || DEFAULT_JEV_MODEL,
+      ...mapped,
       provider: 'vercel-ai-gateway',
     };
   } catch {
