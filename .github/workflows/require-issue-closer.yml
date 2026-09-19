@@ -21,7 +21,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          BODY=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" -q .body // "")
+          BODY=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.body // ""')
           mapfile -t ISSUES < <(printf '%s' "$BODY" | grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+\b' | grep -oE '[0-9]+' | sort -u || true)
 
           if [ "${#ISSUES[@]}" -eq 0 ]; then
@@ -32,8 +32,9 @@ jobs:
 
           OPEN_HIT=0
           for N in "${ISSUES[@]}"; do
-            STATE=$(gh api "repos/${REPO}/issues/${N}" -q .state)
-            IS_PR=$(gh api "repos/${REPO}/issues/${N}" -q 'if .pull_request then "yes" else "no" end')
+            META=$(gh api "repos/${REPO}/issues/${N}" --jq '{state: .state, is_pr: (if .pull_request then "yes" else "no" end)}')
+            STATE=$(printf '%s' "$META" | jq -r .state)
+            IS_PR=$(printf '%s' "$META" | jq -r .is_pr)
             echo "Ref #$N state=$STATE is_pr=$IS_PR"
             if [ "$STATE" = "open" ] && [ "$IS_PR" = "no" ]; then
               OPEN_HIT=1
