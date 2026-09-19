@@ -5,6 +5,7 @@ import {
   KEYFRAME_IMAGES_OK_NOTE,
   KEYFRAME_IMAGES_PARTIAL,
   KEYFRAME_IMAGES_PARTIAL_NOTE,
+  type VideoPackV0Json,
   VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
   identityHash,
 } from '@/lib/video-pack';
@@ -232,7 +233,7 @@ describe('POST /api/video/pack', () => {
       data?: {
         chapters?: Array<{ topic?: string }>;
         action_items?: Array<{ title?: string }>;
-        provenance?: { tool_versions?: Record<string, string> };
+        provenance?: { created_at?: string; tool_versions?: Record<string, string> };
       };
     };
     expect(body.data?.chapters?.[0]?.topic).toBe('Intro');
@@ -251,14 +252,18 @@ describe('POST /api/video/pack', () => {
       `https://www.youtube.com/watch?v=${CANON_B}`,
       staleCreatedAt,
     );
-    const stale = loaded.applyExtractedSpec(identity, specFor(CANON_B)) as Record<string, unknown>;
-    Reflect.set(stale.provenance as object, 'tool_versions', {
-      ...(stale.provenance as { tool_versions?: Record<string, string> }).tool_versions,
+    const stale = loaded.applyExtractedSpec(identity, specFor(CANON_B));
+    const staleMalformed: Omit<VideoPackV0Json, 'chapters' | 'action_items'> & {
+      chapters?: unknown;
+      action_items?: unknown;
+    } = { ...stale };
+    staleMalformed.provenance.tool_versions = {
+      ...staleMalformed.provenance.tool_versions,
       pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
-    });
-    Reflect.deleteProperty(stale, 'chapters');
-    Reflect.deleteProperty(stale, 'action_items');
-    loaded.seedVideoPackRecordForTests({ state: 'ready', pack: stale as Parameters<typeof loaded.seedVideoPackRecordForTests>[0] extends { pack: infer T } ? T : never });
+    };
+    delete staleMalformed.chapters;
+    delete staleMalformed.action_items;
+    loaded.seedVideoPackRecordForTests({ state: 'ready', pack: staleMalformed as unknown as VideoPackV0Json });
 
     const res = await loaded.POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
     expect(res.status).toBe(202);
