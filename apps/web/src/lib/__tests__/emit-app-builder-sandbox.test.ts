@@ -5,8 +5,10 @@ import {
   APP_BUILDER_CUT,
   APP_BUILDER_EMIT_REV,
   chapterStartSecondsAttr,
+  deriveSopTimestampFromPackFields,
   emitAppBuilderSandbox,
   sandboxFromVideoPack,
+  sopStepsFromPack,
   youtubeNocookieEmbedSrc,
 } from '@/lib/emit-app-builder-sandbox';
 import { buildStudioShipPackage } from '@/lib/action-surface';
@@ -144,7 +146,68 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID, 94.8)).toBe(
       'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?start=94&autoplay=1&enablejsapi=1',
     );
-    expect(APP_BUILDER_EMIT_REV).toContain('chapter-seek');
+    expect(APP_BUILDER_EMIT_REV).toContain('m4-sop-visual-seek');
+  });
+
+  it('M4: visual events and SOP outline emit seek attrs and bind jump handlers', () => {
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      visualEvents: QJ_VISUAL_EVENTS,
+      sopSteps: QJ_SOP_STEPS,
+    });
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    expect(html).toContain('data-testid="visual-event"');
+    expect(html).toContain('data-start-seconds="39"');
+    expect(html).toContain('data-testid="outline-sop-jump"');
+    expect(html).toContain('data-start-seconds="21"');
+    expect(html).toContain('data-testid="sop-seek"');
+    expect(main).toContain('bindVisualEventJumps');
+    expect(main).toContain('bindSopTitleSeek');
+  });
+
+  it('M4: omits data-start-seconds when visual or SOP timestamps are absent', () => {
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      visualEvents: [{ timestamp: Number.NaN, content: 'No time on pack' }],
+      sopSteps: [{ id: 's1', order: 1, title: 'Untimed step', description: 'No seek' }],
+    });
+    const html = sandbox.files['index.html'];
+    expect(html).toContain('visual-event-static');
+    expect(html).not.toMatch(/visual-event[^"]*"[^>]*data-start-seconds/);
+    expect(html).not.toContain('data-testid="sop-seek"');
+    expect(html).not.toMatch(/outline-sop-jump[^>]*data-start-seconds/);
+  });
+
+  it('M4: deriveSopTimestampFromPackFields matches chapters then visuals; sopStepsFromPack passes timestamps', () => {
+    const chapters = [
+      { start: 21.8, end: 37, topic: 'Safety and Vehicle Staging', key_points: [] },
+      { start: 37.8, end: 53, topic: 'Lug loosening before jack', key_points: [] },
+    ];
+    const visuals = QJ_VISUAL_EVENTS;
+    const derived = deriveSopTimestampFromPackFields(
+      { title: 'Safety and Vehicle Staging', description: 'Park safely.' },
+      chapters,
+      visuals,
+    );
+    expect(derived).toBe(21.8);
+    const fromPack = sopStepsFromPack({
+      requirements: [{ id: 'REQ-01', title: 'Safety and Vehicle Staging', detail: 'Park safely.' }],
+      chapters,
+      visualEvents: visuals,
+    });
+    expect(fromPack[0]?.timestamp).toBe(21.8);
+    const noMatch = sopStepsFromPack({
+      requirements: [{ id: 'X', title: 'Unrelated workflow', detail: 'Nothing in chapters.' }],
+      chapters,
+      visualEvents: visuals,
+    });
+    expect(noMatch[0]?.timestamp).toBeUndefined();
   });
 
   it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
