@@ -42,7 +42,7 @@ def summarize_checks(
 ) -> dict[str, Any]:
     counts = Counter(str(check.get("status", "UNKNOWN")) for check in checks)
     blocking = [
-        str(check.get("id", "<unknown>"))
+        f"{check.get('id', '<unknown>')}:{check.get('status', 'UNKNOWN')}"
         for check in checks
         if required and str(check.get("status")) in {"FAILURE", "WARNING"}
     ]
@@ -111,7 +111,8 @@ def validate_repository_skill_bundle(repo_root: Path) -> dict[str, Any]:
             }
         )
 
-        output_checks = all(item in harness_text for item in REQUIRED_OUTPUTS)
+        lower_harness_text = harness_text.lower()
+        output_checks = all(item in lower_harness_text for item in REQUIRED_OUTPUTS)
         checks.append(
             {
                 "id": "harness outputs",
