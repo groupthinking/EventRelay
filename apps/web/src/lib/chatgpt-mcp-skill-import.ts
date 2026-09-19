@@ -209,6 +209,13 @@ function requireTrimmedString(value: unknown, field: string): string {
   return trimmed;
 }
 
+function requireRecord(value: unknown, field: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    hold(`${field} must be an object.`);
+  }
+  return value as Record<string, unknown>;
+}
+
 function normalizeSkillUri(uri: unknown): NormalizedSkillUri {
   const rawUri = requireString(uri, 'skill URI');
   const match = /^skill:\/\/([^/?#]+)(\/[^?#]*)$/.exec(rawUri);
@@ -258,28 +265,37 @@ function verifyManifest(
 
   const seen = new Set<string>();
   let totalSize = 0;
-  const verified = resources.map((resource) => {
-    const normalized = normalizeSkillUri(resource.uri);
+  const verified = resources.map((resource, index) => {
+    const entry = requireRecord(resource, `skill manifest resource[${index}]`);
+    const uri = requireString(entry.uri, `skill manifest resource[${index}].uri`);
+    const expectedDigest = requireString(
+      entry.digest,
+      `skill manifest resource[${index}].digest`,
+    );
+    const expectedSize = entry.size;
+    const normalized = normalizeSkillUri(uri);
     if (seen.has(normalized.canonical)) hold('skill manifest contains a duplicate URI.');
     seen.add(normalized.canonical);
     if (
       normalized.authority !== skill.authority ||
       normalized.segments.length <= skill.rootSegments.length ||
-      !skill.rootSegments.every((segment, index) => normalized.segments[index] === segment)
+      !skill.rootSegments.every((segment, segmentIndex) => normalized.segments[segmentIndex] === segment)
     ) {
       hold('resource URI escapes the skill root.');
     }
-    if (!SHA256_DIGEST.test(resource.digest)) hold('resource digest is invalid.');
-    if (!Number.isInteger(resource.size) || resource.size < 0) hold('resource size is invalid.');
-    totalSize += resource.size;
+    if (!SHA256_DIGEST.test(expectedDigest)) hold('resource digest is invalid.');
+    if (!Number.isInteger(expectedSize) || (expectedSize as number) < 0) {
+      hold('resource size is invalid.');
+    }
+    totalSize += expectedSize as number;
     if (totalSize > MAX_TOTAL_BYTES) hold('skill manifest exceeds the total-size limit.');
 
-    const content = contents[resource.uri];
-    if (typeof content !== 'string') hold(`resource content is missing for ${resource.uri}.`);
+    const content = contents[uri];
+    if (typeof content !== 'string') hold(`resource content is missing for ${uri}.`);
     const digest = `sha256:${hashCanonical(content)}`;
     const size = new TextEncoder().encode(content).byteLength;
-    if (digest !== resource.digest) hold(`resource digest mismatch for ${resource.uri}.`);
-    if (size !== resource.size) hold(`resource size mismatch for ${resource.uri}.`);
+    if (digest !== expectedDigest) hold(`resource digest mismatch for ${uri}.`);
+    if (size !== expectedSize) hold(`resource size mismatch for ${uri}.`);
     return { uri: normalized.canonical, digest, size };
   });
 
@@ -296,11 +312,14 @@ function verifyManifest(
 export function createFixtureChatGptSkillImport(
   input: FixtureChatGptSkillImportInput,
 ): FixtureChatGptSkillImportReceipt {
+  requireRecord(input, 'handoff input');
   const serverIdentity = requireTrimmedString(input.serverIdentity, 'server identity');
-  if (!input.capabilities.resources) hold('resources capability is required.');
-  if (!input.capabilities.extensions?.[MCP_SKILLS_EXTENSION_ID]) {
-    hold('MCP Skills extension capability is required.');
-  }
+  const capabilities = requireRecord(input.capabilities, 'capabilities');
+  requireRecord(capabilities.resources, 'resources capability');
+  const extensions = requireRecord(capabilities.extensions, 'capabilities extensions');
+  requireRecord(extensions[MCP_SKILLS_EXTENSION_ID], 'MCP Skills extension capability');
+  requireRecord(input.result, 'skills/get result');
+  requireRecord(input.result.skill, 'skills/get result skill');
   if (input.result.resultType !== 'complete') hold('skills/get resultType must be complete.');
   if (!Number.isInteger(input.result.ttlMs) || input.result.ttlMs < 0) {
     hold('ttlMs must be a nonnegative integer.');
@@ -314,6 +333,7 @@ export function createFixtureChatGptSkillImport(
     hold('returned skill URI does not match the requested URI.');
   }
 
+  requireRecord(input.result.skill.frontmatter, 'manifest frontmatter');
   const manifestFrontmatter = jsonValue(input.result.skill.frontmatter) as Record<string, JsonValue>;
   if (
     typeof manifestFrontmatter.name !== 'string' ||
@@ -324,7 +344,11 @@ export function createFixtureChatGptSkillImport(
   if (manifestFrontmatter.name !== returnedSkill.name) {
     hold('manifest frontmatter name does not match the skill URI.');
   }
-  const skillText = input.resourceContents[input.result.skill.uri];
+  const resourceContents = requireRecord(
+    resourceContents,
+    'resource contents',
+  ) as Record<string, string>;
+  const skillText = resourceContents[input.result.skill.uri];
   if (typeof skillText !== 'string') hold('SKILL.md content is missing.');
   const parsedFrontmatter = parseFrontmatter(skillText);
   if (canonicalGateJson(parsedFrontmatter) !== canonicalGateJson(manifestFrontmatter)) {
@@ -347,6 +371,7 @@ export function createFixtureChatGptSkillImport(
   let approvedCompoundIdentity: FixtureChatGptSkillImportReceipt['authorization']['approved_compound_identity'] =
     null;
   if (approved) {
+    requireRecord(approved, 'approved manifest');
     if (!SHA256_HEX.test(approved.manifestDigest)) hold('approved manifest digest is invalid.');
     approvedCompoundIdentity = {
       server_identity: requireTrimmedString(approved.serverIdentity, 'approved server identity'),
