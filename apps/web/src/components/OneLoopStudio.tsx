@@ -1589,13 +1589,22 @@ export default function OneLoopStudio({
                 </p>
               </div>
             </div>
-            <Link
-              data-testid="studio-pack-build-live-artifact-link"
-              href={scopedPackBuildLiveSuccess.artifactPath}
-              className="inline-flex w-fit items-center justify-center rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408]"
-            >
-              Open {scopedPackBuildLiveSuccess.artifactPath}
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link
+                data-testid="studio-pack-build-live-artifact-link"
+                href={scopedPackBuildLiveSuccess.artifactPath}
+                className="inline-flex w-fit items-center justify-center rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408]"
+              >
+                Open {scopedPackBuildLiveSuccess.artifactPath}
+              </Link>
+              <Link
+                data-testid="studio-pack-build-live-pro-cta"
+                href="/#get-pro"
+                className="inline-flex w-fit items-center justify-center rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm font-medium text-[#e8b86d]"
+              >
+                Unlock Workflow Pro
+              </Link>
+            </div>
           </div>
         </div>
       ) : null}
