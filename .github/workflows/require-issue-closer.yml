@@ -1,0 +1,49 @@
+name: Require issue closer
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+
+jobs:
+  require-closing-keyword:
+    name: Closing keyword to open issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Fixes/Closes targets an open issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          BODY=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" -q .body // "")
+          mapfile -t ISSUES < <(printf '%s' "$BODY" | grep -oiE '\b(close[sd]?|fix(e[sd])?|resolve[sd]?)\s+#[0-9]+\b' | grep -oE '[0-9]+' | sort -u || true)
+
+          if [ "${#ISSUES[@]}" -eq 0 ]; then
+            echo "::error::PR body must include a closing keyword (Fixes/Closes/Resolves #N) that references an open issue."
+            echo "Template: .github/pull_request_template.md"
+            exit 1
+          fi
+
+          OPEN_HIT=0
+          for N in "${ISSUES[@]}"; do
+            STATE=$(gh api "repos/${REPO}/issues/${N}" -q .state)
+            IS_PR=$(gh api "repos/${REPO}/issues/${N}" -q 'if .pull_request then "yes" else "no" end')
+            echo "Ref #$N state=$STATE is_pr=$IS_PR"
+            if [ "$STATE" = "open" ] && [ "$IS_PR" = "no" ]; then
+              OPEN_HIT=1
+              echo "OK: links open issue #$N"
+            fi
+          done
+
+          if [ "$OPEN_HIT" -ne 1 ]; then
+            echo "::error::Found closing keyword(s) (#${ISSUES[*]}) but none target an open issue (not a PR)."
+            exit 1
+          fi
+
+          echo "Pass: PR has closing keyword to an open issue."
