@@ -1,4 +1,5 @@
 import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
+import { hostedExtractReasonFromDetail } from '@/lib/video-pack-extract-reason';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
 export { hostedSpecLivePath } from '@/lib/hosted-spec-paths';
@@ -8,6 +9,8 @@ export type HostedSpecHealthReasonCode =
   | 'HOSTED_SPEC_INCOMPLETE'
   | 'HOSTED_PACK_NOT_FOUND'
   | 'HOSTED_PACK_PROCESSING'
+  | 'HOSTED_PACK_GATEWAY_EMPTY'
+  | 'HOSTED_PACK_GATEWAY_UNAVAILABLE'
   | 'HOSTED_PACK_EXTRACT_FAILED'
   | 'HOSTED_PACK_STORE_ERROR'
   | 'HOSTED_PACK_IDENTITY_ONLY';
@@ -79,14 +82,16 @@ export function hostedSpecHealthFromPackResolution(
         reason_code: 'HOSTED_PACK_PROCESSING',
         detail: 'Video pack is still processing.',
       };
-    case 'extract_error':
+    case 'extract_error': {
+      const reason_code = hostedExtractReasonFromDetail(resolution.message);
       return {
         ok: false,
         status: 200,
         checked_at,
-        reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
+        reason_code,
         detail: resolution.message,
       };
+    }
     case 'store_error':
       return {
         ok: false,

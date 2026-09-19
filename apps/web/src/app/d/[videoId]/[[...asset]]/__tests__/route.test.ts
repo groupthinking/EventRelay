@@ -247,8 +247,8 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     };
     expect(res.status).toBe(200);
     expect(body.ok).toBe(false);
-    expect(body.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
-    expect(body.health.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
+    expect(body.health.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
     expect(body.store.backend).toBe('memory');
   });
 
@@ -347,7 +347,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(res.status).toBe(200);
     expect(body.error).toBeUndefined();
     expect(body.health.ok).toBe(false);
-    expect(body.health.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.health.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
     expect(body.health.detail).toContain('empty content');
   });
 
@@ -374,8 +374,8 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(res.headers.get('content-type')).toContain('text/html');
     expect(body).toContain('data-slot="empty"');
     expect(body).toContain('data-hosted-unavailable="true"');
-    expect(body).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
-    expect(body).toContain('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body).toContain('data-reason-code="HOSTED_PACK_GATEWAY_EMPTY"');
+    expect(body).toContain('HOSTED_PACK_GATEWAY_EMPTY');
     expect(body).toContain('empty content');
     expect(body).not.toMatch(/^\s*\{\s*"error"\s*:\s*"Vercel AI Gateway/);
   });
@@ -396,8 +396,8 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(503);
     expect(res.headers.get('content-type')).toContain('text/html');
-    expect(body).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
-    expect(body).toContain('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body).toContain('data-reason-code="HOSTED_PACK_GATEWAY_EMPTY"');
+    expect(body).toContain('HOSTED_PACK_GATEWAY_EMPTY');
     expect(body).not.toMatch(/^\s*\{\s*"error"\s*:\s*"Vercel AI Gateway/);
   });
 
@@ -444,7 +444,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(res.status).toBe(200);
     expect(body.error).toBeUndefined();
     expect(body.health.ok).toBe(false);
-    expect(body.health.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.health.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
   });
 
   it('serves src/pack and src/pack.js from src/pack.ts', async () => {

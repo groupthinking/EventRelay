@@ -20,6 +20,7 @@ import {
 import { parseArchitecture, parseArtifacts } from '@/lib/video-pack-types';
 import {
   VIDEO_PACK_EXTRACTOR_MODEL,
+  VIDEO_PACK_GATEWAY_MAX_ATTEMPTS,
   VideoPackExtractError,
   extractVideoPackSpec,
   type VideoPackGenerateText,
@@ -266,6 +267,38 @@ describe('extractVideoPackSpec', () => {
     const filePart = parts.find((part) => part.type === 'file');
     expect(filePart && filePart.type === 'file' ? filePart.mediaType : undefined).toMatch(/^video\//);
     expect(filePart && filePart.type === 'file' ? String(filePart.data) : undefined).toBe(SOURCE_URL);
+  });
+
+  it('retries transient empty gateway responses before failing closed', async () => {
+    vi.useFakeTimers();
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    let calls = 0;
+    const generateText = vi.fn<VideoPackGenerateText>(async () => {
+      calls += 1;
+      if (calls < 3) {
+        throw new VideoPackExtractError(
+          'Vercel AI Gateway returned empty content',
+          'HOSTED_PACK_GATEWAY_EMPTY',
+        );
+      }
+      return { text: JSON.stringify(SPEC_JSON) };
+    });
+
+    const promise = extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { generateText },
+    );
+    await vi.runAllTimersAsync();
+    const spec = await promise;
+    vi.useRealTimers();
+
+    expect(spec.transcript.full_text).toContain('elephants');
+    expect(generateText).toHaveBeenCalledTimes(3);
+    expect(calls).toBe(3);
+  });
+
+  it('pins gateway attempt budget at one call plus three retries', () => {
+    expect(VIDEO_PACK_GATEWAY_MAX_ATTEMPTS).toBe(4);
   });
 
   it('fails closed when Gateway returns empty or identity-only cite text', async () => {

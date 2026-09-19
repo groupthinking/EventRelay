@@ -1,14 +1,13 @@
 import { createHash } from 'node:crypto';
+import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 import {
-  VIDEO_PACK_EXTRACTOR_MODEL,
-  VideoPackExtractError,
-  extractVideoPackSpec,
-  type ExtractedVideoPackSpec,
-} from '@/lib/video-pack-extractor';
+  VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
+  hostedExtractReasonFromDetail,
+} from '@/lib/video-pack-extract-reason';
 import {
   emptyPackFormation,
   type VideoPackActionItem,
@@ -26,6 +25,16 @@ import {
 } from '@/lib/video-pack-store';
 import { applyKeyframeImageHonesty } from '@/lib/keyframe-image-path';
 import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
+import {
+  VIDEO_PACK_EXTRACTOR_MODEL,
+  VideoPackExtractError,
+  extractVideoPackSpec,
+  type ExtractedVideoPackSpec,
+} from '@/lib/video-pack-extractor';
+
+export {
+  VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
+} from '@/lib/video-pack-extract-reason';
 
 export const IDENTITY_VERSION = 'v0' as const;
 
@@ -224,6 +233,7 @@ export function applyExtractedSpec(
         ...identity.provenance.tool_versions,
         extractor: VIDEO_PACK_EXTRACTOR_MODEL,
         pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
+        extract_pipeline: VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
       },
       notes: salvaged
         ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
@@ -253,6 +263,17 @@ export function packNeedsStructuredRefresh(pack: VideoPackV0Json): boolean {
   if (isIdentityOnlyPack(pack)) return false;
   const marked = pack.provenance.tool_versions?.pack_structure;
   return marked !== VIDEO_PACK_STRUCTURE_SCHEMA_VERSION;
+}
+
+/** True when a ready pack predates the current Gateway retry/salvage pipeline (C1). */
+export function packNeedsExtractPipelineRefresh(pack: VideoPackV0Json): boolean {
+  if (isIdentityOnlyPack(pack)) return false;
+  const marked = pack.provenance.tool_versions?.extract_pipeline;
+  return marked !== VIDEO_PACK_EXTRACT_PIPELINE_VERSION;
+}
+
+export function packNeedsReextractOnPost(pack: VideoPackV0Json): boolean {
+  return packNeedsStructuredRefresh(pack) || packNeedsExtractPipelineRefresh(pack);
 }
 
 const SOURCE_HASH = /^[a-f0-9]{64}$/;
@@ -321,8 +342,15 @@ async function recordToResponse(record: VideoPackRecord): Promise<NextResponse> 
         }),
         { status: 202 },
       );
-    case 'error':
-      return NextResponse.json({ status: 'error', error: record.error }, { status: 503 });
+    case 'error': {
+      const reason_code = hostedExtractReasonFromDetail(record.error);
+      return NextResponse.json(
+        reasonEnvelopeJson(reasonEnvelope(false, reason_code, record.error), {
+          status: 'error',
+        }),
+        { status: 200 },
+      );
+    }
     default: {
       const _exhaustive: never = record;
       return NextResponse.json(
@@ -409,9 +437,9 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
   const sourceHash = identity.provenance.source_hash;
 
   const existing = await getPackRecord(sourceHash);
-  const reclaimStructuredRefresh =
-    existing?.state === 'ready' && packNeedsStructuredRefresh(existing.pack);
-  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack) && !reclaimStructuredRefresh) {
+  const reclaimReady =
+    existing?.state === 'ready' && packNeedsReextractOnPost(existing.pack);
+  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack) && !reclaimReady) {
     return recordToResponse(existing);
   }
   if (existing?.state === 'processing' && !isProcessingStale(existing)) {
@@ -431,7 +459,7 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
         id: identity.id,
       },
       new Date(),
-      { reclaimReady: reclaimStructuredRefresh },
+      { reclaimReady: reclaimReady },
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Video pack claim failed.';

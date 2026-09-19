@@ -171,11 +171,19 @@ describe('POST /api/video/pack', () => {
     await flush();
 
     const res = await GET(getRequest(`video_id=${CANON_A}`));
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { status?: string; error?: string; data?: unknown };
-    expect(body.status).toBe('error');
-    expect(body.error).toMatch(/AI Gateway/i);
-    expect(body.error).toContain('google/gemini-3.8-flash');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok?: boolean;
+      reason_code?: string;
+      detail?: string;
+      status?: string;
+      error?: string;
+      data?: unknown;
+    };
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.detail).toMatch(/AI Gateway/i);
+    expect(body.detail).toContain('google/gemini-3.8-flash');
     expect(body.data).toBeUndefined();
   });
 
@@ -547,10 +555,18 @@ describe('GET /api/video/pack (anonymous read)', () => {
     await flush();
 
     const res = await GET(getRequest(`video_id=${CANON_B}`));
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { status?: string; error?: string; data?: { transcript?: { full_text?: string } } };
-    expect(body.status).toBe('error');
-    expect(body.error).toMatch(/no extracted spec/i);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok?: boolean;
+      reason_code?: string;
+      detail?: string;
+      status?: string;
+      error?: string;
+      data?: { transcript?: { full_text?: string } };
+    };
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
+    expect(body.detail).toMatch(/no extracted spec/i);
     expect(body.data?.transcript?.full_text).not.toBe(`cite:youtube:${CANON_B}`);
   });
 });
