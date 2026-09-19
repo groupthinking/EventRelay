@@ -12,7 +12,7 @@ import { parsePackActionItems } from '@/lib/video-pack-types';
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.10-m4-sop-visual-seek' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.11-m5-chapter-key-points' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -852,6 +852,44 @@ button, [role="button"] { cursor: pointer; }
 }
 .chapter-jump button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chapter-jump button[data-active="true"] { color: var(--accent); border-color: var(--accent); }
+.chapter-knowledge-list { display: grid; gap: 10px; margin-bottom: 16px; }
+.chapter-knowledge-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.chapter-knowledge-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.chapter-knowledge-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.chapter-knowledge-seek {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.chapter-knowledge-seek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chapter-key-points {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.chapter-key-points li { margin: 4px 0; }
 .meta-collapsed {
   margin: 0;
   font-size: 11px;
@@ -899,6 +937,43 @@ function toolsGrid(tools: AppBuilderStackTool[]): string {
     })
     .join('');
   return `<ul class="tool-grid" data-testid="stack-tools">${rows}</ul><p class="honesty">Pin tools you plan to use — local preference only, not a deploy receipt.</p>`;
+}
+
+export function filterChapterKeyPoints(key_points: string[] | undefined): string[] {
+  return (key_points ?? [])
+    .map((point) => (typeof point === 'string' ? point.trim() : ''))
+    .filter((point) => point.length > 0);
+}
+
+function chapterKnowledgeExploreHtml(chapters: AppBuilderChapter[]): string {
+  if (chapters.length === 0) return '';
+  const cards = chapters
+    .map((chapter, index) => {
+      const points = filterChapterKeyPoints(chapter.key_points);
+      const startAttr = chapterStartSecondsAttr(chapter.start);
+      const startData = startAttr ? ` data-start-seconds="${escapeHtml(startAttr)}"` : '';
+      const seekBtn = startAttr
+        ? `<button type="button" class="chapter-knowledge-seek" data-chapter-index="${index}" data-testid="chapter-knowledge-seek"${startData}>Seek video</button>`
+        : '';
+      const bullets =
+        points.length > 0
+          ? `<ul class="chapter-key-points" data-testid="chapter-key-points">${points
+              .map((point) => `<li>${escapeHtml(point)}</li>`)
+              .join('')}</ul>`
+          : '';
+      return `<article class="chapter-knowledge-card" data-testid="chapter-knowledge-card" data-chapter-index="${index}">
+        <header class="chapter-knowledge-head">
+          <h3>${escapeHtml(chapter.topic)}</h3>
+          ${seekBtn}
+        </header>
+        ${bullets}
+      </article>`;
+    })
+    .join('');
+  return `<section data-testid="pack-chapter-knowledge">
+    <h2>Chapter knowledge</h2>
+    <div class="chapter-knowledge-list">${cards}</div>
+  </section>`;
 }
 
 function chapterJumpButtons(chapters: AppBuilderChapter[]): string {
@@ -1109,6 +1184,7 @@ function indexHtml(input: AppBuilderSandboxInput): string {
               ${toolsGrid(stackTools)}
             </section>
             <section class="panel" data-panel="explore" data-testid="panel-explore">
+              ${chapterKnowledgeExploreHtml(chapters)}
               <section data-testid="pack-transcript-section">
                 <h2>Transcript</h2>
                 ${transcriptBlock(input.transcript)}

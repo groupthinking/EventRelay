@@ -7,6 +7,7 @@ import {
   chapterStartSecondsAttr,
   deriveSopTimestampFromPackFields,
   emitAppBuilderSandbox,
+  filterChapterKeyPoints,
   sandboxFromVideoPack,
   sopStepsFromPack,
   youtubeNocookieEmbedSrc,
@@ -146,7 +147,7 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID, 94.8)).toBe(
       'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?start=94&autoplay=1&enablejsapi=1',
     );
-    expect(APP_BUILDER_EMIT_REV).toContain('m4-sop-visual-seek');
+    expect(APP_BUILDER_EMIT_REV).toContain('m5-chapter-key-points');
   });
 
   it('M4: visual events and SOP outline emit seek attrs and bind jump handlers', () => {
@@ -208,6 +209,44 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
       visualEvents: visuals,
     });
     expect(noMatch[0]?.timestamp).toBeUndefined();
+  });
+
+  it('M5: chapter key_points render as Explore bullets; empty key_points omit list', () => {
+    const jackPoint = 'Jack, lug wrench, and spare tire';
+    const safetyPoint = 'Park on flat ground; hazards and parking brake';
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      chapters: [
+        {
+          start: 0,
+          end: 21.8,
+          topic: 'Tools and Preparation',
+          key_points: [jackPoint, '  ', ''],
+        },
+        {
+          start: 21.8,
+          end: 37.8,
+          topic: 'Roadside Safety',
+          key_points: [safetyPoint],
+        },
+        { start: 37.8, end: 70, topic: 'Remove wheel', key_points: [] },
+      ],
+    });
+    const html = sandbox.files['index.html'];
+    expect(html).toContain('data-testid="pack-chapter-knowledge"');
+    expect(html).toContain('data-testid="chapter-key-points"');
+    expect(html).toContain(jackPoint);
+    expect(html).toContain(safetyPoint);
+    expect(html).toContain('data-testid="chapter-knowledge-seek"');
+    expect(html).toContain('data-start-seconds="21"');
+    const keyPointLists = html.match(/data-testid="chapter-key-points"/g) ?? [];
+    expect(keyPointLists).toHaveLength(2);
+    expect(html).not.toContain('Invented chapter bullet');
+    expect(filterChapterKeyPoints([' ok ', '', '  '])).toEqual(['ok']);
+    expect(APP_BUILDER_EMIT_REV).toBe('p1.11-m5-chapter-key-points');
   });
 
   it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
