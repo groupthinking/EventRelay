@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agents.mcp_ecosystem_coordinator import SkillRegistry
+from skills import repository_research_audit
 from skills.repository_research_audit import (
     collect_repository_research_inputs,
     run_repository_research_audit,
@@ -47,6 +48,32 @@ def test_collect_repository_research_inputs_returns_all_skill_inputs() -> None:
 
     workflow = audit_inputs["skill_inputs"]["github-ops-and-workflow-health"]
     assert "ci.yml" in workflow["workflow_health_report"]["workflow_files"]
+    assert audit_inputs["original_checklist"]
+    item_18 = next(item for item in audit_inputs["original_checklist"] if item["item"] == 18)
+    assert item_18["status"] in {"handled", "partially_handled", "still_needed"}
+
+
+def test_collect_repository_research_inputs_uses_live_workflow_health_when_provided() -> None:
+    live_health = {
+        "source": "github-api",
+        "status": "live",
+        "recent_runs": [
+            {"name": "CI", "conclusion": "success"},
+            {"name": "verification", "conclusion": "failure"},
+        ],
+        "failing_workflows": ["verification.yml"],
+    }
+
+    audit_inputs = collect_repository_research_inputs(
+        _REPO_ROOT,
+        live_workflow_health=live_health,
+    )
+
+    workflow = audit_inputs["skill_inputs"]["github-ops-and-workflow-health"]
+    assert workflow["workflow_health_report"]["live_run_health"] == live_health
+    item_18 = next(item for item in audit_inputs["original_checklist"] if item["item"] == 18)
+    assert item_18["status"] == "handled"
+    assert "verification.yml" in item_18["handling"]
 
 
 def test_collect_repository_research_inputs_fails_closed_without_authority_files(
@@ -63,7 +90,16 @@ def test_collect_repository_research_inputs_fails_closed_without_authority_files
 async def test_run_repository_research_audit_executes_end_to_end() -> None:
     registry = SkillRegistry(lock_file_path=_LOCK_FILE)
 
-    result = await run_repository_research_audit(_REPO_ROOT, registry=registry)
+    result = await run_repository_research_audit(
+        _REPO_ROOT,
+        registry=registry,
+        live_workflow_health={
+            "source": "github-api",
+            "status": "live",
+            "recent_runs": [{"name": "CI", "conclusion": "success"}],
+            "failing_workflows": [],
+        },
+    )
 
     assert result["status"] == "success", result["error"]
     assert result["execution_order"] == [
@@ -76,6 +112,7 @@ async def test_run_repository_research_audit_executes_end_to_end() -> None:
     ]
     assert "canonical-vs-legacy map" in result["output"]
     assert "workflow health report" in result["output"]
+    assert result["original_checklist"]
 
 
 def test_audit_runner_script_emits_json(capsys: pytest.CaptureFixture[str]) -> None:
@@ -88,3 +125,4 @@ def test_audit_runner_script_emits_json(capsys: pytest.CaptureFixture[str]) -> N
     assert exit_code == 0
     assert payload["status"] == "success"
     assert payload["output"]["product-fit memo"]["positioning"]
+    assert payload["original_checklist"]
