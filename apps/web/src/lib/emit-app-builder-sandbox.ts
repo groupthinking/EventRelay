@@ -11,6 +11,8 @@ import { parsePackActionItems } from '@/lib/video-pack-types';
 
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
+/** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
+export const APP_BUILDER_EMIT_REV = 'p1.2-workbench-chrome' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -149,6 +151,15 @@ function excerpt(text: string, max = TRANSCRIPT_EXCERPT): string {
   return `${trimmed.slice(0, max).trimEnd()}…`;
 }
 
+function truncateHash(hash: string, visible = 12): string {
+  if (hash.length <= visible + 1) return hash;
+  return `${hash.slice(0, visible)}…`;
+}
+
+function tabLabel(name: string, count: number): string {
+  return count > 0 ? `${name} · ${count}` : name;
+}
+
 function visualList(events: AppBuilderVisualEvent[]): string {
   if (events.length === 0) {
     return '<p class="empty" data-testid="visual-empty">No visual events on this pack.</p>';
@@ -257,89 +268,264 @@ export default defineConfig({
 function stylesCss(): string {
   return `:root {
   color-scheme: dark;
-  --bg: #071018;
-  --ink: #f4f7fb;
-  --muted: #9aa8b5;
-  --line: rgba(255, 255, 255, 0.12);
-  --accent: #5eead4;
+  --surface-950: #020617;
+  --surface-900: #0f172a;
+  --ink: #f8fafc;
+  --muted: rgba(248, 250, 252, 0.7);
+  --muted-tertiary: rgba(248, 250, 252, 0.45);
+  --line: rgba(255, 255, 255, 0.1);
+  --accent: #14b8a6;
+  --accent-hover: #2dd4bf;
+  --evidence: #22d3ee;
+  --verified: #22c55e;
+  --radius-shell: 12px;
+  --radius-row: 8px;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
 }
 * { box-sizing: border-box; }
 html, body {
   margin: 0;
   min-height: 100%;
-  background: radial-gradient(1200px 600px at 10% -10%, #123 0%, var(--bg) 55%);
+  background: var(--surface-950);
   color: var(--ink);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
 }
-main {
-  max-width: 880px;
-  margin: 0 auto;
-  padding: 48px 24px 80px;
+.mono { font-family: var(--font-mono); font-size: 0.92em; }
+.workbench { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; }
+.app-chrome {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: 0 -16px;
+  padding: 10px 16px 12px;
+  background: rgba(2, 6, 23, 0.92);
+  border-bottom: 1px solid var(--line);
+  backdrop-filter: blur(8px);
 }
-.eyebrow {
-  letter-spacing: 0.12em;
+.chrome-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.chrome-title h1 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.chrome-label {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  font-size: 12px;
-  color: var(--accent);
-  margin: 0 0 12px;
+  color: var(--muted-tertiary);
 }
-h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 12px; }
-.lede, .meta, li, p { color: var(--muted); line-height: 1.55; }
-.meta { display: grid; gap: 8px; margin: 24px 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
-.meta dt { font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-.meta dd { margin: 0; color: var(--ink); word-break: break-all; }
-section { margin-top: 32px; }
-h2 { font-size: 1.1rem; margin: 0 0 12px; }
-.empty { border: 1px dashed var(--line); padding: 12px 14px; border-radius: 10px; }
-.stamp { color: var(--accent); font-size: 12px; }
-.transcript { white-space: pre-wrap; }
-button, [role="button"] { cursor: pointer; }
+.status-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  color: var(--verified);
+  background: rgba(34, 197, 94, 0.08);
+}
+.provenance {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+  word-break: break-all;
+}
+.mini-shell { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
 .honesty {
-  font-size: 0.92rem;
-  border-left: 3px solid var(--accent);
-  padding: 8px 12px;
-  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  border-left: 2px solid var(--accent);
+  padding: 6px 10px;
+  margin: 0;
+  background: rgba(15, 23, 42, 0.6);
+  border-radius: 0 var(--radius-row) var(--radius-row) 0;
 }
-.sop label { display: block; cursor: pointer; }
-.sop input[type="checkbox"] { margin-right: 8px; accent-color: var(--accent); }
-.mini-shell { display: flex; flex-direction: column; gap: 20px; }
+.workbench-rail {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-shell);
+  background: var(--surface-900);
+  overflow: hidden;
+}
 .mini-toolbar {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 6px;
+  border-bottom: 1px solid var(--line);
 }
 .mini-toolbar button {
-  border: 1px solid var(--line); background: transparent; color: var(--ink);
-  padding: 8px 14px; border-radius: 999px; font-size: 0.92rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.mini-toolbar button:hover { color: var(--ink); background: rgba(255, 255, 255, 0.04); }
+.mini-toolbar button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .mini-toolbar button[aria-selected="true"] {
-  border-color: var(--accent); color: var(--accent); background: rgba(94, 234, 212, 0.08);
+  color: var(--ink);
+  background: rgba(20, 184, 166, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(20, 184, 166, 0.35);
 }
-.progress-wrap { flex: 1; min-width: 140px; }
-.progress-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-.progress-track { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
-.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #38bdf8); transition: width 0.2s ease; }
-.panel { display: none; }
+.status-strip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.status-strip strong { color: var(--ink); font-weight: 600; }
+.progress-track {
+  flex: 1;
+  min-width: 80px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--evidence));
+  transition: width 0.2s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-fill { transition: none; }
+}
+.panel { display: none; padding: 12px 14px 16px; }
 .panel[data-active="true"] { display: block; }
-.action-list, .tool-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.panel h2 {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-tertiary);
+  margin: 0 0 10px;
+  font-weight: 600;
+}
+.panel-split {
+  display: grid;
+  gap: 12px;
+}
+@media (min-width: 720px) {
+  .panel-split { grid-template-columns: 1fr minmax(200px, 240px); align-items: start; }
+}
+.panel-aside {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  padding: 10px 12px;
+  background: rgba(2, 6, 23, 0.5);
+  font-size: 12px;
+  color: var(--muted);
+}
+.panel-aside h3 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted-tertiary);
+}
+.panel-aside .stat { margin: 0 0 6px; color: var(--ink); font-size: 13px; }
+.empty {
+  border: 1px dashed var(--line);
+  padding: 10px 12px;
+  border-radius: var(--radius-row);
+  color: var(--muted);
+  font-size: 13px;
+}
+.stamp { color: var(--evidence); font-size: 11px; font-family: var(--font-mono); }
+.transcript { white-space: pre-wrap; color: var(--muted); font-size: 13px; }
+button, [role="button"] { cursor: pointer; }
+.sop label { display: block; cursor: pointer; }
+.sop input[type="checkbox"] { margin-right: 8px; accent-color: var(--accent); }
+.sop li.is-done { opacity: 0.55; }
+.sop li.is-done strong { text-decoration: line-through; }
+.action-list, .tool-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .action-card, .tool-card {
-  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
-  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.02);
 }
+.action-card.is-done { opacity: 0.62; }
+.action-card.is-done strong { text-decoration: line-through; color: var(--muted); }
 .action-card label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
-.action-card input { margin-top: 4px; accent-color: var(--accent); }
-.badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.action-card input { margin-top: 3px; accent-color: var(--accent); flex-shrink: 0; }
+.action-card input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.action-card strong { display: block; font-size: 13px; margin-bottom: 4px; }
+.action-card p { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.action-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  color: var(--accent);
+  background: rgba(20, 184, 166, 0.08);
+}
+.badge-priority-high { border-color: rgba(250, 204, 21, 0.45); color: #facc15; }
+.badge-priority-low { border-color: var(--line); color: var(--muted-tertiary); }
+.tool-card[data-pinned="true"] { border-color: rgba(20, 184, 166, 0.45); background: rgba(20, 184, 166, 0.06); }
 .tool-card button {
-  width: 100%; text-align: left; border: 1px dashed var(--line); background: transparent;
-  color: var(--ink); padding: 10px 12px; border-radius: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13px;
 }
-.tool-card button[data-pinned="true"] { border-style: solid; border-color: var(--accent); }
-.chapter-jump { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tool-card button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tool-card button[data-pinned="true"] {
+  border-style: solid;
+  border-color: var(--accent);
+}
+.tool-card button::before {
+  content: "Pin";
+  display: inline-block;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-right: 8px;
+  color: var(--muted-tertiary);
+}
+.tool-card button[data-pinned="true"]::before { content: "Pinned"; color: var(--accent); }
+.chapter-jump { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .chapter-jump button {
-  border: 1px solid var(--line); background: transparent; color: var(--muted);
-  padding: 6px 10px; border-radius: 8px; font-size: 12px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 11px;
 }
+.chapter-jump button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .chapter-jump button[data-active="true"] { color: var(--accent); border-color: var(--accent); }
+.meta-collapsed {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted-tertiary);
+}
+.meta-collapsed a { color: var(--evidence); text-decoration: none; }
+.meta-collapsed a:hover { text-decoration: underline; }
 `;
 }
 
@@ -349,9 +535,16 @@ function actionItemsList(items: AppBuilderActionItem[]): string {
   }
   const rows = items
     .map((item) => {
-      const diff = item.difficulty ? `<span class="badge">${escapeHtml(item.difficulty)}</span> ` : '';
-      const kind = item.type ? `<span class="badge">${escapeHtml(item.type)}</span> ` : '';
-      return `<li class="action-card" data-testid="action-item"><label><input type="checkbox" data-action-id="${escapeHtml(item.id)}" data-testid="action-check" /><span><strong>${escapeHtml(item.title)}</strong> ${diff}${kind}<p>${escapeHtml(item.description)}</p></span></label></li>`;
+      const diff = item.difficulty
+        ? `<span class="badge badge-difficulty">${escapeHtml(item.difficulty)}</span>`
+        : '';
+      const pri = item.priority
+        ? `<span class="badge badge-priority badge-priority-${escapeHtml(item.priority)}">${escapeHtml(item.priority)}</span>`
+        : '';
+      const kind = item.type ? `<span class="badge badge-kind">${escapeHtml(item.type)}</span>` : '';
+      const meta = [diff, pri, kind].filter(Boolean).join('');
+      const metaRow = meta ? `<span class="action-meta">${meta}</span>` : '';
+      return `<li class="action-card" data-testid="action-item"><label><input type="checkbox" data-action-id="${escapeHtml(item.id)}" data-testid="action-check" aria-label="Mark action complete: ${escapeHtml(item.title)}" /><span><strong>${escapeHtml(item.title)}</strong>${metaRow}<p>${escapeHtml(item.description)}</p></span></label></li>`;
     })
     .join('');
   return `<ul class="action-list" data-testid="action-items">${rows}</ul>`;
@@ -369,7 +562,7 @@ function toolsGrid(tools: AppBuilderStackTool[]): string {
         tool.docs_url && tool.docs_url.startsWith('http')
           ? `<p><a href="${escapeHtml(tool.docs_url)}" target="_blank" rel="noopener noreferrer">Docs</a></p>`
           : '';
-      return `<li class="tool-card" data-testid="stack-tool"><button type="button" data-tool-name="${escapeHtml(tool.name)}" data-testid="tool-pin">${escapeHtml(tool.name)}${kind}</button>${evidence}${docs}</li>`;
+      return `<li class="tool-card" data-testid="stack-tool"><button type="button" data-tool-name="${escapeHtml(tool.name)}" data-testid="tool-pin" aria-pressed="false">${escapeHtml(tool.name)}${kind}</button>${evidence}${docs}</li>`;
     })
     .join('');
   return `<ul class="tool-grid" data-testid="stack-tools">${rows}</ul><p class="honesty">Pin tools you plan to use — local preference only, not a deploy receipt.</p>`;
@@ -390,6 +583,13 @@ function indexHtml(input: AppBuilderSandboxInput): string {
   const actionItems = input.actionItems ?? [];
   const stackTools = input.stackTools ?? [];
   const chapters = input.chapters ?? [];
+  const sopSteps = input.sopSteps ?? [];
+  const packId = input.packId || `vp:v0:${input.videoId}`;
+  const hashShort = truncateHash(input.sourceHash);
+  const actionsTab = tabLabel('Actions', actionItems.length);
+  const runbookTab = tabLabel('Runbook', sopSteps.length);
+  const stackTab = tabLabel('Stack', stackTools.length);
+  const exploreTab = tabLabel('Explore', chapters.length > 0 ? chapters.length : 2);
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -399,50 +599,73 @@ function indexHtml(input: AppBuilderSandboxInput): string {
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <main id="app" class="mini-shell" data-testid="app-builder-sandbox" data-video-id="${escapeHtml(input.videoId)}">
-      <p class="eyebrow">UVAI▶ hosted mini-app</p>
-      <h1>Video Pack ${escapeHtml(input.videoId)}</h1>
-      <p class="lede">Runnable surface from your stored Video Pack — ship actions, runbook steps, stack tools, and reference transcript/visuals.</p>
-      <p class="honesty" data-testid="assembly-honesty">Interactive controls are grounded in pack fields (action_items, requirements/SOP, stack.tools). This does not recreate the demonstrated application or claim deploy. Same-origin <code>/d/${escapeHtml(input.videoId)}</code> when the hosted spec is READY. Origin G.A.T.E. <code>studio.deploy</code> stays separate.</p>
-      <dl class="meta">
-        <div><dt>Source</dt><dd>${escapeHtml(input.sourceUrl)}</dd></div>
-        <div><dt>source_hash</dt><dd>${escapeHtml(input.sourceHash)}</dd></div>
-        <div><dt>Pack id</dt><dd>${escapeHtml(input.packId || `vp:v0:${input.videoId}`)}</dd></div>
-      </dl>
-      <div class="mini-toolbar" data-testid="pack-mini-app" role="tablist" aria-label="Pack workbench">
-        <button type="button" role="tab" data-mini-tab="actions" data-testid="mini-app-tab" aria-selected="true">Actions</button>
-        <button type="button" role="tab" data-mini-tab="runbook" data-testid="mini-app-tab" aria-selected="false">Runbook</button>
-        <button type="button" role="tab" data-mini-tab="stack" data-testid="mini-app-tab" aria-selected="false">Stack</button>
-        <button type="button" role="tab" data-mini-tab="explore" data-testid="mini-app-tab" aria-selected="false">Explore</button>
-        <div class="progress-wrap" data-testid="mini-app-progress">
-          <div class="progress-label"><span data-testid="progress-label">0% ship progress</span></div>
-          <div class="progress-track" aria-hidden="true"><div class="progress-fill" data-testid="progress-fill"></div></div>
+    <div class="workbench">
+      <header class="app-chrome" data-testid="workbench-chrome">
+        <div class="chrome-row">
+          <div class="chrome-title">
+            <span class="chrome-label">Video Pack</span>
+            <h1 class="mono" title="Video Pack ${escapeHtml(input.videoId)}">${escapeHtml(input.videoId)}</h1>
+          </div>
+          <span class="status-chip" data-testid="pack-ready-chip">READY</span>
         </div>
-      </div>
-      ${chapterJumpButtons(chapters)}
-      <section class="panel" data-panel="actions" data-active="true" data-testid="panel-actions">
-        <h2>Ship actions</h2>
-        ${actionItemsList(actionItems)}
-      </section>
-      <section class="panel" data-panel="runbook" data-testid="pack-sop">
-        <h2>SOP steps</h2>
-        ${sopList(input.sopSteps ?? [])}
-      </section>
-      <section class="panel" data-panel="stack" data-testid="panel-stack">
-        <h2>Stack tools</h2>
-        ${toolsGrid(stackTools)}
-      </section>
-      <section class="panel" data-panel="explore" data-testid="panel-explore">
-        <section data-testid="pack-transcript-section">
-          <h2>Transcript</h2>
-          ${transcriptBlock(input.transcript)}
+        <p class="provenance mono" data-testid="pack-provenance">source_hash ${escapeHtml(hashShort)} · ${escapeHtml(packId)}</p>
+      </header>
+      <main
+        id="app"
+        class="mini-shell"
+        data-testid="app-builder-sandbox"
+        data-video-id="${escapeHtml(input.videoId)}"
+        data-emit-rev="${APP_BUILDER_EMIT_REV}"
+      >
+        <p class="honesty" data-testid="assembly-honesty">Interactive controls are grounded in pack fields (action_items, requirements/SOP, stack.tools). This does not recreate the demonstrated application or claim deploy. Same-origin <code>/d/${escapeHtml(input.videoId)}</code> when the hosted spec is READY. Origin G.A.T.E. <code>studio.deploy</code> stays separate — checking items here is not G.A.T.E. PASS.</p>
+        <p class="meta-collapsed"><a href="${escapeHtml(input.sourceUrl)}" target="_blank" rel="noopener noreferrer">Source</a> · <span class="mono">${escapeHtml(hashShort)}</span></p>
+        <div class="workbench-rail">
+          <div class="mini-toolbar" data-testid="pack-mini-app" role="tablist" aria-label="Pack workbench">
+            <button type="button" role="tab" data-mini-tab="actions" data-testid="mini-app-tab" aria-selected="true">${escapeHtml(actionsTab)}</button>
+            <button type="button" role="tab" data-mini-tab="runbook" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(runbookTab)}</button>
+            <button type="button" role="tab" data-mini-tab="stack" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(stackTab)}</button>
+            <button type="button" role="tab" data-mini-tab="explore" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(exploreTab)}</button>
+          </div>
+          <div class="status-strip" data-testid="mini-app-progress" role="status" aria-live="polite">
+            <span data-testid="progress-label">0 / 0 · 0%</span>
+            <div class="progress-track" aria-hidden="true"><div class="progress-fill" data-testid="progress-fill"></div></div>
+          </div>
+        </div>
+        ${chapterJumpButtons(chapters)}
+        <section class="panel" data-panel="actions" data-active="true" data-testid="panel-actions">
+          <div class="panel-split">
+            <div class="panel-primary">
+              <h2>Ship actions</h2>
+              ${actionItemsList(actionItems)}
+            </div>
+            <aside class="panel-aside" data-testid="actions-progress-summary" aria-label="Ship progress summary">
+              <h3>Summary</h3>
+              <p class="stat" data-testid="actions-done-stat">Actions done: 0 / ${actionItems.length}</p>
+              <p class="stat" data-testid="workbench-total-stat">Workbench: 0 / 0</p>
+              <p>Local checklist — not deploy evidence.</p>
+            </aside>
+          </div>
         </section>
-        <section data-testid="pack-visual">
-          <h2>Visual events</h2>
-          ${visualList(input.visualEvents ?? [])}
+        <section class="panel" data-panel="runbook" data-testid="pack-sop">
+          <h2>SOP steps</h2>
+          ${sopList(sopSteps)}
         </section>
-      </section>
-    </main>
+        <section class="panel" data-panel="stack" data-testid="panel-stack">
+          <h2>Stack tools</h2>
+          ${toolsGrid(stackTools)}
+        </section>
+        <section class="panel" data-panel="explore" data-testid="panel-explore">
+          <section data-testid="pack-transcript-section">
+            <h2>Transcript</h2>
+            ${transcriptBlock(input.transcript)}
+          </section>
+          <section data-testid="pack-visual">
+            <h2>Visual events</h2>
+            ${visualList(input.visualEvents ?? [])}
+          </section>
+        </section>
+      </main>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
@@ -500,20 +723,39 @@ function saveMap(key: string, state: BoolMap): void {
   }
 }
 
-function bindChecks(attr: string, storageKey: string): void {
+function setCheckVisual(box: HTMLInputElement, rowSelector: string): void {
+  const row = box.closest(rowSelector);
+  if (row) row.classList.toggle('is-done', box.checked);
+}
+
+function bindChecks(attr: string, storageKey: string, rowSelector: string): void {
   const state = loadMap(storageKey);
   const boxes = Array.from(document.querySelectorAll<HTMLInputElement>(\`input[\${attr}]\`));
   for (const box of boxes) {
     const id = box.getAttribute(attr);
     if (!id) continue;
     box.checked = state[id] === true;
+    setCheckVisual(box, rowSelector);
     box.addEventListener('change', () => {
       const next = loadMap(storageKey);
       next[id] = box.checked;
       saveMap(storageKey, next);
+      setCheckVisual(box, rowSelector);
       updateProgress();
     });
   }
+}
+
+function sortPinnedTools(): void {
+  const grid = document.querySelector('[data-testid="stack-tools"]');
+  if (!grid) return;
+  const items = Array.from(grid.querySelectorAll<HTMLElement>(':scope > li'));
+  items.sort((a, b) => {
+    const ap = a.querySelector('button')?.dataset.pinned === 'true' ? 0 : 1;
+    const bp = b.querySelector('button')?.dataset.pinned === 'true' ? 0 : 1;
+    return ap - bp;
+  });
+  for (const item of items) grid.appendChild(item);
 }
 
 function bindToolPins(): void {
@@ -522,17 +764,24 @@ function bindToolPins(): void {
   for (const button of buttons) {
     const name = button.dataset.toolName;
     if (!name) continue;
+    const card = button.closest<HTMLElement>('[data-testid="stack-tool"]');
     const pinned = state[name] === true;
     button.dataset.pinned = pinned ? 'true' : 'false';
+    button.setAttribute('aria-pressed', pinned ? 'true' : 'false');
+    if (card) card.dataset.pinned = pinned ? 'true' : 'false';
     button.addEventListener('click', () => {
       const next = loadMap('tools');
       const now = !(next[name] === true);
       next[name] = now;
       saveMap('tools', next);
       button.dataset.pinned = now ? 'true' : 'false';
+      button.setAttribute('aria-pressed', now ? 'true' : 'false');
+      if (card) card.dataset.pinned = now ? 'true' : 'false';
+      sortPinnedTools();
       updateProgress();
     });
   }
+  sortPinnedTools();
 }
 
 function updateProgress(): void {
@@ -541,14 +790,23 @@ function updateProgress(): void {
   const toolButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-tool-name]'));
   const checks = [...actionBoxes, ...sopBoxes];
   const doneChecks = checks.filter((el) => el.checked).length;
+  const actionsDone = actionBoxes.filter((el) => el.checked).length;
   const pinned = toolButtons.filter((el) => el.dataset.pinned === 'true').length;
   const total = checks.length + toolButtons.length;
   const done = doneChecks + pinned;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
   const label = document.querySelector('[data-testid="progress-label"]');
   const fill = document.querySelector<HTMLElement>('[data-testid="progress-fill"]');
-  if (label) label.textContent = \`\${pct}% ship progress\`;
+  if (label) label.textContent = \`\${done} / \${total} · \${pct}%\`;
   if (fill) fill.style.width = \`\${pct}%\`;
+  const actionsStat = document.querySelector('[data-testid="actions-done-stat"]');
+  if (actionsStat) {
+    actionsStat.textContent = \`Actions done: \${actionsDone} / \${actionBoxes.length}\`;
+  }
+  const workbenchStat = document.querySelector('[data-testid="workbench-total-stat"]');
+  if (workbenchStat) {
+    workbenchStat.textContent = \`Workbench: \${done} / \${total}\`;
+  }
 }
 
 function activateTab(tabId: string): void {
@@ -557,6 +815,7 @@ function activateTab(tabId: string): void {
   for (const tab of tabs) {
     const active = tab.dataset.miniTab === tabId;
     tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    tab.tabIndex = active ? 0 : -1;
   }
   for (const panel of panels) {
     panel.dataset.active = panel.dataset.panel === tabId ? 'true' : 'false';
@@ -569,6 +828,19 @@ function bindTabs(): void {
     tab.addEventListener('click', () => {
       const id = tab.dataset.miniTab;
       if (id) activateTab(id);
+    });
+    tab.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
+      const current = tabs.findIndex((t) => t.getAttribute('aria-selected') === 'true');
+      if (current < 0) return;
+      const delta = event.key === 'ArrowRight' ? 1 : -1;
+      const next = tabs[(current + delta + tabs.length) % tabs.length];
+      const id = next.dataset.miniTab;
+      if (id) {
+        activateTab(id);
+        next.focus();
+      }
+      event.preventDefault();
     });
   }
 }
@@ -585,8 +857,8 @@ function bindChapterJumps(): void {
 }
 
 bindTabs();
-bindChecks('data-sop-id', 'sop');
-bindChecks('data-action-id', 'actions');
+bindChecks('data-sop-id', 'sop', 'li');
+bindChecks('data-action-id', 'actions', '.action-card');
 bindToolPins();
 bindChapterJumps();
 updateProgress();

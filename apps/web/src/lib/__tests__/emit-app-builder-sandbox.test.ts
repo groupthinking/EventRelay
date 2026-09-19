@@ -3,6 +3,7 @@ import { identityHash } from '@/lib/video-pack';
 import {
   APP_BUILDER_CONTRACT,
   APP_BUILDER_CUT,
+  APP_BUILDER_EMIT_REV,
   emitAppBuilderSandbox,
   sandboxFromVideoPack,
 } from '@/lib/emit-app-builder-sandbox';
@@ -121,15 +122,26 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     });
     const html = sandbox.files['index.html'];
     const main = sandbox.files['src/main.ts'];
+    const css = sandbox.files['src/styles.css'];
     expect(html).toContain('data-testid="pack-mini-app"');
     expect(html).toContain('data-testid="mini-app-tab"');
     expect(html).toContain('data-testid="action-check"');
     expect(html).toContain('data-testid="tool-pin"');
     expect(html).toContain('data-testid="progress-fill"');
+    expect(html).toContain('data-testid="workbench-chrome"');
+    expect(html).toContain('data-testid="pack-ready-chip"');
+    expect(html).toContain('data-testid="pack-provenance"');
+    expect(html).toContain('data-testid="actions-progress-summary"');
+    expect(html).toContain(`data-emit-rev="${APP_BUILDER_EMIT_REV}"`);
+    expect(html).toContain('Runbook ·');
+    expect(css).toContain('--surface-950');
+    expect(css).toContain('#14b8a6');
     expect(main).toContain('bindTabs');
     expect(main).toContain('updateProgress');
     expect(main).toContain('bindToolPins');
+    expect(main).toContain('sortPinnedTools');
     expect(main).toContain('data-action-id');
+    expect(main).toMatch(/done.*total.*pct/);
   });
 
   it('renders transcript, visual events, and SOP — not architecture or code snippets', () => {
@@ -141,7 +153,8 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(html).toContain('data-testid="app-builder-sandbox"');
     expect(html).toContain(QJ_VIDEO_ID);
     expect(html).toContain(QJ_SOURCE_URL);
-    expect(html).toContain(QJ_SOURCE_HASH);
+    expect(html).toContain(QJ_SOURCE_HASH.slice(0, 12));
+    expect(html).toContain(`Video Pack ${QJ_VIDEO_ID}`);
     expect(html).toContain('five flat tires');
     expect(html).toContain('scissor jack');
     expect(html).toContain('Safety and Vehicle Staging');
@@ -323,7 +336,7 @@ describe('emitAppBuilderSandbox (second-video XYMcBrFSJ4c)', () => {
     expect(sandbox.preview.port).toBe(8080);
     expect(html).toContain(XYMC_VIDEO_ID);
     expect(html).toContain(XYMC_SOURCE_URL);
-    expect(html).toContain(XYMC_SOURCE_HASH);
+    expect(html).toContain(XYMC_SOURCE_HASH.slice(0, 12));
     expect(html).toContain('unpaid invoices');
     expect(html).toContain('nine boring AI automations');
     expect(html).toContain('Torty Gym');
