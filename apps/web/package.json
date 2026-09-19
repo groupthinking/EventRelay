@@ -58,7 +58,7 @@
     "stripe": "^22.6.2",
     "swr": "2.5.1",
     "tailwind-merge": "^3.7.0",
-    "tldts": "7.4.12",
+    "tldts": "7.4.13",
     "use-sync-external-store": "^1.7.0",
     "v0": "3.0.7-canary.1f8fe89",
     "workflow": "^4.8.9",
