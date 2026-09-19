@@ -828,6 +828,24 @@ describe('hydrateKeyframeImages', () => {
     resetKeyframeFrameCaptureForTests();
   });
 
+  it('clears stale app-served image_path values that have no persisted JPEG bytes', async () => {
+    const identity = buildIdentityPack('QjZ5ohr7sGA', 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', '2026-09-12T16:39:08.716Z');
+    const stale = applyExtractedSpec(identity, {
+      ...SPEC_JSON,
+      keyframes: [
+        { t_s: 1, desc: 'Host intro', image_path: '/api/video/pack/frames/QjZ5ohr7sGA/1' },
+        { t_s: 8, desc: 'Jack point under the car', image_path: '/api/video/pack/frames/QjZ5ohr7sGA/8' },
+      ],
+    });
+
+    const hydrated = await hydrateKeyframeImages(stale);
+
+    expect(hydrated.keyframes.map((frame) => frame.image_path)).toEqual([null, null]);
+    expect(hydrated.metrics.keyframes_images).toBe(KEYFRAME_IMAGES_PARTIAL);
+    expect(hydrated.provenance.notes).toContain(KEYFRAME_IMAGES_PARTIAL_NOTE);
+    expect(hydrated.provenance.notes).not.toContain(KEYFRAME_IMAGES_OK_NOTE);
+  });
+
   it('writes app-served image_path after a real JPEG capture and seals ok', async () => {
     setKeyframeFrameCaptureForTests(async ({ videoId, t_s }) => ({
       bytes: TINY_JPEG,

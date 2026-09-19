@@ -52,10 +52,13 @@ export type StoryboardTile = {
 };
 
 type HydratePack = KeyframeImageHonestyPack & { video_id: string };
+type ParsedAppServedFramePath = { videoId: string; t_s: number };
 
 const YOUTUBE_STILL_HOSTS = ['https://img.youtube.com/vi', 'https://i.ytimg.com/vi'] as const;
 const STILL_FETCH_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36';
+const APP_SERVED_FRAME_PATH =
+  /^\/api\/video\/pack\/frames\/([A-Za-z0-9_-]{11})\/((?:0|[1-9]\d*)(?:\.\d+)?)$/;
 
 let captureForTests: KeyframeFrameCapture | null = null;
 const memoryFrameCache = new Map<string, Uint8Array>();
@@ -276,6 +279,30 @@ function decodeStoredFrameBytes(value: unknown): Uint8Array | null {
   }
 }
 
+function parseAppServedFramePath(path: string): ParsedAppServedFramePath | null {
+  const match = APP_SERVED_FRAME_PATH.exec(path);
+  if (!match) return null;
+  const t_s = Number(match[2]);
+  if (!Number.isFinite(t_s) || t_s < 0) return null;
+  return { videoId: match[1], t_s };
+}
+
+async function hasPersistedFrameBytes(videoId: string, t_s: number): Promise<boolean> {
+  const cached = recallCapturedFrame(videoId, t_s);
+  if (cached?.length) return true;
+  const redis = await getVideoPackRedisForServer();
+  if (!redis) return false;
+  try {
+    const stored = decodeStoredFrameBytes(await redis.get(frameCacheKey(videoId, t_s)));
+    if (!stored?.length) return false;
+    rememberCapturedFrame(videoId, t_s, stored);
+    return true;
+  } catch (error) {
+    console.error('[keyframe-frame-capture] Redis frame verify failed:', error);
+    return false;
+  }
+}
+
 async function persistCapturedJpeg(input: {
   videoId: string;
   t_s: number;
@@ -464,6 +491,19 @@ async function hydrateWithCapture<T extends HydratePack>(
   for (const frame of pack.keyframes) {
     const existing = sanitizeKeyframeImagePath(frame.image_path);
     if (existing) {
+      const parsed = parseAppServedFramePath(existing);
+      if (parsed) {
+        const samePack = parsed.videoId === pack.video_id;
+        const sameTimestamp = parsed.t_s === frame.t_s;
+        const hasBytes =
+          samePack && sameTimestamp
+            ? await hasPersistedFrameBytes(parsed.videoId, parsed.t_s)
+            : false;
+        if (!hasBytes) {
+          keyframes.push({ ...frame, image_path: null });
+          continue;
+        }
+      }
       keyframes.push({ ...frame, image_path: existing });
       continue;
     }
@@ -491,13 +531,7 @@ export async function hydrateKeyframeImages<T extends HydratePack>(pack: T): Pro
     return hydrateWithCapture(pack, captureForTests);
   }
   if (process.env.VITEST) {
-    return applyKeyframeImageHonesty({
-      ...pack,
-      keyframes: pack.keyframes.map((frame) => ({
-        ...frame,
-        image_path: sanitizeKeyframeImagePath(frame.image_path),
-      })),
-    });
+    return hydrateWithCapture(pack, async () => null);
   }
 
   const spanS = Math.max(...pack.keyframes.map((frame) => frame.t_s), 1);
