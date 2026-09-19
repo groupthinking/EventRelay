@@ -70,9 +70,16 @@ describe('pack-build-live', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
-        ok: false,
-        status: 404,
-        json: async () => ({ error: 'Video pack not found. Generate /api/video/pack first.' }),
+        ok: true,
+        status: 200,
+        json: async () => ({
+          videoId: XYMC_VIDEO_ID,
+          health: {
+            ok: false,
+            reason_code: 'HOSTED_PACK_NOT_FOUND',
+            detail: 'Video pack not found. Generate /api/video/pack first.',
+          },
+        }),
       }),
     );
 
@@ -85,5 +92,43 @@ describe('pack-build-live', () => {
     if (!result.ok) {
       expect(result.message).toMatch(/pack not found/i);
     }
+  });
+
+  it('retries hosted health after sandbox confirms a stored pack', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: { ok: false, reason_code: 'HOSTED_PACK_NOT_FOUND' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success', data: {} }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: { ok: true, status: 200 },
+          factory_deliver: { ready: true, reason_code: 'FACTORY_DELIVER_READY' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await verifyPackBuildLive({
+      videoId: XYMC_VIDEO_ID,
+      sourceHash: 'a'.repeat(64),
+      origin: 'https://uvai.io',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      liveUrl: `https://uvai.io/d/${XYMC_VIDEO_ID}`,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

@@ -733,6 +733,7 @@ export default function OneLoopStudio({
     try {
       const built = await verifyPackBuildLive({
         videoId: attemptVideoId,
+        sourceHash: selected.videoPack.sourceHash,
         origin: typeof window !== 'undefined' ? window.location.origin : undefined,
       });
       if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;

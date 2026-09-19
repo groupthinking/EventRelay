@@ -22,7 +22,7 @@ export function packBuildLiveUrl(origin: string, videoId: string): string | null
 export type PackBuildLiveHealthPayload = {
   videoId?: string;
   live_url?: string;
-  health?: { ok?: boolean; status?: number; detail?: string };
+  health?: { ok?: boolean; status?: number; detail?: string; reason_code?: string };
   factory_deliver?: { ready?: boolean; reason_code?: string };
   error?: string;
 };
@@ -36,6 +36,13 @@ function healthFailureMessage(payload: PackBuildLiveHealthPayload, status: numbe
   if (detail) return detail;
   const error = payload.error?.trim();
   if (error) return error;
+  const reason = payload.health?.reason_code;
+  if (reason === 'HOSTED_PACK_NOT_FOUND') {
+    return 'Video pack not found. Run analysis on this URL before Build live.';
+  }
+  if (reason === 'HOSTED_PACK_PROCESSING') {
+    return 'Video pack is still processing. Try again when the pack is ready.';
+  }
   if (status === 404) {
     return 'Video pack not found. Run analysis on this URL before Build live.';
   }
@@ -45,12 +52,41 @@ function healthFailureMessage(payload: PackBuildLiveHealthPayload, status: numbe
   return `Hosted build health check failed (HTTP ${status}).`;
 }
 
+async function confirmStoredPackOnServer(input: {
+  videoId: string;
+  sourceHash?: string | null;
+  signal?: AbortSignal;
+}): Promise<boolean> {
+  const sourceHash = input.sourceHash?.trim();
+  const params = new URLSearchParams();
+  if (sourceHash && /^[a-f0-9]{64}$/.test(sourceHash)) {
+    params.set('source_hash', sourceHash);
+  } else {
+    params.set('video_id', input.videoId);
+  }
+  const response = await fetch(`/api/video/sandbox?${params.toString()}`, {
+    method: 'GET',
+    credentials: 'same-origin',
+    signal: input.signal ?? AbortSignal.timeout(20_000),
+  });
+  if (!response.ok) {
+    return false;
+  }
+  try {
+    const payload = (await response.json()) as { status?: string };
+    return payload.status === 'success';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Compile-from-pack health probe at `/d/{videoId}/health`.
  * Does not start Origin studio.deploy or external provider deploy.
  */
 export async function verifyPackBuildLive(input: {
   videoId: string;
+  sourceHash?: string | null;
   origin?: string;
   signal?: AbortSignal;
 }): Promise<PackBuildLiveResult> {
@@ -67,17 +103,41 @@ export async function verifyPackBuildLive(input: {
     return { ok: false, message: 'Could not resolve a hosted live URL for this video.' };
   }
 
-  const response = await fetch(`${packBuildLivePath(videoId)}/health`, {
-    method: 'GET',
-    credentials: 'same-origin',
-    signal: input.signal ?? AbortSignal.timeout(20_000),
-  });
+  const signal = input.signal ?? AbortSignal.timeout(20_000);
 
-  let payload: PackBuildLiveHealthPayload = {};
-  try {
-    payload = (await response.json()) as PackBuildLiveHealthPayload;
-  } catch {
-    payload = {};
+  const fetchHealth = async (): Promise<{ response: Response; payload: PackBuildLiveHealthPayload }> => {
+    const response = await fetch(`${packBuildLivePath(videoId)}/health`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      signal,
+    });
+    let payload: PackBuildLiveHealthPayload = {};
+    try {
+      payload = (await response.json()) as PackBuildLiveHealthPayload;
+    } catch {
+      payload = {};
+    }
+    return { response, payload };
+  };
+
+  let { response, payload } = await fetchHealth();
+
+  if (payload.health?.ok !== true) {
+    const shouldRetry =
+      !payload.health?.ok &&
+      (response.status === 404 ||
+        payload.health?.reason_code === 'HOSTED_PACK_NOT_FOUND' ||
+        !response.ok);
+    if (shouldRetry && (input.sourceHash || videoId)) {
+      const confirmed = await confirmStoredPackOnServer({
+        videoId,
+        sourceHash: input.sourceHash,
+        signal,
+      });
+      if (confirmed) {
+        ({ response, payload } = await fetchHealth());
+      }
+    }
   }
 
   if (!response.ok || payload.health?.ok !== true) {

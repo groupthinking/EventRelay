@@ -188,4 +188,73 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(body.checks_recorded).toBeGreaterThanOrEqual(2);
     expect(body.factory_deliver).toMatchObject({ ready: true, reason_code: 'FACTORY_DELIVER_READY' });
   });
+
+  it('returns non-503 health for a missing pack with an honest reason_code', async () => {
+    const loaded = await loadHostedRoute();
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/health`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
+    );
+    const body = (await res.json()) as {
+      health: { ok: boolean; reason_code: string; detail: string };
+      factory_deliver: { ready: boolean; reason_code: string };
+    };
+    expect(res.status).toBe(200);
+    expect(body.health.ok).toBe(false);
+    expect(body.health.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
+    expect(body.health.detail).toMatch(/pack not found/i);
+    expect(body.factory_deliver.ready).toBe(false);
+    expect(body.factory_deliver.reason_code).toBe('FACTORY_DELIVER_HEALTH_FAILED');
+  });
+
+  it('returns non-503 health when pack extraction failed (no gateway 503 envelope)', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(QJ_VIDEO_ID, QJ_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'error',
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: identity.provenance.source_hash,
+      id: identity.id,
+      error: 'Vercel AI Gateway returned empty content',
+      failed_at: '2026-09-18T00:00:00.000Z',
+    });
+
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/health`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
+    );
+    const body = (await res.json()) as {
+      error?: string;
+      health: { ok: boolean; reason_code: string; detail: string };
+    };
+    expect(res.status).toBe(200);
+    expect(body.error).toBeUndefined();
+    expect(body.health.ok).toBe(false);
+    expect(body.health.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.health.detail).toContain('empty content');
+  });
+
+  it('serves src/pack and src/pack.js from src/pack.ts', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(XYMC_VIDEO_ID, XYMC_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'ready',
+      pack: loaded.applyExtractedSpec(identity, xymcExtractedSpec()),
+    });
+
+    const packRes = await loaded.GET(
+      new Request(`https://uvai.io/d/${XYMC_VIDEO_ID}/src/pack`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: XYMC_VIDEO_ID, asset: ['src', 'pack'] }) },
+    );
+    expect(packRes.status).toBe(200);
+    expect(await packRes.text()).toContain(XYMC_VIDEO_ID);
+
+    const jsRes = await loaded.GET(
+      new Request(`https://uvai.io/d/${XYMC_VIDEO_ID}/src/pack.js`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: XYMC_VIDEO_ID, asset: ['src', 'pack.js'] }) },
+    );
+    expect(jsRes.status).toBe(200);
+    expect(jsRes.headers.get('content-type')).toContain('application/javascript');
+  });
 });
