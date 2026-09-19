@@ -24,6 +24,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_REPOSITORY_RESEARCH_EXECUTION_ORDER = [
+    "canonical-architecture-truth",
+    "persistence-and-boundary-truth",
+    "engineering-risk-and-duplication-audit",
+    "github-ops-and-workflow-health",
+    "product-positioning-and-buyer-fit",
+]
+
 
 class BaseMCPServer(abc.ABC):
     """Abstract base class for all MCP servers."""
@@ -222,6 +230,18 @@ class MCPEcosystemCoordinator:
         by the tests and callers.
         """
         return await self.skill_registry.invoke_skill(skill_id, payload)
+
+    async def run_repository_research_harness(
+        self,
+        skill_inputs: dict[str, dict[str, Any]],
+        *,
+        harness_evidence_sources: list[str],
+    ) -> dict[str, Any]:
+        """Run the repository research skills and feed their outputs to the harness."""
+        return await self.skill_registry.run_repository_research_harness(
+            skill_inputs,
+            harness_evidence_sources=harness_evidence_sources,
+        )
 
     async def dispatch_request(self, server_name: str, request: dict) -> dict:
         """Dispatches a request to the specified MCP server."""
@@ -516,6 +536,78 @@ class SkillRegistry:
         except Exception as e:
             logger.error("Skill %s execution failed: %s", skill_id, e)
             return {"status": "error", "error": str(e)}
+
+    async def run_repository_research_harness(
+        self,
+        skill_inputs: dict[str, dict[str, Any]],
+        *,
+        harness_evidence_sources: list[str],
+    ) -> dict[str, Any]:
+        """Run repository research skills in order and then execute the harness."""
+        missing_inputs = [
+            skill_id
+            for skill_id in _REPOSITORY_RESEARCH_EXECUTION_ORDER
+            if skill_id not in skill_inputs
+        ]
+        if missing_inputs:
+            return {
+                "status": "error",
+                "failed_skill": "input-validation",
+                "error": f"missing skill inputs: {', '.join(missing_inputs)}",
+                "execution_order": [],
+                "skill_outputs": {},
+            }
+
+        execution_order: list[str] = []
+        skill_outputs: dict[str, dict[str, Any]] = {}
+
+        for skill_id in _REPOSITORY_RESEARCH_EXECUTION_ORDER:
+            execution_order.append(skill_id)
+            result = await self.invoke_skill(skill_id, skill_inputs[skill_id])
+            if result.get("status") != "success":
+                return {
+                    "status": "error",
+                    "failed_skill": skill_id,
+                    "error": result.get("error"),
+                    "execution_order": execution_order,
+                    "skill_outputs": skill_outputs,
+                }
+            output = result.get("output")
+            if not isinstance(output, dict):
+                return {
+                    "status": "error",
+                    "failed_skill": skill_id,
+                    "error": f"{skill_id} returned a non-dict output",
+                    "execution_order": execution_order,
+                    "skill_outputs": skill_outputs,
+                }
+            skill_outputs[skill_id] = output
+
+        execution_order.append("agent-operating-harness")
+        harness_result = await self.invoke_skill(
+            "agent-operating-harness",
+            {
+                "evidence_sources": harness_evidence_sources,
+                "skill_outputs": skill_outputs,
+            },
+        )
+        if harness_result.get("status") != "success":
+            return {
+                "status": "error",
+                "failed_skill": "agent-operating-harness",
+                "error": harness_result.get("error"),
+                "execution_order": execution_order,
+                "skill_outputs": skill_outputs,
+            }
+
+        return {
+            "status": "success",
+            "failed_skill": None,
+            "error": None,
+            "execution_order": execution_order,
+            "skill_outputs": skill_outputs,
+            "output": harness_result.get("output", {}),
+        }
 
 
 # Example usage and testing

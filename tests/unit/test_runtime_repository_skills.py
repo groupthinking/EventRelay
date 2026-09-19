@@ -227,7 +227,24 @@ async def test_run_repository_research_harness_fails_closed_on_skill_error(
                 "internal_runtime_name": "EventRelay",
                 "deployment_truth": {"production_surface": "apps/web"},
                 "runtime_boundaries": ["apps/web", "src/youtube_extension"],
-            }
+            },
+            "persistence-and-boundary-truth": {
+                "evidence_sources": ["apps/web/src/lib/video-pack-store.ts:1-40"],
+                "persistence_truth_map": {"video_pack_store": "upstash-rest"},
+                "security_boundary_map": {"public_routes": ["/"]},
+            },
+            "engineering-risk-and-duplication-audit": {
+                "evidence_sources": ["docs/REPO_MAP.md:1-80"],
+                "risk_register": [{"severity": "high", "title": "Doc drift"}],
+            },
+            "github-ops-and-workflow-health": {
+                "evidence_sources": [".github/workflows/ci.yml:1-40"],
+                "workflow_health_report": {"failing_workflows": ["verification.yml"]},
+            },
+            "product-positioning-and-buyer-fit": {
+                "evidence_sources": ["README.md:1-40"],
+                "product_fit_memo": {"positioning": "ship from video evidence"},
+            },
         },
         harness_evidence_sources=["docs/MASTER_ROADMAP.md:1-40"],
     )
