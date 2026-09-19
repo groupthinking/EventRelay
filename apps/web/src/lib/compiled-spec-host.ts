@@ -1,3 +1,4 @@
+import { renderHostedSpecUnavailableHtml } from '@/lib/render-hosted-spec-unavailable';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
 export type HostedSpecHealthReasonCode =
@@ -251,43 +252,12 @@ export function isHostedLivePageRequest(
   }
 }
 
-function escapeHostedHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-/** Calm HTML when the compiled spec cannot be served (never a raw gateway 503). */
+/** Enterprise Empty UI HTML when the compiled spec cannot be served (never a raw gateway 503). */
 export function hostedSpecUnavailableHtml(
   videoId: string,
   health: HostedSpecHealthCheck,
 ): string {
-  const id = escapeHostedHtml(normalizedVideoId(videoId));
-  const reason = escapeHostedHtml(health.reason_code ?? 'HOSTED_PACK_EXTRACT_FAILED');
-  const detail = escapeHostedHtml(health.detail?.trim() || 'This hosted app is not available yet.');
-  const healthPath = escapeHostedHtml(`${hostedSpecLivePath(videoId)}/health`);
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Hosted app unavailable — ${id}</title>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; line-height: 1.5; color: #1a1a1a; max-width: 42rem; }
-    h1 { font-size: 1.25rem; font-weight: 600; }
-    code { font-size: 0.9em; background: #f4f4f5; padding: 0.1em 0.35em; border-radius: 4px; }
-    .reason { color: #52525b; margin-top: 1rem; }
-  </style>
-</head>
-<body>
-  <h1>Hosted app unavailable</h1>
-  <p>Video Pack <code>${id}</code> does not have a compiled spec ready to run at this URL.</p>
-  <p class="reason"><strong>${reason}</strong> — ${detail}</p>
-  <p>Probe status at <code>${healthPath}</code> (always HTTP 200 with <code>health.reason_code</code>).</p>
-</body>
-</html>`;
+  return renderHostedSpecUnavailableHtml(videoId, health);
 }
 
 export function hostedPackAssetUnavailableJson(

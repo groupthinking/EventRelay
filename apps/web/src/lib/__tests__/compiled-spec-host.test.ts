@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   factoryDeliverFromHostedSpec,
   hostedSpecHealthFromPackResolution,
+  hostedSpecUnavailableHtml,
   hostedSpecLivePath,
   latestHostedSpecHealthCheck,
   recordHostedSpecHealthCheck,
@@ -45,6 +46,19 @@ describe('compiled-spec-host', () => {
     expect(isHostedHealthPath('/d/auJzb1D-fag/health', 'auJzb1D-fag')).toBe(true);
     expect(isHostedLivePagePath('/d/auJzb1D-fag/health', 'auJzb1D-fag')).toBe(false);
     expect(isHostedLivePagePath('/d/auJzb1D-fag/src/pack', 'auJzb1D-fag')).toBe(false);
+  });
+
+  it('renders enterprise Empty UI HTML with reason_code for extract failures', () => {
+    const health = hostedSpecHealthFromPackResolution({
+      kind: 'extract_error',
+      message: 'Vercel AI Gateway returned empty content',
+    });
+    const html = hostedSpecUnavailableHtml('QjZ5ohr7sGA', health);
+    expect(html).toContain('data-slot="empty"');
+    expect(html).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
+    expect(html).toContain('Vercel AI Gateway returned empty content');
+    expect(html).toContain('/studio?video=');
+    expect(html).toContain('/d/QjZ5ohr7sGA/health');
   });
 
   it('drives Factory Deliver only when live URL and health are both valid', () => {
