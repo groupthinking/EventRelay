@@ -8,6 +8,8 @@ import {
   CLAIM_PROCESSING_SCRIPT,
   claimPackProcessing,
   getPackRecord,
+  getPackRecordWithMeta,
+  packStoreKey,
   putPackRecord,
   resetVideoPackStoreForTests,
   setVideoPackRedisForTests,
@@ -135,6 +137,39 @@ describe('video-pack store', () => {
     await expect(claimPackProcessing(IDENTITY)).rejects.toThrow(
       /durable video pack storage is not configured/i,
     );
+  });
+
+  it('distinguishes a Redis miss from a durable store read failure', async () => {
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+
+    const redis = createRedis();
+    redis.client.get = async () => null;
+    setVideoPackRedisForTests(redis.client);
+
+    const miss = await getPackRecordWithMeta(HASH);
+    expect(miss.outcome).toBe('miss');
+    if (miss.outcome !== 'miss') throw new Error('expected miss');
+    expect(miss.store.backend).toBe('upstash');
+
+    resetVideoPackStoreForTests();
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+    const failing = createRedis();
+    failing.client.get = async () => {
+      throw new Error('upstash read timeout');
+    };
+    setVideoPackRedisForTests(failing.client);
+
+    const err = await getPackRecordWithMeta(HASH);
+    expect(err.outcome).toBe('store_error');
+    if (err.outcome !== 'store_error') throw new Error('expected store_error');
+    expect(err.error).toMatch(/timeout/i);
+    expect(err.store.ok).toBe(false);
+  });
+
+  it('uses the documented key prefix for pack rows', () => {
+    expect(packStoreKey(HASH)).toBe(`er:videopack:v0:${HASH}`);
   });
 
   it('returns null for an unknown source_hash', async () => {

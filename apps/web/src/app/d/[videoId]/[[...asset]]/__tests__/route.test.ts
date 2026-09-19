@@ -177,6 +177,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
       videoId: string;
       live_url: string;
       health: { ok: boolean; status: number };
+      store: { backend: string; ok: boolean };
       checks_recorded: number;
       factory_deliver: { ready: boolean; reason_code: string };
     };
@@ -185,6 +186,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(body.videoId).toBe(QJ_VIDEO_ID);
     expect(body.live_url).toBe(`/d/${QJ_VIDEO_ID}`);
     expect(body.health.ok).toBe(true);
+    expect(body.store).toMatchObject({ backend: 'memory', ok: true });
     expect(body.checks_recorded).toBeGreaterThanOrEqual(2);
     expect(body.factory_deliver).toMatchObject({ ready: true, reason_code: 'FACTORY_DELIVER_READY' });
   });
@@ -197,14 +199,47 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     );
     const body = (await res.json()) as {
       health: { ok: boolean; reason_code: string; detail: string };
+      store: { backend: string; ok: boolean };
       factory_deliver: { ready: boolean; reason_code: string };
     };
     expect(res.status).toBe(200);
     expect(body.health.ok).toBe(false);
     expect(body.health.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
     expect(body.health.detail).toMatch(/pack not found/i);
+    expect(body.store.backend).toBe('memory');
     expect(body.factory_deliver.ready).toBe(false);
     expect(body.factory_deliver.reason_code).toBe('FACTORY_DELIVER_HEALTH_FAILED');
+  });
+
+  it('returns HOSTED_PACK_STORE_ERROR when durable store read fails', async () => {
+    const store = await import('@/lib/video-pack-store');
+    store.resetVideoPackStoreForTests();
+    const redis = {
+      get: async () => {
+        throw new Error('upstash read timeout');
+      },
+      set: async () => 'OK',
+      eval: async () => {
+        throw new Error('eval unavailable');
+      },
+    };
+    store.setVideoPackRedisForTests(redis);
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+
+    const route = await import('../route');
+    const res = await route.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/health`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: ['health'] }) },
+    );
+    const body = (await res.json()) as {
+      health: { ok: boolean; reason_code: string };
+      store: { backend: string; ok: boolean };
+    };
+    expect(res.status).toBe(200);
+    expect(body.health.reason_code).toBe('HOSTED_PACK_STORE_ERROR');
+    expect(body.store.backend).toBe('upstash');
+    expect(body.store.ok).toBe(false);
   });
 
   it('returns non-503 health when pack extraction failed (no gateway 503 envelope)', async () => {
@@ -264,7 +299,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
   it('returns HTTP 200 HTML for live page when pack resolution throws', async () => {
     const store = await import('@/lib/video-pack-store');
     store.resetVideoPackStoreForTests();
-    vi.spyOn(store, 'getPackRecord').mockRejectedValue(
+    vi.spyOn(store, 'getPackRecordWithMeta').mockRejectedValue(
       new Error('Vercel AI Gateway returned empty content'),
     );
     const route = await import('../route');
@@ -308,7 +343,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
   it('returns HTTP 200 health when pack resolution throws (gateway race sealed)', async () => {
     const store = await import('@/lib/video-pack-store');
     store.resetVideoPackStoreForTests();
-    vi.spyOn(store, 'getPackRecord').mockRejectedValue(
+    vi.spyOn(store, 'getPackRecordWithMeta').mockRejectedValue(
       new Error('Vercel AI Gateway returned empty content'),
     );
     const route = await import('../route');

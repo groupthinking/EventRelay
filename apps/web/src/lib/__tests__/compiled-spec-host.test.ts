@@ -31,6 +31,16 @@ describe('compiled-spec-host', () => {
     expect(latestHostedSpecHealthCheck('auJzb1D-fag')).toEqual(second);
   });
 
+  it('maps store read failures to HOSTED_PACK_STORE_ERROR', () => {
+    const health = hostedSpecHealthFromPackResolution({
+      kind: 'store_error',
+      message: 'upstash read timeout',
+    });
+    expect(health.ok).toBe(false);
+    expect(health.reason_code).toBe('HOSTED_PACK_STORE_ERROR');
+    expect(health.detail).toMatch(/timeout/i);
+  });
+
   it('maps missing packs to a non-503 health probe with reason_code', () => {
     const health = hostedSpecHealthFromPackResolution({ kind: 'missing' });
     expect(health.ok).toBe(false);

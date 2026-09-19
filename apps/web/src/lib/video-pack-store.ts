@@ -1,8 +1,30 @@
 import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
 import type { VideoPackV0Json } from '@/lib/video-pack';
 
-export const VIDEO_PACK_STORE_PREFIX = 'er:videopack:v0:';
+/**
+ * Durable Video Pack key schema (Upstash REST only in production).
+ *
+ * Full key: `{VIDEO_PACK_STORE_PREFIX}{source_hash}`
+ * Example: `er:videopack:v0:` + 64-char hex SHA-256 from identity pack provenance.
+ *
+ * Value: JSON {@link VideoPackRecord} (`processing` | `ready` | `error`).
+ */
+export const VIDEO_PACK_STORE_VERSION = 'v0';
+export const VIDEO_PACK_STORE_PREFIX = `er:videopack:${VIDEO_PACK_STORE_VERSION}:`;
 export const PROCESSING_STALE_MS = 180_000;
+
+/** Active persistence layer for pack reads (surfaced on `/d/{id}/health`). */
+export type PackStoreBackend = 'upstash' | 'memory' | 'unavailable';
+
+export type PackStoreSignal = {
+  backend: PackStoreBackend;
+  ok: boolean;
+};
+
+export type PackLookupResult =
+  | { outcome: 'hit'; record: VideoPackRecord; store: PackStoreSignal }
+  | { outcome: 'miss'; store: PackStoreSignal }
+  | { outcome: 'store_error'; store: PackStoreSignal; error: string };
 
 export type PackProcessingIdentity = {
   video_id: string;
@@ -104,8 +126,34 @@ function assertDurableVideoPackStorageConfigured(): void {
   );
 }
 
+/** Redis/KV key for a pack row keyed by canonical 64-char `source_hash`. */
 export function packStoreKey(sourceHash: string): string {
   return `${VIDEO_PACK_STORE_PREFIX}${sourceHash}`;
+}
+
+function logPackStoreEvent(payload: Record<string, unknown>): void {
+  console.log(JSON.stringify({ scope: 'video-pack-store', ...payload }));
+}
+
+async function packStoreSignalFromRedis(
+  redis: VideoPackRedisClient | null,
+): Promise<PackStoreSignal> {
+  if (resolveUpstashRedisCredentials()) {
+    if (redis) {
+      return { backend: 'upstash', ok: true };
+    }
+    return { backend: 'unavailable', ok: false };
+  }
+  if (process.env.NODE_ENV === 'production') {
+    return { backend: 'unavailable', ok: false };
+  }
+  return { backend: 'memory', ok: true };
+}
+
+/** Probe configured backend without reading a pack key (for health JSON). */
+export async function getPackStoreSignal(): Promise<PackStoreSignal> {
+  const redis = await getRedis();
+  return packStoreSignalFromRedis(redis);
 }
 
 export function isProcessingStale(
@@ -188,27 +236,7 @@ function decodeRecord(value: unknown): VideoPackRecord | null {
   return asRecord(decoded);
 }
 
-async function readPackRecordFromStore(
-  key: string,
-  sourceHash: string,
-  redis: VideoPackRedisClient | null,
-): Promise<VideoPackRecord | null> {
-  if (redis) {
-    try {
-      const raw = await redis.get<unknown>(key);
-      const parsed = decodeRecord(raw);
-      if (parsed && recordHash(parsed) === sourceHash) {
-        memoryStore.set(key, parsed);
-        return parsed;
-      }
-    } catch (error) {
-      console.error('[video-pack-store] Redis get failed:', error);
-      const cached = memoryStore.get(key);
-      if (cached && recordHash(cached) === sourceHash) {
-        return cached;
-      }
-    }
-  }
+function readLocalPackRecord(key: string, sourceHash: string): VideoPackRecord | null {
   const local = memoryStore.get(key);
   if (local && recordHash(local) === sourceHash) {
     return local;
@@ -216,15 +244,101 @@ async function readPackRecordFromStore(
   return null;
 }
 
-export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord | null> {
+/**
+ * Load a pack by `source_hash`, distinguishing a true miss from a durable store failure.
+ */
+export async function getPackRecordWithMeta(sourceHash: string): Promise<PackLookupResult> {
   const key = packStoreKey(sourceHash);
+  const started = Date.now();
   const redis = await getRedis();
-  const first = await readPackRecordFromStore(key, sourceHash, redis);
-  if (first) {
-    return first;
-  }
+  const baseSignal = await packStoreSignalFromRedis(redis);
+
   if (redis) {
-    return readPackRecordFromStore(key, sourceHash, redis);
+    try {
+      const raw = await redis.get<unknown>(key);
+      const parsed = decodeRecord(raw);
+      if (parsed && recordHash(parsed) === sourceHash) {
+        memoryStore.set(key, parsed);
+        logPackStoreEvent({
+          event: 'pack_get',
+          source_hash: sourceHash,
+          outcome: 'hit',
+          backend: baseSignal.backend,
+          duration_ms: Date.now() - started,
+        });
+        return { outcome: 'hit', record: parsed, store: baseSignal };
+      }
+      const local = readLocalPackRecord(key, sourceHash);
+      if (local) {
+        logPackStoreEvent({
+          event: 'pack_get',
+          source_hash: sourceHash,
+          outcome: 'hit',
+          backend: baseSignal.backend,
+          cache: 'memory',
+          duration_ms: Date.now() - started,
+        });
+        return { outcome: 'hit', record: local, store: baseSignal };
+      }
+      logPackStoreEvent({
+        event: 'pack_get',
+        source_hash: sourceHash,
+        outcome: 'miss',
+        backend: baseSignal.backend,
+        duration_ms: Date.now() - started,
+      });
+      return { outcome: 'miss', store: baseSignal };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logPackStoreEvent({
+        event: 'pack_get',
+        source_hash: sourceHash,
+        outcome: 'store_error',
+        backend: baseSignal.backend,
+        error: message,
+        duration_ms: Date.now() - started,
+      });
+      const cached = readLocalPackRecord(key, sourceHash);
+      if (cached) {
+        return {
+          outcome: 'hit',
+          record: cached,
+          store: { backend: baseSignal.backend, ok: false },
+        };
+      }
+      return {
+        outcome: 'store_error',
+        store: { backend: baseSignal.backend, ok: false },
+        error: message,
+      };
+    }
+  }
+
+  const local = readLocalPackRecord(key, sourceHash);
+  if (local) {
+    logPackStoreEvent({
+      event: 'pack_get',
+      source_hash: sourceHash,
+      outcome: 'hit',
+      backend: 'memory',
+      duration_ms: Date.now() - started,
+    });
+    return { outcome: 'hit', record: local, store: { backend: 'memory', ok: true } };
+  }
+  logPackStoreEvent({
+    event: 'pack_get',
+    source_hash: sourceHash,
+    outcome: 'miss',
+    backend: baseSignal.backend,
+    duration_ms: Date.now() - started,
+  });
+  return { outcome: 'miss', store: baseSignal };
+}
+
+export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord | null> {
+  const result = await getPackRecordWithMeta(sourceHash);
+  if (result.outcome === 'hit') {
+    return result.record;
   }
   return null;
 }
