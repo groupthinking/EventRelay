@@ -116,6 +116,48 @@
       "computedHash": "48a49c3910e512e6055fa2be8a67a3bbd62827f4825d250cd3dc75b5ab3aeba8",
       "subscribed_triggers": []
     },
+    "canonical-architecture-truth": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".claude/skills/canonical-architecture-truth/SKILL.md",
+      "computedHash": "d3ddbdae42e718c3490e4548cf88ebee620cda34a2ac58714ac47874f330a6d0",
+      "subscribed_triggers": []
+    },
+    "persistence-and-boundary-truth": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".claude/skills/persistence-and-boundary-truth/SKILL.md",
+      "computedHash": "6e7822983c36ff31b0eaceb3d82fb992a8b880d8f3eb43227011987aaaf1eab9",
+      "subscribed_triggers": []
+    },
+    "engineering-risk-and-duplication-audit": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".claude/skills/engineering-risk-and-duplication-audit/SKILL.md",
+      "computedHash": "e44395b00dabc63818d09ed0094e4d0c01ccf61e41a30f8df2e7fb9be9b27262",
+      "subscribed_triggers": []
+    },
+    "github-ops-and-workflow-health": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".claude/skills/github-ops-and-workflow-health/SKILL.md",
+      "computedHash": "9ea199b335b32d43dc996fec1d0d8a0fd72147e904b15151ad56a313d16c3206",
+      "subscribed_triggers": []
+    },
+    "product-positioning-and-buyer-fit": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".claude/skills/product-positioning-and-buyer-fit/SKILL.md",
+      "computedHash": "ddaa38abeb8001c41a3776c2ce96259b1fe1cd6b16f8ca1143f0108e7fadaa8e",
+      "subscribed_triggers": []
+    },
+    "agent-operating-harness": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": ".claude/skills/agent-operating-harness/SKILL.md",
+      "computedHash": "e916a4f87f7a328c83e09d6e1b4d9fb09124af7c945b563608241369a427bf86",
+      "subscribed_triggers": []
+    },
     "xcode-project-setup": {
       "source": "firebase/agent-skills",
       "sourceType": "github",
