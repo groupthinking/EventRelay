@@ -805,10 +805,6 @@ export default function OneLoopStudio({
     }
     setBuildBusy(true);
     const attemptRecordId = selectedVideoId;
-    setPackLiveReceiptUrl(null);
-    setPackLiveReceiptVideoId(attemptRecordId);
-    setPackLiveReceiptYoutubeId(null);
-    setPackLiveReceiptReasonCode(null);
     setBuildLiveFailure(null);
     try {
       const built = await verifyPackBuildLive({
