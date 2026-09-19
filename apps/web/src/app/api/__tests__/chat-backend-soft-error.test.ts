@@ -76,6 +76,13 @@ describe('POST /api/chat backend soft-error fallback', () => {
     expect(response.status).toBe(200);
     expect(body.answer).toBe('gateway fallback reply');
     expect(body.provider).toBe('vercel-ai-gateway');
-    expect(generateText).toHaveBeenCalled();
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [{ role: 'user', content: 'Summarize the video' }],
+      }),
+    );
+    const gatewayArgs = generateText.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(gatewayArgs).not.toHaveProperty('instructions');
+    expect(gatewayArgs).not.toHaveProperty('system');
   });
 });
