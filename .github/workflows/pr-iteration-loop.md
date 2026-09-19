@@ -4,15 +4,18 @@ description: Solve a problem through verified iterations on one long-running dra
 intent: Determine which agentic workflow pattern delivers the most operational value to EventRelay by advancing one verified repository problem at a time on a single draft pull request.
 on:
   issues:
-    types: [opened]
+    types: [labeled]
   pull_request:
-    types: [opened, ready_for_review]
+    types: [labeled]
+  issue_comment:
+    types: [created]
   push:
     branches: [main]
   schedule:
     - cron: "0 9 * * 1-5"
-    - cron: "0 12 * * 1"
-  skip-if-match: 'is:issue is:open "gh-aw-workflow-id: pr-iteration-loop" in:body'
+concurrency:
+  group: ${{ contains(github.actor, '[bot]') && github.run_id || format('pr-iteration-loop-{0}-{1}', github.repository, (github.event_name == 'push' || github.event_name == 'schedule') && 'repo' || github.event.issue.number || github.event.pull_request.number || github.run_id) }}
+  cancel-in-progress: true
 permissions:
   actions: read
   contents: read
@@ -59,55 +62,134 @@ tools:
     browsers: [chromium]
 evals:
   - id: operational_value
-    question: Does the agent output show that this run delivered an evidence-backed recommendation or accepted iteration proving which of Chopin, Continuous AI, Autoloop, or Agentic Workflows most helps one high-value EventRelay problem on a single long-running draft pull request?
+    question: Does the run deliver a verified mutation or evidence-backed no-op for one selected fingerprint, and fail this answer if mutation failed, duplicate artifacts were created, or output is narrative-only?
   - id: bounded_checkpoint
     question: Does the agent output show that exactly one deterministic checkpoint or repository problem was selected for this run?
   - id: verified_outcome
     question: Does the agent output include concrete verification evidence for the selected change or recommendation, such as command output, CI results, or browser checks tied to the current head or verified URL?
+  - id: postcondition_match
+    question: Does the output include claimed_outcome, observed_outcome, and postcondition_match derived from safe-output manifest plus fetchable GitHub artifact state for the selected fingerprint?
   - id: memory_updated
     question: Does the agent output record what had already been tried, what outcome it produced, and what was learned, gained, lost, or foreclosed for future runs?
   - id: visualized_status
     question: Does the agent output include a chart asset or discussion-ready digest that visualizes the selected repository opportunity or iteration status?
 pre-agent-steps:
-  - name: Install repository dependencies and language servers
-    run: |
-      python -m pip install --upgrade pip
-      python -m pip install -e ".[dev,youtube]" pandas matplotlib seaborn
-      npm install --legacy-peer-deps
-      npm install -g pyright typescript-language-server typescript
   - name: Prime loop workspaces
     run: |
       mkdir -p /tmp/gh-aw/{agent,python/data,python/charts,cache-memory/pr-iteration-loop}
   - name: Select deterministic checkpoint seed
+    id: select_checkpoint
     uses: actions/github-script@v9
     with:
       script: |
         const fs = require("fs");
+        const crypto = require("crypto");
         const now = Date.now();
         const weekMs = 7 * 24 * 60 * 60 * 1000;
+        const staleMs = 7 * 24 * 60 * 60 * 1000;
+        const dispatchLabel = "run-pr-iteration";
+        const dispatchCommand = "/run-pr-iteration-loop";
         const owner = context.repo.owner;
         const repo = context.repo.repo;
+        const canonicalIssueBodyTag = "PR Iteration Fingerprint:";
+        const canonicalPrBodyTag = "PR Iteration Fingerprint:";
+
+        function stableHash(parts) {
+          return crypto
+            .createHash("sha256")
+            .update(parts.filter(Boolean).join("|"))
+            .digest("hex")
+            .slice(0, 16);
+        }
+
+        function fingerprintForCandidate(candidate) {
+          if (!candidate) {
+            return null;
+          }
+          if (candidate.kind === "workflow_failure") {
+            return `workflow_failure:${stableHash([candidate.name, candidate.head_sha, candidate.created_at])}`;
+          }
+          if (candidate.kind === "stale_pull_request") {
+            return `stale_pull_request:${stableHash([String(candidate.number), candidate.updated_at])}`;
+          }
+          if (candidate.kind === "stale_issue") {
+            return `stale_issue:${stableHash([String(candidate.number), candidate.updated_at])}`;
+          }
+          if (candidate.kind === "pull_request") {
+            return `pull_request:${stableHash([String(candidate.number), candidate.updated_at])}`;
+          }
+          if (candidate.kind === "issue") {
+            return `issue:${stableHash([String(candidate.number), candidate.updated_at])}`;
+          }
+          return `other:${stableHash([candidate.kind || "unknown", String(candidate.number || candidate.id || "none")])}`;
+        }
+
+        function toCandidateList(items, skippedReason) {
+          return items.map((item) => ({
+            kind: item.kind,
+            fingerprint: fingerprintForCandidate(item),
+            number: item.number || null,
+            id: item.id || null,
+            title: item.title || item.name || null,
+            html_url: item.html_url || null,
+            skipped_reason: skippedReason,
+          }));
+        }
+
         const payload = {
           repository: `${owner}/${repo}`,
           event_name: context.eventName,
           generated_at: new Date().toISOString(),
+          ceilings: {
+            max_run_minutes: 30,
+            max_ai_credits: 200,
+            max_safe_output_mutations: 1,
+            circuit_breaker_on_first_mutation_failure: true,
+          },
         };
 
-        if (context.eventName === "issues") {
+        if (context.eventName === "issues" && context.payload.action === "labeled") {
           const issue = context.payload.issue;
+          const labelName = context.payload.label?.name || "";
           payload.triggered = {
             kind: "issue",
             number: issue.number,
             title: issue.title,
             url: issue.html_url,
+            label: labelName,
+            authorized: labelName === dispatchLabel,
+            reason: labelName === dispatchLabel
+              ? "authorized_label_dispatch"
+              : "label_not_authorized_for_iteration",
           };
-        } else if (context.eventName === "pull_request") {
+        } else if (context.eventName === "pull_request" && context.payload.action === "labeled") {
           const pr = context.payload.pull_request;
+          const labelName = context.payload.label?.name || "";
           payload.triggered = {
             kind: "pull_request",
             number: pr.number,
             title: pr.title,
             url: pr.html_url,
+            label: labelName,
+            authorized: labelName === dispatchLabel,
+            reason: labelName === dispatchLabel
+              ? "authorized_label_dispatch"
+              : "label_not_authorized_for_iteration",
+          };
+        } else if (context.eventName === "issue_comment" && context.payload.action === "created") {
+          const issue = context.payload.issue;
+          const body = context.payload.comment?.body || "";
+          const isCommand = body.includes(dispatchCommand);
+          payload.triggered = {
+            kind: issue.pull_request ? "pull_request" : "issue",
+            number: issue.number,
+            title: issue.title,
+            url: issue.html_url,
+            command: dispatchCommand,
+            authorized: isCommand,
+            reason: isCommand
+              ? "authorized_comment_dispatch"
+              : "comment_missing_dispatch_command",
           };
         }
 
@@ -147,7 +229,7 @@ pre-agent-steps:
           }));
 
         const stalePulls = pulls
-          .filter((pr) => now - new Date(pr.updated_at).getTime() > weekMs)
+          .filter((pr) => now - new Date(pr.updated_at).getTime() > staleMs)
           .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
           .slice(0, 10)
           .map((pr) => ({
@@ -163,7 +245,7 @@ pre-agent-steps:
 
         const staleIssues = issues
           .filter((item) => !item.pull_request)
-          .filter((item) => now - new Date(item.updated_at).getTime() > weekMs)
+          .filter((item) => now - new Date(item.updated_at).getTime() > staleMs)
           .sort((a, b) => new Date(a.updated_at) - new Date(b.updated_at))
           .slice(0, 10)
           .map((issue) => ({
@@ -180,13 +262,135 @@ pre-agent-steps:
           stale_pull_requests: stalePulls,
           stale_issues: staleIssues,
         };
-        payload.selected =
-          recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null;
+
+        let explicitTriggeredCandidate = null;
+        if (payload.triggered?.authorized) {
+          if (payload.triggered.kind === "pull_request") {
+            const selectedPr = pulls.find((pr) => pr.number === payload.triggered.number);
+            if (selectedPr) {
+              explicitTriggeredCandidate = {
+                kind: "pull_request",
+                number: selectedPr.number,
+                title: selectedPr.title,
+                updated_at: selectedPr.updated_at,
+                html_url: selectedPr.html_url,
+                head: selectedPr.head.ref,
+                labels: selectedPr.labels.map((label) => label.name),
+              };
+            }
+          } else if (payload.triggered.kind === "issue") {
+            const selectedIssue = issues.find(
+              (issue) => !issue.pull_request && issue.number === payload.triggered.number,
+            );
+            if (selectedIssue) {
+              explicitTriggeredCandidate = {
+                kind: "issue",
+                number: selectedIssue.number,
+                title: selectedIssue.title,
+                updated_at: selectedIssue.updated_at,
+                html_url: selectedIssue.html_url,
+                labels: selectedIssue.labels.map((label) => label.name),
+              };
+            }
+          }
+        }
+
+        const rankedCandidates = [
+          ...recentFailingRuns,
+          ...stalePulls,
+          ...staleIssues,
+        ];
+        const selected = explicitTriggeredCandidate || rankedCandidates[0] || null;
+        const selectedFingerprint = fingerprintForCandidate(selected);
+
+        let existingCanonicalIssue = null;
+        let existingCanonicalPr = null;
+        if (selectedFingerprint) {
+          existingCanonicalIssue = issues.find(
+            (item) =>
+              !item.pull_request &&
+              ((item.body || "").includes(`${canonicalIssueBodyTag} ${selectedFingerprint}`) ||
+                (item.title || "").includes(selectedFingerprint)),
+          );
+          existingCanonicalPr = pulls.find(
+            (item) =>
+              ((item.body || "").includes(`${canonicalPrBodyTag} ${selectedFingerprint}`) ||
+                (item.title || "").includes(selectedFingerprint)),
+          );
+        }
+
+        const skippedCandidates = [];
+        if (payload.triggered && !payload.triggered.authorized) {
+          skippedCandidates.push({
+            kind: payload.triggered.kind,
+            number: payload.triggered.number || null,
+            fingerprint: null,
+            skipped_reason: payload.triggered.reason,
+          });
+        }
+        if (explicitTriggeredCandidate && rankedCandidates.length > 0) {
+          skippedCandidates.push(
+            ...toCandidateList(
+              rankedCandidates,
+              "not_selected_explicit_authorized_trigger_took_precedence",
+            ),
+          );
+        } else if (!explicitTriggeredCandidate && rankedCandidates.length > 1) {
+          skippedCandidates.push(
+            ...toCandidateList(
+              rankedCandidates.slice(1),
+              "not_selected_priority_ranked_second_or_later",
+            ),
+          );
+        }
+
+        const dedupeMatched = Boolean(existingCanonicalIssue || existingCanonicalPr);
+        payload.selection = {
+          selected,
+          fingerprint: selectedFingerprint,
+          selected_via: explicitTriggeredCandidate
+            ? "authorized_trigger_item"
+            : "ranked_priority",
+          decision: selected ? "selected" : "noop",
+          existing_receipt: {
+            canonical_issue_number: existingCanonicalIssue?.number || null,
+            canonical_issue_url: existingCanonicalIssue?.html_url || null,
+            canonical_pr_number: existingCanonicalPr?.number || null,
+            canonical_pr_url: existingCanonicalPr?.html_url || null,
+            dedupe_matched: dedupeMatched,
+          },
+          should_mutate: Boolean(selected && !dedupeMatched),
+          skipped_candidates: skippedCandidates,
+        };
 
         fs.writeFileSync(
           "/tmp/gh-aw/pr-iteration-loop-context.json",
           JSON.stringify(payload, null, 2),
         );
+        core.setOutput("has_candidate", payload.selection.should_mutate ? "true" : "false");
+        core.setOutput("selected_fingerprint", payload.selection.fingerprint || "");
+  - name: Exit before heavy setup when no candidate exists
+    env:
+      HAS_CANDIDATE: ${{ steps.select_checkpoint.outputs.has_candidate }}
+    run: |
+      if [ "${HAS_CANDIDATE}" = "true" ]; then
+        echo "Candidate selected; continuing."
+        exit 0
+      fi
+      echo "No mutation candidate selected (dedupe or no-op)."
+      exit 0
+  - name: Install repository dependencies and language servers
+    env:
+      HAS_CANDIDATE: ${{ steps.select_checkpoint.outputs.has_candidate }}
+    run: |
+      if [ "${HAS_CANDIDATE}" != "true" ]; then
+        echo "Skipping heavy dependency install: no candidate selected."
+        exit 0
+      fi
+      python -m pip install --upgrade pip
+      python -m pip install -e ".[dev,youtube]" pandas matplotlib seaborn
+      npm install --legacy-peer-deps
+      npm install -g pyright typescript-language-server typescript
 safe-outputs:
   github-app:
     client-id: ${{ vars.GH_AW_APP_ID }}
@@ -198,7 +402,7 @@ safe-outputs:
     max: 1
     expires: 7
   add-comment:
-    max: 2
+    max: 1
   create-pull-request:
     title-prefix: "[ai] "
     labels: [automation, ai-agent]
@@ -230,6 +434,8 @@ safe-outputs:
       - "uv.lock"
   push-to-pull-request-branch:
     target: "*"
+    max: 1
+    required-labels: [automation, ai-agent]
     if-no-changes: warn
     allowed-files:
       - ".github/workflows/**"
@@ -251,24 +457,14 @@ safe-outputs:
       - "requirements.txt"
       - "turbo.json"
       - "uv.lock"
-  merge-pull-request:
-    target: "*"
-    required-labels: [ready-to-merge]
-    allowed-branches: ["pr-iteration/*"]
-    max: 1
   create-pull-request-review-comment:
     target: "*"
     max: 6
-  create-discussion:
-    title-prefix: "[ai] "
-    category: General
-    labels: [automation]
-    max: 1
   upload-asset:
     branch: assets/pr-iteration-loop
     allowed-exts: [.png, .jpg, .jpeg, .svg]
     max: 3
-timeout-minutes: 45
+timeout-minutes: 30
 ---
 
 # PR Iteration Loop
@@ -369,13 +565,17 @@ Use only the configured safe outputs for writes:
 - `add-comment`
 - `create-pull-request`
 - `push-to-pull-request-branch`
-- `merge-pull-request`
 - `create-pull-request-review-comment`
-- `create-discussion`
 - `upload-asset`
 
-When the run is scheduled or triggered by `push` to `main`, prefer a narrative
-discussion digest only when there is new verified information worth publishing.
+Never merge from this workflow. Every merge decision is human-only.
+
+Only use `push-to-pull-request-branch` when the destination PR head branch is
+already under `pr-iteration/*`. For any non-automation branch, leave a single
+blocking comment or no-op and stop.
+
+After one failed safe-output mutation, open circuit and stop mutating in the
+same run. Do not create a second competing artifact for the same fingerprint.
 
 ## Final report requirements
 
@@ -388,3 +588,18 @@ Your final visible output must include:
 5. the primary recommended pattern among Chopin, Continuous AI, Autoloop, and
    Agentic Workflows, with a short evidence-backed reason
 6. what was written back to cache-memory for the next run
+
+## Acceptance receipt
+
+Every run must include a single receipt block with:
+
+- input events
+- selected fingerprint
+- dedupe decision
+- exact mutation attempted
+- claimed_outcome
+- observed_outcome
+- postcondition_match
+- usage (AIC + wall-clock)
+- verification result
+- next queued action

@@ -282,10 +282,67 @@ def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
 
     assert 'payload.selected = {\n            kind: "issue",' not in workflow_source
     assert 'payload.selected = {\n            kind: "pull_request",' not in workflow_source
-    assert "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null" in workflow_source
+    assert "payload.selection = {" in workflow_source
+    assert "skipped_candidates: skippedCandidates" in workflow_source
 
 
 def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert "required-title-prefix" not in workflow_source
+    assert workflow["safe-outputs"]["push-to-pull-request-branch"]["target"] == "*"
+    assert workflow["safe-outputs"]["push-to-pull-request-branch"]["required-labels"] == [
+        "automation",
+        "ai-agent",
+    ]
+    assert "Only use `push-to-pull-request-branch` when the destination PR head branch is" in workflow_source
+    assert "`pr-iteration/*`" in workflow_source
+    assert "merge-pull-request" not in workflow["safe-outputs"]
+
+
+def test_pr_iteration_requires_label_or_command_dispatch() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    workflow_on = workflow.get("on", workflow.get(True))
+
+    assert workflow_on is not None
+    assert workflow_on["issues"]["types"] == ["labeled"]
+    assert workflow_on["pull_request"]["types"] == ["labeled"]
+    assert workflow_on["issue_comment"]["types"] == ["created"]
+    assert "opened" not in workflow_on["issues"]["types"]
+    assert "opened" not in workflow_on["pull_request"]["types"]
+    assert "ready_for_review" not in workflow_on["pull_request"]["types"]
+
+
+def test_pr_iteration_uses_repo_level_concurrency_for_push_and_schedule() -> None:
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    group = workflow["concurrency"]["group"]
+
+    assert "github.event_name == 'push'" in group
+    assert "github.event_name == 'schedule'" in group
+    assert "'repo'" in group
+
+
+def test_pr_iteration_selection_writes_atomic_fingerprint_and_receipt_hints() -> None:
+    workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
+
+    assert "function fingerprintForCandidate" in workflow_source
+    assert "fingerprint: selectedFingerprint" in workflow_source
+    assert "existing_receipt: {" in workflow_source
+    assert "decision: selected ? \"selected\" : \"noop\"" in workflow_source
+
+
+def test_pr_iteration_short_circuits_heavy_setup_when_no_candidate() -> None:
+    workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
+
+    assert "name: Exit before heavy setup when no candidate exists" in workflow_source
+    assert "HAS_CANDIDATE" in workflow_source
+    assert "exit 0" in workflow_source
+
+
+def test_pr_iteration_evals_require_deterministic_postcondition_grading() -> None:
+    workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
+
+    assert "claimed_outcome" in workflow_source
+    assert "observed_outcome" in workflow_source
+    assert "postcondition_match" in workflow_source
