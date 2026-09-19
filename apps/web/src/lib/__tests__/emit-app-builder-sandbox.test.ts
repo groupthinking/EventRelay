@@ -4,8 +4,10 @@ import {
   APP_BUILDER_CONTRACT,
   APP_BUILDER_CUT,
   APP_BUILDER_EMIT_REV,
+  chapterStartSecondsAttr,
   emitAppBuilderSandbox,
   sandboxFromVideoPack,
+  youtubeNocookieEmbedSrc,
 } from '@/lib/emit-app-builder-sandbox';
 import { buildStudioShipPackage } from '@/lib/action-surface';
 import {
@@ -109,6 +111,42 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(smoke).toMatch(/visible|textContent|innerText|data-testid/);
   });
 
+  it('M3: chapter jumps carry start seconds, seek hook, and sticky progress keys', () => {
+    const chapters = [
+      { start: 0, end: 21.8, topic: 'Intro', key_points: [] },
+      { start: 21.8, end: 37.8, topic: 'Jack setup', key_points: [] },
+      { start: 37.8, end: 70, topic: 'Remove wheel', key_points: [] },
+    ];
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      chapters,
+    });
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    expect(html).toContain('data-testid="source-youtube"');
+    expect(html).toContain('data-start-seconds="0"');
+    expect(html).toContain('data-start-seconds="21"');
+    expect(html).toContain('data-start-seconds="37"');
+    expect(html).toContain('data-outline-chapter="1"');
+    expect(main).toContain('seekSourceVideo');
+    expect(main).toContain('parseStartSecondsFromButton');
+    expect(main).toContain('loadMap');
+    expect(main).toContain('saveMap');
+    expect(main).toContain('updateProgress');
+    expect(chapterStartSecondsAttr(21.8)).toBe('21');
+    expect(chapterStartSecondsAttr(Number.NaN)).toBe('');
+    expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID)).toBe(
+      'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?enablejsapi=1',
+    );
+    expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID, 94.8)).toBe(
+      'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?start=94&autoplay=1&enablejsapi=1',
+    );
+    expect(APP_BUILDER_EMIT_REV).toContain('chapter-seek');
+  });
+
   it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
     const sandbox = emitAppBuilderSandbox({
       videoId: QJ_VIDEO_ID,
@@ -156,6 +194,8 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(html).toContain('data-testid="shell-chat-panel"');
     expect(html).toContain('data-testid="workspace-hero"');
     expect(html).toContain('data-testid="shell-chat-honesty"');
+    expect(html).toContain('data-testid="source-youtube"');
+    expect(html).toContain('enablejsapi=1');
     expect(html).toContain('youtube-nocookie.com/embed/');
     expect(css).toContain('.saas-shell');
     expect(css).toContain('--shell-nav-w');

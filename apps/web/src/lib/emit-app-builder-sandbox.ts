@@ -12,7 +12,7 @@ import { parsePackActionItems } from '@/lib/video-pack-types';
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.8-live-chat-rail' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.9-m3-chapter-seek' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -158,6 +158,26 @@ function truncateHash(hash: string, visible = 12): string {
 
 function tabLabel(name: string, count: number): string {
   return count > 0 ? `${name} · ${count}` : name;
+}
+
+/** Floor chapter start for DOM + embed; NaN/negative → omit seek (empty string). */
+export function chapterStartSecondsAttr(start: number): string {
+  if (!Number.isFinite(start) || start < 0) return '';
+  return String(Math.floor(start));
+}
+
+/** YouTube nocookie embed URL with optional seek (used by emitted mini-app + unit tests). */
+export function youtubeNocookieEmbedSrc(videoId: string, startSeconds?: number): string {
+  const id = videoId.trim();
+  const base = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
+  if (startSeconds === undefined) {
+    return `${base}?enablejsapi=1`;
+  }
+  const start = Math.floor(startSeconds);
+  if (!Number.isFinite(start) || start < 0) {
+    return `${base}?enablejsapi=1`;
+  }
+  return `${base}?start=${start}&autoplay=1&enablejsapi=1`;
 }
 
 function visualList(events: AppBuilderVisualEvent[]): string {
@@ -839,7 +859,9 @@ function chapterJumpButtons(chapters: AppBuilderChapter[]): string {
   const buttons = chapters
     .map((chapter, index) => {
       const label = excerpt(chapter.topic, 48);
-      return `<button type="button" data-chapter-index="${index}" data-testid="chapter-jump">${escapeHtml(label)}</button>`;
+      const startAttr = chapterStartSecondsAttr(chapter.start);
+      const startData = startAttr ? ` data-start-seconds="${escapeHtml(startAttr)}"` : '';
+      return `<button type="button" data-chapter-index="${index}" data-testid="chapter-jump"${startData}>${escapeHtml(label)}</button>`;
     })
     .join('');
   return `<div class="chapter-jump" data-testid="chapter-jumps">${buttons}</div>`;
@@ -866,7 +888,9 @@ function outlineNavHtml(
       : chapters
           .map((chapter, index) => {
             const label = excerpt(chapter.topic, 56);
-            return `<li><button type="button" data-outline-chapter="${index}" data-testid="outline-chapter">${escapeHtml(label)}</button></li>`;
+            const startAttr = chapterStartSecondsAttr(chapter.start);
+            const startData = startAttr ? ` data-start-seconds="${escapeHtml(startAttr)}"` : '';
+            return `<li><button type="button" data-outline-chapter="${index}" data-testid="outline-chapter"${startData}>${escapeHtml(label)}</button></li>`;
           })
           .join('');
   const sopItems =
@@ -897,9 +921,10 @@ function outlineNavHtml(
 }
 
 function workspaceHeroHtml(videoId: string, sourceUrl: string): string {
-  const embed = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}`;
+  const embed = youtubeNocookieEmbedSrc(videoId);
   return `<section class="workspace-hero" data-testid="workspace-hero" aria-label="Source video">
     <iframe
+      data-testid="source-youtube"
       src="${escapeHtml(embed)}"
       title="YouTube source for ${escapeHtml(videoId)}"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -1228,12 +1253,42 @@ function bindTabs(): void {
   }
 }
 
+function parseStartSecondsFromButton(button: HTMLElement): number | null {
+  const raw = button.getAttribute('data-start-seconds');
+  if (raw == null || raw === '') return null;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.floor(n);
+}
+
+function seekSourceVideo(startSeconds: number | null): void {
+  if (startSeconds == null) return;
+  const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="source-youtube"]');
+  if (!iframe) return;
+  iframe.src = \`https://www.youtube-nocookie.com/embed/\${encodeURIComponent(pack.videoId)}?start=\${startSeconds}&autoplay=1&enablejsapi=1\`;
+}
+
+function highlightChapterJump(chapterIndex: string): void {
+  const jumpButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chapter-index]'));
+  const match = jumpButtons.find((b) => b.dataset.chapterIndex === chapterIndex);
+  for (const peer of jumpButtons) peer.dataset.active = 'false';
+  if (match) {
+    match.dataset.active = 'true';
+    match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+  const outlineButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-chapter]'));
+  for (const peer of outlineButtons) peer.dataset.active = 'false';
+  const outlineMatch = outlineButtons.find((b) => b.dataset.outlineChapter === chapterIndex);
+  if (outlineMatch) outlineMatch.dataset.active = 'true';
+}
+
 function bindChapterJumps(): void {
   const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chapter-index]'));
   for (const button of buttons) {
     button.addEventListener('click', () => {
-      for (const peer of buttons) peer.dataset.active = 'false';
-      button.dataset.active = 'true';
+      seekSourceVideo(parseStartSecondsFromButton(button));
+      const idx = button.dataset.chapterIndex;
+      if (idx != null) highlightChapterJump(idx);
       activateTab('explore');
       syncOutlineTabs('explore');
     });
@@ -1260,16 +1315,11 @@ function bindOutlineNav(): void {
   const chapterButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-chapter]'));
   for (const btn of chapterButtons) {
     btn.addEventListener('click', () => {
+      seekSourceVideo(parseStartSecondsFromButton(btn));
+      const idx = btn.dataset.outlineChapter;
+      if (idx != null) highlightChapterJump(idx);
       activateTab('explore');
       syncOutlineTabs('explore');
-      const jumpButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chapter-index]'));
-      const idx = btn.dataset.outlineChapter;
-      const match = jumpButtons.find((b) => b.dataset.chapterIndex === idx);
-      if (match) {
-        for (const peer of jumpButtons) peer.dataset.active = 'false';
-        match.dataset.active = 'true';
-        match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      }
     });
   }
   syncOutlineTabs('actions');
