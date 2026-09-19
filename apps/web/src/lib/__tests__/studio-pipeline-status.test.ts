@@ -28,6 +28,7 @@ import {
   studioStatusMessage,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
+  studioWorkbenchEmptyView,
 } from '../studio-pipeline-status';
 
 describe('studio-pipeline-status', () => {
@@ -547,6 +548,38 @@ describe('studio-pipeline-status', () => {
     expect(studio).toMatch(/seekTo\(/);
     expect(studio).not.toMatch(/onLoad=\{\(\) => setPlayerLoaded/);
     expect(studio).not.toMatch(/0:00/);
+  });
+
+  it('describes workbench empty states when no pack is stored', () => {
+    expect(
+      studioWorkbenchEmptyView({
+        busy: false,
+        hasSelection: false,
+        hasVideoPack: false,
+        analysisReady: false,
+      })?.title,
+    ).toMatch(/no video/i);
+    expect(
+      studioWorkbenchEmptyView({
+        busy: true,
+        hasSelection: true,
+        hasVideoPack: false,
+        analysisReady: false,
+      })?.title,
+    ).toMatch(/in progress/i);
+    expect(
+      studioWorkbenchEmptyView({
+        busy: false,
+        hasSelection: true,
+        hasVideoPack: true,
+        analysisReady: true,
+      }),
+    ).toBeNull();
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('data-testid="studio-workbench-empty"');
+    expect(studio).toContain('studioWorkbenchEmptyView');
+    expect(studio).toContain('data-testid="studio-build-live-failure"');
   });
 
   it('does not map keyframes or concepts into Studio events', () => {

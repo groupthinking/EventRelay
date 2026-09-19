@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
+  packBuildLiveFailureDetails,
   packBuildLivePath,
   packBuildLiveUrl,
   resolvePackBuildLiveVideoId,
@@ -173,10 +174,10 @@ describe('pack-build-live', () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/d/${XYMC_VIDEO_ID}/health`);
   });
 
-  it('surfaces missing pack as a build failure', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
+  it('surfaces missing pack as a build failure without raw API copy', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
         ok: true,
         status: 200,
         json: async () => ({
@@ -187,18 +188,45 @@ describe('pack-build-live', () => {
             detail: 'Video pack not found. Generate /api/video/pack first.',
           },
         }),
-      }),
-    );
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        json: async () => ({ status: 'error' }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
 
     const result = await verifyPackBuildLive({
       videoId: XYMC_VIDEO_ID,
       origin: 'https://uvai.io',
     });
 
-    expect(result).toMatchObject({ ok: false });
+    expect(result).toMatchObject({ ok: false, reasonCode: 'HOSTED_PACK_NOT_FOUND' });
     if (!result.ok) {
-      expect(result.message).toMatch(/pack not found/i);
+      expect(result.message).toMatch(/stored video pack/i);
+      expect(result.message).not.toMatch(/\/api\//i);
     }
+  });
+
+  it('returns recovery actions for missing-pack Build live failures', () => {
+    const failure = packBuildLiveFailureDetails({
+      reasonCode: 'HOSTED_PACK_NOT_FOUND',
+      videoId: XYMC_VIDEO_ID,
+      origin: 'https://uvai.io',
+    });
+    expect(failure.title).toMatch(/no stored video pack/i);
+    expect(failure.actions.map((a) => a.id)).toContain('rerun_analysis');
+    expect(failure.message).not.toMatch(/\/api\//i);
+  });
+
+  it('offers hosted page recovery when extraction failed but /d is available', () => {
+    const failure = packBuildLiveFailureDetails({
+      reasonCode: 'HOSTED_PACK_EXTRACT_FAILED',
+      videoId: XYMC_VIDEO_ID,
+      origin: 'https://uvai.io',
+    });
+    const open = failure.actions.find((a) => a.id === 'open_hosted');
+    expect(open).toMatchObject({ href: `https://uvai.io/d/${XYMC_VIDEO_ID}` });
   });
 
   it('retries hosted health after sandbox confirms a stored pack', async () => {

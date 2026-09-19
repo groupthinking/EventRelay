@@ -46,7 +46,19 @@ export type PackBuildLiveHealthPayload = {
 
 export type PackBuildLiveResult =
   | { ok: true; liveUrl: string; reasonCode: string }
-  | { ok: false; message: string };
+  | { ok: false; message: string; reasonCode?: string };
+
+export type StudioRecoveryAction =
+  | { id: 'rerun_analysis'; label: string }
+  | { id: 'scroll_pack'; label: string }
+  | { id: 'open_hosted'; label: string; href: string };
+
+export type PackBuildLiveFailureDetails = {
+  title: string;
+  message: string;
+  reasonCode?: string;
+  actions: StudioRecoveryAction[];
+};
 
 /** YouTube id for `/d/{videoId}` — must come from the pack citation, not the dashboard row UUID. */
 export function resolvePackBuildLiveVideoId(input: {
@@ -64,25 +76,114 @@ export function resolvePackBuildLiveVideoId(input: {
 
 type StoredPackConfirmation = { ok: true; videoId: string } | { ok: false };
 
-function healthFailureMessage(payload: PackBuildLiveHealthPayload, status: number): string {
-  const detail = payload.health?.detail?.trim();
-  if (detail) return detail;
-  const error = payload.error?.trim();
-  if (error) return error;
+function sanitizeHostedDetail(detail: string | undefined): string | undefined {
+  const raw = detail?.trim();
+  if (!raw) return undefined;
+  if (/\/api\//i.test(raw) || /generate\s+\/api/i.test(raw)) {
+    return undefined;
+  }
+  return raw;
+}
+
+function healthFailureMessage(
+  payload: PackBuildLiveHealthPayload,
+  status: number,
+): { message: string; reasonCode?: string } {
   const reason = payload.health?.reason_code;
-  if (reason === 'HOSTED_PACK_NOT_FOUND') {
-    return 'Video pack not found. Run analysis on this URL before Build live.';
+  const detail = sanitizeHostedDetail(payload.health?.detail);
+  const error = sanitizeHostedDetail(payload.error);
+  if (reason === 'HOSTED_PACK_NOT_FOUND' || status === 404) {
+    return {
+      reasonCode: 'HOSTED_PACK_NOT_FOUND',
+      message: 'No stored Video Pack for this video. Run analysis on this URL, then try Build live again.',
+    };
   }
-  if (reason === 'HOSTED_PACK_PROCESSING') {
-    return 'Video pack is still processing. Try again when the pack is ready.';
+  if (reason === 'HOSTED_PACK_PROCESSING' || status === 202) {
+    return {
+      reasonCode: 'HOSTED_PACK_PROCESSING',
+      message: 'Video Pack is still processing. Wait for analysis to finish, then try again.',
+    };
   }
-  if (status === 404) {
-    return 'Video pack not found. Run analysis on this URL before Build live.';
+  if (reason === 'HOSTED_PACK_EXTRACT_FAILED') {
+    return {
+      reasonCode: reason,
+      message:
+        detail ??
+        'Pack extraction failed. You can still open the hosted page for details, or re-run analysis in Studio.',
+    };
   }
-  if (status === 202) {
-    return 'Video pack is still processing. Try again when the pack is ready.';
+  if (detail) {
+    return { reasonCode: reason, message: detail };
   }
-  return `Hosted build health check failed (HTTP ${status}).`;
+  if (error) {
+    return { reasonCode: reason, message: error };
+  }
+  return {
+    reasonCode: reason,
+    message: `Hosted build health check failed (HTTP ${status}).`,
+  };
+}
+
+export function packBuildLiveFailureDetails(input: {
+  reasonCode?: string | null;
+  message?: string;
+  videoId?: string | null;
+  origin?: string;
+  storedPackMissing?: boolean;
+}): PackBuildLiveFailureDetails {
+  const videoId = input.videoId?.trim() ?? '';
+  const origin =
+    input.origin?.trim() ||
+    (typeof window !== 'undefined' ? window.location.origin : 'https://uvai.io');
+  const hostedHref = videoId ? packBuildLiveUrl(origin, videoId) : null;
+  const reason =
+    input.reasonCode?.trim() ||
+    (input.storedPackMissing ? 'HOSTED_PACK_NOT_FOUND' : undefined);
+
+  const rerun: StudioRecoveryAction = { id: 'rerun_analysis', label: 'Re-run analysis' };
+  const scrollPack: StudioRecoveryAction = { id: 'scroll_pack', label: 'Open Video pack section' };
+  const openHosted: StudioRecoveryAction | null = hostedHref
+    ? { id: 'open_hosted', label: 'Open hosted page', href: hostedHref }
+    : null;
+
+  switch (reason) {
+    case 'HOSTED_PACK_NOT_FOUND':
+      return {
+        title: 'No stored Video Pack',
+        message:
+          input.message?.trim() ||
+          'Run analysis on this URL so UVAI can store a Video Pack, then try Build live again.',
+        reasonCode: reason,
+        actions: [rerun, scrollPack],
+      };
+    case 'HOSTED_PACK_PROCESSING':
+      return {
+        title: 'Video Pack still processing',
+        message:
+          input.message?.trim() ||
+          'Analysis is still storing the pack. Wait for the run to finish, then try Build live again.',
+        reasonCode: reason,
+        actions: [rerun],
+      };
+    case 'HOSTED_PACK_EXTRACT_FAILED':
+      return {
+        title: 'Hosted pack extraction failed',
+        message:
+          input.message?.trim() ||
+          'Extraction did not produce a full hosted spec. Open the hosted page for the recorded reason, or re-run analysis if you intend to retry.',
+        reasonCode: reason,
+        actions: openHosted ? [openHosted, rerun] : [rerun],
+      };
+    default:
+      return {
+        title: 'Build live did not open',
+        message:
+          input.message?.trim() ||
+          'Could not verify a hosted app for this video. Re-run analysis or open the hosted page when a pack exists.',
+        reasonCode: reason,
+        actions: openHosted ? [openHosted, rerun, scrollPack] : [rerun, scrollPack],
+      };
+  }
 }
 
 async function confirmStoredPackOnServer(input: {
@@ -138,14 +239,22 @@ export async function verifyPackBuildLive(input: {
 }): Promise<PackBuildLiveResult> {
   const videoId = input.videoId.trim();
   if (!videoId) {
-    return { ok: false, message: 'Analyze a video before Build live.' };
+    return {
+      ok: false,
+      message: 'Analyze a video before Build live.',
+      reasonCode: 'HOSTED_PACK_NOT_FOUND',
+    };
   }
 
   const origin =
     input.origin?.trim() ||
     (typeof window !== 'undefined' ? window.location.origin : 'https://uvai.io');
   if (!packBuildLiveUrl(origin, videoId)) {
-    return { ok: false, message: 'Could not resolve a hosted live URL for this video.' };
+    return {
+      ok: false,
+      message: 'Could not resolve a hosted live URL for this video.',
+      reasonCode: 'HOSTED_SPEC_INCOMPLETE',
+    };
   }
 
   const signal = input.signal ?? AbortSignal.timeout(20_000);
@@ -200,12 +309,21 @@ export async function verifyPackBuildLive(input: {
   }
 
   if (!response.ok || payload.health?.ok !== true) {
-    return { ok: false, message: healthFailureMessage(payload, response.status) };
+    const failure = healthFailureMessage(payload, response.status);
+    return {
+      ok: false,
+      message: failure.message,
+      reasonCode: failure.reasonCode,
+    };
   }
 
   const liveUrl = packBuildLiveUrl(origin, hostVideoId);
   if (!liveUrl) {
-    return { ok: false, message: 'Could not resolve a hosted live URL for this video.' };
+    return {
+      ok: false,
+      message: 'Could not resolve a hosted live URL for this video.',
+      reasonCode: 'HOSTED_SPEC_INCOMPLETE',
+    };
   }
   const reasonCode = payload.factory_deliver?.reason_code ?? 'FACTORY_DELIVER_READY';
 
