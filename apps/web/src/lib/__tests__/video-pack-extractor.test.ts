@@ -31,6 +31,7 @@ const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
 
 vi.mock('@/lib/youtube-metadata', () => ({
   fetchYouTubeMetadata: vi.fn(async () => null),
+  preflightYouTubeVideoSource: vi.fn(async () => 'available'),
 }));
 
 /** Live Eggs GET/pack failure class — Gemini cut mid-string around position 8050. */
@@ -297,8 +298,24 @@ describe('extractVideoPackSpec', () => {
     expect(calls).toBe(3);
   });
 
-  it('pins gateway attempt budget at one call plus three retries', () => {
-    expect(VIDEO_PACK_GATEWAY_MAX_ATTEMPTS).toBe(4);
+  it('pins gateway attempt budget at one call plus four retries', () => {
+    expect(VIDEO_PACK_GATEWAY_MAX_ATTEMPTS).toBe(5);
+  });
+
+  it('fails fast when YouTube oEmbed preflight reports the source is gone', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const { preflightYouTubeVideoSource } = await import('@/lib/youtube-metadata');
+    vi.mocked(preflightYouTubeVideoSource).mockResolvedValueOnce('not_found');
+    const generateText = vi.fn<VideoPackGenerateText>(async () => ({
+      text: JSON.stringify(SPEC_JSON),
+    }));
+
+    await expect(
+      extractVideoPackSpec({ sourceUrl: SOURCE_URL, videoId: CANON }, { generateText }),
+    ).rejects.toMatchObject({
+      reasonCode: 'HOSTED_PACK_SOURCE_NOT_FOUND',
+    });
+    expect(generateText).not.toHaveBeenCalled();
   });
 
   it('fails closed when Gateway returns empty or identity-only cite text', async () => {

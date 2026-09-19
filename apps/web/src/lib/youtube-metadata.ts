@@ -17,6 +17,37 @@ export interface YouTubeMetadata {
   chapters: { time: string; title: string }[];
 }
 
+/** Result of a cheap YouTube availability probe before gateway extract. */
+export type YouTubeSourcePreflight = 'available' | 'not_found' | 'unknown';
+
+/**
+ * Preflight YouTube watch URL via oEmbed. Deleted/private videos typically return 404.
+ * Returns `unknown` on network errors or non-404 failures so extract can still proceed.
+ */
+export async function preflightYouTubeVideoSource(url: string): Promise<YouTubeSourcePreflight> {
+  const videoId = extractVideoId(url);
+  if (!videoId) return 'unknown';
+
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
+
+  try {
+    const response = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; EventRelay/2.0)',
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 404) return 'not_found';
+    if (!response.ok) return 'unknown';
+    return 'available';
+  } catch (e) {
+    console.warn('[YouTube] oEmbed preflight failed:', e);
+    return 'unknown';
+  }
+}
+
 /**
  * Extract YouTube video ID from various URL formats.
  */

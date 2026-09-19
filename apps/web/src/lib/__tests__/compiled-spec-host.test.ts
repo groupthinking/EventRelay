@@ -39,6 +39,14 @@ describe('compiled-spec-host', () => {
     expect(health.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
   });
 
+  it('maps missing YouTube sources to HOSTED_PACK_SOURCE_NOT_FOUND', () => {
+    const health = hostedSpecHealthFromPackResolution({
+      kind: 'extract_error',
+      message: 'Requested entity was not found.',
+    });
+    expect(health.reason_code).toBe('HOSTED_PACK_SOURCE_NOT_FOUND');
+  });
+
   it('maps gateway 503 class to HOSTED_PACK_GATEWAY_UNAVAILABLE', () => {
     const health = hostedSpecHealthFromPackResolution({
       kind: 'extract_error',

@@ -27,6 +27,20 @@ describe('video-pack-extract-reason', () => {
     );
   });
 
+  it('maps deleted or missing YouTube sources to HOSTED_PACK_SOURCE_NOT_FOUND', () => {
+    expect(hostedExtractReasonFromDetail('Requested entity was not found.')).toBe(
+      'HOSTED_PACK_SOURCE_NOT_FOUND',
+    );
+    expect(
+      classifyVideoPackExtractFailure(
+        'Vercel AI Gateway failed after 5 attempts: Requested entity was not found.',
+      ),
+    ).toBe('HOSTED_PACK_SOURCE_NOT_FOUND');
+    expect(
+      isTransientVideoPackGatewayError(new Error('Requested entity was not found.')),
+    ).toBe(false);
+  });
+
   it('keeps parse and config failures on HOSTED_PACK_EXTRACT_FAILED', () => {
     expect(
       hostedExtractReasonFromDetail('Video pack spec extract requires AI Gateway'),
@@ -56,6 +70,6 @@ describe('video-pack-extract-reason', () => {
   });
 
   it('pins the extract pipeline version marker', () => {
-    expect(VIDEO_PACK_EXTRACT_PIPELINE_VERSION).toBe('c1-gateway-retry-v1');
+    expect(VIDEO_PACK_EXTRACT_PIPELINE_VERSION).toBe('h1-extract-reliability-v1');
   });
 });

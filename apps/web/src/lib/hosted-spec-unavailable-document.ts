@@ -174,6 +174,12 @@ function titleForReason(reason: HostedSpecHealthReasonCode | undefined): string 
       return 'Video pack is still processing';
     case 'HOSTED_PACK_EXTRACT_FAILED':
       return 'Pack extraction did not complete';
+    case 'HOSTED_PACK_SOURCE_NOT_FOUND':
+      return 'YouTube video unavailable';
+    case 'HOSTED_PACK_GATEWAY_EMPTY':
+      return 'Pack extract returned no content';
+    case 'HOSTED_PACK_GATEWAY_UNAVAILABLE':
+      return 'AI Gateway temporarily unavailable';
     case 'HOSTED_PACK_IDENTITY_ONLY':
       return 'Compiled spec is not available for this pack';
     case 'HOSTED_SPEC_INCOMPLETE':
@@ -193,6 +199,12 @@ function summaryForReason(reason: HostedSpecHealthReasonCode | undefined): strin
       return 'A pack job may still be running. This page will not fabricate a compiled spec while processing is in flight.';
     case 'HOSTED_PACK_EXTRACT_FAILED':
       return 'Extraction failed with a recorded error. Retrying from here does not invent a new pack; use Studio only if you intend to run extraction again.';
+    case 'HOSTED_PACK_SOURCE_NOT_FOUND':
+      return 'YouTube reports this video is missing, private, or removed. UVAI will not burn gateway retries on a source that is gone.';
+    case 'HOSTED_PACK_GATEWAY_EMPTY':
+      return 'The model returned no usable pack content. This is an honest empty outcome — try again later if the source video is still available.';
+    case 'HOSTED_PACK_GATEWAY_UNAVAILABLE':
+      return 'The AI Gateway was temporarily unavailable. Wait a moment and re-run analysis; this is not a missing-video failure.';
     case 'HOSTED_PACK_IDENTITY_ONLY':
       return 'This pack is identity-only and has no compiled hosted spec to run at /d.';
     case 'HOSTED_SPEC_INCOMPLETE':
