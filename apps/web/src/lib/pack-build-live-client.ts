@@ -104,6 +104,22 @@ function healthFailureMessage(
       message: 'Video Pack is still processing. Wait for analysis to finish, then try again.',
     };
   }
+  if (reason === 'HOSTED_PACK_SOURCE_NOT_FOUND') {
+    return {
+      reasonCode: reason,
+      message:
+        detail ??
+        'This YouTube video is unavailable or was removed. Pick a different URL — re-running analysis will not recover a deleted source.',
+    };
+  }
+  if (reason === 'HOSTED_PACK_GATEWAY_UNAVAILABLE') {
+    return {
+      reasonCode: reason,
+      message:
+        detail ??
+        'The AI Gateway was temporarily unavailable. Wait and re-run analysis; the source video may still be valid.',
+    };
+  }
   if (reason === 'HOSTED_PACK_EXTRACT_FAILED') {
     return {
       reasonCode: reason,
@@ -164,6 +180,24 @@ export function packBuildLiveFailureDetails(input: {
           'Analysis is still storing the pack. Wait for the run to finish, then try Build live again.',
         reasonCode: reason,
         actions: [rerun],
+      };
+    case 'HOSTED_PACK_SOURCE_NOT_FOUND':
+      return {
+        title: 'YouTube video unavailable',
+        message:
+          input.message?.trim() ||
+          'This video is missing or removed on YouTube. Use a different URL — gateway retries cannot restore a deleted source.',
+        reasonCode: reason,
+        actions: [scrollPack],
+      };
+    case 'HOSTED_PACK_GATEWAY_UNAVAILABLE':
+      return {
+        title: 'AI Gateway temporarily unavailable',
+        message:
+          input.message?.trim() ||
+          'Extraction hit a transient gateway outage. Wait and re-run analysis when the service recovers.',
+        reasonCode: reason,
+        actions: openHosted ? [openHosted, rerun] : [rerun],
       };
     case 'HOSTED_PACK_EXTRACT_FAILED':
       return {

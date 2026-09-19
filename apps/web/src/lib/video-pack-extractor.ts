@@ -25,13 +25,20 @@ import {
   type VideoPackStack,
   type VideoPackStackTool,
 } from '@/lib/video-pack-types';
-import { fetchYouTubeMetadata, type YouTubeMetadata } from '@/lib/youtube-metadata';
+import {
+  fetchYouTubeMetadata,
+  preflightYouTubeVideoSource,
+  type YouTubeMetadata,
+} from '@/lib/youtube-metadata';
 
 /** Verified Vercel AI Gateway id — do not substitute gemini-2.5-flash. */
 export const VIDEO_PACK_EXTRACTOR_MODEL = 'google/gemini-3.8-flash';
 
-/** One initial Gateway call plus three retries on transient empty/503 failures. */
-export const VIDEO_PACK_GATEWAY_MAX_ATTEMPTS = 4;
+/** One initial Gateway call plus four retries on transient empty/503 failures. */
+export const VIDEO_PACK_GATEWAY_MAX_ATTEMPTS = 5;
+
+export const VIDEO_PACK_SOURCE_UNAVAILABLE_MESSAGE =
+  'YouTube reports this video is unavailable or was removed.';
 
 export class VideoPackExtractError extends Error {
   readonly reasonCode: VideoPackExtractFailureReason;
@@ -686,6 +693,14 @@ export async function extractVideoPackSpec(
   const hasKey = deps.hasGatewayKey ?? hasAiGatewayKey;
   if (!hasKey()) {
     throw new VideoPackExtractError(GATEWAY_MISSING_ERROR);
+  }
+
+  const sourcePreflight = await preflightYouTubeVideoSource(input.sourceUrl);
+  if (sourcePreflight === 'not_found') {
+    throw new VideoPackExtractError(
+      VIDEO_PACK_SOURCE_UNAVAILABLE_MESSAGE,
+      'HOSTED_PACK_SOURCE_NOT_FOUND',
+    );
   }
 
   const generateText = deps.generateText ?? defaultGenerateText;
