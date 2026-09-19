@@ -2,7 +2,7 @@
  * Client-safe Build live helpers (fetch + URL resolution only).
  * Do not import video-pack, extractors, or other server-only modules here.
  */
-import { hostedSpecLivePath } from '@/lib/compiled-spec-host';
+import { hostedSpecLivePath } from '@/lib/hosted-spec-paths';
 import { extractYouTubeId } from '@/lib/timestamp';
 
 export const PACK_BUILD_LIVE_CUT = 'pack→App Builder build→hosted live URL' as const;

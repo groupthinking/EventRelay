@@ -7,12 +7,12 @@ import {
   hostedSpecHealthFromPackResolution,
   hostedSpecHealthHistory,
   hostedSpecLivePath,
-  hostedLivePageUnavailableResponse,
   isHostedHealthPath,
   isHostedLivePageRequest,
   recordHostedSpecHealthCheck,
   type HostedPackResolution,
 } from '@/lib/compiled-spec-host';
+import { hostedLivePageUnavailableResponse } from '@/lib/hosted-spec-unavailable-server';
 import { sandboxFromVideoPack } from '@/lib/emit-app-builder-sandbox';
 import { buildIdentityPack, isIdentityOnlyPack } from '@/lib/video-pack';
 import { getPackRecord } from '@/lib/video-pack-store';

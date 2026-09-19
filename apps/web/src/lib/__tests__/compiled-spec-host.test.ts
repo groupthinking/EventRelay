@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import {
   factoryDeliverFromHostedSpec,
   hostedSpecHealthFromPackResolution,
-  hostedSpecUnavailableHtml,
   hostedSpecLivePath,
   latestHostedSpecHealthCheck,
   recordHostedSpecHealthCheck,
@@ -48,7 +47,8 @@ describe('compiled-spec-host', () => {
     expect(isHostedLivePagePath('/d/auJzb1D-fag/src/pack', 'auJzb1D-fag')).toBe(false);
   });
 
-  it('renders enterprise Empty UI HTML with reason_code for extract failures', () => {
+  it('renders enterprise Empty UI HTML with reason_code for extract failures', async () => {
+    const { hostedSpecUnavailableHtml } = await import('@/lib/hosted-spec-unavailable-server');
     const health = hostedSpecHealthFromPackResolution({
       kind: 'extract_error',
       message: 'Vercel AI Gateway returned empty content',

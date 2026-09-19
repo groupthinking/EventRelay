@@ -1,5 +1,6 @@
-import { renderHostedSpecUnavailableHtml } from '@/lib/render-hosted-spec-unavailable';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
+
+export { hostedSpecLivePath } from '@/lib/hosted-spec-paths';
 
 export type HostedSpecHealthReasonCode =
   | 'HOSTED_SPEC_READY'
@@ -29,10 +30,6 @@ const hostedSpecHealthChecks = new Map<string, HostedSpecHealthCheck[]>();
 
 function normalizedVideoId(videoId: string): string {
   return videoId.trim();
-}
-
-export function hostedSpecLivePath(videoId: string): string {
-  return `/d/${encodeURIComponent(normalizedVideoId(videoId))}`;
 }
 
 export function evaluateHostedSpecHealth(files: Record<string, string>): HostedSpecHealthCheck {
@@ -252,14 +249,6 @@ export function isHostedLivePageRequest(
   }
 }
 
-/** Enterprise Empty UI HTML when the compiled spec cannot be served (never a raw gateway 503). */
-export function hostedSpecUnavailableHtml(
-  videoId: string,
-  health: HostedSpecHealthCheck,
-): string {
-  return renderHostedSpecUnavailableHtml(videoId, health);
-}
-
 export function hostedPackAssetUnavailableJson(
   videoId: string,
   health: HostedSpecHealthCheck,
@@ -271,18 +260,4 @@ export function hostedPackAssetUnavailableJson(
     detail: health.detail,
     health,
   };
-}
-
-export function hostedLivePageUnavailableResponse(
-  videoId: string,
-  resolution: HostedPackResolution,
-): Response {
-  const health = hostedSpecHealthFromPackResolution(resolution);
-  return new Response(hostedSpecUnavailableHtml(videoId, health), {
-    status: 200,
-    headers: {
-      'content-type': 'text/html; charset=utf-8',
-      'cache-control': 'no-store',
-    },
-  });
 }
