@@ -256,8 +256,11 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(503);
     expect(res.headers.get('content-type')).toContain('text/html');
-    expect(body).toContain('Hosted app unavailable');
+    expect(body).toContain('data-slot="empty"');
+    expect(body).toContain('data-hosted-unavailable="true"');
+    expect(body).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
     expect(body).toContain('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body).toContain('empty content');
     expect(body).not.toMatch(/^\s*\{\s*"error"\s*:\s*"Vercel AI Gateway/);
   });
 
@@ -277,6 +280,7 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(503);
     expect(res.headers.get('content-type')).toContain('text/html');
+    expect(body).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
     expect(body).toContain('HOSTED_PACK_EXTRACT_FAILED');
     expect(body).not.toMatch(/^\s*\{\s*"error"\s*:\s*"Vercel AI Gateway/);
   });

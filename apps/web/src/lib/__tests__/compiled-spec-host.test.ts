@@ -47,6 +47,20 @@ describe('compiled-spec-host', () => {
     expect(isHostedLivePagePath('/d/auJzb1D-fag/src/pack', 'auJzb1D-fag')).toBe(false);
   });
 
+  it('renders enterprise Empty UI HTML with reason_code for extract failures', async () => {
+    const { hostedSpecUnavailableHtml } = await import('@/lib/hosted-spec-unavailable-server');
+    const health = hostedSpecHealthFromPackResolution({
+      kind: 'extract_error',
+      message: 'Vercel AI Gateway returned empty content',
+    });
+    const html = hostedSpecUnavailableHtml('QjZ5ohr7sGA', health);
+    expect(html).toContain('data-slot="empty"');
+    expect(html).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
+    expect(html).toContain('Vercel AI Gateway returned empty content');
+    expect(html).toContain('/studio?video=');
+    expect(html).toContain('/d/QjZ5ohr7sGA/health');
+  });
+
   it('drives Factory Deliver only when live URL and health are both valid', () => {
     const ready = factoryDeliverFromHostedSpec({
       videoId: 'auJzb1D-fag',
