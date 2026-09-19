@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
@@ -28,15 +28,22 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('Studio authoritative gate receipt', () => {
-  it('uses client routing for an unauthorized deploy preflight', async () => {
-    vi.mocked(startStudioDeploy).mockResolvedValue({ ok: false, status: 401 });
+  it('shows a local HOLD chip for an unauthorized deploy preflight', async () => {
+    vi.mocked(startStudioDeploy).mockResolvedValue({
+      ok: false,
+      status: 401,
+      error: 'authentication_required',
+    });
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
 
     fireEvent.click(screen.getByTestId('studio-deploy-button'));
 
-    await waitFor(() => {
-      expect(navigation.push).toHaveBeenCalledWith('/login?callbackUrl=%2Fstudio');
-    });
+    const receipt = await screen.findByTestId('studio-gate-receipt');
+    expect(receipt.textContent).toContain('HOLD');
+    expect(receipt.textContent).toContain('authentication_required');
+    expect(screen.getByTestId('studio-gate-receipt-id').textContent).toContain('er:gate:v1:attempt:');
+    expect(screen.getByTestId('studio-gate-receipt-hash').textContent).toMatch(/^[a-f0-9]{64}$/);
+    expect(navigation.push).not.toHaveBeenCalled();
   });
 
   it('reopens a stored pack without running analysis or gate actions', async () => {

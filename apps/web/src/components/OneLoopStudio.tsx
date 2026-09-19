@@ -691,10 +691,6 @@ export default function OneLoopStudio({
     try {
       const started = await startStudioDeploy({ url: next });
       if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      if (started.status === 401 || started.status === 403) {
-        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
-        return;
-      }
       if (started.gate) {
         setGateReceipt(started.gate);
         setMessage(started.gate.reason);
