@@ -14,7 +14,7 @@ import logging
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from youtube_extension.processors.enhanced_extractor import VideoContent
@@ -174,7 +174,7 @@ class MCPEcosystemCoordinator:
         self.workflow_history: list[dict] = []
         self.skill_registry = skill_registry or SkillRegistry()
 
-    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_skills(self, source: str | None = None) -> list[dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
         skills = self.skill_registry.list_skills()
         if source:
@@ -316,13 +316,14 @@ class SkillRegistry:
 
     _LOCK_FILE = "skills-lock.json"
 
-    def __init__(self, lock_file_path: Optional[str] = None):
+    def __init__(self, lock_file_path: str | None = None):
         self._lock_path = Path(
             lock_file_path
             or os.environ.get("SKILLS_LOCK_PATH", "")
             or self._find_lock_file()
         )
         self._skills: dict[str, dict[str, Any]] = {}
+        self._all_class_skills: dict[str, dict[str, Any]] = {}
         self._instances: dict[str, Any] = {}
         self._load_skills()
 
@@ -349,24 +350,20 @@ class SkillRegistry:
 
         skills_data = data.get("skills", {})
         if isinstance(skills_data, list):
-            # Handle list format; only load entries that have a className
-            # so that _load_skill_instance() can instantiate them.
+            # Handle list format; only class-backed local skills are invocable.
             for skill in skills_data:
-                if (
-                    skill.get("source") == "uvai-skills"
-                    and skill.get("className")
-                    and skill.get("id")
-                ):
-                    self._skills[skill["id"]] = skill
+                if skill.get("sourceType") == "local" and skill.get("className") and skill.get("id"):
+                    self._all_class_skills[skill["id"]] = skill
+                    if skill.get("source") == "uvai-skills":
+                        self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
-            # Handle dict format; apply same guards as list branch
+            # Handle dict format; preserve GTM discovery by default while making
+            # all class-backed local skills directly invocable by ID.
             for skill_id, meta in skills_data.items():
-                if (
-                    meta.get("source") == "uvai-skills"
-                    and meta.get("sourceType") == "local"
-                    and meta.get("className")
-                ):
-                    self._skills[skill_id] = meta
+                if meta.get("sourceType") == "local" and meta.get("className"):
+                    self._all_class_skills[skill_id] = meta
+                    if meta.get("source") == "uvai-skills":
+                        self._skills[skill_id] = meta
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
 
@@ -383,19 +380,24 @@ class SkillRegistry:
             "source": meta.get("source", ""),
         }
 
-    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
-        """Return metadata for all registered GTM skills."""
+    def list_skills(self, source: str | None = None) -> list[dict[str, Any]]:
+        """Return metadata for registered runtime skills.
+
+        By default this preserves the historic GTM-only listing used across the
+        codebase. Passing ``source`` exposes other class-backed local skills.
+        """
+        skill_map = self._all_class_skills if source else self._skills
         skills = [
             self._build_skill_metadata(skill_id, meta)
-            for skill_id, meta in self._skills.items()
+            for skill_id, meta in skill_map.items()
         ]
         if source:
-            return [s for s in skills if self._skills[s["id"]].get("source") == source]
+            return [s for s in skills if skill_map[s["id"]].get("source") == source]
         return skills
 
-    def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
+    def get_skill(self, skill_id: str) -> dict[str, Any] | None:
         """Get metadata for a specific skill."""
-        meta = self._skills.get(skill_id)
+        meta = self._all_class_skills.get(skill_id)
         if meta is None:
             return None
         return self._build_skill_metadata(skill_id, meta)
@@ -404,7 +406,7 @@ class SkillRegistry:
         """Return all skills that match a given trigger event."""
         return [
             self._build_skill_metadata(skill_id, meta)
-            for skill_id, meta in self._skills.items()
+            for skill_id, meta in self._all_class_skills.items()
             if event_type in meta.get("triggers", [])
         ]
 
@@ -413,7 +415,7 @@ class SkillRegistry:
         if skill_id in self._instances:
             return self._instances[skill_id]
 
-        meta = self._skills.get(skill_id)
+        meta = self._all_class_skills.get(skill_id)
         if meta is None:
             raise ValueError(f"Unknown skill: {skill_id}")
 
@@ -469,7 +471,7 @@ class SkillRegistry:
         Implements MCP security requirement: do NOT rely on environment
         inheritance; explicitly pass only required vars.
         """
-        meta = self._skills.get(skill_id)
+        meta = self._all_class_skills.get(skill_id)
         if meta is None:
             return {}
 

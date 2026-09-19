@@ -6,7 +6,6 @@ import pytest
 
 from agents.mcp_ecosystem_coordinator import SkillRegistry
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCK_FILE = str(_REPO_ROOT / "skills-lock.json")
 _SOURCE = "groupthinking/EventRelay"

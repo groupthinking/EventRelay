@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _LOCK_PATH = _REPO_ROOT / "skills-lock.json"
 

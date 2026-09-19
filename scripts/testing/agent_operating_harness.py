@@ -7,13 +7,37 @@ from collections import Counter
 from pathlib import Path
 from typing import Any
 
-REQUIRED_SKILLS: dict[str, str] = {
-    "canonical-architecture-truth": ".claude/skills/canonical-architecture-truth/SKILL.md",
-    "persistence-and-boundary-truth": ".claude/skills/persistence-and-boundary-truth/SKILL.md",
-    "engineering-risk-and-duplication-audit": ".claude/skills/engineering-risk-and-duplication-audit/SKILL.md",
-    "github-ops-and-workflow-health": ".claude/skills/github-ops-and-workflow-health/SKILL.md",
-    "product-positioning-and-buyer-fit": ".claude/skills/product-positioning-and-buyer-fit/SKILL.md",
-    "agent-operating-harness": ".claude/skills/agent-operating-harness/SKILL.md",
+REQUIRED_SKILLS: dict[str, dict[str, str]] = {
+    "canonical-architecture-truth": {
+        "doc_path": ".claude/skills/canonical-architecture-truth/SKILL.md",
+        "runtime_path": "src/skills/canonical_architecture_truth/main.py",
+        "class_name": "CanonicalArchitectureTruthSkill",
+    },
+    "persistence-and-boundary-truth": {
+        "doc_path": ".claude/skills/persistence-and-boundary-truth/SKILL.md",
+        "runtime_path": "src/skills/persistence_and_boundary_truth/main.py",
+        "class_name": "PersistenceAndBoundaryTruthSkill",
+    },
+    "engineering-risk-and-duplication-audit": {
+        "doc_path": ".claude/skills/engineering-risk-and-duplication-audit/SKILL.md",
+        "runtime_path": "src/skills/engineering_risk_and_duplication_audit/main.py",
+        "class_name": "EngineeringRiskAndDuplicationAuditSkill",
+    },
+    "github-ops-and-workflow-health": {
+        "doc_path": ".claude/skills/github-ops-and-workflow-health/SKILL.md",
+        "runtime_path": "src/skills/github_ops_and_workflow_health/main.py",
+        "class_name": "GitHubOpsAndWorkflowHealthSkill",
+    },
+    "product-positioning-and-buyer-fit": {
+        "doc_path": ".claude/skills/product-positioning-and-buyer-fit/SKILL.md",
+        "runtime_path": "src/skills/product_positioning_and_buyer_fit/main.py",
+        "class_name": "ProductPositioningAndBuyerFitSkill",
+    },
+    "agent-operating-harness": {
+        "doc_path": ".claude/skills/agent-operating-harness/SKILL.md",
+        "runtime_path": "src/skills/agent_operating_harness/main.py",
+        "class_name": "AgentOperatingHarnessSkill",
+    },
 }
 
 REQUIRED_SECTIONS = (
@@ -69,14 +93,18 @@ def validate_repository_skill_bundle(repo_root: Path) -> dict[str, Any]:
     else:
         checks.append({"id": "required skill registrations", "status": "SUCCESS"})
 
-    for skill_id, rel_path in REQUIRED_SKILLS.items():
+    for skill_id, paths in REQUIRED_SKILLS.items():
         meta = skills.get(skill_id)
         if meta is None:
             continue
         expected_meta = (
             meta.get("source") == "groupthinking/EventRelay"
             and meta.get("sourceType") == "local"
-            and meta.get("skillPath") == rel_path
+            and meta.get("skillPath") == paths["runtime_path"]
+            and meta.get("className") == paths["class_name"]
+            and meta.get("version") == "1.0.0"
+            and meta.get("triggers") == []
+            and meta.get("dependencies") == []
             and meta.get("subscribed_triggers") == []
         )
         checks.append(
@@ -86,12 +114,20 @@ def validate_repository_skill_bundle(repo_root: Path) -> dict[str, Any]:
             }
         )
 
-        skill_path = repo_root / rel_path
-        if not skill_path.is_file():
-            checks.append({"id": f"missing skill doc: {rel_path}", "status": "FAILURE"})
+        doc_path = repo_root / paths["doc_path"]
+        runtime_path = repo_root / paths["runtime_path"]
+        if not doc_path.is_file():
+            checks.append(
+                {"id": f"missing skill doc: {paths['doc_path']}", "status": "FAILURE"}
+            )
+            continue
+        if not runtime_path.is_file():
+            checks.append(
+                {"id": f"missing runtime skill: {paths['runtime_path']}", "status": "FAILURE"}
+            )
             continue
 
-        text = skill_path.read_text(encoding="utf-8")
+        text = doc_path.read_text(encoding="utf-8")
         missing_sections = [section for section in REQUIRED_SECTIONS if section not in text]
         checks.append(
             {
@@ -99,8 +135,15 @@ def validate_repository_skill_bundle(repo_root: Path) -> dict[str, Any]:
                 "status": "SUCCESS" if not missing_sections else "FAILURE",
             }
         )
+        runtime_text = runtime_path.read_text(encoding="utf-8")
+        checks.append(
+            {
+                "id": f"runtime skill:{skill_id}",
+                "status": "SUCCESS" if "evidence_sources" in runtime_text else "FAILURE",
+            }
+        )
 
-    harness_path = repo_root / REQUIRED_SKILLS["agent-operating-harness"]
+    harness_path = repo_root / REQUIRED_SKILLS["agent-operating-harness"]["doc_path"]
     if harness_path.is_file():
         harness_text = harness_path.read_text(encoding="utf-8")
         ordered = all(name in harness_text for name in REQUIRED_SKILLS if name != "agent-operating-harness")
