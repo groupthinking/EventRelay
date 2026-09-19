@@ -37,7 +37,7 @@ import {
   resolvePackBuildLiveVideoId,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
-} from '@/lib/pack-build-live';
+} from '@/lib/pack-build-live-client';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioActionCard,
