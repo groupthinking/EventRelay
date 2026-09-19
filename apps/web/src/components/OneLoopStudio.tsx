@@ -33,11 +33,21 @@ import {
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
 import {
+  packBuildLiveFailureDetails,
   packBuildLiveOutcomeMessage,
   resolvePackBuildLiveVideoId,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
+  type PackBuildLiveFailureDetails,
 } from '@/lib/pack-build-live-client';
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from '@/components/ui/empty';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioActionCard,
@@ -64,6 +74,7 @@ import {
   studioTranscriptEtaLabel,
   studioTranscriptStage,
   studioVerifiedLiveUrl,
+  studioWorkbenchEmptyView,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import {
@@ -266,6 +277,9 @@ export default function OneLoopStudio({
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
   );
+  const [buildLiveFailure, setBuildLiveFailure] = useState<PackBuildLiveFailureDetails | null>(
+    null,
+  );
   const autoStartedKey = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
@@ -327,6 +341,7 @@ export default function OneLoopStudio({
     setDeployReceiptUrl(null);
     setDeployReceiptVideoId(null);
     setGateReceipt(null);
+    setBuildLiveFailure(null);
   }, [selectedVideoId]);
 
   useEffect(() => {
@@ -464,6 +479,16 @@ export default function OneLoopStudio({
     false,
     Boolean(videoId || selected),
     { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
+  );
+  const workbenchEmpty = studioWorkbenchEmptyView({
+    busy: transcriptWorking,
+    hasSelection: Boolean(selected),
+    hasVideoPack: Boolean(selected?.videoPack),
+    analysisReady: quality === 'live',
+    failed: selected?.status === 'failed',
+  });
+  const canAttemptBuildLive = Boolean(
+    getYouTubeId(url || selected?.url || '') && (selected || url.trim()),
   );
 
   const act = async () => {
@@ -721,28 +746,59 @@ export default function OneLoopStudio({
     }
   };
 
-  const buildLive = async () => {
-    if (!selected?.videoPack) {
-      setMessage('Analyze a video and wait for a stored Video Pack before Build live.');
+  const runBuildLiveRecovery = (action: PackBuildLiveFailureDetails['actions'][number]) => {
+    const watch = (selected?.url || url).trim();
+    if (action.id === 'open_hosted') {
+      window.open(action.href, '_blank', 'noopener,noreferrer');
       return;
     }
+    if (action.id === 'rerun_analysis' && watch) {
+      void runAnalysis(watch);
+      return;
+    }
+    if (action.id === 'scroll_pack') {
+      document.querySelector('[data-testid="video-pack"]')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const buildLive = async () => {
+    const watchUrl = (selected?.url || url).trim();
     const packVideoId = resolvePackBuildLiveVideoId({
-      packVideoId: selected.videoPack.videoId,
-      watchUrl: (selected.url || url).trim(),
+      packVideoId: selected?.videoPack?.videoId,
+      watchUrl,
     });
+    const origin = typeof window !== 'undefined' ? window.location.origin : undefined;
     if (!packVideoId) {
-      setMessage('Analyze a video and wait for a stored Video Pack before Build live.');
+      const failure = packBuildLiveFailureDetails({
+        storedPackMissing: true,
+        videoId: getYouTubeId(watchUrl) || undefined,
+        origin,
+      });
+      setBuildLiveFailure(failure);
+      setMessage(failure.message);
+      return;
+    }
+    if (!selected?.videoPack) {
+      const failure = packBuildLiveFailureDetails({
+        reasonCode: 'HOSTED_PACK_NOT_FOUND',
+        videoId: packVideoId,
+        origin,
+        storedPackMissing: true,
+      });
+      setBuildLiveFailure(failure);
+      setMessage(failure.message);
       return;
     }
     setBuildBusy(true);
     const attemptRecordId = selectedVideoId;
     setPackLiveReceiptUrl(null);
     setPackLiveReceiptVideoId(attemptRecordId);
+    setBuildLiveFailure(null);
     try {
       const built = await verifyPackBuildLive({
         videoId: packVideoId,
         sourceHash: selected.videoPack.sourceHash,
-        origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+        origin,
       });
       if (useDashboardStore.getState().selectedVideoId !== attemptRecordId) return;
       if (built.ok) {
@@ -752,10 +808,23 @@ export default function OneLoopStudio({
         window.open(built.liveUrl, '_blank', 'noopener,noreferrer');
         return;
       }
-      setMessage(packBuildLiveOutcomeMessage(built));
+      const failure = packBuildLiveFailureDetails({
+        reasonCode: built.reasonCode,
+        message: built.message,
+        videoId: packVideoId,
+        origin,
+      });
+      setBuildLiveFailure(failure);
+      setMessage(failure.message);
     } catch (err) {
       if (useDashboardStore.getState().selectedVideoId !== attemptRecordId) return;
-      setMessage(err instanceof Error ? err.message : 'Build live failed.');
+      const failure = packBuildLiveFailureDetails({
+        message: err instanceof Error ? err.message : 'Build live failed.',
+        videoId: packVideoId,
+        origin,
+      });
+      setBuildLiveFailure(failure);
+      setMessage(failure.message);
     } finally {
       setBuildBusy(false);
     }
@@ -1059,6 +1128,49 @@ export default function OneLoopStudio({
                   : 'Nothing yet.')}
           </div>
         </section>
+
+        {workbenchEmpty ? (
+          <section
+            data-testid="studio-workbench-empty"
+            className="lg:col-span-2"
+            aria-labelledby="studio-workbench-empty-title"
+          >
+            <Empty
+              className="border-white/15 bg-[#11131a] text-[#f4f1ea] min-h-[12rem]"
+            >
+              <EmptyHeader>
+                <EmptyMedia variant="icon" className="bg-white/10 text-white/60">
+                  ◇
+                </EmptyMedia>
+                <EmptyTitle
+                  id="studio-workbench-empty-title"
+                  className="text-[#f4f1ea]"
+                >
+                  {workbenchEmpty.title}
+                </EmptyTitle>
+                <EmptyDescription className="text-white/55">
+                  {workbenchEmpty.description}
+                </EmptyDescription>
+              </EmptyHeader>
+              {workbenchEmpty.primaryAction ? (
+                <EmptyContent>
+                  <button
+                    type="button"
+                    data-testid="studio-workbench-empty-action"
+                    onClick={() =>
+                      void runAnalysis(url || selected?.url || '')
+                    }
+                    className="rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm text-[#e8b86d]"
+                  >
+                    {workbenchEmpty.primaryAction === 'retry'
+                      ? 'Retry analysis'
+                      : 'Re-run analysis'}
+                  </button>
+                </EmptyContent>
+              ) : null}
+            </Empty>
+          </section>
+        ) : null}
 
         {selected?.videoPack?.pack ? (
           <GroundedSpecReview
@@ -1432,6 +1544,52 @@ export default function OneLoopStudio({
         </div>
       ) : null}
 
+      {buildLiveFailure ? (
+        <div
+          data-testid="studio-build-live-failure"
+          role="alert"
+          className="border-t border-red-400/30 bg-[#2a1212]/95"
+        >
+          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
+            <div>
+              <p className="text-sm font-medium text-red-100">{buildLiveFailure.title}</p>
+              <p className="mt-1 text-sm text-red-100/85">{buildLiveFailure.message}</p>
+              {buildLiveFailure.reasonCode ? (
+                <p className="mt-1 font-mono text-[11px] text-red-100/60">
+                  {buildLiveFailure.reasonCode}
+                </p>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {buildLiveFailure.actions.map((action) =>
+                action.id === 'open_hosted' ? (
+                  <a
+                    key={action.id}
+                    href={action.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="studio-build-live-recovery-open-hosted"
+                    className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                  >
+                    {action.label}
+                  </a>
+                ) : (
+                  <button
+                    key={action.id}
+                    type="button"
+                    data-testid={`studio-build-live-recovery-${action.id}`}
+                    onClick={() => runBuildLiveRecovery(action)}
+                    className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90"
+                  >
+                    {action.label}
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
           {showAgentWorkflowUi && (
@@ -1457,11 +1615,13 @@ export default function OneLoopStudio({
             type="button"
             data-testid="studio-build-live-button"
             onClick={() => void buildLive()}
-            disabled={buildBusy || !selected?.videoPack}
+            disabled={buildBusy || !canAttemptBuildLive}
             title={
               selected?.videoPack
                 ? 'Compile the stored Video Pack to a hosted app at /d/{videoId}.'
-                : 'Run analysis and store a Video Pack first.'
+                : canAttemptBuildLive
+                  ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
+                  : 'Paste a YouTube URL and run analysis first.'
             }
             className="inline-flex items-center gap-2 rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm text-[#e8b86d] disabled:opacity-40"
           >
