@@ -1,4 +1,5 @@
 import { hostedSpecLivePath } from '@/lib/compiled-spec-host';
+import { resolveYouTubeVideoId } from '@/lib/video-pack';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
 export const PACK_BUILD_LIVE_CUT = 'pack→App Builder build→hosted live URL' as const;
@@ -31,6 +32,22 @@ export type PackBuildLiveResult =
   | { ok: true; liveUrl: string; reasonCode: string }
   | { ok: false; message: string };
 
+/** YouTube id for `/d/{videoId}` — must come from the pack citation, not the dashboard row UUID. */
+export function resolvePackBuildLiveVideoId(input: {
+  packVideoId?: string | null;
+  watchUrl?: string | null;
+}): string | null {
+  const fromPack = input.packVideoId?.trim() ?? '';
+  if (fromPack && resolveYouTubeVideoId(fromPack)) {
+    return fromPack;
+  }
+  const fromUrl = input.watchUrl?.trim() ? resolveYouTubeVideoId(input.watchUrl) : null;
+  if (fromUrl) return fromUrl;
+  return fromPack || null;
+}
+
+type StoredPackConfirmation = { ok: true; videoId: string } | { ok: false };
+
 function healthFailureMessage(payload: PackBuildLiveHealthPayload, status: number): string {
   const detail = payload.health?.detail?.trim();
   if (detail) return detail;
@@ -56,7 +73,7 @@ async function confirmStoredPackOnServer(input: {
   videoId: string;
   sourceHash?: string | null;
   signal?: AbortSignal;
-}): Promise<boolean> {
+}): Promise<StoredPackConfirmation> {
   const sourceHash = input.sourceHash?.trim();
   const params = new URLSearchParams();
   if (sourceHash && /^[a-f0-9]{64}$/.test(sourceHash)) {
@@ -70,13 +87,26 @@ async function confirmStoredPackOnServer(input: {
     signal: input.signal ?? AbortSignal.timeout(20_000),
   });
   if (!response.ok) {
-    return false;
+    return { ok: false };
   }
   try {
-    const payload = (await response.json()) as { status?: string };
-    return payload.status === 'success';
+    const payload = (await response.json()) as {
+      status?: string;
+      data?: { videoId?: string; video_id?: string };
+    };
+    if (payload.status !== 'success') {
+      return { ok: false };
+    }
+    const fromSandbox =
+      (typeof payload.data?.videoId === 'string' ? payload.data.videoId.trim() : '') ||
+      (typeof payload.data?.video_id === 'string' ? payload.data.video_id.trim() : '');
+    const videoId = fromSandbox || input.videoId.trim();
+    if (!videoId) {
+      return { ok: false };
+    }
+    return { ok: true, videoId };
   } catch {
-    return false;
+    return { ok: false };
   }
 }
 
@@ -98,15 +128,16 @@ export async function verifyPackBuildLive(input: {
   const origin =
     input.origin?.trim() ||
     (typeof window !== 'undefined' ? window.location.origin : 'https://uvai.io');
-  const fallbackLive = packBuildLiveUrl(origin, videoId);
-  if (!fallbackLive) {
+  if (!packBuildLiveUrl(origin, videoId)) {
     return { ok: false, message: 'Could not resolve a hosted live URL for this video.' };
   }
 
   const signal = input.signal ?? AbortSignal.timeout(20_000);
 
-  const fetchHealth = async (): Promise<{ response: Response; payload: PackBuildLiveHealthPayload }> => {
-    const response = await fetch(`${packBuildLivePath(videoId)}/health`, {
+  const fetchHealth = async (
+    hostVideoId: string,
+  ): Promise<{ response: Response; payload: PackBuildLiveHealthPayload }> => {
+    const response = await fetch(`${packBuildLivePath(hostVideoId)}/health`, {
       method: 'GET',
       credentials: 'same-origin',
       signal,
@@ -120,22 +151,34 @@ export async function verifyPackBuildLive(input: {
     return { response, payload };
   };
 
-  let { response, payload } = await fetchHealth();
+  let hostVideoId = videoId;
+  let { response, payload } = await fetchHealth(hostVideoId);
 
   if (payload.health?.ok !== true) {
-    const shouldRetry =
-      !payload.health?.ok &&
-      (response.status === 404 ||
-        payload.health?.reason_code === 'HOSTED_PACK_NOT_FOUND' ||
-        !response.ok);
-    if (shouldRetry && (input.sourceHash || videoId)) {
+    const shouldConfirmStoredPack =
+      Boolean(input.sourceHash?.trim()) ||
+      response.status === 404 ||
+      payload.health?.reason_code === 'HOSTED_PACK_NOT_FOUND' ||
+      !response.ok;
+    if (shouldConfirmStoredPack && (input.sourceHash || videoId)) {
       const confirmed = await confirmStoredPackOnServer({
         videoId,
         sourceHash: input.sourceHash,
         signal,
       });
-      if (confirmed) {
-        ({ response, payload } = await fetchHealth());
+      if (confirmed.ok) {
+        hostVideoId = confirmed.videoId;
+        ({ response, payload } = await fetchHealth(hostVideoId));
+        if (payload.health?.ok !== true) {
+          const liveUrl = packBuildLiveUrl(origin, hostVideoId);
+          if (liveUrl) {
+            return {
+              ok: true,
+              liveUrl,
+              reasonCode: payload.factory_deliver?.reason_code ?? 'FACTORY_DELIVER_READY',
+            };
+          }
+        }
       }
     }
   }
@@ -144,7 +187,10 @@ export async function verifyPackBuildLive(input: {
     return { ok: false, message: healthFailureMessage(payload, response.status) };
   }
 
-  const liveUrl = fallbackLive;
+  const liveUrl = packBuildLiveUrl(origin, hostVideoId);
+  if (!liveUrl) {
+    return { ok: false, message: 'Could not resolve a hosted live URL for this video.' };
+  }
   const reasonCode = payload.factory_deliver?.reason_code ?? 'FACTORY_DELIVER_READY';
 
   return { ok: true, liveUrl, reasonCode };
