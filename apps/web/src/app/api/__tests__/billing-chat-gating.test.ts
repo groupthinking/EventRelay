@@ -7,9 +7,10 @@ import { resetKaizenTracesForTests, getKaizenTraces } from '@/lib/billing/kaizen
 // The free-tier path terminates in `generateText` against the Vercel AI Gateway.
 // Stub that boundary so assertions describe billing behaviour rather than the
 // developer's ambient credentials, and so the suite never leaves the process.
-const { generateText, aiGateway } = vi.hoisted(() => ({
+const { generateText, aiGateway, scoreLeadWithJev } = vi.hoisted(() => ({
   generateText: vi.fn(async () => ({ text: 'free reply' })),
   aiGateway: vi.fn((model: string) => model),
+  scoreLeadWithJev: vi.fn(),
 }));
 
 vi.mock('ai', () => ({
@@ -27,6 +28,10 @@ vi.mock('@/lib/billing/grok-client', () => ({
     model: 'grok-4-1-fast',
     provider: 'xai',
   }),
+}));
+
+vi.mock('@/lib/billing/jev-lead-score', () => ({
+  scoreLeadWithJev,
 }));
 
 import { POST } from '@/app/api/chat/route';
@@ -73,6 +78,8 @@ beforeEach(() => {
   resetKaizenTracesForTests();
   generateText.mockClear();
   aiGateway.mockClear();
+  scoreLeadWithJev.mockReset();
+  scoreLeadWithJev.mockResolvedValue(null);
 
   for (const key of GATEWAY_ENV_KEYS) {
     savedGatewayEnv[key] = process.env[key];
@@ -156,6 +163,49 @@ describe('POST /api/chat billing gating', () => {
     expect(traces.some((t) => t.stage === 'chat_routed')).toBe(true);
     // Pro traffic goes to Grok, never the free-tier gateway path.
     expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('attaches Jev lead scoring metadata for Pro lead chat', async () => {
+    scoreLeadWithJev.mockResolvedValue({
+      model: 'typesafe-ai/jev',
+      provider: 'vercel-ai-gateway',
+      decision: 'action_items',
+      confidence: 0.91,
+      probabilities: {
+        action_items: 0.91,
+        clarification: 0.09,
+      },
+      rationale: 'User asks for concrete next steps and tooling.',
+    });
+
+    await saveEntitlement({
+      email: 'pro-lead@example.com',
+      plan: 'pro',
+      status: 'active',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
+
+    const res = await POST(cookieReq('pro-lead@example.com', 'Score this lead and list action items.'));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.provider).toBe('xai');
+    expect(scoreLeadWithJev).toHaveBeenCalledWith({
+      query: 'Score this lead and list action items.',
+      history: [],
+    });
+    expect(body.leadScore).toEqual({
+      model: 'typesafe-ai/jev',
+      provider: 'vercel-ai-gateway',
+      decision: 'action_items',
+      confidence: 0.91,
+      probabilities: {
+        action_items: 0.91,
+        clarification: 0.09,
+      },
+      rationale: 'User asks for concrete next steps and tooling.',
+    });
   });
 
   it('does not meter Pro users against the free daily quota', async () => {
