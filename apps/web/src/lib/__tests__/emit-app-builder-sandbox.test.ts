@@ -123,12 +123,19 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     const main = sandbox.files['src/main.ts'];
     expect(html).toContain('data-testid="pack-mini-app"');
     expect(html).toContain('data-testid="mini-app-tab"');
+    expect(html).toContain('data-testid="explore-tab-transcript"');
+    expect(html).toContain('data-testid="explore-tab-visual"');
     expect(html).toContain('data-testid="action-check"');
     expect(html).toContain('data-testid="tool-pin"');
     expect(html).toContain('data-testid="progress-fill"');
+    expect(html).toContain('data-testid="panel-explore-transcript"');
+    expect(html).toContain('data-testid="panel-explore-visual"');
     expect(main).toContain('bindTabs');
     expect(main).toContain('updateProgress');
     expect(main).toContain('bindToolPins');
+    expect(main).toContain('bindExploreTabs');
+    expect(main).toContain("saveValue('active-tab'");
+    expect(main).toContain("saveValue('explore-tab'");
     expect(main).toContain('data-action-id');
   });
 

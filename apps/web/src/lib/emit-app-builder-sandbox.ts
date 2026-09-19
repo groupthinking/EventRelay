@@ -340,6 +340,26 @@ button, [role="button"] { cursor: pointer; }
   padding: 6px 10px; border-radius: 8px; font-size: 12px;
 }
 .chapter-jump button[data-active="true"] { color: var(--accent); border-color: var(--accent); }
+.explore-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+.explore-tabs button {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.explore-tabs button[aria-selected="true"] { color: var(--accent); border-color: var(--accent); }
+.explore-panel { display: none; }
+.explore-panel[data-active="true"] { display: block; }
 `;
 }
 
@@ -433,11 +453,15 @@ function indexHtml(input: AppBuilderSandboxInput): string {
         ${toolsGrid(stackTools)}
       </section>
       <section class="panel" data-panel="explore" data-testid="panel-explore">
-        <section data-testid="pack-transcript-section">
+        <div class="explore-tabs" role="tablist" aria-label="Explore references">
+          <button type="button" role="tab" data-explore-tab="transcript" data-testid="explore-tab-transcript" aria-selected="true">Transcript</button>
+          <button type="button" role="tab" data-explore-tab="visual" data-testid="explore-tab-visual" aria-selected="false">Visual</button>
+        </div>
+        <section class="explore-panel" data-explore-panel="transcript" data-active="true" data-testid="panel-explore-transcript">
           <h2>Transcript</h2>
           ${transcriptBlock(input.transcript)}
         </section>
-        <section data-testid="pack-visual">
+        <section class="explore-panel" data-explore-panel="visual" data-testid="panel-explore-visual">
           <h2>Visual events</h2>
           ${visualList(input.visualEvents ?? [])}
         </section>
@@ -489,6 +513,22 @@ function loadMap(key: string): BoolMap {
     return parsed as BoolMap;
   } catch {
     return {};
+  }
+}
+
+function loadValue(key: string): string | null {
+  try {
+    return localStorage.getItem(\`\${storagePrefix}:\${key}\`);
+  } catch {
+    return null;
+  }
+}
+
+function saveValue(key: string, value: string): void {
+  try {
+    localStorage.setItem(\`\${storagePrefix}:\${key}\`, value);
+  } catch {
+    // quota / private mode
   }
 }
 
@@ -561,6 +601,20 @@ function activateTab(tabId: string): void {
   for (const panel of panels) {
     panel.dataset.active = panel.dataset.panel === tabId ? 'true' : 'false';
   }
+  saveValue('active-tab', tabId);
+}
+
+function activateExploreTab(tabId: string): void {
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-explore-tab]'));
+  const panels = Array.from(document.querySelectorAll<HTMLElement>('section[data-explore-panel]'));
+  for (const tab of tabs) {
+    const active = tab.dataset.exploreTab === tabId;
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+  for (const panel of panels) {
+    panel.dataset.active = panel.dataset.explorePanel === tabId ? 'true' : 'false';
+  }
+  saveValue('explore-tab', tabId);
 }
 
 function bindTabs(): void {
@@ -571,6 +625,24 @@ function bindTabs(): void {
       if (id) activateTab(id);
     });
   }
+  const saved = loadValue('active-tab');
+  const fallback = tabs[0]?.dataset.miniTab;
+  const selected = tabs.some((tab) => tab.dataset.miniTab === saved) ? saved : fallback;
+  if (selected) activateTab(selected);
+}
+
+function bindExploreTabs(): void {
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-explore-tab]'));
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+      const id = tab.dataset.exploreTab;
+      if (id) activateExploreTab(id);
+    });
+  }
+  const saved = loadValue('explore-tab');
+  const fallback = tabs[0]?.dataset.exploreTab;
+  const selected = tabs.some((tab) => tab.dataset.exploreTab === saved) ? saved : fallback;
+  if (selected) activateExploreTab(selected);
 }
 
 function bindChapterJumps(): void {
@@ -585,6 +657,7 @@ function bindChapterJumps(): void {
 }
 
 bindTabs();
+bindExploreTabs();
 bindChecks('data-sop-id', 'sop');
 bindChecks('data-action-id', 'actions');
 bindToolPins();
