@@ -30,7 +30,7 @@ function isValidChatHistoryMessage(message: unknown): message is ChatHistoryMess
   );
 }
 
-type GatewayMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+type GatewayConversationMessage = { role: 'user' | 'assistant'; content: string };
 
 const BACKEND_SOFT_ERROR_RE =
   /publisher model|was not found|not found for API version|model unavailable|vertex/i;
@@ -41,15 +41,11 @@ export function looksLikeBackendProviderSoftError(answer: string): boolean {
   return BACKEND_SOFT_ERROR_RE.test(text);
 }
 
-function buildModelMessages(
-  systemPrompt: string | undefined,
+function buildConversationMessages(
   history: ChatHistoryMessage[],
   query: string,
-): GatewayMessage[] {
-  const messages: GatewayMessage[] = [];
-  if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt });
-  }
+): GatewayConversationMessage[] {
+  const messages: GatewayConversationMessage[] = [];
   for (const entry of history) {
     messages.push({ role: entry.role, content: entry.content });
   }
@@ -67,7 +63,8 @@ async function generateGatewayChatAnswer(
   }
   const { text } = await generateText({
     model: aiGateway(GATEWAY_CHAT_MODEL),
-    messages: buildModelMessages(packSystemPrompt, history, query),
+    ...(packSystemPrompt ? { instructions: packSystemPrompt } : {}),
+    messages: buildConversationMessages(history, query),
   });
   return text;
 }

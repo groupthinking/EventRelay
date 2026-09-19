@@ -74,14 +74,16 @@ describe('POST /api/chat pack grounding (#2122)', () => {
     expect(backendFetch).not.toHaveBeenCalled();
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: 'system',
-            content: expect.stringContaining(`packId: vp:v0:${QJ_VIDEO_ID}`),
-          }),
-        ]),
+        instructions: expect.stringContaining(`packId: vp:v0:${QJ_VIDEO_ID}`),
+        messages: [
+          { role: 'user', content: 'What tools are mentioned?' },
+        ],
       }),
     );
+    const gatewayArgs = generateText.mock.calls[0]?.[0] as {
+      messages?: { role: string }[];
+    };
+    expect(gatewayArgs.messages?.some((m) => m.role === 'system')).toBe(false);
   });
 
   it('fails closed when pack is missing', async () => {
