@@ -4,7 +4,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
-import { startStudioDeploy } from '@/lib/studio-workflow';
+import * as gateTransition from '@/lib/gate-transition';
+import { pollStudioDeploy, startStudioDeploy } from '@/lib/studio-workflow';
 
 const navigation = { push: vi.fn() };
 
@@ -15,10 +16,35 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/components/Nav', () => ({ default: () => null }));
 vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({ useYouTubePlayer: () => ({ containerRef: { current: null }, ready: false, failed: false, seekTo: vi.fn() }) }));
-vi.mock('@/lib/studio-workflow', async (importOriginal) => ({ ...await importOriginal<typeof import('@/lib/studio-workflow')>(), startStudioDeploy: vi.fn() }));
+vi.mock('@/lib/studio-workflow', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/studio-workflow')>(),
+  startStudioDeploy: vi.fn(),
+  pollStudioDeploy: vi.fn(),
+}));
 
 const gate: NonNullable<Awaited<ReturnType<typeof startStudioDeploy>>['gate']> = { decision: 'HOLD', reason: 'Signed artifact evidence is required.', reason_code: 'GATE_HOLD_MISSING_EVIDENCE', receiptId: 'er:gate:v2:test', receiptHash: 'a'.repeat(64), version: 'eventrelay.gate-receipt.v2', transitionId: 'transition-test', retained: false };
 const video: Video = { id: 'selected-a', title: 'Gate fixture', url: 'https://www.youtube.com/watch?v=auJzb1D-fag', status: 'complete', progress: 100, transcript: 'Review the observed requirements and gather verified evidence before authorizing a transition.' };
+const passEvaluation: gateTransition.GateEvaluation = {
+  decision: 'PASS',
+  reason: 'PASS: verified receipt evidence.',
+  reason_code: 'GATE_PASS',
+  receipt: {
+    version: 'eventrelay.gate-receipt.v1',
+    id: 'er:gate:v1:pass',
+    kind: 'studio.deploy',
+    transition_id: 'run-receipt',
+    from_state: 'proposed',
+    to_state: 'live',
+    decision: 'PASS',
+    reason_code: 'GATE_PASS',
+    reason: 'PASS: verified receipt evidence.',
+    evidence_refs: [],
+    authority: { actor: 'anonymous' },
+    zero_sim: { verdict: 'real', reason_code: 'ZERO_SIM_REAL' },
+    issued_at: new Date(0).toISOString(),
+    receipt_hash: 'b'.repeat(64),
+  },
+};
 
 beforeEach(() => {
   vi.stubGlobal('React', React);
@@ -118,5 +144,70 @@ describe('Studio authoritative gate receipt', () => {
     act(() => useDashboardStore.getState().selectVideo('selected-b'));
     await act(async () => finish({ ok: false, status: 409, gate }));
     expect(screen.queryByTestId('studio-gate-receipt')).toBeNull();
+  });
+
+  it('clears a deploy receipt status when switching to another selected video', async () => {
+    vi.spyOn(gateTransition, 'evaluateStudioDeployTransition').mockReturnValue(passEvaluation);
+    vi.mocked(startStudioDeploy).mockResolvedValue({ ok: true, status: 200, runId: 'run-receipt' });
+    vi.mocked(pollStudioDeploy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      runId: 'run-receipt',
+      runStatus: 'completed',
+      result: {
+        kind: 'job',
+        live_url: 'https://deploy.example.vercel.app',
+      },
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-deploy-button'));
+
+    await screen.findByTestId('studio-gate-live-url');
+    expect(screen.getAllByRole('status')[0].textContent).toContain(
+      'Deploy receipt: https://deploy.example.vercel.app',
+    );
+
+    act(() => useDashboardStore.getState().selectVideo('selected-b'));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('status')[0].textContent).not.toContain('Deploy receipt:');
+    });
+    expect(screen.queryByTestId('studio-gate-live-url')).toBeNull();
+  });
+
+  it('clears a prior deploy receipt message when a new attempt starts', async () => {
+    vi.spyOn(gateTransition, 'evaluateStudioDeployTransition').mockReturnValue(passEvaluation);
+    let holdNextStart!: (result: Awaited<ReturnType<typeof startStudioDeploy>>) => void;
+    vi.mocked(startStudioDeploy)
+      .mockResolvedValueOnce({ ok: true, status: 200, runId: 'run-first' })
+      .mockImplementationOnce(() => new Promise((resolve) => { holdNextStart = resolve; }));
+    vi.mocked(pollStudioDeploy).mockResolvedValue({
+      ok: true,
+      status: 200,
+      runId: 'run-first',
+      runStatus: 'completed',
+      result: {
+        kind: 'job',
+        live_url: 'https://deploy.example.vercel.app',
+      },
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-deploy-button'));
+
+    await screen.findByTestId('studio-gate-live-url');
+    expect(screen.getAllByRole('status')[0].textContent).toContain(
+      'Deploy receipt: https://deploy.example.vercel.app',
+    );
+
+    fireEvent.click(screen.getByTestId('studio-deploy-button'));
+
+    await waitFor(() => {
+      expect(screen.getAllByRole('status')[0].textContent).not.toContain('Deploy receipt:');
+    });
+    expect(screen.queryByTestId('studio-gate-live-url')).toBeNull();
+
+    await act(async () => holdNextStart({ ok: false, status: 409, gate }));
   });
 });

@@ -892,7 +892,11 @@ export default function OneLoopStudio({
   });
   const statusText = transcriptWorking
     ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
-    : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
+    : `${studioStatusLabel(quality, runState)} — ${
+      !scopedDeployReceipt && /^Deploy receipt:\s*/i.test(message.trim())
+        ? studioStatusMessage(quality, runState, 'Analysis', false)
+        : (message || studioStatusMessage(quality, runState, 'Analysis', false))
+    }`;
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0b0c10] text-[#f4f1ea]">
