@@ -31,6 +31,22 @@ describe('compiled-spec-host', () => {
     expect(latestHostedSpecHealthCheck('auJzb1D-fag')).toEqual(second);
   });
 
+  it('maps gateway empty content to HOSTED_PACK_GATEWAY_EMPTY', () => {
+    const health = hostedSpecHealthFromPackResolution({
+      kind: 'extract_error',
+      message: 'Vercel AI Gateway returned empty content',
+    });
+    expect(health.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
+  });
+
+  it('maps gateway 503 class to HOSTED_PACK_GATEWAY_UNAVAILABLE', () => {
+    const health = hostedSpecHealthFromPackResolution({
+      kind: 'extract_error',
+      message: 'GatewayInternalServerError: Service temporarily unavailable',
+    });
+    expect(health.reason_code).toBe('HOSTED_PACK_GATEWAY_UNAVAILABLE');
+  });
+
   it('maps store read failures to HOSTED_PACK_STORE_ERROR', () => {
     const health = hostedSpecHealthFromPackResolution({
       kind: 'store_error',
@@ -65,7 +81,7 @@ describe('compiled-spec-host', () => {
     });
     const html = hostedSpecUnavailableHtml('QjZ5ohr7sGA', health);
     expect(html).toContain('data-slot="empty"');
-    expect(html).toContain('data-reason-code="HOSTED_PACK_EXTRACT_FAILED"');
+    expect(html).toContain('data-reason-code="HOSTED_PACK_GATEWAY_EMPTY"');
     expect(html).toContain('Vercel AI Gateway returned empty content');
     expect(html).toContain('/studio?video=');
     expect(html).toContain('/d/QjZ5ohr7sGA/health');

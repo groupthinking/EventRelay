@@ -2,11 +2,14 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import {
   GOLDEN_IDENTITY_HASHES,
+  VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
   VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
   applyExtractedSpec,
   buildIdentityPack,
   identityHash,
   identityPayload,
+  packNeedsExtractPipelineRefresh,
+  packNeedsReextractOnPost,
   packNeedsStructuredRefresh,
   resolveYouTubeVideoId,
 } from '@/lib/video-pack';
@@ -103,5 +106,48 @@ describe('pack structured refresh (B1c)', () => {
       },
     ];
     expect(packNeedsStructuredRefresh(current)).toBe(false);
+  });
+});
+
+describe('pack extract pipeline refresh (C1)', () => {
+  it('flags ready packs missing extract_pipeline marker', () => {
+    const identity = buildIdentityPack(CANON_A);
+    const pack = applyExtractedSpec(identity, {
+      transcript: {
+        language: 'en',
+        full_text: 'Cached speech before C1 retry pipeline.',
+        segments: [{ idx: 0, start_s: 0, end_s: 4, text: 'Cached speech.' }],
+      },
+      keyframes: [],
+      concepts: ['cached'],
+      requirements: [],
+      code_snippets: [],
+      artifacts: [],
+      stack: { tools: [] },
+      visual_context: null,
+    });
+    delete pack.provenance.tool_versions.extract_pipeline;
+    expect(packNeedsExtractPipelineRefresh(pack)).toBe(true);
+    expect(packNeedsReextractOnPost(pack)).toBe(true);
+  });
+
+  it('does not refresh packs stamped with the current extract pipeline', () => {
+    const identity = buildIdentityPack(CANON_A);
+    const pack = applyExtractedSpec(identity, {
+      transcript: {
+        language: 'en',
+        full_text: 'Current pipeline speech.',
+        segments: [{ idx: 0, start_s: 0, end_s: 4, text: 'Current pipeline speech.' }],
+      },
+      keyframes: [],
+      concepts: ['cached'],
+      requirements: [],
+      code_snippets: [],
+      artifacts: [],
+      stack: { tools: [] },
+      visual_context: null,
+    });
+    expect(pack.provenance.tool_versions.extract_pipeline).toBe(VIDEO_PACK_EXTRACT_PIPELINE_VERSION);
+    expect(packNeedsExtractPipelineRefresh(pack)).toBe(false);
   });
 });

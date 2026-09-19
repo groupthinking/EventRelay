@@ -1,6 +1,15 @@
 import 'server-only';
 
 import { hasAiGatewayKey, stripJsonCodeFence } from '@/lib/vercel-ai-gateway';
+import {
+  classifyVideoPackExtractFailure,
+  isRetryableTruncatedParseError,
+  isTransientVideoPackGatewayError,
+  jitteredExtractBackoffMs,
+  normalizeExtractFailureMessage,
+  sleepMs,
+  type VideoPackExtractFailureReason,
+} from '@/lib/video-pack-extract-reason';
 import { parseGroundedSpec, type GroundedSpecExtraction } from '@/lib/grounded-build-spec';
 import {
   parseArchitecture,
@@ -21,10 +30,16 @@ import { fetchYouTubeMetadata, type YouTubeMetadata } from '@/lib/youtube-metada
 /** Verified Vercel AI Gateway id — do not substitute gemini-2.5-flash. */
 export const VIDEO_PACK_EXTRACTOR_MODEL = 'google/gemini-3.8-flash';
 
+/** One initial Gateway call plus three retries on transient empty/503 failures. */
+export const VIDEO_PACK_GATEWAY_MAX_ATTEMPTS = 4;
+
 export class VideoPackExtractError extends Error {
-  constructor(message: string) {
+  readonly reasonCode: VideoPackExtractFailureReason;
+
+  constructor(message: string, reasonCode?: VideoPackExtractFailureReason) {
     super(message);
     this.name = 'VideoPackExtractError';
+    this.reasonCode = reasonCode ?? classifyVideoPackExtractFailure(message);
   }
 }
 
@@ -621,9 +636,44 @@ async function defaultGenerateText(args: VideoPackGenerateTextArgs): Promise<{ t
     abortSignal: args.abortSignal,
   });
   if (!result.text.trim()) {
-    throw new VideoPackExtractError('Vercel AI Gateway returned empty content');
+    throw new VideoPackExtractError(
+      'Vercel AI Gateway returned empty content',
+      'HOSTED_PACK_GATEWAY_EMPTY',
+    );
   }
   return { text: result.text };
+}
+
+function raiseExtractError(error: unknown): never {
+  if (error instanceof VideoPackExtractError) {
+    throw error;
+  }
+  const message = normalizeExtractFailureMessage(error);
+  throw new VideoPackExtractError(message, classifyVideoPackExtractFailure(message));
+}
+
+async function generateTextWithGatewayRetry(
+  generateText: VideoPackGenerateText,
+  args: VideoPackGenerateTextArgs,
+): Promise<{ text: string }> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await generateText(args);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientVideoPackGatewayError(error) || attempt >= VIDEO_PACK_GATEWAY_MAX_ATTEMPTS - 1) {
+        raiseExtractError(error);
+      }
+      const delayMs = jitteredExtractBackoffMs(attempt);
+      console.warn(
+        `[video-pack-extract] transient gateway error (attempt ${attempt + 1}/${VIDEO_PACK_GATEWAY_MAX_ATTEMPTS}); retry in ${delayMs}ms:`,
+        normalizeExtractFailureMessage(error),
+      );
+      await sleepMs(delayMs);
+    }
+  }
+  raiseExtractError(lastError);
 }
 
 export async function extractVideoPackSpec(
@@ -639,7 +689,7 @@ export async function extractVideoPackSpec(
   }
 
   const generateText = deps.generateText ?? defaultGenerateText;
-  const result = await generateText({
+  const gatewayArgs: VideoPackGenerateTextArgs = {
     model: VIDEO_PACK_EXTRACTOR_MODEL,
     abortSignal: AbortSignal.timeout(110_000),
     messages: [
@@ -658,23 +708,53 @@ export async function extractVideoPackSpec(
         ],
       },
     ],
-  });
+  };
 
-  let spec: ExtractedVideoPackSpec;
-  try {
-    spec = parseSpecJson(result.text, input.videoId).spec;
-  } catch (error) {
-    if (error instanceof VideoPackExtractError) throw error;
-    throw new VideoPackExtractError(formatUnparseableSpecError(error));
+  let lastParseError: unknown;
+  for (let attempt = 0; attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS; attempt += 1) {
+    let result: { text: string };
+    try {
+      result = await generateTextWithGatewayRetry(generateText, gatewayArgs);
+    } catch (error) {
+      raiseExtractError(error);
+    }
+
+    try {
+      const spec = parseSpecJson(result.text, input.videoId).spec;
+      const metadata = await fetchYouTubeMetadata(input.sourceUrl).catch(() => null);
+      const structured = ensureStructuredPackSections(spec, metadata);
+      const enriched: ExtractedVideoPackSpec = { ...spec, ...structured };
+
+      if (isIdentityOnlySpec(enriched, input.videoId)) {
+        throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
+      }
+
+      return enriched;
+    } catch (error) {
+      if (error instanceof VideoPackExtractError && error.message === EMPTY_SPEC_ERROR) {
+        throw error;
+      }
+      lastParseError = error;
+      const retryParse =
+        isRetryableTruncatedParseError(error, result.text) &&
+        attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS - 1;
+      if (retryParse) {
+        const delayMs = jitteredExtractBackoffMs(attempt);
+        console.warn(
+          `[video-pack-extract] truncated JSON salvage miss (attempt ${attempt + 1}/${VIDEO_PACK_GATEWAY_MAX_ATTEMPTS}); retry in ${delayMs}ms`,
+        );
+        await sleepMs(delayMs);
+        continue;
+      }
+      if (error instanceof VideoPackExtractError) {
+        throw error;
+      }
+      throw new VideoPackExtractError(formatUnparseableSpecError(error));
+    }
   }
 
-  const metadata = await fetchYouTubeMetadata(input.sourceUrl).catch(() => null);
-  const structured = ensureStructuredPackSections(spec, metadata);
-  const enriched: ExtractedVideoPackSpec = { ...spec, ...structured };
-
-  if (isIdentityOnlySpec(enriched, input.videoId)) {
-    throw new VideoPackExtractError(EMPTY_SPEC_ERROR);
+  if (lastParseError instanceof VideoPackExtractError) {
+    throw lastParseError;
   }
-
-  return enriched;
+  throw new VideoPackExtractError(formatUnparseableSpecError(lastParseError));
 }
