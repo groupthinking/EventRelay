@@ -41,7 +41,7 @@
     "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.7",
     "@vercel/speed-insights": "^2.0.0",
-    "ai": "^7.0.91",
+    "ai": "7.0.107",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "flags": "^4.3.1",
