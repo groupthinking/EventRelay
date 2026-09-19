@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import base64
 import json
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import conftest as suite_conftest
+import pytest
 import yaml
 
 try:
@@ -25,6 +29,102 @@ def _load_frontmatter(path: Path) -> dict:
     assert text.startswith("---\n"), f"Expected YAML frontmatter: {path}"
     frontmatter, _body = text[4:].split("\n---\n", maxsplit=1)
     return yaml.safe_load(frontmatter)
+
+
+def _run_pr_iteration_selection(
+    *,
+    event_name: str,
+    event_payload: dict,
+    runs: list[dict],
+    pulls: list[dict],
+    issues: list[dict],
+) -> dict:
+    if shutil.which("node") is None:
+        pytest.skip("node is required to replay the workflow selection script")
+    workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
+    script = workflow["jobs"]["selection"]["steps"][0]["with"]["script"]
+    runner = """
+const script = process.env.SELECTION_SCRIPT;
+const eventName = process.env.EVENT_NAME;
+const payload = JSON.parse(process.env.EVENT_PAYLOAD);
+const runs = JSON.parse(process.env.RUNS);
+const pulls = JSON.parse(process.env.PULLS);
+const issues = JSON.parse(process.env.ISSUES);
+const outputs = {};
+const files = {};
+const marker = {
+  actionsList: {},
+  pullsList: {},
+  issuesList: {},
+};
+const github = {
+  rest: {
+    actions: { listWorkflowRunsForRepo: marker.actionsList },
+    pulls: {
+      list: marker.pullsList,
+      get: async ({ pull_number }) => {
+        const found = pulls.find((pr) => pr.number === pull_number);
+        if (!found) throw new Error(`missing pull ${pull_number}`);
+        return { data: found };
+      },
+    },
+    issues: { listForRepo: marker.issuesList },
+  },
+  paginate: async (method) => {
+    if (method === marker.actionsList) return runs;
+    if (method === marker.pullsList) return pulls;
+    if (method === marker.issuesList) return issues;
+    return [];
+  },
+};
+const context = {
+  eventName,
+  payload,
+  repo: { owner: "groupthinking", repo: "EventRelay" },
+};
+const core = {
+  setOutput: (name, value) => {
+    outputs[name] = String(value);
+  },
+};
+const fs = {
+  writeFileSync: (path, content) => {
+    files[path] = content;
+  },
+};
+const run = new Function("github", "context", "core", "fs", `return (async () => {${script}\\n})();`);
+run(github, context, core, fs)
+  .then(() => {
+    process.stdout.write(JSON.stringify({ outputs, files }));
+  })
+  .catch((error) => {
+    process.stderr.write(String(error && error.stack ? error.stack : error));
+    process.exit(1);
+  });
+"""
+    try:
+        result = subprocess.run(
+            ["node", "-e", runner],
+            check=True,
+            text=True,
+            capture_output=True,
+            env={
+                "SELECTION_SCRIPT": script,
+                "EVENT_NAME": event_name,
+                "EVENT_PAYLOAD": json.dumps(event_payload),
+                "RUNS": json.dumps(runs),
+                "PULLS": json.dumps(pulls),
+                "ISSUES": json.dumps(issues),
+            },
+        )
+    except FileNotFoundError:
+        pytest.skip("node is required to replay the workflow selection script")
+    return json.loads(result.stdout)
+
+
+def _selection_payload(selection_result: dict) -> dict:
+    context_b64 = selection_result["outputs"]["context_json_b64"]
+    return json.loads(base64.b64decode(context_b64.encode("utf-8")).decode("utf-8"))
 
 
 
@@ -299,23 +399,27 @@ def test_pr_iteration_selection_uses_fingerprint_and_skip_reasons() -> None:
 
     assert "selection: {" in workflow_source
     assert "fingerprint" in workflow_source
+    assert "marker_line" in workflow_source
     assert "skipped: []" in workflow_source
     assert "payload.selection.reasons.push" in workflow_source
     assert "payload.selection.duplicate_owner" in workflow_source
+    assert "line.trim() === marker" in workflow_source
+    assert "Targeted trigger observed without authorization; skipping ranked fallback." in workflow_source
 
 
 def test_pr_iteration_no_candidate_short_circuits_before_dependency_install() -> None:
     workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
-    pre_agent_steps = workflow["pre-agent-steps"]
-    selection_step = pre_agent_steps[0]
-    install_step = pre_agent_steps[1]
+    selection_job = workflow["jobs"]["selection"]
+    selection_step = selection_job["steps"][0]
+    agent_job = workflow["jobs"]["agent"]
 
+    assert selection_job["outputs"]["should_proceed"] == "${{ steps.select-checkpoint.outputs.should_proceed }}"
     assert selection_step["name"] == "Select deterministic checkpoint seed"
     assert selection_step["id"] == "select-checkpoint"
     assert "core.setOutput(\"should_proceed\", \"false\")" in selection_step["with"]["script"]
     assert "No candidate selected; exiting before dependency installation" in selection_step["with"]["script"]
-    assert install_step["name"] == "Install repository dependencies and language servers"
-    assert install_step["if"] == "steps.select-checkpoint.outputs.should_proceed == 'true'"
+    assert "needs.selection.outputs.should_proceed == 'true'" in agent_job["if"]
+    assert "selection" in agent_job["needs"]
 
 
 def test_pr_iteration_safe_outputs_disallow_automation_merge() -> None:
@@ -324,23 +428,100 @@ def test_pr_iteration_safe_outputs_disallow_automation_merge() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert "merge-pull-request" not in safe_outputs
-    assert safe_outputs["push-to-pull-request-branch"]["target"] == "triggering"
-    assert "required-title-prefix" not in safe_outputs["push-to-pull-request-branch"]
+    assert safe_outputs["push-to-pull-request-branch"]["target"] == "*"
+    assert safe_outputs["push-to-pull-request-branch"]["required-title-prefix"] == "[ai] "
+    assert safe_outputs["push-to-pull-request-branch"]["required-labels"] == ["automation", "ai-agent"]
     assert '.filter((pr) => pr.head?.ref?.startsWith("pr-iteration/"))' in workflow_source
 
 
 def test_pr_iteration_eval_requires_deterministic_observed_outcome_match() -> None:
     workflow = _load_frontmatter(ROOT / ".github/workflows/pr-iteration-loop.md")
     evals = workflow["evals"]
+    eval_job = workflow["jobs"]["evals"]
 
     deterministic_eval = next(item for item in evals if item["id"] == "deterministic_postcondition")
     question = deterministic_eval["question"]
     assert "claimed_outcome" in question
     assert "observed_outcome" in question
     assert "match result" in question
+    assert "safe-output apply result" in question
+    assert "safe_outputs" in eval_job["needs"]
 
 
-def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
+def test_pr_iteration_selection_replay_blocks_unauthorized_pr_label_without_fallback() -> None:
+    pull = {
+        "number": 42,
+        "title": "Human PR",
+        "html_url": "https://example/pr/42",
+        "head": {"ref": "feature/human-change"},
+        "updated_at": "2000-01-01T00:00:00Z",
+        "labels": [],
+        "state": "open",
+        "body": "",
+    }
+    stale_issue = {
+        "number": 7,
+        "title": "Fallback issue",
+        "html_url": "https://example/issues/7",
+        "updated_at": "2000-01-01T00:00:00Z",
+        "labels": [],
+        "state": "open",
+        "body": "",
+    }
+    result = _run_pr_iteration_selection(
+        event_name="pull_request",
+        event_payload={
+            "action": "labeled",
+            "label": {"name": "pr-iteration"},
+            "pull_request": pull,
+        },
+        runs=[],
+        pulls=[pull],
+        issues=[stale_issue],
+    )
+    payload = _selection_payload(result)
+    assert result["outputs"]["should_proceed"] == "false"
+    assert payload["selection"]["authorized_trigger"] is False
+    assert payload["selection"]["selected_kind"] is None
+    assert (
+        "Targeted trigger observed without authorization; skipping ranked fallback."
+        in payload["selection"]["reasons"]
+    )
+
+
+def test_pr_iteration_selection_replay_uses_exact_marker_line_for_dedupe() -> None:
+    selected_issue = {
+        "number": 1,
+        "title": "Stale issue",
+        "html_url": "https://example/issues/1",
+        "updated_at": "2000-01-01T00:00:00Z",
+        "labels": [],
+        "state": "open",
+        "body": "",
+    }
+    near_match = {
+        "number": 99,
+        "title": "Near match",
+        "html_url": "https://example/issues/99",
+        "updated_at": "2000-01-01T00:00:00Z",
+        "labels": [],
+        "state": "open",
+        "body": "pr-iteration-fingerprint: issue:10",
+    }
+    result = _run_pr_iteration_selection(
+        event_name="workflow_dispatch",
+        event_payload={},
+        runs=[],
+        pulls=[],
+        issues=[selected_issue, near_match],
+    )
+    payload = _selection_payload(result)
+    assert result["outputs"]["should_proceed"] == "true"
+    assert payload["selection"]["fingerprint"] == "issue:1"
+    assert payload["selection"]["duplicate_owner"] is None
+
+
+def test_pr_iteration_push_rule_requires_ai_title_prefix() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
-    assert "required-title-prefix" not in workflow_source
+    assert 'required-title-prefix: "[ai] "' in workflow_source
