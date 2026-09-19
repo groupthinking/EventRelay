@@ -36,10 +36,16 @@ describe('POST /api/chat pack grounding (#2122)', () => {
 
   afterEach(() => {
     delete process.env.AI_GATEWAY_API_KEY;
+    delete process.env.BACKEND_URL;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
   it('allows anonymous requests and injects pack system context', async () => {
+    process.env.BACKEND_URL = 'https://backend.example.test';
+    const backendFetch = vi.fn();
+    vi.stubGlobal('fetch', backendFetch);
+
     const pack = buildIdentityPack(QJ_VIDEO_ID);
     pack.transcript = QJ_TRANSCRIPT;
     pack.id = `vp:v0:${QJ_VIDEO_ID}`;
@@ -64,6 +70,8 @@ describe('POST /api/chat pack grounding (#2122)', () => {
 
     expect(response.status).toBe(200);
     expect(body.answer).toBe('grounded reply');
+    expect(body.provider).toBe('vercel-ai-gateway');
+    expect(backendFetch).not.toHaveBeenCalled();
     expect(generateText).toHaveBeenCalledWith(
       expect.objectContaining({
         messages: expect.arrayContaining([
