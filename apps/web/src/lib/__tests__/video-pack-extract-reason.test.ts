@@ -70,6 +70,6 @@ describe('video-pack-extract-reason', () => {
   });
 
   it('pins the extract pipeline version marker', () => {
-    expect(VIDEO_PACK_EXTRACT_PIPELINE_VERSION).toBe('h1-extract-reliability-v1');
+    expect(VIDEO_PACK_EXTRACT_PIPELINE_VERSION).toBe('p1.5-chunked-extract-v1');
   });
 });

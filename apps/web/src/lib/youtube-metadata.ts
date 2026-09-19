@@ -15,6 +15,8 @@ export interface YouTubeMetadata {
   channel: string;
   description: string;
   chapters: { time: string; title: string }[];
+  /** Wall-clock duration when present on the watch page (seconds). */
+  durationSeconds: number | null;
 }
 
 /** Result of a cheap YouTube availability probe before gateway extract. */
@@ -132,7 +134,17 @@ export async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata
 
     const chapters = parseChapters(description);
 
-    return { videoId, title, channel, description, chapters };
+    let durationSeconds: number | null = null;
+    const lengthMatch =
+      html.match(/"lengthSeconds":"(\d+)"/) ?? html.match(/"lengthSeconds":(\d+)/);
+    if (lengthMatch) {
+      const parsed = Number(lengthMatch[1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        durationSeconds = parsed;
+      }
+    }
+
+    return { videoId, title, channel, description, chapters, durationSeconds };
   } catch (e) {
     console.warn('[YouTube] Metadata fetch failed:', e);
     return null;
