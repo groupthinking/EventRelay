@@ -32,6 +32,15 @@ function isValidChatHistoryMessage(message: unknown): message is ChatHistoryMess
 
 type GatewayMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
+const BACKEND_SOFT_ERROR_RE =
+  /publisher model|was not found|not found for API version|model unavailable|vertex/i;
+
+export function looksLikeBackendProviderSoftError(answer: string): boolean {
+  const text = answer.trim();
+  if (!text) return true;
+  return BACKEND_SOFT_ERROR_RE.test(text);
+}
+
 function buildModelMessages(
   systemPrompt: string | undefined,
   history: ChatHistoryMessage[],
@@ -46,6 +55,21 @@ function buildModelMessages(
   }
   messages.push({ role: 'user', content: query });
   return messages;
+}
+
+async function generateGatewayChatAnswer(
+  packSystemPrompt: string | undefined,
+  history: ChatHistoryMessage[],
+  query: string,
+): Promise<string> {
+  if (!hasAiGatewayKey()) {
+    throw new Error('gateway_not_configured');
+  }
+  const { text } = await generateText({
+    model: aiGateway(GATEWAY_CHAT_MODEL),
+    messages: buildModelMessages(packSystemPrompt, history, query),
+  });
+  return text;
 }
 
 export async function POST(request: Request) {
@@ -138,6 +162,35 @@ export async function POST(request: Request) {
       }
     }
 
+    const usePackGateway = Boolean(packSystemPrompt);
+
+    if (usePackGateway) {
+      try {
+        const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
+        return NextResponse.json({
+          answer,
+          routing,
+          plan: routing.plan,
+          provider: 'vercel-ai-gateway',
+        });
+      } catch (gatewayErr) {
+        const msg = gatewayErr instanceof Error ? gatewayErr.message : 'gateway_failed';
+        console.error('Pack-grounded gateway chat error:', gatewayErr);
+        return NextResponse.json(
+          {
+            answer:
+              msg === 'gateway_not_configured'
+                ? 'Pack-grounded chat requires AI_GATEWAY_API_KEY to be configured.'
+                : 'The AI assistant is temporarily unavailable. Please try again.',
+            routing,
+            plan: routing.plan,
+            provider: 'vercel-ai-gateway',
+          },
+          { status: msg === 'gateway_not_configured' ? 503 : 502 },
+        );
+      }
+    }
+
     if (BACKEND_AVAILABLE) {
       const response = await fetch(`${BACKEND_URL}/api/v1/chat`, {
         method: 'POST',
@@ -163,6 +216,19 @@ export async function POST(request: Request) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Chat API error:', response.status, errorText);
+        if (hasAiGatewayKey()) {
+          try {
+            const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
+            return NextResponse.json({
+              answer,
+              routing,
+              plan: routing.plan,
+              provider: 'vercel-ai-gateway',
+            });
+          } catch (gatewayErr) {
+            console.error('Gateway fallback after backend HTTP error:', gatewayErr);
+          }
+        }
         return NextResponse.json(
           { answer: 'The AI assistant is temporarily unavailable. Please try again.', routing },
           { status: response.status },
@@ -170,9 +236,24 @@ export async function POST(request: Request) {
       }
 
       const data = await response.json();
+      const backendAnswer =
+        data.response || data.answer || data.message || 'No response generated.';
+      if (looksLikeBackendProviderSoftError(String(backendAnswer)) && hasAiGatewayKey()) {
+        try {
+          const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
+          return NextResponse.json({
+            answer,
+            routing,
+            plan: routing.plan,
+            provider: 'vercel-ai-gateway',
+          });
+        } catch (gatewayErr) {
+          console.error('Gateway fallback after backend soft error:', gatewayErr);
+        }
+      }
 
       return NextResponse.json({
-        answer: data.response || data.answer || data.message || 'No response generated.',
+        answer: backendAnswer,
         routing,
         plan: routing.plan,
       });
@@ -189,13 +270,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const { text } = await generateText({
-      model: aiGateway(GATEWAY_CHAT_MODEL),
-      messages: buildModelMessages(packSystemPrompt, history, query),
-    });
+    const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
 
     return NextResponse.json({
-      answer: text,
+      answer,
       routing,
       plan: routing.plan,
       provider: 'vercel-ai-gateway',
