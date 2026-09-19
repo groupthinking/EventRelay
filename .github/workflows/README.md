@@ -15,7 +15,7 @@ workflow; this README is the index.
 | PR Iteration Loop | `pr-iteration-loop.md` / `.lock.yml` | issue opened; PR opened/ready; weekdays + weekly; push to `main` | Long-running verified loop that selects one failing/stale repository checkpoint, iterates on one canonical draft PR, records durable memory, and can publish a discussion digest with chart assets |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
-| Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
+| Dependency Review | `dependency-review.yml` | push to `main`; all PRs | Seed main-branch dependency snapshots and review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
 | PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |

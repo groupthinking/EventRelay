@@ -630,7 +630,14 @@ async def chat_v1(
             logger.info(
                 "Adding video context for video_id: %s", _safe_log_value(video_id)
             )
-            detail = data_service.get_video_detail(video_id)
+            # ``get_video_detail`` performs a blocking recursive filesystem
+            # walk plus file reads; dispatch it to a worker thread behind the
+            # shared filesystem-walk gate instead of running it on the event
+            # loop (see ``get_video_detail_v1`` for the same pattern).
+            async with _get_fs_walk_gate():
+                detail = await asyncio.to_thread(
+                    data_service.get_video_detail, video_id
+                )
 
             # If video not found, trigger real-time processing
             if not detail and request.video_url:
@@ -645,7 +652,10 @@ async def chat_v1(
                         )
                     )
                     if proc_result and proc_result.get("status") == "success":
-                        detail = data_service.get_video_detail(video_id)
+                        async with _get_fs_walk_gate():
+                            detail = await asyncio.to_thread(
+                                data_service.get_video_detail, video_id
+                            )
                         logger.info(
                             "Real-time processing complete for %s",
                             _safe_log_value(video_id),
