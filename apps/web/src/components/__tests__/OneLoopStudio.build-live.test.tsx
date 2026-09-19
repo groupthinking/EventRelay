@@ -85,3 +85,48 @@ describe('OneLoopStudio Build live honesty (B3b)', () => {
     expect(screen.queryByText(/\/api\/video\/pack/i)).toBeNull();
   });
 });
+
+describe('OneLoopStudio Build live Setup→Result (D1)', () => {
+  it('renders a success receipt card with /d/{videoId} after verified Build live', async () => {
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
+    const youtubeId = pack.video_id;
+    const liveUrl = `https://uvai.io/d/${youtubeId}`;
+    vi.spyOn(packBuildLive, 'verifyPackBuildLive').mockResolvedValue({
+      ok: true,
+      liveUrl,
+      reasonCode: 'FACTORY_DELIVER_READY',
+    });
+    useDashboardStore.setState({
+      videos: [
+        {
+          ...baseVideo,
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        },
+      ],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
+    });
+    expect(screen.getByTestId('studio-pack-build-live-state').textContent).toBe('Ready');
+    expect(screen.getByTestId('studio-pack-build-live-video-id').textContent).toBe(youtubeId);
+    const artifactLink = screen.getByTestId('studio-pack-build-live-artifact-link');
+    expect(artifactLink.getAttribute('href')).toBe(`/d/${youtubeId}`);
+    expect(screen.getByTestId('studio-pack-build-live-reason-code').textContent).toBe(
+      'FACTORY_DELIVER_READY',
+    );
+    expect(screen.queryByTestId('studio-build-live-failure')).toBeNull();
+  });
+});

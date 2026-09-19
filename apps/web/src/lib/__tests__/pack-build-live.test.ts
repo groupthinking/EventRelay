@@ -4,6 +4,7 @@ import {
   packBuildLivePath,
   packBuildLiveUrl,
   resolvePackBuildLiveVideoId,
+  studioPackBuildLiveSuccessReceiptForSelection,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
 } from '@/lib/pack-build-live';
@@ -143,6 +144,31 @@ describe('pack-build-live', () => {
       studioPackLiveReceiptForSelection({
         selectedVideoId: 'other',
         receiptVideoId: XYMC_VIDEO_ID,
+        liveUrl: live,
+      }),
+    ).toBeNull();
+  });
+
+  it('builds a Setup→Result success receipt scoped to the dashboard row', () => {
+    const live = `https://uvai.io/d/${XYMC_VIDEO_ID}`;
+    const receipt = studioPackBuildLiveSuccessReceiptForSelection({
+      selectedVideoId: 'row-1',
+      receiptVideoId: 'row-1',
+      youtubeVideoId: XYMC_VIDEO_ID,
+      liveUrl: live,
+      reasonCode: 'FACTORY_DELIVER_READY',
+    });
+    expect(receipt).toMatchObject({
+      jobTitle: 'Build live',
+      youtubeVideoId: XYMC_VIDEO_ID,
+      artifactPath: `/d/${XYMC_VIDEO_ID}`,
+      reasonCode: 'FACTORY_DELIVER_READY',
+    });
+    expect(
+      studioPackBuildLiveSuccessReceiptForSelection({
+        selectedVideoId: 'other',
+        receiptVideoId: 'row-1',
+        youtubeVideoId: XYMC_VIDEO_ID,
         liveUrl: live,
       }),
     ).toBeNull();
