@@ -1,11 +1,27 @@
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
+export type HostedSpecHealthReasonCode =
+  | 'HOSTED_SPEC_READY'
+  | 'HOSTED_SPEC_INCOMPLETE'
+  | 'HOSTED_PACK_NOT_FOUND'
+  | 'HOSTED_PACK_PROCESSING'
+  | 'HOSTED_PACK_EXTRACT_FAILED'
+  | 'HOSTED_PACK_IDENTITY_ONLY';
+
 export interface HostedSpecHealthCheck {
   ok: boolean;
   status: number;
   checked_at: string;
   detail?: string;
+  reason_code?: HostedSpecHealthReasonCode;
 }
+
+export type HostedPackResolution =
+  | { kind: 'ready'; files: Record<string, string> }
+  | { kind: 'missing' }
+  | { kind: 'processing' }
+  | { kind: 'extract_error'; message: string }
+  | { kind: 'identity_only' };
 
 const HEALTH_HISTORY_LIMIT = 20;
 const hostedSpecHealthChecks = new Map<string, HostedSpecHealthCheck[]>();
@@ -19,21 +35,76 @@ export function hostedSpecLivePath(videoId: string): string {
 }
 
 export function evaluateHostedSpecHealth(files: Record<string, string>): HostedSpecHealthCheck {
+  const checked_at = new Date().toISOString();
   const required = ['index.html', 'src/main.ts', 'src/pack.ts', 'package.json'];
   const missing = required.filter((path) => !(files[path] ?? '').trim());
   if (missing.length > 0) {
     return {
       ok: false,
-      status: 503,
-      checked_at: new Date().toISOString(),
+      status: 200,
+      checked_at,
+      reason_code: 'HOSTED_SPEC_INCOMPLETE',
       detail: `Missing hosted spec files: ${missing.join(', ')}`,
     };
   }
   return {
     ok: true,
     status: 200,
-    checked_at: new Date().toISOString(),
+    checked_at,
+    reason_code: 'HOSTED_SPEC_READY',
   };
+}
+
+export function hostedSpecHealthFromPackResolution(
+  resolution: HostedPackResolution,
+): HostedSpecHealthCheck {
+  const checked_at = new Date().toISOString();
+  switch (resolution.kind) {
+    case 'ready':
+      return evaluateHostedSpecHealth(resolution.files);
+    case 'missing':
+      return {
+        ok: false,
+        status: 200,
+        checked_at,
+        reason_code: 'HOSTED_PACK_NOT_FOUND',
+        detail: 'Video pack not found. Generate /api/video/pack first.',
+      };
+    case 'processing':
+      return {
+        ok: false,
+        status: 200,
+        checked_at,
+        reason_code: 'HOSTED_PACK_PROCESSING',
+        detail: 'Video pack is still processing.',
+      };
+    case 'extract_error':
+      return {
+        ok: false,
+        status: 200,
+        checked_at,
+        reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
+        detail: resolution.message,
+      };
+    case 'identity_only':
+      return {
+        ok: false,
+        status: 200,
+        checked_at,
+        reason_code: 'HOSTED_PACK_IDENTITY_ONLY',
+        detail: 'Compiled spec is unavailable for identity-only packs.',
+      };
+    default: {
+      const unexpected: never = resolution;
+      return {
+        ok: false,
+        status: 200,
+        checked_at,
+        reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
+        detail: `Unhandled pack resolution: ${JSON.stringify(unexpected)}`,
+      };
+    }
+  }
 }
 
 export function recordHostedSpecHealthCheck(

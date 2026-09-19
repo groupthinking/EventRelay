@@ -188,9 +188,11 @@ function decodeRecord(value: unknown): VideoPackRecord | null {
   return asRecord(decoded);
 }
 
-export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord | null> {
-  const key = packStoreKey(sourceHash);
-  const redis = await getRedis();
+async function readPackRecordFromStore(
+  key: string,
+  sourceHash: string,
+  redis: VideoPackRedisClient | null,
+): Promise<VideoPackRecord | null> {
   if (redis) {
     try {
       const raw = await redis.get<unknown>(key);
@@ -201,9 +203,30 @@ export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord
       }
     } catch (error) {
       console.error('[video-pack-store] Redis get failed:', error);
+      const cached = memoryStore.get(key);
+      if (cached && recordHash(cached) === sourceHash) {
+        return cached;
+      }
     }
   }
-  return memoryStore.get(key) ?? null;
+  const local = memoryStore.get(key);
+  if (local && recordHash(local) === sourceHash) {
+    return local;
+  }
+  return null;
+}
+
+export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord | null> {
+  const key = packStoreKey(sourceHash);
+  const redis = await getRedis();
+  const first = await readPackRecordFromStore(key, sourceHash, redis);
+  if (first) {
+    return first;
+  }
+  if (redis) {
+    return readPackRecordFromStore(key, sourceHash, redis);
+  }
+  return null;
 }
 
 export async function putPackRecord(record: VideoPackRecord): Promise<void> {

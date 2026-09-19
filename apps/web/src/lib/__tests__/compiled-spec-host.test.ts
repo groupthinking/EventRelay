@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   factoryDeliverFromHostedSpec,
+  hostedSpecHealthFromPackResolution,
   hostedSpecLivePath,
   latestHostedSpecHealthCheck,
   recordHostedSpecHealthCheck,
@@ -28,6 +29,13 @@ describe('compiled-spec-host', () => {
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(false);
     expect(latestHostedSpecHealthCheck('auJzb1D-fag')).toEqual(second);
+  });
+
+  it('maps missing packs to a non-503 health probe with reason_code', () => {
+    const health = hostedSpecHealthFromPackResolution({ kind: 'missing' });
+    expect(health.ok).toBe(false);
+    expect(health.status).toBe(200);
+    expect(health.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
   });
 
   it('drives Factory Deliver only when live URL and health are both valid', () => {
