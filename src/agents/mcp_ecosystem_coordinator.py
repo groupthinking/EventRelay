@@ -243,6 +243,10 @@ class MCPEcosystemCoordinator:
             harness_evidence_sources=harness_evidence_sources,
         )
 
+    async def run_repository_research_audit(self, repo_root: str | Path) -> dict[str, Any]:
+        """Collect repository evidence and run the full research audit."""
+        return await self.skill_registry.run_repository_research_audit(Path(repo_root))
+
     async def dispatch_request(self, server_name: str, request: dict) -> dict:
         """Dispatches a request to the specified MCP server."""
         server = self.servers.get(server_name)
@@ -608,6 +612,12 @@ class SkillRegistry:
             "skill_outputs": skill_outputs,
             "output": harness_result.get("output", {}),
         }
+
+    async def run_repository_research_audit(self, repo_root: Path) -> dict[str, Any]:
+        """Collect repository evidence and execute the research harness end to end."""
+        from skills.repository_research_audit import run_repository_research_audit
+
+        return await run_repository_research_audit(repo_root, registry=self)
 
 
 # Example usage and testing
