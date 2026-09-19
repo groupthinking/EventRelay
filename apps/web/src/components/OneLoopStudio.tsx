@@ -36,6 +36,7 @@ import {
   packBuildLiveFailureDetails,
   packBuildLiveOutcomeMessage,
   resolvePackBuildLiveVideoId,
+  studioPackBuildLiveSuccessReceiptForSelection,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
   type PackBuildLiveFailureDetails,
@@ -269,6 +270,8 @@ export default function OneLoopStudio({
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
+  const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
+  const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
   const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
@@ -297,6 +300,13 @@ export default function OneLoopStudio({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
     liveUrl: packLiveReceiptUrl,
+  });
+  const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
+    selectedVideoId,
+    receiptVideoId: packLiveReceiptVideoId,
+    youtubeVideoId: packLiveReceiptYoutubeId,
+    liveUrl: packLiveReceiptUrl,
+    reasonCode: packLiveReceiptReasonCode,
   });
   const packFormation = useMemo(
     () => studioPackFormation(selected?.videoPack),
@@ -342,6 +352,10 @@ export default function OneLoopStudio({
     setDeployReceiptVideoId(null);
     setGateReceipt(null);
     setBuildLiveFailure(null);
+    setPackLiveReceiptUrl(null);
+    setPackLiveReceiptVideoId(null);
+    setPackLiveReceiptYoutubeId(null);
+    setPackLiveReceiptReasonCode(null);
   }, [selectedVideoId]);
 
   useEffect(() => {
@@ -793,6 +807,8 @@ export default function OneLoopStudio({
     const attemptRecordId = selectedVideoId;
     setPackLiveReceiptUrl(null);
     setPackLiveReceiptVideoId(attemptRecordId);
+    setPackLiveReceiptYoutubeId(null);
+    setPackLiveReceiptReasonCode(null);
     setBuildLiveFailure(null);
     try {
       const built = await verifyPackBuildLive({
@@ -804,8 +820,9 @@ export default function OneLoopStudio({
       if (built.ok) {
         setPackLiveReceiptUrl(built.liveUrl);
         setPackLiveReceiptVideoId(attemptRecordId);
+        setPackLiveReceiptYoutubeId(packVideoId);
+        setPackLiveReceiptReasonCode(built.reasonCode);
         setMessage(packBuildLiveOutcomeMessage(built));
-        window.open(built.liveUrl, '_blank', 'noopener,noreferrer');
         return;
       }
       const failure = packBuildLiveFailureDetails({
@@ -889,6 +906,13 @@ export default function OneLoopStudio({
             </h1>
             <p className="mt-1 text-sm text-white/55">
               Transcript, events, and tools stay on this page.
+            </p>
+            <p
+              data-testid="studio-primary-job-strip"
+              className="mt-2 font-mono text-[11px] tracking-wide text-white/40"
+            >
+              Paste URL → Run → Build live → open{' '}
+              <span className="text-white/55">/d/{'{videoId}'}</span>
             </p>
           </div>
           <form onSubmit={analyze} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -986,20 +1010,6 @@ export default function OneLoopStudio({
                       className="break-all text-sm text-[#e8b86d] underline"
                     >
                       {scopedDeployReceipt}
-                    </a>
-                  </p>
-                ) : null}
-                {scopedPackLiveUrl ? (
-                  <p className="mt-1">
-                    <span className="text-sm text-white/55">Pack build: </span>
-                    <a
-                      data-testid="studio-pack-live-url"
-                      href={scopedPackLiveUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-all text-sm text-[#e8b86d] underline"
-                    >
-                      {scopedPackLiveUrl}
                     </a>
                   </p>
                 ) : null}
@@ -1541,6 +1551,52 @@ export default function OneLoopStudio({
           )}
         >
           {exportToast.text}
+        </div>
+      ) : null}
+
+      {scopedPackBuildLiveSuccess ? (
+        <div
+          data-testid="studio-pack-build-live-result"
+          role="status"
+          className="border-t border-[#e8b86d]/30 bg-[#1a1408]/95"
+        >
+          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
+            <div className="flex flex-wrap items-start gap-2">
+              <span
+                data-testid="studio-pack-build-live-state"
+                className="inline-flex rounded-full border border-[#e8b86d]/50 bg-[#e8b86d]/10 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#e8b86d]"
+              >
+                Ready
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[#f4f1ea]">
+                  {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
+                </p>
+                <p className="mt-1 text-sm text-white/70">
+                  YouTube video id{' '}
+                  <span
+                    data-testid="studio-pack-build-live-video-id"
+                    className="font-mono text-[#e8b86d]"
+                  >
+                    {scopedPackBuildLiveSuccess.youtubeVideoId}
+                  </span>
+                </p>
+                <p
+                  data-testid="studio-pack-build-live-reason-code"
+                  className="mt-1 font-mono text-[11px] text-white/50"
+                >
+                  {scopedPackBuildLiveSuccess.reasonCode}
+                </p>
+              </div>
+            </div>
+            <Link
+              data-testid="studio-pack-build-live-artifact-link"
+              href={scopedPackBuildLiveSuccess.artifactPath}
+              className="inline-flex w-fit items-center justify-center rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408]"
+            >
+              Open {scopedPackBuildLiveSuccess.artifactPath}
+            </Link>
+          </div>
         </div>
       ) : null}
 

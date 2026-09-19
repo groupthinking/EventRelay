@@ -347,3 +347,38 @@ export function studioPackLiveReceiptForSelection(input: {
   }
   return verifiedHttpsLiveUrl(input.liveUrl);
 }
+
+/** Setup→Result receipt after a verified Build live — scoped to the dashboard row that ran it. */
+export type StudioPackBuildLiveSuccessReceipt = {
+  jobTitle: string;
+  subtitle: string;
+  youtubeVideoId: string;
+  artifactPath: string;
+  liveUrl: string;
+  reasonCode: string;
+};
+
+export function studioPackBuildLiveSuccessReceiptForSelection(input: {
+  selectedVideoId?: string | null;
+  receiptVideoId?: string | null;
+  youtubeVideoId?: string | null;
+  liveUrl?: string | null;
+  reasonCode?: string | null;
+}): StudioPackBuildLiveSuccessReceipt | null {
+  if (!input.selectedVideoId || input.selectedVideoId !== input.receiptVideoId) {
+    return null;
+  }
+  const youtubeVideoId = input.youtubeVideoId?.trim() ?? '';
+  const liveUrl = verifiedHttpsLiveUrl(input.liveUrl);
+  if (!youtubeVideoId || !liveUrl) {
+    return null;
+  }
+  return {
+    jobTitle: 'Build live',
+    subtitle: 'Live app ready',
+    youtubeVideoId,
+    artifactPath: packBuildLivePath(youtubeVideoId),
+    liveUrl,
+    reasonCode: input.reasonCode?.trim() || 'FACTORY_DELIVER_READY',
+  };
+}
