@@ -254,10 +254,55 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     );
     const body = await res.text();
     expect(res.status).toBe(200);
+    expect(res.status).not.toBe(503);
     expect(res.headers.get('content-type')).toContain('text/html');
     expect(body).toContain('Hosted app unavailable');
     expect(body).toContain('HOSTED_PACK_EXTRACT_FAILED');
     expect(body).not.toMatch(/^\s*\{\s*"error"\s*:\s*"Vercel AI Gateway/);
+  });
+
+  it('returns HTTP 200 HTML for live page when pack resolution throws', async () => {
+    const store = await import('@/lib/video-pack-store');
+    store.resetVideoPackStoreForTests();
+    vi.spyOn(store, 'getPackRecord').mockRejectedValue(
+      new Error('Vercel AI Gateway returned empty content'),
+    );
+    const route = await import('../route');
+
+    const res = await route.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}`, { method: 'GET' }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID }) },
+    );
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(res.status).not.toBe(503);
+    expect(res.headers.get('content-type')).toContain('text/html');
+    expect(body).toContain('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body).not.toMatch(/^\s*\{\s*"error"\s*:\s*"Vercel AI Gateway/);
+  });
+
+  it('seals live page path via pathname when asset params are absent', async () => {
+    const loaded = await loadHostedRoute();
+    const identity = loaded.buildIdentityPack(QJ_VIDEO_ID, QJ_SOURCE_URL, '2026-09-18T00:00:00.000Z');
+    loaded.seedVideoPackRecordForTests({
+      state: 'error',
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: identity.provenance.source_hash,
+      id: identity.id,
+      error: 'Vercel AI Gateway returned empty content',
+      failed_at: '2026-09-18T00:00:00.000Z',
+    });
+
+    const res = await loaded.GET(
+      new Request(`https://uvai.io/d/${QJ_VIDEO_ID}/`, {
+        method: 'GET',
+        headers: { accept: 'text/html' },
+      }),
+      { params: Promise.resolve({ videoId: QJ_VIDEO_ID, asset: undefined }) },
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('text/html');
   });
 
   it('returns HTTP 200 health when pack resolution throws (gateway race sealed)', async () => {

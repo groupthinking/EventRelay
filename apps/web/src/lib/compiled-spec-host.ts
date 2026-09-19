@@ -227,6 +227,30 @@ export function isHostedIndexRequest(assetParts: string[]): boolean {
   return false;
 }
 
+/** Canonical hosted app page: `/d/{videoId}` or `/d/{videoId}/` (not `/health` or asset paths). */
+export function isHostedLivePagePath(pathname: string, videoId: string): boolean {
+  const id = normalizedVideoId(videoId);
+  if (!id) return false;
+  if (isHostedHealthPath(pathname, id)) return false;
+  const base = `/d/${encodeURIComponent(id)}`;
+  return pathname === base || pathname === `${base}/`;
+}
+
+export function isHostedLivePageRequest(
+  request: Request,
+  videoId: string,
+  assetParts: string[],
+): boolean {
+  if (isHostedIndexRequest(assetParts)) {
+    return true;
+  }
+  try {
+    return isHostedLivePagePath(new URL(request.url).pathname, videoId);
+  } catch {
+    return false;
+  }
+}
+
 function escapeHostedHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -277,4 +301,18 @@ export function hostedPackAssetUnavailableJson(
     detail: health.detail,
     health,
   };
+}
+
+export function hostedLivePageUnavailableResponse(
+  videoId: string,
+  resolution: HostedPackResolution,
+): Response {
+  const health = hostedSpecHealthFromPackResolution(resolution);
+  return new Response(hostedSpecUnavailableHtml(videoId, health), {
+    status: 200,
+    headers: {
+      'content-type': 'text/html; charset=utf-8',
+      'cache-control': 'no-store',
+    },
+  });
 }

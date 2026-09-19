@@ -7,9 +7,9 @@ import {
   hostedSpecHealthFromPackResolution,
   hostedSpecHealthHistory,
   hostedSpecLivePath,
-  hostedSpecUnavailableHtml,
+  hostedLivePageUnavailableResponse,
   isHostedHealthPath,
-  isHostedIndexRequest,
+  isHostedLivePageRequest,
   recordHostedSpecHealthCheck,
   type HostedPackResolution,
 } from '@/lib/compiled-spec-host';
@@ -144,16 +144,10 @@ function hostedNotReadyResponse(
   resolution: HostedPackResolution,
   assetParts: string[],
 ): Response {
-  const health = hostedSpecHealthFromPackResolution(resolution);
-  if (isHostedIndexRequest(assetParts)) {
-    return new Response(hostedSpecUnavailableHtml(videoId, health), {
-      status: 200,
-      headers: {
-        'content-type': 'text/html; charset=utf-8',
-        'cache-control': 'no-store',
-      },
-    });
+  if (isHostedLivePageRequest(request, videoId, assetParts)) {
+    return hostedLivePageUnavailableResponse(videoId, resolution);
   }
+  const health = hostedSpecHealthFromPackResolution(resolution);
   const status = resolution.kind === 'processing' ? 202 : 404;
   return NextResponse.json(hostedPackAssetUnavailableJson(videoId, health), {
     status,
@@ -243,15 +237,8 @@ export async function GET(request: Request, context: RouteContext): Promise<Resp
     if (isHealthAssetRequest(request, id, parts)) {
       return hostedHealthJsonResponse(request, id, resolution);
     }
-    if (isHostedIndexRequest(parts)) {
-      const health = hostedSpecHealthFromPackResolution(resolution);
-      return new Response(hostedSpecUnavailableHtml(id, health), {
-        status: 200,
-        headers: {
-          'content-type': 'text/html; charset=utf-8',
-          'cache-control': 'no-store',
-        },
-      });
+    if (isHostedLivePageRequest(request, id, parts)) {
+      return hostedLivePageUnavailableResponse(id, resolution);
     }
     const health = hostedSpecHealthFromPackResolution(resolution);
     return NextResponse.json(hostedPackAssetUnavailableJson(id, health), {
