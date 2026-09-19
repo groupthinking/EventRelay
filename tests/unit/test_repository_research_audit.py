@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from agents.mcp_ecosystem_coordinator import SkillRegistry
-from skills import repository_research_audit
 from skills.repository_research_audit import (
     collect_repository_research_inputs,
     run_repository_research_audit,
