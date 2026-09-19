@@ -144,6 +144,26 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(main).toMatch(/done.*total.*pct/);
   });
 
+  it('ships the P1.6 three-panel SaaS shell with resizable splitters and chat rail', () => {
+    const sandbox = emitFixture();
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    const css = sandbox.files['src/styles.css'];
+    expect(html).toContain('data-testid="saas-three-panel-shell"');
+    expect(html).toContain('data-testid="shell-nav-panel"');
+    expect(html).toContain('data-testid="shell-splitter-left"');
+    expect(html).toContain('data-testid="shell-splitter-right"');
+    expect(html).toContain('data-testid="shell-chat-panel"');
+    expect(html).toContain('data-testid="workspace-hero"');
+    expect(html).toContain('data-testid="shell-chat-honesty"');
+    expect(html).toContain('youtube-nocookie.com/embed/');
+    expect(css).toContain('.saas-shell');
+    expect(css).toContain('--shell-nav-w');
+    expect(main).toContain('bindShellLayout');
+    expect(main).toContain('bindChatRail');
+    expect(main).toContain('bindOutlineNav');
+  });
+
   it('renders transcript, visual events, and SOP — not architecture or code snippets', () => {
     const sandbox = emitFixture();
     const html = sandbox.files['index.html'];

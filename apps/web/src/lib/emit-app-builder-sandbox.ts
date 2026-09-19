@@ -12,7 +12,7 @@ import { parsePackActionItems } from '@/lib/video-pack-types';
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.2-workbench-chrome' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.6-three-panel-shell' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -294,17 +294,277 @@ html, body {
   line-height: 1.45;
 }
 .mono { font-family: var(--font-mono); font-size: 0.92em; }
-.workbench { max-width: 960px; margin: 0 auto; padding: 0 16px 48px; }
+.shell-viewport {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+}
 .app-chrome {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  margin: 0 -16px;
-  padding: 10px 16px 12px;
-  background: rgba(2, 6, 23, 0.92);
+  flex-shrink: 0;
+  z-index: 30;
+  padding: 10px 14px 12px;
+  background: rgba(2, 6, 23, 0.96);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(8px);
 }
+.saas-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  width: 100%;
+  background: var(--surface-950);
+}
+.shell-nav {
+  flex: 0 0 auto;
+  width: var(--shell-nav-w, 240px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  background: rgba(15, 23, 42, 0.55);
+  overflow: hidden;
+}
+.shell-nav[data-collapsed="true"] {
+  width: 44px;
+  min-width: 44px;
+}
+.shell-nav-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.shell-nav-header h2 {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted-tertiary);
+  font-weight: 600;
+}
+.shell-nav[data-collapsed="true"] .shell-nav-header h2,
+.shell-nav[data-collapsed="true"] .outline-body { display: none; }
+.shell-icon-btn {
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+}
+.shell-icon-btn:hover { color: var(--ink); border-color: rgba(255, 255, 255, 0.2); }
+.shell-icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.outline-body {
+  flex: 1;
+  overflow: auto;
+  padding: 8px 8px 16px;
+  font-size: 12px;
+}
+.outline-group { margin-bottom: 14px; }
+.outline-group h3 {
+  margin: 0 0 6px;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted-tertiary);
+  font-weight: 600;
+}
+.outline-list { list-style: none; margin: 0; padding: 0; }
+.outline-list button {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.outline-list button:hover { background: rgba(255, 255, 255, 0.04); color: var(--ink); }
+.outline-list button[data-active="true"] {
+  color: var(--accent);
+  background: rgba(20, 184, 166, 0.1);
+}
+.outline-list button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.shell-splitter {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  touch-action: none;
+}
+.shell-splitter::after {
+  content: "";
+  position: absolute;
+  inset: 0 2px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.shell-splitter:hover::after,
+.shell-splitter[data-dragging="true"]::after {
+  background: rgba(20, 184, 166, 0.35);
+}
+.shell-center {
+  flex: 1 1 auto;
+  min-width: 280px;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 12px 24px;
+}
+.shell-chat {
+  flex: 0 0 auto;
+  width: var(--shell-chat-w, 320px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+  background: rgba(15, 23, 42, 0.72);
+}
+.shell-chat[data-closed="true"] { display: none; }
+.shell-chat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.shell-chat-header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.shell-chat-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.chat-bubble {
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  max-width: 100%;
+}
+.chat-bubble-system {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+.chat-bubble-user {
+  align-self: flex-end;
+  background: rgba(20, 184, 166, 0.18);
+  border: 1px solid rgba(20, 184, 166, 0.35);
+  color: var(--ink);
+}
+.chat-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chat-cta {
+  border: 1px solid var(--line);
+  background: rgba(2, 6, 23, 0.5);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.chat-cta:hover { border-color: var(--accent); color: var(--accent); }
+.chat-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.shell-chat-composer {
+  flex-shrink: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.shell-chat-composer textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: vertical;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgba(2, 6, 23, 0.65);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.shell-chat-composer textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.shell-chat-composer .composer-note {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted-tertiary);
+}
+.shell-chat-composer .composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.shell-chat-composer button[type="submit"] {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #042f2e;
+}
+.shell-chat-composer button[type="submit"]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.shell-chat-reopen {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 40;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--accent);
+  color: #042f2e;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  display: none;
+}
+.shell-chat-reopen[data-visible="true"] { display: block; }
+.workspace-hero {
+  margin: 12px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-shell);
+  overflow: hidden;
+  background: #000;
+  aspect-ratio: 16 / 9;
+  max-height: min(42vh, 420px);
+}
+.workspace-hero iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+.workbench { max-width: none; margin: 0; padding: 0; }
 .chrome-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .chrome-title h1 {
   margin: 2px 0 0;
@@ -579,6 +839,107 @@ function chapterJumpButtons(chapters: AppBuilderChapter[]): string {
   return `<div class="chapter-jump" data-testid="chapter-jumps">${buttons}</div>`;
 }
 
+function outlineNavHtml(
+  chapters: AppBuilderChapter[],
+  sopSteps: AppBuilderSopStep[],
+): string {
+  const workspaceTabs = [
+    { id: 'actions', label: 'Ship actions' },
+    { id: 'runbook', label: 'Runbook' },
+    { id: 'stack', label: 'Stack' },
+    { id: 'explore', label: 'Explore' },
+  ]
+    .map(
+      (tab) =>
+        `<li><button type="button" data-outline-tab="${escapeHtml(tab.id)}" data-testid="outline-tab">${escapeHtml(tab.label)}</button></li>`,
+    )
+    .join('');
+  const chapterItems =
+    chapters.length === 0
+      ? '<li><p class="empty" style="margin:0;padding:6px 8px;">No chapters on this pack.</p></li>'
+      : chapters
+          .map((chapter, index) => {
+            const label = excerpt(chapter.topic, 56);
+            return `<li><button type="button" data-outline-chapter="${index}" data-testid="outline-chapter">${escapeHtml(label)}</button></li>`;
+          })
+          .join('');
+  const sopItems =
+    sopSteps.length === 0
+      ? ''
+      : `<div class="outline-group" data-testid="outline-sop">
+          <h3>SOP</h3>
+          <ul class="outline-list">
+            ${sopSteps
+              .map(
+                (step) =>
+                  `<li><button type="button" data-outline-tab="runbook" data-testid="outline-sop-jump">${escapeHtml(excerpt(step.title, 52))}</button></li>`,
+              )
+              .join('')}
+          </ul>
+        </div>`;
+  return `<nav class="outline-body" aria-label="Pack outline">
+    <div class="outline-group" data-testid="outline-workspace">
+      <h3>Workspace</h3>
+      <ul class="outline-list">${workspaceTabs}</ul>
+    </div>
+    <div class="outline-group" data-testid="outline-chapters">
+      <h3>Chapters</h3>
+      <ul class="outline-list">${chapterItems}</ul>
+    </div>
+    ${sopItems}
+  </nav>`;
+}
+
+function workspaceHeroHtml(videoId: string, sourceUrl: string): string {
+  const embed = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}`;
+  return `<section class="workspace-hero" data-testid="workspace-hero" aria-label="Source video">
+    <iframe
+      src="${escapeHtml(embed)}"
+      title="YouTube source for ${escapeHtml(videoId)}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen
+      loading="lazy"
+      referrerpolicy="strict-origin-when-cross-origin"
+    ></iframe>
+    <p class="meta-collapsed" style="padding:6px 10px;margin:0;background:rgba(0,0,0,0.65);">
+      <a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">Open on YouTube</a>
+    </p>
+  </section>`;
+}
+
+function chatRailHtml(_videoId: string): string {
+  return `<aside class="shell-chat" data-testid="shell-chat-panel" data-closed="false" aria-label="UVAI assistant">
+    <header class="shell-chat-header">
+      <h2>UVAI AI</h2>
+      <button type="button" class="shell-icon-btn" data-testid="shell-chat-close" aria-label="Close assistant panel">×</button>
+    </header>
+    <div class="shell-chat-body" data-testid="shell-chat-messages">
+      <div class="chat-bubble chat-bubble-system" data-testid="shell-chat-honesty">
+        Preview rail — messages you send here stay in this browser until a live UVAI session is connected. I only use pack fields already on this page; I will not invent ship receipts or G.A.T.E. PASS.
+      </div>
+      <div class="chat-cta-row" data-testid="shell-chat-ctas" role="group" aria-label="Pack actions">
+        <button type="button" class="chat-cta" data-chat-cta="summarize" data-testid="chat-cta-summarize">Summarize</button>
+        <button type="button" class="chat-cta" data-chat-cta="extract" data-testid="chat-cta-extract">Extract</button>
+        <button type="button" class="chat-cta" data-chat-cta="export" data-testid="chat-cta-export">Open source</button>
+      </div>
+    </div>
+    <form class="shell-chat-composer" data-testid="shell-chat-composer">
+      <textarea
+        name="message"
+        rows="3"
+        placeholder="Ask about this pack…"
+        aria-label="Message UVAI AI"
+        data-testid="shell-chat-input"
+      ></textarea>
+      <p class="composer-note">Local preview composer — not a deploy or G.A.T.E. claim.</p>
+      <div class="composer-actions">
+        <button type="submit" data-testid="shell-chat-send">Send (preview)</button>
+      </div>
+    </form>
+  </aside>
+  <button type="button" class="shell-chat-reopen" data-testid="shell-chat-reopen" data-visible="false" aria-label="Open UVAI assistant">UVAI AI</button>`;
+}
+
 function indexHtml(input: AppBuilderSandboxInput): string {
   const actionItems = input.actionItems ?? [];
   const stackTools = input.stackTools ?? [];
@@ -599,7 +960,7 @@ function indexHtml(input: AppBuilderSandboxInput): string {
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <div class="workbench">
+    <div class="shell-viewport" data-testid="saas-three-panel-shell">
       <header class="app-chrome" data-testid="workbench-chrome">
         <div class="chrome-row">
           <div class="chrome-title">
@@ -610,61 +971,76 @@ function indexHtml(input: AppBuilderSandboxInput): string {
         </div>
         <p class="provenance mono" data-testid="pack-provenance">source_hash ${escapeHtml(hashShort)} · ${escapeHtml(packId)}</p>
       </header>
-      <main
-        id="app"
-        class="mini-shell"
-        data-testid="app-builder-sandbox"
-        data-video-id="${escapeHtml(input.videoId)}"
-        data-emit-rev="${APP_BUILDER_EMIT_REV}"
-      >
-        <p class="honesty" data-testid="assembly-honesty">Interactive controls are grounded in pack fields (action_items, requirements/SOP, stack.tools). This does not recreate the demonstrated application or claim deploy. Same-origin <code>/d/${escapeHtml(input.videoId)}</code> when the hosted spec is READY. Origin G.A.T.E. <code>studio.deploy</code> stays separate — checking items here is not G.A.T.E. PASS.</p>
-        <p class="meta-collapsed"><a href="${escapeHtml(input.sourceUrl)}" target="_blank" rel="noopener noreferrer">Source</a> · <span class="mono">${escapeHtml(hashShort)}</span></p>
-        <div class="workbench-rail">
-          <div class="mini-toolbar" data-testid="pack-mini-app" role="tablist" aria-label="Pack workbench">
-            <button type="button" role="tab" data-mini-tab="actions" data-testid="mini-app-tab" aria-selected="true">${escapeHtml(actionsTab)}</button>
-            <button type="button" role="tab" data-mini-tab="runbook" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(runbookTab)}</button>
-            <button type="button" role="tab" data-mini-tab="stack" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(stackTab)}</button>
-            <button type="button" role="tab" data-mini-tab="explore" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(exploreTab)}</button>
+      <div class="saas-shell" data-testid="saas-shell-panels">
+        <aside class="shell-nav" data-testid="shell-nav-panel" data-collapsed="false" aria-label="Pack navigation">
+          <div class="shell-nav-header">
+            <h2>Outline</h2>
+            <button type="button" class="shell-icon-btn" data-testid="shell-nav-collapse" aria-label="Collapse navigation" title="Collapse">‹</button>
           </div>
-          <div class="status-strip" data-testid="mini-app-progress" role="status" aria-live="polite">
-            <span data-testid="progress-label">0 / 0 · 0%</span>
-            <div class="progress-track" aria-hidden="true"><div class="progress-fill" data-testid="progress-fill"></div></div>
-          </div>
-        </div>
-        ${chapterJumpButtons(chapters)}
-        <section class="panel" data-panel="actions" data-active="true" data-testid="panel-actions">
-          <div class="panel-split">
-            <div class="panel-primary">
-              <h2>Ship actions</h2>
-              ${actionItemsList(actionItems)}
+          ${outlineNavHtml(chapters, sopSteps)}
+        </aside>
+        <div class="shell-splitter shell-splitter-left" data-testid="shell-splitter-left" role="separator" aria-orientation="vertical" aria-label="Resize navigation"></div>
+        <main class="shell-center workbench">
+          ${workspaceHeroHtml(input.videoId, input.sourceUrl)}
+          <div
+            id="app"
+            class="mini-shell"
+            data-testid="app-builder-sandbox"
+            data-video-id="${escapeHtml(input.videoId)}"
+            data-emit-rev="${APP_BUILDER_EMIT_REV}"
+          >
+            <p class="honesty" data-testid="assembly-honesty">Interactive controls are grounded in pack fields (action_items, requirements/SOP, stack.tools). This does not recreate the demonstrated application or claim deploy. Same-origin <code>/d/${escapeHtml(input.videoId)}</code> when the hosted spec is READY. Origin G.A.T.E. <code>studio.deploy</code> stays separate — checking items here is not G.A.T.E. PASS.</p>
+            <p class="meta-collapsed"><a href="${escapeHtml(input.sourceUrl)}" target="_blank" rel="noopener noreferrer">Source</a> · <span class="mono">${escapeHtml(hashShort)}</span></p>
+            <div class="workbench-rail">
+              <div class="mini-toolbar" data-testid="pack-mini-app" role="tablist" aria-label="Pack workbench">
+                <button type="button" role="tab" data-mini-tab="actions" data-testid="mini-app-tab" aria-selected="true">${escapeHtml(actionsTab)}</button>
+                <button type="button" role="tab" data-mini-tab="runbook" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(runbookTab)}</button>
+                <button type="button" role="tab" data-mini-tab="stack" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(stackTab)}</button>
+                <button type="button" role="tab" data-mini-tab="explore" data-testid="mini-app-tab" aria-selected="false">${escapeHtml(exploreTab)}</button>
+              </div>
+              <div class="status-strip" data-testid="mini-app-progress" role="status" aria-live="polite">
+                <span data-testid="progress-label">0 / 0 · 0%</span>
+                <div class="progress-track" aria-hidden="true"><div class="progress-fill" data-testid="progress-fill"></div></div>
+              </div>
             </div>
-            <aside class="panel-aside" data-testid="actions-progress-summary" aria-label="Ship progress summary">
-              <h3>Summary</h3>
-              <p class="stat" data-testid="actions-done-stat">Actions done: 0 / ${actionItems.length}</p>
-              <p class="stat" data-testid="workbench-total-stat">Workbench: 0 / 0</p>
-              <p>Local checklist — not deploy evidence.</p>
-            </aside>
+            ${chapterJumpButtons(chapters)}
+            <section class="panel" data-panel="actions" data-active="true" data-testid="panel-actions">
+              <div class="panel-split">
+                <div class="panel-primary">
+                  <h2>Ship actions</h2>
+                  ${actionItemsList(actionItems)}
+                </div>
+                <aside class="panel-aside" data-testid="actions-progress-summary" aria-label="Ship progress summary">
+                  <h3>Summary</h3>
+                  <p class="stat" data-testid="actions-done-stat">Actions done: 0 / ${actionItems.length}</p>
+                  <p class="stat" data-testid="workbench-total-stat">Workbench: 0 / 0</p>
+                  <p>Local checklist — not deploy evidence.</p>
+                </aside>
+              </div>
+            </section>
+            <section class="panel" data-panel="runbook" data-testid="pack-sop">
+              <h2>SOP steps</h2>
+              ${sopList(sopSteps)}
+            </section>
+            <section class="panel" data-panel="stack" data-testid="panel-stack">
+              <h2>Stack tools</h2>
+              ${toolsGrid(stackTools)}
+            </section>
+            <section class="panel" data-panel="explore" data-testid="panel-explore">
+              <section data-testid="pack-transcript-section">
+                <h2>Transcript</h2>
+                ${transcriptBlock(input.transcript)}
+              </section>
+              <section data-testid="pack-visual">
+                <h2>Visual events</h2>
+                ${visualList(input.visualEvents ?? [])}
+              </section>
+            </section>
           </div>
-        </section>
-        <section class="panel" data-panel="runbook" data-testid="pack-sop">
-          <h2>SOP steps</h2>
-          ${sopList(sopSteps)}
-        </section>
-        <section class="panel" data-panel="stack" data-testid="panel-stack">
-          <h2>Stack tools</h2>
-          ${toolsGrid(stackTools)}
-        </section>
-        <section class="panel" data-panel="explore" data-testid="panel-explore">
-          <section data-testid="pack-transcript-section">
-            <h2>Transcript</h2>
-            ${transcriptBlock(input.transcript)}
-          </section>
-          <section data-testid="pack-visual">
-            <h2>Visual events</h2>
-            ${visualList(input.visualEvents ?? [])}
-          </section>
-        </section>
-      </main>
+        </main>
+        <div class="shell-splitter shell-splitter-right" data-testid="shell-splitter-right" role="separator" aria-orientation="vertical" aria-label="Resize assistant"></div>
+        ${chatRailHtml(input.videoId)}
+      </div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
@@ -820,6 +1196,7 @@ function activateTab(tabId: string): void {
   for (const panel of panels) {
     panel.dataset.active = panel.dataset.panel === tabId ? 'true' : 'false';
   }
+  syncOutlineTabs(tabId);
 }
 
 function bindTabs(): void {
@@ -852,8 +1229,229 @@ function bindChapterJumps(): void {
       for (const peer of buttons) peer.dataset.active = 'false';
       button.dataset.active = 'true';
       activateTab('explore');
+      syncOutlineTabs('explore');
     });
   }
+}
+
+function syncOutlineTabs(tabId: string): void {
+  const outlineTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-tab]'));
+  for (const btn of outlineTabs) {
+    btn.dataset.active = btn.dataset.outlineTab === tabId ? 'true' : 'false';
+  }
+}
+
+function bindOutlineNav(): void {
+  const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-tab]'));
+  for (const btn of tabButtons) {
+    btn.addEventListener('click', () => {
+      const tabId = btn.dataset.outlineTab;
+      if (!tabId) return;
+      activateTab(tabId);
+      syncOutlineTabs(tabId);
+    });
+  }
+  const chapterButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-chapter]'));
+  for (const btn of chapterButtons) {
+    btn.addEventListener('click', () => {
+      activateTab('explore');
+      syncOutlineTabs('explore');
+      const jumpButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chapter-index]'));
+      const idx = btn.dataset.outlineChapter;
+      const match = jumpButtons.find((b) => b.dataset.chapterIndex === idx);
+      if (match) {
+        for (const peer of jumpButtons) peer.dataset.active = 'false';
+        match.dataset.active = 'true';
+        match.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    });
+  }
+  syncOutlineTabs('actions');
+}
+
+function bindChatRail(): void {
+  const messages = document.querySelector('[data-testid="shell-chat-messages"]');
+  const input = document.querySelector<HTMLTextAreaElement>('[data-testid="shell-chat-input"]');
+  const send = document.querySelector<HTMLButtonElement>('[data-testid="shell-chat-send"]');
+  const form = document.querySelector<HTMLFormElement>('[data-testid="shell-chat-composer"]');
+  const chat = document.querySelector<HTMLElement>('[data-testid="shell-chat-panel"]');
+  const reopen = document.querySelector<HTMLElement>('[data-testid="shell-chat-reopen"]');
+  const closeBtn = document.querySelector<HTMLButtonElement>('[data-testid="shell-chat-close"]');
+  const ctas = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chat-cta]'));
+
+  function appendBubble(text: string, kind: 'user' | 'system'): void {
+    if (!messages) return;
+    const bubble = document.createElement('div');
+    bubble.className = kind === 'user' ? 'chat-bubble chat-bubble-user' : 'chat-bubble chat-bubble-system';
+    bubble.textContent = text;
+    messages.appendChild(bubble);
+    bubble.scrollIntoView({ block: 'nearest' });
+  }
+
+  if (input && send) {
+    input.addEventListener('input', () => {
+      send.disabled = input.value.trim().length === 0;
+    });
+    send.disabled = input.value.trim().length === 0;
+  }
+
+  if (form && input) {
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      appendBubble(text, 'user');
+      input.value = '';
+      if (send) send.disabled = true;
+      appendBubble(
+        'Preview only — your message was not sent to a model. Use UVAI Studio for live chat grounded on this pack.',
+        'system',
+      );
+    });
+  }
+
+  for (const cta of ctas) {
+    cta.addEventListener('click', () => {
+      const kind = cta.dataset.chatCta;
+      if (kind === 'export') {
+        window.open(pack.sourceUrl, '_blank', 'noopener,noreferrer');
+        return;
+      }
+      if (!input) return;
+      if (kind === 'summarize') {
+        input.value = 'Summarize the transcript already shown in the Explore tab for this pack.';
+      } else if (kind === 'extract') {
+        input.value = 'List ship actions and SOP steps already on this page — do not invent new ones.';
+      }
+      input.focus();
+      if (send) send.disabled = input.value.trim().length === 0;
+    });
+  }
+
+  function setChatClosed(closed: boolean): void {
+    if (chat) chat.dataset.closed = closed ? 'true' : 'false';
+    const rightSplitter = document.querySelector<HTMLElement>('[data-testid="shell-splitter-right"]');
+    if (rightSplitter) rightSplitter.style.display = closed ? 'none' : '';
+    if (reopen) reopen.dataset.visible = closed ? 'true' : 'false';
+    try {
+      localStorage.setItem(\`\${storagePrefix}:chat-closed\`, closed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }
+
+  closeBtn?.addEventListener('click', () => setChatClosed(true));
+  reopen?.addEventListener('click', () => setChatClosed(false));
+
+  try {
+    const stored = localStorage.getItem(\`\${storagePrefix}:chat-closed\`);
+    if (stored === '1') setChatClosed(true);
+  } catch {
+    // ignore
+  }
+}
+
+function bindShellLayout(): void {
+  const nav = document.querySelector<HTMLElement>('[data-testid="shell-nav-panel"]');
+  const navToggle = document.querySelector<HTMLButtonElement>('[data-testid="shell-nav-collapse"]');
+  const leftSplitter = document.querySelector<HTMLElement>('[data-testid="shell-splitter-left"]');
+  const rightSplitter = document.querySelector<HTMLElement>('[data-testid="shell-splitter-right"]');
+  const chat = document.querySelector<HTMLElement>('[data-testid="shell-chat-panel"]');
+  const shell = document.querySelector<HTMLElement>('[data-testid="saas-shell-panels"]');
+  const root = document.documentElement;
+
+  const MIN_NAV = 180;
+  const MAX_NAV = 420;
+  const MIN_CHAT = 260;
+  const MAX_CHAT = 480;
+
+  function loadShellNumber(key: string, fallback: number): number {
+    try {
+      const raw = localStorage.getItem(\`\${storagePrefix}:\${key}\`);
+      if (!raw) return fallback;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  function saveShellNumber(key: string, value: number): void {
+    try {
+      localStorage.setItem(\`\${storagePrefix}:\${key}\`, String(Math.round(value)));
+    } catch {
+      // ignore
+    }
+  }
+
+  const navW = loadShellNumber('nav-w', 240);
+  const chatW = loadShellNumber('chat-w', 320);
+  root.style.setProperty('--shell-nav-w', \`\${navW}px\`);
+  root.style.setProperty('--shell-chat-w', \`\${chatW}px\`);
+
+  function setNavCollapsed(collapsed: boolean): void {
+    if (!nav || !navToggle) return;
+    nav.dataset.collapsed = collapsed ? 'true' : 'false';
+    navToggle.textContent = collapsed ? '›' : '‹';
+    navToggle.setAttribute('aria-label', collapsed ? 'Expand navigation' : 'Collapse navigation');
+    if (leftSplitter) leftSplitter.style.display = collapsed ? 'none' : '';
+    try {
+      localStorage.setItem(\`\${storagePrefix}:nav-collapsed\`, collapsed ? '1' : '0');
+    } catch {
+      // ignore
+    }
+  }
+
+  navToggle?.addEventListener('click', () => {
+    const collapsed = nav?.dataset.collapsed === 'true';
+    setNavCollapsed(!collapsed);
+  });
+
+  try {
+    if (localStorage.getItem(\`\${storagePrefix}:nav-collapsed\`) === '1') setNavCollapsed(true);
+  } catch {
+    // ignore
+  }
+
+  function startResize(
+    side: 'left' | 'right',
+    splitter: HTMLElement,
+    onMove: (clientX: number) => void,
+  ): void {
+    splitter.dataset.dragging = 'true';
+    const onPointerMove = (event: PointerEvent) => onMove(event.clientX);
+    const onPointerUp = () => {
+      splitter.dataset.dragging = 'false';
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+    };
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
+
+  leftSplitter?.addEventListener('pointerdown', (event) => {
+    if (nav?.dataset.collapsed === 'true') return;
+    event.preventDefault();
+    startResize('left', leftSplitter, (clientX) => {
+      const bounds = shell?.getBoundingClientRect();
+      if (!bounds) return;
+      const next = Math.min(MAX_NAV, Math.max(MIN_NAV, clientX - bounds.left));
+      root.style.setProperty('--shell-nav-w', \`\${next}px\`);
+      saveShellNumber('nav-w', next);
+    });
+  });
+
+  rightSplitter?.addEventListener('pointerdown', (event) => {
+    if (chat?.dataset.closed === 'true') return;
+    event.preventDefault();
+    startResize('right', rightSplitter, (clientX) => {
+      const bounds = shell?.getBoundingClientRect();
+      if (!bounds) return;
+      const next = Math.min(MAX_CHAT, Math.max(MIN_CHAT, bounds.right - clientX));
+      root.style.setProperty('--shell-chat-w', \`\${next}px\`);
+      saveShellNumber('chat-w', next);
+    });
+  });
 }
 
 bindTabs();
@@ -861,6 +1459,9 @@ bindChecks('data-sop-id', 'sop', 'li');
 bindChecks('data-action-id', 'actions', '.action-card');
 bindToolPins();
 bindChapterJumps();
+bindOutlineNav();
+bindChatRail();
+bindShellLayout();
 updateProgress();
 `;
 }
