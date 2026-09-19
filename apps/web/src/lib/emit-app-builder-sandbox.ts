@@ -6,6 +6,8 @@ import type {
   VideoPackV0Json,
   VideoPackVisualElement,
 } from '@/lib/video-pack';
+import type { VideoPackActionItem, VideoPackChapter, VideoPackStackTool } from '@/lib/video-pack-types';
+import { parsePackActionItems } from '@/lib/video-pack-types';
 
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
@@ -43,6 +45,29 @@ export type AppBuilderSopStep = {
   timestamp?: number;
 };
 
+export type AppBuilderActionItem = {
+  id: string;
+  title: string;
+  description: string;
+  type?: string | null;
+  difficulty?: 'easy' | 'medium' | 'hard' | null;
+  priority?: 'low' | 'normal' | 'high' | null;
+};
+
+export type AppBuilderStackTool = {
+  name: string;
+  kind?: string | null;
+  evidence?: string | null;
+  docs_url?: string | null;
+};
+
+export type AppBuilderChapter = {
+  start: number;
+  end: number;
+  topic: string;
+  key_points: string[];
+};
+
 export type AppBuilderSandboxInput = {
   videoId: string;
   sourceUrl: string;
@@ -51,6 +76,9 @@ export type AppBuilderSandboxInput = {
   transcript?: AppBuilderTranscript | null;
   visualEvents?: AppBuilderVisualEvent[];
   sopSteps?: AppBuilderSopStep[];
+  actionItems?: AppBuilderActionItem[];
+  stackTools?: AppBuilderStackTool[];
+  chapters?: AppBuilderChapter[];
 };
 
 export type AppBuilderSandboxPreview = {
@@ -66,6 +94,9 @@ export type AppBuilderSandboxIngredients = {
   transcript: AppBuilderTranscript;
   visualEvents: AppBuilderVisualEvent[];
   sopSteps: AppBuilderSopStep[];
+  actionItems: AppBuilderActionItem[];
+  stackTools: AppBuilderStackTool[];
+  chapters: AppBuilderChapter[];
 };
 
 export type AppBuilderSandbox = {
@@ -271,10 +302,94 @@ button, [role="button"] { cursor: pointer; }
 }
 .sop label { display: block; cursor: pointer; }
 .sop input[type="checkbox"] { margin-right: 8px; accent-color: var(--accent); }
+.mini-shell { display: flex; flex-direction: column; gap: 20px; }
+.mini-toolbar {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+}
+.mini-toolbar button {
+  border: 1px solid var(--line); background: transparent; color: var(--ink);
+  padding: 8px 14px; border-radius: 999px; font-size: 0.92rem;
+}
+.mini-toolbar button[aria-selected="true"] {
+  border-color: var(--accent); color: var(--accent); background: rgba(94, 234, 212, 0.08);
+}
+.progress-wrap { flex: 1; min-width: 140px; }
+.progress-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.progress-track { height: 8px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.progress-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), #38bdf8); transition: width 0.2s ease; }
+.panel { display: none; }
+.panel[data-active="true"] { display: block; }
+.action-list, .tool-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.action-card, .tool-card {
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  background: rgba(255,255,255,0.02);
+}
+.action-card label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.action-card input { margin-top: 4px; accent-color: var(--accent); }
+.badge { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.tool-card button {
+  width: 100%; text-align: left; border: 1px dashed var(--line); background: transparent;
+  color: var(--ink); padding: 10px 12px; border-radius: 10px;
+}
+.tool-card button[data-pinned="true"] { border-style: solid; border-color: var(--accent); }
+.chapter-jump { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.chapter-jump button {
+  border: 1px solid var(--line); background: transparent; color: var(--muted);
+  padding: 6px 10px; border-radius: 8px; font-size: 12px;
+}
+.chapter-jump button[data-active="true"] { color: var(--accent); border-color: var(--accent); }
 `;
 }
 
+function actionItemsList(items: AppBuilderActionItem[]): string {
+  if (items.length === 0) {
+    return '<p class="empty" data-testid="action-items-empty">No ship actions on this pack yet — use SOP steps in Runbook.</p>';
+  }
+  const rows = items
+    .map((item) => {
+      const diff = item.difficulty ? `<span class="badge">${escapeHtml(item.difficulty)}</span> ` : '';
+      const kind = item.type ? `<span class="badge">${escapeHtml(item.type)}</span> ` : '';
+      return `<li class="action-card" data-testid="action-item"><label><input type="checkbox" data-action-id="${escapeHtml(item.id)}" data-testid="action-check" /><span><strong>${escapeHtml(item.title)}</strong> ${diff}${kind}<p>${escapeHtml(item.description)}</p></span></label></li>`;
+    })
+    .join('');
+  return `<ul class="action-list" data-testid="action-items">${rows}</ul>`;
+}
+
+function toolsGrid(tools: AppBuilderStackTool[]): string {
+  if (tools.length === 0) {
+    return '<p class="empty" data-testid="stack-tools-empty">No stack.tools on this pack.</p>';
+  }
+  const rows = tools
+    .map((tool) => {
+      const kind = tool.kind ? ` · ${escapeHtml(tool.kind)}` : '';
+      const evidence = tool.evidence ? `<p>${escapeHtml(excerpt(tool.evidence, 160))}</p>` : '';
+      const docs =
+        tool.docs_url && tool.docs_url.startsWith('http')
+          ? `<p><a href="${escapeHtml(tool.docs_url)}" target="_blank" rel="noopener noreferrer">Docs</a></p>`
+          : '';
+      return `<li class="tool-card" data-testid="stack-tool"><button type="button" data-tool-name="${escapeHtml(tool.name)}" data-testid="tool-pin">${escapeHtml(tool.name)}${kind}</button>${evidence}${docs}</li>`;
+    })
+    .join('');
+  return `<ul class="tool-grid" data-testid="stack-tools">${rows}</ul><p class="honesty">Pin tools you plan to use — local preference only, not a deploy receipt.</p>`;
+}
+
+function chapterJumpButtons(chapters: AppBuilderChapter[]): string {
+  if (chapters.length === 0) return '';
+  const buttons = chapters
+    .map((chapter, index) => {
+      const label = excerpt(chapter.topic, 48);
+      return `<button type="button" data-chapter-index="${index}" data-testid="chapter-jump">${escapeHtml(label)}</button>`;
+    })
+    .join('');
+  return `<div class="chapter-jump" data-testid="chapter-jumps">${buttons}</div>`;
+}
+
 function indexHtml(input: AppBuilderSandboxInput): string {
+  const actionItems = input.actionItems ?? [];
+  const stackTools = input.stackTools ?? [];
+  const chapters = input.chapters ?? [];
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -284,27 +399,48 @@ function indexHtml(input: AppBuilderSandboxInput): string {
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
-    <main id="app" data-testid="app-builder-sandbox" data-video-id="${escapeHtml(input.videoId)}">
-      <p class="eyebrow">UVAI▶ App Builder sandbox</p>
+    <main id="app" class="mini-shell" data-testid="app-builder-sandbox" data-video-id="${escapeHtml(input.videoId)}">
+      <p class="eyebrow">UVAI▶ hosted mini-app</p>
       <h1>Video Pack ${escapeHtml(input.videoId)}</h1>
-      <p class="lede">Running preview from paste-URL ingest. Payload is transcript, visual events, and SOP steps — not invented architecture.</p>
-      <p class="honesty" data-testid="assembly-honesty">This workspace is a pack viewer and SOP checklist compiled from your Video Pack. It does not recreate the demonstrated application. When the pack is stored, Build live in Studio opens <code>/d/${escapeHtml(input.videoId)}</code> on this site. Origin G.A.T.E. studio.deploy to external hosts stays separate.</p>
+      <p class="lede">Runnable surface from your stored Video Pack — ship actions, runbook steps, stack tools, and reference transcript/visuals.</p>
+      <p class="honesty" data-testid="assembly-honesty">Interactive controls are grounded in pack fields (action_items, requirements/SOP, stack.tools). This does not recreate the demonstrated application or claim deploy. Same-origin <code>/d/${escapeHtml(input.videoId)}</code> when the hosted spec is READY. Origin G.A.T.E. <code>studio.deploy</code> stays separate.</p>
       <dl class="meta">
         <div><dt>Source</dt><dd>${escapeHtml(input.sourceUrl)}</dd></div>
         <div><dt>source_hash</dt><dd>${escapeHtml(input.sourceHash)}</dd></div>
         <div><dt>Pack id</dt><dd>${escapeHtml(input.packId || `vp:v0:${input.videoId}`)}</dd></div>
       </dl>
-      <section data-testid="pack-transcript-section">
-        <h2>Transcript</h2>
-        ${transcriptBlock(input.transcript)}
+      <div class="mini-toolbar" data-testid="pack-mini-app" role="tablist" aria-label="Pack workbench">
+        <button type="button" role="tab" data-mini-tab="actions" data-testid="mini-app-tab" aria-selected="true">Actions</button>
+        <button type="button" role="tab" data-mini-tab="runbook" data-testid="mini-app-tab" aria-selected="false">Runbook</button>
+        <button type="button" role="tab" data-mini-tab="stack" data-testid="mini-app-tab" aria-selected="false">Stack</button>
+        <button type="button" role="tab" data-mini-tab="explore" data-testid="mini-app-tab" aria-selected="false">Explore</button>
+        <div class="progress-wrap" data-testid="mini-app-progress">
+          <div class="progress-label"><span data-testid="progress-label">0% ship progress</span></div>
+          <div class="progress-track" aria-hidden="true"><div class="progress-fill" data-testid="progress-fill"></div></div>
+        </div>
+      </div>
+      ${chapterJumpButtons(chapters)}
+      <section class="panel" data-panel="actions" data-active="true" data-testid="panel-actions">
+        <h2>Ship actions</h2>
+        ${actionItemsList(actionItems)}
       </section>
-      <section data-testid="pack-visual">
-        <h2>Visual events</h2>
-        ${visualList(input.visualEvents ?? [])}
-      </section>
-      <section data-testid="pack-sop">
+      <section class="panel" data-panel="runbook" data-testid="pack-sop">
         <h2>SOP steps</h2>
         ${sopList(input.sopSteps ?? [])}
+      </section>
+      <section class="panel" data-panel="stack" data-testid="panel-stack">
+        <h2>Stack tools</h2>
+        ${toolsGrid(stackTools)}
+      </section>
+      <section class="panel" data-panel="explore" data-testid="panel-explore">
+        <section data-testid="pack-transcript-section">
+          <h2>Transcript</h2>
+          ${transcriptBlock(input.transcript)}
+        </section>
+        <section data-testid="pack-visual">
+          <h2>Visual events</h2>
+          ${visualList(input.visualEvents ?? [])}
+        </section>
       </section>
     </main>
     <script type="module" src="/src/main.ts"></script>
@@ -322,6 +458,9 @@ function packTs(input: AppBuilderSandboxInput): string {
     transcript: input.transcript ?? { full_text: '', segments: [] },
     visualEvents: input.visualEvents ?? [],
     sopSteps: input.sopSteps ?? [],
+    actionItems: input.actionItems ?? [],
+    stackTools: input.stackTools ?? [],
+    chapters: input.chapters ?? [],
   };
   return `export const pack = ${JSON.stringify(payload, null, 2)} as const;
 `;
@@ -334,44 +473,123 @@ const root = document.querySelector<HTMLElement>('[data-testid="app-builder-sand
 if (root) {
   root.dataset.hydrated = 'true';
   root.dataset.videoId = pack.videoId;
+  root.dataset.interactive = 'true';
 }
 
-const storageKey = \`uvai:sop-check:\${pack.videoId}:\${pack.sourceHash}\`;
+const storagePrefix = \`uvai:mini-app:\${pack.videoId}:\${pack.sourceHash}\`;
 
-type ChecklistState = Record<string, boolean>;
+type BoolMap = Record<string, boolean>;
 
-function loadState(): ChecklistState {
+function loadMap(key: string): BoolMap {
   try {
-    const raw = localStorage.getItem(storageKey);
+    const raw = localStorage.getItem(\`\${storagePrefix}:\${key}\`);
     if (!raw) return {};
     const parsed: unknown = JSON.parse(raw);
     if (parsed === null || typeof parsed !== 'object') return {};
-    return parsed as ChecklistState;
+    return parsed as BoolMap;
   } catch {
     return {};
   }
 }
 
-function saveState(state: ChecklistState): void {
+function saveMap(key: string, state: BoolMap): void {
   try {
-    localStorage.setItem(storageKey, JSON.stringify(state));
+    localStorage.setItem(\`\${storagePrefix}:\${key}\`, JSON.stringify(state));
   } catch {
-    // quota / private mode — checklist stays session-only
+    // quota / private mode
   }
 }
 
-const state = loadState();
-const boxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-sop-id]'));
-for (const box of boxes) {
-  const id = box.dataset.sopId;
-  if (!id) continue;
-  box.checked = state[id] === true;
-  box.addEventListener('change', () => {
-    const next = loadState();
-    next[id] = box.checked;
-    saveState(next);
-  });
+function bindChecks(attr: string, storageKey: string): void {
+  const state = loadMap(storageKey);
+  const boxes = Array.from(document.querySelectorAll<HTMLInputElement>(\`input[\${attr}]\`));
+  for (const box of boxes) {
+    const id = box.getAttribute(attr);
+    if (!id) continue;
+    box.checked = state[id] === true;
+    box.addEventListener('change', () => {
+      const next = loadMap(storageKey);
+      next[id] = box.checked;
+      saveMap(storageKey, next);
+      updateProgress();
+    });
+  }
 }
+
+function bindToolPins(): void {
+  const state = loadMap('tools');
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-tool-name]'));
+  for (const button of buttons) {
+    const name = button.dataset.toolName;
+    if (!name) continue;
+    const pinned = state[name] === true;
+    button.dataset.pinned = pinned ? 'true' : 'false';
+    button.addEventListener('click', () => {
+      const next = loadMap('tools');
+      const now = !(next[name] === true);
+      next[name] = now;
+      saveMap('tools', next);
+      button.dataset.pinned = now ? 'true' : 'false';
+      updateProgress();
+    });
+  }
+}
+
+function updateProgress(): void {
+  const actionBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-action-id]'));
+  const sopBoxes = Array.from(document.querySelectorAll<HTMLInputElement>('input[data-sop-id]'));
+  const toolButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-tool-name]'));
+  const checks = [...actionBoxes, ...sopBoxes];
+  const doneChecks = checks.filter((el) => el.checked).length;
+  const pinned = toolButtons.filter((el) => el.dataset.pinned === 'true').length;
+  const total = checks.length + toolButtons.length;
+  const done = doneChecks + pinned;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const label = document.querySelector('[data-testid="progress-label"]');
+  const fill = document.querySelector<HTMLElement>('[data-testid="progress-fill"]');
+  if (label) label.textContent = \`\${pct}% ship progress\`;
+  if (fill) fill.style.width = \`\${pct}%\`;
+}
+
+function activateTab(tabId: string): void {
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-mini-tab]'));
+  const panels = Array.from(document.querySelectorAll<HTMLElement>('section[data-panel]'));
+  for (const tab of tabs) {
+    const active = tab.dataset.miniTab === tabId;
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  }
+  for (const panel of panels) {
+    panel.dataset.active = panel.dataset.panel === tabId ? 'true' : 'false';
+  }
+}
+
+function bindTabs(): void {
+  const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-mini-tab]'));
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => {
+      const id = tab.dataset.miniTab;
+      if (id) activateTab(id);
+    });
+  }
+}
+
+function bindChapterJumps(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chapter-index]'));
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      for (const peer of buttons) peer.dataset.active = 'false';
+      button.dataset.active = 'true';
+      activateTab('explore');
+    });
+  }
+}
+
+bindTabs();
+bindChecks('data-sop-id', 'sop');
+bindChecks('data-action-id', 'actions');
+bindToolPins();
+bindChapterJumps();
+updateProgress();
 `;
 }
 
@@ -403,7 +621,7 @@ function readme(input: AppBuilderSandboxInput): string {
 
 Deterministic workspace emitted from Video Pack \`${input.videoId}\`.
 
-Payload: transcript + visual events + SOP steps. Architecture and code snippets are not shipped.
+Payload: action_items, stack.tools, SOP/requirements, transcript, and visual events. Architecture and code snippets are not shipped.
 
 ## Verify (Loop / agent)
 
@@ -449,6 +667,67 @@ export function visualEventsFromPack(input: {
   return [...fromVisual, ...fromFrames];
 }
 
+export function actionItemsFromPack(input: {
+  action_items?: VideoPackActionItem[];
+  requirements?: VideoPackRequirement[];
+}): AppBuilderActionItem[] {
+  const parsed = parsePackActionItems(input.action_items ?? []);
+  if (parsed.length > 0) {
+    return parsed.map((item) => ({
+      id: item.id,
+      title: item.title,
+      description: item.description,
+      type: item.type ?? null,
+      difficulty: item.difficulty ?? null,
+      priority: item.priority ?? null,
+    }));
+  }
+  return (input.requirements ?? []).flatMap((req, index) => {
+    const title = req.title.trim();
+    if (!title) return [];
+    return [
+      {
+        id: req.id || `action_${index + 1}`,
+        title,
+        description: (req.detail ?? '').trim() || title,
+        type: 'requirement',
+        difficulty: null,
+        priority: null,
+      },
+    ];
+  });
+}
+
+export function stackToolsFromPack(stack?: { tools?: VideoPackStackTool[] } | null): AppBuilderStackTool[] {
+  return (stack?.tools ?? []).flatMap((tool) => {
+    const name = tool.name.trim();
+    if (!name) return [];
+    return [
+      {
+        name,
+        kind: tool.kind ?? null,
+        evidence: tool.evidence ?? null,
+        docs_url: tool.docs_url ?? null,
+      },
+    ];
+  });
+}
+
+export function chaptersFromPack(chapters?: VideoPackChapter[] | null): AppBuilderChapter[] {
+  return (chapters ?? []).flatMap((chapter) => {
+    const topic = chapter.topic.trim();
+    if (!topic) return [];
+    return [
+      {
+        start: chapter.start,
+        end: chapter.end,
+        topic,
+        key_points: chapter.key_points ?? [],
+      },
+    ];
+  });
+}
+
 export function sopStepsFromPack(input: {
   requirements?: VideoPackRequirement[];
   transcript?: AppBuilderTranscript | null;
@@ -489,6 +768,18 @@ export function emitAppBuilderSandbox(input: AppBuilderSandboxInput): AppBuilder
   const sourceUrl = input.sourceUrl.trim();
   const sourceHash = input.sourceHash.trim();
   const packId = (input.packId || `vp:v0:${videoId}`).trim();
+  const sopSteps = input.sopSteps ?? [];
+  let actionItems = input.actionItems ?? [];
+  if (actionItems.length === 0 && sopSteps.length > 0) {
+    actionItems = sopSteps.map((step) => ({
+      id: step.id,
+      title: step.title,
+      description: step.description,
+      type: 'sop',
+      difficulty: null,
+      priority: null,
+    }));
+  }
   const normalized: AppBuilderSandboxInput = {
     videoId,
     sourceUrl,
@@ -496,7 +787,10 @@ export function emitAppBuilderSandbox(input: AppBuilderSandboxInput): AppBuilder
     packId,
     transcript: input.transcript ?? { full_text: '', segments: [] },
     visualEvents: input.visualEvents ?? [],
-    sopSteps: input.sopSteps ?? [],
+    sopSteps,
+    actionItems,
+    stackTools: input.stackTools ?? [],
+    chapters: input.chapters ?? [],
   };
 
   const sandbox: AppBuilderSandbox = {
@@ -511,6 +805,9 @@ export function emitAppBuilderSandbox(input: AppBuilderSandboxInput): AppBuilder
       transcript: normalized.transcript ?? { full_text: '', segments: [] },
       visualEvents: normalized.visualEvents ?? [],
       sopSteps: normalized.sopSteps ?? [],
+      actionItems: normalized.actionItems ?? [],
+      stackTools: normalized.stackTools ?? [],
+      chapters: normalized.chapters ?? [],
     },
     files: {
       'startup.sh': startupSh(),
@@ -566,6 +863,12 @@ function emitInputFromV0(pack: VideoPackV0Json | EmittedVideoPack): AppBuilderSa
       requirements: pack.requirements,
       transcript,
     }),
+    actionItems: actionItemsFromPack({
+      action_items: pack.action_items,
+      requirements: pack.requirements,
+    }),
+    stackTools: stackToolsFromPack(pack.stack),
+    chapters: chaptersFromPack(pack.chapters),
   };
 }
 

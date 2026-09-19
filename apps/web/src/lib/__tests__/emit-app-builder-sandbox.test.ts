@@ -108,11 +108,36 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(smoke).toMatch(/visible|textContent|innerText|data-testid/);
   });
 
+  it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      transcript: QJ_TRANSCRIPT,
+      visualEvents: QJ_VISUAL_EVENTS,
+      sopSteps: QJ_SOP_STEPS,
+      stackTools: [{ name: 'Torque wrench', kind: 'tool', evidence: 'Shown in video' }],
+    });
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    expect(html).toContain('data-testid="pack-mini-app"');
+    expect(html).toContain('data-testid="mini-app-tab"');
+    expect(html).toContain('data-testid="action-check"');
+    expect(html).toContain('data-testid="tool-pin"');
+    expect(html).toContain('data-testid="progress-fill"');
+    expect(main).toContain('bindTabs');
+    expect(main).toContain('updateProgress');
+    expect(main).toContain('bindToolPins');
+    expect(main).toContain('data-action-id');
+  });
+
   it('renders transcript, visual events, and SOP — not architecture or code snippets', () => {
     const sandbox = emitFixture();
     const html = sandbox.files['index.html'];
     const packTs = sandbox.files['src/pack.ts'];
-    const shipped = `${html}\n${packTs}\n${Object.values(sandbox.files).join('\n')}`;
+    const main = sandbox.files['src/main.ts'];
+    const shipped = `${html}\n${packTs}\n${main}\n${Object.values(sandbox.files).join('\n')}`;
     expect(html).toContain('data-testid="app-builder-sandbox"');
     expect(html).toContain(QJ_VIDEO_ID);
     expect(html).toContain(QJ_SOURCE_URL);
@@ -122,6 +147,9 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(html).toContain('Safety and Vehicle Staging');
     expect(html).toContain('Star Pattern Torquing');
     expect(html).toContain('data-testid="sop-check"');
+    expect(html).toContain('data-panel="runbook"');
+    expect(packTs).toContain('actionItems');
+    expect(packTs).toContain('Safety and Vehicle Staging');
     expect(html).toContain('data-testid="assembly-honesty"');
     expect(html).toContain('data-sop-id="REQ-01"');
     expect(html).not.toMatch(/shopify/i);
