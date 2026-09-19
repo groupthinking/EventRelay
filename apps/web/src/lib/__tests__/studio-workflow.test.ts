@@ -594,6 +594,19 @@ describe('studio-workflow (WDK Product v1)', () => {
     ).toBeNull();
   });
 
+  it('does not surface generic unread workflow return text as the terminal deploy HOLD cause', () => {
+    expect(
+      studioDeployPollResidual({
+        ok: true,
+        status: 200,
+        runId: 'wrun_generic_unread',
+        runStatus: 'completed',
+        error: 'Failed to read workflow return value',
+        result: { kind: 'job', jobId: 'job_123', jobStatus: 'complete' },
+      }),
+    ).toBe(STUDIO_ORIGIN_NO_HOSTNAME_HOLD);
+  });
+
   it('getStudioDeployStatus extracts a nested vercel live_url without inventing one', async () => {
     vi.stubGlobal(
       'fetch',

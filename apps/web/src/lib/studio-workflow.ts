@@ -87,6 +87,15 @@ const TERMINAL_JOB = new Set([
 export const STUDIO_DEPLOY_POLL_ATTEMPTS = 280;
 export const STUDIO_DEPLOY_POLL_DELAY_MS = 2000;
 
+function isGenericUnreadWorkflowReturnError(value?: string | null): boolean {
+  const message = value?.trim();
+  if (!message) return false;
+  return (
+    /^failed to read workflow return value[.!]?$/i.test(message) ||
+    /^failed to read workflow return[.!]?$/i.test(message)
+  );
+}
+
 function inFlightJobHold(poll: StudioDeployPoll, attempts: number): string {
   return studioDeployPollResidual(poll, attempts) ?? STUDIO_ORIGIN_STILL_POLLABLE_HOLD;
 }
@@ -115,7 +124,8 @@ export function studioDeployPollResidual(
     return STUDIO_ORIGIN_STILL_POLLABLE_HOLD;
   }
 
-  const detail = poll.result?.message?.trim() || poll.error?.trim();
+  const detailRaw = poll.result?.message?.trim() || poll.error?.trim();
+  const detail = isGenericUnreadWorkflowReturnError(detailRaw) ? undefined : detailRaw;
   if (jobId) {
     return detail || STUDIO_ORIGIN_NO_HOSTNAME_HOLD;
   }
@@ -151,7 +161,7 @@ export function isUnreadWorkflowReturn(poll: {
   error?: string;
 }): boolean {
   if (poll.runStatus !== 'completed' || poll.result) return false;
-  return /failed to read workflow return value|return value/i.test(poll.error || '');
+  return isGenericUnreadWorkflowReturnError(poll.error);
 }
 
 /** GET getRun threw before status/result — keep polling, do not HOLD on the generic. */
