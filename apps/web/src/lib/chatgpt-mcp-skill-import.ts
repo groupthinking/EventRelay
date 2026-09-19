@@ -345,7 +345,7 @@ export function createFixtureChatGptSkillImport(
     hold('manifest frontmatter name does not match the skill URI.');
   }
   const resourceContents = requireRecord(
-    resourceContents,
+    input.resourceContents,
     'resource contents',
   ) as Record<string, string>;
   const skillText = resourceContents[input.result.skill.uri];
