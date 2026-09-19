@@ -38,6 +38,15 @@ describe('compiled-spec-host', () => {
     expect(health.reason_code).toBe('HOSTED_PACK_NOT_FOUND');
   });
 
+  it('detects hosted live page paths separately from health and assets', async () => {
+    const { isHostedLivePagePath, isHostedHealthPath } = await import('@/lib/compiled-spec-host');
+    expect(isHostedLivePagePath('/d/auJzb1D-fag', 'auJzb1D-fag')).toBe(true);
+    expect(isHostedLivePagePath('/d/auJzb1D-fag/', 'auJzb1D-fag')).toBe(true);
+    expect(isHostedHealthPath('/d/auJzb1D-fag/health', 'auJzb1D-fag')).toBe(true);
+    expect(isHostedLivePagePath('/d/auJzb1D-fag/health', 'auJzb1D-fag')).toBe(false);
+    expect(isHostedLivePagePath('/d/auJzb1D-fag/src/pack', 'auJzb1D-fag')).toBe(false);
+  });
+
   it('drives Factory Deliver only when live URL and health are both valid', () => {
     const ready = factoryDeliverFromHostedSpec({
       videoId: 'auJzb1D-fag',

@@ -34,9 +34,10 @@ import {
 } from '@/lib/studio-workflow';
 import {
   packBuildLiveOutcomeMessage,
+  resolvePackBuildLiveVideoId,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
-} from '@/lib/pack-build-live';
+} from '@/lib/pack-build-live-client';
 import { identityPackJson } from '@/lib/emit-video-pack';
 import {
   studioActionCard,
@@ -721,32 +722,39 @@ export default function OneLoopStudio({
   };
 
   const buildLive = async () => {
-    const videoId = selectedVideoId ?? getYouTubeId((selected?.url || url).trim());
-    if (!videoId || !selected?.videoPack) {
+    if (!selected?.videoPack) {
+      setMessage('Analyze a video and wait for a stored Video Pack before Build live.');
+      return;
+    }
+    const packVideoId = resolvePackBuildLiveVideoId({
+      packVideoId: selected.videoPack.videoId,
+      watchUrl: (selected.url || url).trim(),
+    });
+    if (!packVideoId) {
       setMessage('Analyze a video and wait for a stored Video Pack before Build live.');
       return;
     }
     setBuildBusy(true);
-    const attemptVideoId = videoId;
+    const attemptRecordId = selectedVideoId;
     setPackLiveReceiptUrl(null);
-    setPackLiveReceiptVideoId(attemptVideoId);
+    setPackLiveReceiptVideoId(attemptRecordId);
     try {
       const built = await verifyPackBuildLive({
-        videoId: attemptVideoId,
+        videoId: packVideoId,
         sourceHash: selected.videoPack.sourceHash,
         origin: typeof window !== 'undefined' ? window.location.origin : undefined,
       });
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      if (useDashboardStore.getState().selectedVideoId !== attemptRecordId) return;
       if (built.ok) {
         setPackLiveReceiptUrl(built.liveUrl);
-        setPackLiveReceiptVideoId(attemptVideoId);
+        setPackLiveReceiptVideoId(attemptRecordId);
         setMessage(packBuildLiveOutcomeMessage(built));
         window.open(built.liveUrl, '_blank', 'noopener,noreferrer');
         return;
       }
       setMessage(packBuildLiveOutcomeMessage(built));
     } catch (err) {
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      if (useDashboardStore.getState().selectedVideoId !== attemptRecordId) return;
       setMessage(err instanceof Error ? err.message : 'Build live failed.');
     } finally {
       setBuildBusy(false);

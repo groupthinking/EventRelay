@@ -2,10 +2,11 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   packBuildLivePath,
   packBuildLiveUrl,
+  resolvePackBuildLiveVideoId,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
 } from '@/lib/pack-build-live';
-import { XYMC_VIDEO_ID } from '@/lib/__fixtures__/xymcbrfsj4c-emit';
+import { XYMC_VIDEO_ID, XYMC_SOURCE_HASH } from '@/lib/__fixtures__/xymcbrfsj4c-emit';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -20,6 +21,112 @@ describe('pack-build-live', () => {
     expect(packBuildLiveUrl('https://uvai.io', XYMC_VIDEO_ID)).toBe(
       `https://uvai.io/d/${XYMC_VIDEO_ID}`,
     );
+  });
+
+  it('resolves hosted video id from pack citation, not dashboard record uuid', () => {
+    const dashboardRowId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    expect(
+      resolvePackBuildLiveVideoId({
+        packVideoId: XYMC_VIDEO_ID,
+        watchUrl: `https://www.youtube.com/watch?v=${XYMC_VIDEO_ID}`,
+      }),
+    ).toBe(XYMC_VIDEO_ID);
+    expect(
+      resolvePackBuildLiveVideoId({
+        packVideoId: XYMC_VIDEO_ID,
+        watchUrl: `https://www.youtube.com/watch?v=${dashboardRowId}`,
+      }),
+    ).toBe(XYMC_VIDEO_ID);
+  });
+
+  it('opens Build live when sandbox confirms pack under source_hash after health miss', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: { ok: false, reason_code: 'HOSTED_PACK_NOT_FOUND' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'success',
+          data: { videoId: XYMC_VIDEO_ID, sourceHash: XYMC_SOURCE_HASH },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: { ok: true, status: 200 },
+          factory_deliver: { ready: true, reason_code: 'FACTORY_DELIVER_READY' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await verifyPackBuildLive({
+      videoId: XYMC_VIDEO_ID,
+      sourceHash: XYMC_SOURCE_HASH,
+      origin: 'https://uvai.io',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      liveUrl: `https://uvai.io/d/${XYMC_VIDEO_ID}`,
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/d/${XYMC_VIDEO_ID}/health`);
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain(
+      `source_hash=${encodeURIComponent(XYMC_SOURCE_HASH)}`,
+    );
+  });
+
+  it('succeeds after sandbox confirm when health stays degraded but pack is stored', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: {
+            ok: false,
+            reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
+            detail: 'Vercel AI Gateway returned empty content',
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'success',
+          data: { videoId: XYMC_VIDEO_ID },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: {
+            ok: false,
+            reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
+          },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await verifyPackBuildLive({
+      videoId: XYMC_VIDEO_ID,
+      sourceHash: XYMC_SOURCE_HASH,
+      origin: 'https://uvai.io',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      liveUrl: `https://uvai.io/d/${XYMC_VIDEO_ID}`,
+    });
   });
 
   it('scopes pack live receipts to the selected video', () => {
@@ -130,5 +237,48 @@ describe('pack-build-live', () => {
       liveUrl: `https://uvai.io/d/${XYMC_VIDEO_ID}`,
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('uses sandbox video id when an incorrect dashboard row id was probed on health', async () => {
+    const dashboardRowId = 'f47ac10b-58cc-4372-a567-0e02b2c3d479';
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: { ok: false, reason_code: 'HOSTED_PACK_NOT_FOUND' },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'success',
+          data: { videoId: XYMC_VIDEO_ID },
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          health: { ok: true, status: 200 },
+          factory_deliver: { ready: true, reason_code: 'FACTORY_DELIVER_READY' },
+        }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await verifyPackBuildLive({
+      videoId: dashboardRowId,
+      sourceHash: XYMC_SOURCE_HASH,
+      origin: 'https://uvai.io',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      liveUrl: `https://uvai.io/d/${XYMC_VIDEO_ID}`,
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(`/d/${dashboardRowId}/health`);
+    expect(String(fetchMock.mock.calls[2]?.[0])).toContain(`/d/${XYMC_VIDEO_ID}/health`);
   });
 });
