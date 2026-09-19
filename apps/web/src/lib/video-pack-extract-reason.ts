@@ -1,5 +1,5 @@
 /** Bump when extract retry/salvage policy changes — triggers reclaimReady on POST. */
-export const VIDEO_PACK_EXTRACT_PIPELINE_VERSION = 'h1-extract-reliability-v1' as const;
+export const VIDEO_PACK_EXTRACT_PIPELINE_VERSION = 'p1.5-chunked-extract-v1' as const;
 
 export type VideoPackExtractFailureReason =
   | 'HOSTED_PACK_GATEWAY_EMPTY'

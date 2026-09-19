@@ -244,6 +244,41 @@ describe('extractVideoPackSpec', () => {
     expect(generateText).not.toHaveBeenCalled();
   });
 
+  it('uses sectional gateway calls for long/chaptered sources', async () => {
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: 'QjZ5ohr7sGA',
+      title: 'Flat tire change',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [
+        { time: '0:00', title: 'Intro' },
+        { time: '3:00', title: 'Jack' },
+        { time: '6:00', title: 'Finish' },
+      ],
+    });
+
+    const generateText = vi.fn<VideoPackGenerateText>(async (args) => {
+      const textPart = args.messages[0]?.content.find((part) => part.type === 'text');
+      const prompt = textPart && textPart.type === 'text' ? textPart.text : '';
+      expect(prompt).toMatch(/focus_time_range_seconds/i);
+      expect(prompt).toMatch(/Do not emit grounded_spec in sectional mode/i);
+      expect(prompt).not.toMatch(/Also emit grounded_spec/i);
+      return { text: JSON.stringify(SPEC_JSON) };
+    });
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', videoId: 'QjZ5ohr7sGA' },
+      { generateText },
+    );
+
+    expect(spec.transcript.full_text).toContain('zoo');
+    expect(spec.concepts).toEqual(['zoo', 'elephants']);
+    expect(generateText).toHaveBeenCalledTimes(3);
+  });
+
   it('calls generateText with google/gemini-3.8-flash and the YouTube video file', async () => {
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     const generateText = vi.fn<VideoPackGenerateText>(async () => ({
