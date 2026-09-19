@@ -12,7 +12,7 @@ import { parsePackActionItems } from '@/lib/video-pack-types';
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.9-m3-chapter-seek' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.10-m4-sop-visual-seek' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -188,7 +188,13 @@ function visualList(events: AppBuilderVisualEvent[]): string {
     .map((event) => {
       const stamp = Number.isFinite(event.timestamp) ? `${event.timestamp}s` : '';
       const kind = event.element_type ? ` · ${escapeHtml(event.element_type)}` : '';
-      return `<li><span class="stamp">${escapeHtml(stamp)}${kind}</span> ${escapeHtml(event.content)}</li>`;
+      const startAttr = chapterStartSecondsAttr(event.timestamp);
+      const startData = startAttr ? ` data-start-seconds="${escapeHtml(startAttr)}"` : '';
+      const inner = `<span class="stamp">${escapeHtml(stamp)}${kind}</span> ${escapeHtml(event.content)}`;
+      if (startData) {
+        return `<li><button type="button" class="visual-event-row" data-testid="visual-event"${startData}>${inner}</button></li>`;
+      }
+      return `<li class="visual-event-static">${inner}</li>`;
     })
     .join('')}</ol>`;
 }
@@ -200,8 +206,18 @@ function sopList(steps: AppBuilderSopStep[]): string {
   const items = steps
     .map((step) => {
       const stamp =
-        step.timestamp != null ? ` <span class="stamp">${escapeHtml(String(step.timestamp))}s</span>` : '';
-      return `<li><label><input type="checkbox" data-testid="sop-check" data-sop-id="${escapeHtml(step.id)}" /> <strong>${escapeHtml(step.title)}</strong>${stamp}<p>${escapeHtml(step.description)}</p></label></li>`;
+        step.timestamp != null && Number.isFinite(step.timestamp)
+          ? ` <span class="stamp">${escapeHtml(String(step.timestamp))}s</span>`
+          : '';
+      const startAttr =
+        step.timestamp != null && Number.isFinite(step.timestamp)
+          ? chapterStartSecondsAttr(step.timestamp)
+          : '';
+      const startData = startAttr ? ` data-start-seconds="${escapeHtml(startAttr)}"` : '';
+      const titleHtml = startData
+        ? `<button type="button" class="sop-title-seek" data-testid="sop-seek" data-sop-id="${escapeHtml(step.id)}"${startData}><strong>${escapeHtml(step.title)}</strong>${stamp}</button>`
+        : `<strong>${escapeHtml(step.title)}</strong>${stamp}`;
+      return `<li class="sop-step"><label><input type="checkbox" data-testid="sop-check" data-sop-id="${escapeHtml(step.id)}" /></label> ${titleHtml}<p>${escapeHtml(step.description)}</p></li>`;
     })
     .join('');
   return `<ol class="sop" data-testid="sop-steps">${items}</ol><p class="honesty" data-testid="sop-checklist-note">Local checklist only — checking a step is not evidence the procedure was performed.</p>`;
@@ -737,10 +753,41 @@ html, body {
 .stamp { color: var(--evidence); font-size: 11px; font-family: var(--font-mono); }
 .transcript { white-space: pre-wrap; color: var(--muted); font-size: 13px; }
 button, [role="button"] { cursor: pointer; }
-.sop label { display: block; cursor: pointer; }
-.sop input[type="checkbox"] { margin-right: 8px; accent-color: var(--accent); }
+.sop-step { display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; align-items: start; }
+.sop-step > label { display: inline-flex; padding-top: 2px; cursor: pointer; }
+.sop-step > p { grid-column: 2; margin: 4px 0 0; }
+.sop input[type="checkbox"] { margin: 0; accent-color: var(--accent); }
+.sop-title-seek {
+  grid-column: 2;
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.sop-title-seek:hover strong { color: var(--accent); text-decoration: underline; }
 .sop li.is-done { opacity: 0.55; }
 .sop li.is-done strong { text-decoration: line-through; }
+.events { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.visual-event-row {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--ink);
+  font: inherit;
+}
+.visual-event-row:hover { border-color: var(--accent); background: rgba(20, 184, 166, 0.08); }
+.visual-event-static {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-row);
+  padding: 8px 10px;
+  color: var(--muted);
+}
 .action-list, .tool-grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .action-card, .tool-card {
   border: 1px solid var(--line);
@@ -900,10 +947,14 @@ function outlineNavHtml(
           <h3>SOP</h3>
           <ul class="outline-list">
             ${sopSteps
-              .map(
-                (step) =>
-                  `<li><button type="button" data-outline-tab="runbook" data-testid="outline-sop-jump">${escapeHtml(excerpt(step.title, 52))}</button></li>`,
-              )
+              .map((step) => {
+                const startAttr =
+                  step.timestamp != null && Number.isFinite(step.timestamp)
+                    ? chapterStartSecondsAttr(step.timestamp)
+                    : '';
+                const startData = startAttr ? ` data-start-seconds="${escapeHtml(startAttr)}"` : '';
+                return `<li><button type="button" data-outline-tab="runbook" data-testid="outline-sop-jump"${startData}>${escapeHtml(excerpt(step.title, 52))}</button></li>`;
+              })
               .join('')}
           </ul>
         </div>`;
@@ -1295,6 +1346,30 @@ function bindChapterJumps(): void {
   }
 }
 
+function bindVisualEventJumps(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-testid="visual-event"]'));
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      seekSourceVideo(parseStartSecondsFromButton(button));
+      activateTab('explore');
+      syncOutlineTabs('explore');
+    });
+  }
+}
+
+function bindSopTitleSeek(): void {
+  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-testid="sop-seek"]'));
+  for (const button of buttons) {
+    button.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      seekSourceVideo(parseStartSecondsFromButton(button));
+      activateTab('runbook');
+      syncOutlineTabs('runbook');
+    });
+  }
+}
+
 function syncOutlineTabs(tabId: string): void {
   const outlineTabs = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-tab]'));
   for (const btn of outlineTabs) {
@@ -1306,6 +1381,7 @@ function bindOutlineNav(): void {
   const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-outline-tab]'));
   for (const btn of tabButtons) {
     btn.addEventListener('click', () => {
+      seekSourceVideo(parseStartSecondsFromButton(btn));
       const tabId = btn.dataset.outlineTab;
       if (!tabId) return;
       activateTab(tabId);
@@ -1568,6 +1644,8 @@ bindChecks('data-sop-id', 'sop', 'li');
 bindChecks('data-action-id', 'actions', '.action-card');
 bindToolPins();
 bindChapterJumps();
+bindVisualEventJumps();
+bindSopTitleSeek();
 bindOutlineNav();
 bindChatRail();
 bindShellLayout();
@@ -1710,21 +1788,98 @@ export function chaptersFromPack(chapters?: VideoPackChapter[] | null): AppBuild
   });
 }
 
+/** Normalize text for honest SOP ↔ chapter/visual matching (no fuzzy guessing). */
+function sopMatchNormalize(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function sopMatchTokens(text: string): Set<string> {
+  const tokens = sopMatchNormalize(text).split(/\s+/).filter((w) => w.length > 3);
+  return new Set(tokens);
+}
+
+function sopTokenOverlapScore(left: string, right: string): number {
+  const a = sopMatchTokens(left);
+  const b = sopMatchTokens(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let overlap = 0;
+  for (const token of a) {
+    if (b.has(token)) overlap += 1;
+  }
+  return overlap;
+}
+
+/**
+ * Derive a seek timestamp only from existing pack fields (chapter starts or visual timestamps).
+ * Requires a strong token overlap (≥2) or a clear substring relation — never invent times.
+ */
+export function deriveSopTimestampFromPackFields(
+  step: { title: string; description: string },
+  chapters: AppBuilderChapter[],
+  visualEvents: AppBuilderVisualEvent[],
+): number | undefined {
+  const titleNorm = sopMatchNormalize(step.title);
+  let bestChapter: { start: number; score: number } | null = null;
+  for (const chapter of chapters) {
+    const topicNorm = sopMatchNormalize(chapter.topic);
+    const overlap = Math.max(
+      sopTokenOverlapScore(step.title, chapter.topic),
+      sopTokenOverlapScore(step.description, chapter.topic),
+    );
+    const substring =
+      (titleNorm.length >= 8 && topicNorm.includes(titleNorm)) ||
+      (topicNorm.length >= 8 && titleNorm.includes(topicNorm))
+        ? 3
+        : 0;
+    const score = Math.max(overlap, substring);
+    if (score >= 2 && Number.isFinite(chapter.start) && chapter.start >= 0) {
+      if (!bestChapter || score > bestChapter.score) {
+        bestChapter = { start: chapter.start, score };
+      }
+    }
+  }
+  if (bestChapter) return bestChapter.start;
+
+  let bestVisual: { timestamp: number; score: number } | null = null;
+  for (const event of visualEvents) {
+    if (!Number.isFinite(event.timestamp) || event.timestamp < 0) continue;
+    const score = Math.max(
+      sopTokenOverlapScore(step.title, event.content),
+      sopTokenOverlapScore(step.description, event.content),
+    );
+    if (score >= 2) {
+      if (!bestVisual || score > bestVisual.score) {
+        bestVisual = { timestamp: event.timestamp, score };
+      }
+    }
+  }
+  if (bestVisual) return bestVisual.timestamp;
+
+  return undefined;
+}
+
 export function sopStepsFromPack(input: {
   requirements?: VideoPackRequirement[];
   transcript?: AppBuilderTranscript | null;
+  chapters?: AppBuilderChapter[];
+  visualEvents?: AppBuilderVisualEvent[];
 }): AppBuilderSopStep[] {
   const requirements = input.requirements ?? [];
+  const chapters = input.chapters ?? [];
+  const visualEvents = input.visualEvents ?? [];
   if (requirements.length > 0) {
     return requirements.flatMap((req, index) => {
       const title = req.title.trim();
       if (!title) return [];
+      const description = (req.detail ?? '').trim();
+      const timestamp = deriveSopTimestampFromPackFields({ title, description }, chapters, visualEvents);
       return [
         {
           id: req.id || `sop_${index + 1}`,
           order: index + 1,
           title,
-          description: (req.detail ?? '').trim(),
+          description,
+          ...(timestamp !== undefined ? { timestamp } : {}),
         },
       ];
     });
@@ -1844,6 +1999,11 @@ function emitInputFromV0(pack: VideoPackV0Json | EmittedVideoPack): AppBuilderSa
     sopSteps: sopStepsFromPack({
       requirements: pack.requirements,
       transcript,
+      chapters: chaptersFromPack(pack.chapters),
+      visualEvents: visualEventsFromPack({
+        visual_context: pack.visual_context,
+        keyframes: pack.keyframes,
+      }),
     }),
     actionItems: actionItemsFromPack({
       action_items: pack.action_items,
