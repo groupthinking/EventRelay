@@ -1,5 +1,13 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/live-deployment-probe', () => ({
+  probeLiveDeploymentUrl: vi.fn(async (liveUrl: string) => ({
+    ok: true,
+    statusCode: 200,
+    finalUrl: liveUrl,
+  })),
+}));
 import { canonicalGateJson, type GateDecision } from '@/lib/gate-transition';
 import { evaluateOriginGate, type OriginGateEvaluation } from '@/lib/origin-gate';
 import {
