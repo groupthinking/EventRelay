@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -109,6 +110,7 @@ run(github, context, core, fs)
             text=True,
             capture_output=True,
             env={
+                **os.environ,
                 "SELECTION_SCRIPT": script,
                 "EVENT_NAME": event_name,
                 "EVENT_PAYLOAD": json.dumps(event_payload),
