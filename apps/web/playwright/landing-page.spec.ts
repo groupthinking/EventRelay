@@ -21,7 +21,7 @@ for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Paste a YouTube URL. Continue in Studio.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Turn a YouTube URL into a hashed Video Pack in Studio.' })).toBeVisible();
     await expect(page.getByLabel('YouTube URL')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Run in Studio' })).toBeVisible();
     await expect(page.getByText('UVAI Workflow Pro').last()).toBeVisible();
