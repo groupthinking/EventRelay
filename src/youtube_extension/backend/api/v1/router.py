@@ -2269,17 +2269,38 @@ async def list_pipeline_audit_runs(limit: int = 20):
 # ============================================================
 
 
-_VIDEO_PACK_STORE = VideoPackStore(Path("storage/video_packs"))
+_LEGACY_VIDEO_PACK_FILESYSTEM_ENV = "ENABLE_LEGACY_VIDEO_PACK_FILESYSTEM"
+_LEGACY_VIDEO_PACK_FILESYSTEM_ROOT_ENV = "LEGACY_VIDEO_PACK_FILESYSTEM_ROOT"
+_LEGACY_VIDEO_PACK_ROUTE_DETAIL = (
+    "Deprecated backend /api/v1/video/pack filesystem storage is retired. "
+    "Use the canonical web /api/video/pack route backed by Upstash REST. "
+    "For short-lived non-production migration only, set "
+    "ENABLE_LEGACY_VIDEO_PACK_FILESYSTEM=1."
+)
+
+
+def _legacy_video_pack_store() -> Optional[VideoPackStore]:
+    node_env = os.getenv("NODE_ENV", "").strip().lower()
+    legacy_enabled = os.getenv(_LEGACY_VIDEO_PACK_FILESYSTEM_ENV, "").strip().lower()
+    if node_env == "production" or legacy_enabled not in {"1", "true", "yes", "on"}:
+        return None
+    root = os.getenv(_LEGACY_VIDEO_PACK_FILESYSTEM_ROOT_ENV, "storage/video_packs")
+    return VideoPackStore(Path(root))
 
 
 @router.post(
     "/video/pack",
     response_model=ApiResponse,
-    summary="Get or create a VideoPack",
+    summary="Legacy VideoPack filesystem route (deprecated)",
     tags=["Jobs"],
+    deprecated=True,
 )
 async def get_or_create_videopack(request: VideoPackRequest):
     """Get or create the hashed VideoPack v0 identity record for a video ID."""
+    store = _legacy_video_pack_store()
+    if store is None:
+        raise HTTPException(status_code=410, detail=_LEGACY_VIDEO_PACK_ROUTE_DETAIL)
+
     video_id = request.video_id
     if not video_id and request.video_url:
         try:
@@ -2297,10 +2318,14 @@ async def get_or_create_videopack(request: VideoPackRequest):
         raise HTTPException(status_code=400, detail="Could not determine video_id")
 
     try:
+        logger.warning(
+            "Using deprecated filesystem VideoPack store for /api/v1/video/pack; "
+            "canonical pack persistence is /api/video/pack via Upstash REST"
+        )
         pack = emit_video_pack(
             video_id=video_id,
             video_url=request.video_url,
-            store=_VIDEO_PACK_STORE,
+            store=store,
         )
         return ApiResponse.success(pack.model_dump(mode="json"))
     except ValueError as exc:

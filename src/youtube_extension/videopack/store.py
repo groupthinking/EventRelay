@@ -1,7 +1,11 @@
-"""Filesystem get-or-create store for VideoPack v0.
+"""Legacy filesystem get-or-create store for VideoPack v0.
 
 Layout matches the existing convention documented in versioning.py:
 `storage/video_packs/<video_id>/pack.json`.
+
+This store is legacy-only. Production Video Pack persistence is the shared
+Upstash REST store used by the web runtime; the filesystem path exists only for
+short-lived non-production migration and tests.
 """
 
 from __future__ import annotations

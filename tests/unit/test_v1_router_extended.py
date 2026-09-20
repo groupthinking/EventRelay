@@ -3874,3 +3874,54 @@ class TestVideoDetailOffloading:
             "a closed loop survived a later gate build; "
             "_discard_closed_fs_walk_gates did not reclaim it"
         )
+
+
+class TestVideoPackPersistenceConsolidation:
+    def test_video_pack_route_is_retired_without_explicit_legacy_opt_in(
+        self, client, monkeypatch
+    ):
+        monkeypatch.delenv("ENABLE_LEGACY_VIDEO_PACK_FILESYSTEM", raising=False)
+        monkeypatch.delenv("LEGACY_VIDEO_PACK_FILESYSTEM_ROOT", raising=False)
+        monkeypatch.setenv("NODE_ENV", "development")
+
+        resp = client.post(
+            "/api/v1/video/pack",
+            json={"video_url": "https://www.youtube.com/watch?v=auJzb1D-fag"},
+        )
+
+        assert resp.status_code == 410
+        assert "/api/video/pack" in resp.json()["detail"]
+        assert "Upstash REST" in resp.json()["detail"]
+
+    def test_video_pack_route_never_reenables_filesystem_store_in_production(
+        self, client, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ENABLE_LEGACY_VIDEO_PACK_FILESYSTEM", "1")
+        monkeypatch.setenv("LEGACY_VIDEO_PACK_FILESYSTEM_ROOT", str(tmp_path))
+        monkeypatch.setenv("NODE_ENV", "production")
+
+        resp = client.post(
+            "/api/v1/video/pack",
+            json={"video_url": "https://www.youtube.com/watch?v=auJzb1D-fag"},
+        )
+
+        assert resp.status_code == 410
+        assert not (tmp_path / "auJzb1D-fag" / "pack.json").exists()
+
+    def test_video_pack_route_can_use_legacy_filesystem_store_only_in_non_production(
+        self, client, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ENABLE_LEGACY_VIDEO_PACK_FILESYSTEM", "1")
+        monkeypatch.setenv("LEGACY_VIDEO_PACK_FILESYSTEM_ROOT", str(tmp_path))
+        monkeypatch.setenv("NODE_ENV", "development")
+
+        resp = client.post(
+            "/api/v1/video/pack",
+            json={"video_url": "https://www.youtube.com/watch?v=auJzb1D-fag"},
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "success"
+        assert body["data"]["video_id"] == "auJzb1D-fag"
+        assert (tmp_path / "auJzb1D-fag" / "pack.json").is_file()

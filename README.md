@@ -81,6 +81,8 @@ Set the web runtime's `BACKEND_URL` to the intended backend. A missing backend m
 
 Redis TCP URLs are **not** the Video Pack store. Backend SQL stores and auxiliary integrations serve other entities; they do not replace the locked Upstash REST pack contract. Direct provider keys used by legacy runtime paths are not a new requirement for every Studio user.
 
+The FastAPI `POST /api/v1/video/pack` filesystem implementation is deprecated and retired by default so production has a single active Video Pack store. Use the canonical web `POST /api/video/pack` route for all durable packs. If you still need the old filesystem path during a short-lived local migration, opt in only outside production with `ENABLE_LEGACY_VIDEO_PACK_FILESYSTEM=1` and optionally point it at a temporary root with `LEGACY_VIDEO_PACK_FILESYSTEM_ROOT=/abs/path`.
+
 ## Verification
 
 Run focused tests for the changed surface, then the broader checks required by that change:
