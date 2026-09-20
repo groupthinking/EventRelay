@@ -41,6 +41,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const repoFullName = `${owner}/${repo}`;
+            const defaultBranch = context.payload.repository?.default_branch || "main";
             const escapedRepoFullName = repoFullName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const now = Date.now();
             const staleAfterMs = 14 * 24 * 60 * 60 * 1000;
@@ -82,11 +83,11 @@ jobs:
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
             });
-            const protectedBranches = await github.rest.repos.listBranches({
+            const protectedBranches = await github.paginate(github.rest.repos.listBranches, {
               owner, repo, protected: true, per_page: 100
             });
             const protectedNames = new Set(
-              (protectedBranches.data || []).map(branch => branch.name)
+              (protectedBranches || []).map(branch => branch.name)
             );
             // Branch commit metadata comes from GraphQL with the branch page, avoiding one
             // REST getCommit call per stale branch. The reconciliation trigger intentionally
@@ -188,7 +189,7 @@ jobs:
             const staleBranches = [];
             for (const branch of branches) {
               // Exclude the default branch, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || protectedNames.has(branch.name) || activeHeads.has(branch.name)) continue;
+              if (branch.name === defaultBranch || protectedNames.has(branch.name) || activeHeads.has(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });
