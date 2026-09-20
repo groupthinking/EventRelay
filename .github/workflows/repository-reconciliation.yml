@@ -83,8 +83,9 @@ jobs:
               owner, repo, state: "open", per_page: 100
             });
             // Branch commit metadata comes from GraphQL with the branch page, avoiding one
-            // REST getCommit call per stale branch. The reconciliation trigger intentionally
-            // excludes pull_request.synchronize so it cannot compete with preview E2E lookup.
+            // REST getCommit call per stale branch. Protection status stays on the REST
+            // branch list because the GraphQL branchProtectionRule field is forbidden to
+            // this workflow token on some repositories/branches.
             const branchQuery = `
               query BranchInventory($owner: String!, $repo: String!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
@@ -93,7 +94,6 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                     nodes {
                       name
-                      branchProtectionRule { id }
                       target {
                         ... on Commit { oid committedDate }
                       }
@@ -103,15 +103,22 @@ jobs:
               }
             `;
             const branches = [];
+            const protectedBranches = new Map();
             let totalBranches = 0;
             let branchCursor = null;
             try {
+              const branchProtectionInventory = await github.paginate(github.rest.repos.listBranches, {
+                owner, repo, per_page: 100
+              });
+              for (const branch of branchProtectionInventory) {
+                protectedBranches.set(branch.name, Boolean(branch.protected));
+              }
               do {
                 const inventory = await github.graphql(branchQuery, {
                   owner, repo, cursor: branchCursor
                 });
                 const refs = inventory.repository.refs;
-                totalBranches = refs.totalCount;
+                totalBranches = Math.max(refs.totalCount, protectedBranches.size);
                 branches.push(...refs.nodes);
                 branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
               } while (branchCursor);
@@ -175,7 +182,7 @@ jobs:
             const staleBranches = [];
             for (const branch of branches) {
               // Exclude main, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || branch.branchProtectionRule || activeHeads.has(branch.name)) continue;
+              if (branch.name === "main" || protectedBranches.get(branch.name) || activeHeads.has(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });
