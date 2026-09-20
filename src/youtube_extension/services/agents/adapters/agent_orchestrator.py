@@ -541,6 +541,11 @@ class AgentOrchestrator:
         result.total_processing_time = asyncio.get_event_loop().time() - start_time
         return result
 
+    def create_agent_graph(self, name: str = "orchestrator_graph"):
+        """Create and return a new AgentGraph instance."""
+        from ..agent_graph import AgentGraph
+        return AgentGraph(name=name)
+
 
 # Global orchestrator instance
 orchestrator = AgentOrchestrator()
