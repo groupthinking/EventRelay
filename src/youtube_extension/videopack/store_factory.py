@@ -17,15 +17,6 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_FS_ROOT = Path("storage/video_packs")
 
-
-class VideoPackStoreProtocol:
-    def get(self, video_id: str):  # pragma: no cover - protocol sketch
-        raise NotImplementedError
-
-    def put(self, pack) -> None:  # pragma: no cover - protocol sketch
-        raise NotImplementedError
-
-
 def get_video_pack_store(
     *,
     filesystem_root: Path | None = None,
