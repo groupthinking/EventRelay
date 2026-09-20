@@ -100,36 +100,39 @@ jobs:
               for (const branch of branchInventory) {
                 const isProtected = Boolean(branch.protected);
                 protectedBranches.set(branch.name, isProtected);
-
-                const branchTarget = {
-                  oid: branch.commit.sha,
-                  committedDate: null
-                };
-
-                if (branch.name !== "main" && !isProtected && !activeHeads.has(branch.name)) {
-                  try {
-                    const commit = await github.rest.repos.getCommit({
-                      owner, repo, ref: branch.commit.sha
-                    });
-                    branchTarget.committedDate =
-                      commit.data.commit.committer?.date ||
-                      commit.data.commit.author?.date ||
-                      null;
-                  } catch (err) {
-                    if (err.status === 404) {
-                      core.warning(`Unable to retrieve commit metadata for branch ${branch.name}`);
-                    } else if (err.status === 403 && /rate limit/i.test(err.message || "")) {
-                      core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
-                      return;
-                    } else {
-                      throw err;
-                    }
+              }
+              const candidateBranches = branchInventory.filter(branch =>
+                branch.name !== "main" &&
+                !protectedBranches.get(branch.name) &&
+                !activeHeads.has(branch.name)
+              );
+              for (const branch of candidateBranches) {
+                let committedDate = null;
+                try {
+                  const commit = await github.rest.repos.getCommit({
+                    owner, repo, ref: branch.commit.sha
+                  });
+                  committedDate =
+                    commit.data.commit.committer?.date ||
+                    commit.data.commit.author?.date ||
+                    null;
+                } catch (err) {
+                  if (err.status === 404) {
+                    core.warning(`Unable to retrieve commit metadata for branch ${branch.name}`);
+                  } else if (err.status === 403 && /rate limit/i.test(err.message || "")) {
+                    core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
+                    return;
+                  } else {
+                    throw err;
                   }
                 }
 
                 branches.push({
                   name: branch.name,
-                  target: branchTarget
+                  target: {
+                    oid: branch.commit.sha,
+                    committedDate
+                  }
                 });
               }
             } catch (err) {
