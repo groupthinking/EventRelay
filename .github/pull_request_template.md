@@ -2,6 +2,9 @@
 
 Closes #
 
+<!-- Required: use Fixes #N / Closes #N / Resolves #N to an *open* issue.
+     The `Require issue closer` check fails without it. -->
+
 ## Outcome
 
 Describe the user or operational result this PR produces.
@@ -36,4 +39,3 @@ Provide the Vercel preview, production deployment, runtime evidence, or state wh
 - [ ] Acceptance criteria are satisfied
 - [ ] Required checks pass on the current head
 - [ ] Human decision is requested only for product, security, irreversible infrastructure, or production approval
-

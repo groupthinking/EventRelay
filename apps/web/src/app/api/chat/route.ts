@@ -4,11 +4,15 @@ import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
 import { checkFreeChatQuota } from '@/lib/billing/chat-quota';
 import { grokChatCompletion } from '@/lib/billing/grok-client';
+import { scoreLeadWithJev } from '@/lib/billing/jev-lead-score';
 import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/paid-tier-model';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
 import { hasAiGatewayKey } from '@/lib/vercel-ai-gateway';
-
+import {
+  parseChatPackBinding,
+  resolveChatPackGrounding,
+} from '@/lib/chat-pack-grounding';
 type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -27,6 +31,45 @@ function isValidChatHistoryMessage(message: unknown): message is ChatHistoryMess
   );
 }
 
+type GatewayConversationMessage = { role: 'user' | 'assistant'; content: string };
+
+const BACKEND_SOFT_ERROR_RE =
+  /publisher model|was not found|not found for API version|model unavailable|vertex/i;
+
+export function looksLikeBackendProviderSoftError(answer: string): boolean {
+  const text = answer.trim();
+  if (!text) return true;
+  return BACKEND_SOFT_ERROR_RE.test(text);
+}
+
+function buildConversationMessages(
+  history: ChatHistoryMessage[],
+  query: string,
+): GatewayConversationMessage[] {
+  const messages: GatewayConversationMessage[] = [];
+  for (const entry of history) {
+    messages.push({ role: entry.role, content: entry.content });
+  }
+  messages.push({ role: 'user', content: query });
+  return messages;
+}
+
+async function generateGatewayChatAnswer(
+  packSystemPrompt: string | undefined,
+  history: ChatHistoryMessage[],
+  query: string,
+): Promise<string> {
+  if (!hasAiGatewayKey()) {
+    throw new Error('gateway_not_configured');
+  }
+  const { text } = await generateText({
+    model: aiGateway(GATEWAY_CHAT_MODEL),
+    ...(packSystemPrompt ? { instructions: packSystemPrompt } : {}),
+    messages: buildConversationMessages(history, query),
+  });
+  return text;
+}
+
 export async function POST(request: Request) {
   let routing = resolvePaidTierRouting(false);
   try {
@@ -35,6 +78,32 @@ export async function POST(request: Request) {
     const quotaSubject = billingEmail ?? 'anonymous';
     const isPro = await isProSubscriber(billingEmail);
     routing = resolvePaidTierRouting(isPro);
+
+    let packSystemPrompt: string | undefined;
+    const packBinding = parseChatPackBinding(body);
+    if (
+      (typeof body.video_id === 'string' && body.video_id.trim())
+      || (typeof body.pack_id === 'string' && body.pack_id.trim())
+    ) {
+      if (!packBinding) {
+        return NextResponse.json(
+          {
+            answer:
+              'Pack binding failed: video_id and pack_id must refer to the same hosted Video Pack.',
+            code: 'pack_binding_invalid',
+          },
+          { status: 400 },
+        );
+      }
+      const grounded = await resolveChatPackGrounding(packBinding);
+      if (!grounded.ok) {
+        return NextResponse.json(
+          { answer: grounded.answer, code: grounded.code },
+          { status: grounded.status },
+        );
+      }
+      packSystemPrompt = grounded.systemPrompt;
+    }
 
     if (!isPro) {
       const quota = await checkFreeChatQuota(quotaSubject, FREE_CHAT_DAILY_LIMIT);
@@ -59,14 +128,33 @@ export async function POST(request: Request) {
       decision: `model=${routing.model} runtime=${routing.runtime} plan=${routing.plan}`,
     });
 
+    const history = Array.isArray(body.history)
+      ? body.history.filter(isValidChatHistoryMessage)
+      : [];
+    const query = body.query || body.message || '';
+
     if (isPro) {
+      const leadScore = await scoreLeadWithJev({ query, history });
+      const scoredPrompt =
+        leadScore?.decision === 'action_items'
+          ? [
+              packSystemPrompt,
+              'Prioritize concrete next actions first, then add concise rationale.',
+            ]
+            .filter(Boolean)
+            .join('\n\n')
+          : packSystemPrompt;
       try {
-        const grok = await grokChatCompletion(body.query ?? '', routing.model);
+        const grok = await grokChatCompletion(query, routing.model, {
+          systemPrompt: scoredPrompt,
+          history,
+        });
         return NextResponse.json({
           answer: grok.answer,
           routing,
           plan: routing.plan,
           provider: grok.provider,
+          ...(leadScore ? { leadScore } : {}),
         });
       } catch (grokErr) {
         const msg = grokErr instanceof Error ? grokErr.message : 'grok_failed';
@@ -77,8 +165,38 @@ export async function POST(request: Request) {
             routing,
             plan: routing.plan,
             provider: 'xai',
+            ...(leadScore ? { leadScore } : {}),
           },
           { status: 503 },
+        );
+      }
+    }
+
+    const usePackGateway = Boolean(packSystemPrompt);
+
+    if (usePackGateway) {
+      try {
+        const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
+        return NextResponse.json({
+          answer,
+          routing,
+          plan: routing.plan,
+          provider: 'vercel-ai-gateway',
+        });
+      } catch (gatewayErr) {
+        const msg = gatewayErr instanceof Error ? gatewayErr.message : 'gateway_failed';
+        console.error('Pack-grounded gateway chat error:', gatewayErr);
+        return NextResponse.json(
+          {
+            answer:
+              msg === 'gateway_not_configured'
+                ? 'Pack-grounded chat requires AI_GATEWAY_API_KEY to be configured.'
+                : 'The AI assistant is temporarily unavailable. Please try again.',
+            routing,
+            plan: routing.plan,
+            provider: 'vercel-ai-gateway',
+          },
+          { status: msg === 'gateway_not_configured' ? 503 : 502 },
         );
       }
     }
@@ -94,10 +212,11 @@ export async function POST(request: Request) {
           'X-Lead-Runtime': routing.runtime,
         },
         body: JSON.stringify({
-          message: body.query,
+          message: query,
           video_url: body.video_url || '',
           video_id: body.video_id || '',
-          conversation_history: body.history || [],
+          pack_system_context: packSystemPrompt ?? '',
+          conversation_history: history,
           model: routing.model,
           lead_runtime: routing.runtime,
         }),
@@ -107,6 +226,19 @@ export async function POST(request: Request) {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Chat API error:', response.status, errorText);
+        if (hasAiGatewayKey()) {
+          try {
+            const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
+            return NextResponse.json({
+              answer,
+              routing,
+              plan: routing.plan,
+              provider: 'vercel-ai-gateway',
+            });
+          } catch (gatewayErr) {
+            console.error('Gateway fallback after backend HTTP error:', gatewayErr);
+          }
+        }
         return NextResponse.json(
           { answer: 'The AI assistant is temporarily unavailable. Please try again.', routing },
           { status: response.status },
@@ -114,9 +246,24 @@ export async function POST(request: Request) {
       }
 
       const data = await response.json();
+      const backendAnswer =
+        data.response || data.answer || data.message || 'No response generated.';
+      if (looksLikeBackendProviderSoftError(String(backendAnswer)) && hasAiGatewayKey()) {
+        try {
+          const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
+          return NextResponse.json({
+            answer,
+            routing,
+            plan: routing.plan,
+            provider: 'vercel-ai-gateway',
+          });
+        } catch (gatewayErr) {
+          console.error('Gateway fallback after backend soft error:', gatewayErr);
+        }
+      }
 
       return NextResponse.json({
-        answer: data.response || data.answer || data.message || 'No response generated.',
+        answer: backendAnswer,
         routing,
         plan: routing.plan,
       });
@@ -133,18 +280,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const history = Array.isArray(body.history)
-      ? body.history.filter(isValidChatHistoryMessage)
-      : [];
-
-    const query = body.query || body.message || '';
-    const { text } = await generateText({
-      model: aiGateway(GATEWAY_CHAT_MODEL),
-      messages: [...history, { role: 'user', content: query }],
-    });
+    const answer = await generateGatewayChatAnswer(packSystemPrompt, history, query);
 
     return NextResponse.json({
-      answer: text,
+      answer,
       routing,
       plan: routing.plan,
       provider: 'vercel-ai-gateway',

@@ -15,9 +15,15 @@ export function getXaiApiKey(): string | undefined {
   );
 }
 
+type GrokChatContext = {
+  systemPrompt?: string;
+  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+};
+
 export async function grokChatCompletion(
   query: string,
   model: string = GROK_BILLING_LEAD_MODEL,
+  context: GrokChatContext = {},
 ): Promise<GrokChatResult> {
   const apiKey = getXaiApiKey();
   if (!apiKey) {
@@ -36,8 +42,13 @@ export async function grokChatCompletion(
         {
           role: 'system',
           content:
-            'You are the UVAI Workflow Pro lead agent (Grok/Composer). Answer concisely for video intelligence users.',
+            context.systemPrompt
+            ?? 'You are the UVAI Workflow Pro lead agent (Grok/Composer). Answer concisely for video intelligence users.',
         },
+        ...(context.history ?? []).map((entry) => ({
+          role: entry.role,
+          content: entry.content,
+        })),
         { role: 'user', content: query },
       ],
       max_tokens: 512,

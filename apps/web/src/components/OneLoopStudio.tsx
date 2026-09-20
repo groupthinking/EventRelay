@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Download, GitPullRequest, Hammer, Play, Rocket } from 'lucide-react';
@@ -100,6 +100,11 @@ import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
 import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
+import StudioThreePanelShell from '@/components/studio/StudioThreePanelShell';
+import {
+  chaptersFromPack,
+  sopStepsFromPack,
+} from '@/lib/emit-app-builder-sandbox';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -501,6 +506,28 @@ export default function OneLoopStudio({
     analysisReady: quality === 'live',
     failed: selected?.status === 'failed',
   });
+  const resultReadyShell = Boolean(selected?.videoPack?.pack);
+  const shellPack = selected?.videoPack?.pack;
+  const shellChapters = useMemo(
+    () => (shellPack ? chaptersFromPack(shellPack.chapters) : []),
+    [shellPack],
+  );
+  const shellSopSteps = useMemo(() => {
+    if (!shellPack) return [];
+    const transcript = shellPack.transcript
+      ? {
+          full_text: shellPack.transcript.full_text,
+          language: 'language' in shellPack.transcript ? shellPack.transcript.language : null,
+          segments: shellPack.transcript.segments,
+        }
+      : null;
+    return sopStepsFromPack({ requirements: shellPack.requirements, transcript });
+  }, [shellPack]);
+  const [shellOutlineId, setShellOutlineId] = useState<string | null>('studio-shell-video');
+  const scrollToShellSection = useCallback((sectionId: string) => {
+    setShellOutlineId(sectionId);
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
   const canAttemptBuildLive = Boolean(
     getYouTubeId(url || selected?.url || '') && (selected || url.trim()),
   );
@@ -1040,9 +1067,18 @@ export default function OneLoopStudio({
 
       <main
         data-testid="studio-main"
-        className="mx-auto grid w-full max-w-6xl flex-1 gap-4 px-4 py-6 pb-28 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]"
+        className={clsx(
+          'mx-auto flex w-full flex-1 flex-col gap-4 px-4 py-6 pb-28 sm:px-6',
+          resultReadyShell ? 'max-w-[min(100%,96rem)]' : 'max-w-6xl grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]',
+        )}
       >
-        <section className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
+        {(() => {
+          const workspace = (
+            <>
+        <section
+          id="studio-shell-video"
+          className="relative overflow-hidden rounded-xl border border-white/10 bg-black"
+        >
           {videoId ? (
             <>
               <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
@@ -1089,7 +1125,10 @@ export default function OneLoopStudio({
           )}
         </section>
 
-        <section className="flex min-h-[280px] flex-col rounded-xl border border-white/10 bg-[#11131a]">
+        <section
+          id="studio-shell-transcript"
+          className="flex min-h-[280px] flex-col rounded-xl border border-white/10 bg-[#11131a]"
+        >
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
               Transcript
@@ -1138,7 +1177,7 @@ export default function OneLoopStudio({
         {workbenchEmpty ? (
           <section
             data-testid="studio-workbench-empty"
-            className="lg:col-span-2"
+            className={clsx(!resultReadyShell && 'lg:col-span-2')}
             aria-labelledby="studio-workbench-empty-title"
           >
             <Empty
@@ -1179,19 +1218,21 @@ export default function OneLoopStudio({
         ) : null}
 
         {selected?.videoPack?.pack ? (
-          <GroundedSpecReview
-            key={selected.id}
-            videoId={selected.id}
-            pack={selected.videoPack.pack}
-            acknowledgment={selected.specReviewAcknowledgment}
-            persistenceAvailable={dashboardPersistenceSucceeded()}
-            onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
-            onAcknowledge={(value) => {
-              if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
-              updateVideo(selected.id, { specReviewAcknowledgment: value });
-              return dashboardPersistenceSucceeded();
-            }}
-          />
+          <div id="studio-shell-result" data-testid="studio-result-ready-pane">
+            <GroundedSpecReview
+              key={selected.id}
+              videoId={selected.id}
+              pack={selected.videoPack.pack}
+              acknowledgment={selected.specReviewAcknowledgment}
+              persistenceAvailable={dashboardPersistenceSucceeded()}
+              onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
+              onAcknowledge={(value) => {
+                if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
+                updateVideo(selected.id, { specReviewAcknowledgment: value });
+                return dashboardPersistenceSucceeded();
+              }}
+            />
+          </div>
         ) : null}
 
         {promotePack ? (
@@ -1203,7 +1244,12 @@ export default function OneLoopStudio({
           />
         ) : null}
 
-        <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
+        <section
+          className={clsx(
+            'rounded-xl border border-white/10 bg-[#11131a]',
+            !resultReadyShell && 'lg:col-span-2',
+          )}
+        >
           <div className="border-b border-white/10 px-4 py-3">
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
               Events
@@ -1253,7 +1299,13 @@ export default function OneLoopStudio({
         </section>
 
         {linkedSop && (linkedSop.entities.length > 0 || linkedSop.steps.length > 0 || packFormation.tools.length > 0) && (
-          <section className="rounded-xl border border-white/10 bg-[#11131a] lg:col-span-2">
+          <section
+            id="studio-shell-sop"
+            className={clsx(
+              'rounded-xl border border-white/10 bg-[#11131a]',
+              !resultReadyShell && 'lg:col-span-2',
+            )}
+          >
             <div className="border-b border-white/10 px-4 py-3">
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
                 Named tools
@@ -1411,8 +1463,12 @@ export default function OneLoopStudio({
 
         {selected?.videoPack && (
           <section
+            id="studio-shell-pack"
             data-testid="video-pack"
-            className="rounded-xl border border-white/10 bg-[#11131a] p-4 lg:col-span-2"
+            className={clsx(
+              'rounded-xl border border-white/10 bg-[#11131a] p-4',
+              !resultReadyShell && 'lg:col-span-2',
+            )}
           >
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
               Video pack
@@ -1479,7 +1535,12 @@ export default function OneLoopStudio({
         )}
 
         {selected?.insights && (
-          <section className="rounded-xl border border-white/10 bg-[#11131a] p-4 lg:col-span-2">
+          <section
+            className={clsx(
+              'rounded-xl border border-white/10 bg-[#11131a] p-4',
+              !resultReadyShell && 'lg:col-span-2',
+            )}
+          >
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
               Summary
             </h2>
@@ -1491,7 +1552,10 @@ export default function OneLoopStudio({
           <section
             id="act-results"
             data-testid="act-results"
-            className="rounded-xl border border-[#e8b86d]/30 bg-[#e8b86d]/5 p-4 lg:col-span-2"
+            className={clsx(
+              'rounded-xl border border-[#e8b86d]/30 bg-[#e8b86d]/5 p-4',
+              !resultReadyShell && 'lg:col-span-2',
+            )}
           >
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
               Tool results
@@ -1533,6 +1597,31 @@ export default function OneLoopStudio({
             )}
           </section>
         )}
+            </>
+          );
+          if (resultReadyShell && selected?.videoPack) {
+            return (
+              <StudioThreePanelShell
+                youtubeVideoId={selected.videoPack.videoId}
+                sourceHash={selected.videoPack.sourceHash}
+                sourceUrl={selected.videoPack.sourceUrl}
+                chapters={shellChapters}
+                sopSteps={shellSopSteps}
+                outlineSections={[
+                  { id: 'studio-shell-video', label: 'Video' },
+                  { id: 'studio-shell-transcript', label: 'Transcript' },
+                  { id: 'studio-shell-result', label: 'Result Ready' },
+                  { id: 'studio-shell-pack', label: 'Video pack' },
+                ]}
+                activeOutlineId={shellOutlineId}
+                onOutlineSelect={scrollToShellSection}
+              >
+                <div className="flex flex-col gap-4">{workspace}</div>
+              </StudioThreePanelShell>
+            );
+          }
+          return workspace;
+        })()}
       </main>
 
       {exportToast ? (

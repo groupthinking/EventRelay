@@ -1,10 +1,22 @@
 /** Bump when extract retry/salvage policy changes — triggers reclaimReady on POST. */
-export const VIDEO_PACK_EXTRACT_PIPELINE_VERSION = 'c1-gateway-retry-v1' as const;
+export const VIDEO_PACK_EXTRACT_PIPELINE_VERSION = 'p1.5-chunked-extract-v1' as const;
 
 export type VideoPackExtractFailureReason =
   | 'HOSTED_PACK_GATEWAY_EMPTY'
   | 'HOSTED_PACK_GATEWAY_UNAVAILABLE'
+  | 'HOSTED_PACK_SOURCE_NOT_FOUND'
   | 'HOSTED_PACK_EXTRACT_FAILED';
+
+export function isVideoPackSourceNotFoundMessage(message: string): boolean {
+  const lower = message.trim().toLowerCase();
+  if (!lower) return false;
+  return (
+    lower.includes('requested entity was not found') ||
+    lower.includes('entity was not found') ||
+    lower.includes('youtube reports this video is unavailable') ||
+    lower.includes('video is unavailable or was removed')
+  );
+}
 
 export function normalizeExtractFailureMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -27,6 +39,9 @@ export function classifyVideoPackExtractFailure(message: string): VideoPackExtra
   ) {
     return 'HOSTED_PACK_GATEWAY_EMPTY';
   }
+  if (isVideoPackSourceNotFoundMessage(message)) {
+    return 'HOSTED_PACK_SOURCE_NOT_FOUND';
+  }
   if (
     lower.includes('gatewayinternalservererror') ||
     lower.includes('service temporarily unavailable') ||
@@ -36,10 +51,14 @@ export function classifyVideoPackExtractFailure(message: string): VideoPackExtra
     return 'HOSTED_PACK_GATEWAY_UNAVAILABLE';
   }
   if (
+    lower.includes('after 5 attempts') ||
     lower.includes('after 4 attempts') ||
     lower.includes('after 3 attempts') ||
     (lower.includes('failed after') && lower.includes('attempt'))
   ) {
+    if (isVideoPackSourceNotFoundMessage(message)) {
+      return 'HOSTED_PACK_SOURCE_NOT_FOUND';
+    }
     if (lower.includes('empty content') || lower.includes('no extracted spec')) {
       return 'HOSTED_PACK_GATEWAY_EMPTY';
     }
@@ -56,6 +75,9 @@ export function isTransientVideoPackGatewayError(error: unknown): boolean {
   const message = normalizeExtractFailureMessage(error);
   const lower = message.toLowerCase();
 
+  if (isVideoPackSourceNotFoundMessage(message)) {
+    return false;
+  }
   if (lower.includes('requires ai gateway') || lower.includes('ai gateway api key is not configured')) {
     return false;
   }
@@ -97,7 +119,7 @@ export function isRetryableTruncatedParseError(error: unknown, rawText?: string)
   return true;
 }
 
-export function jitteredExtractBackoffMs(attemptIndex: number, baseMs = 1000): number {
+export function jitteredExtractBackoffMs(attemptIndex: number, baseMs = 1500): number {
   const exponential = baseMs * 2 ** attemptIndex;
   const jitter = Math.floor(Math.random() * 400);
   return exponential + jitter;
