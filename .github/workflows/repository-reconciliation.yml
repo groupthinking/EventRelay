@@ -21,9 +21,9 @@ on:
   delete:
 
 permissions:
-  contents: read
-  issues: write
-  pull-requests: read
+  contents: read # branch inventory + PR metadata; intentionally avoids admin-only branch protection reads
+  issues: write # upsert the drift report issue and comment on untracked PRs
+  pull-requests: read # inspect open PR metadata only
 
 concurrency:
   group: repository-reconciliation
@@ -82,9 +82,17 @@ jobs:
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
             });
+            const protectedBranches = await github.rest.repos.listBranches({
+              owner, repo, protected: true, per_page: 100
+            });
+            const protectedNames = new Set(
+              (protectedBranches.data || []).map(branch => branch.name)
+            );
             // Branch commit metadata comes from GraphQL with the branch page, avoiding one
             // REST getCommit call per stale branch. The reconciliation trigger intentionally
             // excludes pull_request.synchronize so it cannot compete with preview E2E lookup.
+            // This query must stay within contents:read; branchProtectionRule requires elevated
+            // admin scope and breaks pull_request_target / schedule runs with installation tokens.
             const branchQuery = `
               query BranchInventory($owner: String!, $repo: String!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
@@ -93,7 +101,6 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                     nodes {
                       name
-                      branchProtectionRule { id }
                       target {
                         ... on Commit { oid committedDate }
                       }
@@ -116,8 +123,14 @@ jobs:
                 branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
               } while (branchCursor);
             } catch (err) {
-              if (err.status === 403 && /rate limit/i.test(err.message || "")) {
-                core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
+              if (
+                err.status === 403
+                && (
+                  /rate limit/i.test(err.message || "")
+                  || /resource not accessible by integration/i.test(err.message || "")
+                )
+              ) {
+                core.info("Repository reconciliation deferred: GitHub API branch inventory was unavailable before reconciliation completed.");
                 return;
               }
               throw err;
@@ -174,8 +187,8 @@ jobs:
 
             const staleBranches = [];
             for (const branch of branches) {
-              // Exclude main, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || branch.branchProtectionRule || activeHeads.has(branch.name)) continue;
+              // Exclude the default branch, protected branches, and branches attached to open PRs.
+              if (branch.name === "main" || protectedNames.has(branch.name) || activeHeads.has(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });

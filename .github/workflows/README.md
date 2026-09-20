@@ -154,6 +154,9 @@ A full audit of this directory was performed (see
 - **Removed** `verify-litert-mcp.yml` and `vision-reasoning.yml` — both only
   exercised the `mcp-servers/` tree, which was deleted in the dead-code cleanup;
   with the target modules gone every run failed, so the workflows were removed.
+- **Removed** `verification.yml` — the branch-specific hybrid-refactor gates no
+  longer had an owner, overlapped with `ci.yml`/`security.yml`/`e2e-tests.yml`,
+  and its last seven runs all failed without affecting the current delivery path.
 - **Renamed** `.yaml` → `stale.yml` — the file had no basename.
 - **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
   job (`@main`, dead paths) and switched the Node cache from a dead

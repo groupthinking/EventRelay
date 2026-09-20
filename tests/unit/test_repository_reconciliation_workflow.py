@@ -49,7 +49,11 @@ const actions = { issueUpdates: [], issueCreates: [], comments: [], pullUpdates:
 
 const pullsList = async () => ({ data: scenario.pulls || [] });
 pullsList.__tag = "pulls.list";
-const listBranches = async () => ({ data: scenario.branches || [] });
+const listBranches = async (params = {}) => ({
+  data: params.protected
+    ? (scenario.protectedBranches || (scenario.branches || []).filter(branch => branch.protected))
+    : (scenario.branches || []),
+});
 listBranches.__tag = "repos.listBranches";
 const listComments = async ({ issue_number }) => ({ data: (scenario.commentsByIssue || {})[issue_number] || [] });
 listComments.__tag = "issues.listComments";
@@ -88,7 +92,9 @@ const github = {
       case "pulls.list":
         return scenario.pulls || [];
       case "repos.listBranches":
-        return scenario.branches || [];
+        return params.protected
+          ? (scenario.protectedBranches || (scenario.branches || []).filter(branch => branch.protected))
+          : (scenario.branches || []);
       case "issues.listComments":
         return ((scenario.commentsByIssue || {})[params.issue_number]) || [];
       default:
@@ -283,6 +289,13 @@ def test_reconciliation_uses_graphql_branch_inventory_without_rest_pagination() 
     assert 'refs(refPrefix: "refs/heads/"' in script
     assert "committedDate" in script
     assert "github.paginate(github.rest.repos.listBranches" not in script
+
+
+def test_reconciliation_branch_query_omits_admin_only_branch_protection_field() -> None:
+    """The branch inventory query must not request admin-only branch protection data."""
+    script = _get_script(_load_workflow())
+
+    assert "branchProtectionRule { id }" not in script
 
 
 def test_reconciliation_workflow_report_is_idempotent() -> None:
@@ -560,6 +573,27 @@ def test_reconciliation_defers_without_writing_when_github_rate_limits(
             "graphqlError": {
                 "status": 403,
                 "message": "API rate limit exceeded for installation",
+            },
+        },
+    )
+
+    assert outcome["issueUpdates"] == []
+    assert outcome["issueCreates"] == []
+    assert any("Repository reconciliation deferred" in message for message in outcome["infos"])
+
+
+def test_reconciliation_defers_without_writing_on_forbidden_graphql_scope(
+    tmp_path: Path,
+) -> None:
+    """Forbidden GraphQL scope errors must defer instead of failing the whole workflow."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [],
+            "branches": [],
+            "graphqlError": {
+                "status": 403,
+                "message": "Resource not accessible by integration",
             },
         },
     )
