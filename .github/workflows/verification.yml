@@ -5,10 +5,6 @@ name: "Hybrid Refactor Verification Gates"
 #  See AUDIT-003 / #2165 — use ci.yml for canonical gates.)
 
 on:
-  pull_request:
-    branches:
-      - "refactor/hybrid-infra-v2"
-    types: [opened, synchronize, ready_for_review]
   workflow_dispatch:
     inputs:
       skip_docker:
