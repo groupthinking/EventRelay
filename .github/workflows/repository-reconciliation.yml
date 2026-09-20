@@ -93,7 +93,6 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                     nodes {
                       name
-                      branchProtectionRule { id }
                       target {
                         ... on Commit { oid committedDate }
                       }
@@ -174,8 +173,9 @@ jobs:
 
             const staleBranches = [];
             for (const branch of branches) {
-              // Exclude main, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || branch.branchProtectionRule || activeHeads.has(branch.name)) continue;
+              // Exclude main, branches attached to open PRs, and stale inventory rows
+              // without commit metadata (branchProtectionRule omitted — token lacks scope).
+              if (branch.name === "main" || activeHeads.has(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });
