@@ -113,13 +113,21 @@ const github = {
     },
     repos: {
       listBranches,
-      getCommit: async ({ ref }) => ({
-        data: {
-          commit: {
-            committer: { date: ((scenario.commitsBySha || {})[ref]) || "2026-07-01T00:00:00Z" },
+      getCommit: async ({ ref }) => {
+        const commitError = (scenario.commitErrorsBySha || {})[ref];
+        if (commitError) {
+          const err = new Error(commitError.message);
+          err.status = commitError.status;
+          throw err;
+        }
+        return {
+          data: {
+            commit: {
+              committer: { date: ((scenario.commitsBySha || {})[ref]) || "2026-07-01T00:00:00Z" },
+            },
           },
-        },
-      }),
+        };
+      },
     },
     issues: {
       get: async ({ issue_number }) => {
@@ -283,14 +291,14 @@ def test_reconciliation_workflow_total_branches_metric_is_accurate() -> None:
     assert "Total remote branches" in script
 
 
-def test_reconciliation_uses_graphql_branch_inventory_without_branch_protection_field() -> None:
-    """Branch inventory must not request the forbidden branch protection GraphQL field."""
+def test_reconciliation_uses_rest_branch_inventory_and_commit_lookup() -> None:
+    """Branch inventory must rely on REST so restricted GraphQL refs access cannot fail the job."""
     script = _get_script(_load_workflow())
 
-    assert "github.graphql" in script
-    assert 'refs(refPrefix: "refs/heads/"' in script
-    assert "committedDate" in script
-    assert "branchProtectionRule { id }" not in script
+    assert "github.graphql" not in script
+    assert "github.paginate(github.rest.repos.listBranches" in script
+    assert "github.rest.repos.getCommit" in script
+    assert "protectedBranches.set" in script
 
 
 def test_reconciliation_workflow_report_is_idempotent() -> None:
@@ -564,10 +572,12 @@ def test_reconciliation_defers_without_writing_when_github_rate_limits(
         tmp_path,
         {
             "pulls": [],
-            "branches": [],
-            "graphqlError": {
-                "status": 403,
-                "message": "API rate limit exceeded for installation",
+            "branches": [{"name": "topic", "protected": False, "commit": {"sha": "topic-sha"}}],
+            "commitErrorsBySha": {
+                "topic-sha": {
+                    "status": 403,
+                    "message": "API rate limit exceeded for installation",
+                }
             },
         },
     )
@@ -577,10 +587,10 @@ def test_reconciliation_defers_without_writing_when_github_rate_limits(
     assert any("Repository reconciliation deferred" in message for message in outcome["infos"])
 
 
-def test_reconciliation_avoids_forbidden_branch_protection_graphql_field(
+def test_reconciliation_uses_rest_branch_inventory_when_graphql_refs_are_forbidden(
     tmp_path: Path,
 ) -> None:
-    """The workflow should succeed when branch protection metadata is unavailable in GraphQL."""
+    """The workflow should succeed even when GraphQL branch inventory would be forbidden."""
     outcome = _run_reconciliation(
         tmp_path,
         {
