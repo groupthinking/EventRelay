@@ -3,13 +3,28 @@
  *
  * After verified captions land, label the tools the video named, attach only
  * official docs, and turn speech order into a checklist. Unknown names do not
- * get invented URLs. Stack checklists (Vercel Deployment Checks, Shopify CLI)
+ * get invented URLs. Stack checklists (Vercel Deployment Checks, GitHub Actions)
  * are appended only when that stack is actually in the transcript.
+ *
+ * Each named process in the video includes hyperlinks to all labeled tools
+ * referenced or required at that milestone. Processes required to achieve the
+ * intent goal of the video that were not specifically named in speech (such as
+ * environment/secret provisioning, dependency installation, and preflight test
+ * gates) are synthesized, classified as 'implied', and labeled as
+ * 'Required by intent (unstated)'.
  */
 
 import { formatSeconds } from '@/lib/timestamp';
 
 export type EntityKind = 'tool' | 'product' | 'process' | 'platform';
+export type ProcessType = 'named' | 'implied';
+
+export interface ProcessToolLink {
+  name: string;
+  kind: EntityKind;
+  officialUrl: string;
+  docsUrl?: string;
+}
 
 export interface LinkedEntity {
   name: string;
@@ -28,6 +43,12 @@ export interface SopStep {
   timestamp?: number;
   quote?: string;
   entityNames: string[];
+  /** Hyperlinks to official vendor documentation/sites for tools labeled in this process */
+  tools?: ProcessToolLink[];
+  /** Classification: 'named' (explicitly in video) vs 'implied' (required by intent, unstated) */
+  processType?: ProcessType;
+  /** UI badge / label describing origin: 'Named in video' | 'Required by intent (unstated)' */
+  processLabel?: string;
 }
 
 export interface ChecklistItem {
@@ -40,6 +61,7 @@ export interface ChecklistItem {
 }
 
 export interface LinkedSop {
+  intentGoal?: string;
   entities: LinkedEntity[];
   steps: SopStep[];
   checklist: ChecklistItem[];
@@ -55,6 +77,8 @@ export interface CatalogEntry {
 }
 
 export interface LinkedSopInput {
+  title?: string;
+  summary?: string;
   transcript?: string;
   segments?: Array<{ start: number; duration?: number; text: string }>;
   events?: Array<{ timestamp?: number; label?: string; title?: string; description?: string }>;
@@ -70,14 +94,6 @@ interface StackCheck {
 
 /** Official vendor docs only. Aliases are matched in the transcript, longest first. */
 export const OFFICIAL_CATALOG: CatalogEntry[] = [
-  {
-    name: 'Shopify CLI',
-    aliases: ['shopify cli'],
-    kind: 'tool',
-    officialUrl: 'https://shopify.dev/docs/api/shopify-cli',
-    docsUrl: 'https://shopify.dev/docs/api/shopify-cli',
-    stack: 'shopify',
-  },
   {
     name: 'Shopify',
     aliases: ['shopify'],
@@ -233,8 +249,8 @@ const STACK_CHECKS: StackCheck[] = [
   },
   {
     stack: 'shopify',
-    title: 'Use Shopify CLI, not a storefront plugin, for store work',
-    href: 'https://shopify.dev/docs/api/shopify-cli',
+    title: 'Verify app scopes and API access in Shopify Partner Dashboard',
+    href: 'https://shopify.dev/docs/apps/launch',
   },
   {
     stack: 'github',
@@ -268,11 +284,6 @@ const SOP_HINTS: Array<{ pattern: RegExp; title: string; description: string }> 
     pattern: /week (four|4)\b/i,
     title: 'Week 4 — automate routines',
     description: 'Add cron/routines after the team already works.',
-  },
-  {
-    pattern: /shopify cli/i,
-    title: 'Use Shopify CLI, not the plugin',
-    description: 'The video SOP is the CLI on the agent machine.',
   },
   {
     pattern: /one project per|one grokbot account|one grok bot account/i,
@@ -330,7 +341,188 @@ function similarTitle(left: string, right: string): boolean {
   const a = norm(left);
   const b = norm(right);
   if (!a || !b) return false;
-  return a === b || a.includes(b) || b.includes(a);
+  if (a === b || a.includes(b) || b.includes(a)) return true;
+  const wordsA = a.split(' ').filter((w) => w.length >= 4);
+  const wordsB = new Set(b.split(' ').filter((w) => w.length >= 4));
+  const overlap = wordsA.filter((w) => wordsB.has(w));
+  return overlap.length >= 2 || (overlap.length >= 1 && (wordsA.length <= 2 || wordsB.size <= 2));
+}
+
+function toolsForProcess(
+  text: string,
+  timestamp: number | undefined,
+  entities: LinkedEntity[],
+  segments?: LinkedSopInput['segments'],
+): ProcessToolLink[] {
+  const result: ProcessToolLink[] = [];
+  const added = new Set<string>();
+
+  const addEntity = (entity: LinkedEntity) => {
+    if (added.has(entity.name)) return;
+    added.add(entity.name);
+    result.push({
+      name: entity.name,
+      kind: entity.kind,
+      officialUrl: entity.officialUrl,
+      docsUrl: entity.docsUrl,
+    });
+  };
+
+  // 1. Direct name match in step title or description
+  for (const entity of entities) {
+    const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(entity.name)}([^a-z0-9]|$)`, 'i');
+    if (pattern.test(text)) {
+      addEntity(entity);
+    }
+  }
+
+  // 2. Proximity match by timestamp (within +/- 20s)
+  if (timestamp != null) {
+    for (const entity of entities) {
+      if (entity.timestamps.some((t) => Math.abs(t - timestamp) <= 20)) {
+        addEntity(entity);
+      }
+    }
+  }
+
+  // 3. Segment text matching near the timestamp
+  if (timestamp != null && segments) {
+    const nearbySegments = segments.filter((s) => Math.abs(s.start - timestamp) <= 8);
+    for (const seg of nearbySegments) {
+      for (const entity of entities) {
+        const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(entity.name)}([^a-z0-9]|$)`, 'i');
+        if (pattern.test(seg.text)) {
+          addEntity(entity);
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+function resolveIntentGoal(input: LinkedSopInput, namedSteps: SopStep[]): string {
+  if (input.summary?.trim()) {
+    const firstSentence = input.summary.trim().split(/[.!?]\s/)[0];
+    if (firstSentence) return firstSentence.trim().replace(/\.$/, '');
+  }
+  if (input.title?.trim()) {
+    return input.title.trim();
+  }
+  if (input.topics && input.topics.length > 0) {
+    return `Implement solution using ${input.topics.slice(0, 3).join(', ')}`;
+  }
+  if (namedSteps.length > 0) {
+    return `Execute workflow: ${namedSteps[0].title}`;
+  }
+  return 'Achieve workflow objective and deploy solution';
+}
+
+function synthesizeImpliedProcesses(
+  input: LinkedSopInput,
+  entities: LinkedEntity[],
+  namedSteps: SopStep[],
+): SopStep[] {
+  const implied: SopStep[] = [];
+  const isNamedAlready = (term: string) =>
+    namedSteps.some((step) => similarTitle(step.title, term) || similarTitle(step.description, term));
+
+  // Labeled tools and platforms
+  const toolEntities = entities.filter(
+    (e) => e.kind === 'tool' || e.kind === 'product' || e.kind === 'platform',
+  );
+
+  // 1. Environment & API Credential Configuration
+  if (toolEntities.length > 0) {
+    const credTitle = 'Configure environment variables and credentials';
+    if (!isNamedAlready('environment') && !isNamedAlready('credentials') && !isNamedAlready('api keys') && !isNamedAlready('secrets')) {
+      const toolLinks: ProcessToolLink[] = toolEntities.map((e) => ({
+        name: e.name,
+        kind: e.kind,
+        officialUrl: e.officialUrl,
+        docsUrl: e.docsUrl,
+      }));
+      implied.push({
+        id: 'sop_implied_env',
+        order: 0,
+        title: credTitle,
+        description: `Provision API keys and secrets for ${toolEntities.map((t) => t.name).slice(0, 4).join(', ')}.`,
+        entityNames: toolEntities.map((t) => t.name),
+        tools: toolLinks,
+        processType: 'implied',
+        processLabel: 'Required by intent (unstated)',
+      });
+    }
+  }
+
+  // 2. Local Runtime & Dependency Setup
+  if (toolEntities.length > 0) {
+    const setupTitle = 'Initialize workspace and install tool dependencies';
+    if (!isNamedAlready('install') && !isNamedAlready('dependencies') && !isNamedAlready('workspace setup')) {
+      const toolLinks: ProcessToolLink[] = toolEntities.map((e) => ({
+        name: e.name,
+        kind: e.kind,
+        officialUrl: e.officialUrl,
+        docsUrl: e.docsUrl,
+      }));
+      implied.push({
+        id: 'sop_implied_setup',
+        order: 0,
+        title: setupTitle,
+        description: 'Install SDKs and initialize dependencies required to interact with the target toolchain.',
+        entityNames: toolEntities.map((t) => t.name),
+        tools: toolLinks,
+        processType: 'implied',
+        processLabel: 'Required by intent (unstated)',
+      });
+    }
+  }
+
+  // 3. Unstated actions from analysis (when timed events exist and actions supplement them)
+  if ((input.events || []).length > 0) {
+    for (const action of input.actions || []) {
+      const title = (action.title || '').trim();
+      if (!title) continue;
+      if (isNamedAlready(title) || implied.some((s) => similarTitle(s.title, title))) continue;
+
+      const matchedTools = toolsForProcess(
+        `${title} ${action.description || ''}`,
+        undefined,
+        entities,
+        input.segments,
+      );
+
+      implied.push({
+        id: `sop_implied_${implied.length + 1}`,
+        order: 0,
+        title,
+        description: (action.description || '').trim() || 'Required task to achieve the video intent goal.',
+        entityNames: matchedTools.map((t) => t.name),
+        tools: matchedTools,
+        processType: 'implied',
+        processLabel: 'Required by intent (unstated)',
+      });
+    }
+  }
+
+  // 4. Preflight Verification & Integration Checks (when tech tools/platforms are in play)
+  if (toolEntities.length > 0) {
+    const verifyTitle = 'Run preflight verification and integration checks';
+    if (!isNamedAlready('verification') && !isNamedAlready('testing') && !isNamedAlready('checks') && !isNamedAlready('smoke test')) {
+      implied.push({
+        id: 'sop_implied_verify',
+        order: 0,
+        title: verifyTitle,
+        description: 'Validate end-to-end integration and smoke test components before promoting to production.',
+        entityNames: [],
+        tools: [],
+        processType: 'implied',
+        processLabel: 'Required by intent (unstated)',
+      });
+    }
+  }
+
+  return implied;
 }
 
 export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
@@ -365,7 +557,7 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     });
   }
 
-  const steps: SopStep[] = [];
+  const namedSteps: SopStep[] = [];
   const timedEvents = [...(input.events || [])]
     .map((event) => ({
       title: (event.label || event.title || '').trim(),
@@ -379,48 +571,80 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     const hits = event.timestamp != null
       ? { timestamps: [event.timestamp], quote: segments.find((s) => Math.abs(s.start - event.timestamp!) < 8)?.text.trim() }
       : findHits(event.title, segments, new RegExp(escapeRe(event.title.split(' ').slice(0, 4).join(' ')), 'i'));
-    steps.push({
-      id: `sop_${steps.length + 1}`,
-      order: steps.length + 1,
+
+    const stepText = `${event.title} ${event.description}`;
+    const stepEntities = entityNamesIn(stepText, entities);
+    const stepTools = toolsForProcess(stepText, hits.timestamps[0] ?? event.timestamp, entities, segments);
+
+    namedSteps.push({
+      id: `sop_${namedSteps.length + 1}`,
+      order: namedSteps.length + 1,
       title: event.title,
       description: event.description,
       timestamp: hits.timestamps[0] ?? event.timestamp,
       quote: hits.quote,
-      entityNames: entityNamesIn(`${event.title} ${event.description}`, entities),
+      entityNames: stepEntities,
+      tools: stepTools,
+      processType: 'named',
+      processLabel: 'Named in video',
     });
   }
 
   for (const hint of SOP_HINTS) {
     const hits = findHits(text, segments, hint.pattern);
     if (hits.timestamps.length === 0 && !hint.pattern.test(text)) continue;
-    if (steps.some((step) => similarTitle(step.title, hint.title))) continue;
-    steps.push({
-      id: `sop_${steps.length + 1}`,
-      order: steps.length + 1,
+    if (namedSteps.some((step) => similarTitle(step.title, hint.title))) continue;
+
+    const hintText = `${hint.title} ${hint.description}`;
+    const hintEntities = entityNamesIn(hintText, entities);
+    const hintTools = toolsForProcess(hintText, hits.timestamps[0], entities, segments);
+
+    namedSteps.push({
+      id: `sop_${namedSteps.length + 1}`,
+      order: namedSteps.length + 1,
       title: hint.title,
       description: hint.description,
       timestamp: hits.timestamps[0],
       quote: hits.quote,
-      entityNames: entityNamesIn(`${hint.title} ${hint.description}`, entities),
+      entityNames: hintEntities,
+      tools: hintTools,
+      processType: 'named',
+      processLabel: 'Named in video',
     });
   }
 
-  if (steps.length === 0) {
+  if (namedSteps.length === 0) {
     for (const action of input.actions || []) {
       const title = (action.title || '').trim();
       if (!title) continue;
       const hits = findHits(title, segments, new RegExp(escapeRe(title.split(' ').slice(0, 5).join(' ')), 'i'));
-      steps.push({
-        id: `sop_${steps.length + 1}`,
-        order: steps.length + 1,
+      const actionText = `${title} ${action.description || ''}`;
+      const actionEntities = entityNamesIn(actionText, entities);
+      const actionTools = toolsForProcess(actionText, hits.timestamps[0], entities, segments);
+
+      namedSteps.push({
+        id: `sop_${namedSteps.length + 1}`,
+        order: namedSteps.length + 1,
         title,
         description: (action.description || '').trim(),
         timestamp: hits.timestamps[0],
         quote: hits.quote,
-        entityNames: entityNamesIn(`${title} ${action.description || ''}`, entities),
+        entityNames: actionEntities,
+        tools: actionTools,
+        processType: 'named',
+        processLabel: 'Named in video',
       });
     }
   }
+
+  const impliedSteps = synthesizeImpliedProcesses(input, entities, namedSteps);
+  const steps: SopStep[] = [...namedSteps, ...impliedSteps].map((step, idx) => ({
+    ...step,
+    id: `sop_${idx + 1}`,
+    order: idx + 1,
+  }));
+
+  const intentGoal = resolveIntentGoal(input, namedSteps);
 
   const stacks = new Set(
     entities
@@ -446,7 +670,7 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     });
   }
 
-  return { entities, steps, checklist };
+  return { intentGoal, entities, steps, checklist };
 }
 
 export function renderDeployMarkdown(sop: LinkedSop): string {
@@ -455,16 +679,45 @@ export function renderDeployMarkdown(sop: LinkedSop): string {
     '',
     'Compiled from the video SOP plus official stack docs. Do not invent extra steps.',
     '',
-    '## Video SOP',
-    '',
   ];
-  if (sop.steps.length === 0) {
+
+  if (sop.intentGoal) {
+    lines.push(`**Intent Goal:** ${sop.intentGoal}`, '');
+  }
+
+  const namedSteps = sop.steps.filter((s) => s.processType !== 'implied');
+  lines.push('## Video SOP (Named Processes)', '');
+  if (namedSteps.length === 0) {
     lines.push('_No timed SOP steps in this run._', '');
   } else {
-    for (const step of sop.steps) {
+    for (const step of namedSteps) {
       const when = step.timestamp != null ? ` [${formatSeconds(step.timestamp)}]` : '';
       lines.push(`- [ ] ${step.title}${when}`);
       if (step.description) lines.push(`  ${step.description}`);
+      if (step.tools && step.tools.length > 0) {
+        const toolLinks = step.tools.map((t) => {
+          const docs = t.docsUrl && t.docsUrl !== t.officialUrl ? ` ([docs](${t.docsUrl}))` : '';
+          return `[${t.name}](${t.officialUrl})${docs}`;
+        });
+        lines.push(`  Tools: ${toolLinks.join(', ')}`);
+      }
+    }
+    lines.push('');
+  }
+
+  const impliedSteps = sop.steps.filter((s) => s.processType === 'implied');
+  if (impliedSteps.length > 0) {
+    lines.push('## Required Processes (Implied by Intent, Unstated in Video)', '');
+    for (const step of impliedSteps) {
+      lines.push(`- [ ] ${step.title} *(Required by intent)*`);
+      if (step.description) lines.push(`  ${step.description}`);
+      if (step.tools && step.tools.length > 0) {
+        const toolLinks = step.tools.map((t) => {
+          const docs = t.docsUrl && t.docsUrl !== t.officialUrl ? ` ([docs](${t.docsUrl}))` : '';
+          return `[${t.name}](${t.officialUrl})${docs}`;
+        });
+        lines.push(`  Tools: ${toolLinks.join(', ')}`);
+      }
     }
     lines.push('');
   }
@@ -472,7 +725,7 @@ export function renderDeployMarkdown(sop: LinkedSop): string {
   const stackItems = sop.checklist.filter((item) => item.source === 'stack');
   lines.push('## Industry checks', '');
   if (stackItems.length === 0) {
-    lines.push('_No Vercel/Shopify/GitHub stack detected in the transcript._', '');
+    lines.push('_No Vercel/GitHub stack detected in the transcript._', '');
   } else {
     for (const item of stackItems) {
       const link = item.href ? ` ([docs](${item.href}))` : '';
@@ -493,3 +746,4 @@ export function renderDeployMarkdown(sop: LinkedSop): string {
   }
   return lines.join('\n');
 }
+

@@ -119,6 +119,8 @@ export default function OneLoopStudio() {
       return action.title?.trim() ? [{ title: action.title, description: action.description, category: action.category }] : [];
     });
     return compileLinkedSop({
+      title: selected?.title,
+      summary: selected?.insights?.summary,
       transcript: selected?.transcript,
       events: (selected?.events || []).map((event) => ({
         timestamp: parseTimestampToSeconds(event.timestamp) ?? undefined,
@@ -553,32 +555,78 @@ export default function OneLoopStudio() {
               ))}
             </div>
 
-            <div className="border-t border-white/10 px-4 py-3">
+            <div className="border-t border-white/10 px-4 py-3 flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                SOP
+                SOP & Processes
               </h2>
+              {linkedSop.intentGoal && (
+                <span className="text-[11px] text-white/40 truncate max-w-xs sm:max-w-md" title={linkedSop.intentGoal}>
+                  Intent: <span className="text-white/60">{linkedSop.intentGoal}</span>
+                </span>
+              )}
             </div>
             <ol className="divide-y divide-white/5">
               {linkedSop.steps.length === 0 && (
                 <li className="px-4 py-3 text-sm text-white/40">No ordered SOP in this run.</li>
               )}
               {linkedSop.steps.map((step) => (
-                <li key={step.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
-                  {step.timestamp != null ? (
-                    <button
-                      type="button"
-                      onClick={() => setSeekSeconds(step.timestamp!)}
-                      className="text-left font-mono text-[11px] text-[#e8b86d]"
+                <li key={step.id} className="grid gap-2 px-4 py-3 sm:grid-cols-[7.5rem_1fr]">
+                  <div className="flex flex-col gap-1">
+                    {step.timestamp != null ? (
+                      <button
+                        type="button"
+                        onClick={() => setSeekSeconds(step.timestamp!)}
+                        className="text-left font-mono text-[11px] text-[#e8b86d] hover:underline"
+                      >
+                        {formatSeconds(step.timestamp)}
+                      </button>
+                    ) : (
+                      <div className="font-mono text-[11px] text-white/35">Step {step.order}</div>
+                    )}
+                    <span
+                      className={`inline-block self-start rounded px-1.5 py-0.5 text-[9px] font-medium tracking-wide uppercase ${
+                        step.processType === 'implied'
+                          ? 'border border-amber-500/20 bg-amber-500/10 text-amber-300/80'
+                          : 'border border-emerald-500/20 bg-emerald-500/10 text-emerald-300/80'
+                      }`}
                     >
-                      {formatSeconds(step.timestamp)}
-                    </button>
-                  ) : (
-                    <div className="font-mono text-[11px] text-white/35">{step.order}</div>
-                  )}
+                      {step.processLabel || (step.processType === 'implied' ? 'Required by intent (unstated)' : 'Named in video')}
+                    </span>
+                  </div>
                   <div>
                     <div className="text-sm font-medium text-white">{step.title}</div>
                     {step.description && (
                       <div className="mt-0.5 text-sm text-white/55">{step.description}</div>
+                    )}
+                    {step.tools && step.tools.length > 0 && (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-white/40">Tools:</span>
+                        {step.tools.map((tool) => (
+                          <span
+                            key={tool.name}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white"
+                          >
+                            <a
+                              href={tool.officialUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-[#e8b86d] hover:underline"
+                            >
+                              {tool.name}
+                            </a>
+                            {tool.docsUrl && tool.docsUrl !== tool.officialUrl && (
+                              <a
+                                href={tool.docsUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-[10px] uppercase tracking-wider text-white/40 hover:text-[#e8b86d]"
+                              >
+                                docs
+                              </a>
+                            )}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </li>

@@ -73,6 +73,13 @@
       "env": {
         "SENTRY_AUTH_TOKEN": "${env:SENTRY_AUTH_TOKEN}"
       }
+    },
+    "data-agent-kit": {
+      "command": "node",
+      "args": [
+        "/Users/garvey/.antigravity-ide/extensions/googlecloudtools.datacloud-0.10.0-universal/mcp_servers/cli/mcp_proxy_bundle.js",
+        "dataAgentKit-antigravityide"
+      ]
     }
   }
 }

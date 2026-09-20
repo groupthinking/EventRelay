@@ -24,5 +24,6 @@
     "python.testing.pytestEnabled": false,
     "python.testing.unittestEnabled": true,
     "notebook.defaultFormatter": "ms-python.black-formatter",
-    "geminicodeassist.outlines.automaticOutlineGeneration": true
+    "geminicodeassist.outlines.automaticOutlineGeneration": true,
+    "kilo-code.new.autoApprove.enabled": true
 }

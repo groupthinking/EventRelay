@@ -139,6 +139,8 @@ function verifiedResultPatch(
   const transcript = formatVerifiedTranscript(analysis.transcript || []);
   const actions = normalizeDashboardActions(analysis.actions);
   const linkedSop = compileLinkedSop({
+    title: analysis.title,
+    summary: analysis.summary,
     transcript,
     segments: analysis.transcript || [],
     events: (analysis.events || []).map((event) => ({
