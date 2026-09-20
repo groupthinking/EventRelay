@@ -8,11 +8,12 @@ import type {
 } from '@/lib/video-pack';
 import type { VideoPackActionItem, VideoPackChapter, VideoPackStackTool } from '@/lib/video-pack-types';
 import { parsePackActionItems } from '@/lib/video-pack-types';
+import { uvaiEnterpriseTokensCss } from '@/lib/uvai-enterprise-tokens';
 
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.11-m5-chapter-key-points' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.12-enterprise-tokens-p0' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -302,22 +303,23 @@ export default defineConfig({
 }
 
 function stylesCss(): string {
-  return `:root {
+  return `${uvaiEnterpriseTokensCss()}
+:root {
   color-scheme: dark;
-  --surface-950: #020617;
-  --surface-900: #0f172a;
-  --ink: #f8fafc;
-  --muted: rgba(248, 250, 252, 0.7);
-  --muted-tertiary: rgba(248, 250, 252, 0.45);
-  --line: rgba(255, 255, 255, 0.1);
-  --accent: #14b8a6;
-  --accent-hover: #2dd4bf;
-  --evidence: #22d3ee;
-  --verified: #22c55e;
+  --surface-950: var(--uvai-surface);
+  --surface-900: var(--uvai-elevated);
+  --ink: var(--uvai-text);
+  --muted: color-mix(in srgb, var(--uvai-text) 70%, transparent);
+  --muted-tertiary: color-mix(in srgb, var(--uvai-muted) 85%, transparent);
+  --line: color-mix(in srgb, var(--uvai-border) 65%, transparent);
+  --accent: var(--uvai-primary);
+  --accent-hover: var(--uvai-primary-hover);
+  --evidence: var(--uvai-accent);
+  --verified: var(--uvai-success);
   --radius-shell: 12px;
   --radius-row: 8px;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--uvai-font-sans);
 }
 * { box-sizing: border-box; }
 html, body {
@@ -1114,6 +1116,9 @@ function indexHtml(input: AppBuilderSandboxInput): string {
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>UVAI▶ Video Pack · ${escapeHtml(input.videoId)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&amp;display=swap" rel="stylesheet" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>

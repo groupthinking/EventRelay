@@ -147,7 +147,7 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID, 94.8)).toBe(
       'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?start=94&autoplay=1&enablejsapi=1',
     );
-    expect(APP_BUILDER_EMIT_REV).toContain('m5-chapter-key-points');
+    expect(APP_BUILDER_EMIT_REV).toContain('enterprise-tokens-p0');
   });
 
   it('M4: visual events and SOP outline emit seek attrs and bind jump handlers', () => {
@@ -246,7 +246,7 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(keyPointLists).toHaveLength(2);
     expect(html).not.toContain('Invented chapter bullet');
     expect(filterChapterKeyPoints([' ok ', '', '  '])).toEqual(['ok']);
-    expect(APP_BUILDER_EMIT_REV).toBe('p1.11-m5-chapter-key-points');
+    expect(APP_BUILDER_EMIT_REV).toBe('p1.12-enterprise-tokens-p0');
   });
 
   it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
@@ -275,7 +275,9 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(html).toContain(`data-emit-rev="${APP_BUILDER_EMIT_REV}"`);
     expect(html).toContain('Runbook ·');
     expect(css).toContain('--surface-950');
-    expect(css).toContain('#14b8a6');
+    expect(css).toContain('--uvai-surface');
+    expect(css).toContain('#09090b');
+    expect(css).toContain('var(--uvai-primary)');
     expect(main).toContain('bindTabs');
     expect(main).toContain('updateProgress');
     expect(main).toContain('bindToolPins');

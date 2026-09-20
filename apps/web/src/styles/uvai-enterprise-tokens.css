@@ -1,0 +1,27 @@
+/**
+ * UVAI enterprise design tokens (Video Pack /d shell — issue #2197 P0).
+ * Source of truth for hosted pack emit and web app imports.
+ */
+:root {
+  --uvai-surface: #09090b;
+  --uvai-elevated: #111827;
+  --uvai-panel: #1f2937;
+  --uvai-border: #374151;
+  --uvai-primary: #0c5cab;
+  --uvai-primary-hover: #0a4a8a;
+  --uvai-accent: #38bdf8;
+  --uvai-success: #10b981;
+  --uvai-warning: #f59e0b;
+  --uvai-danger: #ef4444;
+  --uvai-text: #fafafa;
+  --uvai-muted: #9ca3af;
+  --uvai-focus-ring: var(--uvai-accent);
+  --uvai-grid-unit: 8px;
+  --uvai-font-sans: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --uvai-motion-safe: 0;
+  }
+}
