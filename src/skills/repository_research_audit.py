@@ -117,12 +117,28 @@ def collect_live_workflow_health(
         "User-Agent": "EventRelay-Repository-Research-Audit",
     }
     workflows_url = f"https://api.github.com/repos/{repo_slug}/actions/workflows?per_page=100"
-    runs_url = f"https://api.github.com/repos/{repo_slug}/actions/runs?per_page=10"
     try:
         with urlopen(Request(workflows_url, headers=headers), timeout=15) as response:
             workflows_payload = json.loads(response.read().decode("utf-8"))
-        with urlopen(Request(runs_url, headers=headers), timeout=15) as response:
-            runs_payload = json.loads(response.read().decode("utf-8"))
+        workflows = workflows_payload.get("workflows", [])
+        # Classify health per workflow using each workflow's latest run, rather
+        # than aggregating an arbitrary global run window (which can produce
+        # false positives from stale failed runs and false negatives when a
+        # single busy workflow dominates the window).
+        latest_runs: list[dict[str, Any]] = []
+        for workflow in workflows:
+            workflow_id = workflow.get("id")
+            if workflow_id is None:
+                continue
+            runs_url = (
+                f"https://api.github.com/repos/{repo_slug}/actions/workflows/"
+                f"{workflow_id}/runs?per_page=1"
+            )
+            with urlopen(Request(runs_url, headers=headers), timeout=15) as response:
+                runs_payload = json.loads(response.read().decode("utf-8"))
+            workflow_runs = runs_payload.get("workflow_runs", [])
+            if workflow_runs:
+                latest_runs.append(workflow_runs[0])
     except Exception as exc:  # noqa: BLE001
         return {
             "source": "github-api",
@@ -131,8 +147,6 @@ def collect_live_workflow_health(
             "reason": str(exc),
         }
 
-    workflows = workflows_payload.get("workflows", [])
-    runs = runs_payload.get("workflow_runs", [])
     recent_runs = [
         {
             "name": run.get("name"),
@@ -144,12 +158,12 @@ def collect_live_workflow_health(
             "html_url": run.get("html_url"),
             "created_at": run.get("created_at"),
         }
-        for run in runs
+        for run in latest_runs
     ]
     failing_workflows = sorted(
         {
             (run.get("path") or run.get("name") or "<unknown>")
-            for run in runs
+            for run in latest_runs
             if run.get("conclusion") not in {None, "success", "skipped"}
         }
     )
