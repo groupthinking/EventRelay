@@ -235,6 +235,31 @@ export interface StudioDeployPoll {
 }
 
 /** Request gate preflight only; transcript generation is not deployment evidence. */
+export async function probeStudioDeployLiveUrl(liveUrl: string): Promise<{
+  ok: boolean;
+  probe: { ok: boolean; statusCode?: number; error?: string; finalUrl?: string };
+}> {
+  const response = await fetch('/api/gate/probe-live', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ liveUrl }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const probeRaw =
+    payload.probe && typeof payload.probe === 'object'
+      ? (payload.probe as Record<string, unknown>)
+      : {};
+  const probe = {
+    ok: probeRaw.ok === true,
+    statusCode: typeof probeRaw.statusCode === 'number' ? probeRaw.statusCode : undefined,
+    error: str(probeRaw.error),
+    finalUrl: str(probeRaw.finalUrl),
+  };
+  return { ok: response.ok && probe.ok, probe };
+}
+
 export async function startStudioDeploy(input: {
   url: string;
   projectType?: string;
