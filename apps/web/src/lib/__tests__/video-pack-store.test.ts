@@ -8,6 +8,9 @@ import {
   CLAIM_PROCESSING_SCRIPT,
   claimPackProcessing,
   getPackRecord,
+  getPackRecordWithMeta,
+  packLookupFailureEnvelope,
+  packStoreKey,
   putPackRecord,
   resetVideoPackStoreForTests,
   setVideoPackRedisForTests,
@@ -49,6 +52,8 @@ function readyPack() {
     artifacts: [],
     stack: { tools: [] },
     visual_context: null,
+    chapters: [],
+    action_items: [],
   });
 }
 
@@ -87,9 +92,11 @@ function createRedis(initial: unknown = null) {
       const processing = JSON.parse(String(args[0])) as VideoPackRecord;
       const staleBefore = String(args[1]);
       const sourceHash = String(args[2]);
+      const reclaimReady = String(args[3] ?? '0') === '1';
       const current = decodeStored(stored);
       if (
         current?.state === 'ready' &&
+        !reclaimReady &&
         current.pack.provenance.source_hash === sourceHash &&
         typeof current.pack.transcript?.full_text === 'string'
       ) {
@@ -131,6 +138,64 @@ describe('video-pack store', () => {
     await expect(claimPackProcessing(IDENTITY)).rejects.toThrow(
       /durable video pack storage is not configured/i,
     );
+  });
+
+  it('maps miss and store_error to distinct reason envelopes', async () => {
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+
+    const redis = createRedis();
+    redis.client.get = async () => null;
+    setVideoPackRedisForTests(redis.client);
+
+    const missLookup = await getPackRecordWithMeta(HASH);
+    if (missLookup.outcome !== 'miss') throw new Error('expected miss');
+    expect(packLookupFailureEnvelope(missLookup).reason_code).toBe('HOSTED_PACK_NOT_FOUND');
+
+    resetVideoPackStoreForTests();
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+    const failing = createRedis();
+    failing.client.get = async () => {
+      throw new Error('upstash read timeout');
+    };
+    setVideoPackRedisForTests(failing.client);
+    const errLookup = await getPackRecordWithMeta(HASH);
+    if (errLookup.outcome !== 'store_error') throw new Error('expected store_error');
+    expect(packLookupFailureEnvelope(errLookup).reason_code).toBe('HOSTED_PACK_STORE_ERROR');
+  });
+
+  it('distinguishes a Redis miss from a durable store read failure', async () => {
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+
+    const redis = createRedis();
+    redis.client.get = async () => null;
+    setVideoPackRedisForTests(redis.client);
+
+    const miss = await getPackRecordWithMeta(HASH);
+    expect(miss.outcome).toBe('miss');
+    if (miss.outcome !== 'miss') throw new Error('expected miss');
+    expect(miss.store.backend).toBe('upstash');
+
+    resetVideoPackStoreForTests();
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://example.upstash.io');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'test-token');
+    const failing = createRedis();
+    failing.client.get = async () => {
+      throw new Error('upstash read timeout');
+    };
+    setVideoPackRedisForTests(failing.client);
+
+    const err = await getPackRecordWithMeta(HASH);
+    expect(err.outcome).toBe('store_error');
+    if (err.outcome !== 'store_error') throw new Error('expected store_error');
+    expect(err.error).toMatch(/timeout/i);
+    expect(err.store.ok).toBe(false);
+  });
+
+  it('uses the documented key prefix for pack rows', () => {
+    expect(packStoreKey(HASH)).toBe(`er:videopack:v0:${HASH}`);
   });
 
   it('returns null for an unknown source_hash', async () => {
@@ -186,6 +251,19 @@ describe('video-pack store', () => {
     expect(decodeStored(redis.getStored())).toEqual(ready);
     expect(redis.getEvalCalls()).toBe(1);
     expect(redis.getSetCalls()).toBe(0);
+  });
+
+  it('reclaims a ready pack when structured schema refresh is requested', async () => {
+    const ready: VideoPackRecord = { state: 'ready', pack: readyPack() };
+    const redis = createRedis(JSON.stringify(ready));
+    setVideoPackRedisForTests(redis.client);
+
+    const result = await claimPackProcessing(IDENTITY, new Date('2026-09-05T06:00:00.000Z'), {
+      reclaimReady: true,
+    });
+
+    expect(result).toBe('claimed');
+    expect(decodeStored(redis.getStored())?.state).toBe('processing');
   });
 
   it('replaces a ready-shaped value whose provenance does not match its key', async () => {
@@ -342,6 +420,7 @@ describe.skipIf(!hasRedisServer)('video-pack store Redis integration', () => {
         JSON.stringify(processing),
         '2026-09-05T01:00:00.000Z',
         HASH,
+        '0',
       ],
     });
 

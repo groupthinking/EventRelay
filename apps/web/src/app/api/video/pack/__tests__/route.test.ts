@@ -45,6 +45,16 @@ function specFor(videoId: string) {
       summary: `Spec extract for ${videoId}`,
       frame_analysis_count: 1,
     },
+    chapters: [{ start: 0, end: 4, topic: 'Intro', key_points: ['Main idea'] }],
+    action_items: [
+      {
+        id: 'action-1',
+        type: 'implementation',
+        title: `Act on ${videoId}`,
+        description: 'Structured ship step from extract.',
+        difficulty: 'easy' as const,
+      },
+    ],
   };
 }
 
@@ -161,11 +171,19 @@ describe('POST /api/video/pack', () => {
     await flush();
 
     const res = await GET(getRequest(`video_id=${CANON_A}`));
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { status?: string; error?: string; data?: unknown };
-    expect(body.status).toBe('error');
-    expect(body.error).toMatch(/AI Gateway/i);
-    expect(body.error).toContain('google/gemini-3.8-flash');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok?: boolean;
+      reason_code?: string;
+      detail?: string;
+      status?: string;
+      error?: string;
+      data?: unknown;
+    };
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
+    expect(body.detail).toMatch(/AI Gateway/i);
+    expect(body.detail).toContain('google/gemini-3.8-flash');
     expect(body.data).toBeUndefined();
   });
 
@@ -183,6 +201,42 @@ describe('POST /api/video/pack', () => {
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
     expect(extractVideoPackSpec).not.toHaveBeenCalled();
     expect(loaded.scheduled).toHaveLength(0);
+  });
+
+  it('re-extracts a pre-B1 cached pack on Run (structured schema refresh)', async () => {
+    extractVideoPackSpec.mockImplementation(async ({ videoId }: { videoId: string }) => specFor(videoId));
+    const loaded = await loadPackRoute();
+    const identity = loaded.buildIdentityPack(
+      CANON_B,
+      `https://www.youtube.com/watch?v=${CANON_B}`,
+      '2026-09-11T00:00:00.000Z',
+    );
+    const stale = loaded.applyExtractedSpec(identity, {
+      ...specFor(CANON_B),
+      chapters: [],
+      action_items: [],
+    });
+    delete stale.provenance.tool_versions.pack_structure;
+    loaded.seedVideoPackRecordForTests({ state: 'ready', pack: stale });
+
+    const res = await loaded.POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+    expect(res.status).toBe(202);
+    expect(loaded.scheduled).toHaveLength(1);
+    await loaded.flush();
+
+    const ready = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(ready.status).toBe(200);
+    const body = (await ready.json()) as {
+      data?: {
+        chapters?: Array<{ topic?: string }>;
+        action_items?: Array<{ title?: string }>;
+        provenance?: { tool_versions?: Record<string, string> };
+      };
+    };
+    expect(body.data?.chapters?.[0]?.topic).toBe('Intro');
+    expect(body.data?.action_items?.[0]?.title).toMatch(/Act on/);
+    expect(body.data?.provenance?.tool_versions?.pack_structure).toBeDefined();
+    expect(extractVideoPackSpec).toHaveBeenCalledTimes(1);
   });
 
   it('emits a spec pack whose identity hash is stable for the same video ID', async () => {
@@ -407,6 +461,93 @@ describe('GET /api/video/pack (anonymous read)', () => {
     expect(body.data.provenance.source_hash).toBe(GOLDEN_IDENTITY_HASHES[CANON_B]);
   });
 
+  it('returns 200 after truncated auJzb1D-fag spec salvage (not GET 503)', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/video-pack-extractor')>(
+      '@/lib/video-pack-extractor',
+    );
+    const bulky = {
+      transcript: {
+        language: 'en',
+        full_text: 'Me at the zoo. The elephants have really long trunks.',
+        segments: [{ idx: 0, start_s: 0, end_s: 5.2, text: 'Me at the zoo.' }],
+      },
+      keyframes: [{ t_s: 1.2, desc: 'Elephants at the enclosure' }],
+      concepts: ['zoo', 'elephants'],
+      requirements: [
+        {
+          id: 'req-1',
+          title: 'Show the enclosure',
+          detail: 'The speaker points at the elephants.',
+          priority: 'normal',
+          tags: ['visual'],
+        },
+      ],
+      code_snippets: [],
+      artifacts: [],
+      stack: { tools: [] },
+      visual_context: null,
+      chapters: [{ start: 0, end: 5.2, topic: 'At the zoo', key_points: ['Elephants have long trunks'] }],
+      action_items: [
+        {
+          id: 'action-1',
+          type: 'implementation',
+          title: 'Visit the elephant enclosure',
+          description: 'Observe how the speaker describes the elephants.',
+          difficulty: 'easy',
+        },
+      ],
+      grounded_spec: {
+        version: '1',
+        outputClass: 'browser-interactive',
+        sourceStatus: 'partial',
+        confidence: 0.8,
+        limitations: Array.from(
+          { length: 400 },
+          (_, index) => `Synthetic limitation line ${index} ${'detail '.repeat(30)}`,
+        ),
+        app: { name: 'Zoo visit', purpose: 'Watch elephants' },
+        screens: [{ id: 'main', name: 'Main', purpose: 'View' }],
+        state: [],
+        requirements: [],
+        acceptanceCriteria: [],
+        unresolved: [],
+        unsupported: [],
+      },
+    };
+    const truncated = JSON.stringify(bulky).slice(0, 8050);
+
+    extractVideoPackSpec.mockImplementation((input, deps) =>
+      actual.extractVideoPackSpec(input, {
+        generateText: async () => ({ text: truncated }),
+        hasGatewayKey: () => true,
+      }),
+    );
+
+    const { POST, GET, flush } = await loadPackRoute();
+    const accepted = await POST(postRequest({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag' }));
+    expect(accepted.status).toBe(202);
+    await flush();
+
+    const res = await GET(getRequest(`video_id=${CANON_A}`));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status?: string;
+      error?: string;
+      data?: {
+        transcript?: { full_text?: string };
+        metrics?: Record<string, number | string>;
+        chapters?: Array<{ topic?: string }>;
+        action_items?: Array<{ title?: string }>;
+      };
+    };
+    expect(body.status).toBe('success');
+    expect(body.error).toBeUndefined();
+    expect(body.data?.transcript?.full_text).toContain('elephants');
+    expect(body.data?.metrics?.spec_json_salvaged).toBe(1);
+    expect(body.data?.chapters?.[0]?.topic).toBe('At the zoo');
+    expect(body.data?.action_items?.[0]?.title).toBe('Visit the elephant enclosure');
+  });
+
   it('does not serve an identity-only pack as success after cite-only extract', async () => {
     extractVideoPackSpec.mockRejectedValue(new VideoPackExtractError('Gemini 3.8 Flash returned no extracted spec content.'));
     const { POST, GET, flush } = await loadPackRoute();
@@ -414,10 +555,18 @@ describe('GET /api/video/pack (anonymous read)', () => {
     await flush();
 
     const res = await GET(getRequest(`video_id=${CANON_B}`));
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as { status?: string; error?: string; data?: { transcript?: { full_text?: string } } };
-    expect(body.status).toBe('error');
-    expect(body.error).toMatch(/no extracted spec/i);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      ok?: boolean;
+      reason_code?: string;
+      detail?: string;
+      status?: string;
+      error?: string;
+      data?: { transcript?: { full_text?: string } };
+    };
+    expect(body.ok).toBe(false);
+    expect(body.reason_code).toBe('HOSTED_PACK_GATEWAY_EMPTY');
+    expect(body.detail).toMatch(/no extracted spec/i);
     expect(body.data?.transcript?.full_text).not.toBe(`cite:youtube:${CANON_B}`);
   });
 });

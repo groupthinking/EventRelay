@@ -67,6 +67,96 @@ export const stackSchema = z.object({
   tools: z.array(stackToolSchema).optional(),
 });
 
+export interface VideoPackChapter {
+  start: number;
+  end: number;
+  topic: string;
+  key_points: string[];
+}
+
+export interface VideoPackActionItem {
+  id: string;
+  title: string;
+  description: string;
+  type?: string | null;
+  difficulty?: 'easy' | 'medium' | 'hard' | null;
+  priority?: 'low' | 'normal' | 'high' | null;
+}
+
+export const packChapterSchema = z.object({
+  start: z.number().nonnegative(),
+  end: z.number().nonnegative(),
+  topic: z.string().trim().min(1),
+  key_points: z.array(z.string().trim().min(1)).min(1),
+});
+
+export const packActionItemSchema = z.object({
+  id: z.string().trim().min(1).optional(),
+  type: z.string().trim().min(1).nullable().optional(),
+  title: z.string().trim().min(1),
+  description: z.string().trim().min(1),
+  difficulty: z.enum(['easy', 'medium', 'hard']).nullable().optional(),
+  priority: z.enum(['low', 'normal', 'high']).nullable().optional(),
+});
+
+const MAX_PACK_CHAPTERS = 64;
+const MAX_PACK_ACTION_ITEMS = 64;
+const MAX_KEY_POINTS_PER_CHAPTER = 12;
+
+export function parsePackChapters(value: unknown): VideoPackChapter[] {
+  if (!Array.isArray(value)) return [];
+  const chapters: VideoPackChapter[] = [];
+  for (const item of value) {
+    if (chapters.length >= MAX_PACK_CHAPTERS) break;
+    const row = item !== null && typeof item === 'object' ? (item as Record<string, unknown>) : null;
+    if (!row) continue;
+    const startRaw = row.start ?? row.start_s;
+    const endRaw = row.end ?? row.end_s;
+    const start = typeof startRaw === 'number' && Number.isFinite(startRaw) ? Math.max(0, startRaw) : null;
+    const end = typeof endRaw === 'number' && Number.isFinite(endRaw) ? Math.max(0, endRaw) : null;
+    const topic =
+      typeof row.topic === 'string'
+        ? row.topic.trim()
+        : typeof row.title === 'string'
+          ? row.title.trim()
+          : '';
+    const keyPointsRaw = Array.isArray(row.key_points)
+      ? row.key_points
+      : Array.isArray(row.keyPoints)
+        ? row.keyPoints
+        : [];
+    const key_points = keyPointsRaw
+      .filter((point): point is string => typeof point === 'string' && point.trim().length > 0)
+      .map((point) => point.trim())
+      .slice(0, MAX_KEY_POINTS_PER_CHAPTER);
+    if (start === null || end === null || !topic || key_points.length === 0 || end < start) continue;
+    chapters.push({ start, end, topic, key_points });
+  }
+  return chapters;
+}
+
+export function parsePackActionItems(value: unknown): VideoPackActionItem[] {
+  if (!Array.isArray(value)) return [];
+  const items: VideoPackActionItem[] = [];
+  for (const [index, item] of value.entries()) {
+    if (items.length >= MAX_PACK_ACTION_ITEMS) break;
+    const parsed = packActionItemSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const title = parsed.data.title.trim();
+    const description = parsed.data.description.trim();
+    if (!title || !description) continue;
+    items.push({
+      id: parsed.data.id?.trim() || `action-${index + 1}`,
+      title,
+      description,
+      type: parsed.data.type?.trim() || null,
+      difficulty: parsed.data.difficulty ?? null,
+      priority: parsed.data.priority ?? null,
+    });
+  }
+  return items;
+}
+
 export function truncatePackText(value: string, max: number = VIDEO_PACK_SNIPPET_MAX): string {
   return value.length <= max ? value : value.slice(0, max);
 }
@@ -161,11 +251,15 @@ export function readPackFormation(data: Record<string, unknown>): {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
   stack: VideoPackStack;
+  chapters: VideoPackChapter[];
+  action_items: VideoPackActionItem[];
 } {
   return {
     architecture: parseArchitecture(data.architecture),
     artifacts: parseArtifacts(data.artifacts),
     stack: parseStack(data.stack),
+    chapters: parsePackChapters(data.chapters),
+    action_items: parsePackActionItems(data.action_items),
   };
 }
 
@@ -173,6 +267,14 @@ export function emptyPackFormation(): {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
   stack: VideoPackStack;
+  chapters: VideoPackChapter[];
+  action_items: VideoPackActionItem[];
 } {
-  return { architecture: null, artifacts: [], stack: { tools: [] } };
+  return {
+    architecture: null,
+    artifacts: [],
+    stack: { tools: [] },
+    chapters: [],
+    action_items: [],
+  };
 }

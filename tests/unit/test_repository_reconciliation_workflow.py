@@ -210,9 +210,8 @@ def test_reconciliation_workflow_minimum_permissions() -> None:
     workflow = _load_workflow()
     perms = workflow["permissions"]
     assert perms.get("contents") == "read"
-    # Comments on untracked PRs and closes superseded draft PRs via pulls.update.
-    assert perms.get("pull-requests") == "write"
-    # Needs write to upsert the drift report issue.
+    assert perms.get("pull-requests") == "read"
+    # Needs write to upsert the report and comment on untracked PRs.
     assert perms.get("issues") == "write"
 
 
@@ -361,6 +360,192 @@ def test_reconciliation_workflow_excludes_dependabot_from_untracked() -> None:
     script = _get_script(_load_workflow())
     assert "dependabot[bot]" in script
     assert "isDependencyAutomationPR" in script
+
+
+@pytest.mark.parametrize(
+    "title",
+    [
+        "build(deps): bump anyio",
+        "build(deps-dev): bump pytest",
+        "fix: bump anyio in the uv group across 1 directory",
+        "chore(deps): bump anyio",
+        "Bump anyio",
+    ],
+)
+@pytest.mark.parametrize("author", ["dependabot[bot]", "contributor"])
+def test_dependency_exemption_uses_author_not_title(
+    tmp_path: Path, title: str, author: str
+) -> None:
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 2006,
+                    "title": title,
+                    "body": "",
+                    "user": {"login": author},
+                    "draft": False,
+                    "head": {"ref": "dependabot/uv/anyio", "repo": None},
+                }
+            ],
+        },
+    )
+
+    expected = 0 if author == "dependabot[bot]" else 1
+    assert len(outcome["comments"]) == expected
+    assert (
+        f"- Ready PRs without exactly one canonical issue: **{expected}**"
+        in outcome["issueCreates"][0]["body"]
+    )
+
+
+@pytest.mark.parametrize(
+    "example",
+    [
+        "`Closes #123`",
+        "``Example `Closes #123` here``",
+        "```Closes #123```",
+        "```text\nCloses #123\n```",
+        "````text\n```\nCloses #123\n```\n````",
+        "~~~text\nCloses #123\n~~~",
+        "  ```text\nCloses #123\n  ````",
+    ],
+)
+@pytest.mark.parametrize("canonical", ["", "\n\n- Fixes groupthinking/EventRelay#1822"])
+def test_reconciliation_ignores_code_examples(
+    tmp_path: Path, example: str, canonical: str
+) -> None:
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 1825,
+                    "title": "fix(reconciliation): accept same-repo qualified issue refs",
+                    "body": f"Example:\n{example}{canonical}",
+                    "draft": False,
+                    "head": {"ref": "reconciliation", "repo": None},
+                },
+                {
+                    "number": 124,
+                    "title": "Implement a different issue",
+                    "body": "Closes #123",
+                    "draft": False,
+                    "head": {"ref": "other-work", "repo": None},
+                },
+            ],
+            "issuesByNumber": {"123": {"state": "open"}, "1822": {"state": "open"}},
+        },
+    )
+
+    body = outcome["issueCreates"][0]["body"]
+    expected = 0 if canonical else 1
+    assert f"- Ready PRs without exactly one canonical issue: **{expected}**" in body
+    assert "- Issues with competing implementation PRs: **0**" in body
+    assert [comment["issue_number"] for comment in outcome["comments"]] == (
+        [] if canonical else [1825]
+    )
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Closes other/repo#1822",
+        "Closes #999999",
+        "Closes #1825",
+        "Closes #1822\nFixes #123",
+        "```text\nCloses #1822",
+        "~~~text\nCloses #1822",
+        "Closes `example` #1822",
+        "Closes\n```\nexample\n```\n#1822",
+    ],
+)
+def test_reconciliation_still_reports_noncanonical_references(
+    tmp_path: Path, body: str
+) -> None:
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 1691,
+                    "title": "Partial implementation",
+                    "body": body,
+                    "draft": False,
+                    "head": {"ref": "partial", "repo": None},
+                }
+            ],
+            "issuesByNumber": {
+                "123": {"state": "open"},
+                "1822": {"state": "open"},
+                "1825": {"pull_request": {}},
+            },
+        },
+    )
+
+    assert "- Ready PRs without exactly one canonical issue: **1**" in (
+        outcome["issueCreates"][0]["body"]
+    )
+    assert [comment["issue_number"] for comment in outcome["comments"]] == [1691]
+
+
+def test_reconciliation_reports_competition_and_stale_branches_without_closing_prs(
+    tmp_path: Path,
+) -> None:
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": number,
+                    "title": "Landing page implementation",
+                    "body": body,
+                    "draft": True,
+                    "head": {
+                        "ref": f"implementation-{number}",
+                        "repo": {"full_name": "groupthinking/EventRelay"},
+                    },
+                }
+                for number, body in [
+                    (1981, "Closes #1975"),
+                    (1996, "Closes #1975\nSupersedes draft #1981"),
+                ]
+            ],
+            "branches": [
+                {
+                    "name": name,
+                    "protected": protected,
+                    "commit": {"sha": "042989a9abcdef"},
+                }
+                for name, protected in [
+                    ("main", False),
+                    ("protected", True),
+                    ("implementation-1981", False),
+                    ("implementation-1996", False),
+                    ("unattached", False),
+                ]
+            ],
+            "commitsBySha": {"042989a9abcdef": "2000-01-01T00:00:00Z"},
+            "issuesByNumber": {"1975": {"state": "open"}},
+            "existingReport": {
+                "number": 1951,
+                "title": "[automation] Repository drift report",
+            },
+        },
+    )
+
+    assert outcome["issueCreates"] == []
+    assert len(outcome["issueUpdates"]) == 1
+    body = outcome["issueUpdates"][0]["body"]
+    assert "- Ready PRs without exactly one canonical issue: **0**" in body
+    assert "- Issues with competing implementation PRs: **1**" in body
+    assert "- Issue #1975: #1981, #1996" in body
+    assert "- Total remote branches: **5**" in body
+    assert "- Unattached branches older than 14 days: **1**" in body
+    assert "- `unattached` — 042989a9" in body
+    assert outcome["pullUpdates"] == []
+    assert outcome["comments"] == []
 
 
 def test_reconciliation_defers_without_writing_when_github_rate_limits(

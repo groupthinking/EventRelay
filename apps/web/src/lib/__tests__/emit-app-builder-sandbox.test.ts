@@ -3,8 +3,14 @@ import { identityHash } from '@/lib/video-pack';
 import {
   APP_BUILDER_CONTRACT,
   APP_BUILDER_CUT,
+  APP_BUILDER_EMIT_REV,
+  chapterStartSecondsAttr,
+  deriveSopTimestampFromPackFields,
   emitAppBuilderSandbox,
+  filterChapterKeyPoints,
   sandboxFromVideoPack,
+  sopStepsFromPack,
+  youtubeNocookieEmbedSrc,
 } from '@/lib/emit-app-builder-sandbox';
 import { buildStudioShipPackage } from '@/lib/action-surface';
 import {
@@ -108,20 +114,222 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(smoke).toMatch(/visible|textContent|innerText|data-testid/);
   });
 
+  it('M3: chapter jumps carry start seconds, seek hook, and sticky progress keys', () => {
+    const chapters = [
+      { start: 0, end: 21.8, topic: 'Intro', key_points: [] },
+      { start: 21.8, end: 37.8, topic: 'Jack setup', key_points: [] },
+      { start: 37.8, end: 70, topic: 'Remove wheel', key_points: [] },
+    ];
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      chapters,
+    });
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    expect(html).toContain('data-testid="source-youtube"');
+    expect(html).toContain('data-start-seconds="0"');
+    expect(html).toContain('data-start-seconds="21"');
+    expect(html).toContain('data-start-seconds="37"');
+    expect(html).toContain('data-outline-chapter="1"');
+    expect(main).toContain('seekSourceVideo');
+    expect(main).toContain('parseStartSecondsFromButton');
+    expect(main).toContain('loadMap');
+    expect(main).toContain('saveMap');
+    expect(main).toContain('updateProgress');
+    expect(chapterStartSecondsAttr(21.8)).toBe('21');
+    expect(chapterStartSecondsAttr(Number.NaN)).toBe('');
+    expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID)).toBe(
+      'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?enablejsapi=1',
+    );
+    expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID, 94.8)).toBe(
+      'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?start=94&autoplay=1&enablejsapi=1',
+    );
+    expect(APP_BUILDER_EMIT_REV).toContain('m5-chapter-key-points');
+  });
+
+  it('M4: visual events and SOP outline emit seek attrs and bind jump handlers', () => {
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      visualEvents: QJ_VISUAL_EVENTS,
+      sopSteps: QJ_SOP_STEPS,
+    });
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    expect(html).toContain('data-testid="visual-event"');
+    expect(html).toContain('data-start-seconds="39"');
+    expect(html).toContain('data-testid="outline-sop-jump"');
+    expect(html).toContain('data-start-seconds="21"');
+    expect(html).toContain('data-testid="sop-seek"');
+    expect(main).toContain('bindVisualEventJumps');
+    expect(main).toContain('bindSopTitleSeek');
+  });
+
+  it('M4: omits data-start-seconds when visual or SOP timestamps are absent', () => {
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      visualEvents: [{ timestamp: Number.NaN, content: 'No time on pack' }],
+      sopSteps: [{ id: 's1', order: 1, title: 'Untimed step', description: 'No seek' }],
+    });
+    const html = sandbox.files['index.html'];
+    expect(html).toContain('visual-event-static');
+    expect(html).not.toMatch(/visual-event[^"]*"[^>]*data-start-seconds/);
+    expect(html).not.toContain('data-testid="sop-seek"');
+    expect(html).not.toMatch(/outline-sop-jump[^>]*data-start-seconds/);
+  });
+
+  it('M4: deriveSopTimestampFromPackFields matches chapters then visuals; sopStepsFromPack passes timestamps', () => {
+    const chapters = [
+      { start: 21.8, end: 37, topic: 'Safety and Vehicle Staging', key_points: [] },
+      { start: 37.8, end: 53, topic: 'Lug loosening before jack', key_points: [] },
+    ];
+    const visuals = QJ_VISUAL_EVENTS;
+    const derived = deriveSopTimestampFromPackFields(
+      { title: 'Safety and Vehicle Staging', description: 'Park safely.' },
+      chapters,
+      visuals,
+    );
+    expect(derived).toBe(21.8);
+    const fromPack = sopStepsFromPack({
+      requirements: [{ id: 'REQ-01', title: 'Safety and Vehicle Staging', detail: 'Park safely.' }],
+      chapters,
+      visualEvents: visuals,
+    });
+    expect(fromPack[0]?.timestamp).toBe(21.8);
+    const noMatch = sopStepsFromPack({
+      requirements: [{ id: 'X', title: 'Unrelated workflow', detail: 'Nothing in chapters.' }],
+      chapters,
+      visualEvents: visuals,
+    });
+    expect(noMatch[0]?.timestamp).toBeUndefined();
+  });
+
+  it('M5: chapter key_points render as Explore bullets; empty key_points omit list', () => {
+    const jackPoint = 'Jack, lug wrench, and spare tire';
+    const safetyPoint = 'Park on flat ground; hazards and parking brake';
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      chapters: [
+        {
+          start: 0,
+          end: 21.8,
+          topic: 'Tools and Preparation',
+          key_points: [jackPoint, '  ', ''],
+        },
+        {
+          start: 21.8,
+          end: 37.8,
+          topic: 'Roadside Safety',
+          key_points: [safetyPoint],
+        },
+        { start: 37.8, end: 70, topic: 'Remove wheel', key_points: [] },
+      ],
+    });
+    const html = sandbox.files['index.html'];
+    expect(html).toContain('data-testid="pack-chapter-knowledge"');
+    expect(html).toContain('data-testid="chapter-key-points"');
+    expect(html).toContain(jackPoint);
+    expect(html).toContain(safetyPoint);
+    expect(html).toContain('data-testid="chapter-knowledge-seek"');
+    expect(html).toContain('data-start-seconds="21"');
+    const keyPointLists = html.match(/data-testid="chapter-key-points"/g) ?? [];
+    expect(keyPointLists).toHaveLength(2);
+    expect(html).not.toContain('Invented chapter bullet');
+    expect(filterChapterKeyPoints([' ok ', '', '  '])).toEqual(['ok']);
+    expect(APP_BUILDER_EMIT_REV).toBe('p1.11-m5-chapter-key-points');
+  });
+
+  it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
+    const sandbox = emitAppBuilderSandbox({
+      videoId: QJ_VIDEO_ID,
+      sourceUrl: QJ_SOURCE_URL,
+      sourceHash: QJ_SOURCE_HASH,
+      packId: QJ_PACK_ID,
+      transcript: QJ_TRANSCRIPT,
+      visualEvents: QJ_VISUAL_EVENTS,
+      sopSteps: QJ_SOP_STEPS,
+      stackTools: [{ name: 'Torque wrench', kind: 'tool', evidence: 'Shown in video' }],
+    });
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    const css = sandbox.files['src/styles.css'];
+    expect(html).toContain('data-testid="pack-mini-app"');
+    expect(html).toContain('data-testid="mini-app-tab"');
+    expect(html).toContain('data-testid="action-check"');
+    expect(html).toContain('data-testid="tool-pin"');
+    expect(html).toContain('data-testid="progress-fill"');
+    expect(html).toContain('data-testid="workbench-chrome"');
+    expect(html).toContain('data-testid="pack-ready-chip"');
+    expect(html).toContain('data-testid="pack-provenance"');
+    expect(html).toContain('data-testid="actions-progress-summary"');
+    expect(html).toContain(`data-emit-rev="${APP_BUILDER_EMIT_REV}"`);
+    expect(html).toContain('Runbook ·');
+    expect(css).toContain('--surface-950');
+    expect(css).toContain('#14b8a6');
+    expect(main).toContain('bindTabs');
+    expect(main).toContain('updateProgress');
+    expect(main).toContain('bindToolPins');
+    expect(main).toContain('sortPinnedTools');
+    expect(main).toContain('data-action-id');
+    expect(main).toMatch(/done.*total.*pct/);
+  });
+
+  it('ships the P1.6 three-panel SaaS shell with resizable splitters and chat rail', () => {
+    const sandbox = emitFixture();
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    const css = sandbox.files['src/styles.css'];
+    expect(html).toContain('data-testid="saas-three-panel-shell"');
+    expect(html).toContain('data-testid="shell-nav-panel"');
+    expect(html).toContain('data-testid="shell-splitter-left"');
+    expect(html).toContain('data-testid="shell-splitter-right"');
+    expect(html).toContain('data-testid="shell-chat-panel"');
+    expect(html).toContain('data-testid="workspace-hero"');
+    expect(html).toContain('data-testid="shell-chat-honesty"');
+    expect(html).toContain('data-testid="source-youtube"');
+    expect(html).toContain('enablejsapi=1');
+    expect(html).toContain('youtube-nocookie.com/embed/');
+    expect(css).toContain('.saas-shell');
+    expect(css).toContain('--shell-nav-w');
+    expect(main).toContain('bindShellLayout');
+    expect(main).toContain('bindChatRail');
+    expect(main).toContain('bindOutlineNav');
+    expect(main).toContain("fetch('/api/chat'");
+    expect(main).toContain('postLiveChat');
+    expect(html).toContain('data-testid="shell-chat-send">Send</button>');
+    expect(html).not.toContain('Send (preview)');
+    expect(html).not.toContain('Sign in required');
+  });
+
   it('renders transcript, visual events, and SOP — not architecture or code snippets', () => {
     const sandbox = emitFixture();
     const html = sandbox.files['index.html'];
     const packTs = sandbox.files['src/pack.ts'];
-    const shipped = `${html}\n${packTs}\n${Object.values(sandbox.files).join('\n')}`;
+    const main = sandbox.files['src/main.ts'];
+    const shipped = `${html}\n${packTs}\n${main}\n${Object.values(sandbox.files).join('\n')}`;
     expect(html).toContain('data-testid="app-builder-sandbox"');
     expect(html).toContain(QJ_VIDEO_ID);
     expect(html).toContain(QJ_SOURCE_URL);
-    expect(html).toContain(QJ_SOURCE_HASH);
+    expect(html).toContain(QJ_SOURCE_HASH.slice(0, 12));
+    expect(html).toContain(`Video Pack ${QJ_VIDEO_ID}`);
     expect(html).toContain('five flat tires');
     expect(html).toContain('scissor jack');
     expect(html).toContain('Safety and Vehicle Staging');
     expect(html).toContain('Star Pattern Torquing');
     expect(html).toContain('data-testid="sop-check"');
+    expect(html).toContain('data-panel="runbook"');
+    expect(packTs).toContain('actionItems');
+    expect(packTs).toContain('Safety and Vehicle Staging');
     expect(html).toContain('data-testid="assembly-honesty"');
     expect(html).toContain('data-sop-id="REQ-01"');
     expect(html).not.toMatch(/shopify/i);
@@ -295,7 +503,7 @@ describe('emitAppBuilderSandbox (second-video XYMcBrFSJ4c)', () => {
     expect(sandbox.preview.port).toBe(8080);
     expect(html).toContain(XYMC_VIDEO_ID);
     expect(html).toContain(XYMC_SOURCE_URL);
-    expect(html).toContain(XYMC_SOURCE_HASH);
+    expect(html).toContain(XYMC_SOURCE_HASH.slice(0, 12));
     expect(html).toContain('unpaid invoices');
     expect(html).toContain('nine boring AI automations');
     expect(html).toContain('Torty Gym');

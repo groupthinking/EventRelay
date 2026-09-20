@@ -62,7 +62,7 @@ describe('auth path policy', () => {
   });
 
   it('requires auth for product APIs but not the retired dashboard skin', () => {
-    expect(needsAuthentication('/api/chat')).toBe(true);
+    expect(needsAuthentication('/api/chat')).toBe(false);
     expect(needsAuthentication('/api/pipeline')).toBe(true);
     expect(needsAuthentication('/api/video')).toBe(true);
     expect(needsAuthentication('/dashboard')).toBe(false);
@@ -92,6 +92,8 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/v1/video/sandbox')).toBe(false);
     expect(needsAuthentication('/api/video/assemble')).toBe(false);
     expect(needsAuthentication('/api/v1/video/assemble')).toBe(false);
+    expect(isPublicApiPath('/api/chat')).toBe(true);
+    expect(needsAuthentication('/api/chat')).toBe(false);
     // Exact allowlist only — siblings stay gated.
     expect(isPublicApiPath('/api/video')).toBe(false);
     expect(isPublicApiPath('/api/video/generate')).toBe(false);

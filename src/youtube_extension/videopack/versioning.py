@@ -11,6 +11,7 @@ def upgrade_to_v0(data: dict) -> dict:
     data.setdefault("metrics", {})
     data.setdefault("concepts", [])
     data.setdefault("chapters", [])
+    data.setdefault("action_items", [])
     data.setdefault("keyframes", [])
     data.setdefault("requirements", [])
     data.setdefault("code_snippets", [])

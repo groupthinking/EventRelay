@@ -1,18 +1,19 @@
 import { createHash } from 'node:crypto';
+import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import { waitUntil } from '@vercel/functions';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 import {
-  VIDEO_PACK_EXTRACTOR_MODEL,
-  VideoPackExtractError,
-  extractVideoPackSpec,
-  type ExtractedVideoPackSpec,
-} from '@/lib/video-pack-extractor';
+  VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
+  hostedExtractReasonFromDetail,
+} from '@/lib/video-pack-extract-reason';
 import {
   emptyPackFormation,
+  type VideoPackActionItem,
   type VideoPackArchitecture,
   type VideoPackArtifact,
+  type VideoPackChapter,
   type VideoPackStack,
 } from '@/lib/video-pack-types';
 import {
@@ -24,8 +25,21 @@ import {
 } from '@/lib/video-pack-store';
 import { applyKeyframeImageHonesty } from '@/lib/keyframe-image-path';
 import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
+import {
+  VIDEO_PACK_EXTRACTOR_MODEL,
+  VideoPackExtractError,
+  extractVideoPackSpec,
+  type ExtractedVideoPackSpec,
+} from '@/lib/video-pack-extractor';
+
+export {
+  VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
+} from '@/lib/video-pack-extract-reason';
 
 export const IDENTITY_VERSION = 'v0' as const;
+
+/** Bump when stored packs must re-extract (e.g. Cut B1 chapters + action_items). */
+export const VIDEO_PACK_STRUCTURE_SCHEMA_VERSION = 'b1-structured-v1' as const;
 
 export {
   KEYFRAME_IMAGES_OK,
@@ -111,6 +125,8 @@ export interface VideoPackV0Json {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
   stack: VideoPackStack;
+  chapters: VideoPackChapter[];
+  action_items: VideoPackActionItem[];
   visual_context: VideoPackVisualContext | null;
   metrics: Record<string, number | string>;
   provenance: VideoPackProvenance;
@@ -172,6 +188,8 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
     architecture: null,
     artifacts: [],
     stack: { tools: [] },
+    chapters: [],
+    action_items: [],
     visual_context: null,
     metrics: {},
     provenance: {
@@ -183,12 +201,21 @@ export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt
   };
 }
 
+const SPEC_JSON_SALVAGE_NOTE =
+  'Gemini spec JSON was truncated; salvage kept the verified prefix only (no invented tail fields).';
+
 export function applyExtractedSpec(
   identity: VideoPackV0Json,
   spec: ExtractedVideoPackSpec,
 ): VideoPackV0Json {
+  const salvaged = spec.spec_json_salvaged === true;
   const pack = applyKeyframeImageHonesty({
     ...identity,
+    ...(salvaged
+      ? {
+          metrics: { ...identity.metrics, spec_json_salvaged: 1 },
+        }
+      : {}),
     transcript: spec.transcript,
     keyframes: spec.keyframes,
     concepts: spec.concepts,
@@ -197,14 +224,20 @@ export function applyExtractedSpec(
     architecture: spec.architecture ?? emptyPackFormation().architecture,
     artifacts: spec.artifacts ?? emptyPackFormation().artifacts,
     stack: spec.stack ?? emptyPackFormation().stack,
+    chapters: spec.chapters ?? emptyPackFormation().chapters,
+    action_items: spec.action_items ?? emptyPackFormation().action_items,
     visual_context: spec.visual_context,
     provenance: {
       ...identity.provenance,
       tool_versions: {
         ...identity.provenance.tool_versions,
         extractor: VIDEO_PACK_EXTRACTOR_MODEL,
+        pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
+        extract_pipeline: VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
       },
-      notes: 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+      notes: salvaged
+        ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
+        : 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
     },
   });
   if (!spec.grounded_spec) return pack;
@@ -223,6 +256,24 @@ export function applyExtractedSpec(
 
 export function isIdentityOnlyPack(pack: VideoPackV0Json): boolean {
   return pack.transcript.full_text === `cite:youtube:${pack.video_id}`;
+}
+
+/** True when a ready extracted pack predates the current structured schema (pre-B1 cache). */
+export function packNeedsStructuredRefresh(pack: VideoPackV0Json): boolean {
+  if (isIdentityOnlyPack(pack)) return false;
+  const marked = pack.provenance.tool_versions?.pack_structure;
+  return marked !== VIDEO_PACK_STRUCTURE_SCHEMA_VERSION;
+}
+
+/** True when a ready pack predates the current Gateway retry/salvage pipeline (C1). */
+export function packNeedsExtractPipelineRefresh(pack: VideoPackV0Json): boolean {
+  if (isIdentityOnlyPack(pack)) return false;
+  const marked = pack.provenance.tool_versions?.extract_pipeline;
+  return marked !== VIDEO_PACK_EXTRACT_PIPELINE_VERSION;
+}
+
+export function packNeedsReextractOnPost(pack: VideoPackV0Json): boolean {
+  return packNeedsStructuredRefresh(pack) || packNeedsExtractPipelineRefresh(pack);
 }
 
 const SOURCE_HASH = /^[a-f0-9]{64}$/;
@@ -291,8 +342,15 @@ async function recordToResponse(record: VideoPackRecord): Promise<NextResponse> 
         }),
         { status: 202 },
       );
-    case 'error':
-      return NextResponse.json({ status: 'error', error: record.error }, { status: 503 });
+    case 'error': {
+      const reason_code = hostedExtractReasonFromDetail(record.error);
+      return NextResponse.json(
+        reasonEnvelopeJson(reasonEnvelope(false, reason_code, record.error), {
+          status: 'error',
+        }),
+        { status: 200 },
+      );
+    }
     default: {
       const _exhaustive: never = record;
       return NextResponse.json(
@@ -379,7 +437,9 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
   const sourceHash = identity.provenance.source_hash;
 
   const existing = await getPackRecord(sourceHash);
-  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack)) {
+  const reclaimReady =
+    existing?.state === 'ready' && packNeedsReextractOnPost(existing.pack);
+  if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack) && !reclaimReady) {
     return recordToResponse(existing);
   }
   if (existing?.state === 'processing' && !isProcessingStale(existing)) {
@@ -391,12 +451,16 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
 
   let claimed: Awaited<ReturnType<typeof claimPackProcessing>>;
   try {
-    claimed = await claimPackProcessing({
-      video_id: identity.video_id,
-      source_url: identity.source_url,
-      source_hash: sourceHash,
-      id: identity.id,
-    });
+    claimed = await claimPackProcessing(
+      {
+        video_id: identity.video_id,
+        source_url: identity.source_url,
+        source_hash: sourceHash,
+        id: identity.id,
+      },
+      new Date(),
+      { reclaimReady: reclaimReady },
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Video pack claim failed.';
     return NextResponse.json({ status: 'error', error: message }, { status: 503 });

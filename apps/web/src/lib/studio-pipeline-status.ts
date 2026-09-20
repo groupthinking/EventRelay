@@ -98,6 +98,58 @@ export function studioFormationSupplementalEntities(
   return entities ?? [];
 }
 
+export function studioWorkbenchEmptyView(input: {
+  busy: boolean;
+  hasSelection: boolean;
+  hasVideoPack: boolean;
+  analysisReady: boolean;
+  failed?: boolean;
+}): {
+  title: string;
+  description: string;
+  primaryAction: 'run' | 'retry' | null;
+} | null {
+  if (input.hasVideoPack) return null;
+  if (!input.hasSelection && !input.busy) {
+    return {
+      title: 'No video in this session yet',
+      description:
+        'Paste a YouTube URL above and run analysis. Transcript, Video Pack, and build rails stay on this page.',
+      primaryAction: null,
+    };
+  }
+  if (input.busy) {
+    return {
+      title: 'Analysis in progress',
+      description:
+        'Waiting on transcript and pack storage. Export and Build live unlock when the run finishes.',
+      primaryAction: null,
+    };
+  }
+  if (input.failed) {
+    return {
+      title: 'Analysis did not finish',
+      description:
+        'Transcript or pack storage failed. Retry analysis or try another public video.',
+      primaryAction: 'retry',
+    };
+  }
+  if (!input.analysisReady) {
+    return {
+      title: 'Analysis not ready',
+      description:
+        'This run has no usable transcript yet. Re-run analysis when you are ready to store a pack.',
+      primaryAction: 'run',
+    };
+  }
+  return {
+    title: 'Video Pack not stored',
+    description:
+      'Transcript is here but no pack was persisted for Build live. Re-run analysis to store a Video Pack.',
+    primaryAction: 'run',
+  };
+}
+
 export function studioEventsEmptyMessage(input: {
   busy: boolean;
   hasCompletedRun: boolean;

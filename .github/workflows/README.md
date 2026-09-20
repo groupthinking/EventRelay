@@ -15,7 +15,7 @@ workflow; this README is the index.
 | PR Iteration Loop | `pr-iteration-loop.md` / `.lock.yml` | issue opened; PR opened/ready; weekdays + weekly; push to `main` | Long-running verified loop that selects one failing/stale repository checkpoint, iterates on one canonical draft PR, records durable memory, and can publish a discussion digest with chart assets |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
-| Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
+| Dependency Review | `dependency-review.yml` | push to `main`; all PRs | Seed main-branch dependency snapshots and review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
 | PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
@@ -32,7 +32,7 @@ workflow; this README is the index.
 | API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
 | Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
-| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Drift report: PRs without canonical issues, competing PRs, stale branches; auto-comments on untracked PRs and auto-closes superseded drafts |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; repository state changes | Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
 
 ## Key Workflows
 
