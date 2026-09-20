@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hybrid Workspace — EventRelay</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">EventRelay <span>Hybrid</span></div>
+      <nav class="actions" id="actions">
+        <button data-action="embed" class="active">&lt;/&gt; Embed</button>
+        <button data-action="summarize">Summarize</button>
+        <button data-action="extract">Extract</button>
+        <button data-action="escalate">Escalate</button>
+      </nav>
+    </header>
+
+    <div class="stage" id="stage">
+      <div class="main" id="main">
+        <section class="workspace" id="workspace">
+          <div class="work-top">
+            <aside class="files" id="files">
+              <h4>Project Workspace</h4>
+            </aside>
+            <div class="edit-preview" id="editPreview">
+              <div id="editor"></div>
+              <iframe id="preview" sandbox="allow-scripts allow-same-origin" title="Live preview"></iframe>
+            </div>
+          </div>
+        </section>
+        <aside class="assistant" id="assistant">
+          <header>Workspace AI</header>
+          <div class="thread" id="thread"></div>
+          <div class="prompts" id="prompts"></div>
+          <form class="composer" id="composer">
+            <input id="ask" autocomplete="off" placeholder="Ask a question..." />
+            <button type="submit">Send</button>
+          </form>
+        </aside>
+      </div>
+      <section class="termwrap" id="termwrap">
+        <header>
+          <span>Terminal · fx</span>
+          <span><i class="status-dot off" id="fxdot"></i> <span id="fxlabel">fallback</span></span>
+        </header>
+        <div id="terminal"></div>
+      </section>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/split.js@1.6.5/dist/split.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.52.2/min/vs/loader.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
