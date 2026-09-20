@@ -2309,7 +2309,9 @@ async def get_or_create_videopack(request: VideoPackRequest):
         logger.error(
             "VideoPack store unavailable: %s", _safe_log_value(exc), exc_info=True
         )
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=503, detail="Video pack store unavailable"
+        ) from exc
     except ValueError as exc:
         logger.error(
             "VideoPack identity rejected: %s", _safe_log_value(exc), exc_info=True

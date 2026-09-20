@@ -105,6 +105,15 @@ const github = {
     },
     repos: {
       listBranches,
+      getBranchProtection: async ({ branch }) => {
+        const match = (scenario.branches || []).find((b) => b.name === branch);
+        if (match?.protected) {
+          return { data: { required_status_checks: {} } };
+        }
+        const err = new Error(`Branch ${branch} is not protected`);
+        err.status = 404;
+        throw err;
+      },
       getCommit: async ({ ref }) => ({
         data: {
           commit: {
@@ -283,6 +292,13 @@ def test_reconciliation_uses_graphql_branch_inventory_without_rest_pagination() 
     assert 'refs(refPrefix: "refs/heads/"' in script
     assert "committedDate" in script
     assert "github.paginate(github.rest.repos.listBranches" not in script
+
+
+def test_reconciliation_uses_rest_branch_protection_for_stale_inventory() -> None:
+    """Protected branches are excluded via REST, not GraphQL branchProtectionRule."""
+    script = _get_script(_load_workflow())
+    assert "getBranchProtection" in script
+    assert "branchProtectionRule" not in script
 
 
 def test_reconciliation_workflow_report_is_idempotent() -> None:

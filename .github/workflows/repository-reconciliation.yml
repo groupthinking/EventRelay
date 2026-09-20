@@ -144,6 +144,16 @@ jobs:
                 .map(pr => pr.head.ref)
             );
 
+            async function isBranchProtected(branchName) {
+              try {
+                await github.rest.repos.getBranchProtection({ owner, repo, branch: branchName });
+                return true;
+              } catch (err) {
+                if (err.status === 404) return false;
+                return false;
+              }
+            }
+
             // Collect all unique issue numbers referenced across open PRs and validate each one
             // against the Issues API before using them for classification. This prevents textual
             // references like "Closes #999999" from creating fictitious duplicate groups.
@@ -188,9 +198,9 @@ jobs:
 
             const staleBranches = [];
             for (const branch of branches) {
-              // Exclude main, branches attached to open PRs, and stale inventory rows
-              // without commit metadata (branchProtectionRule omitted — token lacks scope).
+              // Exclude main, protected branches, and branches attached to open PRs.
               if (branch.name === "main" || activeHeads.has(branch.name)) continue;
+              if (await isBranchProtected(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });
