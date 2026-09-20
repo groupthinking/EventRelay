@@ -3,7 +3,7 @@
 **Source session:** [36f6c3e5-60dc-4dfe-a151-ef2ab9114afa](https://github.com/groupthinking/EventRelay/tasks/36f6c3e5-60dc-4dfe-a151-ef2ab9114afa)  
 **Master index:** [.github/AUDIT_FINDINGS_SESSION.md](../.github/AUDIT_FINDINGS_SESSION.md)  
 **Phase 1 merge:** `dc2aa69b0` on `main`  
-**Phase 2 branch:** `cursor/audit-phase2-all-twelve-9e63`  
+**Phase 2 merge:** `bb06a0417` on `main` (PR [#2190](https://github.com/groupthinking/EventRelay/pull/2190))  
 **Closeout narrative:** [AUDIT_SESSION_CLOSEOUT_REPORT.md](./AUDIT_SESSION_CLOSEOUT_REPORT.md)
 
 | ID | Issue | Phase | Status |

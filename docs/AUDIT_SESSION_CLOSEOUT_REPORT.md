@@ -3,7 +3,8 @@
 **Task session:** [36f6c3e5-60dc-4dfe-a151-ef2ab9114afa](https://github.com/groupthinking/EventRelay/tasks/36f6c3e5-60dc-4dfe-a151-ef2ab9114afa)  
 **Tracker:** [#2175](https://github.com/groupthinking/EventRelay/issues/2175)  
 **Findings index:** [.github/AUDIT_FINDINGS_SESSION.md](../.github/AUDIT_FINDINGS_SESSION.md)  
-**Phase 1 implementation:** [#2188](https://github.com/groupthinking/EventRelay/pull/2188) (`cursor/audit-remediation-tracker-9e63`)  
+**Phase 1 implementation:** [#2188](https://github.com/groupthinking/EventRelay/pull/2188) (`dc2aa69b0` on `main`)  
+**Phase 2 implementation:** [#2190](https://github.com/groupthinking/EventRelay/pull/2190) (`bb06a0417` on `main`)  
 **Live status matrix:** [AUDIT_REMEDIATION_STATUS.md](./AUDIT_REMEDIATION_STATUS.md)
 
 This file is the durable human-readable closeout for the ~10-hour / 14-session research chain and the 12 linked GitHub issues (#2163–#2174). It does not replace runtime audit output from `scripts/testing/run_repository_research_audit.py`.
@@ -15,9 +16,9 @@ This file is the durable human-readable closeout for the ~10-hour / 14-session r
 | Layer | Outcome |
 | --- | --- |
 | **Research & diligence** | Architecture, risk, GitHub ops, and product-fit analysis completed in session; encoded as five runtime skills + operating harness + repo audit runner. |
-| **Remediation (code)** | Phase 1 critical items largely addressed in #2188: pack store unification, G.A.T.E. HTTP probe, reconciliation workflow fix, 503 disclosure guard. |
-| **Remediation (docs)** | Phase 2–4 strategy docs added; full code fixes deferred to follow-up PRs per issue. |
-| **Still open** | Origin provider ownership (#2164), route collapse (#2167), SQL/migration reconciliation (#2169), yt-dlp circuit breaker (#2173), Studio UI wiring to probe-live, external market research automation. |
+| **Remediation (code)** | Phase 1 (#2188, `dc2aa69b0`) + Phase 2 (#2190, `bb06a0417`): pack store, G.A.T.E. HTTP probe (Origin + Studio), v1 video route aliases, yt-dlp circuit breaker, reconciliation/verification workflow guards, tests. |
+| **Remediation (docs)** | `CURRENT_ARCHITECTURE.md`, `MIGRATION_TRUTH.md`, `AUDIT_ISSUE_TRIAGE.md`, orchestration/API/exception standards; status matrix in `AUDIT_REMEDIATION_STATUS.md`. |
+| **Residual (honest)** | Alembic drift not auto-fixed (#2169 doc+test only); bare-`except` repo-wide refactor not done (#2168); preferences/refinery v1 twins remain (#2167 partial); close tracker issues on GitHub if auto-close did not run (token scope). |
 
 ---
 
