@@ -1,38 +1,33 @@
-# Hybrid Workspace (Monaco + Split + iframe + fx)
+# UVAI Hybrid Workspace (Monaco + Split + iframe)
 
-Cursor-like / Udacity AI Learning Assistant split shell for EventRelay.
+Public brand: **UVAI**. EventRelay stays the internal runtime.
+
+This folder is a **studio-pane prototype** for the Cursor / Udacity split UX
+(Embed, Summarize, Extract, Escalate). Canonical product surface remains `/studio`.
+Do not treat this directory as a second public product.
 
 Closes #2183.
-
-## Layout
-
-```
-[ Embed | Summarize | Extract | Escalate ]
-+---------------------------+------------------+
-| file tree | Monaco editor | AI chat          |
-|           | iframe preview| suggested prompts|
-+---------------------------+------------------+
-| xterm  (fx when available, local fallback)   |
-+----------------------------------------------+
-```
 
 ## Run
 
 ```bash
 cd apps/hybrid-workspace
+node --experimental-vm-modules logic.test.mjs
 python3 -m http.server 4173
-# open http://localhost:4173
 ```
 
-No build step. Monaco / Split / xterm load from jsDelivr.
+Open http://localhost:4173
 
-## Real fx
+Monaco / Split / xterm load from jsDelivr. No Gateway key in the browser.
 
-1. `npm i libfx @xterm/xterm @xterm/addon-fit` in this folder if you want the native/wasm harness instead of the CDN xterm-only fallback.
-2. Export a short-lived `AI_GATEWAY_API_KEY`.
-3. Open in Chrome/Edge 137+ with WebAssembly JSPI.
-4. `fx-adapter.js` calls `createFxTerminal` + `xtermAdapter` when those exist; otherwise it keeps the local action router so Summarize / Extract / Escalate still work.
+## fx
 
-## What is not included
+The bottom pane is an **activity log** with typed commands. A real `libfx`
+attach needs a bundler + import map + WASM assets + a **server-side** short-lived
+token. `python -m http.server` cannot resolve `libfx/browser` or inject
+`AI_GATEWAY_API_KEY`. Do not export that key onto `window`.
 
-YouTube player internals. Preview is a sandboxed iframe of *your* editor HTML. Drop a YouTube embed into that HTML only if the lesson itself needs a player.
+## Preview sandbox
+
+The iframe uses `sandbox="allow-scripts"` only (no `allow-same-origin`) so
+student JS cannot read the parent page.

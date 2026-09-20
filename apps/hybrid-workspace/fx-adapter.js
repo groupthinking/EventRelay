@@ -1,33 +1,34 @@
+import { parseTermCommand } from "./logic.js";
+
 /**
- * Isolated fx hook.
- * Tries libfx browser terminal when JSPI + key exist.
- * Always exposes write/log so the UI never depends on Gateway.
+ * Local activity log + optional future libfx hook.
+ * Bare `libfx/browser` is not resolvable from python http.server.
+ * Do not put AI_GATEWAY_API_KEY on window.
  */
-export async function attachFx(xterm, env = {}) {
-  const status = { mode: "fallback", runtime: null };
-
-  const hasKey = Boolean(env.AI_GATEWAY_API_KEY);
-  const hasJspi = typeof WebAssembly !== "undefined" &&
-    typeof WebAssembly.Suspending === "function";
-
-  if (hasKey && hasJspi) {
-    try {
-      const mod = await import("libfx/browser");
-      if (mod.createFxTerminal && mod.xtermAdapter) {
-        status.runtime = await mod.createFxTerminal({
-          terminal: mod.xtermAdapter(xterm),
-          env,
-        });
-        status.mode = "fx";
-        return status;
+export async function attachFx(xterm, { onCommand } = {}) {
+  const status = { mode: "log", runtime: null };
+  xterm.writeln("Activity log. Type: summarize | extract | escalate | embed | ask <text>");
+  let buf = "";
+  xterm.onData((data) => {
+    for (const ch of data) {
+      if (ch === "\r" || ch === "\n") {
+        xterm.write("\r\n");
+        const parsed = parseTermCommand(buf);
+        buf = "";
+        onCommand?.(parsed.action, parsed.text);
+        continue;
       }
-    } catch (err) {
-      console.warn("fx unavailable, using local terminal", err);
+      if (ch === "\u007f") {
+        if (buf.length) {
+          buf = buf.slice(0, -1);
+          xterm.write("\b \b");
+        }
+        continue;
+      }
+      buf += ch;
+      xterm.write(ch);
     }
-  }
-
-  xterm.writeln("fx fallback online. Set AI_GATEWAY_API_KEY + JSPI to attach libfx.");
-  xterm.writeln("Actions: summarize | extract | escalate | embed | ask <text>");
+  });
   return status;
 }
 
@@ -35,7 +36,7 @@ export function fxPrompt(action, payload) {
   const map = {
     summarize: "Summarize the active preview / lesson content.",
     extract: "Extract and clarify the current editor or quote selection.",
-    escalate: "File a human support ticket from this workspace session.",
+    escalate: "Create a local support reference from this session.",
     embed: "Keep the learner in split-screen: workspace left, assistant right.",
     ask: payload || "Ask about the active video or project.",
   };
