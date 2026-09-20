@@ -5,10 +5,12 @@ import argparse
 import json
 import os
 import re
+import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Lock
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 TOOLS = [
     {
@@ -28,29 +30,19 @@ TOOLS = [
     },
 ]
 RESOURCES = {
-    "resource://fixtures/static/text": {
+    "test://static-text": {
         "mimeType": "text/plain",
         "text": "fixture static text",
     },
-    "resource://fixtures/static/json": {
+    "test://template/123/data": {
         "mimeType": "application/json",
-        "text": json.dumps(
-            {
-                "string": "value",
-                "number": 7,
-                "boolean": True,
-                "array": [1, "two", False],
-                "object": {"nested": "ok"},
-                "null": None,
-            },
-            sort_keys=True,
-        ),
+        "text": json.dumps({"templateId": "123", "value": "fixture template data"}, sort_keys=True),
     },
 }
 PROMPTS = {
-    "summarize_video": {
-        "description": "Summarize a video fixture prompt.",
-        "arguments": [{"name": "video_id", "required": True}],
+    "test_simple_prompt": {
+        "description": "Return a deterministic fixture prompt.",
+        "arguments": [{"name": "video_id", "required": False}],
     }
 }
 
@@ -63,6 +55,9 @@ STATELESS_RESULT_META = {
 ALLOWED_PROTOCOL_VERSIONS = {"2025-11-25", "2026-07-28"}
 SCOPE_STEP_UP_FLAG = "EVENTRELAY_FIXTURE_SCOPE_STEP_UP"
 TARGET_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_:-]{1,128}$")
+APPROVAL_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
+OPERATOR_PROVENANCE_PATTERN = re.compile(r"^operator:[A-Za-z0-9_.-]{1,64}$")
+SCOPE_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9:._/-]{1,256}$")
 
 
 def _jsonrpc_result(request_id: Any, result: dict[str, Any]) -> dict[str, Any]:
@@ -97,10 +92,19 @@ def _safe_header_part(value: str) -> str:
     return value
 
 
+def _quoted_header_value(value: str) -> str:
+    return _safe_header_part(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _immutable_snapshot(value: dict[str, Any]) -> dict[str, Any]:
+    return json.loads(json.dumps(value, sort_keys=True))
+
+
 class ConformanceFixtureHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     _handler_runs: dict[str, int] = {}
     _scope_receipts: list[dict[str, Any]] = []
+    _state_lock = Lock()
 
     def do_POST(self) -> None:  # noqa: N802
         if self.path != "/mcp":
@@ -118,9 +122,22 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if not isinstance(payload, dict):
+            self._write_json(
+                HTTPStatus.BAD_REQUEST,
+                _jsonrpc_error(None, -32600, "Invalid Request"),
+            )
+            return
+
         request_id = payload.get("id")
         method = payload.get("method")
         params = payload.get("params") or {}
+        if not isinstance(params, dict):
+            self._write_json(
+                HTTPStatus.BAD_REQUEST,
+                _jsonrpc_error(request_id, -32602, "Invalid params"),
+            )
+            return
         scope_context = self._scope_context(request_id=request_id, method=method, params=params)
         if scope_context is False:
             return
@@ -139,7 +156,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
                     request_id,
                     {
                         "protocolVersion": protocol_version,
-                        "capabilities": {"tools": {}},
+                        "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
                         "serverInfo": SERVER_INFO,
                     },
                 ),
@@ -154,7 +171,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
                     request_id,
                     {
                         "supportedVersions": ["2026-07-28"],
-                        "capabilities": {"tools": {}},
+                        "capabilities": {"tools": {}, "resources": {}, "prompts": {}},
                         "serverInfo": SERVER_INFO,
                     },
                 ),
@@ -235,7 +252,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         if method == "fixtures/receipts/list":
             self._write_json(
                 HTTPStatus.OK,
-                _jsonrpc_result(request_id, {"receipts": list(self._scope_receipts)}),
+                _jsonrpc_result(request_id, {"receipts": self._receipt_snapshot()}),
                 headers={"MCP-Protocol-Version": "2026-07-28"},
             )
             return
@@ -361,17 +378,19 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         if not scope_context:
             return {}
         operation_key = str(scope_context["operation_key"])
-        count = self._handler_runs.get(operation_key, 0) + 1
-        self._handler_runs[operation_key] = count
-        receipt = {
-            **scope_context["receipt"],
-            "decision": "approved",
-            "retry_result": "success",
-            "handler_ran": True,
-            "handlerRunCount": count,
-        }
-        self._scope_receipts.append(dict(receipt))
-        return {"scopeStepUp": receipt}
+        with self._state_lock:
+            count = self._handler_runs.get(operation_key, 0) + 1
+            self._handler_runs[operation_key] = count
+            receipt = {
+                **scope_context["receipt"],
+                "decision": "approved",
+                "retry_result": "success",
+                "handler_ran": True,
+                "handlerRunCount": count,
+            }
+            immutable_receipt = _immutable_snapshot(receipt)
+            self._scope_receipts.append(immutable_receipt)
+        return {"scopeStepUp": immutable_receipt}
 
     def _scope_context(
         self, *, request_id: Any, method: Any, params: dict[str, Any]
@@ -381,17 +400,6 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         operation = str(method or "")
         if operation not in {"tools/call", "resources/read", "prompts/get"}:
             return None
-
-        provenance = str(self.headers.get("X-EventRelay-Approval-Provenance", "") or "")
-        if provenance.lower().startswith("peer-agent:"):
-            return self._deny_scope(
-                request_id=request_id,
-                operation=operation,
-                target="<unknown>",
-                reason="invalid_provenance",
-                challenged_scopes=(),
-                resource_metadata={"resource_metadata_url": "about:blank"},
-            )
 
         target = self._canonical_target(operation=operation, params=params)
         if target is None:
@@ -404,12 +412,25 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
                 resource_metadata={"resource_metadata_url": "about:blank"},
             )
 
+        encoded_target = quote(target, safe="")
+        metadata_url = f"https://eventrelay.local/mcp/metadata/{quote(operation, safe='')}/{encoded_target}"
         resource_metadata = {
-            "resource_metadata_url": f"https://eventrelay.local/mcp/metadata/{operation}/{target}",
+            "resource_metadata_url": metadata_url,
             "resource": target,
         }
         required_scopes = self._required_scopes(operation=operation, target=target)
         prior_scopes = self._granted_scopes()
+        if prior_scopes is None:
+            return self._deny_scope(
+                request_id=request_id,
+                operation=operation,
+                target=target,
+                reason="malformed_scope_set",
+                challenged_scopes=tuple(required_scopes),
+                resource_metadata=resource_metadata,
+            )
+
+        provenance = str(self.headers.get("X-EventRelay-Approval-Provenance", "") or "")
         receipt = {
             "call_id": request_id,
             "operation": operation,
@@ -417,7 +438,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
             "prior_scopes": prior_scopes,
             "challenged_scopes": required_scopes,
             "resource_metadata": resource_metadata,
-            "approval_provenance": provenance or "operator:fixture",
+            "approval_provenance": provenance or None,
             "retry_result": "not_attempted",
             "handler_ran": False,
         }
@@ -431,7 +452,73 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
                 resource_metadata=resource_metadata,
                 receipt=receipt,
             )
+
+        approval_binding, rejection_reason = self._approval_binding(
+            operation=operation,
+            target=target,
+            required_scopes=required_scopes,
+            metadata_url=metadata_url,
+        )
+        if approval_binding is None:
+            return self._deny_scope(
+                request_id=request_id,
+                operation=operation,
+                target=target,
+                reason=rejection_reason,
+                challenged_scopes=tuple(required_scopes),
+                resource_metadata=resource_metadata,
+                receipt=receipt,
+            )
+        receipt["approval_binding"] = approval_binding
+        receipt["approval_provenance"] = approval_binding["provenance"]
         return {"operation_key": f"{operation}:{target}", "receipt": receipt}
+
+    def _approval_binding(
+        self,
+        *,
+        operation: str,
+        target: str,
+        required_scopes: list[str],
+        metadata_url: str,
+    ) -> tuple[dict[str, Any] | None, str]:
+        provenance = str(self.headers.get("X-EventRelay-Approval-Provenance", "") or "")
+        approval_id = str(self.headers.get("X-EventRelay-Approval-Id", "") or "")
+        bound_operation = str(self.headers.get("X-EventRelay-Approval-Operation", "") or "")
+        bound_target = str(self.headers.get("X-EventRelay-Approval-Target", "") or "")
+        bound_metadata = str(self.headers.get("X-EventRelay-Approval-Resource-Metadata", "") or "")
+        bound_scopes = self._parse_scope_header("X-EventRelay-Approval-Scopes")
+        state = str(self.headers.get("X-EventRelay-Approval-State", "") or "")
+        expires_at_raw = str(self.headers.get("X-EventRelay-Approval-Expires-At", "") or "")
+
+        if not OPERATOR_PROVENANCE_PATTERN.fullmatch(provenance):
+            return None, "invalid_provenance"
+        if not APPROVAL_ID_PATTERN.fullmatch(approval_id):
+            return None, "invalid_approval_id"
+        if bound_operation != operation or bound_target != target:
+            return None, "approval_binding_mismatch"
+        if bound_metadata != metadata_url:
+            return None, "resource_metadata_mismatch"
+        if bound_scopes is None or bound_scopes != sorted(required_scopes):
+            return None, "approval_scope_mismatch"
+        if state != "active":
+            return None, "approval_revoked" if state == "revoked" else "approval_inactive"
+        try:
+            expires_at = int(expires_at_raw)
+        except ValueError:
+            return None, "invalid_approval_expiry"
+        if expires_at <= int(time.time()):
+            return None, "approval_expired"
+
+        return {
+            "approval_id": approval_id,
+            "provenance": provenance,
+            "operation": operation,
+            "target": target,
+            "scope_set": sorted(required_scopes),
+            "resource_metadata_url": metadata_url,
+            "expires_at": expires_at,
+            "revocation_state": state,
+        }, ""
 
     def _deny_scope(
         self,
@@ -444,7 +531,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         resource_metadata: dict[str, str],
         receipt: dict[str, Any] | None = None,
     ) -> bool:
-        prior_scopes = self._granted_scopes()
+        prior_scopes = self._granted_scopes() or []
         denial_receipt = {
             "call_id": request_id,
             "operation": operation,
@@ -453,8 +540,9 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
             "challenged_scopes": list(challenged_scopes),
             "resource_metadata": resource_metadata,
             "approval_provenance": str(
-                self.headers.get("X-EventRelay-Approval-Provenance", "") or "operator:fixture"
-            ),
+                self.headers.get("X-EventRelay-Approval-Provenance", "") or ""
+            )
+            or None,
             "decision": "challenge" if reason == "insufficient_scope" else "rejected",
             "retry_result": "not_attempted",
             "handler_ran": False,
@@ -462,14 +550,15 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         }
         if receipt:
             denial_receipt = {**receipt, **denial_receipt}
-        self._scope_receipts.append(dict(denial_receipt))
+        self._append_receipt(denial_receipt)
         headers = {"MCP-Protocol-Version": "2026-07-28"}
         if reason == "insufficient_scope":
-            scope_value = " ".join(challenged_scopes)
-            metadata_url = resource_metadata.get("resource_metadata_url", "about:blank")
-            auth_scheme = "Bearer"
+            scope_value = _quoted_header_value(" ".join(challenged_scopes))
+            metadata_url = _quoted_header_value(
+                resource_metadata.get("resource_metadata_url", "about:blank")
+            )
             headers["WWW-Authenticate"] = (
-                f'{auth_scheme} error="insufficient_scope", scope="{scope_value}", '
+                f'Bearer error="insufficient_scope", scope="{scope_value}", '
                 f'resource_metadata="{metadata_url}"'
             )
         message = (
@@ -478,7 +567,7 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
             else "authorization_rejected"
         )
         payload = _jsonrpc_error(request_id, -32003, message)
-        payload["error"]["data"] = denial_receipt
+        payload["error"]["data"] = _immutable_snapshot(denial_receipt)
         self._write_json(
             HTTPStatus.FORBIDDEN,
             payload,
@@ -486,38 +575,70 @@ class ConformanceFixtureHandler(BaseHTTPRequestHandler):
         )
         return False
 
+    def _append_receipt(self, receipt: dict[str, Any]) -> None:
+        with self._state_lock:
+            self._scope_receipts.append(_immutable_snapshot(receipt))
+
+    def _receipt_snapshot(self) -> list[dict[str, Any]]:
+        with self._state_lock:
+            return [_immutable_snapshot(receipt) for receipt in self._scope_receipts]
+
     def _scope_step_up_enabled(self) -> bool:
         return os.getenv(SCOPE_STEP_UP_FLAG, "").lower() in {"1", "true", "yes", "on"}
 
-    def _granted_scopes(self) -> list[str]:
-        scopes = str(self.headers.get("X-EventRelay-Fixture-Scopes", "") or "")
-        values = sorted({part.strip() for part in scopes.split(" ") if part.strip()})
+    def _parse_scope_header(self, name: str) -> list[str] | None:
+        raw_value = str(self.headers.get(name, "") or "")
+        values = sorted({part.strip() for part in raw_value.split(" ") if part.strip()})
+        if any(not SCOPE_TOKEN_PATTERN.fullmatch(value) for value in values):
+            return None
         return values
+
+    def _granted_scopes(self) -> list[str] | None:
+        return self._parse_scope_header("X-EventRelay-Fixture-Scopes")
 
     def _canonical_target(self, *, operation: str, params: dict[str, Any]) -> str | None:
         if operation == "tools/call":
-            name = str(params.get("name") or "")
-            return name if TARGET_NAME_PATTERN.fullmatch(name) else None
+            name = params.get("name")
+            arguments = params.get("arguments", {})
+            if not isinstance(arguments, dict):
+                return None
+            return name if isinstance(name, str) and TARGET_NAME_PATTERN.fullmatch(name) else None
         if operation == "resources/read":
-            uri = str(params.get("uri") or "")
-            if "\n" in uri or "\r" in uri:
+            uri = params.get("uri")
+            if not isinstance(uri, str) or uri not in RESOURCES:
                 return None
             parsed = urlparse(uri)
-            if not parsed.scheme or not parsed.netloc:
+            if parsed.scheme != "test" or not parsed.netloc:
                 return None
             return uri
         if operation == "prompts/get":
-            name = str(params.get("name") or "")
-            return name if TARGET_NAME_PATTERN.fullmatch(name) else None
+            name = params.get("name")
+            arguments = params.get("arguments", {})
+            if not isinstance(arguments, dict):
+                return None
+            if not isinstance(name, str) or name not in PROMPTS:
+                return None
+            return name
         return None
 
     def _required_scopes(self, *, operation: str, target: str) -> list[str]:
         if operation == "tools/call":
-            return ["mcp:tools:call", f"tool:{target}:execute"]
+            return [
+                "mcp:conformance:tools:call",
+                f"mcp:conformance:tools:{target}",
+            ]
         if operation == "resources/read":
-            return ["mcp:resources:read", f"resource:{target}:read"]
+            resource_scope = (
+                "mcp:conformance:resources:static"
+                if target == "test://static-text"
+                else "mcp:conformance:resources:template:123"
+            )
+            return ["mcp:conformance:resources:read", resource_scope]
         if operation == "prompts/get":
-            return ["mcp:prompts:get", f"prompt:{target}:read"]
+            return [
+                "mcp:conformance:prompts:get",
+                "mcp:conformance:prompts:test_simple_prompt",
+            ]
         return []
 
 

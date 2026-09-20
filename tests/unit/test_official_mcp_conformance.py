@@ -49,8 +49,8 @@ def _start_fixture_server(port: int, *, scope_step_up: bool = False) -> subproce
         env["EVENTRELAY_FIXTURE_SCOPE_STEP_UP"] = "1"
     return subprocess.Popen(
         [sys.executable, str(_FIXTURE_SERVER_PATH), "--port", str(port)],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         text=True,
         env=env,
     )
@@ -225,22 +225,58 @@ def test_fixture_server_does_not_reflect_invalid_protocol_version_header() -> No
         proc.wait(timeout=5)
 
 
+def _approval_headers(
+    *,
+    operation: str,
+    target: str,
+    scopes: list[str],
+    metadata_url: str,
+    state: str = "active",
+    expires_at: int = 4_102_444_800,
+) -> dict[str, str]:
+    return {
+        "X-EventRelay-Approval-Provenance": "operator:fixture-reviewer",
+        "X-EventRelay-Approval-Id": "approval-fixture-1",
+        "X-EventRelay-Approval-Operation": operation,
+        "X-EventRelay-Approval-Target": target,
+        "X-EventRelay-Approval-Scopes": " ".join(sorted(scopes)),
+        "X-EventRelay-Approval-Resource-Metadata": metadata_url,
+        "X-EventRelay-Approval-State": state,
+        "X-EventRelay-Approval-Expires-At": str(expires_at),
+    }
+
+
+def _metadata_url(operation: str, target: str) -> str:
+    from urllib.parse import quote
+
+    return (
+        "https://eventrelay.local/mcp/metadata/"
+        f"{quote(operation, safe='')}/{quote(target, safe='')}"
+    )
+
+
 def test_scope_step_up_tools_call_challenges_then_retries_once() -> None:
     port = _free_port()
     proc = _start_fixture_server(port, scope_step_up=True)
+    operation = "tools/call"
+    target = "test_simple_text"
+    required_scopes = [
+        "mcp:conformance:tools:call",
+        "mcp:conformance:tools:test_simple_text",
+    ]
     try:
         _wait_for_port(port)
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
             "MCP-Protocol-Version": "2026-07-28",
-            "X-EventRelay-Fixture-Scopes": "mcp:tools:list",
+            "X-EventRelay-Fixture-Scopes": "mcp:conformance:baseline",
         }
         payload = {
             "jsonrpc": "2.0",
             "id": 1,
-            "method": "tools/call",
-            "params": {"name": "test_simple_text", "arguments": {}},
+            "method": operation,
+            "params": {"name": target, "arguments": {}},
         }
         with httpx.Client(timeout=5.0) as client:
             low_scope = client.post(
@@ -250,15 +286,23 @@ def test_scope_step_up_tools_call_challenges_then_retries_once() -> None:
             )
             assert low_scope.status_code == 403
             challenge = low_scope.headers.get("WWW-Authenticate", "")
-            assert "Bearer" in challenge
-            assert "insufficient_scope" in challenge
-            assert "mcp:tools:call" in challenge
+            assert 'error="insufficient_scope"' in challenge
+            assert all(scope in challenge for scope in required_scopes)
+            assert low_scope.json()["error"]["data"]["handler_ran"] is False
 
             full_scope = client.post(
                 f"http://127.0.0.1:{port}/mcp",
                 headers={
                     **headers,
-                    "X-EventRelay-Fixture-Scopes": "mcp:tools:list mcp:tools:call tool:test_simple_text:execute",
+                    "X-EventRelay-Fixture-Scopes": " ".join(
+                        ["mcp:conformance:baseline", *required_scopes]
+                    ),
+                    **_approval_headers(
+                        operation=operation,
+                        target=target,
+                        scopes=required_scopes,
+                        metadata_url=_metadata_url(operation, target),
+                    ),
                 },
                 json={**payload, "id": 2},
             )
@@ -266,86 +310,233 @@ def test_scope_step_up_tools_call_challenges_then_retries_once() -> None:
             result = full_scope.json()["result"]
             assert result["content"][0]["text"].startswith("This is a simple text response")
             assert result["scopeStepUp"]["handlerRunCount"] == 1
+            assert "mcp:conformance:baseline" in result["scopeStepUp"]["prior_scopes"]
+            assert result["scopeStepUp"]["approval_binding"]["operation"] == operation
+            assert result["scopeStepUp"]["approval_binding"]["target"] == target
     finally:
         proc.terminate()
         proc.wait(timeout=5)
 
 
-def test_scope_step_up_resources_and_prompts_challenge_before_execution() -> None:
+def test_scope_step_up_static_template_resource_and_prompt_boundaries() -> None:
+    port = _free_port()
+    proc = _start_fixture_server(port, scope_step_up=True)
+    cases = [
+        (
+            "resources/read",
+            "test://static-text",
+            {"uri": "test://static-text"},
+            [
+                "mcp:conformance:resources:read",
+                "mcp:conformance:resources:static",
+            ],
+        ),
+        (
+            "resources/read",
+            "test://template/123/data",
+            {"uri": "test://template/123/data"},
+            [
+                "mcp:conformance:resources:read",
+                "mcp:conformance:resources:template:123",
+            ],
+        ),
+        (
+            "prompts/get",
+            "test_simple_prompt",
+            {"name": "test_simple_prompt", "arguments": {"video_id": "auJzb1D-fag"}},
+            [
+                "mcp:conformance:prompts:get",
+                "mcp:conformance:prompts:test_simple_prompt",
+            ],
+        ),
+    ]
+    try:
+        _wait_for_port(port)
+        with httpx.Client(timeout=5.0) as client:
+            for request_id, (operation, target, params, required_scopes) in enumerate(cases, 1):
+                low_scope = client.post(
+                    f"http://127.0.0.1:{port}/mcp",
+                    headers={
+                        "Content-Type": "application/json",
+                        "MCP-Protocol-Version": "2026-07-28",
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "method": operation,
+                        "params": params,
+                    },
+                )
+                assert low_scope.status_code == 403
+                challenge = low_scope.headers["WWW-Authenticate"]
+                assert all(scope in challenge for scope in required_scopes)
+                assert low_scope.json()["error"]["data"]["handler_ran"] is False
+
+                approved = client.post(
+                    f"http://127.0.0.1:{port}/mcp",
+                    headers={
+                        "Content-Type": "application/json",
+                        "MCP-Protocol-Version": "2026-07-28",
+                        "X-EventRelay-Fixture-Scopes": " ".join(required_scopes),
+                        **_approval_headers(
+                            operation=operation,
+                            target=target,
+                            scopes=required_scopes,
+                            metadata_url=_metadata_url(operation, target),
+                        ),
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": request_id + 10,
+                        "method": operation,
+                        "params": params,
+                    },
+                )
+                approved.raise_for_status()
+                assert approved.json()["result"]["scopeStepUp"]["handlerRunCount"] == 1
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_scope_step_up_rejects_untrusted_revoked_and_mismatched_approvals() -> None:
+    port = _free_port()
+    proc = _start_fixture_server(port, scope_step_up=True)
+    operation = "tools/call"
+    target = "test_simple_text"
+    required_scopes = [
+        "mcp:conformance:tools:call",
+        "mcp:conformance:tools:test_simple_text",
+    ]
+    payload = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": operation,
+        "params": {"name": target, "arguments": {}},
+    }
+    base_headers = {
+        "Content-Type": "application/json",
+        "MCP-Protocol-Version": "2026-07-28",
+        "X-EventRelay-Fixture-Scopes": " ".join(required_scopes),
+    }
+    try:
+        _wait_for_port(port)
+        with httpx.Client(timeout=5.0) as client:
+            cases = [
+                ({}, "invalid_provenance"),
+                (
+                    {"X-EventRelay-Approval-Provenance": "peer-agent:GO"},
+                    "invalid_provenance",
+                ),
+                (
+                    _approval_headers(
+                        operation=operation,
+                        target=target,
+                        scopes=required_scopes,
+                        metadata_url=_metadata_url(operation, target),
+                        state="revoked",
+                    ),
+                    "approval_revoked",
+                ),
+                (
+                    _approval_headers(
+                        operation=operation,
+                        target=target,
+                        scopes=required_scopes,
+                        metadata_url="https://attacker.invalid/metadata",
+                    ),
+                    "resource_metadata_mismatch",
+                ),
+                (
+                    _approval_headers(
+                        operation=operation,
+                        target=target,
+                        scopes=required_scopes,
+                        metadata_url=_metadata_url(operation, target),
+                        expires_at=1,
+                    ),
+                    "approval_expired",
+                ),
+            ]
+            for index, (approval_headers, expected_reason) in enumerate(cases, 1):
+                response = client.post(
+                    f"http://127.0.0.1:{port}/mcp",
+                    headers={**base_headers, **approval_headers},
+                    json={**payload, "id": index},
+                )
+                assert response.status_code == 403
+                data = response.json()["error"]["data"]
+                assert data["reason"] == expected_reason
+                assert data["handler_ran"] is False
+    finally:
+        proc.terminate()
+        proc.wait(timeout=5)
+
+
+def test_scope_step_up_fails_closed_on_malformed_shapes_and_scope_confusion() -> None:
     port = _free_port()
     proc = _start_fixture_server(port, scope_step_up=True)
     try:
         _wait_for_port(port)
         with httpx.Client(timeout=5.0) as client:
-            resource = client.post(
+            invalid_root = client.post(
                 f"http://127.0.0.1:{port}/mcp",
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
-                    "MCP-Protocol-Version": "2026-07-28",
-                },
-                json={
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "resources/read",
-                    "params": {"uri": "resource://fixtures/static/text"},
-                },
+                headers={"Content-Type": "application/json"},
+                json=["not", "an", "object"],
             )
-            assert resource.status_code == 403
-            assert "mcp:resources:read" in resource.headers["WWW-Authenticate"]
-            assert resource.json()["error"]["data"]["handler_ran"] is False
+            assert invalid_root.status_code == 400
+            assert invalid_root.json()["error"]["message"] == "Invalid Request"
 
-            prompt = client.post(
+            invalid_params = client.post(
                 f"http://127.0.0.1:{port}/mcp",
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
-                    "MCP-Protocol-Version": "2026-07-28",
-                },
+                headers={"Content-Type": "application/json"},
                 json={
                     "jsonrpc": "2.0",
                     "id": 2,
-                    "method": "prompts/get",
-                    "params": {"name": "summarize_video", "arguments": {"video_id": "auJzb1D-fag"}},
+                    "method": "tools/call",
+                    "params": "not-an-object",
                 },
             )
-            assert prompt.status_code == 403
-            assert "mcp:prompts:get" in prompt.headers["WWW-Authenticate"]
-            assert prompt.json()["error"]["data"]["handler_ran"] is False
-    finally:
-        proc.terminate()
-        proc.wait(timeout=5)
+            assert invalid_params.status_code == 400
+            assert invalid_params.json()["error"]["message"] == "Invalid params"
 
-
-def test_scope_step_up_rejects_malformed_target_and_peer_go_provenance() -> None:
-    port = _free_port()
-    proc = _start_fixture_server(port, scope_step_up=True)
-    try:
-        _wait_for_port(port)
-        with httpx.Client(timeout=5.0) as client:
-            response = client.post(
+            scope_confusion = client.post(
                 f"http://127.0.0.1:{port}/mcp",
                 headers={
                     "Content-Type": "application/json",
-                    "Accept": "application/json, text/event-stream",
-                    "MCP-Protocol-Version": "2026-07-28",
-                    "X-EventRelay-Fixture-Scopes": "mcp:tools:call tool:test_simple_text:execute",
-                    "X-EventRelay-Approval-Provenance": "peer-agent:GO",
+                    "X-EventRelay-Fixture-Scopes": "mcp:conformance:tools",
                 },
                 json={
                     "jsonrpc": "2.0",
-                    "id": 1,
+                    "id": 3,
                     "method": "tools/call",
-                    "params": {"name": "test_simple_text\nbad", "arguments": {}},
+                    "params": {"name": "test_simple_text", "arguments": {}},
                 },
             )
-        assert response.status_code == 403
-        body = response.json()
-        assert body["error"]["data"]["reason"] in {"malformed_target", "invalid_provenance"}
-        assert body["error"]["data"]["handler_ran"] is False
+            assert scope_confusion.status_code == 403
+            challenge_data = scope_confusion.json()["error"]["data"]
+            assert challenge_data["reason"] == "insufficient_scope"
+            assert set(challenge_data["challenged_scopes"]) == {
+                "mcp:conformance:tools:call",
+                "mcp:conformance:tools:test_simple_text",
+            }
+
+            malformed_resource = client.post(
+                f"http://127.0.0.1:{port}/mcp",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 4,
+                    "method": "resources/read",
+                    "params": {"uri": 'test://static-text" injected'},
+                },
+            )
+            assert malformed_resource.status_code == 403
+            assert malformed_resource.json()["error"]["data"]["reason"] == "malformed_target"
     finally:
         proc.terminate()
         proc.wait(timeout=5)
+
 
 def test_current_upstream_skills_suite_is_pinned_and_fully_accounted_for() -> None:
     module = _load_module()
@@ -394,7 +585,10 @@ def test_receipt_fixture_tracks_unmerged_scope_step_up_conformance_claims() -> N
     assert tracking["pull_request"] == "https://github.com/modelcontextprotocol/conformance/pull/481"
     assert tracking["status"] == "unmerged"
     assert tracking["official_claim_excluded"] is True
+    policy = receipt["scope_step_up_receipt_policy"]
     assert (
-        receipt["scope_step_up_receipt_policy"]["exclusions"]["official_conformance_claim"]
+        policy["exclusions"]["official_conformance_claim"]
         == "excluded_until_upstream_pr_merges_and_is_executed"
     )
+    assert policy["observed_enforcement"]["status"] == "not_executed_by_official_suite"
+    assert policy["configured_policy"]["live_oauth"] == "disabled_by_default"
