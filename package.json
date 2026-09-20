@@ -21,10 +21,10 @@
   },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
-    "brace-expansion": "^5.0.9",
+    "brace-expansion": "^5.0.12",
     "eslint": "^9.39.5",
     "next": "^16.3.3",
-    "turbo": "^2.10.12",
+    "turbo": "^2.10.13",
     "typescript": "6.0.3",
     "undici": "^8.10.2",
     "vitest": "^4.1.11"
@@ -65,16 +65,16 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^4.0.55",
+    "@ai-sdk/gateway": "^4.0.83",
     "@dataconnect/generated": "file:src/dataconnect-generated",
     "@google-cloud/text-to-speech": "^7.1.0",
     "@google/genai": "^2.22.0",
     "@opentelemetry/core": "^2.11.0",
-    "@types/node": "^26.5.1",
-    "ai": "^7.0.91",
+    "@types/node": "^26.6.1",
+    "ai": "^7.0.103",
     "chrome-devtools-mcp": "^1.9.0",
     "dotenv": "^17.4.2",
-    "openai": "^7.15.0",
+    "openai": "^7.17.0",
     "react": "^19",
     "react-dom": "^19",
     "tsx": "^4.23.13"
