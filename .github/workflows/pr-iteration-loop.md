@@ -305,14 +305,24 @@ jobs:
                 .split(/\r?\n/)
                 .some((line) => line.trim() === marker);
 
+            const selectedIsPr =
+              selected.kind === "pull_request" || selected.kind === "stale_pull_request";
+            const selectedIsIssue =
+              selected.kind === "issue" || selected.kind === "stale_issue";
+            const selectedNumber =
+              typeof selected.number === "number" ? selected.number : null;
             const duplicatePr = pulls.find(
-              (pr) => pr.state === "open" && hasMarkerLine(pr.body),
+              (pr) =>
+                pr.state === "open" &&
+                hasMarkerLine(pr.body) &&
+                !(selectedIsPr && selectedNumber !== null && pr.number === selectedNumber),
             );
             const duplicateIssue = issues.find(
               (issue) =>
                 !issue.pull_request &&
                 issue.state === "open" &&
-                hasMarkerLine(issue.body),
+                hasMarkerLine(issue.body) &&
+                !(selectedIsIssue && selectedNumber !== null && issue.number === selectedNumber),
             );
             const duplicateOwner = duplicatePr || duplicateIssue || null;
             if (duplicateOwner) {
