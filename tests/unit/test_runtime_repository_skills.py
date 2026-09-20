@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,6 +24,23 @@ _EXPECTED_REPOSITORY_SKILLS = {
 @pytest.fixture
 def registry() -> SkillRegistry:
     return SkillRegistry(lock_file_path=_LOCK_FILE)
+
+
+@pytest.fixture
+def harness_skill_outputs() -> dict[str, dict[str, Any]]:
+    outputs = {
+        "canonical-architecture-truth": {"canonical_vs_legacy_map": {}},
+        "persistence-and-boundary-truth": {
+            "persistence_truth_map": {},
+            "security_boundary_map": {},
+        },
+        "engineering-risk-and-duplication-audit": {"risk_register": []},
+        "github-ops-and-workflow-health": {"workflow_health_report": {}},
+        "product-positioning-and-buyer-fit": {"product_fit_memo": {}},
+    }
+    for output in outputs.values():
+        output["evidence_sources"] = ["README.md:1-40"]
+    return outputs
 
 
 def test_registry_lists_repository_runtime_skills_by_source(
@@ -99,6 +117,47 @@ async def test_agent_operating_harness_requires_all_skill_outputs(
 
     assert result["status"] == "error"
     assert "missing skill outputs" in (result["error"] or "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("child_evidence", [[None], [""], ["   "], [None, "", " \t"]])
+async def test_agent_operating_harness_rejects_unusable_child_evidence(
+    registry: SkillRegistry,
+    harness_skill_outputs: dict[str, dict[str, Any]],
+    child_evidence: list[Any],
+) -> None:
+    harness_skill_outputs["canonical-architecture-truth"]["evidence_sources"] = child_evidence
+    result = await registry.invoke_skill(
+        "agent-operating-harness",
+        {"evidence_sources": ["AGENTS.md:8-14"], "skill_outputs": harness_skill_outputs},
+    )
+
+    assert result["status"] == "error"
+    assert result["error"] == (
+        "canonical-architecture-truth missing evidence_sources; fail closed on missing evidence"
+    )
+
+
+@pytest.mark.asyncio
+async def test_agent_operating_harness_normalizes_and_deduplicates_child_evidence(
+    registry: SkillRegistry,
+    harness_skill_outputs: dict[str, dict[str, Any]],
+) -> None:
+    harness_skill_outputs["canonical-architecture-truth"]["evidence_sources"] = [
+        None,
+        "",
+        " \t",
+        " AGENTS.md:8-14 ",
+        " README.md:1-40 ",
+        "README.md:1-40",
+    ]
+    result = await registry.invoke_skill(
+        "agent-operating-harness",
+        {"evidence_sources": ["AGENTS.md:8-14"], "skill_outputs": harness_skill_outputs},
+    )
+
+    assert result["status"] == "success", result["error"]
+    assert result["output"]["evidence_sources"] == ["AGENTS.md:8-14", "README.md:1-40"]
 
 
 @pytest.mark.asyncio

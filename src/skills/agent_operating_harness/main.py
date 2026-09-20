@@ -75,14 +75,14 @@ class AgentOperatingHarnessSkill(EvidenceBackedSkill):
             child = skill_outputs[skill_id]
             if not isinstance(child, dict):
                 return SkillResult(status="error", error=f"{skill_id} output must be a dict")
-            child_evidence = child.get("evidence_sources")
-            if not isinstance(child_evidence, list) or not child_evidence:
+            child_evidence = self._evidence_sources(child)
+            if child_evidence is None:
                 return SkillResult(
                     status="error",
                     error=f"{skill_id} missing evidence_sources; fail closed on missing evidence",
                 )
             aggregated_evidence.extend(
-                item for item in child_evidence if isinstance(item, str) and item not in aggregated_evidence
+                item for item in child_evidence if item not in aggregated_evidence
             )
 
             required_outputs = _REQUIRED_CHILD_OUTPUTS[skill_id]

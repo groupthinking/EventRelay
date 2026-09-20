@@ -82,59 +82,39 @@ jobs:
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
             });
-            // Only track head refs from PRs targeting this repository (not forks) to prevent
-            // branch-name collisions between fork branches and local branches.
-            const activeHeads = new Set(
-              pulls
-                .filter(pr => pr.head.repo && pr.head.repo.full_name === repoFullName)
-                .map(pr => pr.head.ref)
-            );
-            const branches = [];
-            const protectedBranches = new Map();
-            let totalBranches = 0;
-            try {
-              const branchInventory = await github.paginate(github.rest.repos.listBranches, {
-                owner, repo, per_page: 100
-              });
-              totalBranches = branchInventory.length;
-              for (const branch of branchInventory) {
-                const isProtected = Boolean(branch.protected);
-                protectedBranches.set(branch.name, isProtected);
-              }
-              const candidateBranches = branchInventory.filter(branch =>
-                branch.name !== "main" &&
-                !protectedBranches.get(branch.name) &&
-                !activeHeads.has(branch.name)
-              );
-              for (const branch of candidateBranches) {
-                let committedDate = null;
-                try {
-                  const commit = await github.rest.repos.getCommit({
-                    owner, repo, ref: branch.commit.sha
-                  });
-                  committedDate =
-                    commit.data.commit.committer?.date ||
-                    commit.data.commit.author?.date ||
-                    null;
-                } catch (err) {
-                  if (err.status === 404) {
-                    core.warning(`Unable to retrieve commit metadata for branch ${branch.name}`);
-                  } else if (err.status === 403 && /rate limit/i.test(err.message || "")) {
-                    core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
-                    return;
-                  } else {
-                    throw err;
+            // Branch commit metadata comes from GraphQL with the branch page, avoiding one
+            // REST getCommit call per stale branch. The reconciliation trigger intentionally
+            // excludes pull_request.synchronize so it cannot compete with preview E2E lookup.
+            const branchQuery = `
+              query BranchInventory($owner: String!, $repo: String!, $cursor: String) {
+                repository(owner: $owner, name: $repo) {
+                  refs(refPrefix: "refs/heads/", first: 100, after: $cursor) {
+                    totalCount
+                    pageInfo { hasNextPage endCursor }
+                    nodes {
+                      name
+                      branchProtectionRule { id }
+                      target {
+                        ... on Commit { oid committedDate }
+                      }
+                    }
                   }
                 }
-
-                branches.push({
-                  name: branch.name,
-                  target: {
-                    oid: branch.commit.sha,
-                    committedDate
-                  }
-                });
               }
+            `;
+            const branches = [];
+            let totalBranches = 0;
+            let branchCursor = null;
+            try {
+              do {
+                const inventory = await github.graphql(branchQuery, {
+                  owner, repo, cursor: branchCursor
+                });
+                const refs = inventory.repository.refs;
+                totalBranches = refs.totalCount;
+                branches.push(...refs.nodes);
+                branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
+              } while (branchCursor);
             } catch (err) {
               if (err.status === 403 && /rate limit/i.test(err.message || "")) {
                 core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
@@ -142,6 +122,13 @@ jobs:
               }
               throw err;
             }
+            // Only track head refs from PRs targeting this repository (not forks) to prevent
+            // branch-name collisions between fork branches and local branches.
+            const activeHeads = new Set(
+              pulls
+                .filter(pr => pr.head.repo && pr.head.repo.full_name === repoFullName)
+                .map(pr => pr.head.ref)
+            );
 
             // Collect all unique issue numbers referenced across open PRs and validate each one
             // against the Issues API before using them for classification. This prevents textual
@@ -188,7 +175,7 @@ jobs:
             const staleBranches = [];
             for (const branch of branches) {
               // Exclude main, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || protectedBranches.get(branch.name) || activeHeads.has(branch.name)) continue;
+              if (branch.name === "main" || branch.branchProtectionRule || activeHeads.has(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });

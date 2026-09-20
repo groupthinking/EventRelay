@@ -1142,7 +1142,8 @@ class TestVideoToSoftwareEndpoint:
             body = resp.json()
             assert body["status"] == "success"
             assert body["data"]["job_id"].startswith("job_")
-            assert "524" not in str(body).lower()
+            assert body["error"] is None
+            assert body["detail"] is None
         finally:
             app.dependency_overrides[get_video_processing_service] = _make_vps
 
@@ -1193,7 +1194,9 @@ class TestVideoToSoftwareEndpoint:
             while "transcript" not in seen and time.perf_counter() < deadline:
                 time.sleep(0.01)
             assert seen.get("transcript") == payload["transcript"]
-            assert "524" not in str(body).lower()
+            assert body["status"] == "success"
+            assert body["error"] is None
+            assert body["detail"] is None
             job_id = body["data"]["job_id"]
             status = client.get(f"/api/v1/jobs/{job_id}")
             assert status.status_code == 200

@@ -54,18 +54,12 @@ listBranches.__tag = "repos.listBranches";
 const listComments = async ({ issue_number }) => ({ data: (scenario.commentsByIssue || {})[issue_number] || [] });
 listComments.__tag = "issues.listComments";
 
-const graphql = async (query) => {
+const graphql = async () => {
   if (scenario.graphqlError) {
     const err = new Error(scenario.graphqlError.message);
     err.status = scenario.graphqlError.status;
     throw err;
   }
-  if (scenario.forbidBranchProtectionRuleQuery && query.includes("branchProtectionRule")) {
-    const err = new Error("Resource not accessible by integration");
-    err.status = 403;
-    throw err;
-  }
-  const includesBranchProtectionRule = query.includes("branchProtectionRule");
   return {
     repository: {
       refs: {
@@ -73,9 +67,7 @@ const graphql = async (query) => {
         pageInfo: { hasNextPage: false, endCursor: null },
         nodes: (scenario.branches || []).map((branch) => ({
           name: branch.name,
-          ...(includesBranchProtectionRule
-            ? { branchProtectionRule: branch.protected ? { id: "protected" } : null }
-            : {}),
+          branchProtectionRule: branch.protected ? { id: "protected" } : null,
           target: {
             oid: branch.commit?.sha || branch.sha || "fixture-sha",
             committedDate:
@@ -113,21 +105,13 @@ const github = {
     },
     repos: {
       listBranches,
-      getCommit: async ({ ref }) => {
-        const commitError = (scenario.commitErrorsBySha || {})[ref];
-        if (commitError) {
-          const err = new Error(commitError.message);
-          err.status = commitError.status;
-          throw err;
-        }
-        return {
-          data: {
-            commit: {
-              committer: { date: ((scenario.commitsBySha || {})[ref]) || "2026-07-01T00:00:00Z" },
-            },
+      getCommit: async ({ ref }) => ({
+        data: {
+          commit: {
+            committer: { date: ((scenario.commitsBySha || {})[ref]) || "2026-07-01T00:00:00Z" },
           },
-        };
-      },
+        },
+      }),
     },
     issues: {
       get: async ({ issue_number }) => {
@@ -291,14 +275,14 @@ def test_reconciliation_workflow_total_branches_metric_is_accurate() -> None:
     assert "Total remote branches" in script
 
 
-def test_reconciliation_uses_rest_branch_inventory_and_commit_lookup() -> None:
-    """Branch inventory must rely on REST so restricted GraphQL refs access cannot fail the job."""
+def test_reconciliation_uses_graphql_branch_inventory_without_rest_pagination() -> None:
+    """Branch inventory must avoid one REST request per page and per stale branch."""
     script = _get_script(_load_workflow())
 
-    assert "github.graphql" not in script
-    assert "github.paginate(github.rest.repos.listBranches" in script
-    assert "github.rest.repos.getCommit" in script
-    assert "protectedBranches.set" in script
+    assert "github.graphql" in script
+    assert 'refs(refPrefix: "refs/heads/"' in script
+    assert "committedDate" in script
+    assert "github.paginate(github.rest.repos.listBranches" not in script
 
 
 def test_reconciliation_workflow_report_is_idempotent() -> None:
@@ -572,12 +556,10 @@ def test_reconciliation_defers_without_writing_when_github_rate_limits(
         tmp_path,
         {
             "pulls": [],
-            "branches": [{"name": "topic", "protected": False, "commit": {"sha": "topic-sha"}}],
-            "commitErrorsBySha": {
-                "topic-sha": {
-                    "status": 403,
-                    "message": "API rate limit exceeded for installation",
-                }
+            "branches": [],
+            "graphqlError": {
+                "status": 403,
+                "message": "API rate limit exceeded for installation",
             },
         },
     )
@@ -585,35 +567,3 @@ def test_reconciliation_defers_without_writing_when_github_rate_limits(
     assert outcome["issueUpdates"] == []
     assert outcome["issueCreates"] == []
     assert any("Repository reconciliation deferred" in message for message in outcome["infos"])
-
-
-def test_reconciliation_uses_rest_branch_inventory_when_graphql_refs_are_forbidden(
-    tmp_path: Path,
-) -> None:
-    """The workflow should succeed even when GraphQL branch inventory would be forbidden."""
-    outcome = _run_reconciliation(
-        tmp_path,
-        {
-            "pulls": [],
-            "branches": [
-                {"name": "main", "protected": False, "commit": {"sha": "main-sha"}},
-                {"name": "protected", "protected": True, "commit": {"sha": "protected-sha"}},
-                {"name": "unattached", "protected": False, "commit": {"sha": "old-sha"}},
-            ],
-            "commitsBySha": {
-                "main-sha": "2026-09-19T00:00:00Z",
-                "protected-sha": "2026-01-01T00:00:00Z",
-                "old-sha": "2026-01-01T00:00:00Z",
-            },
-            "existingReport": {
-                "number": 1951,
-                "title": "[automation] Repository drift report",
-            },
-            "forbidBranchProtectionRuleQuery": True,
-        },
-    )
-
-    body = outcome["issueUpdates"][0]["body"]
-    assert "- Total remote branches: **3**" in body
-    assert "- Unattached branches older than 14 days: **1**" in body
-    assert "- `unattached` — old-sha" in body
