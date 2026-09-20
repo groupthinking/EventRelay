@@ -115,11 +115,26 @@ jobs:
                 branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
               } while (branchCursor);
             } catch (err) {
+              const integrationForbidden =
+                (Array.isArray(err.errors) &&
+                  err.errors.some(
+                    (e) =>
+                      e.type === "FORBIDDEN" ||
+                      /not accessible by integration/i.test(e.message || ""),
+                  )) ||
+                /not accessible by integration/i.test(err.message || "");
               if (err.status === 403 && /rate limit/i.test(err.message || "")) {
                 core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
                 return;
               }
-              throw err;
+              if (integrationForbidden) {
+                core.warning(
+                  "Branch inventory skipped: GITHUB_TOKEN lacks GraphQL scope for refs query. Stale-branch section will be empty.",
+                );
+                totalBranches = 0;
+              } else {
+                throw err;
+              }
             }
             // Only track head refs from PRs targeting this repository (not forks) to prevent
             // branch-name collisions between fork branches and local branches.

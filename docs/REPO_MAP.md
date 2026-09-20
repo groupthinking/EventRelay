@@ -14,6 +14,8 @@ UVAI is the public product; EventRelay is the internal runtime and repository na
 | Grounded model extraction | [`video-pack-extractor.ts`](../apps/web/src/lib/video-pack-extractor.ts) |
 | Pack identity and format | [`video-pack.ts`](../apps/web/src/lib/video-pack.ts) |
 | Upstash REST pack persistence | [`video-pack-store.ts`](../apps/web/src/lib/video-pack-store.ts) |
+| Backend pack store (same Upstash keys) | [`videopack/store_factory.py`](../src/youtube_extension/videopack/store_factory.py) |
+| Deep audit remediation tracker (#2175) | [`AUDIT_REMEDIATION_STATUS.md`](AUDIT_REMEDIATION_STATUS.md) |
 | Evidence-workspace emitter | [`emit-app-builder-sandbox.ts`](../apps/web/src/lib/emit-app-builder-sandbox.ts) |
 | Sandbox HTTP endpoint | [`api/video/sandbox/route.ts`](../apps/web/src/app/api/video/sandbox/route.ts) |
 | Four-way transition decision and hashed receipt | [`gate-transition.ts`](../apps/web/src/lib/gate-transition.ts) |
