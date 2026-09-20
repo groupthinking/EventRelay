@@ -2,7 +2,8 @@
 
 **Source session:** [36f6c3e5-60dc-4dfe-a151-ef2ab9114afa](https://github.com/groupthinking/EventRelay/tasks/36f6c3e5-60dc-4dfe-a151-ef2ab9114afa)  
 **Master index:** [.github/AUDIT_FINDINGS_SESSION.md](../.github/AUDIT_FINDINGS_SESSION.md)  
-**Implementation PR:** #2188 (`cursor/audit-remediation-tracker-9e63`)
+**Implementation PR:** #2188 (`cursor/audit-remediation-tracker-9e63`)  
+**Closeout narrative:** [AUDIT_SESSION_CLOSEOUT_REPORT.md](./AUDIT_SESSION_CLOSEOUT_REPORT.md) (14-session + 12-issue matrix)
 
 | ID | Issue | Phase | Status in #2188 |
 | --- | --- | --- | --- |
