@@ -13,7 +13,7 @@ import { uvaiEnterpriseTokensCss } from '@/lib/uvai-enterprise-tokens';
 export const APP_BUILDER_CONTRACT = 'app-builder-workspace' as const;
 export const APP_BUILDER_CUT = 'ingest→App Builder sandbox emit' as const;
 /** Bumped when emitted mini-app chrome/CSS/JS changes (hosted /d re-emits on each request). */
-export const APP_BUILDER_EMIT_REV = 'p1.12-enterprise-tokens-p0' as const;
+export const APP_BUILDER_EMIT_REV = 'p1.13-pack-ask-light' as const;
 export const APP_BUILDER_PREVIEW_HOST = '0.0.0.0' as const;
 export const APP_BUILDER_PREVIEW_PORT = 8080;
 export const APP_BUILDER_PROBE_URL = 'http://127.0.0.1:8080/';
@@ -305,21 +305,35 @@ export default defineConfig({
 function stylesCss(): string {
   return `${uvaiEnterpriseTokensCss()}
 :root {
-  color-scheme: dark;
+  color-scheme: light;
   --surface-950: var(--uvai-surface);
   --surface-900: var(--uvai-elevated);
   --ink: var(--uvai-text);
-  --muted: color-mix(in srgb, var(--uvai-text) 70%, transparent);
-  --muted-tertiary: color-mix(in srgb, var(--uvai-muted) 85%, transparent);
-  --line: color-mix(in srgb, var(--uvai-border) 65%, transparent);
+  --muted: color-mix(in srgb, var(--uvai-text) 78%, transparent);
+  --muted-tertiary: color-mix(in srgb, var(--uvai-muted) 90%, transparent);
+  --line: var(--uvai-border);
   --accent: var(--uvai-primary);
   --accent-hover: var(--uvai-primary-hover);
-  --evidence: var(--uvai-accent);
+  --evidence: var(--uvai-primary);
   --verified: var(--uvai-success);
   --radius-shell: 12px;
   --radius-row: 8px;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   --font-sans: var(--uvai-font-sans);
+}
+/* Opt-in dark enterprise telemetry theme (option 1: not the default). */
+:root[data-pack-theme="enterprise-dark"] {
+  color-scheme: dark;
+  --surface-950: #09090b;
+  --surface-900: #111827;
+  --ink: #fafafa;
+  --muted: rgba(250, 250, 250, 0.7);
+  --muted-tertiary: rgba(156, 163, 175, 0.9);
+  --line: rgba(55, 65, 81, 0.9);
+  --accent: #0c5cab;
+  --accent-hover: #0a4a8a;
+  --evidence: #38bdf8;
+  --verified: #10b981;
 }
 * { box-sizing: border-box; }
 html, body {
@@ -343,9 +357,14 @@ html, body {
   flex-shrink: 0;
   z-index: 30;
   padding: 10px 14px 12px;
-  background: rgba(2, 6, 23, 0.96);
+  background: var(--surface-900);
   border-bottom: 1px solid var(--line);
   backdrop-filter: blur(8px);
+}
+.chrome-title h1 {
+  font-family: var(--uvai-font-display, Georgia, "Times New Roman", serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .saas-shell {
   flex: 1;
@@ -361,7 +380,7 @@ html, body {
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--line);
-  background: rgba(15, 23, 42, 0.55);
+  background: var(--surface-900);
   overflow: hidden;
 }
 .shell-nav[data-collapsed="true"] {
@@ -464,7 +483,7 @@ html, body {
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--line);
-  background: rgba(15, 23, 42, 0.72);
+  background: var(--surface-900);
 }
 .shell-chat[data-closed="true"] { display: none; }
 .shell-chat-header {
@@ -498,20 +517,20 @@ html, body {
   max-width: 100%;
 }
 .chat-bubble-system {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--uvai-panel);
   border: 1px solid var(--line);
   color: var(--muted);
 }
 .chat-bubble-user {
   align-self: flex-end;
-  background: rgba(20, 184, 166, 0.18);
-  border: 1px solid rgba(20, 184, 166, 0.35);
+  background: rgba(12, 92, 171, 0.1);
+  border: 1px solid rgba(12, 92, 171, 0.35);
   color: var(--ink);
 }
 .chat-bubble-assistant {
   align-self: flex-start;
-  background: rgba(15, 23, 42, 0.85);
-  border: 1px solid rgba(20, 184, 166, 0.35);
+  background: var(--surface-950);
+  border: 1px solid var(--line);
   color: var(--ink);
 }
 .chat-cta-row {
@@ -521,7 +540,7 @@ html, body {
 }
 .chat-cta {
   border: 1px solid var(--line);
-  background: rgba(2, 6, 23, 0.5);
+  background: var(--surface-950);
   color: var(--ink);
   border-radius: 8px;
   padding: 6px 10px;
@@ -530,6 +549,46 @@ html, body {
 }
 .chat-cta:hover { border-color: var(--accent); color: var(--accent); }
 .chat-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chat-prompt-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.chat-prompt {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface-950);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.chat-prompt:hover { border-color: var(--accent); }
+.chat-prompt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chat-prompt .prompt-hint {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--muted);
+}
+/* Narrow viewports: assistant becomes a bottom sheet (YouTube-Ask pattern). */
+@media (max-width: 900px) {
+  .saas-shell { flex-direction: column; }
+  .shell-chat {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    width: 100%;
+    max-height: 52dvh;
+    border-left: none;
+    border-top: 1px solid var(--line);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.12);
+  }
+}
 .shell-chat-composer {
   flex-shrink: 0;
   padding: 10px 12px 12px;
@@ -544,7 +603,7 @@ html, body {
   resize: vertical;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(2, 6, 23, 0.65);
+  background: var(--surface-950);
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 13px;
@@ -571,7 +630,7 @@ html, body {
   font-size: 12px;
   font-weight: 600;
   background: var(--accent);
-  color: #042f2e;
+  color: #ffffff;
 }
 .shell-chat-composer button[type="submit"]:disabled {
   opacity: 0.45;
@@ -588,7 +647,7 @@ html, body {
   font-size: 12px;
   font-weight: 600;
   background: var(--accent);
-  color: #042f2e;
+  color: #ffffff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   display: none;
 }
@@ -1067,36 +1126,41 @@ function workspaceHeroHtml(videoId: string, sourceUrl: string): string {
 }
 
 function chatRailHtml(_videoId: string): string {
-  return `<aside class="shell-chat" data-testid="shell-chat-panel" data-closed="false" aria-label="UVAI assistant">
+  return `<aside class="shell-chat" data-testid="shell-chat-panel" data-closed="false" aria-label="Ask about this pack">
     <header class="shell-chat-header">
-      <h2>UVAI AI</h2>
+      <h2>Ask about this pack</h2>
       <button type="button" class="shell-icon-btn" data-testid="shell-chat-close" aria-label="Close assistant panel">×</button>
     </header>
     <div class="shell-chat-body" data-testid="shell-chat-messages">
       <div class="chat-bubble chat-bubble-system" data-testid="shell-chat-honesty">
-        Live pack-grounded chat — Send posts to same-origin /api/chat with this page’s Video Pack id (anonymous OK; rate-limited, no chat PII stored). I only use stored pack fields (transcript, SOP, events); I will not invent ship receipts or G.A.T.E. PASS.
+        Pack-grounded answers only — I use stored pack fields (transcript, SOP, events). I will not invent ship receipts or G.A.T.E. PASS.
+      </div>
+      <div class="chat-prompt-row" data-testid="shell-chat-prompts" role="group" aria-label="Suggested questions">
+        <button type="button" class="chat-prompt" data-chat-prompt="Summarize the video" data-testid="chat-prompt-summarize">Summarize the video<span class="prompt-hint">Key ideas from this pack</span></button>
+        <button type="button" class="chat-prompt" data-chat-prompt="Recommend related content" data-testid="chat-prompt-recommend">Recommend related content<span class="prompt-hint">Chapters and SOP inside this pack</span></button>
+        <button type="button" class="chat-prompt" data-chat-prompt="List the key components" data-testid="chat-prompt-components">List the key components<span class="prompt-hint">Actions, SOP steps, stack.tools</span></button>
       </div>
       <div class="chat-cta-row" data-testid="shell-chat-ctas" role="group" aria-label="Pack actions">
         <button type="button" class="chat-cta" data-chat-cta="summarize" data-testid="chat-cta-summarize">Summarize</button>
         <button type="button" class="chat-cta" data-chat-cta="extract" data-testid="chat-cta-extract">Extract</button>
-        <button type="button" class="chat-cta" data-chat-cta="export" data-testid="chat-cta-export">Open source</button>
+        <button type="button" class="chat-cta" data-chat-cta="escalate" data-testid="chat-cta-escalate">Escalate</button>
       </div>
     </div>
     <form class="shell-chat-composer" data-testid="shell-chat-composer">
       <textarea
         name="message"
         rows="3"
-        placeholder="Ask about this pack…"
-        aria-label="Message UVAI AI"
+        placeholder="Ask a question…"
+        aria-label="Ask about this pack"
         data-testid="shell-chat-input"
       ></textarea>
-      <p class="composer-note">Live assistant — not a deploy or G.A.T.E. claim.</p>
+      <p class="composer-note">AI can make mistakes — answers stay inside this pack. Not a deploy or G.A.T.E. claim.</p>
       <div class="composer-actions">
         <button type="submit" data-testid="shell-chat-send">Send</button>
       </div>
     </form>
   </aside>
-  <button type="button" class="shell-chat-reopen" data-testid="shell-chat-reopen" data-visible="false" aria-label="Open UVAI assistant">UVAI AI</button>`;
+  <button type="button" class="shell-chat-reopen" data-testid="shell-chat-reopen" data-visible="false" aria-label="Open pack assistant">Ask about this pack</button>`;
 }
 
 function indexHtml(input: AppBuilderSandboxInput): string {
@@ -1111,7 +1175,7 @@ function indexHtml(input: AppBuilderSandboxInput): string {
   const stackTab = tabLabel('Stack', stackTools.length);
   const exploreTab = tabLabel('Explore', chapters.length > 0 ? chapters.length : 2);
   return `<!doctype html>
-<html lang="en">
+<html lang="en" data-pack-theme="light">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -1482,6 +1546,21 @@ function bindOutlineNav(): void {
   syncOutlineTabs('actions');
 }
 
+function bindPackTheme(): void {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const requested = params.get('theme');
+    const stored = window.localStorage.getItem('uvai:pack-theme');
+    const theme = requested === 'enterprise-dark' || stored === 'enterprise-dark' ? 'enterprise-dark' : 'light';
+    document.documentElement.dataset.packTheme = theme;
+    if (requested === 'enterprise-dark' || requested === 'light') {
+      window.localStorage.setItem('uvai:pack-theme', requested);
+    }
+  } catch {
+    document.documentElement.dataset.packTheme = 'light';
+  }
+}
+
 function bindChatRail(): void {
   const messages = document.querySelector('[data-testid="shell-chat-messages"]');
   const input = document.querySelector<HTMLTextAreaElement>('[data-testid="shell-chat-input"]');
@@ -1491,6 +1570,7 @@ function bindChatRail(): void {
   const reopen = document.querySelector<HTMLElement>('[data-testid="shell-chat-reopen"]');
   const closeBtn = document.querySelector<HTMLButtonElement>('[data-testid="shell-chat-close"]');
   const ctas = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chat-cta]'));
+  const prompts = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chat-prompt]'));
 
   const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
   let inFlight = false;
@@ -1579,16 +1659,29 @@ function bindChatRail(): void {
   for (const cta of ctas) {
     cta.addEventListener('click', () => {
       const kind = cta.dataset.chatCta;
-      if (kind === 'export') {
-        window.open(pack.sourceUrl, '_blank', 'noopener,noreferrer');
-        return;
-      }
       if (!input) return;
       if (kind === 'summarize') {
         input.value = 'Summarize the transcript already shown in the Explore tab for this pack.';
       } else if (kind === 'extract') {
         input.value = 'List ship actions and SOP steps already on this page — do not invent new ones.';
+      } else if (kind === 'escalate') {
+        input.value = 'I need human help with this pack: ';
+        appendBubble(
+          'Escalation sends as a normal pack chat message — there is no separate support queue on this page yet.',
+          'system',
+        );
       }
+      input.focus();
+      if (send) send.disabled = input.value.trim().length === 0;
+    });
+  }
+
+  for (const prompt of prompts) {
+    prompt.addEventListener('click', () => {
+      if (!input) return;
+      const text = prompt.dataset.chatPrompt;
+      if (!text) return;
+      input.value = text;
       input.focus();
       if (send) send.disabled = input.value.trim().length === 0;
     });
@@ -1721,6 +1814,7 @@ function bindShellLayout(): void {
 }
 
 bindTabs();
+bindPackTheme();
 bindChecks('data-sop-id', 'sop', 'li');
 bindChecks('data-action-id', 'actions', '.action-card');
 bindToolPins();

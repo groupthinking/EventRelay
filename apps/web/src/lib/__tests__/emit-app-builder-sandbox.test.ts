@@ -147,7 +147,7 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(youtubeNocookieEmbedSrc(QJ_VIDEO_ID, 94.8)).toBe(
       'https://www.youtube-nocookie.com/embed/QjZ5ohr7sGA?start=94&autoplay=1&enablejsapi=1',
     );
-    expect(APP_BUILDER_EMIT_REV).toContain('enterprise-tokens-p0');
+    expect(APP_BUILDER_EMIT_REV).toContain('pack-ask-light');
   });
 
   it('M4: visual events and SOP outline emit seek attrs and bind jump handlers', () => {
@@ -246,7 +246,7 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(keyPointLists).toHaveLength(2);
     expect(html).not.toContain('Invented chapter bullet');
     expect(filterChapterKeyPoints([' ok ', '', '  '])).toEqual(['ok']);
-    expect(APP_BUILDER_EMIT_REV).toBe('p1.12-enterprise-tokens-p0');
+    expect(APP_BUILDER_EMIT_REV).toBe('p1.13-pack-ask-light');
   });
 
   it('ships a runnable mini-app shell with tabs, progress, and persisted interactive controls', () => {
@@ -278,6 +278,8 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(css).toContain('--uvai-surface');
     expect(css).toContain('#09090b');
     expect(css).toContain('var(--uvai-primary)');
+    expect(css).toContain('color-scheme: light');
+    expect(css).toContain('data-pack-theme');
     expect(main).toContain('bindTabs');
     expect(main).toContain('updateProgress');
     expect(main).toContain('bindToolPins');
@@ -311,6 +313,27 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(html).toContain('data-testid="shell-chat-send">Send</button>');
     expect(html).not.toContain('Send (preview)');
     expect(html).not.toContain('Sign in required');
+  });
+
+  it('ships the option-1 ask pattern: light default, suggested prompts, Summarize/Extract/Escalate', () => {
+    const sandbox = emitFixture();
+    const html = sandbox.files['index.html'];
+    const main = sandbox.files['src/main.ts'];
+    const css = sandbox.files['src/styles.css'];
+    expect(html).toContain('data-pack-theme="light"');
+    expect(html).toContain('Ask about this pack');
+    expect(html).toContain('data-testid="shell-chat-prompts"');
+    expect(html).toContain('data-testid="chat-prompt-summarize"');
+    expect(html).toContain('data-testid="chat-prompt-recommend"');
+    expect(html).toContain('data-testid="chat-prompt-components"');
+    expect(html).toContain('data-testid="chat-cta-escalate">Escalate</button>');
+    expect(html).not.toContain('data-testid="chat-cta-export"');
+    expect(html).toContain('AI can make mistakes');
+    expect(css).toContain('.chat-prompt');
+    expect(css).toContain('max-width: 900px');
+    expect(main).toContain('bindPackTheme');
+    expect(main).toContain('data-chat-prompt');
+    expect(main).toContain('no separate support queue');
   });
 
   it('renders transcript, visual events, and SOP — not architecture or code snippets', () => {
