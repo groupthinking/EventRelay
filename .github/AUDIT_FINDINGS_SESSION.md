@@ -250,7 +250,7 @@ This document serves as a **master index** for all findings from the comprehensi
 - `backend/api/v1/router.py` (2800+ lines, all endpoints)
   - `/transcript-action` (workflow entrypoint)
   - `/knowledge/ingest` (JSONL persistence)
-  - `/video/pack` (filesystem pack storage)
+  - `/video/pack` (Upstash REST via `videopack/store_factory`; filesystem dev-only)
   - `/agents/dispatch`, `/agents/status`
 - `backend/containers/service_container.py` (DI container)
 - `backend/models/base.py` (SQL model mixins)

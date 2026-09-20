@@ -1,7 +1,8 @@
 name: "Hybrid Refactor Verification Gates"
 
 # Legacy hybrid-refactor verification workflow
-# (kept branch-scoped for historical compatibility)
+# (kept branch-scoped for historical compatibility; not part of default CI on main.
+#  See AUDIT-003 / #2165 — use ci.yml for canonical gates.)
 
 on:
   pull_request:

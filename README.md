@@ -29,7 +29,7 @@ Paste a YouTube URL → inspect a hashed **Video Pack** → export grounded buil
 
 `/dashboard` and its retired skins redirect to `/studio`; they are not separate products. App Builder's deterministic sandbox emitter produces a workspace displaying pack evidence. Exporting that workspace is not proof that the app shown in a video has been recreated, installed, tested, or deployed.
 
-The existing Studio gate checks a returned HTTPS URL with a hostname before showing a live result. It does **not** independently probe the deployment or establish provider-backed ownership. See the [contract boundary](docs/gate-transition-contract.md#current-evidence-boundary) before making a live-success claim.
+The existing Studio gate checks a returned HTTPS URL with a hostname before showing a live result. When a server-side HTTP probe succeeds (`deployment_http_probe` evidence), G.A.T.E. may treat the URL as reachable; it still does **not** establish provider-backed ownership without Origin attestation. See the [contract boundary](docs/gate-transition-contract.md#current-evidence-boundary) before making a live-success claim.
 
 ## Locked offers
 
@@ -74,7 +74,7 @@ Set the web runtime's `BACKEND_URL` to the intended backend. A missing backend m
 | Area | Configuration / source of truth |
 | --- | --- |
 | Video Pack extraction | Vercel AI Gateway; model defined in `apps/web/src/lib/video-pack-extractor.ts` |
-| Production Video Pack storage | `KV_REST_API_URL` + `KV_REST_API_TOKEN`, or `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` |
+| Production Video Pack storage | `KV_REST_API_*` or `UPSTASH_REDIS_REST_*` — canonical for **web and Python backend** (`er:videopack:v0:{source_hash}`). Local filesystem packs require `VIDEO_PACK_FILESYSTEM_STORE=1` (dev only). |
 | Web authentication | Existing NextAuth configuration and `apps/web/src/lib/auth-paths.ts`; do not replace the auth stack as cleanup |
 | Backend-dependent workflows | `BACKEND_URL` and the backend's own auth/provider configuration |
 | Billing | Existing Stripe setup under `apps/web/src/lib/billing/`; keep server-side catalog validation |

@@ -93,7 +93,6 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                     nodes {
                       name
-                      branchProtectionRule { id }
                       target {
                         ... on Commit { oid committedDate }
                       }
@@ -116,11 +115,26 @@ jobs:
                 branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
               } while (branchCursor);
             } catch (err) {
+              const integrationForbidden =
+                (Array.isArray(err.errors) &&
+                  err.errors.some(
+                    (e) =>
+                      e.type === "FORBIDDEN" ||
+                      /not accessible by integration/i.test(e.message || ""),
+                  )) ||
+                /not accessible by integration/i.test(err.message || "");
               if (err.status === 403 && /rate limit/i.test(err.message || "")) {
                 core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
                 return;
               }
-              throw err;
+              if (integrationForbidden) {
+                core.warning(
+                  "Branch inventory skipped: GITHUB_TOKEN lacks GraphQL scope for refs query. Stale-branch section will be empty.",
+                );
+                totalBranches = 0;
+              } else {
+                throw err;
+              }
             }
             // Only track head refs from PRs targeting this repository (not forks) to prevent
             // branch-name collisions between fork branches and local branches.
@@ -129,6 +143,16 @@ jobs:
                 .filter(pr => pr.head.repo && pr.head.repo.full_name === repoFullName)
                 .map(pr => pr.head.ref)
             );
+
+            async function isBranchProtected(branchName) {
+              try {
+                await github.rest.repos.getBranchProtection({ owner, repo, branch: branchName });
+                return true;
+              } catch (err) {
+                if (err.status === 404) return false;
+                return false;
+              }
+            }
 
             // Collect all unique issue numbers referenced across open PRs and validate each one
             // against the Issues API before using them for classification. This prevents textual
@@ -175,7 +199,8 @@ jobs:
             const staleBranches = [];
             for (const branch of branches) {
               // Exclude main, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || branch.branchProtectionRule || activeHeads.has(branch.name)) continue;
+              if (branch.name === "main" || activeHeads.has(branch.name)) continue;
+              if (await isBranchProtected(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });
