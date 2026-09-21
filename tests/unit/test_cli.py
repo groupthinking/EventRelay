@@ -544,3 +544,31 @@ class TestHealthCommand:
         # Whether exit 0 or 1 depends on which checks pass; we confirm the
         # warning path is reachable (at minimum the venv check fails).
         assert result.output  # at minimum something was printed
+
+
+# ---------------------------------------------------------------------------
+# doctor command
+# ---------------------------------------------------------------------------
+
+
+class TestDoctorCommand:
+    def test_doctor_runs_parallel_probes(self):
+        env = {"VIRTUAL_ENV": "/fake/venv", "YOUTUBE_API_KEY": "test_key"}
+        fake_main = types.ModuleType("youtube_extension.main")
+        fake_main.app = MagicMock()  # type: ignore[attr-defined]
+        with patch.dict("os.environ", env, clear=False):
+            with patch.dict(sys.modules, {"youtube_extension.main": fake_main}):
+                result = runner.invoke(app, ["doctor"])
+        assert result.exit_code == 0
+        assert "Running CLI doctor & parallel health probes" in result.output
+        assert "Virtual Environment" in result.output
+        assert "OAuth Refresh & Auth" in result.output
+        assert "Health Monitoring Service" in result.output
+
+    def test_doctor_rethrows_failover_error_when_option_set(self):
+        from integration.gemini_video import FailoverError
+
+        with patch.dict("os.environ", {}, clear=True):
+            result = runner.invoke(app, ["doctor", "--rethrow-failover"])
+        assert result.exit_code == 1
+        assert isinstance(result.exception, FailoverError)

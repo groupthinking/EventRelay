@@ -18,7 +18,7 @@ import pytest
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from integration.gemini_video import GeminiVideoService, VideoAnalysisResult
+from integration.gemini_video import FailoverError, GeminiVideoService, VideoAnalysisResult
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -120,11 +120,35 @@ async def test_grok_fallback_called_on_gemini_failure() -> None:
 
 @pytest.mark.asyncio
 async def test_grok_fallback_raises_when_no_grok_key() -> None:
-    """_call_grok_fallback raises RuntimeError when Grok API key is absent."""
+    """_call_grok_fallback raises FailoverError when Grok API key is absent."""
     svc = _make_service(grok_key=None)
 
-    with pytest.raises(RuntimeError, match="no Grok API key"):
+    with pytest.raises(FailoverError, match="no Grok API key"):
         await svc._call_grok_fallback(_VIDEO_URL, _PROMPT)
+
+
+@pytest.mark.asyncio
+async def test_analyze_video_rethrows_failover_error_without_swallowing() -> None:
+    """When Grok fallback raises FailoverError, analyze_video rethrows FailoverError."""
+    svc = _make_service(grok_key=None)
+
+    with patch.object(
+        svc, "_make_request", new_callable=AsyncMock, side_effect=RuntimeError("Gemini error")
+    ):
+        with pytest.raises(FailoverError, match="no Grok API key"):
+            await svc.analyze_video(_VIDEO_URL, _PROMPT)
+
+
+@pytest.mark.asyncio
+async def test_grok_fallback_wraps_http_error_in_failover_error() -> None:
+    """HTTP errors during Grok fallback are wrapped in FailoverError."""
+    svc = _make_service()
+
+    with patch.object(
+        svc.client, "post", new_callable=AsyncMock, side_effect=RuntimeError("Connection refused")
+    ):
+        with pytest.raises(FailoverError, match="Grok failover backup failed"):
+            await svc._call_grok_fallback(_VIDEO_URL, _PROMPT)
 
 
 @pytest.mark.asyncio
