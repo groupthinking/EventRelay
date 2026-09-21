@@ -244,11 +244,10 @@ async def _probe_oauth_refresh(fail_on_error: bool = False) -> tuple[str, str]:
 async def _probe_health_monitoring() -> tuple[str, str]:
     try:
         from youtube_extension.backend.services.health_monitoring_service import (
-            get_health_monitoring_service,
+            HealthMonitoringService,
         )
 
-        service = get_health_monitoring_service()
-        assert service is not None
+        assert HealthMonitoringService is not None
         return ("Health Monitoring Service", "✅ Active")
     except Exception:
         return ("Health Monitoring Service", "❌ Unavailable")
