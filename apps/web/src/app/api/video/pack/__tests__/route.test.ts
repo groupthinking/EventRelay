@@ -159,10 +159,10 @@ describe('POST /api/video/pack', () => {
     expect(extractVideoPackSpec).not.toHaveBeenCalled();
   });
 
-  it('fails closed with a visible error when Gateway extract is unavailable', async () => {
+  it('fails closed with a visible error when direct video extract is unavailable', async () => {
     extractVideoPackSpec.mockRejectedValue(
       new VideoPackExtractError(
-        'Video pack spec extract requires AI Gateway (AI_GATEWAY_API_KEY or VERCEL_AI_GATEWAY_API_KEY) and model google/gemini-3.8-flash.',
+        'Video pack spec extract requires direct Google video access and model gemini-3.8-flash.',
       ),
     );
     const { POST, GET, flush } = await loadPackRoute();
@@ -182,8 +182,8 @@ describe('POST /api/video/pack', () => {
     };
     expect(body.ok).toBe(false);
     expect(body.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
-    expect(body.detail).toMatch(/AI Gateway/i);
-    expect(body.detail).toContain('google/gemini-3.8-flash');
+    expect(body.detail).toMatch(/direct Google video access/i);
+    expect(body.detail).toContain('gemini-3.8-flash');
     expect(body.data).toBeUndefined();
   });
 
@@ -518,8 +518,8 @@ describe('GET /api/video/pack (anonymous read)', () => {
 
     extractVideoPackSpec.mockImplementation((input, deps) =>
       actual.extractVideoPackSpec(input, {
-        generateText: async () => ({ text: truncated }),
-        hasGatewayKey: () => true,
+        runVideoInteraction: async () => ({ text: truncated, interactionId: 'int-test' }),
+        hasDirectGoogleKey: () => true,
       }),
     );
 

@@ -26,11 +26,11 @@ import {
 import { applyKeyframeImageHonesty } from '@/lib/keyframe-image-path';
 import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
 import {
-  VIDEO_PACK_EXTRACTOR_MODEL,
   VideoPackExtractError,
   extractVideoPackSpec,
   type ExtractedVideoPackSpec,
 } from '@/lib/video-pack-extractor';
+import { VIDEO_PACK_VIDEO_MODEL } from '@/lib/video-pack-shard-planner';
 
 export {
   VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
@@ -231,13 +231,13 @@ export function applyExtractedSpec(
       ...identity.provenance,
       tool_versions: {
         ...identity.provenance.tool_versions,
-        extractor: VIDEO_PACK_EXTRACTOR_MODEL,
+        extractor: VIDEO_PACK_VIDEO_MODEL,
         pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
         extract_pipeline: VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
       },
       notes: salvaged
-        ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
-        : 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+        ? `Identity pack plus Gemini 3.8 Flash spec extract via direct Interactions shards. ${SPEC_JSON_SALVAGE_NOTE}`
+        : 'Identity pack plus Gemini 3.8 Flash spec extract via direct Interactions shards.',
     },
   });
   if (!spec.grounded_spec) return pack;
