@@ -163,12 +163,12 @@ describe('emitVideoPack', () => {
         json: async () => ({
           status: 'error',
           error:
-            'Video pack spec extract requires AI Gateway (AI_GATEWAY_API_KEY or VERCEL_AI_GATEWAY_API_KEY) and model google/gemini-3.8-flash.',
+            'Video pack spec extract requires direct Google video access and model gemini-3.8-flash.',
         }),
       });
     vi.stubGlobal('fetch', fetchMock);
     await expect(emitVideoPack(SOURCE_URL, { pollIntervalMs: 0, timeoutMs: 5_000 })).rejects.toThrow(
-      /AI Gateway/i,
+      /direct Google video access/i,
     );
   });
 });
