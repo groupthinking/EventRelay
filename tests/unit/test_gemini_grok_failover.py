@@ -18,7 +18,8 @@ import pytest
 # Ensure src/ is importable
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from integration.gemini_video import FailoverError, GeminiVideoService, VideoAnalysisResult
+from youtube_extension.exceptions import FailoverError
+from integration.gemini_video import GeminiVideoService, VideoAnalysisResult
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures

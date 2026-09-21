@@ -23,12 +23,14 @@ from typing import Any, Literal, Optional, cast
 
 import httpx
 
+try:
+    from youtube_extension.exceptions import FailoverError
+except ImportError:
+    class FailoverError(Exception):  # type: ignore[no-redef]
+        """Raised when model failover or fallback fails or encounters an unrecoverable error."""
+        pass
+
 logger = logging.getLogger(__name__)
-
-
-class FailoverError(Exception):
-    """Raised when model failover or fallback fails or encounters an unrecoverable error."""
-    pass
 
 
 @dataclass

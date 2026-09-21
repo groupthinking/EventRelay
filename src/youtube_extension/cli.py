@@ -12,12 +12,7 @@ from pathlib import Path
 
 import typer
 
-try:
-    from integration.gemini_video import FailoverError
-except ImportError:
-    class FailoverError(Exception):  # type: ignore[no-redef]
-        """Fallback definition for FailoverError if module is unavailable."""
-        pass
+from youtube_extension.exceptions import FailoverError
 
 app = typer.Typer(
     name="youtube-extension",

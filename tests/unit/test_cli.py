@@ -566,7 +566,7 @@ class TestDoctorCommand:
         assert "Health Monitoring Service" in result.output
 
     def test_doctor_rethrows_failover_error_when_option_set(self):
-        from integration.gemini_video import FailoverError
+        from youtube_extension.exceptions import FailoverError
 
         with patch.dict("os.environ", {}, clear=True):
             result = runner.invoke(app, ["doctor", "--rethrow-failover"])
