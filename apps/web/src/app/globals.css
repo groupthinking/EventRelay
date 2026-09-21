@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @config "../../tailwind.config.js";
+@import "../styles/uvai-enterprise-tokens.css";
 
 /* ============================================
    UVAI Premium Design System
