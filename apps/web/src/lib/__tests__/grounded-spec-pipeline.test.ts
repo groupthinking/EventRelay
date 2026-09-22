@@ -4,6 +4,10 @@ import { applyExtractedSpec, buildIdentityPack, GOLDEN_IDENTITY_HASHES } from '@
 import { verifyIdentityPack } from '@/lib/emit-video-pack';
 import { browserSpecFixture } from '@/test/grounded-spec-fixture';
 
+vi.mock('@/lib/youtube-captions', () => ({
+  fetchYouTubeCaptions: vi.fn(async () => null),
+}));
+
 async function extract(raw: unknown) {
   return extractVideoPackSpec(
     { sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag', videoId: 'auJzb1D-fag' },

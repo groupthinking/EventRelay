@@ -37,6 +37,17 @@ import {
   VIDEO_PACK_VIDEO_MODEL,
   type ShardManifest,
 } from '@/lib/video-pack-shard-planner';
+import {
+  analyzeTranscriptChunkWithGateway,
+  backfillTranscriptSegments,
+  chunkTranscriptSegments,
+  fetchCaptionsOnce,
+  TRANSCRIPT_CHUNK_MAX_PARALLEL,
+  type AnalyzeTranscriptChunk,
+  type FetchCaptions,
+  type FetchedCaptions,
+  type TranscriptChunkEvidence,
+} from '@/lib/transcript-team';
 import { mergeSectionVideoPackSpecs } from '@/lib/video-pack-extract-merge';
 import {
   mapWithBoundedConcurrency,
@@ -114,6 +125,8 @@ export interface ExtractedVisualContext {
 export interface ExtractedVideoPackSpec {
   /** Set when parse recovered from truncated Gemini JSON (prefix salvage only). */
   spec_json_salvaged?: boolean;
+  /** Gate 2 transcript-team evidence (caption chunks analyzed in parallel). */
+  transcript_evidence?: TranscriptChunkEvidence[];
   grounded_spec?: GroundedSpecExtraction;
   transcript: {
     language: string | null;
@@ -803,17 +816,50 @@ async function extractVideoPackSpecChunked(
   return enriched;
 }
 
+/**
+ * Gate 2 enrichment: backfill transcript voids from the once-fetched
+ * captions and attach parallel chunk evidence. No-op when captions miss.
+ */
+async function enrichSpecWithTranscriptTeam(
+  spec: ExtractedVideoPackSpec,
+  captionsPromise: Promise<FetchedCaptions | null>,
+  videoId: string,
+  analyzeChunk: AnalyzeTranscriptChunk,
+): Promise<ExtractedVideoPackSpec> {
+  const captions = await captionsPromise.catch(() => null);
+  if (!captions) return spec;
+  spec.transcript.segments = backfillTranscriptSegments(spec.transcript.segments, captions.segments);
+  if (!spec.transcript.full_text.trim()) {
+    spec.transcript.full_text = captions.transcript;
+  }
+  const chunks = chunkTranscriptSegments(captions.segments);
+  spec.transcript_evidence = await mapWithBoundedConcurrency(
+    chunks,
+    TRANSCRIPT_CHUNK_MAX_PARALLEL,
+    async (chunk) => analyzeChunk(chunk, videoId),
+  );
+  return spec;
+}
+
 export async function extractVideoPackSpec(
   input: { sourceUrl: string; videoId: string },
   deps: {
     runVideoInteraction?: ShardVideoInteractionRunner;
     hasDirectGoogleKey?: () => boolean;
+    fetchCaptions?: FetchCaptions;
+    analyzeTranscriptChunk?: AnalyzeTranscriptChunk;
   } = {},
 ): Promise<ExtractedVideoPackSpec> {
   const hasKey = deps.hasDirectGoogleKey ?? hasDirectGoogleKey;
   if (!hasKey()) {
     throw new VideoPackExtractError(DIRECT_KEY_MISSING_ERROR);
   }
+
+  // Captions fetch starts immediately and races the model path (independent I/O).
+  const captionsPromise = fetchCaptionsOnce(input.sourceUrl, 'en', deps.fetchCaptions).catch(
+    () => null,
+  );
+  const analyzeChunk = deps.analyzeTranscriptChunk ?? analyzeTranscriptChunkWithGateway;
 
   const sourcePreflight = await preflightYouTubeVideoSource(input.sourceUrl);
   if (sourcePreflight === 'not_found') {
@@ -838,7 +884,8 @@ export async function extractVideoPackSpec(
     );
   }
   if (manifest.shards.length >= 2) {
-    return extractVideoPackSpecChunked(input, metadata, manifest, runVideoInteraction);
+    const spec = await extractVideoPackSpecChunked(input, metadata, manifest, runVideoInteraction);
+    return enrichSpecWithTranscriptTeam(spec, captionsPromise, input.videoId, analyzeChunk);
   }
 
   const shard = manifest.shards[0];
@@ -872,7 +919,7 @@ export async function extractVideoPackSpec(
         throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
       }
 
-      return enriched;
+      return enrichSpecWithTranscriptTeam(enriched, captionsPromise, input.videoId, analyzeChunk);
     } catch (error) {
       if (error instanceof VideoPackExtractError && error.message === EMPTY_SPEC_ERROR) {
         throw error;

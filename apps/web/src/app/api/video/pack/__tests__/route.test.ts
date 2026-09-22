@@ -540,6 +540,7 @@ describe('GET /api/video/pack (anonymous read)', () => {
       actual.extractVideoPackSpec(input, {
         runVideoInteraction: async () => ({ text: truncated, interactionId: 'int-test' }),
         hasDirectGoogleKey: () => true,
+        fetchCaptions: async () => null,
       }),
     );
 
