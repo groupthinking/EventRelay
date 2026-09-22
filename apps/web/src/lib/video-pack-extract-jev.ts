@@ -65,6 +65,8 @@ export interface ExtractPlannerState {
   costBoundUnits: number;
   validationFailures: string[];
   attempt: number;
+  /** Set by the consolidator post-check. Planning calls leave this unset. */
+  stage?: 'merged';
 }
 
 const EXTRACT_NEXT_QUESTIONS = {
@@ -89,11 +91,36 @@ function isJevExtractAction(value: unknown): value is JevExtractAction {
   );
 }
 
+function extractQuestionsFor(actions: readonly JevExtractAction[]) {
+  const base = EXTRACT_NEXT_QUESTIONS[EXTRACT_NEXT_QUESTION_ID];
+  const sameAsDefault =
+    actions.length === EXTRACT_ACTIONS.length &&
+    actions.every((action, index) => action === EXTRACT_ACTIONS[index]);
+  if (sameAsDefault) {
+    return EXTRACT_NEXT_QUESTIONS;
+  }
+  const criteria = {} as typeof base.criteria;
+  for (const action of actions) {
+    criteria[action] = base.criteria[action];
+  }
+  return {
+    [EXTRACT_NEXT_QUESTION_ID]: {
+      type: 'choice' as const,
+      instructions: base.instructions,
+      criteria,
+    },
+  };
+}
+
 export function buildExtractEvaluationState(state: ExtractPlannerState): string {
   const failures =
     state.validationFailures.length > 0 ? state.validationFailures.join('; ') : '(none)';
+  const headline =
+    state.stage === 'merged'
+      ? 'Choose the next extractor action for this merged Video Pack.'
+      : 'Choose the next extractor action for this Video Pack shard plan.';
   return [
-    'Choose the next extractor action for this Video Pack shard plan.',
+    headline,
     '',
     `video_id: ${state.videoId}`,
     `shards: ${state.shardCount}`,
@@ -139,19 +166,24 @@ export type JevExtractEvaluate = typeof evaluate;
  */
 export async function decideExtractNext(
   state: ExtractPlannerState,
-  deps: { evaluateFn?: JevExtractEvaluate } = {},
+  deps: { evaluateFn?: JevExtractEvaluate; actions?: readonly JevExtractAction[] } = {},
 ): Promise<JevExtractDecision | null> {
   if (!hasAiGatewayKey()) {
     return null;
   }
+  const allowed = deps.actions ?? EXTRACT_ACTIONS;
   try {
     const result = await (deps.evaluateFn ?? evaluate)({
       model: aiGateway.evaluationModel(JEV_DEFAULT_MODEL),
       state: buildExtractEvaluationState(state),
-      questions: EXTRACT_NEXT_QUESTIONS,
+      questions: extractQuestionsFor(allowed),
       abortSignal: AbortSignal.timeout(12_000),
     });
-    return mapJevEvaluateResultToExtractDecision(result, JEV_DEFAULT_MODEL);
+    const mapped = mapJevEvaluateResultToExtractDecision(result, JEV_DEFAULT_MODEL);
+    if (!mapped || !allowed.includes(mapped.action)) {
+      return null;
+    }
+    return mapped;
   } catch {
     return null;
   }

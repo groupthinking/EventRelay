@@ -24,6 +24,8 @@ import {
   extractVideoPackSpec,
 } from '@/lib/video-pack-extractor';
 import { VIDEO_PACK_VIDEO_MODEL } from '@/lib/video-pack-shard-planner';
+import { isTransientVideoPackExtractError } from '@/lib/video-pack-extract-reason';
+import * as videoPackExtractJev from '@/lib/video-pack-extract-jev';
 import type { ShardVideoInteractionRunner } from '@/lib/google-genai-video';
 import type { TranscriptChunk } from '@/lib/transcript-team';
 
@@ -844,6 +846,78 @@ describe('extractVideoPackSpec', () => {
       ),
     ).rejects.toThrow(/refusing fan-out/);
     expect(runVideo).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails closed when consolidated code contains a placeholder', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        code_snippets: [
+          {
+            path_hint: 'src/zoo.ts',
+            lang: 'ts',
+            content: 'export const zoo = placeholder;',
+          },
+        ],
+      }),
+      interactionId: 'int-test',
+    }));
+
+    await expect(
+      extractVideoPackSpec(
+        { sourceUrl: SOURCE_URL, videoId: CANON },
+        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+      ),
+    ).rejects.toThrow(/Consolidated app failed 0\/1/);
+    expect(runVideo).toHaveBeenCalled();
+    try {
+      await extractVideoPackSpec(
+        { sourceUrl: SOURCE_URL, videoId: CANON },
+        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+      );
+    } catch (error) {
+      expect(error).toBeInstanceOf(VideoPackExtractError);
+      expect(isTransientVideoPackExtractError(error)).toBe(false);
+    }
+  });
+
+  it('keeps the extract when the Jev post-check is stop', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const stop: videoPackExtractJev.JevExtractDecision = {
+      action: 'stop',
+      confidence: 0.9,
+      probabilities: {
+        chunk: 0,
+        model: 0,
+        retry: 0,
+        consolidate: 0,
+        'request-more-evidence': 0,
+        stop: 0.9,
+      },
+      rationale: '',
+      model: 'typesafe-ai/jev',
+    };
+    const spy = vi.spyOn(videoPackExtractJev, 'decideExtractNext').mockImplementation(async (state) => {
+      if (state.stage === 'merged') return stop;
+      return null;
+    });
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify(SPEC_JSON),
+      interactionId: 'int-test',
+    }));
+
+    try {
+      const spec = await extractVideoPackSpec(
+        { sourceUrl: SOURCE_URL, videoId: CANON },
+        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+      );
+      expect(spec.concepts).toContain('zoo');
+      expect(runVideo).toHaveBeenCalled();
+      expect(spy.mock.calls.some(([state]) => state.stage === 'merged')).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 
