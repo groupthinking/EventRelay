@@ -25,6 +25,7 @@ import {
 } from '@/lib/video-pack-extractor';
 import { VIDEO_PACK_VIDEO_MODEL } from '@/lib/video-pack-shard-planner';
 import type { ShardVideoInteractionRunner } from '@/lib/google-genai-video';
+import type { TranscriptChunk } from '@/lib/transcript-team';
 
 const CANON = 'auJzb1D-fag';
 const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
@@ -32,6 +33,10 @@ const SOURCE_URL = `https://www.youtube.com/watch?v=${CANON}`;
 vi.mock('@/lib/youtube-metadata', () => ({
   fetchYouTubeMetadata: vi.fn(async () => null),
   preflightYouTubeVideoSource: vi.fn(async () => 'available'),
+}));
+
+vi.mock('@/lib/youtube-captions', () => ({
+  fetchYouTubeCaptions: vi.fn(async () => null),
 }));
 
 /** Live Eggs GET/pack failure class — Gemini cut mid-string around position 8050. */
@@ -690,6 +695,67 @@ describe('extractVideoPackSpec', () => {
     await expect(
       extractVideoPackSpec({ sourceUrl: EGGS_URL, videoId: EGGS_ID }, { runVideoInteraction: runVideo }),
     ).rejects.toThrow(/no extracted spec content/i);
+  });
+
+  it('backfills empty model segments from once-fetched captions and attaches chunk evidence', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        transcript: { language: 'en', full_text: '', segments: [] },
+      }),
+      interactionId: 'int-test',
+    }));
+    const fetchCaptions = vi.fn(async () => ({
+      transcript: 'Captioned zoo words here for backfill coverage test.',
+      segments: [
+        { start: 0, duration: 5, text: 'Captioned zoo words here' },
+        { start: 5, duration: 4, text: 'for backfill coverage test.' },
+      ],
+      source: 'youtube-captions',
+    }));
+    const analyzeTranscriptChunk = vi.fn(async (chunk: TranscriptChunk) => ({
+      index: chunk.index,
+      start_s: chunk.start_s,
+      end_s: chunk.end_s,
+      bullets: ['zoo words'],
+      entities: ['zoo'],
+      analyzed: true,
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions, analyzeTranscriptChunk },
+    );
+
+    expect(fetchCaptions).toHaveBeenCalledTimes(1);
+    expect(spec.transcript.full_text).toContain('Captioned zoo words');
+    expect(spec.transcript.segments).toHaveLength(2);
+    expect(spec.transcript.segments[0]).toMatchObject({ idx: 0, start_s: 0, end_s: 5 });
+    expect(spec.transcript_evidence).toHaveLength(1);
+    expect(spec.transcript_evidence?.[0]).toMatchObject({ analyzed: true });
+    expect(analyzeTranscriptChunk).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps model segments when present and skips analysis on a caption miss', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify(SPEC_JSON),
+      interactionId: 'int-test',
+    }));
+    const fetchCaptions = vi.fn(async () => null);
+    const analyzeTranscriptChunk = vi.fn();
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions, analyzeTranscriptChunk },
+    );
+
+    expect(fetchCaptions).toHaveBeenCalledTimes(1);
+    expect(spec.transcript.full_text).toContain('elephants');
+    expect(spec.transcript.segments).toHaveLength(1);
+    expect(spec.transcript_evidence).toBeUndefined();
+    expect(analyzeTranscriptChunk).not.toHaveBeenCalled();
   });
 });
 
