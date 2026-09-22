@@ -27,6 +27,7 @@ import {
 import {
   pollStudioDeploy,
   pollVideoToActions,
+  probeStudioDeployLiveUrl,
   startStudioDeploy,
   startVideoToActions,
   studioDeployPollResidual,
@@ -743,6 +744,10 @@ export default function OneLoopStudio({
       const polled = await pollStudioDeploy(started.runId);
       if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
       const backendReason = studioDeployPollResidual(polled);
+      const liveCandidate = polled.result?.live_url?.trim() ?? '';
+      const deploymentHttpProbe = liveCandidate
+        ? (await probeStudioDeployLiveUrl(liveCandidate)).probe
+        : undefined;
       const gated = evaluateStudioDeployTransition({
         transitionId: started.runId,
         runId: started.runId,
@@ -751,6 +756,7 @@ export default function OneLoopStudio({
         runStatus: polled.runStatus,
         kind: polled.result?.kind,
         backendReason,
+        deploymentHttpProbe,
         authority: { actor: 'anonymous' },
       });
       setGateReceipt(studioGateReceiptView(gated, { backendReason }));

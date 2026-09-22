@@ -7,7 +7,7 @@ import { browserSpecFixture } from '@/test/grounded-spec-fixture';
 async function extract(raw: unknown) {
   return extractVideoPackSpec(
     { sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag', videoId: 'auJzb1D-fag' },
-    { hasGatewayKey: () => true, generateText: vi.fn().mockResolvedValue({ text: typeof raw === 'string' ? raw : JSON.stringify(raw) }) },
+    { hasDirectGoogleKey: () => true, runVideoInteraction: vi.fn().mockResolvedValue({ text: typeof raw === 'string' ? raw : JSON.stringify(raw), interactionId: 'int-test' }) },
   );
 }
 
@@ -73,13 +73,14 @@ describe('grounded specification extraction boundary (synthetic source)', () => 
     expect(verifyIdentityPack({ status: 'success', data: pack }).pack).not.toHaveProperty('grounded_spec');
   });
 
-  it('asks for classified source-linked browser requirements in the single attached-video pass', async () => {
-    const generateText = vi.fn().mockResolvedValue({ text: JSON.stringify(browserSpecFixture()) });
-    await extractVideoPackSpec({ sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag', videoId: 'auJzb1D-fag' }, { hasGatewayKey: () => true, generateText });
-    expect(generateText).toHaveBeenCalledTimes(1);
-    const content = generateText.mock.calls[0]![0].messages[0].content;
-    expect(content[0].type).toBe('file');
-    expect(content[1].text).toContain('grounded_spec');
-    expect(content[1].text).toContain('untrusted');
+  it('asks for classified source-linked browser requirements in the single clipped pass', async () => {
+    const runVideo = vi.fn().mockResolvedValue({ text: JSON.stringify(browserSpecFixture()), interactionId: 'int-test' });
+    await extractVideoPackSpec({ sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag', videoId: 'auJzb1D-fag' }, { hasDirectGoogleKey: () => true, runVideoInteraction: runVideo });
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    const call = runVideo.mock.calls[0]![0];
+    expect(call.sourceUrl).toBe('https://www.youtube.com/watch?v=auJzb1D-fag');
+    expect(call.end_s).toBeGreaterThan(call.start_s);
+    expect(call.sectionPrompt).toContain('grounded_spec');
+    expect(call.sectionPrompt).toContain('untrusted');
   });
 });

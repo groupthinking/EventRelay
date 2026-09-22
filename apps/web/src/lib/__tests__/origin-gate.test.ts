@@ -15,6 +15,13 @@ import { COMMIT_ORIGIN_GATE_SCRIPT, createOriginGateStore, ORIGIN_GATE_POLICY_KE
 
 const { start } = vi.hoisted(() => ({ start: vi.fn() }));
 vi.mock('workflow/api', () => ({ start }));
+vi.mock('@/lib/live-deployment-probe', () => ({
+  probeLiveDeploymentUrl: vi.fn(async (liveUrl: string) => ({
+    ok: true,
+    statusCode: 200,
+    finalUrl: liveUrl,
+  })),
+}));
 vi.mock('node:dns/promises', () => ({
   lookup: async (host: string) => {
     if (host !== 'www.youtube.com') throw new Error('Unexpected offline DNS request');
@@ -164,6 +171,15 @@ describe('Origin G.A.T.E. signed server boundary', () => {
   it('binds production explicitly without inventing an issuer environment allowlist', async () => {
     const production = { ...binding, target: { ...binding.target, environment: 'production' } };
     expect(await evaluateOriginGate(input({ target: production.target, approval: attestation('approval', { binding: production }), evidence: attestation('deployment', { binding: production }) }), setup().context)).toMatchObject({ decision: 'PASS' });
+  });
+
+  it('holds when HTTP deployment probe fails after signed provider evidence', async () => {
+    const { probeLiveDeploymentUrl } = await import('@/lib/live-deployment-probe');
+    vi.mocked(probeLiveDeploymentUrl).mockResolvedValueOnce({ ok: false, error: 'http_503' });
+    expect(await evaluateOriginGate(input(), setup().context)).toMatchObject({
+      decision: 'HOLD',
+      reason_code: 'GATE_HOLD_DEPLOYMENT_UNREACHABLE',
+    });
   });
 
   it('checks approval before evidence, and freshness before signed verdicts', async () => {

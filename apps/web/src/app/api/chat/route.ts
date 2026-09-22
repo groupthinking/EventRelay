@@ -4,6 +4,7 @@ import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
 import { checkFreeChatQuota } from '@/lib/billing/chat-quota';
 import { grokChatCompletion } from '@/lib/billing/grok-client';
+import { scoreLeadWithJev } from '@/lib/billing/jev-lead-score';
 import { FREE_CHAT_DAILY_LIMIT, resolvePaidTierRouting } from '@/lib/billing/paid-tier-model';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
 import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
@@ -133,9 +134,19 @@ export async function POST(request: Request) {
     const query = body.query || body.message || '';
 
     if (isPro) {
+      const leadScore = await scoreLeadWithJev({ query, history });
+      const scoredPrompt =
+        leadScore?.decision === 'action_items'
+          ? [
+              packSystemPrompt,
+              'Prioritize concrete next actions first, then add concise rationale.',
+            ]
+            .filter(Boolean)
+            .join('\n\n')
+          : packSystemPrompt;
       try {
         const grok = await grokChatCompletion(query, routing.model, {
-          systemPrompt: packSystemPrompt,
+          systemPrompt: scoredPrompt,
           history,
         });
         return NextResponse.json({
@@ -143,6 +154,7 @@ export async function POST(request: Request) {
           routing,
           plan: routing.plan,
           provider: grok.provider,
+          ...(leadScore ? { leadScore } : {}),
         });
       } catch (grokErr) {
         const msg = grokErr instanceof Error ? grokErr.message : 'grok_failed';
@@ -153,6 +165,7 @@ export async function POST(request: Request) {
             routing,
             plan: routing.plan,
             provider: 'xai',
+            ...(leadScore ? { leadScore } : {}),
           },
           { status: 503 },
         );

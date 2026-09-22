@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data:; connect-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; object-src 'none'; base-uri 'self'"
+  />
+  <title>UVAI /d Enterprise Design Demo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="header" role="banner">
+      <div class="brand">
+        <span class="brand-mark">UVAI</span>
+        <span class="brand-sub">Video Pack /d · Enterprise shell</span>
+      </div>
+      <span class="header-meta" id="dogfood-meta">dogfood · XYMcBrFSJ4c</span>
+
+      <div class="demo-controls" role="group" aria-label="Demo state controls">
+        <span class="demo-label">Demo state</span>
+        <div class="seg" role="group" aria-label="Panel state">
+          <button type="button" data-state="ready" aria-pressed="true">Ready</button>
+          <button type="button" data-state="empty" aria-pressed="false">Empty</button>
+          <button type="button" data-state="loading" aria-pressed="false">Loading</button>
+          <button type="button" data-state="error" aria-pressed="false">Error</button>
+        </div>
+        <button
+          type="button"
+          class="toggle-chip"
+          id="bbox-toggle"
+          aria-pressed="true"
+          aria-label="Toggle EXAMPLE DATA bounding boxes"
+        >
+          BBox EXAMPLE DATA
+        </button>
+        <button
+          type="button"
+          class="toggle-chip"
+          id="webrtc-toggle"
+          aria-pressed="false"
+          aria-label="Toggle simulated WebRTC VAD session"
+        >
+          WebRTC SIMULATED
+        </button>
+      </div>
+    </header>
+
+    <main class="main" role="main">
+      <!-- Agent / MCP rail -->
+      <section class="col agent-col" aria-labelledby="agent-title">
+        <div class="col-head">
+          <h2 class="col-title" id="agent-title">Agent / MCP</h2>
+          <span class="chip chip-sim" title="Prototype telemetry">DEMO</span>
+        </div>
+        <div class="col-body">
+          <div class="state-panel" id="agent-empty" aria-live="polite">
+            <h4>No agents yet</h4>
+            <p>Run Extract on a READY pack to populate agent cards.</p>
+          </div>
+          <div class="state-panel" id="agent-loading" aria-live="polite" aria-busy="true">
+            <div class="spinner" aria-hidden="true"></div>
+            <h4>Loading agents</h4>
+            <p>Fetching Extract / Pack / Verify status…</p>
+          </div>
+          <div class="state-panel" id="agent-error" aria-live="assertive">
+            <h4>Agent rail error</h4>
+            <p>Could not load agent telemetry. Retry from the pack dashboard.</p>
+          </div>
+          <div class="content-ready" id="agent-ready">
+            <div class="agent-stack" id="agent-cards"></div>
+            <div class="mcp-section">
+              <h3>MCP tool log</h3>
+              <div class="mcp-log" id="mcp-log" role="list" aria-label="MCP tool invocations"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Video viewport -->
+      <section class="col video-col" aria-labelledby="video-title">
+        <div class="col-head">
+          <h2 class="col-title" id="video-title">Video viewport</h2>
+          <span class="chip chip-ready" id="pack-status">READY</span>
+        </div>
+        <div class="col-body">
+          <div class="state-panel" id="video-empty" aria-live="polite">
+            <h4>No video selected</h4>
+            <p>Open a READY pack such as XYMcBrFSJ4c to preview.</p>
+          </div>
+          <div class="state-panel" id="video-loading" aria-live="polite" aria-busy="true">
+            <div class="spinner" aria-hidden="true"></div>
+            <h4>Loading pack</h4>
+            <p>Resolving chapters and media…</p>
+          </div>
+          <div class="state-panel" id="video-error" aria-live="assertive">
+            <h4>Playback unavailable</h4>
+            <p>Media failed to load. Check pack status and retry.</p>
+          </div>
+          <div class="content-ready" id="video-ready">
+            <div class="viewport" id="viewport" aria-label="Video preview with optional bounding boxes">
+              <div class="viewport-frame" aria-hidden="true"></div>
+              <div class="badge-example" id="bbox-badge">EXAMPLE DATA</div>
+              <svg id="bbox-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+              <div class="viewport-placeholder">
+                <strong>Simulated pack frame</strong>
+                XYMcBrFSJ4c · transport driven by rAF clock
+              </div>
+            </div>
+            <div class="transport">
+              <div class="transport-row">
+                <button type="button" class="btn btn-primary btn-icon" id="play-btn" aria-label="Play">
+                  ▶
+                </button>
+                <span class="time-readout" id="time-readout" aria-live="off">00:00.0 / 00:24.0</span>
+                <input
+                  type="range"
+                  class="scrubber"
+                  id="scrubber"
+                  min="0"
+                  max="24000"
+                  step="50"
+                  value="0"
+                  aria-label="Seek playback position"
+                />
+              </div>
+              <div class="transport-row">
+                <button type="button" class="btn" id="webrtc-session-btn" aria-pressed="false" aria-label="Start simulated WebRTC session">
+                  WebRTC session
+                </button>
+                <div class="webrtc-panel" id="webrtc-panel" aria-label="Simulated VAD and latency">
+                  <span class="chip chip-sim">SIMULATED</span>
+                  <div class="vad-meter" title="Simulated voice activity" aria-hidden="true">
+                    <div class="vad-fill" id="vad-fill"></div>
+                  </div>
+                  <span class="latency-readout" id="latency-readout">latency — ms</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Transcript + events -->
+      <section class="col transcript-col" aria-labelledby="transcript-title">
+        <div class="col-head">
+          <h2 class="col-title" id="transcript-title">Transcript + events</h2>
+          <span class="chip chip-sim">word-level</span>
+        </div>
+        <div class="col-body">
+          <div class="state-panel" id="transcript-empty" aria-live="polite">
+            <h4>No transcript</h4>
+            <p>Transcript appears when a pack has word-level timing.</p>
+          </div>
+          <div class="state-panel" id="transcript-loading" aria-live="polite" aria-busy="true">
+            <div class="spinner" aria-hidden="true"></div>
+            <h4>Aligning transcript</h4>
+            <p>Loading word timings…</p>
+          </div>
+          <div class="state-panel" id="transcript-error" aria-live="assertive">
+            <h4>Transcript error</h4>
+            <p>Word timings failed to load for this pack.</p>
+          </div>
+          <div class="content-ready" id="transcript-ready">
+            <div
+              class="transcript-list"
+              id="transcript"
+              role="list"
+              aria-label="Word-level transcript; click a word to seek"
+            ></div>
+            <div class="event-stream">
+              <h3>Event stream</h3>
+              <div id="event-stream" aria-live="polite"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

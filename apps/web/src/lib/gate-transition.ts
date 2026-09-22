@@ -89,6 +89,8 @@ export interface StudioDeployGateInput {
   backendReason?: string | null;
   authority: GateAuthority;
   issuedAt?: string;
+  /** Optional HTTP reachability probe for the claimed live URL (server-side). */
+  deploymentHttpProbe?: { ok: boolean; statusCode?: number; error?: string; finalUrl?: string };
 }
 
 export interface StudioGateReceiptView {
@@ -341,10 +343,23 @@ export function evaluateTransition(request: GateTransitionRequest): GateEvaluati
 
   const liveRefs = request.evidenceRefs.filter((ref) => ref.kind === 'live_url');
   const verifiedLive = liveRefs.map(liveRefValue).find((url): url is string => Boolean(url));
+  const probeRef = request.evidenceRefs.find((ref) => ref.kind === 'deployment_http_probe');
+  const probeSucceeded = probeRef?.id === 'ok';
   const claimedLiveWithoutReceipt =
-    toState === 'live' && liveRefs.some((ref) => presentedLiveValue(ref));
+    toState === 'live' &&
+    liveRefs.some((ref) => presentedLiveValue(ref)) &&
+    !probeSucceeded;
 
   if (claimedLiveWithoutReceipt) {
+    if (probeRef && probeRef.id !== 'ok') {
+      return finish(
+        request,
+        'HOLD',
+        'GATE_HOLD_DEPLOYMENT_UNREACHABLE',
+        'Live URL failed HTTP reachability probe. Plane stays proposed.',
+        zeroSim,
+      );
+    }
     return finish(
       request,
       'REJECT',
@@ -427,9 +442,25 @@ export function evaluateStudioDeployTransition(
   if (input.backendReason?.trim()) {
     evidenceRefs.push({ kind: 'backend_reason', id: input.backendReason.trim() });
   }
+  if (input.deploymentHttpProbe?.ok) {
+    evidenceRefs.push({
+      kind: 'deployment_http_probe',
+      id: 'ok',
+      uri: input.deploymentHttpProbe.finalUrl ?? verified ?? presented,
+    });
+  } else if (input.deploymentHttpProbe && !input.deploymentHttpProbe.ok) {
+    evidenceRefs.push({
+      kind: 'deployment_http_probe',
+      id: input.deploymentHttpProbe.error ?? 'failed',
+    });
+  }
 
   const zeroSim: ZeroSimResult | undefined = verified
-    ? { verdict: 'unverified', reason_code: 'ZERO_SIM_UNVERIFIED' }
+    ? input.deploymentHttpProbe?.ok
+      ? { verdict: 'real', reason_code: 'ZERO_SIM_HTTP_PROBE' }
+      : input.deploymentHttpProbe && !input.deploymentHttpProbe.ok
+        ? { verdict: 'unverified', reason_code: 'ZERO_SIM_DEPLOYMENT_UNREACHABLE' }
+        : { verdict: 'unverified', reason_code: 'ZERO_SIM_UNVERIFIED' }
     : presented
       ? { verdict: 'unreal', reason_code: 'ZERO_SIM_UNREAL' }
       : undefined;

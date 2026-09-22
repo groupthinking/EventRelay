@@ -95,6 +95,8 @@ G.A.T.E. remains a policy engine; these are internal runtime records, not a new 
 
 `gate-transition.ts` retains its client-safe v1 diagnostic contract and decision vocabulary. v1 content-addressed receipts are **not** authorization. The Studio URL adapter no longer upgrades a syntactically valid URL into Zero-Sim `real`; a valid raw live claim stays unverified/REJECT without authoritative evidence. This supersedes the earlier #1707 / #1710 URL-only bar without accepting any weaker URL.
 
+Optional `deploymentHttpProbe` evidence (see `live-deployment-probe.ts`) records an HTTP reachability check. A successful probe adds `deployment_http_probe` with id `ok` and may yield PASS together with known authority; a failed probe HOLDs with `GATE_HOLD_DEPLOYMENT_UNREACHABLE`. This is not provider ownership verification (Origin attestations remain required for production PASS on `/api/gate/transitions`).
+
 Studio displays server v2 decisions, transition IDs, and receipt-retention status distinctly from local diagnostics, retains existing auth redirects, clears receipts on selection changes, and ignores late responses for another selected video. A decision chip or completed workflow never starts deployment. Mission advance is not implemented.
 
 ## Executable contract map

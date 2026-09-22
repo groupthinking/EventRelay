@@ -1,15 +1,5 @@
-import {
-  handleAppBuilderAssembleGet,
-  handleAppBuilderAssemblePost,
-} from '@/lib/assemble-app-builder-route';
-
+/** AUDIT-005: compatibility alias — canonical route at /api/video/assemble */
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-export async function POST(request: Request): Promise<Response> {
-  return handleAppBuilderAssemblePost(request);
-}
-
-export async function GET(request: Request): Promise<Response> {
-  return handleAppBuilderAssembleGet(request);
-}
+export { GET, POST } from '../../../video/assemble/route';

@@ -3,6 +3,7 @@ import 'server-only';
 import { createHmac, createPublicKey, timingSafeEqual, verify } from 'node:crypto';
 import { z } from 'zod';
 import { canonicalGateJson, hashCanonical, type GateDecision, type GateEvaluation, type GateReceipt, type ZeroSimVerdict } from '@/lib/gate-transition';
+import { probeLiveDeploymentUrl } from '@/lib/live-deployment-probe';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
 const identifier = z.string().min(1).max(200).regex(/^[a-zA-Z0-9_.:-]+$/);
@@ -214,6 +215,15 @@ export async function evaluateOriginGate(input: unknown, context: OriginGateCont
   const evidenceKey = createPublicKey(policy.issuers.find((issuer) => issuer.id === proposal.evidence!.payload.issuer)!.publicKey).export({ type: 'spki', format: 'der' });
   if (approvalKey.equals(evidenceKey)) {
     return retain({ decision: 'REJECT', code: 'GATE_REJECT_AUTHORITY_SCOPE', reason: 'Loop approval and deployment verification require independent signing keys.' });
+  }
+  const probe = await probeLiveDeploymentUrl(proposal.target.liveUrl);
+  if (!probe.ok) {
+    return retain({
+      decision: 'HOLD',
+      code: 'GATE_HOLD_DEPLOYMENT_UNREACHABLE',
+      reason: 'Signed deployment evidence did not pass HTTP reachability probe. Plane stays proposed.',
+      verdict: 'unverified',
+    });
   }
   return retain({ decision: 'PASS', code: 'GATE_PASS', reason: 'Trusted Loop approval and independent verification permit this exact artifact-bound transition. This receipt does not execute deployment or authorize a later phase.', verdict: 'real' });
 }

@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
 import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
-import { waitUntil } from '@vercel/functions';
+import { start } from 'workflow/api';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
+import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
+import { videoPackExtractionWorkflow } from '@/workflows/video-pack-extraction';
 import {
   VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
   hostedExtractReasonFromDetail,
@@ -26,11 +28,11 @@ import {
 import { applyKeyframeImageHonesty } from '@/lib/keyframe-image-path';
 import { hydrateKeyframeImages } from '@/lib/keyframe-frame-capture';
 import {
-  VIDEO_PACK_EXTRACTOR_MODEL,
   VideoPackExtractError,
   extractVideoPackSpec,
   type ExtractedVideoPackSpec,
 } from '@/lib/video-pack-extractor';
+import { VIDEO_PACK_VIDEO_MODEL } from '@/lib/video-pack-shard-planner';
 
 export {
   VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
@@ -231,13 +233,13 @@ export function applyExtractedSpec(
       ...identity.provenance,
       tool_versions: {
         ...identity.provenance.tool_versions,
-        extractor: VIDEO_PACK_EXTRACTOR_MODEL,
+        extractor: VIDEO_PACK_VIDEO_MODEL,
         pack_structure: VIDEO_PACK_STRUCTURE_SCHEMA_VERSION,
         extract_pipeline: VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
       },
       notes: salvaged
-        ? `Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway. ${SPEC_JSON_SALVAGE_NOTE}`
-        : 'Identity pack plus Gemini 3.8 Flash spec extract via AI Gateway.',
+        ? `Identity pack plus Gemini 3.8 Flash spec extract via direct Interactions shards. ${SPEC_JSON_SALVAGE_NOTE}`
+        : 'Identity pack plus Gemini 3.8 Flash spec extract via direct Interactions shards.',
     },
   });
   if (!spec.grounded_spec) return pack;
@@ -278,16 +280,29 @@ export function packNeedsReextractOnPost(pack: VideoPackV0Json): boolean {
 
 const SOURCE_HASH = /^[a-f0-9]{64}$/;
 
-type ScheduleExtract = (work: Promise<unknown>) => void;
+type StartVideoPackExtraction = (identity: VideoPackV0Json) => Promise<void>;
 
-let scheduleExtract: ScheduleExtract = (work) => {
-  waitUntil(work);
-};
-
-export function setVideoPackSchedulerForTests(schedule: ScheduleExtract | null): void {
-  scheduleExtract = schedule ?? ((work) => {
-    waitUntil(work);
+async function startDurableVideoPackExtraction(identity: VideoPackV0Json): Promise<void> {
+  await withWorldVercelFetch(async () => {
+    await start(videoPackExtractionWorkflow, [identity]);
   });
+}
+
+let startVideoPackExtraction: StartVideoPackExtraction = startDurableVideoPackExtraction;
+
+export function setVideoPackWorkflowStarterForTests(
+  starter: StartVideoPackExtraction | null,
+): void {
+  startVideoPackExtraction = starter ?? startDurableVideoPackExtraction;
+}
+
+/** @deprecated Use setVideoPackWorkflowStarterForTests in new tests. */
+export function setVideoPackSchedulerForTests(schedule: ((work: Promise<unknown>) => void) | null): void {
+  setVideoPackWorkflowStarterForTests(
+    schedule
+      ? async (identity) => { schedule(persistVideoPackExtraction(identity)); }
+      : null,
+  );
 }
 
 function missingIdentityResponse(): NextResponse {
@@ -380,7 +395,7 @@ function resolveIdentityFromFields(
   return { identity };
 }
 
-async function persistExtract(identity: VideoPackV0Json): Promise<void> {
+export async function persistVideoPackExtraction(identity: VideoPackV0Json): Promise<{ state: 'ready' | 'error' }> {
   try {
     const spec = await extractVideoPackSpec({
       sourceUrl: identity.source_url,
@@ -397,9 +412,10 @@ async function persistExtract(identity: VideoPackV0Json): Promise<void> {
         error: 'Gemini 3.8 Flash returned no extracted spec content.',
         failed_at: new Date().toISOString(),
       });
-      return;
+      return { state: 'error' };
     }
     await putPackRecord({ state: 'ready', pack });
+    return { state: 'ready' };
   } catch (error) {
     const message =
       error instanceof VideoPackExtractError
@@ -417,6 +433,7 @@ async function persistExtract(identity: VideoPackV0Json): Promise<void> {
       error: message,
       failed_at: new Date().toISOString(),
     });
+    return { state: 'error' };
   }
 }
 
@@ -469,7 +486,23 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
     return recordToResponse(claimed);
   }
 
-  scheduleExtract(persistExtract(identity));
+  try {
+    await startVideoPackExtraction(identity);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to start Video Pack extraction.';
+    console.error('[video-pack] durable workflow start failed:', message);
+    await putPackRecord({
+      state: 'error',
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: sourceHash,
+      id: identity.id,
+      error: message,
+      failed_at: new Date().toISOString(),
+    });
+    return NextResponse.json({ status: 'error', error: message }, { status: 503 });
+  }
+
   return NextResponse.json(
     processingEnvelope({
       id: identity.id,

@@ -1,12 +1,5 @@
-import { handleIdentityPackGet, handleIdentityPackPost } from '@/lib/video-pack';
-
+/** AUDIT-005: compatibility alias — canonical route at /api/video/pack */
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
-export async function POST(request: Request): Promise<Response> {
-  return handleIdentityPackPost(request);
-}
-
-export async function GET(request: Request): Promise<Response> {
-  return handleIdentityPackGet(request);
-}
+export { GET, POST } from '../../../video/pack/route';
