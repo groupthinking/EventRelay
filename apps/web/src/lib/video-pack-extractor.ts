@@ -32,12 +32,12 @@ import {
   type VideoPackStackTool,
 } from '@/lib/video-pack-types';
 import {
-  planShardManifest,
   validateShardManifest,
   VIDEO_PACK_VIDEO_MODEL,
   type ShardManifest,
   type VideoShard,
 } from '@/lib/video-pack-shard-planner';
+import { planShardsWithJev } from '@/lib/video-pack-extract-jev';
 import { fanOutShardsOnProbePass, type ClipProbe } from '@/lib/video-pack-clip-probe';
 import {
   analyzeTranscriptChunkWithGateway,
@@ -882,12 +882,19 @@ export async function extractVideoPackSpec(
 
   const runVideoInteraction = deps.runVideoInteraction ?? runShardVideoInteraction;
   const metadata = await fetchYouTubeMetadata(input.sourceUrl).catch(() => null);
-  const manifest = planShardManifest(
+  // No secret or a null Jev decision keeps today's deterministic manifest.
+  // stop yields no manifest and must fail closed before any Interactions call.
+  // Every other action uses the returned manifest; ok stays on the validator.
+  const planned = await planShardsWithJev(
     input.videoId,
     input.sourceUrl,
     metadata,
     metadata?.durationSeconds ?? null,
   );
+  if (!planned.manifest) {
+    throw new VideoPackExtractError('Jev extract decision is stop; refusing video calls.');
+  }
+  const manifest = planned.manifest;
   const validation = validateShardManifest(manifest);
   if (validation.ok === 0) {
     throw new VideoPackExtractError(
