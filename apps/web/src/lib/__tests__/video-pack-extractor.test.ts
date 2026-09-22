@@ -757,6 +757,94 @@ describe('extractVideoPackSpec', () => {
     expect(spec.transcript_evidence).toBeUndefined();
     expect(analyzeTranscriptChunk).not.toHaveBeenCalled();
   });
+
+  it('gates chunked fan-out on a passing clip probe', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: 'QjZ5ohr7sGA',
+      title: 'Flat tire change',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [
+        { time: '0:00', title: 'Intro' },
+        { time: '3:00', title: 'Jack' },
+        { time: '6:00', title: 'Finish' },
+      ],
+    });
+    const calls: string[] = [];
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
+      if (call.sectionPrompt.startsWith('PROBE:')) {
+        calls.push('probe');
+        return { text: 'safety briefing in this window', interactionId: 'int-probe' };
+      }
+      calls.push(`worker:${call.start_s}`);
+      return { text: JSON.stringify(SPEC_JSON), interactionId: `int-${call.start_s}` };
+    });
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', videoId: 'QjZ5ohr7sGA' },
+      {
+        runVideoInteraction: runVideo,
+        fetchCaptions: async () => null,
+        clipProbe: {
+          sourceUrl: 'https://www.youtube.com/watch?v=QjZ5ohr7sGA',
+          start_s: 0,
+          end_s: 180,
+          model: 'gemini-3.8-flash',
+          prompt: 'PROBE: describe only this clip.',
+          forbiddenPhrases: ['torque wrench calibration'],
+          expectedPhrases: ['safety briefing'],
+        },
+      },
+    );
+
+    expect(spec.transcript.full_text).toContain('zoo');
+    expect(calls[0]).toBe('probe');
+    expect(calls.filter((c) => c.startsWith('worker:'))).toHaveLength(3);
+  });
+
+  it('refuses chunked fan-out when the clip probe fails (probe call only)', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: 'QjZ5ohr7sGA',
+      title: 'Flat tire change',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [
+        { time: '0:00', title: 'Intro' },
+        { time: '3:00', title: 'Jack' },
+        { time: '6:00', title: 'Finish' },
+      ],
+    });
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: 'safety briefing plus torque wrench calibration from later',
+      interactionId: 'int-probe',
+    }));
+
+    await expect(
+      extractVideoPackSpec(
+        { sourceUrl: 'https://www.youtube.com/watch?v=QjZ5ohr7sGA', videoId: 'QjZ5ohr7sGA' },
+        {
+          runVideoInteraction: runVideo,
+          fetchCaptions: async () => null,
+          clipProbe: {
+            sourceUrl: 'https://www.youtube.com/watch?v=QjZ5ohr7sGA',
+            start_s: 0,
+            end_s: 180,
+            model: 'gemini-3.8-flash',
+            prompt: 'PROBE: describe only this clip.',
+            forbiddenPhrases: ['torque wrench calibration'],
+            expectedPhrases: ['safety briefing'],
+          },
+        },
+      ),
+    ).rejects.toThrow(/refusing fan-out/);
+    expect(runVideo).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('formation parsers', () => {

@@ -36,7 +36,9 @@ import {
   validateShardManifest,
   VIDEO_PACK_VIDEO_MODEL,
   type ShardManifest,
+  type VideoShard,
 } from '@/lib/video-pack-shard-planner';
+import { fanOutShardsOnProbePass, type ClipProbe } from '@/lib/video-pack-clip-probe';
 import {
   analyzeTranscriptChunkWithGateway,
   backfillTranscriptSegments,
@@ -792,18 +794,26 @@ async function extractVideoPackSpecChunked(
   metadata: YouTubeMetadata | null,
   manifest: ShardManifest,
   runVideoInteraction: ShardVideoInteractionRunner,
+  clipProbe?: ClipProbe,
 ): Promise<ExtractedVideoPackSpec> {
   const sectionCount = manifest.shards.length;
 
   console.info(
-    `[video-pack-extract] chunked extract: ${sectionCount} shards for ${input.videoId} (model ${manifest.model}, cap ${manifest.parallelCap})`,
+    `[video-pack-extract] chunked extract: ${sectionCount} shards for ${input.videoId} (model ${manifest.model}, cap ${manifest.parallelCap}, probe ${clipProbe ? 'on' : 'off'})`,
   );
 
-  const sectionalSpecs = await mapWithBoundedConcurrency(
-    manifest.shards,
-    manifest.parallelCap,
-    async (shard) => extractSectionSpec(input, shard, sectionCount, runVideoInteraction),
-  );
+  const runShard = async (shard: VideoShard, _index: number) =>
+    extractSectionSpec(input, shard, sectionCount, runVideoInteraction);
+  // Probe gate is opt-in per call: when a canonical probe is supplied, one
+  // clipped call must pass before any worker runs; otherwise fan out directly.
+  // Production passes no probe until a canonical per-model calibration exists.
+  const sectionalSpecs = clipProbe
+    ? (await fanOutShardsOnProbePass(manifest, clipProbe, runShard, runVideoInteraction)).results
+    : await mapWithBoundedConcurrency(
+        manifest.shards,
+        manifest.parallelCap,
+        async (shard) => extractSectionSpec(input, shard, sectionCount, runVideoInteraction),
+      );
 
   const merged = mergeSectionVideoPackSpecs(sectionalSpecs) as ExtractedVideoPackSpec;
   const structured = ensureStructuredPackSections(merged, metadata);
@@ -848,6 +858,7 @@ export async function extractVideoPackSpec(
     hasDirectGoogleKey?: () => boolean;
     fetchCaptions?: FetchCaptions;
     analyzeTranscriptChunk?: AnalyzeTranscriptChunk;
+    clipProbe?: ClipProbe;
   } = {},
 ): Promise<ExtractedVideoPackSpec> {
   const hasKey = deps.hasDirectGoogleKey ?? hasDirectGoogleKey;
@@ -884,7 +895,13 @@ export async function extractVideoPackSpec(
     );
   }
   if (manifest.shards.length >= 2) {
-    const spec = await extractVideoPackSpecChunked(input, metadata, manifest, runVideoInteraction);
+    const spec = await extractVideoPackSpecChunked(
+      input,
+      metadata,
+      manifest,
+      runVideoInteraction,
+      deps.clipProbe,
+    );
     return enrichSpecWithTranscriptTeam(spec, captionsPromise, input.videoId, analyzeChunk);
   }
 
