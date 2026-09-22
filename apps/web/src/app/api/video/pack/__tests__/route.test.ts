@@ -101,6 +101,7 @@ async function loadPackRoute() {
     buildIdentityPack: videoPack.buildIdentityPack,
     applyExtractedSpec: videoPack.applyExtractedSpec,
     setKeyframeFrameCaptureForTests: capture.setKeyframeFrameCaptureForTests,
+    setVideoPackWorkflowStarterForTests: videoPack.setVideoPackWorkflowStarterForTests,
   };
 }
 
@@ -141,6 +142,25 @@ describe('POST /api/video/pack', () => {
     finish?.(specFor(CANON_B));
   });
 
+  it('persists a visible error when the durable workflow cannot start', async () => {
+    const loaded = await loadPackRoute();
+    loaded.setVideoPackWorkflowStarterForTests(async () => {
+      throw new Error('Workflow endpoint is unavailable');
+    });
+
+    const accepted = await loaded.POST(postRequest({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }));
+    expect(accepted.status).toBe(503);
+    expect((await accepted.json()) as { error?: string }).toEqual(
+      expect.objectContaining({ error: 'Workflow endpoint is unavailable' }),
+    );
+
+    const stored = await loaded.GET(getRequest(`video_id=${CANON_B}`));
+    expect(stored.status).toBe(200);
+    expect((await stored.json()) as { status?: string; detail?: string }).toEqual(
+      expect.objectContaining({ status: 'error', detail: 'Workflow endpoint is unavailable' }),
+    );
+  });
+
   it('does not return 202 in production when Redis durability is unavailable', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.stubEnv('UPSTASH_REDIS_REST_URL', '');
@@ -159,10 +179,10 @@ describe('POST /api/video/pack', () => {
     expect(extractVideoPackSpec).not.toHaveBeenCalled();
   });
 
-  it('fails closed with a visible error when Gateway extract is unavailable', async () => {
+  it('fails closed with a visible error when direct video extract is unavailable', async () => {
     extractVideoPackSpec.mockRejectedValue(
       new VideoPackExtractError(
-        'Video pack spec extract requires AI Gateway (AI_GATEWAY_API_KEY or VERCEL_AI_GATEWAY_API_KEY) and model google/gemini-3.8-flash.',
+        'Video pack spec extract requires direct Google video access and model gemini-3.8-flash.',
       ),
     );
     const { POST, GET, flush } = await loadPackRoute();
@@ -182,8 +202,8 @@ describe('POST /api/video/pack', () => {
     };
     expect(body.ok).toBe(false);
     expect(body.reason_code).toBe('HOSTED_PACK_EXTRACT_FAILED');
-    expect(body.detail).toMatch(/AI Gateway/i);
-    expect(body.detail).toContain('google/gemini-3.8-flash');
+    expect(body.detail).toMatch(/direct Google video access/i);
+    expect(body.detail).toContain('gemini-3.8-flash');
     expect(body.data).toBeUndefined();
   });
 
@@ -518,8 +538,8 @@ describe('GET /api/video/pack (anonymous read)', () => {
 
     extractVideoPackSpec.mockImplementation((input, deps) =>
       actual.extractVideoPackSpec(input, {
-        generateText: async () => ({ text: truncated }),
-        hasGatewayKey: () => true,
+        runVideoInteraction: async () => ({ text: truncated, interactionId: 'int-test' }),
+        hasDirectGoogleKey: () => true,
       }),
     );
 

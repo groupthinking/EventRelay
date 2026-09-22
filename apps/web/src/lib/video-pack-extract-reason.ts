@@ -1,5 +1,5 @@
 /** Bump when extract retry/salvage policy changes — triggers reclaimReady on POST. */
-export const VIDEO_PACK_EXTRACT_PIPELINE_VERSION = 'p1.5-chunked-extract-v1' as const;
+export const VIDEO_PACK_EXTRACT_PIPELINE_VERSION = 'p1.6-direct-shard-v1' as const;
 
 export type VideoPackExtractFailureReason =
   | 'HOSTED_PACK_GATEWAY_EMPTY'
@@ -71,7 +71,7 @@ export function hostedExtractReasonFromDetail(message: string): VideoPackExtract
   return classifyVideoPackExtractFailure(message);
 }
 
-export function isTransientVideoPackGatewayError(error: unknown): boolean {
+export function isTransientVideoPackExtractError(error: unknown): boolean {
   const message = normalizeExtractFailureMessage(error);
   const lower = message.toLowerCase();
 
@@ -79,6 +79,9 @@ export function isTransientVideoPackGatewayError(error: unknown): boolean {
     return false;
   }
   if (lower.includes('requires ai gateway') || lower.includes('ai gateway api key is not configured')) {
+    return false;
+  }
+  if (lower.includes('requires direct google')) {
     return false;
   }
   if (lower.includes('returned no extracted spec content') && !lower.includes('gateway')) {
