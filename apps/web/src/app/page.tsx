@@ -31,6 +31,10 @@ const OFFERS = [
   },
 ] as const;
 
+/**
+ * Render the landing page with a YouTube URL-to-Studio handoff and Workflow Pro checkout.
+ * The optional badge appears only when its feature flag is enabled.
+ */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
 
