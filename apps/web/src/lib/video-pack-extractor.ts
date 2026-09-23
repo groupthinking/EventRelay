@@ -51,6 +51,7 @@ import {
   type TranscriptChunkEvidence,
 } from '@/lib/transcript-team';
 import { mergeSectionVideoPackSpecs } from '@/lib/video-pack-extract-merge';
+import { consolidateShardExtract } from '@/lib/video-pack-consolidator';
 import {
   mapWithBoundedConcurrency,
   type VideoPackExtractSection,
@@ -791,11 +792,10 @@ async function extractSectionSpec(
 
 async function extractVideoPackSpecChunked(
   input: { sourceUrl: string; videoId: string },
-  metadata: YouTubeMetadata | null,
   manifest: ShardManifest,
   runVideoInteraction: ShardVideoInteractionRunner,
   clipProbe?: ClipProbe,
-): Promise<ExtractedVideoPackSpec> {
+): Promise<ExtractedVideoPackSpec[]> {
   const sectionCount = manifest.shards.length;
 
   console.info(
@@ -815,15 +815,7 @@ async function extractVideoPackSpecChunked(
         async (shard) => extractSectionSpec(input, shard, sectionCount, runVideoInteraction),
       );
 
-  const merged = mergeSectionVideoPackSpecs(sectionalSpecs) as ExtractedVideoPackSpec;
-  const structured = ensureStructuredPackSections(merged, metadata);
-  const enriched: ExtractedVideoPackSpec = { ...merged, ...structured };
-
-  if (isIdentityOnlySpec(enriched, input.videoId)) {
-    throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
-  }
-
-  return enriched;
+  return sectionalSpecs;
 }
 
 /**
@@ -849,6 +841,56 @@ async function enrichSpecWithTranscriptTeam(
     async (chunk) => analyzeChunk(chunk, videoId),
   );
   return spec;
+}
+
+/**
+ * Identity check stays before caption backfill. The consolidator then merges
+ * shard specs with transcript evidence and fails closed on app 0/1. Jev's
+ * post-check decision is not a success bit; sandbox build stays off.
+ */
+async function finishConsolidatedSpec(
+  specs: ExtractedVideoPackSpec[],
+  metadata: YouTubeMetadata | null,
+  videoId: string,
+  captionsPromise: Promise<FetchedCaptions | null>,
+  analyzeChunk: AnalyzeTranscriptChunk,
+): Promise<ExtractedVideoPackSpec> {
+  const merged = mergeSectionVideoPackSpecs(specs) as ExtractedVideoPackSpec;
+  const structured = ensureStructuredPackSections(merged, metadata);
+  const enriched: ExtractedVideoPackSpec = { ...merged, ...structured };
+
+  if (isIdentityOnlySpec(enriched, videoId)) {
+    throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
+  }
+
+  const withEvidence = await enrichSpecWithTranscriptTeam(
+    enriched,
+    captionsPromise,
+    videoId,
+    analyzeChunk,
+  );
+  const consolidated = await consolidateShardExtract({
+    videoId,
+    specs,
+    transcriptEvidence: withEvidence.transcript_evidence,
+    durationSeconds: metadata?.durationSeconds ?? null,
+    sandboxBuild: false,
+  });
+  if (consolidated.app.ok === 0) {
+    throw new VideoPackExtractError(
+      `Consolidated app failed 0/1: ${consolidated.app.failures.join('; ')}`,
+    );
+  }
+  return {
+    ...withEvidence,
+    ...consolidated.tree,
+    transcript: withEvidence.transcript,
+    chapters: withEvidence.chapters,
+    action_items: withEvidence.action_items,
+    ...(withEvidence.transcript_evidence
+      ? { transcript_evidence: consolidated.tree.transcript_evidence }
+      : {}),
+  };
 }
 
 export async function extractVideoPackSpec(
@@ -902,14 +944,19 @@ export async function extractVideoPackSpec(
     );
   }
   if (manifest.shards.length >= 2) {
-    const spec = await extractVideoPackSpecChunked(
+    const specs = await extractVideoPackSpecChunked(
       input,
-      metadata,
       manifest,
       runVideoInteraction,
       deps.clipProbe,
     );
-    return enrichSpecWithTranscriptTeam(spec, captionsPromise, input.videoId, analyzeChunk);
+    return finishConsolidatedSpec(
+      specs,
+      metadata,
+      input.videoId,
+      captionsPromise,
+      analyzeChunk,
+    );
   }
 
   const shard = manifest.shards[0];
@@ -936,14 +983,13 @@ export async function extractVideoPackSpec(
 
     try {
       const spec = parseSpecJson(result.text, input.videoId).spec;
-      const structured = ensureStructuredPackSections(spec, metadata);
-      const enriched: ExtractedVideoPackSpec = { ...spec, ...structured };
-
-      if (isIdentityOnlySpec(enriched, input.videoId)) {
-        throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
-      }
-
-      return enrichSpecWithTranscriptTeam(enriched, captionsPromise, input.videoId, analyzeChunk);
+      return finishConsolidatedSpec(
+        [spec],
+        metadata,
+        input.videoId,
+        captionsPromise,
+        analyzeChunk,
+      );
     } catch (error) {
       if (error instanceof VideoPackExtractError && error.message === EMPTY_SPEC_ERROR) {
         throw error;
