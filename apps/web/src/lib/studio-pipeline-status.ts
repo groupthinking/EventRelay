@@ -104,6 +104,7 @@ export function studioWorkbenchEmptyView(input: {
   hasVideoPack: boolean;
   analysisReady: boolean;
   failed?: boolean;
+  failureMessage?: string | null;
 }): {
   title: string;
   description: string;
@@ -127,9 +128,11 @@ export function studioWorkbenchEmptyView(input: {
     };
   }
   if (input.failed) {
+    const error = input.failureMessage?.trim() ?? '';
     return {
       title: 'Analysis did not finish',
       description:
+        error ||
         'Transcript or pack storage failed. Retry analysis or try another public video.',
       primaryAction: 'retry',
     };
@@ -235,6 +238,32 @@ export type StudioTranscriptStageId =
   | 'events'
   | 'ready'
   | 'failed';
+
+/** Transcript pane copy. Idle stays "Nothing yet." A failed run shows the stored error. */
+export function studioTranscriptBody(input: {
+  transcript?: string | null;
+  busy: boolean;
+  failed: boolean;
+  failureMessage?: string | null;
+}): string {
+  const transcript = input.transcript?.trim() ?? '';
+  if (transcript) return transcript;
+  if (input.busy) return 'Waiting on captions — no invented text.';
+  if (input.failed) {
+    const error = input.failureMessage?.trim() ?? '';
+    return error || 'Transcript failed.';
+  }
+  return 'Nothing yet.';
+}
+
+/** Header job strip. A stored pack names its YouTube id. Otherwise link back to /studio. */
+export function studioJobStripDestination(
+  videoId: string | null | undefined,
+): { kind: 'video'; label: string } | { kind: 'studio'; label: '/studio'; href: '/studio' } {
+  const id = videoId?.trim() ?? '';
+  if (id.length > 0) return { kind: 'video', label: id };
+  return { kind: 'studio', label: '/studio', href: '/studio' };
+}
 
 export function studioTranscriptStage(input: {
   busy: boolean;

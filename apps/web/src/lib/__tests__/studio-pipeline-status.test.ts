@@ -26,6 +26,8 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioJobStripDestination,
+  studioTranscriptBody,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
   studioWorkbenchEmptyView,
@@ -307,6 +309,30 @@ describe('studio-pipeline-status', () => {
     expect(studioTranscriptStage({ busy: false, elapsedSeconds: 12, hasFailed: true }).id).toBe(
       'failed',
     );
+    expect(
+      studioTranscriptBody({ transcript: '', busy: false, failed: false }),
+    ).toBe('Nothing yet.');
+    expect(
+      studioTranscriptBody({
+        transcript: '   ',
+        busy: false,
+        failed: true,
+        failureMessage: 'Gemini 3.8 Flash returned no extracted spec content.',
+      }),
+    ).toBe('Gemini 3.8 Flash returned no extracted spec content.');
+    expect(
+      studioTranscriptBody({ transcript: null, busy: false, failed: true, failureMessage: '  ' }),
+    ).toBe('Transcript failed.');
+    expect(studioJobStripDestination(null)).toEqual({
+      kind: 'studio',
+      label: '/studio',
+      href: '/studio',
+    });
+    expect(studioJobStripDestination('auJzb1D-fag')).toEqual({
+      kind: 'video',
+      label: 'auJzb1D-fag',
+    });
+    expect(JSON.stringify(studioJobStripDestination('auJzb1D-fag'))).not.toContain('/d/');
     expect(studioTranscriptEtaLabel(10)).toMatch(/about 35s left/i);
     expect(studioTranscriptEtaLabel(45)).toMatch(/typical/i);
     expect(studioCanRetryTranscript({ busy: false, hasFailed: true, retryable: true })).toBe(true);
@@ -580,6 +606,20 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-workbench-empty"');
     expect(studio).toContain('studioWorkbenchEmptyView');
     expect(studio).toContain('data-testid="studio-build-live-failure"');
+    expect(studio).not.toContain('/d/{videoId}');
+    expect(studio).not.toContain("{'{videoId}'}");
+    expect(studio).toContain('studioJobStripDestination');
+    expect(studio).toContain('studioTranscriptBody');
+    expect(
+      studioWorkbenchEmptyView({
+        busy: false,
+        hasSelection: true,
+        hasVideoPack: false,
+        analysisReady: false,
+        failed: true,
+        failureMessage: 'Gemini 3.8 Flash returned no extracted spec content.',
+      })?.description,
+    ).toBe('Gemini 3.8 Flash returned no extracted spec content.');
   });
 
   it('does not map keyframes or concepts into Studio events', () => {
