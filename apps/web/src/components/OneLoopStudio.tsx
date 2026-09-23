@@ -64,6 +64,7 @@ import {
   studioExportToastMessage,
   studioFormationSupplementalEntities,
   studioInvalidHandoffMessage,
+  studioJobStripDestination,
   studioPackCitation,
   studioPackFormation,
   studioPasteOutcomeMessage,
@@ -73,6 +74,7 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioTranscriptBody,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
   studioVerifiedLiveUrl,
@@ -254,6 +256,35 @@ function PackWorkbench({
   );
 }
 
+function StudioJobStripDestination({
+  destination,
+}: {
+  destination: ReturnType<typeof studioJobStripDestination>;
+}) {
+  switch (destination.kind) {
+    case 'video':
+      return (
+        <span data-testid="studio-job-video-id" className="text-white/55">
+          {destination.label}
+        </span>
+      );
+    case 'studio':
+      return (
+        <Link
+          href={destination.href}
+          data-testid="studio-job-self-link"
+          className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-white/80"
+        >
+          {destination.label}
+        </Link>
+      );
+    default: {
+      const _exhaustive: never = destination;
+      return _exhaustive;
+    }
+  }
+}
+
 export default function OneLoopStudio({
   showAgentWorkflowUi,
 }: {
@@ -403,12 +434,16 @@ export default function OneLoopStudio({
       const video = useDashboardStore.getState().videos.find((v) => v.id === id);
       const ready =
         (video?.transcript?.trim().length ?? 0) >= 40 || (video?.events?.length ?? 0) > 0;
-      setMessage(
-        studioPasteOutcomeMessage({
-          hasUsableTranscript: ready,
-          packCitation: video?.videoPack ? studioPackCitation(video.videoPack) : null,
-        }),
-      );
+      if (video?.status === 'failed') {
+        setMessage(video.failure?.message?.trim() || 'Analysis failed.');
+      } else {
+        setMessage(
+          studioPasteOutcomeMessage({
+            hasUsableTranscript: ready,
+            packCitation: video?.videoPack ? studioPackCitation(video.videoPack) : null,
+          }),
+        );
+      }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Analysis failed.');
     } finally {
@@ -506,6 +541,7 @@ export default function OneLoopStudio({
     hasVideoPack: Boolean(selected?.videoPack),
     analysisReady: quality === 'live',
     failed: selected?.status === 'failed',
+    failureMessage: selected?.failure?.message,
   });
   const resultReadyShell = Boolean(selected?.videoPack?.pack);
   const shellPack = selected?.videoPack?.pack;
@@ -945,7 +981,9 @@ export default function OneLoopStudio({
               className="mt-2 font-mono text-[11px] tracking-wide text-white/40"
             >
               Paste URL → Run → Build live → open{' '}
-              <span className="text-white/55">/d/{'{videoId}'}</span>
+              <StudioJobStripDestination
+                destination={studioJobStripDestination(selected?.videoPack?.videoId)}
+              />
             </p>
           </div>
           <form onSubmit={analyze} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -1174,13 +1212,16 @@ export default function OneLoopStudio({
               ) : null}
             </div>
           )}
-          <div className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80">
-            {selected?.transcript?.trim() ||
-              (transcriptWorking
-                ? 'Waiting on captions — no invented text.'
-                : selected?.status === 'failed'
-                  ? selected.failure?.message || 'Transcript failed.'
-                  : 'Nothing yet.')}
+          <div
+            data-testid="studio-transcript-body"
+            className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80"
+          >
+            {studioTranscriptBody({
+              transcript: selected?.transcript,
+              busy: transcriptWorking,
+              failed: selected?.status === 'failed',
+              failureMessage: selected?.failure?.message,
+            })}
           </div>
         </section>
 
@@ -1778,7 +1819,7 @@ export default function OneLoopStudio({
             disabled={buildBusy || !canAttemptBuildLive}
             title={
               selected?.videoPack
-                ? 'Compile the stored Video Pack to a hosted app at /d/{videoId}.'
+                ? `Compile the stored Video Pack for ${selected.videoPack.videoId}.`
                 : canAttemptBuildLive
                   ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                   : 'Paste a YouTube URL and run analysis first.'
