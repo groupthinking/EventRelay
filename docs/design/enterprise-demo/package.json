@@ -8,7 +8,7 @@
     "browser": "echo Open index.html in a modern browser"
   },
   "devDependencies": {
-    "electron": "^31.0.0"
+    "electron": "^44.4.3"
   },
   "license": "UNLICENSED",
   "private": true
