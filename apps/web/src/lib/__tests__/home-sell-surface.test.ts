@@ -67,8 +67,11 @@ describe('Home is a sell page; Studio is the workbench', () => {
 
   it('keeps the live workbench only on /studio', () => {
     const studio = readSource('app/studio/page.tsx');
+    const shell = readSource('app/studio/StudioShell.tsx');
     const workbench = readSource('components/OneLoopStudio.tsx');
-    expect(studio).toContain('OneLoopStudio');
+    expect(studio).toContain('StudioShell');
+    expect(studio).not.toContain('OneLoopStudio');
+    expect(shell).toContain('OneLoopStudio');
     expect(workbench).toContain('applyStudioQueryAutoStart');
     expect(workbench).toContain('processVideo');
   });

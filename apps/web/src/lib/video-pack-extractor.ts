@@ -1,10 +1,16 @@
 import 'server-only';
 
-import { hasAiGatewayKey, stripJsonCodeFence } from '@/lib/vercel-ai-gateway';
+import { stripJsonCodeFence } from '@/lib/vercel-ai-gateway';
+import {
+  hasDirectGoogleKey,
+  runShardVideoInteraction,
+  type ShardVideoCall,
+  type ShardVideoInteractionRunner,
+} from '@/lib/google-genai-video';
 import {
   classifyVideoPackExtractFailure,
   isRetryableTruncatedParseError,
-  isTransientVideoPackGatewayError,
+  isTransientVideoPackExtractError,
   jitteredExtractBackoffMs,
   normalizeExtractFailureMessage,
   sleepMs,
@@ -25,12 +31,29 @@ import {
   type VideoPackStack,
   type VideoPackStackTool,
 } from '@/lib/video-pack-types';
+import {
+  validateShardManifest,
+  VIDEO_PACK_VIDEO_MODEL,
+  type ShardManifest,
+  type VideoShard,
+} from '@/lib/video-pack-shard-planner';
+import { planShardsWithJev } from '@/lib/video-pack-extract-jev';
+import { fanOutShardsOnProbePass, type ClipProbe } from '@/lib/video-pack-clip-probe';
+import {
+  analyzeTranscriptChunkWithGateway,
+  backfillTranscriptSegments,
+  chunkTranscriptSegments,
+  fetchCaptionsOnce,
+  TRANSCRIPT_CHUNK_MAX_PARALLEL,
+  type AnalyzeTranscriptChunk,
+  type FetchCaptions,
+  type FetchedCaptions,
+  type TranscriptChunkEvidence,
+} from '@/lib/transcript-team';
 import { mergeSectionVideoPackSpecs } from '@/lib/video-pack-extract-merge';
+import { consolidateShardExtract } from '@/lib/video-pack-consolidator';
 import {
   mapWithBoundedConcurrency,
-  planVideoPackExtractSections,
-  shouldUseChunkedVideoPackExtract,
-  VIDEO_PACK_CHUNK_MAX_PARALLEL,
   type VideoPackExtractSection,
 } from '@/lib/video-pack-extract-segments';
 import {
@@ -39,11 +62,8 @@ import {
   type YouTubeMetadata,
 } from '@/lib/youtube-metadata';
 
-/** Verified Vercel AI Gateway id — do not substitute gemini-2.5-flash. */
-export const VIDEO_PACK_EXTRACTOR_MODEL = 'google/gemini-3.8-flash';
-
-/** One initial Gateway call plus four retries on transient empty/503 failures. */
-export const VIDEO_PACK_GATEWAY_MAX_ATTEMPTS = 5;
+/** One initial direct call plus four retries on transient empty/503 failures. */
+export const VIDEO_PACK_EXTRACT_MAX_ATTEMPTS = 5;
 
 export const VIDEO_PACK_SOURCE_UNAVAILABLE_MESSAGE =
   'YouTube reports this video is unavailable or was removed.';
@@ -108,6 +128,8 @@ export interface ExtractedVisualContext {
 export interface ExtractedVideoPackSpec {
   /** Set when parse recovered from truncated Gemini JSON (prefix salvage only). */
   spec_json_salvaged?: boolean;
+  /** Gate 2 transcript-team evidence (caption chunks analyzed in parallel). */
+  transcript_evidence?: TranscriptChunkEvidence[];
   grounded_spec?: GroundedSpecExtraction;
   transcript: {
     language: string | null;
@@ -126,24 +148,17 @@ export interface ExtractedVideoPackSpec {
   action_items?: VideoPackActionItem[];
 }
 
-export interface VideoPackGenerateTextArgs {
-  model: string;
-  messages: Array<{
-    role: 'user';
-    content: Array<
-      | { type: 'text'; text: string }
-      | { type: 'file'; data: URL; mediaType: string }
-    >;
-  }>;
-  abortSignal?: AbortSignal;
-}
+/**
+ * System line for clipped shard workers. The full JSON spec contract stays
+ * in the section prompt; this line only enforces the narrowed observable
+ * range. (The code-synthesis system contract belongs to later synthesis
+ * passes, not to spec extraction.)
+ */
+const SHARD_VIDEO_SYSTEM_INSTRUCTION =
+  'You are a precise video-evidence extractor. The attached clip is your entire observable universe: describe only what is visible or audible inside its seconds and never claim coverage outside them.';
 
-export type VideoPackGenerateText = (
-  args: VideoPackGenerateTextArgs,
-) => Promise<{ text: string }>;
-
-const GATEWAY_MISSING_ERROR =
-  'Video pack spec extract requires AI Gateway (AI_GATEWAY_API_KEY or VERCEL_AI_GATEWAY_API_KEY) and model google/gemini-3.8-flash.';
+const DIRECT_KEY_MISSING_ERROR =
+  'Video pack spec extract requires direct Google video access and model gemini-3.8-flash.';
 
 const EMPTY_SPEC_ERROR =
   'Gemini 3.8 Flash returned no extracted spec content.';
@@ -162,6 +177,7 @@ function buildSectionExtractPrompt(
     `focus_time_range_seconds: ${section.start_s} to ${section.end_s}`,
     `section_topic: ${section.topic}`,
     'Analyze ONLY spoken and on-screen content within this time range. Ignore content outside the range.',
+    'Shard scope: the attached clip covers ONLY the seconds above. Extract only what is visible or audible in this range plus what is required to keep this range parseable. Do not claim coverage outside the range.',
     'Use the attached video (frames + spoken audio). Do not invent a second pack format.',
     'Do not return cite:youtube as full_text. Extract real spoken/on-screen content for this section.',
     'Return ONLY a JSON object with keys:',
@@ -678,20 +694,27 @@ function isIdentityOnlySpec(spec: ExtractedVideoPackSpec, videoId: string): bool
   return !hasSpeech && !hasSpec;
 }
 
-async function defaultGenerateText(args: VideoPackGenerateTextArgs): Promise<{ text: string }> {
-  const { generateText } = await import('ai');
-  const result = await generateText({
-    model: args.model,
-    messages: args.messages,
-    abortSignal: args.abortSignal,
-  });
-  if (!result.text.trim()) {
-    throw new VideoPackExtractError(
-      'Vercel AI Gateway returned empty content',
-      'HOSTED_PACK_GATEWAY_EMPTY',
-    );
+async function runWithExtractRetry(
+  operation: () => Promise<{ text: string }>,
+): Promise<{ text: string }> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < VIDEO_PACK_EXTRACT_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (!isTransientVideoPackExtractError(error) || attempt >= VIDEO_PACK_EXTRACT_MAX_ATTEMPTS - 1) {
+        raiseExtractError(error);
+      }
+      const delayMs = jitteredExtractBackoffMs(attempt);
+      console.warn(
+        `[video-pack-extract] transient video error (attempt ${attempt + 1}/${VIDEO_PACK_EXTRACT_MAX_ATTEMPTS}); retry in ${delayMs}ms:`,
+        normalizeExtractFailureMessage(error),
+      );
+      await sleepMs(delayMs);
+    }
   }
-  return { text: result.text };
+  raiseExtractError(lastError);
 }
 
 function raiseExtractError(error: unknown): never {
@@ -702,30 +725,23 @@ function raiseExtractError(error: unknown): never {
   throw new VideoPackExtractError(message, classifyVideoPackExtractFailure(message));
 }
 
-function gatewayArgsForSection(
+/**
+ * Worker contract for one shard (Gate 1). The worker receives a narrowed
+ * `{ sourceUrl, start, end }` range for provider-enforced clipping — never
+ * the full video with a focus instruction.
+ */
+function shardVideoCallForSection(
   input: { sourceUrl: string; videoId: string },
   section: VideoPackExtractSection,
   sectionCount: number,
-): VideoPackGenerateTextArgs {
+): ShardVideoCall {
   return {
-    model: VIDEO_PACK_EXTRACTOR_MODEL,
-    abortSignal: AbortSignal.timeout(90_000),
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'file',
-            data: new URL(input.sourceUrl),
-            mediaType: 'video/mp4',
-          },
-          {
-            type: 'text',
-            text: buildSectionExtractPrompt(input.sourceUrl, input.videoId, section, sectionCount),
-          },
-        ],
-      },
-    ],
+    sourceUrl: input.sourceUrl,
+    start_s: section.start_s,
+    end_s: section.end_s,
+    model: VIDEO_PACK_VIDEO_MODEL,
+    systemInstruction: SHARD_VIDEO_SYSTEM_INSTRUCTION,
+    sectionPrompt: buildSectionExtractPrompt(input.sourceUrl, input.videoId, section, sectionCount),
   };
 }
 
@@ -733,15 +749,15 @@ async function extractSectionSpec(
   input: { sourceUrl: string; videoId: string },
   section: VideoPackExtractSection,
   sectionCount: number,
-  generateText: VideoPackGenerateText,
+  runVideoInteraction: ShardVideoInteractionRunner,
 ): Promise<ExtractedVideoPackSpec> {
   let lastParseError: unknown;
-  const gatewayArgs = gatewayArgsForSection(input, section, sectionCount);
+  const call = shardVideoCallForSection(input, section, sectionCount);
 
-  for (let attempt = 0; attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < VIDEO_PACK_EXTRACT_MAX_ATTEMPTS; attempt += 1) {
     let result: { text: string };
     try {
-      result = await generateTextWithGatewayRetry(generateText, gatewayArgs);
+      result = await runWithExtractRetry(() => runVideoInteraction(call));
     } catch (error) {
       raiseExtractError(error);
     }
@@ -752,11 +768,11 @@ async function extractSectionSpec(
       lastParseError = error;
       const retryParse =
         isRetryableTruncatedParseError(error, result.text) &&
-        attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS - 1;
+        attempt < VIDEO_PACK_EXTRACT_MAX_ATTEMPTS - 1;
       if (retryParse) {
         const delayMs = jitteredExtractBackoffMs(attempt);
         console.warn(
-          `[video-pack-extract] sectional truncated JSON (section ${section.index + 1}/${sectionCount}, attempt ${attempt + 1}/${VIDEO_PACK_GATEWAY_MAX_ATTEMPTS}); retry in ${delayMs}ms`,
+          `[video-pack-extract] sectional truncated JSON (section ${section.index + 1}/${sectionCount}, attempt ${attempt + 1}/${VIDEO_PACK_EXTRACT_MAX_ATTEMPTS}); retry in ${delayMs}ms`,
         );
         await sleepMs(delayMs);
         continue;
@@ -776,69 +792,127 @@ async function extractSectionSpec(
 
 async function extractVideoPackSpecChunked(
   input: { sourceUrl: string; videoId: string },
-  metadata: YouTubeMetadata | null,
-  generateText: VideoPackGenerateText,
-): Promise<ExtractedVideoPackSpec> {
-  const durationSeconds = metadata?.durationSeconds ?? null;
-  const sections = planVideoPackExtractSections(metadata, durationSeconds);
-  const sectionCount = sections.length;
+  manifest: ShardManifest,
+  runVideoInteraction: ShardVideoInteractionRunner,
+  clipProbe?: ClipProbe,
+): Promise<ExtractedVideoPackSpec[]> {
+  const sectionCount = manifest.shards.length;
 
   console.info(
-    `[video-pack-extract] chunked extract: ${sectionCount} sections for ${input.videoId}`,
+    `[video-pack-extract] chunked extract: ${sectionCount} shards for ${input.videoId} (model ${manifest.model}, cap ${manifest.parallelCap}, probe ${clipProbe ? 'on' : 'off'})`,
   );
 
-  const sectionalSpecs = await mapWithBoundedConcurrency(
-    sections,
-    VIDEO_PACK_CHUNK_MAX_PARALLEL,
-    async (section) => extractSectionSpec(input, section, sectionCount, generateText),
-  );
+  const runShard = async (shard: VideoShard, _index: number) =>
+    extractSectionSpec(input, shard, sectionCount, runVideoInteraction);
+  // Probe gate is opt-in per call: when a canonical probe is supplied, one
+  // clipped call must pass before any worker runs; otherwise fan out directly.
+  // Production passes no probe until a canonical per-model calibration exists.
+  const sectionalSpecs = clipProbe
+    ? (await fanOutShardsOnProbePass(manifest, clipProbe, runShard, runVideoInteraction)).results
+    : await mapWithBoundedConcurrency(
+        manifest.shards,
+        manifest.parallelCap,
+        async (shard) => extractSectionSpec(input, shard, sectionCount, runVideoInteraction),
+      );
 
-  const merged = mergeSectionVideoPackSpecs(sectionalSpecs) as ExtractedVideoPackSpec;
+  return sectionalSpecs;
+}
+
+/**
+ * Gate 2 enrichment: backfill transcript voids from the once-fetched
+ * captions and attach parallel chunk evidence. No-op when captions miss.
+ */
+async function enrichSpecWithTranscriptTeam(
+  spec: ExtractedVideoPackSpec,
+  captionsPromise: Promise<FetchedCaptions | null>,
+  videoId: string,
+  analyzeChunk: AnalyzeTranscriptChunk,
+): Promise<ExtractedVideoPackSpec> {
+  const captions = await captionsPromise.catch(() => null);
+  if (!captions) return spec;
+  spec.transcript.segments = backfillTranscriptSegments(spec.transcript.segments, captions.segments);
+  if (!spec.transcript.full_text.trim()) {
+    spec.transcript.full_text = captions.transcript;
+  }
+  const chunks = chunkTranscriptSegments(captions.segments);
+  spec.transcript_evidence = await mapWithBoundedConcurrency(
+    chunks,
+    TRANSCRIPT_CHUNK_MAX_PARALLEL,
+    async (chunk) => analyzeChunk(chunk, videoId),
+  );
+  return spec;
+}
+
+/**
+ * Identity check stays before caption backfill. The consolidator then merges
+ * shard specs with transcript evidence and fails closed on app 0/1. Jev's
+ * post-check decision is not a success bit; sandbox build stays off.
+ */
+async function finishConsolidatedSpec(
+  specs: ExtractedVideoPackSpec[],
+  metadata: YouTubeMetadata | null,
+  videoId: string,
+  captionsPromise: Promise<FetchedCaptions | null>,
+  analyzeChunk: AnalyzeTranscriptChunk,
+): Promise<ExtractedVideoPackSpec> {
+  const merged = mergeSectionVideoPackSpecs(specs) as ExtractedVideoPackSpec;
   const structured = ensureStructuredPackSections(merged, metadata);
   const enriched: ExtractedVideoPackSpec = { ...merged, ...structured };
 
-  if (isIdentityOnlySpec(enriched, input.videoId)) {
+  if (isIdentityOnlySpec(enriched, videoId)) {
     throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
   }
 
-  return enriched;
-}
-
-async function generateTextWithGatewayRetry(
-  generateText: VideoPackGenerateText,
-  args: VideoPackGenerateTextArgs,
-): Promise<{ text: string }> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS; attempt += 1) {
-    try {
-      return await generateText(args);
-    } catch (error) {
-      lastError = error;
-      if (!isTransientVideoPackGatewayError(error) || attempt >= VIDEO_PACK_GATEWAY_MAX_ATTEMPTS - 1) {
-        raiseExtractError(error);
-      }
-      const delayMs = jitteredExtractBackoffMs(attempt);
-      console.warn(
-        `[video-pack-extract] transient gateway error (attempt ${attempt + 1}/${VIDEO_PACK_GATEWAY_MAX_ATTEMPTS}); retry in ${delayMs}ms:`,
-        normalizeExtractFailureMessage(error),
-      );
-      await sleepMs(delayMs);
-    }
+  const withEvidence = await enrichSpecWithTranscriptTeam(
+    enriched,
+    captionsPromise,
+    videoId,
+    analyzeChunk,
+  );
+  const consolidated = await consolidateShardExtract({
+    videoId,
+    specs,
+    transcriptEvidence: withEvidence.transcript_evidence,
+    durationSeconds: metadata?.durationSeconds ?? null,
+    sandboxBuild: false,
+  });
+  if (consolidated.app.ok === 0) {
+    throw new VideoPackExtractError(
+      `Consolidated app failed 0/1: ${consolidated.app.failures.join('; ')}`,
+    );
   }
-  raiseExtractError(lastError);
+  return {
+    ...withEvidence,
+    ...consolidated.tree,
+    transcript: withEvidence.transcript,
+    chapters: withEvidence.chapters,
+    action_items: withEvidence.action_items,
+    ...(withEvidence.transcript_evidence
+      ? { transcript_evidence: consolidated.tree.transcript_evidence }
+      : {}),
+  };
 }
 
 export async function extractVideoPackSpec(
   input: { sourceUrl: string; videoId: string },
   deps: {
-    generateText?: VideoPackGenerateText;
-    hasGatewayKey?: () => boolean;
+    runVideoInteraction?: ShardVideoInteractionRunner;
+    hasDirectGoogleKey?: () => boolean;
+    fetchCaptions?: FetchCaptions;
+    analyzeTranscriptChunk?: AnalyzeTranscriptChunk;
+    clipProbe?: ClipProbe;
   } = {},
 ): Promise<ExtractedVideoPackSpec> {
-  const hasKey = deps.hasGatewayKey ?? hasAiGatewayKey;
+  const hasKey = deps.hasDirectGoogleKey ?? hasDirectGoogleKey;
   if (!hasKey()) {
-    throw new VideoPackExtractError(GATEWAY_MISSING_ERROR);
+    throw new VideoPackExtractError(DIRECT_KEY_MISSING_ERROR);
   }
+
+  // Captions fetch starts immediately and races the model path (independent I/O).
+  const captionsPromise = fetchCaptionsOnce(input.sourceUrl, 'en', deps.fetchCaptions).catch(
+    () => null,
+  );
+  const analyzeChunk = deps.analyzeTranscriptChunk ?? analyzeTranscriptChunkWithGateway;
 
   const sourcePreflight = await preflightYouTubeVideoSource(input.sourceUrl);
   if (sourcePreflight === 'not_found') {
@@ -848,52 +922,74 @@ export async function extractVideoPackSpec(
     );
   }
 
-  const generateText = deps.generateText ?? defaultGenerateText;
+  const runVideoInteraction = deps.runVideoInteraction ?? runShardVideoInteraction;
   const metadata = await fetchYouTubeMetadata(input.sourceUrl).catch(() => null);
-  if (shouldUseChunkedVideoPackExtract(metadata, metadata?.durationSeconds ?? null)) {
-    return extractVideoPackSpecChunked(input, metadata, generateText);
+  // No secret or a null Jev decision keeps today's deterministic manifest.
+  // stop yields no manifest and must fail closed before any Interactions call.
+  // Every other action uses the returned manifest; ok stays on the validator.
+  const planned = await planShardsWithJev(
+    input.videoId,
+    input.sourceUrl,
+    metadata,
+    metadata?.durationSeconds ?? null,
+  );
+  if (!planned.manifest) {
+    throw new VideoPackExtractError('Jev extract decision is stop; refusing video calls.');
+  }
+  const manifest = planned.manifest;
+  const validation = validateShardManifest(manifest);
+  if (validation.ok === 0) {
+    throw new VideoPackExtractError(
+      `Shard manifest failed 0/1 checkpoint: ${validation.failures.join('; ')}`,
+    );
+  }
+  if (manifest.shards.length >= 2) {
+    const specs = await extractVideoPackSpecChunked(
+      input,
+      manifest,
+      runVideoInteraction,
+      deps.clipProbe,
+    );
+    return finishConsolidatedSpec(
+      specs,
+      metadata,
+      input.videoId,
+      captionsPromise,
+      analyzeChunk,
+    );
   }
 
-  const gatewayArgs: VideoPackGenerateTextArgs = {
-    model: VIDEO_PACK_EXTRACTOR_MODEL,
-    abortSignal: AbortSignal.timeout(110_000),
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'file',
-            data: new URL(input.sourceUrl),
-            mediaType: 'video/mp4',
-          },
-          {
-            type: 'text',
-            text: buildExtractPrompt(input.sourceUrl, input.videoId),
-          },
-        ],
-      },
-    ],
+  const shard = manifest.shards[0];
+  if (!shard) {
+    throw new VideoPackExtractError('Shard manifest failed 0/1 checkpoint: manifest has no shards');
+  }
+  const call: ShardVideoCall = {
+    sourceUrl: input.sourceUrl,
+    start_s: shard.start_s,
+    end_s: shard.end_s,
+    model: manifest.model,
+    systemInstruction: SHARD_VIDEO_SYSTEM_INSTRUCTION,
+    sectionPrompt: buildExtractPrompt(input.sourceUrl, input.videoId),
   };
 
   let lastParseError: unknown;
-  for (let attempt = 0; attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS; attempt += 1) {
+  for (let attempt = 0; attempt < VIDEO_PACK_EXTRACT_MAX_ATTEMPTS; attempt += 1) {
     let result: { text: string };
     try {
-      result = await generateTextWithGatewayRetry(generateText, gatewayArgs);
+      result = await runWithExtractRetry(() => runVideoInteraction(call));
     } catch (error) {
       raiseExtractError(error);
     }
 
     try {
       const spec = parseSpecJson(result.text, input.videoId).spec;
-      const structured = ensureStructuredPackSections(spec, metadata);
-      const enriched: ExtractedVideoPackSpec = { ...spec, ...structured };
-
-      if (isIdentityOnlySpec(enriched, input.videoId)) {
-        throw new VideoPackExtractError(EMPTY_SPEC_ERROR, 'HOSTED_PACK_GATEWAY_EMPTY');
-      }
-
-      return enriched;
+      return finishConsolidatedSpec(
+        [spec],
+        metadata,
+        input.videoId,
+        captionsPromise,
+        analyzeChunk,
+      );
     } catch (error) {
       if (error instanceof VideoPackExtractError && error.message === EMPTY_SPEC_ERROR) {
         throw error;
@@ -901,11 +997,11 @@ export async function extractVideoPackSpec(
       lastParseError = error;
       const retryParse =
         isRetryableTruncatedParseError(error, result.text) &&
-        attempt < VIDEO_PACK_GATEWAY_MAX_ATTEMPTS - 1;
+        attempt < VIDEO_PACK_EXTRACT_MAX_ATTEMPTS - 1;
       if (retryParse) {
         const delayMs = jitteredExtractBackoffMs(attempt);
         console.warn(
-          `[video-pack-extract] truncated JSON salvage miss (attempt ${attempt + 1}/${VIDEO_PACK_GATEWAY_MAX_ATTEMPTS}); retry in ${delayMs}ms`,
+          `[video-pack-extract] truncated JSON salvage miss (attempt ${attempt + 1}/${VIDEO_PACK_EXTRACT_MAX_ATTEMPTS}); retry in ${delayMs}ms`,
         );
         await sleepMs(delayMs);
         continue;
