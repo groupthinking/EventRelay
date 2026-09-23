@@ -1,11 +1,17 @@
 import { NextRequest } from 'next/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { start, getToken, decide } = vi.hoisted(() => ({ start: vi.fn(), getToken: vi.fn(), decide: vi.fn() }));
+const { start, getToken, decide, assertPublicHttpUrl } = vi.hoisted(() => ({
+  start: vi.fn(),
+  getToken: vi.fn(),
+  decide: vi.fn(),
+  assertPublicHttpUrl: vi.fn(),
+}));
 vi.mock('workflow/api', () => ({ start }));
 vi.mock('@/workflows/studio-deploy', () => ({ studioDeployWorkflow: async () => ({}) }));
 vi.mock('next-auth/jwt', () => ({ getToken }));
 vi.mock('@/lib/origin-gate-store', () => ({ decideOriginGate: decide }));
+vi.mock('@/lib/ssrf-guard', () => ({ assertPublicHttpUrl }));
 import { POST } from '../route';
 
 function request(body: unknown, origin = 'https://uvai.io') {
@@ -21,6 +27,12 @@ describe('Studio deployment preflight', () => {
     for (const key of ['V0_SANDBOX_URL', 'V0_RUNTIME_URL', 'V0_BUILD_URL']) vi.stubEnv(key, '');
     vi.stubEnv('NEXTAUTH_SECRET', 'unit-test-secret-with-at-least-32-characters');
     getToken.mockResolvedValue({ sub: 'owner-test' });
+    assertPublicHttpUrl.mockImplementation(async (rawUrl: string) => {
+      const hostname = new URL(rawUrl).hostname;
+      if (hostname === '127.0.0.1' || hostname === '[::1]' || hostname === '169.254.169.254') {
+        throw new Error('private host');
+      }
+    });
     decide.mockResolvedValue({ decision: 'HOLD', reason_code: 'GATE_HOLD_MISSING_EVIDENCE', reason: 'Artifact-bound receipts are missing.', receipt: { version: 'eventrelay.gate-receipt.v2' } });
   });
   afterEach(() => vi.unstubAllEnvs());
