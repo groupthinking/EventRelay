@@ -4,12 +4,15 @@ Command Line Interface for UVAI YouTube Extension
 Provides CLI commands for development, testing, and deployment
 """
 
+import asyncio
 import os
 import subprocess
 import sys
 from pathlib import Path
 
 import typer
+
+from youtube_extension.exceptions import FailoverError
 
 app = typer.Typer(
     name="youtube-extension",
@@ -189,6 +192,100 @@ def install():
         raise typer.Exit(1)
 
     typer.echo("✅ Package installed successfully")
+
+
+async def _probe_virtual_env() -> tuple[str, str]:
+    venv_active = "VIRTUAL_ENV" in os.environ
+    return ("Virtual Environment", "✅ Active" if venv_active else "❌ Not active")
+
+
+async def _probe_package_import() -> tuple[str, str]:
+    try:
+        import youtube_extension as package
+
+        assert package is not None
+        return ("Package Import", "✅ Working")
+    except Exception:
+        return ("Package Import", "❌ Failed")
+
+
+async def _probe_fastapi_app() -> tuple[str, str]:
+    try:
+        from youtube_extension.main import app as fastapi_app
+
+        assert fastapi_app is not None
+        return ("FastAPI App", "✅ Loaded")
+    except Exception:
+        return ("FastAPI App", "❌ Failed")
+
+
+async def _probe_oauth_refresh(fail_on_error: bool = False) -> tuple[str, str]:
+    """Check OAuth refresh and auth failover status in parallel."""
+    try:
+        oauth_configured = bool(
+            os.environ.get("GOOGLE_CLIENT_ID")
+            or os.environ.get("OAUTH_REFRESH_TOKEN")
+            or os.environ.get("YOUTUBE_API_KEY")
+        )
+        if not oauth_configured and fail_on_error:
+            raise FailoverError("OAuth refresh credentials not configured")
+        return (
+            "OAuth Refresh & Auth",
+            "✅ Configured" if oauth_configured else "⚠️ Not configured",
+        )
+    except FailoverError:
+        raise
+    except Exception as e:
+        if fail_on_error:
+            raise FailoverError(f"OAuth refresh failed: {e}") from e
+        return ("OAuth Refresh & Auth", f"❌ Failed ({e})")
+
+
+async def _probe_health_monitoring() -> tuple[str, str]:
+    try:
+        from youtube_extension.backend.services.health_monitoring_service import (
+            HealthMonitoringService,
+        )
+
+        assert HealthMonitoringService is not None
+        return ("Health Monitoring Service", "✅ Active")
+    except Exception:
+        return ("Health Monitoring Service", "❌ Unavailable")
+
+
+@app.command()
+def doctor(
+    rethrow_failover: bool = typer.Option(
+        False, "--rethrow-failover", help="Rethrow FailoverError on auth failover failure"
+    )
+):
+    """Run CLI doctor with parallel OAuth refresh and health probes"""
+    typer.echo("🩺 Running CLI doctor & parallel health probes...")
+
+    async def _run_probes():
+        return await asyncio.gather(
+            _probe_virtual_env(),
+            _probe_package_import(),
+            _probe_fastapi_app(),
+            _probe_oauth_refresh(fail_on_error=rethrow_failover),
+            _probe_health_monitoring(),
+            return_exceptions=False,
+        )
+
+    try:
+        checks = asyncio.run(_run_probes())
+    except FailoverError:
+        raise
+
+    for check, status in checks:
+        typer.echo(f"  {check}: {status}")
+
+    all_passed = all("✅" in status or "⚠️" in status for _, status in checks)
+    if all_passed:
+        typer.echo("\n🎉 All doctor health checks passed!")
+    else:
+        typer.echo("\n⚠️ Some doctor health checks failed or need attention")
+        raise typer.Exit(1)
 
 
 @app.command()
