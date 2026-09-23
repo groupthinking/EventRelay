@@ -20,10 +20,14 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('OneLoopStudio');
     expect(home).not.toContain('Loading studio');
     expect(home).toContain('Universal Video Action Intelligence');
+    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack in Studio.');
+    expect(home).toContain('hashed Video Pack');
+    expect(home).toContain('transcript, event, and action outputs');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
     expect(home).toContain('HomeProCheckout');
     expect(home).toContain('Get Pro');
+    expect(home).toContain('workflowProPriceLabel');
     expect(home).not.toContain('$19/mo');
     expect(home).not.toContain('$180');
   });
@@ -63,6 +67,24 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(sellCopy).not.toMatch(/any video/i);
     expect(sellCopy).not.toMatch(/reliable.{0,40}transcript/i);
     expect(sellCopy).not.toMatch(/grounded transcript/i);
+  });
+
+  it('keeps the Home URL field labelled, described, announced, and keyboard-visible', () => {
+    const paste = readSource('components/home/HomePasteForm.tsx');
+    expect(paste).toContain('htmlFor="home-youtube-url"');
+    expect(paste).toContain('aria-invalid={Boolean(error)}');
+    expect(paste).toContain('aria-describedby={helpId}');
+    expect(paste).toContain('id="home-youtube-url-error"');
+    expect(paste).toContain('id="home-youtube-url-help"');
+    expect(paste).toContain('role="alert"');
+    expect(paste).toContain('focus-visible:ring-2');
+  });
+
+  it('keeps the checkout controls and pricing link keyboard-visible', () => {
+    const checkout = readSource('components/home/HomeProCheckout.tsx');
+    const button = readSource('components/billing/ProCheckoutButton.tsx');
+    expect(checkout).toContain('focus-visible:ring-2');
+    expect(button).toContain('focus-visible:ring-2');
   });
 
   it('keeps the live workbench only on /studio', () => {
