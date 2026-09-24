@@ -233,8 +233,6 @@ async def legacy_process_video_markdown(request: dict):
         if not health_service.rate_limit_check():
             raise HTTPException(status_code=429, detail="Rate limit exceeded")
 
-        health_service.increment_metric("requests_total")
-
         # Process video
         result = await video_processing_service.process_video_for_markdown(
             markdown_request.video_url, markdown_request.force_regenerate
