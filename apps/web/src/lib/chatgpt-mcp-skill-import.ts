@@ -28,6 +28,7 @@ export const MCP_CLIENT_MATRIX_REVISION = [
 
 type CacheScope = 'public' | 'private';
 type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+type JsonObject = { [key: string]: JsonValue };
 
 export type SkillFrontmatter = {
   name: string;
@@ -62,8 +63,8 @@ export type FixtureChatGptSkillImportInput = {
   serverIdentity: string;
   requestedSkillUri: string;
   capabilities: {
-    resources?: object;
-    extensions?: Record<string, object>;
+    resources?: Record<string, unknown>;
+    extensions?: Record<string, Record<string, unknown>>;
   };
   result: SkillGetResult;
   resourceContents: Record<string, string>;
@@ -140,7 +141,7 @@ function jsonValue(value: unknown, path = 'frontmatter'): JsonValue {
   if (Array.isArray(value)) return value.map((entry, index) => jsonValue(entry, `${path}[${index}]`));
   if (typeof value !== 'object') hold(`${path} contains a non-JSON value.`);
   const record = value as Record<string, unknown>;
-  const output: Record<string, JsonValue> = {};
+  const output: JsonObject = {};
   for (const [key, entry] of Object.entries(record)) {
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
       hold(`${path} contains an unsafe key.`);
@@ -150,20 +151,27 @@ function jsonValue(value: unknown, path = 'frontmatter'): JsonValue {
   return output;
 }
 
+function jsonObject(value: unknown, path = 'frontmatter'): JsonObject {
+  const normalized = jsonValue(value, path);
+  if (normalized === null || Array.isArray(normalized) || typeof normalized !== 'object') {
+    hold(`${path} must be an object.`);
+  }
+  return normalized;
+}
+
 function parseFrontmatter(content: string): Record<string, JsonValue> {
   const match = /^---[\t ]*\r?\n([\s\S]*?)\r?\n---(?:[\t ]*\r?\n|$)/.exec(content);
   if (!match) hold('SKILL.md frontmatter is missing.');
-  const document = parseDocument(match[1], {
+  const frontmatter = match[1];
+  if (frontmatter === undefined) hold('SKILL.md frontmatter is missing.');
+  const document = parseDocument(frontmatter, {
     schema: 'core',
     merge: false,
     uniqueKeys: true,
   });
   if (document.errors.length > 0) hold('SKILL.md frontmatter is invalid YAML.');
   const parsed = document.toJS({ maxAliasCount: 0 });
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    hold('SKILL.md frontmatter must be an object.');
-  }
-  return jsonValue(parsed) as Record<string, JsonValue>;
+  return jsonObject(parsed, 'frontmatter');
 }
 
 function decodePathSegment(raw: string): string {
@@ -231,7 +239,9 @@ function normalizeSkillUri(uri: unknown): NormalizedSkillUri {
   }
   const authority = parsed.hostname.toLowerCase();
   if (!authority) hold('skill URI authority is missing.');
-  const segments = match[2].slice(1).split('/').map(decodePathSegment);
+  const path = match[2];
+  if (path === undefined) hold('skill URI path is missing.');
+  const segments = path.slice(1).split('/').map(decodePathSegment);
   const canonical = `skill://${authority}/${segments.map((segment) => encodeURIComponent(segment)).join('/')}`;
   return { canonical, authority, segments };
 }
@@ -242,7 +252,8 @@ function skillRoot(uri: string): NormalizedSkillUri & { rootSegments: string[]; 
     hold('skill URI must end in /SKILL.md.');
   }
   const rootSegments = normalized.segments.slice(0, -1);
-  const name = rootSegments.at(-1)!;
+  const name = rootSegments.at(-1);
+  if (!name) hold('skill URI final segment is invalid.');
   if (!SKILL_NAME.test(name)) hold('skill URI final segment is invalid.');
   return { ...normalized, rootSegments, name };
 }
@@ -314,7 +325,7 @@ export function createFixtureChatGptSkillImport(
     hold('returned skill URI does not match the requested URI.');
   }
 
-  const manifestFrontmatter = jsonValue(input.result.skill.frontmatter) as Record<string, JsonValue>;
+  const manifestFrontmatter = jsonObject(input.result.skill.frontmatter);
   if (
     typeof manifestFrontmatter.name !== 'string' ||
     typeof manifestFrontmatter.description !== 'string'
