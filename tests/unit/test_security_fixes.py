@@ -217,7 +217,7 @@ def _parse_floors(text: str) -> dict:
 # on a line-initial ``dependencies = [`` selects it without matching the
 # ``[project.optional-dependencies]`` tables, whose keys are indented (``dev = [``).
 # Extracting textually rather than via tomllib/tomli keeps this guard working on
-# the declared ``requires-python = ">=3.9"`` floor, where neither is guaranteed.
+# the declared ``requires-python = ">=3.10"`` floor, where neither is guaranteed.
 _PYPROJECT_DEPS_RE = re.compile(
     r"^dependencies\s*=\s*\[(?P<body>.*?)^\]", re.MULTILINE | re.DOTALL
 )
