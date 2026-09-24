@@ -110,6 +110,26 @@ describe('Studio authoritative gate receipt', () => {
     expect(screen.queryByTestId('studio-gate-receipt')).toBeNull();
   });
 
+  it('shows live Gemini watch time and refresh-safe progress copy while processing', () => {
+    vi.useFakeTimers();
+    useDashboardStore.setState({
+      videos: [{ ...video, status: 'processing', transcript: undefined }],
+      selectedVideoId: video.id,
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+
+    expect(screen.getByText(/Gemini watch time: 0s elapsed\./i)).toBeTruthy();
+    expect(screen.getByText(/pipeline keeps running if this page refreshes\./i)).toBeTruthy();
+
+    act(() => {
+      vi.advanceTimersByTime(2200);
+    });
+
+    expect(screen.getByText(/Gemini watch time: 2s elapsed\./i)).toBeTruthy();
+    vi.useRealTimers();
+  });
+
   it('ignores a late receipt when another video is selected', async () => {
     let finish!: (result: Awaited<ReturnType<typeof startStudioDeploy>>) => void;
     vi.mocked(startStudioDeploy).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
