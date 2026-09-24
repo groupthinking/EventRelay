@@ -103,6 +103,15 @@ describe('studio-workflow (WDK Product v1)', () => {
     expect(workflowReturnErrorMessage(new Error('fetch failed'))).toBe('fetch failed');
   });
 
+  it('prefers a nested failed-run cause over generic workflow return wrappers', () => {
+    const rootCause = new Error('Deploy job job_2 failed: missing Vercel token');
+    const failed = new Error('Workflow run failed');
+    Object.assign(failed, { cause: rootCause });
+    const unread = new Error('Failed to read workflow return value');
+    Object.assign(unread, { cause: failed });
+    expect(workflowReturnErrorMessage(unread)).toBe('Deploy job job_2 failed: missing Vercel token');
+  });
+
   it('treats Request-parse GET failures as unread workflow run, not a terminal HOLD', () => {
     const parseErr = new TypeError('Failed to parse URL from [object Request]');
     Object.assign(parseErr, {

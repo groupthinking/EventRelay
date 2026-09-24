@@ -3,6 +3,7 @@ import { getRun } from 'workflow/api';
 import {
   isTransientWorkflowRunReadError,
   workflowReturnErrorMessage,
+  workflowReturnLiveUrl,
 } from '@/lib/studio-workflow';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
 import type { StudioDeployResult } from '@/workflows/studio-deploy';
@@ -53,7 +54,12 @@ export async function GET(
         try {
           body.result = await run.returnValue;
         } catch (err) {
-          body.error = workflowReturnErrorMessage(err);
+          const live_url = workflowReturnLiveUrl(err);
+          if (live_url) {
+            body.result = { kind: 'live', live_url };
+          } else {
+            body.error = workflowReturnErrorMessage(err);
+          }
         }
       }
 

@@ -126,23 +126,61 @@ export function studioDeployPollResidual(
 }
 
 /** WDK failed-run cause, not a generic unread-return placeholder. */
-export function workflowReturnErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object') {
-    const rec = err as Record<string, unknown>;
-    const cause = rec.cause;
-    if (cause instanceof Error) {
-      const fromCause = cause.message.trim();
-      if (fromCause) return fromCause;
-    } else if (cause && typeof cause === 'object') {
-      const fromCause = str((cause as { message?: unknown }).message);
-      if (fromCause) return fromCause;
-    }
+const GENERIC_WORKFLOW_RETURN_RE =
+  /failed to read workflow return value|failed to read workflow run|workflow run failed/i;
+
+function collectWorkflowReturnMessages(
+  value: unknown,
+  sink: string[],
+  seen = new Set<unknown>(),
+): void {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed) sink.push(trimmed);
+    return;
   }
-  if (err instanceof Error) {
-    const message = err.message.trim();
-    if (message) return message;
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+
+  if (value instanceof Error) {
+    const message = value.message.trim();
+    if (message) sink.push(message);
+  }
+
+  const rec = value as Record<string, unknown>;
+  for (const key of ['message', 'error', 'detail', 'reason'] as const) {
+    const message = str(rec[key]);
+    if (message) sink.push(message);
+  }
+  collectWorkflowReturnMessages(rec.cause, sink, seen);
+}
+
+export function workflowReturnErrorMessage(err: unknown): string {
+  const messages: string[] = [];
+  collectWorkflowReturnMessages(err, messages);
+  const specific = messages.find((message) => !GENERIC_WORKFLOW_RETURN_RE.test(message));
+  if (specific) return specific;
+  if (messages.length > 0) {
+    return messages[0];
   }
   return 'Workflow run failed';
+}
+
+export function workflowReturnLiveUrl(value: unknown): string | null {
+  const seen = new Set<unknown>();
+  const queue: unknown[] = [value];
+  while (queue.length) {
+    const current = queue.shift();
+    if (current == null || seen.has(current)) continue;
+    if (typeof current === 'object') seen.add(current);
+    const liveUrl = extractBackendLiveUrl(current);
+    if (liveUrl) return liveUrl;
+    if (current && typeof current === 'object') {
+      queue.push((current as { cause?: unknown }).cause);
+    }
+  }
+  return null;
 }
 
 export function isUnreadWorkflowReturn(poll: {
