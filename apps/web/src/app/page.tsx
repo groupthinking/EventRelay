@@ -61,13 +61,24 @@ export default async function HomePage() {
                 id="home-heading"
                 className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance sm:text-5xl md:mt-8 md:text-6xl"
               >
-                Turn a YouTube URL into a hashed Video Pack in Studio.
+                Paste a YouTube URL. Open Studio with a hashed Video Pack.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-white/70 md:text-lg">
                 Paste a YouTube URL to open Studio and review transcript, event, and action outputs
                 from your source. Transcript quality varies by source. No guaranteed production
                 outcome.
               </p>
+              <ol className="mt-5 space-y-2 text-sm leading-7 text-white/70">
+                <li>
+                  <span className="font-semibold text-white">Paste YouTube URL</span>
+                </li>
+                <li>
+                  <span className="font-semibold text-white">Open Studio</span>
+                </li>
+                <li>
+                  <span className="font-semibold text-white">Keep checkout reachable</span>
+                </li>
+              </ol>
 
               <div className="mt-8 w-full max-w-2xl md:mt-10">
                 <HomePasteForm />

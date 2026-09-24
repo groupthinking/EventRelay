@@ -33,6 +33,7 @@ export default function HomePasteForm() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
         <input
           id="home-youtube-url"
+          type="url"
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="https://www.youtube.com/watch?v=auJzb1D-fag"
@@ -55,7 +56,8 @@ export default function HomePasteForm() {
         </p>
       ) : (
         <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-white/55">
-          Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
+          You can paste a watch or share URL. Opens Studio and starts the Video Pack handoff.
+          Transcript quality varies by source.
         </p>
       )}
     </form>
