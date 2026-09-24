@@ -14,7 +14,7 @@ import logging
 import os
 from dataclasses import asdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from youtube_extension.processors.enhanced_extractor import VideoContent
@@ -23,6 +23,14 @@ if TYPE_CHECKING:
 # REMOVED: sys.path.append removed
 
 logger = logging.getLogger(__name__)
+
+_REPOSITORY_RESEARCH_EXECUTION_ORDER = [
+    "canonical-architecture-truth",
+    "persistence-and-boundary-truth",
+    "engineering-risk-and-duplication-audit",
+    "github-ops-and-workflow-health",
+    "product-positioning-and-buyer-fit",
+]
 
 
 class BaseMCPServer(abc.ABC):
@@ -174,7 +182,7 @@ class MCPEcosystemCoordinator:
         self.workflow_history: list[dict] = []
         self.skill_registry = skill_registry or SkillRegistry()
 
-    def list_skills(self, source: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_skills(self, source: str | None = None) -> list[dict[str, Any]]:
         """Returns a list of discovered skills from the registry."""
         skills = self.skill_registry.list_skills()
         if source:
@@ -222,6 +230,22 @@ class MCPEcosystemCoordinator:
         by the tests and callers.
         """
         return await self.skill_registry.invoke_skill(skill_id, payload)
+
+    async def run_repository_research_harness(
+        self,
+        skill_inputs: dict[str, dict[str, Any]],
+        *,
+        harness_evidence_sources: list[str],
+    ) -> dict[str, Any]:
+        """Run the repository research skills and feed their outputs to the harness."""
+        return await self.skill_registry.run_repository_research_harness(
+            skill_inputs,
+            harness_evidence_sources=harness_evidence_sources,
+        )
+
+    async def run_repository_research_audit(self, repo_root: str | Path) -> dict[str, Any]:
+        """Collect repository evidence and run the full research audit."""
+        return await self.skill_registry.run_repository_research_audit(Path(repo_root))
 
     async def dispatch_request(self, server_name: str, request: dict) -> dict:
         """Dispatches a request to the specified MCP server."""
@@ -316,13 +340,14 @@ class SkillRegistry:
 
     _LOCK_FILE = "skills-lock.json"
 
-    def __init__(self, lock_file_path: Optional[str] = None):
+    def __init__(self, lock_file_path: str | None = None):
         self._lock_path = Path(
             lock_file_path
             or os.environ.get("SKILLS_LOCK_PATH", "")
             or self._find_lock_file()
         )
         self._skills: dict[str, dict[str, Any]] = {}
+        self._all_class_skills: dict[str, dict[str, Any]] = {}
         self._instances: dict[str, Any] = {}
         self._load_skills()
 
@@ -349,24 +374,20 @@ class SkillRegistry:
 
         skills_data = data.get("skills", {})
         if isinstance(skills_data, list):
-            # Handle list format; only load entries that have a className
-            # so that _load_skill_instance() can instantiate them.
+            # Handle list format; only class-backed local skills are invocable.
             for skill in skills_data:
-                if (
-                    skill.get("source") == "uvai-skills"
-                    and skill.get("className")
-                    and skill.get("id")
-                ):
-                    self._skills[skill["id"]] = skill
+                if skill.get("sourceType") == "local" and skill.get("className") and skill.get("id"):
+                    self._all_class_skills[skill["id"]] = skill
+                    if skill.get("source") == "uvai-skills":
+                        self._skills[skill["id"]] = skill
         elif isinstance(skills_data, dict):
-            # Handle dict format; apply same guards as list branch
+            # Handle dict format; preserve GTM discovery by default while making
+            # all class-backed local skills directly invocable by ID.
             for skill_id, meta in skills_data.items():
-                if (
-                    meta.get("source") == "uvai-skills"
-                    and meta.get("sourceType") == "local"
-                    and meta.get("className")
-                ):
-                    self._skills[skill_id] = meta
+                if meta.get("sourceType") == "local" and meta.get("className"):
+                    self._all_class_skills[skill_id] = meta
+                    if meta.get("source") == "uvai-skills":
+                        self._skills[skill_id] = meta
 
         logger.info("Loaded %d GTM skills from %s", len(self._skills), self._lock_path)
 
@@ -383,19 +404,24 @@ class SkillRegistry:
             "source": meta.get("source", ""),
         }
 
-    def list_skills(self, source: Optional[str] = None) -> list[dict[str, Any]]:
-        """Return metadata for all registered GTM skills."""
+    def list_skills(self, source: str | None = None) -> list[dict[str, Any]]:
+        """Return metadata for registered runtime skills.
+
+        By default this preserves the historic GTM-only listing used across the
+        codebase. Passing ``source`` exposes other class-backed local skills.
+        """
+        skill_map = self._all_class_skills if source else self._skills
         skills = [
             self._build_skill_metadata(skill_id, meta)
-            for skill_id, meta in self._skills.items()
+            for skill_id, meta in skill_map.items()
         ]
         if source:
-            return [s for s in skills if self._skills[s["id"]].get("source") == source]
+            return [s for s in skills if skill_map[s["id"]].get("source") == source]
         return skills
 
-    def get_skill(self, skill_id: str) -> Optional[dict[str, Any]]:
+    def get_skill(self, skill_id: str) -> dict[str, Any] | None:
         """Get metadata for a specific skill."""
-        meta = self._skills.get(skill_id)
+        meta = self._all_class_skills.get(skill_id)
         if meta is None:
             return None
         return self._build_skill_metadata(skill_id, meta)
@@ -404,7 +430,7 @@ class SkillRegistry:
         """Return all skills that match a given trigger event."""
         return [
             self._build_skill_metadata(skill_id, meta)
-            for skill_id, meta in self._skills.items()
+            for skill_id, meta in self._all_class_skills.items()
             if event_type in meta.get("triggers", [])
         ]
 
@@ -413,7 +439,7 @@ class SkillRegistry:
         if skill_id in self._instances:
             return self._instances[skill_id]
 
-        meta = self._skills.get(skill_id)
+        meta = self._all_class_skills.get(skill_id)
         if meta is None:
             raise ValueError(f"Unknown skill: {skill_id}")
 
@@ -469,7 +495,7 @@ class SkillRegistry:
         Implements MCP security requirement: do NOT rely on environment
         inheritance; explicitly pass only required vars.
         """
-        meta = self._skills.get(skill_id)
+        meta = self._all_class_skills.get(skill_id)
         if meta is None:
             return {}
 
@@ -514,6 +540,84 @@ class SkillRegistry:
         except Exception as e:
             logger.error("Skill %s execution failed: %s", skill_id, e)
             return {"status": "error", "error": str(e)}
+
+    async def run_repository_research_harness(
+        self,
+        skill_inputs: dict[str, dict[str, Any]],
+        *,
+        harness_evidence_sources: list[str],
+    ) -> dict[str, Any]:
+        """Run repository research skills in order and then execute the harness."""
+        missing_inputs = [
+            skill_id
+            for skill_id in _REPOSITORY_RESEARCH_EXECUTION_ORDER
+            if skill_id not in skill_inputs
+        ]
+        if missing_inputs:
+            return {
+                "status": "error",
+                "failed_skill": "input-validation",
+                "error": f"missing skill inputs: {', '.join(missing_inputs)}",
+                "execution_order": [],
+                "skill_outputs": {},
+            }
+
+        execution_order: list[str] = []
+        skill_outputs: dict[str, dict[str, Any]] = {}
+
+        for skill_id in _REPOSITORY_RESEARCH_EXECUTION_ORDER:
+            execution_order.append(skill_id)
+            result = await self.invoke_skill(skill_id, skill_inputs[skill_id])
+            if result.get("status") != "success":
+                return {
+                    "status": "error",
+                    "failed_skill": skill_id,
+                    "error": result.get("error"),
+                    "execution_order": execution_order,
+                    "skill_outputs": skill_outputs,
+                }
+            output = result.get("output")
+            if not isinstance(output, dict):
+                return {
+                    "status": "error",
+                    "failed_skill": skill_id,
+                    "error": f"{skill_id} returned a non-dict output",
+                    "execution_order": execution_order,
+                    "skill_outputs": skill_outputs,
+                }
+            skill_outputs[skill_id] = output
+
+        execution_order.append("agent-operating-harness")
+        harness_result = await self.invoke_skill(
+            "agent-operating-harness",
+            {
+                "evidence_sources": harness_evidence_sources,
+                "skill_outputs": skill_outputs,
+            },
+        )
+        if harness_result.get("status") != "success":
+            return {
+                "status": "error",
+                "failed_skill": "agent-operating-harness",
+                "error": harness_result.get("error"),
+                "execution_order": execution_order,
+                "skill_outputs": skill_outputs,
+            }
+
+        return {
+            "status": "success",
+            "failed_skill": None,
+            "error": None,
+            "execution_order": execution_order,
+            "skill_outputs": skill_outputs,
+            "output": harness_result.get("output", {}),
+        }
+
+    async def run_repository_research_audit(self, repo_root: Path) -> dict[str, Any]:
+        """Collect repository evidence and execute the research harness end to end."""
+        from skills.repository_research_audit import run_repository_research_audit
+
+        return await run_repository_research_audit(repo_root, registry=self)
 
 
 # Example usage and testing

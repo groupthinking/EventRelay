@@ -116,6 +116,72 @@
       "computedHash": "48a49c3910e512e6055fa2be8a67a3bbd62827f4825d250cd3dc75b5ab3aeba8",
       "subscribed_triggers": []
     },
+    "canonical-architecture-truth": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": "src/skills/canonical_architecture_truth/main.py",
+      "computedHash": "de57eccc4a71a2916d2f3db49f57f480f664ae4a288b2586cf842d6fff62fea8",
+      "subscribed_triggers": [],
+      "className": "CanonicalArchitectureTruthSkill",
+      "version": "1.0.0",
+      "triggers": [],
+      "dependencies": []
+    },
+    "persistence-and-boundary-truth": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": "src/skills/persistence_and_boundary_truth/main.py",
+      "computedHash": "f362664dac540736322ff4163f2538a3f30d9732fa0f7077e51356bbc7985a7c",
+      "subscribed_triggers": [],
+      "className": "PersistenceAndBoundaryTruthSkill",
+      "version": "1.0.0",
+      "triggers": [],
+      "dependencies": []
+    },
+    "engineering-risk-and-duplication-audit": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": "src/skills/engineering_risk_and_duplication_audit/main.py",
+      "computedHash": "72a972df20668746af7cb2d1c0600cbec885796049610b5e93d4ad10b11759ff",
+      "subscribed_triggers": [],
+      "className": "EngineeringRiskAndDuplicationAuditSkill",
+      "version": "1.0.0",
+      "triggers": [],
+      "dependencies": []
+    },
+    "github-ops-and-workflow-health": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": "src/skills/github_ops_and_workflow_health/main.py",
+      "computedHash": "873a5d879173fd858091d56769187df05d868e559c91abf69bbd4973b43dba02",
+      "subscribed_triggers": [],
+      "className": "GitHubOpsAndWorkflowHealthSkill",
+      "version": "1.0.0",
+      "triggers": [],
+      "dependencies": []
+    },
+    "product-positioning-and-buyer-fit": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": "src/skills/product_positioning_and_buyer_fit/main.py",
+      "computedHash": "1f9a0ac1c3b5c128c8ec708b531ab0ddf9b309993e29f7f82a292442a8801632",
+      "subscribed_triggers": [],
+      "className": "ProductPositioningAndBuyerFitSkill",
+      "version": "1.0.0",
+      "triggers": [],
+      "dependencies": []
+    },
+    "agent-operating-harness": {
+      "source": "groupthinking/EventRelay",
+      "sourceType": "local",
+      "skillPath": "src/skills/agent_operating_harness/main.py",
+      "computedHash": "689a6606ebc20fb29878722a47b48261fc74841a65433d6f257e0edbad5ed2b6",
+      "subscribed_triggers": [],
+      "className": "AgentOperatingHarnessSkill",
+      "version": "1.0.0",
+      "triggers": [],
+      "dependencies": []
+    },
     "xcode-project-setup": {
       "source": "firebase/agent-skills",
       "sourceType": "github",
