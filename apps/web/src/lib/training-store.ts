@@ -25,7 +25,7 @@ import 'server-only';
 import { promises as fs } from 'fs';
 import path from 'path';
 
-const IS_VERCEL = process.env.VERCEL === '1';
+const IS_VERCEL = process.env.VERCEL === '1' || Boolean(process.env.VERCEL_ENV?.trim());
 
 /** Where training data lives */
 const TRAINING_DIR = path.join(process.cwd(), 'data', 'training');
