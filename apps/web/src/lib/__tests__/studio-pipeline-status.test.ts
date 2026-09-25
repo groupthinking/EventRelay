@@ -17,6 +17,8 @@ import {
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackIdentity,
+  studioResolveAutoSelectedPackId,
   studioFormationSupplementalEntities,
   studioPackFormation,
   studioPasteOutcomeMessage,
@@ -309,6 +311,26 @@ describe('studio-pipeline-status', () => {
     expect(studioTranscriptStage({ busy: false, elapsedSeconds: 12, hasFailed: true }).id).toBe(
       'failed',
     );
+    // Pack identity short-circuits the open-ended "Building transcript" label
+    // even when the elapsed/progress heuristics would otherwise report it.
+    const identityStage = studioTranscriptStage({
+      busy: true,
+      elapsedSeconds: 40,
+      progress: 12,
+      hasPackIdentity: true,
+    });
+    expect(identityStage.id).toBe('pack');
+    expect(identityStage.label).toMatch(/pack identity/i);
+    expect(identityStage.label).not.toMatch(/building transcript/i);
+    // A real transcript still advances past pack identity to events.
+    expect(
+      studioTranscriptStage({
+        busy: true,
+        elapsedSeconds: 40,
+        hasPackIdentity: true,
+        hasTranscript: true,
+      }).id,
+    ).toBe('events');
     expect(
       studioTranscriptBody({ transcript: '', busy: false, failed: false }),
     ).toBe('Nothing yet.');
@@ -632,5 +654,109 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/keyframes/);
     expect(studio).not.toMatch(/code_snippets/);
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
+  });
+
+  it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    // The header/transcript follow a resolved selection, and pack identity is
+    // wired into the transcript stage so the status leaves "Building transcript".
+    expect(studio).toContain('studioResolveAutoSelectedPackId');
+    expect(studio).toContain('studioPackIdentity');
+    expect(studio).toContain('hasPackIdentity');
+    // Combobox change still drives selection via the store.
+    expect(studio).toMatch(/onChange=\{\(event\) => selectVideo\(event\.target\.value \|\| null\)\}/);
+  });
+});
+
+function fixturePackCitation(overrides?: {
+  videoId?: string;
+  sourceUrl?: string | null;
+  sourceHash?: string | null;
+}) {
+  const videoId = overrides?.videoId ?? 'auJzb1D-fag';
+  const sourceUrl =
+    overrides && 'sourceUrl' in overrides
+      ? overrides.sourceUrl
+      : `https://www.youtube.com/watch?v=${videoId}`;
+  const sourceHash =
+    overrides && 'sourceHash' in overrides
+      ? overrides.sourceHash
+      : '2778c5fc21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d';
+  return {
+    version: 'v0',
+    videoId,
+    packId: `vp:v0:${videoId}`,
+    sourceUrl: sourceUrl ?? '',
+    sourceHash: sourceHash ?? '',
+    pack: {
+      version: 'v0',
+      id: `vp:v0:${videoId}`,
+      video_id: videoId,
+      source_url: sourceUrl ?? '',
+      provenance: { source_hash: sourceHash ?? '' },
+    },
+  };
+}
+
+describe('studioPackIdentity', () => {
+  it('returns the youtube id and citation when source_url + source_hash exist', () => {
+    const identity = studioPackIdentity(fixturePackCitation());
+    expect(identity).not.toBeNull();
+    expect(identity?.videoId).toBe('auJzb1D-fag');
+    expect(identity?.citation).toContain('cite:youtube:auJzb1D-fag');
+  });
+
+  it('returns null when the pack is missing or lacks identity fields', () => {
+    expect(studioPackIdentity(null)).toBeNull();
+    expect(studioPackIdentity(undefined)).toBeNull();
+    expect(studioPackIdentity(fixturePackCitation({ sourceUrl: '' }))).toBeNull();
+    expect(studioPackIdentity(fixturePackCitation({ sourceHash: '   ' }))).toBeNull();
+  });
+});
+
+describe('studioResolveAutoSelectedPackId', () => {
+  it('picks the newest stored pack with identity when nothing is selected', () => {
+    const target = studioResolveAutoSelectedPackId({
+      selectedVideoId: null,
+      videos: [
+        { id: 'newest', videoPack: fixturePackCitation({ videoId: 'auJzb1D-fag' }) },
+        { id: 'older', videoPack: fixturePackCitation({ videoId: 'jNQXAC9IVRw' }) },
+      ],
+    });
+    expect(target).toBe('newest');
+  });
+
+  it('skips rows without pack identity', () => {
+    const target = studioResolveAutoSelectedPackId({
+      selectedVideoId: null,
+      videos: [
+        { id: 'no-pack', videoPack: null },
+        { id: 'no-identity', videoPack: fixturePackCitation({ sourceHash: '' }) },
+        { id: 'ready', videoPack: fixturePackCitation() },
+      ],
+    });
+    expect(target).toBe('ready');
+  });
+
+  it('never overrides an existing selection or a pending handoff', () => {
+    expect(
+      studioResolveAutoSelectedPackId({
+        selectedVideoId: 'already',
+        videos: [{ id: 'ready', videoPack: fixturePackCitation() }],
+      }),
+    ).toBeNull();
+    expect(
+      studioResolveAutoSelectedPackId({
+        selectedVideoId: null,
+        hasPendingHandoff: true,
+        videos: [{ id: 'ready', videoPack: fixturePackCitation() }],
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null when no stored pack exists', () => {
+    expect(
+      studioResolveAutoSelectedPackId({ selectedVideoId: null, videos: [] }),
+    ).toBeNull();
   });
 });

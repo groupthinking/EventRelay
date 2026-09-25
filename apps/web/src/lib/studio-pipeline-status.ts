@@ -75,6 +75,39 @@ export function studioPackCitation(pack: VideoPackCitation): string {
   return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash} · ${pack.sourceUrl}`;
 }
 
+/**
+ * A stored pack has verified identity once it carries both source_url and
+ * source_hash. That identity is enough to cite the pack and name its YouTube id
+ * in the header immediately — no transcript run or dropdown interaction needed.
+ */
+export function studioPackIdentity(
+  pack: VideoPackCitation | null | undefined,
+): { videoId: string; citation: string } | null {
+  if (!pack) return null;
+  const sourceUrl = pack.sourceUrl?.trim() ?? '';
+  const sourceHash = pack.sourceHash?.trim() ?? '';
+  if (!sourceUrl || !sourceHash) return null;
+  return { videoId: pack.videoId, citation: studioPackCitation(pack) };
+}
+
+/**
+ * Surface a stored pack in the header without waiting for a Stored packs
+ * combobox click: when nothing is selected and no `?video=` handoff is pending,
+ * point the selection at the newest row that already has pack identity.
+ * Returns null when a selection already exists (never fights the user) or when a
+ * handoff run will select its own row.
+ */
+export function studioResolveAutoSelectedPackId(input: {
+  selectedVideoId: string | null | undefined;
+  videos: ReadonlyArray<{ id: string; videoPack?: VideoPackCitation | null }>;
+  hasPendingHandoff?: boolean;
+}): string | null {
+  if (input.selectedVideoId) return null;
+  if (input.hasPendingHandoff) return null;
+  const match = input.videos.find((video) => studioPackIdentity(video.videoPack));
+  return match ? match.id : null;
+}
+
 export function studioPackFormation(pack: VideoPackCitation | null | undefined): {
   tools: VideoPackStackTool[];
   checks: ChecklistItem[];
@@ -270,6 +303,7 @@ export function studioTranscriptStage(input: {
   elapsedSeconds: number;
   progress?: number;
   hasPack?: boolean;
+  hasPackIdentity?: boolean;
   hasTranscript?: boolean;
   hasFailed?: boolean;
 }): { id: StudioTranscriptStageId; label: string } {
@@ -284,6 +318,12 @@ export function studioTranscriptStage(input: {
   }
   if (input.hasTranscript) {
     return { id: 'events', label: 'Extracting events' };
+  }
+  // Once the selected row has pack identity (source_url + source_hash), the
+  // stage must not stay on the open-ended "Building transcript". Surface the
+  // ready pack instead of implying transcript work is still the blocker.
+  if (input.hasPackIdentity) {
+    return { id: 'pack', label: 'Pack identity' };
   }
   const progress = input.progress ?? 0;
   if (progress >= 10 || input.elapsedSeconds >= 18) {
