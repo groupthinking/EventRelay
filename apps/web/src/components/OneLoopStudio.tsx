@@ -67,6 +67,8 @@ import {
   studioJobStripDestination,
   studioPackCitation,
   studioPackFormation,
+  studioPackIdentity,
+  studioResolveAutoSelectedPackId,
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
@@ -321,6 +323,7 @@ export default function OneLoopStudio({
     null,
   );
   const autoStartedKey = useRef<string | null>(null);
+  const autoSelectedPackRef = useRef(false);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
@@ -407,6 +410,24 @@ export default function OneLoopStudio({
   useEffect(() => {
     useDashboardStore.persist.rehydrate();
   }, []);
+
+  // A stored pack must drive the header + transcript without a Stored packs
+  // combobox click (#2244). Once, after rehydration, point the selection at the
+  // newest row that already has pack identity — unless a selection or a
+  // `?video=` handoff already owns the row. This is display-only: it selects an
+  // existing row and never starts extraction.
+  useEffect(() => {
+    if (autoSelectedPackRef.current) return;
+    if (selectedVideoId || studioQueryFromSearchParams(searchParams)) {
+      autoSelectedPackRef.current = true;
+      return;
+    }
+    const targetId = studioResolveAutoSelectedPackId({ selectedVideoId, videos });
+    if (targetId) {
+      autoSelectedPackRef.current = true;
+      selectVideo(targetId);
+    }
+  }, [selectedVideoId, videos, searchParams, selectVideo]);
 
   const runAnalysis = async (raw: string) => {
     const handoff = resolveStudioHandoff(raw);
@@ -945,11 +966,13 @@ export default function OneLoopStudio({
     }
   };
 
+  const packIdentity = studioPackIdentity(selected?.videoPack);
   const transcriptStage = studioTranscriptStage({
     busy: transcriptWorking,
     elapsedSeconds: elapsed,
     progress: selected?.progress,
     hasPack: Boolean(selected?.videoPack),
+    hasPackIdentity: Boolean(packIdentity),
     hasTranscript: Boolean(selected?.transcript?.trim()),
     hasFailed: selected?.status === 'failed',
   });
