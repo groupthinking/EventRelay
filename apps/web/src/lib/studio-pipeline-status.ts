@@ -75,6 +75,23 @@ export function studioPackCitation(pack: VideoPackCitation): string {
   return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash} · ${pack.sourceUrl}`;
 }
 
+/** A stored row has pack identity when both source URL and source hash are present. */
+export function studioPackHasIdentity(
+  pack: { sourceUrl?: string | null; sourceHash?: string | null } | null | undefined,
+): boolean {
+  return Boolean(pack?.sourceUrl?.trim() && pack?.sourceHash?.trim());
+}
+
+/** Prefer the row transcript. Fall back to the stored pack transcript without waiting on a control event. */
+export function studioTranscriptForSelection(input: {
+  transcript?: string | null;
+  packTranscript?: string | null;
+}): string {
+  const direct = input.transcript?.trim() ?? '';
+  if (direct) return direct;
+  return input.packTranscript?.trim() ?? '';
+}
+
 export function studioPackFormation(pack: VideoPackCitation | null | undefined): {
   tools: VideoPackStackTool[];
   checks: ChecklistItem[];

@@ -17,6 +17,8 @@ import {
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackHasIdentity,
+  studioTranscriptForSelection,
   studioFormationSupplementalEntities,
   studioPackFormation,
   studioPasteOutcomeMessage,
@@ -96,6 +98,24 @@ describe('studio-pipeline-status', () => {
         packCitation: citation,
       }),
     ).toContain('cite:youtube:jNQXAC9IVRw');
+  });
+
+  it('treats source URL plus source hash as pack identity and falls back to the pack transcript', () => {
+    expect(studioPackHasIdentity({ sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag', sourceHash: 'abc' })).toBe(true);
+    expect(studioPackHasIdentity({ sourceUrl: '  ', sourceHash: 'abc' })).toBe(false);
+    expect(studioPackHasIdentity(null)).toBe(false);
+    expect(
+      studioTranscriptForSelection({
+        transcript: '',
+        packTranscript: 'Select a task to mark it complete.',
+      }),
+    ).toBe('Select a task to mark it complete.');
+    expect(
+      studioTranscriptForSelection({
+        transcript: 'Row transcript wins.',
+        packTranscript: 'Pack transcript.',
+      }),
+    ).toBe('Row transcript wins.');
   });
 
   it('fails closed when paste finishes without a verified pack', () => {

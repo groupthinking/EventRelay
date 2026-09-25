@@ -67,6 +67,8 @@ import {
   studioJobStripDestination,
   studioPackCitation,
   studioPackFormation,
+  studioPackHasIdentity,
+  studioTranscriptForSelection,
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
@@ -321,6 +323,7 @@ export default function OneLoopStudio({
     null,
   );
   const autoStartedKey = useRef<string | null>(null);
+  const boundStoredPack = useRef(false);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
@@ -408,6 +411,18 @@ export default function OneLoopStudio({
     useDashboardStore.persist.rehydrate();
   }, []);
 
+  useEffect(() => {
+    if (selectedVideoId) {
+      boundStoredPack.current = true;
+      return;
+    }
+    if (boundStoredPack.current) return;
+    const stored = videos.find((video) => studioPackHasIdentity(video.videoPack));
+    if (!stored) return;
+    boundStoredPack.current = true;
+    selectVideo(stored.id);
+  }, [selectedVideoId, videos, selectVideo]);
+
   const runAnalysis = async (raw: string) => {
     const handoff = resolveStudioHandoff(raw);
     if (!handoff) {
@@ -486,7 +501,13 @@ export default function OneLoopStudio({
     void runAnalysis(url);
   };
 
-  const transcriptWorking = busy || selected?.status === 'processing';
+  const selectedPackIdentity = studioPackHasIdentity(selected?.videoPack);
+  const transcriptWorking =
+    (busy || selected?.status === 'processing') && !selectedPackIdentity;
+  const selectedTranscript = studioTranscriptForSelection({
+    transcript: selected?.transcript,
+    packTranscript: selected?.videoPack?.pack.transcript?.full_text,
+  });
 
   useEffect(() => {
     if (!transcriptWorking) {
@@ -533,7 +554,7 @@ export default function OneLoopStudio({
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
     false,
     Boolean(videoId || selected),
-    { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
+    { transcript: selectedTranscript, eventCount: selected?.events?.length ?? 0 },
   );
   const workbenchEmpty = studioWorkbenchEmptyView({
     busy: transcriptWorking,
@@ -950,7 +971,7 @@ export default function OneLoopStudio({
     elapsedSeconds: elapsed,
     progress: selected?.progress,
     hasPack: Boolean(selected?.videoPack),
-    hasTranscript: Boolean(selected?.transcript?.trim()),
+    hasTranscript: Boolean(selectedTranscript),
     hasFailed: selected?.status === 'failed',
   });
   const showTranscriptRetry = studioCanRetryTranscript({
@@ -1181,9 +1202,9 @@ export default function OneLoopStudio({
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
               Transcript
             </h2>
-            {selected?.transcript ? (
+            {selectedTranscript ? (
               <span className="font-mono text-[11px] text-white/35">
-                {selected.transcript.trim().split(/\s+/).length} words
+                {selectedTranscript.split(/\s+/).length} words
               </span>
             ) : null}
           </div>
@@ -1194,7 +1215,7 @@ export default function OneLoopStudio({
             >
               <div>
                 <p className="text-sm text-white/80">{transcriptStage.label}</p>
-                {transcriptWorking && !selected?.transcript && (
+                {transcriptWorking && !selectedTranscript && (
                   <p className="font-mono text-[11px] text-white/40">
                     {studioTranscriptEtaLabel(elapsed)}
                   </p>
@@ -1217,7 +1238,7 @@ export default function OneLoopStudio({
             className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80"
           >
             {studioTranscriptBody({
-              transcript: selected?.transcript,
+              transcript: selectedTranscript,
               busy: transcriptWorking,
               failed: selected?.status === 'failed',
               failureMessage: selected?.failure?.message,
