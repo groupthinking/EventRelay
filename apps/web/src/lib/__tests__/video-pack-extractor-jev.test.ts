@@ -150,7 +150,18 @@ describe('extractVideoPackSpec Jev wiring', () => {
 
     const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
     expect(validateShardManifest(manifest)).toEqual({ ok: 1, failures: [] });
-    expect(experimental_evaluate).toHaveBeenCalledTimes(1);
+    expect(experimental_evaluate).toHaveBeenCalledTimes(2);
+    const postCheck = experimental_evaluate.mock.calls[1]?.[0] as {
+      state: string;
+      questions: { extract_next: { criteria: Record<string, string> } };
+    };
+    expect(postCheck.state).toContain('merged Video Pack');
+    expect(Object.keys(postCheck.questions.extract_next.criteria).sort()).toEqual([
+      'consolidate',
+      'request-more-evidence',
+      'retry',
+      'stop',
+    ]);
     expect(runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s])).toEqual(
       manifest.shards.map((shard) => [shard.start_s, shard.end_s]),
     );
@@ -193,7 +204,9 @@ describe('extractVideoPackSpec Jev wiring', () => {
     );
 
     const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
-    expect(experimental_evaluate).toHaveBeenCalledTimes(1);
+    expect(experimental_evaluate).toHaveBeenCalledTimes(2);
+    const postCheck = experimental_evaluate.mock.calls[1]?.[0] as { state: string };
+    expect(postCheck.state).toContain('merged Video Pack');
     expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
   });
 });
