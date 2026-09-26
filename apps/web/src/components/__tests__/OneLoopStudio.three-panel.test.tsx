@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
@@ -81,6 +81,15 @@ describe('OneLoopStudio Result Ready three-panel shell (P1.7)', () => {
     expect(screen.getByTestId('chat-cta-summarize')).toBeTruthy();
     expect(screen.getByTestId('chat-cta-extract')).toBeTruthy();
     expect(screen.getByTestId('chat-cta-open-d')).toBeTruthy();
+
+    // Single-pane workbench: a tab bar picks one pane at a time. The default
+    // pane is Video, so the grounded spec is NOT stacked on first paint.
+    expect(screen.getByTestId('studio-workbench-tabs')).toBeTruthy();
+    expect(screen.getByTestId('studio-workbench-tab-video').getAttribute('data-active')).toBe('true');
+    expect(screen.queryByTestId('studio-result-ready-pane')).toBeNull();
+
+    // Selecting the Spec tab swaps the single main pane to the grounded spec.
+    fireEvent.click(screen.getByTestId('studio-workbench-tab-spec'));
     expect(screen.getByTestId('studio-result-ready-pane')).toBeTruthy();
     expect(screen.getByTestId('grounded-spec-review')).toBeTruthy();
   });
