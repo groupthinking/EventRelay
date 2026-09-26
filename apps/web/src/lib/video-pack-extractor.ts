@@ -924,19 +924,20 @@ export async function extractVideoPackSpec(
 
   const runVideoInteraction = deps.runVideoInteraction ?? runShardVideoInteraction;
   const metadata = await fetchYouTubeMetadata(input.sourceUrl).catch(() => null);
-  // No secret or a null Jev decision keeps today's deterministic manifest.
-  // stop yields no manifest and must fail closed before any Interactions call.
-  // Every other action uses the returned manifest; ok stays on the validator.
+  // Live Jev is off, no secret, a null decision, OR a stop decision all keep
+  // today's deterministic manifest — stop is a skip, not an abort, so extract
+  // proceeds and Interactions may run. Every other action uses the returned
+  // manifest; ok stays with validateShardManifest (the sole 0/1 gate).
   const planned = await planShardsWithJev(
     input.videoId,
     input.sourceUrl,
     metadata,
     metadata?.durationSeconds ?? null,
   );
-  if (!planned.manifest) {
-    throw new VideoPackExtractError('Jev extract decision is stop; refusing video calls.');
-  }
   const manifest = planned.manifest;
+  if (!manifest) {
+    throw new VideoPackExtractError('Shard manifest unavailable for extract.');
+  }
   const validation = validateShardManifest(manifest);
   if (validation.ok === 0) {
     throw new VideoPackExtractError(

@@ -161,14 +161,24 @@ export function mapJevEvaluateResultToExtractDecision(
 export type JevExtractEvaluate = typeof evaluate;
 
 /**
- * Ask Jev for the next action. Returns null (skip) when the billing
- * gateway secret is missing, the call fails, or the answer is unmapped.
+ * Live Jev routing is opt-in: it runs only when the `EXTRACT_JEV_LIVE=1`
+ * flag is set AND the billing gateway secret exists. Otherwise every entry
+ * point skips (null decision) and the deterministic planner proceeds alone.
+ */
+export function extractJevLiveEnabled(): boolean {
+  return process.env.EXTRACT_JEV_LIVE === '1' && hasAiGatewayKey();
+}
+
+/**
+ * Ask Jev for the next action. Returns null (skip) unless live Jev is enabled
+ * (`EXTRACT_JEV_LIVE=1` plus a gateway key); also null when the call fails or
+ * the answer is unmapped.
  */
 export async function decideExtractNext(
   state: ExtractPlannerState,
   deps: { evaluateFn?: JevExtractEvaluate; actions?: readonly JevExtractAction[] } = {},
 ): Promise<JevExtractDecision | null> {
-  if (!hasAiGatewayKey()) {
+  if (!extractJevLiveEnabled()) {
     return null;
   }
   const allowed = deps.actions ?? EXTRACT_ACTIONS;
@@ -190,10 +200,11 @@ export async function decideExtractNext(
 }
 
 /**
- * Translate a Jev decision into planner input. `stop` yields null (the
- * caller must not plan); every other action passes the base decisions
- * through — the action itself is consumed by the orchestrator, and the
- * 0/1 stays with `validateShardManifest`.
+ * Translate a Jev decision into planner input. `stop` yields null to signal
+ * "do not apply Jev shard decisions"; the caller treats that as a skip and
+ * proceeds with the deterministic base manifest (stop is never an abort).
+ * Every other action passes the base decisions through — the action itself is
+ * consumed by the orchestrator, and the 0/1 stays with `validateShardManifest`.
  */
 export function jevDecisionToShardPlanDecisions(
   decision: JevExtractDecision,
@@ -211,10 +222,12 @@ export interface PlannedShardsWithJev {
 }
 
 /**
- * Plan shards with Jev routing. Without a gateway secret (or on any Jev
- * failure) the deterministic planner proceeds alone. A `stop` decision
- * yields no manifest. Callers must still run `validateShardManifest` —
- * Jev output never implies a 0/1.
+ * Plan shards with Jev routing. When live Jev is disabled (no
+ * `EXTRACT_JEV_LIVE=1` / no gateway secret) or on any Jev failure, the
+ * deterministic planner proceeds alone. A `stop` decision is treated as a skip:
+ * it yields a null decision and the deterministic base manifest, so extract
+ * continues rather than aborting. Callers must still run
+ * `validateShardManifest` — Jev output never implies a 0/1.
  */
 export async function planShardsWithJev(
   videoId: string,
@@ -243,7 +256,10 @@ export async function planShardsWithJev(
   }
   const planDecisions = jevDecisionToShardPlanDecisions(decision);
   if (!planDecisions) {
-    return { decision, manifest: null };
+    // stop is a skip, not an abort: keep the deterministic base manifest and
+    // surface a null decision so the planner proceeds. Workers may run; the
+    // 0/1 stays with validateShardManifest.
+    return { decision: null, manifest: base };
   }
   return {
     decision,

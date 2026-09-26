@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { JevEvaluatePayload } from '@/lib/billing/jev-lead-score';
 import type { ShardVideoInteractionRunner } from '@/lib/google-genai-video';
-import { VideoPackExtractError, extractVideoPackSpec } from '@/lib/video-pack-extractor';
-import { isTransientVideoPackExtractError } from '@/lib/video-pack-extract-reason';
+import { extractVideoPackSpec } from '@/lib/video-pack-extractor';
 import { planShardManifest, validateShardManifest } from '@/lib/video-pack-shard-planner';
 
 const { experimental_evaluate } = vi.hoisted(() => ({
@@ -82,6 +81,7 @@ afterEach(() => {
   delete process.env.GOOGLE_API_KEY;
   delete process.env.AI_GATEWAY_API_KEY;
   delete process.env.VERCEL_AI_GATEWAY_API_KEY;
+  delete process.env.EXTRACT_JEV_LIVE;
   experimental_evaluate.mockReset();
   vi.restoreAllMocks();
 });
@@ -109,31 +109,51 @@ describe('extractVideoPackSpec Jev wiring', () => {
     expect(spec.concepts).toEqual(['zoo', 'elephants']);
   });
 
-  it('fails closed on stop before any Interactions call', async () => {
+  it('treats a stop decision as a skip: proceeds with the deterministic manifest and runs Interactions', async () => {
+    process.env.EXTRACT_JEV_LIVE = '1';
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     process.env.GEMINI_API_KEY = 'test-direct-key';
     experimental_evaluate.mockResolvedValue(choicePayload('stop'));
     await loadMetadataMock();
     const runVideo = videoRunner();
 
-    await expect(
-      extractVideoPackSpec(
-        { sourceUrl: SOURCE_URL, videoId: CANON },
-        { runVideoInteraction: runVideo },
-      ),
-    ).rejects.toSatisfy((error: unknown) => {
-      expect(error).toBeInstanceOf(VideoPackExtractError);
-      expect(error).toMatchObject({ message: expect.stringMatching(/stop/i) });
-      expect((error as Error).message).toMatch(/refusing video calls/i);
-      expect(isTransientVideoPackExtractError(error)).toBe(false);
-      return true;
-    });
+    // Must not throw "refusing video calls" — stop is a skip, not an abort.
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo },
+    );
 
-    expect(experimental_evaluate).toHaveBeenCalledTimes(1);
-    expect(runVideo).not.toHaveBeenCalled();
+    const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
+    expect(validateShardManifest(manifest).ok).toBe(1);
+    // Planner call fires; a stop is treated as a null decision so the
+    // deterministic manifest drives the shard workers.
+    expect(experimental_evaluate).toHaveBeenCalled();
+    expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
+    expect(runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s])).toEqual(
+      manifest.shards.map((shard) => [shard.start_s, shard.end_s]),
+    );
+    expect(spec.concepts).toEqual(['zoo', 'elephants']);
+  });
+
+  it('keeps the deterministic plan when EXTRACT_JEV_LIVE is unset even with a gateway key', async () => {
+    delete process.env.EXTRACT_JEV_LIVE;
+    process.env.AI_GATEWAY_API_KEY = 'vck_test';
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    await loadMetadataMock();
+    const runVideo = videoRunner();
+
+    await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo },
+    );
+
+    const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
+    expect(experimental_evaluate).not.toHaveBeenCalled();
+    expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
   });
 
   it('uses the Jev-returned manifest for other actions and still requires validator ok', async () => {
+    process.env.EXTRACT_JEV_LIVE = '1';
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     process.env.GEMINI_API_KEY = 'test-direct-key';
     experimental_evaluate.mockResolvedValue({
@@ -169,6 +189,7 @@ describe('extractVideoPackSpec Jev wiring', () => {
   });
 
   it('rejects a chunk decision when validateShardManifest returns 0', async () => {
+    process.env.EXTRACT_JEV_LIVE = '1';
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     process.env.GEMINI_API_KEY = 'test-direct-key';
     experimental_evaluate.mockResolvedValue(choicePayload('chunk'));
@@ -192,6 +213,7 @@ describe('extractVideoPackSpec Jev wiring', () => {
   });
 
   it('treats an evaluate throw as a null decision and keeps the deterministic plan', async () => {
+    process.env.EXTRACT_JEV_LIVE = '1';
     process.env.AI_GATEWAY_API_KEY = 'vck_test';
     process.env.GEMINI_API_KEY = 'test-direct-key';
     experimental_evaluate.mockRejectedValue(new Error('gateway down'));
