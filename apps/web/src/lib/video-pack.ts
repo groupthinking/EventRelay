@@ -305,11 +305,13 @@ export function setVideoPackSchedulerForTests(schedule: ((work: Promise<unknown>
   );
 }
 
-function missingIdentityResponse(): NextResponse {
+function missingIdentityResponse(gaps: readonly string[]): NextResponse {
+  const listed = gaps.join(', ');
+  const verb = gaps.length === 1 ? 'is' : 'are';
   return NextResponse.json(
     {
       status: 'error',
-      error: 'Video pack verification failed: source_url and source_hash are required.',
+      error: `Video pack verification failed: ${listed} ${verb} required.`,
     },
     { status: 500 },
   );
@@ -389,8 +391,11 @@ function resolveIdentityFromFields(
     );
   }
   const identity = buildIdentityPack(videoId, url || undefined);
-  if (!identity.source_url.startsWith('http') || !identity.provenance.source_hash) {
-    return missingIdentityResponse();
+  const gaps: string[] = [];
+  if (!identity.source_url.startsWith('http')) gaps.push('source_url');
+  if (!identity.provenance.source_hash) gaps.push('source_hash');
+  if (gaps.length > 0) {
+    return missingIdentityResponse(gaps);
   }
   return { identity };
 }

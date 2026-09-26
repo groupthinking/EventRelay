@@ -87,6 +87,71 @@ describe('verifyIdentityPack (CoS: fail closed)', () => {
     ).toThrow(/source_hash/i);
   });
 
+  it('names only source_hash when the digest is missing', () => {
+    expect(() =>
+      verifyIdentityPack({
+        status: 'success',
+        data: { ...VALID.data, provenance: {} },
+      }),
+    ).toThrow(/^Video pack verification failed: source_hash is required\.$/);
+  });
+
+  it('surfaces envelope.error instead of the identity sentence', () => {
+    const message = 'Gemini 3.8 Flash returned no extracted spec content.';
+    expect(() =>
+      verifyIdentityPack({
+        status: 'error',
+        error: message,
+        data: VALID.data,
+      }),
+    ).toThrow(message);
+  });
+
+  it('surfaces a stored pack failure detail on an HTTP 200 error envelope', () => {
+    const message = 'Video pack spec extract failed.';
+    expect(() =>
+      verifyIdentityPack({
+        status: 'error',
+        ok: false,
+        reason_code: 'extract_failed',
+        detail: message,
+      }),
+    ).toThrow(message);
+  });
+
+  it('names each missing identity field', () => {
+    expect(() =>
+      verifyIdentityPack({
+        status: 'processing',
+        data: VALID.data,
+      }),
+    ).toThrow(/^Video pack verification failed: status is required\.$/);
+
+    expect(() =>
+      verifyIdentityPack({
+        status: 'success',
+        data: { ...VALID.data, version: 'v1' },
+      }),
+    ).toThrow(/^Video pack verification failed: version is required\.$/);
+
+    const { video_id: _videoId, ...withoutVideoId } = VALID.data;
+    expect(() =>
+      verifyIdentityPack({ status: 'success', data: withoutVideoId }),
+    ).toThrow(/^Video pack verification failed: video_id is required\.$/);
+
+    const { id: _packId, ...withoutId } = VALID.data;
+    expect(() =>
+      verifyIdentityPack({ status: 'success', data: withoutId }),
+    ).toThrow(/^Video pack verification failed: id is required\.$/);
+
+    expect(() =>
+      verifyIdentityPack({
+        status: 'success',
+        data: { ...VALID.data, source_url: 'ftp://example.com/watch' },
+      }),
+    ).toThrow(/^Video pack verification failed: source_url is required\.$/);
+  });
+
   it('fails closed on an empty or 401 payload', () => {
     expect(() => verifyIdentityPack({ error: 'Authentication required' })).toThrow(/verif/i);
     expect(() => verifyIdentityPack(null)).toThrow(/verif/i);
@@ -97,6 +162,18 @@ describe('emitVideoPack', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it('surfaces a 200 error envelope from POST', async () => {
+    const message = 'Gemini 3.8 Flash returned no extracted spec content.';
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ status: 'error', error: message }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(emitVideoPack(SOURCE_URL, { pollIntervalMs: 0 })).rejects.toThrow(message);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('returns a cached pack from POST without polling', async () => {
