@@ -26,9 +26,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"
     )
-    assert checkout["with"]["fetch-depth"] == (
-        "${{ github.event_name == 'pull_request' && 0 || 1 }}"
-    )
+    assert checkout["with"]["fetch-depth"] == 0
 
     detection = next(
         step for step in steps if step["name"] == "Detect dependency manifest changes"
