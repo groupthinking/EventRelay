@@ -78,7 +78,9 @@ async function port() {
 
 async function withServer(mode, run) {
   const selected = await port();
-  const origin = `http://127.0.0.1:${selected}`;
+  // NextURL canonicalizes loopback IPs to localhost. Use that actual hostname
+  // for the HTTP request and its Origin instead of spoofing either header.
+  const origin = `http://localhost:${selected}`;
   // Only the dedicated integration credentials enter the server. Never inherit
   // production auth/provider secrets, NODE_OPTIONS preloads, or auth bypasses.
   const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'SystemRoot'].filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
