@@ -10,20 +10,34 @@ using the production build, then starts `next dev` to verify the approved previe
 origin behavior. There are no module replacements, fake DNS answers, intercepted
 HTTP responses, substituted gate decisions, or in-memory receipt stores.
 
-Run from the repository root with the supported Node version:
+Run from the repository root with the supported Node version, Docker, and OpenSSL:
 
 ```sh
 npm ci --legacy-peer-deps
 npm run build:web
-npm --workspace=apps/web run test:studio-preflight:real -- --provision-redis
+npm --workspace=apps/web run test:studio-preflight:services
 ```
 
-The explicit `--provision-redis` option creates a free, isolated Upstash database
+The CI command starts a dedicated Redis server and
+[SRH, the real HTTP transport documented by Upstash](https://upstash.com/docs/redis/sdks/ts/developing).
+Both container images are pinned by digest. A TLS listener forwards bytes to SRH;
+the application still uses its production HTTPS REST client and Redis Lua scripts.
+A fresh localhost certificate is trusted only by this run's Node processes, with
+certificate and hostname verification enabled. The runner removes its containers,
+network, and private key afterward. It supplies no canned Redis results. This
+checks the real protocol and persistence path, not Upstash's managed infrastructure.
+
+For an existing **dedicated integration database**, run
+`npm --workspace=apps/web run test:studio-preflight:real` with
+`STUDIO_PREFLIGHT_REDIS_REST_URL` and `STUDIO_PREFLIGHT_REDIS_REST_TOKEN`.
+Do not supply shared production credentials.
+
+The optional `test:studio-preflight:real -- --provision-redis` command creates a free, isolated Upstash database
 using the provider's [documented temporary database endpoint](https://github.com/upstash/redis-js#readme).
 It expires after 72 hours and is not attached to a production account. Returned
-credentials remain in process memory. For an existing **dedicated integration
-database**, omit that flag and provide `STUDIO_PREFLIGHT_REDIS_REST_URL` and
-`STUDIO_PREFLIGHT_REDIS_REST_TOKEN`. Do not supply shared production credentials.
+credentials remain in process memory. CI uses its own containers because the
+temporary service became unreachable during real verification runs; those runs
+failed, and no service failure is converted into a passing result.
 
 The runner starts its own local application instances with a fresh signing key
 and creates cryptographically valid NextAuth session tokens. It exercises real

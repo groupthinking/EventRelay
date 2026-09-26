@@ -13,7 +13,8 @@
     "assemble:app-builder": "vitest run src/lib/__tests__/assemble-app-builder.gates.test.ts",
     "analyze": "next experimental-analyze --output",
     "postinstall": "node scripts/patch-world-vercel-undici-fetch.mjs",
-    "test:studio-preflight:real": "node scripts/verify-studio-preflight.mjs"
+    "test:studio-preflight:real": "node scripts/verify-studio-preflight.mjs",
+    "test:studio-preflight:services": "node scripts/run-studio-preflight-services.mjs"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.83",

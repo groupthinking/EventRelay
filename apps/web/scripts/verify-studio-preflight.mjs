@@ -83,7 +83,7 @@ async function withServer(mode, run) {
   const origin = `http://localhost:${selected}`;
   // Only the dedicated integration credentials enter the server. Never inherit
   // production auth/provider secrets, NODE_OPTIONS preloads, or auth bypasses.
-  const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'SystemRoot'].filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
+  const env = Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'SystemRoot', 'NODE_EXTRA_CA_CERTS'].filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
   Object.assign(env, {
     NODE_ENV: mode, NEXTAUTH_SECRET: secret, NEXTAUTH_URL: origin,
     NEXT_TELEMETRY_DISABLED: '1', UPSTASH_REDIS_REST_URL: credentials.url,
