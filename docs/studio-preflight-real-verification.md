@@ -53,6 +53,11 @@ TTL. `GATE_HOLD_RUNTIME_UNAVAILABLE`, an unretained receipt, a missing service,
 and a failed prerequisite all fail the run. Cleanup deletes only keys created
 under this run's unique subject and confirms they are gone.
 
+Production rate limits remain active. During the server-reported reset wait,
+the runner sends real Redis PING commands to verify continued dependency health.
+A failed PING fails the check. Temporary-provider diagnostics retain only numeric
+usage counters, never the metrics link or credentials.
+
 The CI build job runs this verification after building the application; it does
 not depend on Vitest's aliases or mocks. It retains the JSON response/receipt
 evidence and redacted server logs as a `studio-preflight-real-<sha>` artifact.

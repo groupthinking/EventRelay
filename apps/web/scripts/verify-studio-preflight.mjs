@@ -53,7 +53,7 @@ async function provisionRedis() {
   const endpoint = field('Endpoint');
   const url = new URL(endpoint.startsWith('https://') ? endpoint : `https://${endpoint}`);
   assert.ok(url.hostname.endsWith('.upstash.io'), 'Unexpected temporary Redis provider');
-  return { url: url.origin, token: field('Token') };
+  return { url: url.origin, token: field('Token'), metrics: field('Metrics').match(/https:\/\/[^\s`<>)*]+/)?.[0] };
 }
 
 async function redis(command) {
@@ -102,7 +102,12 @@ async function withServer(mode, run) {
   let rateLimitReset = 0;
   async function post(body, options = {}) {
     // Respect the real production limiter instead of disabling or spoofing it.
-    if (rateLimitReset > Date.now()) await delay(rateLimitReset - Date.now());
+    // Check that the isolated service stays healthy while no application
+    // requests are permitted. These are real commands, not readiness substitutes.
+    while (rateLimitReset > Date.now()) {
+      await delay(Math.min(5000, rateLimitReset - Date.now()));
+      assert.equal(await redis(['PING']), 'PONG', 'Redis must remain reachable during the rate-limit wait');
+    }
     const headers = { origin: options.origin ?? origin, 'content-type': options.contentType ?? 'application/json' };
     if (options.auth !== false) headers.cookie = options.cookie ?? cookie;
     const response = await fetch(`${origin}/api/workflows/studio-deploy`, {
@@ -254,6 +259,21 @@ try {
       await redis(['DEL', ...keys]);
       assert.equal(await redis(['EXISTS', ...keys]), 0);
     });
+  }
+  if (credentials?.metrics) {
+    try {
+      const url = new URL(credentials.metrics);
+      assert.equal(url.origin, 'https://upstash.com');
+      const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(10_000) });
+      assert.equal(response.status, 200);
+      const metrics = await response.json();
+      // The provider URL contains credentials. Persist only numeric counters.
+      report.providerMetrics = Object.fromEntries(
+        ['commands_total', 'keys', 'memory_bytes', 'uptime_seconds'].filter((key) => typeof metrics[key] === 'number').map((key) => [key, metrics[key]]),
+      );
+    } catch {
+      report.providerMetricsUnavailable = true;
+    }
   }
   report.finishedAt = new Date().toISOString();
   report.passed = report.checks.length > 0 && report.checks.every(({ status }) => status === 'passed');
