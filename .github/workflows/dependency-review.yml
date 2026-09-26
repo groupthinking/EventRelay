@@ -38,17 +38,84 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          # PR runs compare the exact base and head trees before asking the
+          # dependency graph to compare snapshots. This prevents an unrelated
+          # source/test-only PR from inheriting stale graph metadata as a fake
+          # dependency addition.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
           persist-credentials: false
 
+      - name: Detect dependency manifest changes
+        id: dependency-changes
+        if: ${{ github.event_name == 'pull_request' }}
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import PurePosixPath
+          import subprocess
+
+          base = os.environ["BASE_SHA"]
+          head = os.environ["HEAD_SHA"]
+          output = subprocess.run(
+              ["git", "diff", "--name-only", "-z", base, head],
+              check=True,
+              capture_output=True,
+          ).stdout
+          paths = [PurePosixPath(raw.decode("utf-8")) for raw in output.split(b"\0") if raw]
+          exact_names = {
+              "Cargo.lock", "Cargo.toml", "Gemfile", "Gemfile.lock",
+              "Pipfile", "Pipfile.lock", "composer.json", "composer.lock",
+              "go.mod", "go.sum", "npm-shrinkwrap.json", "package-lock.json",
+              "package.json", "pnpm-lock.yaml", "poetry.lock", "pom.xml",
+              "pyproject.toml", "setup.cfg", "setup.py", "uv.lock", "yarn.lock",
+          }
+
+          def is_dependency_input(path: PurePosixPath) -> bool:
+              name = path.name
+              return (
+                  name in exact_names
+                  or name.startswith("Dockerfile")
+                  or (name.startswith("requirements") and name.endswith(".txt"))
+                  or name.endswith((".csproj", ".fsproj", ".gradle", ".gradle.kts"))
+                  or path.as_posix() in {
+                      ".github/dependabot.yml",
+                      ".github/workflows/dependency-review.yml",
+                  }
+              )
+
+          changed = sorted(path.as_posix() for path in paths if is_dependency_input(path))
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"changed={'true' if changed else 'false'}\n")
+              handle.write(f"count={len(changed)}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              if changed:
+                  handle.write("Dependency inputs changed:\n\n")
+                  handle.writelines(f"- `{path}`\n" for path in changed)
+              else:
+                  handle.write(
+                      "No dependency manifests, lockfiles, or dependency-review "
+                      "configuration changed between the exact base and head trees.\n"
+                  )
+          PY
+
       - name: Submit dependency snapshots
-        if: ${{ github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository }}
+        if: >-
+          ${{ github.event_name == 'push' ||
+              (github.event.pull_request.head.repo.full_name == github.repository &&
+               steps.dependency-changes.outputs.changed == 'true') }}
         uses: advanced-security/component-detection-dependency-submission-action@b282c67b1008fde9b60da4bdfcd8849613e293b2 # v0.1.6
         with:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           snapshot-ref: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
 
       - name: Dependency Review
-        if: ${{ github.event_name == 'pull_request' }}
+        if: >-
+          ${{ github.event_name == 'pull_request' &&
+              steps.dependency-changes.outputs.changed == 'true' }}
         uses: actions/dependency-review-action@v5
         with:
           fail-on-severity: moderate
@@ -103,3 +170,9 @@ jobs:
             pkg:npm/@img/sharp-win32-ia32,
             pkg:npm/@img/sharp-win32-x64
           comment-summary-in-pr: always
+
+      - name: Record no dependency delta
+        if: >-
+          ${{ github.event_name == 'pull_request' &&
+              steps.dependency-changes.outputs.changed == 'false' }}
+        run: echo "Dependency review passed without snapshot submission; the exact PR diff contains no dependency inputs."

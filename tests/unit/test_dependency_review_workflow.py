@@ -26,6 +26,27 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"
     )
+    assert checkout["with"]["fetch-depth"] == (
+        "${{ github.event_name == 'pull_request' && 0 || 1 }}"
+    )
+
+    detection = next(
+        step for step in steps if step["name"] == "Detect dependency manifest changes"
+    )
+    assert detection["id"] == "dependency-changes"
+    assert detection["if"] == "${{ github.event_name == 'pull_request' }}"
+    detection_script = detection["run"]
+    for protected_input in (
+        "uv.lock",
+        "pyproject.toml",
+        "requirements",
+        "package-lock.json",
+        "package.json",
+        "Dockerfile",
+        ".github/workflows/dependency-review.yml",
+    ):
+        assert protected_input in detection_script
+    assert '"git", "diff", "--name-only", "-z", base, head' in detection_script
 
     submission = next(
         step
@@ -34,10 +55,8 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
             "advanced-security/component-detection-dependency-submission-action@"
         )
     )
-    assert submission["if"] == (
-        "${{ github.event_name == 'push' || "
-        "github.event.pull_request.head.repo.full_name == github.repository }}"
-    )
+    assert "github.event_name == 'push'" in submission["if"]
+    assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
     assert submission["with"]["snapshot-sha"] == (
         "${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"
@@ -48,6 +67,10 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     )
 
     review = next(step for step in steps if step["name"] == "Dependency Review")
-    assert review["if"] == "${{ github.event_name == 'pull_request' }}"
+    assert "github.event_name == 'pull_request'" in review["if"]
+    assert "steps.dependency-changes.outputs.changed == 'true'" in review["if"]
     assert review["with"]["retry-on-snapshot-warnings"] is True
     assert review["with"]["retry-on-snapshot-warnings-timeout"] == 300
+
+    no_delta = next(step for step in steps if step["name"] == "Record no dependency delta")
+    assert "steps.dependency-changes.outputs.changed == 'false'" in no_delta["if"]
