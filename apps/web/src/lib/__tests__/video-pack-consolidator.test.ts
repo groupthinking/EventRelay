@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { JevEvaluatePayload } from '@/lib/billing/jev-lead-score';
 import type { JevExtractAction, JevExtractDecision } from '@/lib/video-pack-extract-jev';
 import type { TranscriptChunkEvidence } from '@/lib/transcript-team';
@@ -43,6 +43,11 @@ beforeEach(() => {
   experimental_evaluate.mockReset();
   evaluationModel.mockClear();
   hasAiGatewayKey.mockReturnValue(false);
+  delete process.env.EXTRACT_JEV_LIVE;
+});
+
+afterEach(() => {
+  delete process.env.EXTRACT_JEV_LIVE;
 });
 
 function section(overrides: Record<string, unknown> = {}) {
@@ -322,6 +327,7 @@ describe('consolidateShardExtract', () => {
   });
 
   it('asks Jev only for post-check actions on the merged state', async () => {
+    process.env.EXTRACT_JEV_LIVE = '1';
     hasAiGatewayKey.mockReturnValue(true);
     experimental_evaluate.mockResolvedValue(choicePayload('retry'));
     const result = await consolidateShardExtract({

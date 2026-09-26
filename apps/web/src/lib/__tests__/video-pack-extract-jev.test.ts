@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { experimental_evaluate, evaluationModel } = vi.hoisted(() => ({
   experimental_evaluate: vi.fn(),
@@ -42,6 +42,12 @@ beforeEach(() => {
   experimental_evaluate.mockReset();
   evaluationModel.mockClear();
   hasAiGatewayKey.mockReturnValue(true);
+  // Live Jev is opt-in; default it on so the live-path tests exercise evaluate.
+  process.env.EXTRACT_JEV_LIVE = '1';
+});
+
+afterEach(() => {
+  delete process.env.EXTRACT_JEV_LIVE;
 });
 
 function choicePayload(choice: string, modelId = 'typesafe-ai/jev'): JevEvaluatePayload {
@@ -114,6 +120,22 @@ describe('buildExtractEvaluationState', () => {
 describe('decideExtractNext', () => {
   it('skips without calling evaluate when the gateway secret is missing', async () => {
     hasAiGatewayKey.mockReturnValue(false);
+    const decision = await decideExtractNext({
+      videoId: 'auJzb1D-fag',
+      shardCount: 1,
+      durationSeconds: 120,
+      costUnits: 120,
+      costBoundUnits: 120,
+      validationFailures: [],
+      attempt: 1,
+    });
+    expect(decision).toBeNull();
+    expect(experimental_evaluate).not.toHaveBeenCalled();
+  });
+
+  it('skips without the EXTRACT_JEV_LIVE flag even when the gateway key exists', async () => {
+    delete process.env.EXTRACT_JEV_LIVE;
+    hasAiGatewayKey.mockReturnValue(true);
     const decision = await decideExtractNext({
       videoId: 'auJzb1D-fag',
       shardCount: 1,
@@ -206,7 +228,7 @@ describe('planShardsWithJev', () => {
     expect(manifest && validateShardManifest(manifest).ok).toBe(1);
   });
 
-  it('returns no manifest on a stop decision', async () => {
+  it('treats a stop decision as a skip: null decision + deterministic base manifest', async () => {
     experimental_evaluate.mockResolvedValue(choicePayload('stop'));
     const { decision, manifest } = await planShardsWithJev(
       'auJzb1D-fag',
@@ -214,8 +236,10 @@ describe('planShardsWithJev', () => {
       null,
       360,
     );
-    expect(decision?.action).toBe('stop');
-    expect(manifest).toBeNull();
+    // stop no longer aborts: the planner proceeds with the deterministic base.
+    expect(decision).toBeNull();
+    expect(manifest?.shards).toHaveLength(2);
+    expect(manifest && validateShardManifest(manifest).ok).toBe(1);
   });
 
   it('returns a validator-gated manifest on a chunk decision', async () => {
