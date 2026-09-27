@@ -3,7 +3,7 @@ import {
   VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
   classifyVideoPackExtractFailure,
   hostedExtractReasonFromDetail,
-  isTransientVideoPackGatewayError,
+  isTransientVideoPackExtractError,
 } from '@/lib/video-pack-extract-reason';
 
 describe('video-pack-extract-reason', () => {
@@ -37,7 +37,7 @@ describe('video-pack-extract-reason', () => {
       ),
     ).toBe('HOSTED_PACK_SOURCE_NOT_FOUND');
     expect(
-      isTransientVideoPackGatewayError(new Error('Requested entity was not found.')),
+      isTransientVideoPackExtractError(new Error('Requested entity was not found.')),
     ).toBe(false);
   });
 
@@ -51,25 +51,30 @@ describe('video-pack-extract-reason', () => {
   });
 
   it('classifies transient gateway errors for retry', () => {
-    expect(isTransientVideoPackGatewayError(new Error('Vercel AI Gateway returned empty content'))).toBe(
+    expect(isTransientVideoPackExtractError(new Error('Vercel AI Gateway returned empty content'))).toBe(
       true,
     );
     expect(
-      isTransientVideoPackGatewayError(
+      isTransientVideoPackExtractError(
         new Error('GatewayInternalServerError: Service temporarily unavailable'),
       ),
     ).toBe(true);
-    expect(isTransientVideoPackGatewayError(new Error('Video pack spec extract requires AI Gateway'))).toBe(
+    expect(isTransientVideoPackExtractError(new Error('Video pack spec extract requires AI Gateway'))).toBe(
       false,
     );
     expect(
-      isTransientVideoPackGatewayError(
+      isTransientVideoPackExtractError(
+        new Error('Video pack spec extract requires direct Google video access and model gemini-3.8-flash.'),
+      ),
+    ).toBe(false);
+    expect(
+      isTransientVideoPackExtractError(
         new Error('Gemini 3.8 Flash returned unparseable spec JSON at position 4'),
       ),
     ).toBe(false);
   });
 
   it('pins the extract pipeline version marker', () => {
-    expect(VIDEO_PACK_EXTRACT_PIPELINE_VERSION).toBe('p1.5-chunked-extract-v1');
+    expect(VIDEO_PACK_EXTRACT_PIPELINE_VERSION).toBe('p1.6-direct-shard-v1');
   });
 });

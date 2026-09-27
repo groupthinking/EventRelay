@@ -141,10 +141,22 @@ class RobustYouTubeService:
                 logger.warning(f"YouTube Search fallback failed: {e}")
 
         # Final fallback: yt-dlp (most reliable, no API key needed)
-        try:
-            return await self._get_metadata_ytdlp(video_url, video_id)
-        except Exception as e:
-            logger.warning("yt-dlp fallback failed: %s", redact_proxy_credentials(e))
+        from .ytdlp_circuit import get_ytdlp_circuit
+
+        circuit = get_ytdlp_circuit()
+        if not circuit.allow():
+            logger.warning(
+                "yt-dlp circuit open (%s consecutive failures); skipping fallback",
+                circuit.consecutive_failures,
+            )
+        else:
+            try:
+                metadata = await self._get_metadata_ytdlp(video_url, video_id)
+                circuit.record_success()
+                return metadata
+            except Exception as e:
+                circuit.record_failure()
+                logger.warning("yt-dlp fallback failed: %s", redact_proxy_credentials(e))
 
         raise Exception("All YouTube metadata APIs failed")
 

@@ -18,8 +18,11 @@ describe('UVAI is one product surface', () => {
   it('keeps Home as a sell page and Studio as the sole workbench', () => {
     const home = readSource('app/page.tsx');
     const studio = readSource('app/studio/page.tsx');
+    const shell = readSource('app/studio/StudioShell.tsx');
     expect(home).not.toContain('OneLoopStudio');
-    expect(studio).toContain('OneLoopStudio');
+    expect(studio).toContain('StudioShell');
+    expect(studio).not.toContain('OneLoopStudio');
+    expect(shell).toContain('OneLoopStudio');
     expect(home).not.toContain("redirect('/dashboard')");
   });
 

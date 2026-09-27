@@ -23,7 +23,7 @@ on:
 permissions:
   contents: read # branch inventory + PR metadata; intentionally avoids admin-only branch protection reads
   issues: write # upsert the drift report issue and comment on untracked PRs
-  pull-requests: read # inspect open PR metadata only
+  pull-requests: write # remediation comments; issues:write alone 403s on pull requests
 
 concurrency:
   group: repository-reconciliation
@@ -124,12 +124,17 @@ jobs:
                 branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
               } while (branchCursor);
             } catch (err) {
+              const integrationForbidden =
+                (Array.isArray(err.errors) &&
+                  err.errors.some(
+                    (e) =>
+                      e.type === "FORBIDDEN" ||
+                      /not accessible by integration/i.test(e.message || ""),
+                  )) ||
+                /not accessible by integration/i.test(err.message || "");
               if (
-                err.status === 403
-                && (
-                  /rate limit/i.test(err.message || "")
-                  || /resource not accessible by integration/i.test(err.message || "")
-                )
+                (err.status === 403 && /rate limit/i.test(err.message || ""))
+                || integrationForbidden
               ) {
                 core.info("Repository reconciliation deferred: GitHub API branch inventory was unavailable before reconciliation completed.");
                 return;
@@ -249,16 +254,24 @@ jobs:
             }
 
             // --- Remediation: comment on non-draft PRs missing a canonical issue ---
+            // Per-PR failures (permissions, locked threads, mid-run closes) warn and
+            // continue so one un-commentable PR cannot fail the whole report.
             const botTag = "<!-- reconciliation-missing-issue -->";
             for (const pr of untracked) {
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner, repo, issue_number: pr.number, per_page: 100
-              });
-              if (comments.some(c => (c.body || "").includes(botTag))) continue;
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: pr.number,
-                body: `${botTag}\n⚠️ **Repository reconciliation**: this PR does not reference exactly one canonical issue.\n\nPlease add a \`Closes #<issue>\` reference in the PR description so it can be tracked against the delivery plan.\n\nSee governance: #898`
-              });
+              try {
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  owner, repo, issue_number: pr.number, per_page: 100
+                });
+                if (comments.some(c => (c.body || "").includes(botTag))) continue;
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: pr.number,
+                  body: `${botTag}\n⚠️ **Repository reconciliation**: this PR does not reference exactly one canonical issue.\n\nPlease add a \`Closes #<issue>\` reference in the PR description so it can be tracked against the delivery plan.\n\nSee governance: #898`
+                });
+              } catch (err) {
+                core.warning(
+                  `Remediation comment skipped for PR #${pr.number}: ${err.status || ''} ${err.message || err}`.trim()
+                );
+              }
             }
 
             // Competing PRs remain report-only: body text is not closure authority.

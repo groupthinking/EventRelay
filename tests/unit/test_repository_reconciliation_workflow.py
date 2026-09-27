@@ -45,7 +45,7 @@ const vm = require("vm");
 const [scriptPath, scenarioPath] = process.argv.slice(2);
 const script = fs.readFileSync(scriptPath, "utf8");
 const scenario = JSON.parse(fs.readFileSync(scenarioPath, "utf8"));
-const actions = { issueUpdates: [], issueCreates: [], comments: [], pullUpdates: [], infos: [] };
+const actions = { issueUpdates: [], issueCreates: [], comments: [], pullUpdates: [], infos: [], warnings: [] };
 
 const pullsList = async () => ({ data: scenario.pulls || [] });
 pullsList.__tag = "pulls.list";
@@ -62,6 +62,7 @@ const graphql = async () => {
   if (scenario.graphqlError) {
     const err = new Error(scenario.graphqlError.message);
     err.status = scenario.graphqlError.status;
+    if (scenario.graphqlError.errors) err.errors = scenario.graphqlError.errors;
     throw err;
   }
   return {
@@ -139,6 +140,11 @@ const github = {
       },
       listComments,
       createComment: async (payload) => {
+        if ((scenario.commentFailures || []).includes(payload.issue_number)) {
+          const err = new Error("Resource not accessible by integration");
+          err.status = 403;
+          throw err;
+        }
         actions.comments.push(payload);
         return { data: payload };
       },
@@ -161,7 +167,10 @@ const context = {
     },
   },
 };
-const core = { info: (message) => actions.infos.push(message) };
+const core = {
+  info: (message) => actions.infos.push(message),
+  warning: (message) => actions.warnings.push(message),
+};
 
 (async () => {
   await vm.runInNewContext(
@@ -223,7 +232,11 @@ def test_reconciliation_workflow_minimum_permissions() -> None:
     workflow = _load_workflow()
     perms = workflow["permissions"]
     assert perms.get("contents") == "read"
-    assert perms.get("pull-requests") == "read"
+    # Commenting on a *pull request* via the issues API requires
+    # pull-requests:write — issues:write alone 403s with "Resource not
+    # accessible by integration" (observed in production on PR #2199).
+    # The workflow only posts remediation comments; it cannot merge or push.
+    assert perms.get("pull-requests") == "write"
     # Needs write to upsert the report and comment on untracked PRs.
     assert perms.get("issues") == "write"
 
@@ -304,6 +317,15 @@ def test_reconciliation_branch_query_omits_admin_only_branch_protection_field() 
     script = _get_script(_load_workflow())
 
     assert "branchProtectionRule { id }" not in script
+
+
+def test_reconciliation_uses_rest_branch_protection_for_stale_inventory() -> None:
+    """Protected branches are excluded via paginated REST listing, not admin GraphQL or getBranchProtection."""
+    script = _get_script(_load_workflow())
+    assert "github.paginate(github.rest.repos.listBranches" in script
+    assert "protected: true" in script
+    assert "getBranchProtection" not in script
+    assert "branchProtectionRule {" not in script
 
 
 def test_reconciliation_workflow_report_is_idempotent() -> None:
@@ -639,3 +661,62 @@ def test_reconciliation_defers_without_writing_on_forbidden_graphql_scope(
     assert outcome["issueUpdates"] == []
     assert outcome["issueCreates"] == []
     assert any("Repository reconciliation deferred" in message for message in outcome["infos"])
+
+
+def test_reconciliation_defers_on_graphql_forbidden_error_entries(
+    tmp_path: Path,
+) -> None:
+    """A FORBIDDEN entry in the GraphQL errors array must defer, not publish an empty report."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [],
+            "branches": [],
+            "graphqlError": {
+                "status": 200,
+                "message": "Request failed due to following response errors",
+                "errors": [
+                    {
+                        "type": "FORBIDDEN",
+                        "message": "Resource not accessible by integration",
+                    }
+                ],
+            },
+        },
+    )
+
+    assert outcome["issueUpdates"] == []
+    assert outcome["issueCreates"] == []
+    assert any("Repository reconciliation deferred" in message for message in outcome["infos"])
+
+
+def test_reconciliation_comment_failure_warns_and_continues(tmp_path: Path) -> None:
+    """One un-commentable PR must not fail the report or block other notices."""
+    outcome = _run_reconciliation(
+        tmp_path,
+        {
+            "pulls": [
+                {
+                    "number": 2199,
+                    "title": "feat: make Video Pack extraction durable",
+                    "body": "## Summary\n- no closing reference",
+                    "draft": False,
+                    "head": {"ref": "vercel-agent/x", "repo": None},
+                },
+                {
+                    "number": 2200,
+                    "title": "Another untracked PR",
+                    "body": "## Summary\n- no closing reference",
+                    "draft": False,
+                    "head": {"ref": "other/y", "repo": None},
+                },
+            ],
+            "commentFailures": [2199],
+        },
+    )
+
+    assert [comment["issue_number"] for comment in outcome["comments"]] == [2200]
+    assert any("#2199" in message for message in outcome["warnings"])
+    assert "- Ready PRs without exactly one canonical issue: **2**" in (
+        outcome["issueCreates"][0]["body"]
+    )

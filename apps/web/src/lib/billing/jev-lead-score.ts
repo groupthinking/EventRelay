@@ -2,7 +2,7 @@ import { experimental_evaluate as evaluate } from 'ai';
 import { aiGateway } from '@/lib/ai-gateway';
 import { hasAiGatewayKey } from '@/lib/vercel-ai-gateway';
 
-const DEFAULT_JEV_MODEL = process.env.BILLING_JEV_MODEL?.trim() || 'typesafe-ai/jev';
+export const JEV_DEFAULT_MODEL = process.env.BILLING_JEV_MODEL?.trim() || 'typesafe-ai/jev';
 
 const LEAD_DECISION_QUESTION_ID = 'lead_decision';
 
@@ -36,7 +36,7 @@ const LEAD_ROUTING_QUESTIONS = {
   },
 };
 
-function toProbability(value: unknown, fallback: number): number {
+export function toProbability(value: unknown, fallback: number): number {
   if (typeof value !== 'number' || Number.isNaN(value)) {
     return fallback;
   }
@@ -47,7 +47,10 @@ function isJevLeadDecision(value: unknown): value is JevLeadDecision {
   return value === 'action_items' || value === 'clarification';
 }
 
-function readTypesafeConfidence(providerMetadata: unknown): number | null {
+export function readTypesafeConfidence(
+  providerMetadata: unknown,
+  questionId: string = LEAD_DECISION_QUESTION_ID,
+): number | null {
   if (!providerMetadata || typeof providerMetadata !== 'object') {
     return null;
   }
@@ -60,7 +63,7 @@ function readTypesafeConfidence(providerMetadata: unknown): number | null {
     return toProbability(confidence, 0.5);
   }
   if (confidence && typeof confidence === 'object') {
-    const perQuestion = (confidence as Record<string, unknown>)[LEAD_DECISION_QUESTION_ID];
+    const perQuestion = (confidence as Record<string, unknown>)[questionId];
     if (typeof perQuestion === 'number' && !Number.isNaN(perQuestion)) {
       return toProbability(perQuestion, 0.5);
     }
@@ -151,13 +154,13 @@ export async function scoreLeadWithJev(input: {
 
   try {
     const result = await evaluate({
-      model: aiGateway.evaluationModel(DEFAULT_JEV_MODEL),
+      model: aiGateway.evaluationModel(JEV_DEFAULT_MODEL),
       state: buildLeadEvaluationState(query, input.history),
       questions: LEAD_ROUTING_QUESTIONS,
       abortSignal: AbortSignal.timeout(12_000),
     });
 
-    const mapped = mapJevEvaluateResultToLeadScore(result, DEFAULT_JEV_MODEL);
+    const mapped = mapJevEvaluateResultToLeadScore(result, JEV_DEFAULT_MODEL);
     if (!mapped) {
       return null;
     }
