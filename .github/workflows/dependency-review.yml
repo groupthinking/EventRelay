@@ -67,11 +67,19 @@ jobs:
           ).stdout
           paths = [PurePosixPath(raw.decode("utf-8")) for raw in output.split(b"\0") if raw]
           exact_names = {
-              "Cargo.lock", "Cargo.toml", "Gemfile", "Gemfile.lock",
-              "Pipfile", "Pipfile.lock", "composer.json", "composer.lock",
-              "go.mod", "go.sum", "npm-shrinkwrap.json", "package-lock.json",
-              "package.json", "pnpm-lock.yaml", "poetry.lock", "pom.xml",
-              "pyproject.toml", "setup.cfg", "setup.py", "uv.lock", "yarn.lock",
+              "Cargo.lock", "Cargo.toml", "Directory.Build.props",
+              "Directory.Build.targets", "Directory.Packages.props",
+              "Gemfile", "Gemfile.lock", "NuGet.Config", "Package.resolved",
+              "Package.swift", "Pipfile", "Pipfile.lock", "bun.lock",
+              "bun.lockb", "bunfig.toml", "composer.json", "composer.lock",
+              "conda-lock.yml", "deno.json", "deno.jsonc", "deno.lock",
+              "environment.yaml", "environment.yml", "global.json", "go.mod",
+              "go.sum", "gradle.properties", "mix.exs", "mix.lock",
+              "npm-shrinkwrap.json", "package-lock.json", "package.json",
+              "packages.lock.json", "pixi.lock", "pixi.toml", "pnpm-lock.yaml",
+              "poetry.lock", "pom.xml", "pylock.toml", "pyproject.toml",
+              "settings.gradle", "settings.gradle.kts", "setup.cfg", "setup.py",
+              "stack.yaml", "stack.yaml.lock", "uv.lock", "yarn.lock",
           }
 
           def is_dependency_input(path: PurePosixPath) -> bool:
@@ -79,11 +87,16 @@ jobs:
               return (
                   name in exact_names
                   or name.startswith("Dockerfile")
-                  or (name.startswith("requirements") and name.endswith(".txt"))
+                  or (
+                      name.startswith(("constraints", "requirements"))
+                      and name.endswith((".in", ".txt"))
+                  )
                   or name.endswith((".csproj", ".fsproj", ".gradle", ".gradle.kts"))
                   or path.as_posix() in {
+                      ".github/dependabot.yaml",
                       ".github/dependabot.yml",
                       ".github/workflows/dependency-review.yml",
+                      "vendor/modules.txt",
                   }
               )
 
