@@ -99,10 +99,9 @@ export default function GroundedSpecReview({ videoId, pack, acknowledgment, pers
           <p id={scopeId}>Acknowledgment records inspection, not acceptance of proposals or authorization. It does not verify evidence, lock builder inputs, run tests, or produce a G.A.T.E. receipt.</p>
         </header>
         {!available ? (
-          <div className="flex flex-col gap-3">
-            <p>{inspection.status === 'unavailable' ? 'Grounded specification unavailable for this pack. Older cached packs remain readable; cache upgrades and re-extraction are outside this phase.' : inspection.status === 'source-unavailable' ? 'No usable source. Provide a usable source video; no application blueprint was produced.' : 'Invalid grounded specification. It cannot be acknowledged.'}</p>
-            <Issues issues={inspection.issues} />
-          </div>
+          // One-line banner only. The full issues list is intentionally not
+          // dumped under the banner (Studio layout: no raw issues JSON on page).
+          <p data-testid="grounded-spec-invalid-banner">{inspection.status === 'unavailable' ? 'Grounded specification unavailable for this pack. Older cached packs remain readable; cache upgrades and re-extraction are outside this phase.' : inspection.status === 'source-unavailable' ? 'No usable source. Provide a usable source video; no application blueprint was produced.' : 'Invalid grounded specification. It cannot be acknowledged.'}</p>
         ) : (
           <>
             <div className="flex flex-col gap-2">

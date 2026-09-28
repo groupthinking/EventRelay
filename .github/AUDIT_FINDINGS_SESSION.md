@@ -12,6 +12,12 @@
 
 This document serves as a **master index** for all findings from the comprehensive deep research session. Issues have been created for each major finding category. Use this as a reference to understand the full scope and priority sequencing.
 
+## Remediation status updates
+
+- **2026-09-20:** Re-read the source task log (`36f6c3e5-60dc-4dfe-a151-ef2ab9114afa`) and confirmed this tracker against the full audit report.
+- **2026-09-20:** Retired the legacy `.github/workflows/verification.yml` workflow after verifying it no longer owns any current delivery path.
+- **2026-09-20:** Updated `.github/workflows/repository-reconciliation.yml` to avoid the admin-only `branchProtectionRule` GraphQL field and to defer cleanly if GitHub still returns a 403 integration-scope error.
+
 ---
 
 ## Findings by Category

@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | AUDIT-001 | #2163 Video Pack dual store | 1 | **Done** — Upstash REST factory; FS dev-only |
 | AUDIT-002 | #2164 G.A.T.E. verification | 1–2 | **Done** — Origin attestations + HTTP probe in origin-gate & Studio |
-| AUDIT-003 | #2165 Reconciliation workflow | 1 | **Done** — REST protection; verification.yml dispatch-only |
+| AUDIT-003 | #2165 Reconciliation workflow | 1 | **Done** — REST `listBranches?protected=true`; `verification.yml` retired |
 | AUDIT-004 | #2166 Agent orchestration | 2 | **Done** — `AGENT_ORCHESTRATION_TRUTH.md` + pipeline warning |
 | AUDIT-005 | #2167 Duplicate API routes | 2 | **Done** — v1 video routes re-export canonical handlers |
 | AUDIT-006 | #2168 Bare exceptions | 2 | **Done** — `EXCEPTION_HANDLING_STANDARDS.md` + disclosure tests |
