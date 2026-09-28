@@ -47,6 +47,8 @@ describe('Studio authoritative gate receipt', () => {
     const deployCalls = vi.mocked(startStudioDeploy).mock.calls.length;
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
     fireEvent.change(screen.getByRole('combobox', { name: 'Stored packs' }), { target: { value: video.id } });
+    // Single-pane workbench: the grounded spec lives behind its Spec tab.
+    fireEvent.click(screen.getByTestId('studio-workbench-tab-spec'));
     expect(screen.getByTestId('grounded-spec-review')).toBeTruthy();
     expect(screen.getByText('Task checklist')).toBeTruthy();
     expect(process).not.toHaveBeenCalled();
