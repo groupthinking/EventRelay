@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "base_sha": "adf8d1e0e61787966a9a09b7827c8d54abd27bcc",
+  "source_and_test_sha256": {
+    "src/youtube_extension/backend/services/notification_service.py": "532f7a9c41faa1234adfbd756ae5bf32f78d78d21d99d791a18ba6e6bc0f8851",
+    "tests/unit/test_notification_service.py": "dedd740480dde3c004f18805d14bfb5cd2c76dd57b1d80354f205ef5b8b213d7",
+    "tests/unit/test_weight_persistence.py": "9adc2f87a45c95be3e314b7a98a12478673b8aaefb828bc3f730bc41d528d345"
+  },
+  "baseline": {
+    "exit_code": 1,
+    "passed": 161,
+    "failed": 1,
+    "expected_failure": "test_log_file_io_runs_off_event_loop"
+  },
+  "after": {
+    "exit_code": 0,
+    "passed": 258,
+    "failed": 0
+  },
+  "ci": "not_yet_verified",
+  "merge": "not_yet_performed",
+  "deployment": "not_performed"
+}
