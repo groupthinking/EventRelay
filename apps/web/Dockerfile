@@ -36,8 +36,11 @@ COPY --from=deps /app ./
 # Copy the rest of the application source code
 COPY . .
 
-# Build the Next.js application
-RUN npm run build --workspace=apps/web
+# Production typecheck must not see a dev typegen tree. The CI job builds on
+# the host first, and a copied apps/web/.next/dev/types/validator.ts can be
+# syntactically invalid (TS1434/TS1002) while .next/types stays valid.
+ENV NODE_ENV=production
+RUN rm -rf apps/web/.next && npm run build --workspace=apps/web
 
 # Stage 4: Runner
 FROM base AS runner
