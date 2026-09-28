@@ -50,6 +50,10 @@ const PUBLIC_API_EXACT = new Set([
   '/api/v1/video/assemble',
   // Hosted /d pack-grounded chat (#2122): session-optional; proxy AI rate limit + route quota.
   '/api/chat',
+  // Pro Loom → xAI STT → in-session Grok. Identity is checked inside the route
+  // (stored Pro or paywall bypass), same sources as /api/chat, so the edge
+  // gate must not 401 a signed billing cookie that has no NextAuth session.
+  '/api/loom/build',
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
@@ -122,6 +126,7 @@ const AI_ROUTE_PREFIXES = [
   '/api/agents/actions',
   '/api/agents/dispatch',
   '/api/chat',
+  '/api/loom',
   '/api/extract-events',
   '/api/pipeline',
   '/api/realtime',

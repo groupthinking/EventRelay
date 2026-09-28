@@ -1,6 +1,7 @@
 import { extractYouTubeId } from '@/lib/timestamp';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import { startVideoPackEmit } from '@/lib/emit-video-pack';
+import { parseLoomShareInput } from '@/lib/loom-share';
 
 export type StudioHandoff = {
   videoId: string;
@@ -32,10 +33,19 @@ export function studioVideoHref(raw: string): string | null {
 }
 
 /**
- * Home paste: validate YouTube URL, kick pack emit, return /studio?video=.
- * Does not wait for spec extract. Invalid input returns null and does not emit.
+ * Home paste. A Loom share returns /studio?video= and does not emit a pack.
+ * A YouTube URL kicks pack emit, then returns /studio?video=.
+ * Invalid input returns null and does not emit.
  */
+export function loomStudioHref(raw: string): string | null {
+  const loom = parseLoomShareInput(raw);
+  if (!loom) return null;
+  return `${CANONICAL_STUDIO_PATH}?video=${encodeURIComponent(loom.shareUrl)}`;
+}
+
 export function submitHomePaste(raw: string): string | null {
+  const loomHref = loomStudioHref(raw);
+  if (loomHref) return loomHref;
   const handoff = resolveStudioHandoff(raw);
   if (!handoff) return null;
   startVideoPackEmit(handoff.watchUrl);
@@ -100,6 +110,21 @@ export function applyStudioQueryAutoStart(input: {
         : ''
   ) || '';
   if (!query) return 'skipped';
+  const loom = parseLoomShareInput(query);
+  if (loom) {
+    input.onResolved?.(loom.shareUrl);
+    const loomKey = `loom:${loom.videoId}`;
+    if (
+      input.startedKey.current === loomKey
+      || strictModeAutoStartedVideoId === loomKey
+    ) {
+      return 'already';
+    }
+    input.startedKey.current = loomKey;
+    strictModeAutoStartedVideoId = loomKey;
+    input.start(loom.shareUrl);
+    return 'started';
+  }
   const handoff = resolveStudioHandoff(query);
   if (!handoff) {
     input.onInvalidQuery?.(query);

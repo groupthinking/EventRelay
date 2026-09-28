@@ -70,6 +70,16 @@ describe('submitHomePaste kicks pack emit then hands off to Studio', () => {
     expect(submitHomePaste('not a youtube url')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('hands a public Loom share to Studio without emitting a Video Pack', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const share = 'https://www.loom.com/share/c43a642f815f4378b6f80a889bb73d8d';
+    expect(submitHomePaste(`https://loom.com/embed/c43a642f815f4378b6f80a889bb73d8d`)).toBe(
+      `/studio?video=${encodeURIComponent(share)}`,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('applyStudioQueryAutoStart (?video= one-shot, Strict Mode safe)', () => {
@@ -173,6 +183,28 @@ describe('applyStudioQueryAutoStart (?video= one-shot, Strict Mode safe)', () =>
     ).toBe('invalid');
     expect(start).not.toHaveBeenCalled();
     expect(onInvalidQuery).toHaveBeenCalledWith('not a youtube url');
+  });
+
+  it('auto-starts a Loom share without treating it as an invalid YouTube handoff', () => {
+    resetStudioQueryAutoStart();
+    const startedKey = { current: null as string | null };
+    const start = vi.fn();
+    const onInvalidQuery = vi.fn();
+    const share = 'https://www.loom.com/share/c43a642f815f4378b6f80a889bb73d8d';
+    expect(
+      applyStudioQueryAutoStart({
+        query: 'https://loom.com/embed/C43A642F815F4378B6F80A889BB73D8D',
+        startedKey,
+        start,
+        onInvalidQuery,
+      }),
+    ).toBe('started');
+    expect(onInvalidQuery).not.toHaveBeenCalled();
+    expect(start).toHaveBeenCalledWith(share);
+    expect(
+      applyStudioQueryAutoStart({ query: share, startedKey, start, onInvalidQuery }),
+    ).toBe('already');
+    expect(start).toHaveBeenCalledTimes(1);
   });
 });
 

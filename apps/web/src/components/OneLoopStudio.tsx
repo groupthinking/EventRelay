@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Download, GitPullRequest, Hammer, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
+import { parseLoomShareInput } from '@/lib/loom-share';
+import { requestLoomProBuild } from '@/lib/loom-studio-client';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
   deployHoldReason,
@@ -326,6 +328,7 @@ export default function OneLoopStudio({
   const autoSelectedPackRef = useRef(false);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
+  const addVideo = useDashboardStore((s) => s.addVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const updateVideo = useDashboardStore((s) => s.updateVideo);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
@@ -430,6 +433,45 @@ export default function OneLoopStudio({
   }, [selectedVideoId, videos, searchParams, selectVideo]);
 
   const runAnalysis = async (raw: string) => {
+    const loom = parseLoomShareInput(raw);
+    if (loom) {
+      setUrl(loom.shareUrl);
+      setBusy(true);
+      setWorkflowActions(null);
+      setActRunId(null);
+      setUsedSameRun(false);
+      setMessage('Transcribing the Loom share with xAI…');
+      try {
+        const built = await requestLoomProBuild(loom.shareUrl);
+        const id = crypto.randomUUID();
+        addVideo({
+          id,
+          title: `Loom ${built.loomId.slice(0, 8)}`,
+          url: built.shareUrl,
+          status: 'complete',
+          progress: 100,
+          transcript: built.transcript,
+          duration: `${Math.round(built.duration)}s`,
+          processedAt: new Date().toISOString(),
+          insights: {
+            summary: built.answer,
+            actions: [],
+            sentiment: '',
+            topics: [],
+          },
+        });
+        selectVideo(id);
+        setMessage(
+          `Pro Grok build is in this session (${built.duration}s, provider ${built.provider}).`,
+        );
+      } catch (err) {
+        console.error('loom studio build failed', err);
+        setMessage(err instanceof Error ? err.message : 'Loom build failed.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     const handoff = resolveStudioHandoff(raw);
     if (!handoff) {
       setMessage('Need a valid YouTube URL.');
@@ -1011,7 +1053,7 @@ export default function OneLoopStudio({
           </div>
           <form onSubmit={analyze} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
             <label className="sr-only" htmlFor="youtube-url">
-              YouTube URL
+              YouTube URL or Loom share
             </label>
             <input
               id="youtube-url"
@@ -1618,7 +1660,12 @@ export default function OneLoopStudio({
             <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
               Summary
             </h2>
-            <p className="mt-3 text-sm leading-6 text-white/80">{selected.insights.summary}</p>
+            <p
+              className="mt-3 text-sm leading-6 text-white/80"
+              data-testid={parseLoomShareInput(selected.url) ? 'studio-loom-grok-build' : undefined}
+            >
+              {selected.insights.summary}
+            </p>
           </section>
         )}
 

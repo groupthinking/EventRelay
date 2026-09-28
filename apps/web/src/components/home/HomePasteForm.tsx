@@ -6,7 +6,8 @@ import { submitHomePaste } from '@/lib/studio-handoff';
 
 /**
  * Sell-page paste field. Does not load the workbench bundle.
- * Validates a YouTube URL, kicks pack emit, then router.push('/studio?video=').
+ * YouTube paste kicks pack emit and opens Studio.
+ * A public Loom share opens Studio without the Video Pack path.
  */
 export default function HomePasteForm() {
   const router = useRouter();
@@ -55,7 +56,7 @@ export default function HomePasteForm() {
         </p>
       ) : (
         <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-white/55">
-          Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
+          YouTube opens Studio and starts the Video Pack handoff. A public Loom share opens Studio for a Pro xAI transcription and in-session Grok build. Transcript quality varies by source.
         </p>
       )}
     </form>

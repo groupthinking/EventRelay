@@ -138,6 +138,9 @@ _archive/
 ai-edge-torch/
 api_usage_data.json
 build/
+# App Router handler. The directory name matches the build/ artifact rule above.
+!apps/web/src/app/api/loom/build/
+!apps/web/src/app/api/loom/build/**
 build_extensions/
 build_extensions/uvai-extensions/ai-integrations/MiniCPM-o/
 build_extensions/uvai-extensions/ai-integrations/youtube-mcp/

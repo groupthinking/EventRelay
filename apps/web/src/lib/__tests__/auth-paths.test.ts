@@ -94,6 +94,9 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/v1/video/assemble')).toBe(false);
     expect(isPublicApiPath('/api/chat')).toBe(true);
     expect(needsAuthentication('/api/chat')).toBe(false);
+    expect(isPublicApiPath('/api/loom/build')).toBe(true);
+    expect(needsAuthentication('/api/loom/build')).toBe(false);
+    expect(needsAuthentication('/api/loom/other')).toBe(true);
     // Exact allowlist only — siblings stay gated.
     expect(isPublicApiPath('/api/video')).toBe(false);
     expect(isPublicApiPath('/api/video/generate')).toBe(false);
@@ -186,6 +189,7 @@ describe('AI route classification (rate-limit budget)', () => {
       '/api/agents/actions',
       '/api/agents/dispatch',
       '/api/chat',
+      '/api/loom',
       '/api/extract-events',
       '/api/pipeline',
       '/api/realtime',
