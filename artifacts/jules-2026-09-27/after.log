@@ -1,0 +1,35 @@
+2026-09-28 12:09:03 [    INFO] youtube_extension.backend.code_generator: ✅ Project generated successfully at /tmp/pytest-of-root/pytest-1/test_successful_generation_kee0/uvai_project_fivfvckg
+PASSED                                                                   [ 97%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_health_timestamp_is_evaluated_per_request 
+-------------------------------- live log call ---------------------------------
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/api/health "HTTP/1.1 200 OK"
+PASSED                                                                   [ 97%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_unimplemented_endpoints_fail_loudly 
+-------------------------------- live log call ---------------------------------
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: POST http://testserver/auth/login "HTTP/1.1 501 Not Implemented"
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/api/data "HTTP/1.1 501 Not Implemented"
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/ "HTTP/1.1 200 OK"
+PASSED                                                                   [ 98%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_index_reports_no_gaps_without_optional_features 
+-------------------------------- live log call ---------------------------------
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/ "HTTP/1.1 200 OK"
+PASSED                                                                   [ 98%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_messages_round_trip_through_a_real_store 
+-------------------------------- live log call ---------------------------------
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/api/messages "HTTP/1.1 200 OK"
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: POST http://testserver/api/messages "HTTP/1.1 201 Created"
+2026-09-28 12:09:03 [    INFO] httpx: HTTP Request: GET http://testserver/api/messages "HTTP/1.1 200 OK"
+PASSED                                                                   [ 98%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_token_helpers_are_real_implementations PASSED [ 99%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_signing_fails_closed_without_a_secret_key PASSED [ 99%]
+tests/unit/test_code_generator.py::TestGeneratedFastAPIBehaviour::test_auth_projects_declare_their_password_hashing_dependency 
+-------------------------------- live log call ---------------------------------
+2026-09-28 12:09:03 [    INFO] youtube_extension.backend.code_generator: 🏗️ Generating project: api
+2026-09-28 12:09:03 [    INFO] youtube_extension.backend.code_generator: 📝 Using template-based code generation
+2026-09-28 12:09:03 [ WARNING] youtube_extension.backend.code_generator: ⚠️ BuildPlan not found, falling back to legacy extraction
+2026-09-28 12:09:03 [    INFO] youtube_extension.backend.code_generator: ✅ Project generated successfully at /tmp/pytest-of-root/pytest-1/test_auth_projects_declare_the0/api_auth_reqs
+PASSED                                                                   [100%]
+
+- generated xml file: /workspace/scratch/6c44ea0541bd/EventRelay/artifacts/jules-2026-09-27/after.xml -
+============================= 258 passed in 0.80s ==============================

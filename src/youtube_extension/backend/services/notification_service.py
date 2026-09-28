@@ -7,6 +7,7 @@ Handles system notifications, alerts, and user communications.
 Provides centralized notification management with multiple channels.
 """
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass
@@ -247,11 +248,15 @@ class NotificationService:
                 "metadata": message.metadata
             }
 
-            with open(self.notification_log, 'a', encoding='utf-8') as f:
-                f.write(json.dumps(log_entry) + '\n')
+            await asyncio.to_thread(self._append_log_entry, json.dumps(log_entry) + '\n')
 
         except Exception as e:
             logger.error(f"Failed to log notification to file: {e}")
+
+    def _append_log_entry(self, entry: str) -> None:
+        """Append one record without blocking the event-loop thread."""
+        with open(self.notification_log, 'a', encoding='utf-8') as f:
+            f.write(entry)
 
     async def _send_email(self, message: NotificationMessage) -> None:
         """Send notification via email."""
