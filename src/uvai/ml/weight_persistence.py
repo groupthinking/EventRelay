@@ -76,15 +76,24 @@ def save_checkpoint(
 
     payload = json.dumps(checkpoint, indent=2, default=str)
 
-    # Write latest checkpoint (atomic via temp + rename)
-    tmp_path = CHECKPOINT_FILE.with_suffix(".tmp")
-    tmp_path.write_text(payload, encoding="utf-8")
-    tmp_path.rename(CHECKPOINT_FILE)
-
-    # Write timestamped copy for history
     ts_name = now.strftime("%Y%m%dT%H%M%SZ") + ".json"
     history_path = CHECKPOINT_HISTORY_DIR / ts_name
-    history_path.write_text(payload, encoding="utf-8")
+    tmp_path = CHECKPOINT_FILE.with_suffix(".tmp")
+
+    try:
+        # Write timestamped copy for history first
+        history_path.write_text(payload, encoding="utf-8")
+
+        # Write latest checkpoint to temp file and rename atomically
+        tmp_path.write_text(payload, encoding="utf-8")
+        tmp_path.rename(CHECKPOINT_FILE)
+    except Exception:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+        raise
 
     # Prune old history files
     _prune_history()
