@@ -12,10 +12,15 @@ skill execution remain disabled until their own observable receipts exist.
 
 ## Verified state
 
-- MCP Core Maintainers accepted [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) on 2026-09-03.
-- The Skills working group published the stable `io.modelcontextprotocol/skills`
-  specification on 2026-09-04 and made `resultType`, `ttlMs`, and `cacheScope`
-  mandatory on 2026-09-10 ([commit `d866efd`](https://github.com/modelcontextprotocol/ext-skills/commit/d866efdba298b55b8156c7b7aa1bdebc1b625f4c)).
+- MCP Core Maintainers accepted [SEP-2640](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2640) on 2026-09-03, and the Final core specification now lives at
+  `modelcontextprotocol/modelcontextprotocol/seps/2640-skills-extension.md`
+  ([commit `1eb5bbe`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/1eb5bbe8ac933bdb595fedc687b8ed545e440491)).
+- Historical working-group change evidence for the cache metadata requirement
+  remains attributable to `modelcontextprotocol/ext-skills/specs/skills.md`
+  ([commit `d866efd`](https://github.com/modelcontextprotocol/ext-skills/commit/d866efdba298b55b8156c7b7aa1bdebc1b625f4c)).
+- The September 16 link-repair commit updated the core SEP's supporting links to
+  the `ext-skills` archive paths
+  ([commit `f56f204`](https://github.com/modelcontextprotocol/modelcontextprotocol/commit/f56f204f6290f6531b14d5734eb3e0a10f0eb201)).
 - The official conformance suite added seven Skills scenarios on 2026-09-11
   ([commit `7169291`](https://github.com/modelcontextprotocol/conformance/commit/7169291ec0b68eb370fddcd9947313ab0d5e4156)).
 - The official MCP client-support matrix currently marks ChatGPT's Skills
@@ -49,8 +54,10 @@ handoff contract that:
 5. Rejects digest drift, cross-origin reads, decoded path traversal, invalid cache
    metadata, any mismatch in the complete verbatim frontmatter object, top-level
    dynamic resources, and unapproved execution.
-6. Emits a deterministic, machine-readable receipt while performing zero network,
-   import, tool, or external-effect operations.
+6. Emits a deterministic, machine-readable receipt that distinguishes the
+   accepted core normative contract from preserved working-group design-history
+   evidence while performing zero network, import, tool, or external-effect
+   operations.
 
 ## Non-goals / safety boundary
 

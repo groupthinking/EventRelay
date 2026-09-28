@@ -82,6 +82,18 @@ jobs:
         run: cd apps/web && npm run lint
       - name: Build web app
         run: npm run build:web
+      - name: Verify Studio preflight against real services
+        env:
+          STUDIO_PREFLIGHT_REPORT: ${{ runner.temp }}/studio-preflight-real/evidence.json
+        run: npm --workspace=apps/web run test:studio-preflight:services
+      - name: Retain real Studio preflight evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: studio-preflight-real-${{ github.sha }}
+          path: ${{ runner.temp }}/studio-preflight-real/
+          if-no-files-found: error
+          retention-days: 7
       - name: Build web production image
         run: docker build --file apps/web/Dockerfile .
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -167,7 +179,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Set up uv
-        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           version: "0.12.1"
           enable-cache: false

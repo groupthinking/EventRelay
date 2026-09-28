@@ -5,6 +5,11 @@ import {
   type JsonCanvasFileNode,
   type JsonCanvasTextNode,
 } from '@/lib/emit-json-canvas';
+import {
+  factoryDeliverFromHostedSpec,
+  type HostedSpecHealthCheck,
+  type FactoryDeliverStatus,
+} from '@/lib/compiled-spec-host';
 import { canonicalGateJson, hashCanonical } from '@/lib/gate-transition';
 
 export const FACTORY_HANDOFF_RECEIPT_VERSION =
@@ -17,6 +22,8 @@ export type FixtureFactoryHandoffInput = {
   existingFingerprints?: readonly string[];
   approvedPlanRevision?: string | null;
   requiresVisualProof?: boolean;
+  liveUrl?: string | null;
+  hostedHealth?: HostedSpecHealthCheck | null;
   issuedAt?: string;
 };
 
@@ -64,6 +71,7 @@ export type FactoryHandoffReceipt = {
     artifact_locator: string;
     artifact_observed: false;
   };
+  factory_deliver: FactoryDeliverStatus;
   receipt_hash: string;
 };
 
@@ -196,6 +204,11 @@ export function createFixtureFactoryHandoff(
       artifact_locator: `fixture://factory/issues/${fingerprint}`,
       artifact_observed: false as const,
     },
+    factory_deliver: factoryDeliverFromHostedSpec({
+      videoId: sandbox.videoId,
+      liveUrl: input.liveUrl,
+      health: input.hostedHealth,
+    }),
   };
   return { ...body, receipt_hash: digest(body) };
 }

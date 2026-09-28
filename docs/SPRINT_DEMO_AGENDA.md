@@ -1,54 +1,67 @@
-# Sprint demo agenda
+# Sprint Demo Agenda
 
-_Internal agenda for the UVAI sprint demonstration. This plan separates verified local behavior from draft pull-request evidence and does not represent a production deployment._
+**Purpose.** This internal agenda demonstrates the public UVAI Home-to-Studio path and reports sprint evidence accurately. It does not authorize production deployment, payment, OAuth configuration, Origin G.A.T.E. transitions, or a merge. Assign the owner placeholders before the meeting.
 
----
+## Evidence boundary
 
-## 📋 Purpose and boundaries
+Only demonstrate a behavior as verified when the listed command passed on the branch or pull-request head being discussed. A local interaction is not production evidence. A draft pull request is not a reviewed change. If a required check is unavailable, use the named fallback and state the limitation plainly.
 
-The demonstration introduces the public workflow from a YouTube URL on the UVAI home page to the Studio workbench. The primary observable outcome is a local navigation toward Studio after a valid YouTube URL is submitted. It is not a claim that every video produces a complete transcript, analysis, payment, or production result. The home page itself states that transcript quality varies by source. [1]
+## Run of show
 
-The Google sign-in retry change is recorded in draft PR #1978. [2] Its branch contains local verification evidence at commit `c145b57f3b28b072daecf5a21420fe7c3ce62c45`, but the pull request is unmerged and awaits Class C authentication review. The sign-in behavior is therefore not a live-demo claim. Do not enter credentials, modify provider settings, initiate checkout, deploy, or change production configuration during this agenda.
+| Time | Owner | Demo action | Expected visible result | Required evidence and fallback |
+|---|---|---|---|---|
+| 0:00–1:00 | **Demo lead: _assign_** | Open `/` and state the demo goal: a prospective visitor can understand the YouTube URL-to-Studio workflow. | The primary heading and URL input are visible. | Source: [`apps/web/src/app/page.tsx`](https://github.com/groupthinking/EventRelay/blob/main/apps/web/src/app/page.tsx). If no local server is available, use a code walkthrough and do not make a hosted-product claim. |
+| 1:00–3:00 | **Product owner: _assign_** | Enter the standard safe fixture URL in the Home form and submit it. | The route becomes `/studio?video=...`. | Run the command on the [canonical landing-page PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) head: `npm --workspace=eventrelay-web exec -- vitest run src/lib/__tests__/studio-handoff.test.ts src/lib/__tests__/home-sell-surface.test.ts`. If unavailable or failing, show the form and explain that the fresh handoff result is pending. |
+| 3:00–4:30 | **Product owner: _assign_** | Enter an invalid non-YouTube value. Then show the pricing summary and cadence controls without starting checkout. | An accessible invalid-URL message appears; monthly and annual controls plus the pricing link are visible. | Use the same landing PR head and add `src/lib/billing/__tests__/checkout-config.test.ts`. Do not trigger Turnstile or checkout. If the check is unavailable, describe the expected control only. |
+| 4:30–6:00 | **Engineering owner: _assign_** | Explain the Google sign-in recovery behavior: rejected or non-navigating initiation returns the button to a retryable state with generic error copy. | The audience sees the code or test narrative, not a real OAuth completion. | Draft [PR #1984](https://github.com/groupthinking/EventRelay/pull/1984) contains the implementation and its component test. Only demonstrate it as a reviewed outcome after review and its remote check failures are resolved. Until then, explain it as a tested candidate. |
+| 6:00–7:30 | **QA owner: _assign_** | Summarize the local quality gates for the two sprint changes. | The team sees exact commands and the distinction between local tests and remote checks. | Reference [draft QA checklist PR #1993](https://github.com/groupthinking/EventRelay/pull/1993). If that document is still pending review, present the commands directly and do not claim full release readiness. |
+| 7:30–9:00 | **Engineering owner: _assign_** | State the Origin G.A.T.E. boundary and the production launch limitations. | The audience understands that consequential workflow transitions and production readiness were not demonstrated. | Reference [`docs/gate-transition-contract.md`](https://github.com/groupthinking/EventRelay/blob/main/docs/gate-transition-contract.md) and [`docs/LAUNCH_CHECKLIST.md`](https://github.com/groupthinking/EventRelay/blob/main/docs/LAUNCH_CHECKLIST.md). Do not attempt a live deployment, provider action, payment, or configuration change. |
+| 9:00–10:00 | **Demo lead: _assign_** | Close with the active PR status, known blockers, and decisions needed from reviewers. | The team receives a precise next-step record. | Use the closing record below. If a status changes during the meeting, read the current PR status rather than relying on this document. |
 
-## 🎯 Agenda
+## Presenter checklist
 
-| Owner and segment | Minutes | Demo action | Expected visible result | Fallback |
-|---|---:|---|---|---|
-| `[Demo lead]` — opening and goal | 1 | State the workflow: paste a valid YouTube URL on `/`, then continue to Studio. | Audience understands that the session demonstrates local interaction, not a production outcome. | Read the purpose and boundaries section. |
-| `[Product demonstrator]` — public Home-to-Studio handoff | 3 | In a local non-production environment, submit a valid YouTube URL through `HomePasteForm`. | The app initiates the existing pack-emission path and navigates toward `/studio?video=...`. Do not claim that a transcript or analysis completes. | Show the current-main source and the focused handoff test results in the evidence register. |
-| `[Engineering presenter]` — Studio context | 2 | Show the Studio destination and explain that the URL is handed off as a canonical watch URL. | Audience can see the Studio entry point and the supplied video query. | Use the unit-test assertion for `resolveStudioHandoff()` and `submitHomePaste()` rather than a live processing run. |
-| `[Quality owner]` — verification and limits | 3 | Review the local Home handoff tests, then state the OAuth change’s review boundary. | Audience sees which checks substantiate the Home handoff and understands that PR #1978 is still draft. | Read the evidence register and close without an OAuth interaction. |
-| `[Demo lead]` — close and next decisions | 1 | Summarize unresolved items and name the evidence required for future demos. | Audience leaves with a clear distinction between current-main behavior, draft changes, and deployment readiness. | Share this document and the linked tasks. |
+Before the meeting, record the relevant pull-request head and the terminal output from these commands. Run the landing checks on the [canonical landing PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) head and the sign-in checks on [PR #1984](https://github.com/groupthinking/EventRelay/pull/1984) head.
 
-## 🔍 Evidence register
+```bash
+npm --workspace=eventrelay-web exec -- vitest run \
+  src/lib/__tests__/studio-handoff.test.ts \
+  src/lib/__tests__/home-sell-surface.test.ts \
+  src/lib/billing/__tests__/checkout-config.test.ts
 
-The following evidence supports the limited claims in this agenda. A presenter must not extend any claim beyond the stated boundary.
+npm --workspace=eventrelay-web exec -- vitest run \
+  src/app/login/GoogleSignInButton.test.tsx \
+  src/lib/__tests__/auth-paths.test.ts \
+  src/__tests__/proxy-auth-gate.test.ts
 
-| Claim | Evidence | Demonstration limit |
-|---|---|---|
-| The public home page contains `HomePasteForm` and describes a YouTube URL-to-Studio workflow. | [`apps/web/src/app/page.tsx`](../apps/web/src/app/page.tsx) and [`apps/web/src/lib/__tests__/home-sell-surface.test.ts`](../apps/web/src/lib/__tests__/home-sell-surface.test.ts) | This supports the current source structure and related test assertions. It is not a production availability claim. |
-| A valid YouTube input is normalized, requests pack emission, and yields a `/studio?video=...` handoff path. | [`apps/web/src/lib/studio-handoff.ts`](../apps/web/src/lib/studio-handoff.ts) and [`apps/web/src/lib/__tests__/studio-handoff.test.ts`](../apps/web/src/lib/__tests__/studio-handoff.test.ts) | The agenda may demonstrate the local handoff only. Do not promise analysis completion for an arbitrary video. |
-| Invalid Home input is rejected with an accessible alert. | [`apps/web/src/components/home/HomePasteForm.tsx`](../apps/web/src/components/home/HomePasteForm.tsx) | If the local form cannot run, show the component source and omit interactive validation. |
-| A failed or non-navigating Google sign-in initiation becomes retryable and displays a generic alert. | Draft PR #1978, its linked issue #1977, and the focused test in that draft branch. [2] [3] | This is local draft-branch evidence only. PR #1978 is not merged, approved, or deployed; omit a live OAuth interaction. |
-| The OAuth draft branch’s focused authentication suite, type check, and lint completed locally. | The verification section of PR #1978 reports 42 passing tests across 4 files, a successful type check, and lint with 0 errors plus 3 unrelated existing warnings. [2] | Quote the result as local evidence at the PR head only. Do not represent it as current-main CI, a review approval, or a deployed result. |
+npm --workspace=eventrelay-web run type-check
+npm --workspace=eventrelay-web run lint
+git diff --check
+```
 
-## 📌 Presenter controls
+For a local responsive demonstration, use the Home Playwright specification present on the branch being demonstrated. This is local UI evidence only; it does not replace preview-dependent end-to-end evidence.
 
-Before the session, the owner should verify that the planned environment is local and non-production. The presenter must use no real customer data, credentials, payment actions, or production configuration. The sign-in retry update stays in the fallback material until the draft pull request receives the applicable human review and lands through the repository process.
+## Required fallback language
 
-If the Home handoff does not behave as described in the local environment, stop the live interaction. Use the exact test evidence in the register, state that the interactive demonstration is unavailable, and do not diagnose or change configuration during the demo. If the OAuth draft pull request remains open, retain its status as **draft** and describe it as an unmerged change with local verification evidence only.
+**Local URL handoff unavailable:** “The Home-to-Studio route is implemented, but we do not have fresh local verification for this demo. The exact test command is listed in the agenda.”
 
-## ✍️ Known limitations and next decisions
+**Google sign-in change not yet reviewed:** “The retry behavior is a tested candidate in draft PR #1984. It does not change OAuth credentials, callback policy, or the server authentication gate, and it is not presented as a merged result.”
 
-The current sprint still has a landing-page design task in progress. Its scope defines an improvement to the existing UVAI home page, but this agenda contains no landing-page implementation claim. [4] The task remains outside the live demonstration until separate implementation and acceptance evidence exist.
+**Remote preview unavailable:** “Remote preview-dependent checks are blocked. We are showing local evidence only and are not asserting production readiness.”
 
-The launch checklist is a configuration and release reference. It is not evidence that a production deployment has been executed for this sprint. Future release activity must be authorized under its own process and must not be inferred from this agenda or from either draft pull request.
+**Checkout request:** “The checkout component is shown without initiating payment. Billing and entitlements require the separately authorized test-mode and production evidence in the launch checklist.”
 
-The next decision is whether to proceed with the internal Home-to-Studio demo using only the evidence described here. Separately, a reviewer must evaluate PR #1978 before any authentication-change merge decision. No agenda action authorizes a merge, deployment, payment action, credential entry, or production setting change.
+## Closing record
 
-## 🔗 References
+At the end of the meeting, record these facts:
 
-[1]: https://github.com/groupthinking/EventRelay/blob/c2a262abdca91f431166a308110f53d15178115e/apps/web/src/app/page.tsx "UVAI home page"
-[2]: https://github.com/groupthinking/EventRelay/pull/1978 "Draft PR #1978: recover failed Google sign-in initiation"
-[3]: https://github.com/groupthinking/EventRelay/issues/1977 "Issue #1977: recover Google sign-in initiation failures"
-[4]: https://app.notion.com/p/3dd3c2339c0481439d43eafdeacd4136?pvs=204 "Notion task: Design sprint landing page"
+1. The landing-page Notion task remains **In progress**. [PR #1976](https://github.com/groupthinking/EventRelay/pull/1976) is closed as a duplicate; [PR #1981](https://github.com/groupthinking/EventRelay/pull/1981) is the canonical landing-page implementation and remains blocked on preview-dependent evidence.
+2. Google sign-in recovery is represented by draft [PR #1984](https://github.com/groupthinking/EventRelay/pull/1984). The local test coverage is relevant evidence, but open remote Vercel and E2E failures prevent a readiness claim.
+3. The [QA checklist task](https://app.notion.com/p/3dd3c2339c0481019c8fdf22053d0a4d?pvs=204) and this agenda are documentation-only follow-ups. They do not change application behavior or production configuration.
+4. No merge, deployment, payment, secret change, access change, or public release follows from this meeting.
+
+## References
+
+[1]: https://app.notion.com/p/3dd3c2339c0481439d43eafdeacd4136?pvs=204 "Design sprint landing page task"
+[2]: https://app.notion.com/p/3dd3c2339c0481a2a35dce563f281ab1?pvs=204 "Fix login bug task"
+[3]: https://app.notion.com/p/3dd3c2339c04810ca45be4d289f3e240?pvs=204 "Confirm sprint demo agenda task"
+[4]: https://app.notion.com/p/3dd3c2339c0481019c8fdf22053d0a4d?pvs=204 "Prepare QA checklist task"

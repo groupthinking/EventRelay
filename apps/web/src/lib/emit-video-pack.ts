@@ -5,7 +5,14 @@ import type {
   VideoPackTranscriptSegment,
   VideoPackVisualContext,
 } from '@/lib/video-pack';
-import { readPackFormation, type VideoPackArchitecture, type VideoPackArtifact, type VideoPackStack } from '@/lib/video-pack-types';
+import {
+  readPackFormation,
+  type VideoPackActionItem,
+  type VideoPackArchitecture,
+  type VideoPackArtifact,
+  type VideoPackChapter,
+  type VideoPackStack,
+} from '@/lib/video-pack-types';
 
 export interface EmittedVideoPack {
   grounded_spec?: GroundedSpecRecord;
@@ -25,6 +32,8 @@ export interface EmittedVideoPack {
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   stack?: VideoPackStack;
+  chapters?: VideoPackChapter[];
+  action_items?: VideoPackActionItem[];
 }
 
 export interface VideoPackCitation {
@@ -42,8 +51,32 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
 }
 
+function identityFailure(gaps: readonly string[]): Error {
+  const listed = gaps.join(', ');
+  const verb = gaps.length === 1 ? 'is' : 'are';
+  return new Error(`Video pack verification failed: ${listed} ${verb} required.`);
+}
+
+function surfacedEnvelopeError(envelope: Record<string, unknown>): string | null {
+  if (typeof envelope.error === 'string' && envelope.error.trim()) {
+    return envelope.error;
+  }
+  // Stored pack failures return HTTP 200 with the message on `detail`.
+  if (typeof envelope.detail === 'string' && envelope.detail.trim()) {
+    return envelope.detail;
+  }
+  return null;
+}
+
 export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   const envelope = asRecord(payload);
+  if (envelope?.status === 'error') {
+    const surfaced = surfacedEnvelopeError(envelope);
+    if (surfaced) {
+      throw new Error(surfaced);
+    }
+  }
+
   const data = asRecord(envelope?.data);
   const provenance = asRecord(data?.provenance);
   const sourceUrl = typeof data?.source_url === 'string' ? data.source_url.trim() : '';
@@ -51,21 +84,26 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   const videoId = typeof data?.video_id === 'string' ? data.video_id : '';
   const version = typeof data?.version === 'string' ? data.version : '';
   const packId = typeof data?.id === 'string' ? data.id : '';
-
-  if (
-    envelope?.status !== 'success' ||
-    version !== 'v0' ||
-    !videoId ||
-    !packId ||
-    !sourceUrl.startsWith('http') ||
-    !SOURCE_HASH.test(sourceHash)
-  ) {
-    throw new Error(
-      'Video pack verification failed: source_url and source_hash are required.',
-    );
+  const gaps: string[] = [];
+  if (envelope?.status !== 'success') gaps.push('status');
+  if (version !== 'v0') gaps.push('version');
+  if (!videoId) gaps.push('video_id');
+  if (!packId) gaps.push('id');
+  if (!sourceUrl.startsWith('http')) gaps.push('source_url');
+  if (!SOURCE_HASH.test(sourceHash)) gaps.push('source_hash');
+  if (gaps.length > 0) {
+    throw identityFailure(gaps);
   }
 
-  const formation = data ? readPackFormation(data) : { architecture: null, artifacts: [], stack: { tools: [] } };
+  const formation = data
+    ? readPackFormation(data)
+    : {
+        architecture: null,
+        artifacts: [],
+        stack: { tools: [] },
+        chapters: [],
+        action_items: [],
+      };
   const transcriptRecord = asRecord(data?.transcript);
   const transcriptText =
     typeof transcriptRecord?.full_text === 'string' ? transcriptRecord.full_text : '';
@@ -104,6 +142,8 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(formation.architecture ? { architecture: formation.architecture } : {}),
       ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
+      ...(formation.chapters.length > 0 ? { chapters: formation.chapters } : {}),
+      ...(formation.action_items.length > 0 ? { action_items: formation.action_items } : {}),
     },
   };
 }

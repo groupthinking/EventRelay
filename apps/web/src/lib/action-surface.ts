@@ -290,7 +290,10 @@ export function buildStudioShipPackage(input: {
     sopSteps:
       input.sopSteps ??
       input.linkedSop?.steps ??
-      sopStepsFromPack({ requirements: input.videoPack.requirements }),
+      sopStepsFromPack({
+        requirements: input.videoPack.requirements,
+        visualEvents: input.visualEvents ?? visualEventsFromPack(input.videoPack.visual ?? {}),
+      }),
   });
   const files = { ...scaffold.files, ...sandbox.files };
   delete files['ARCHITECTURE.md'];

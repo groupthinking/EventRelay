@@ -31,6 +31,10 @@ const OFFERS = [
   },
 ] as const;
 
+/**
+ * Render the landing page with a YouTube URL-to-Studio handoff and Workflow Pro checkout.
+ * The optional badge appears only when its feature flag is enabled.
+ */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
 
@@ -61,7 +65,7 @@ export default async function HomePage() {
                 id="home-heading"
                 className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance sm:text-5xl md:mt-8 md:text-6xl"
               >
-                Turn a YouTube URL into a hashed Video Pack in Studio.
+                Turn a YouTube URL into a hashed Video Pack, then open it in Studio.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-white/70 md:text-lg">
                 Paste a YouTube URL to open Studio and review transcript, event, and action outputs

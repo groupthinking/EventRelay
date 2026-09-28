@@ -75,6 +75,39 @@ export function studioPackCitation(pack: VideoPackCitation): string {
   return `cite:youtube:${pack.videoId} · ${pack.version} · ${pack.sourceHash} · ${pack.sourceUrl}`;
 }
 
+/**
+ * A stored pack has verified identity once it carries both source_url and
+ * source_hash. That identity is enough to cite the pack and name its YouTube id
+ * in the header immediately — no transcript run or dropdown interaction needed.
+ */
+export function studioPackIdentity(
+  pack: VideoPackCitation | null | undefined,
+): { videoId: string; citation: string } | null {
+  if (!pack) return null;
+  const sourceUrl = pack.sourceUrl?.trim() ?? '';
+  const sourceHash = pack.sourceHash?.trim() ?? '';
+  if (!sourceUrl || !sourceHash) return null;
+  return { videoId: pack.videoId, citation: studioPackCitation(pack) };
+}
+
+/**
+ * Surface a stored pack in the header without waiting for a Stored packs
+ * combobox click: when nothing is selected and no `?video=` handoff is pending,
+ * point the selection at the newest row that already has pack identity.
+ * Returns null when a selection already exists (never fights the user) or when a
+ * handoff run will select its own row.
+ */
+export function studioResolveAutoSelectedPackId(input: {
+  selectedVideoId: string | null | undefined;
+  videos: ReadonlyArray<{ id: string; videoPack?: VideoPackCitation | null }>;
+  hasPendingHandoff?: boolean;
+}): string | null {
+  if (input.selectedVideoId) return null;
+  if (input.hasPendingHandoff) return null;
+  const match = input.videos.find((video) => studioPackIdentity(video.videoPack));
+  return match ? match.id : null;
+}
+
 export function studioPackFormation(pack: VideoPackCitation | null | undefined): {
   tools: VideoPackStackTool[];
   checks: ChecklistItem[];
@@ -96,6 +129,61 @@ export function studioFormationSupplementalEntities(
 ): LinkedEntity[] {
   if ((tools?.length ?? 0) > 0) return [];
   return entities ?? [];
+}
+
+export function studioWorkbenchEmptyView(input: {
+  busy: boolean;
+  hasSelection: boolean;
+  hasVideoPack: boolean;
+  analysisReady: boolean;
+  failed?: boolean;
+  failureMessage?: string | null;
+}): {
+  title: string;
+  description: string;
+  primaryAction: 'run' | 'retry' | null;
+} | null {
+  if (input.hasVideoPack) return null;
+  if (!input.hasSelection && !input.busy) {
+    return {
+      title: 'No video in this session yet',
+      description:
+        'Paste a YouTube URL above and run analysis. Transcript, Video Pack, and build rails stay on this page.',
+      primaryAction: null,
+    };
+  }
+  if (input.busy) {
+    return {
+      title: 'Analysis in progress',
+      description:
+        'Waiting on transcript and pack storage. Export and Build live unlock when the run finishes.',
+      primaryAction: null,
+    };
+  }
+  if (input.failed) {
+    const error = input.failureMessage?.trim() ?? '';
+    return {
+      title: 'Analysis did not finish',
+      description:
+        error ||
+        'Transcript or pack storage failed. Retry analysis or try another public video.',
+      primaryAction: 'retry',
+    };
+  }
+  if (!input.analysisReady) {
+    return {
+      title: 'Analysis not ready',
+      description:
+        'This run has no usable transcript yet. Re-run analysis when you are ready to store a pack.',
+      primaryAction: 'run',
+    };
+  }
+  return {
+    title: 'Video Pack not stored',
+    description:
+      'Transcript is here but no pack was persisted for Build live. Re-run analysis to store a Video Pack.',
+    primaryAction: 'run',
+  };
 }
 
 export function studioEventsEmptyMessage(input: {
@@ -184,11 +272,38 @@ export type StudioTranscriptStageId =
   | 'ready'
   | 'failed';
 
+/** Transcript pane copy. Idle stays "Nothing yet." A failed run shows the stored error. */
+export function studioTranscriptBody(input: {
+  transcript?: string | null;
+  busy: boolean;
+  failed: boolean;
+  failureMessage?: string | null;
+}): string {
+  const transcript = input.transcript?.trim() ?? '';
+  if (transcript) return transcript;
+  if (input.busy) return 'Waiting on captions — no invented text.';
+  if (input.failed) {
+    const error = input.failureMessage?.trim() ?? '';
+    return error || 'Transcript failed.';
+  }
+  return 'Nothing yet.';
+}
+
+/** Header job strip. A stored pack names its YouTube id. Otherwise link back to /studio. */
+export function studioJobStripDestination(
+  videoId: string | null | undefined,
+): { kind: 'video'; label: string } | { kind: 'studio'; label: '/studio'; href: '/studio' } {
+  const id = videoId?.trim() ?? '';
+  if (id.length > 0) return { kind: 'video', label: id };
+  return { kind: 'studio', label: '/studio', href: '/studio' };
+}
+
 export function studioTranscriptStage(input: {
   busy: boolean;
   elapsedSeconds: number;
   progress?: number;
   hasPack?: boolean;
+  hasPackIdentity?: boolean;
   hasTranscript?: boolean;
   hasFailed?: boolean;
 }): { id: StudioTranscriptStageId; label: string } {
@@ -203,6 +318,12 @@ export function studioTranscriptStage(input: {
   }
   if (input.hasTranscript) {
     return { id: 'events', label: 'Extracting events' };
+  }
+  // Once the selected row has pack identity (source_url + source_hash), the
+  // stage must not stay on the open-ended "Building transcript". Surface the
+  // ready pack instead of implying transcript work is still the blocker.
+  if (input.hasPackIdentity) {
+    return { id: 'pack', label: 'Pack identity' };
   }
   const progress = input.progress ?? 0;
   if (progress >= 10 || input.elapsedSeconds >= 18) {

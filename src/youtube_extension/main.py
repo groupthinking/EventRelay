@@ -7,6 +7,8 @@ Provides the core API endpoints and integrates all services including cloud AI
 import logging
 import os
 import shutil
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
 from urllib.parse import urlparse
 
 import uvicorn
@@ -255,10 +257,26 @@ async def health_check():
     }
 
 
+def _bootstrap_dev_database() -> None:
+    """Create the parent directory for local sqlite database URLs."""
+    database_url = os.getenv("API_COST_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
+    parsed = urlsplit(database_url)
+    if parsed.scheme != "sqlite":
+        return
+    raw_path = unquote(parsed.path)
+    if raw_path in {"", "/:memory:"}:
+        return
+    database_path = Path(raw_path) if raw_path.startswith("//") else Path(raw_path.lstrip("/"))
+    if str(database_path) in {"", "."}:
+        return
+    database_path.parent.mkdir(parents=True, exist_ok=True)
+
+
 async def ensure_api_cost_ready() -> None:
     """Validate the shared API-cost schema and runtime DML permissions."""
     from .backend.services.api_cost_monitor import ensure_api_cost_database_ready
 
+    _bootstrap_dev_database()
     await ensure_api_cost_database_ready()
 
 

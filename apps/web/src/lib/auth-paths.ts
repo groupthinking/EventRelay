@@ -48,6 +48,8 @@ const PUBLIC_API_EXACT = new Set([
   // Planned assembly receipt from a stored pack (no npm, no model work).
   '/api/video/assemble',
   '/api/v1/video/assemble',
+  // Hosted /d pack-grounded chat (#2122): session-optional; proxy AI rate limit + route quota.
+  '/api/chat',
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */

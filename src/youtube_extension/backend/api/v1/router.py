@@ -56,7 +56,7 @@ from youtube_extension.services.workflows.transcript_action_workflow import (
 )
 from youtube_extension.utils.video_utils import extract_video_id
 from youtube_extension.videopack.identity import emit_video_pack
-from youtube_extension.videopack.store import VideoPackStore
+from youtube_extension.videopack.store_factory import get_video_pack_store
 
 # CloudEvents integration (optional — falls back to file sink)
 try:
@@ -630,7 +630,14 @@ async def chat_v1(
             logger.info(
                 "Adding video context for video_id: %s", _safe_log_value(video_id)
             )
-            detail = data_service.get_video_detail(video_id)
+            # ``get_video_detail`` performs a blocking recursive filesystem
+            # walk plus file reads; dispatch it to a worker thread behind the
+            # shared filesystem-walk gate instead of running it on the event
+            # loop (see ``get_video_detail_v1`` for the same pattern).
+            async with _get_fs_walk_gate():
+                detail = await asyncio.to_thread(
+                    data_service.get_video_detail, video_id
+                )
 
             # If video not found, trigger real-time processing
             if not detail and request.video_url:
@@ -645,7 +652,10 @@ async def chat_v1(
                         )
                     )
                     if proc_result and proc_result.get("status") == "success":
-                        detail = data_service.get_video_detail(video_id)
+                        async with _get_fs_walk_gate():
+                            detail = await asyncio.to_thread(
+                                data_service.get_video_detail, video_id
+                            )
                         logger.info(
                             "Real-time processing complete for %s",
                             _safe_log_value(video_id),
@@ -2259,9 +2269,6 @@ async def list_pipeline_audit_runs(limit: int = 20):
 # ============================================================
 
 
-_VIDEO_PACK_STORE = VideoPackStore(Path("storage/video_packs"))
-
-
 @router.post(
     "/video/pack",
     response_model=ApiResponse,
@@ -2269,7 +2276,11 @@ _VIDEO_PACK_STORE = VideoPackStore(Path("storage/video_packs"))
     tags=["Jobs"],
 )
 async def get_or_create_videopack(request: VideoPackRequest):
-    """Get or create the hashed VideoPack v0 identity record for a video ID."""
+    """Get or create the hashed VideoPack v0 identity record for a video ID.
+
+    Persistence uses the same Upstash REST keys as ``apps/web`` (``er:videopack:v0:*``).
+    Filesystem storage is dev-only when ``VIDEO_PACK_FILESYSTEM_STORE=1`` is set.
+    """
     video_id = request.video_id
     if not video_id and request.video_url:
         try:
@@ -2287,12 +2298,20 @@ async def get_or_create_videopack(request: VideoPackRequest):
         raise HTTPException(status_code=400, detail="Could not determine video_id")
 
     try:
+        store = get_video_pack_store()
         pack = emit_video_pack(
             video_id=video_id,
             video_url=request.video_url,
-            store=_VIDEO_PACK_STORE,
+            store=store,
         )
         return ApiResponse.success(pack.model_dump(mode="json"))
+    except RuntimeError as exc:
+        logger.error(
+            "VideoPack store unavailable: %s", _safe_log_value(exc), exc_info=True
+        )
+        raise HTTPException(
+            status_code=503, detail="Video pack store unavailable"
+        ) from exc
     except ValueError as exc:
         logger.error(
             "VideoPack identity rejected: %s", _safe_log_value(exc), exc_info=True

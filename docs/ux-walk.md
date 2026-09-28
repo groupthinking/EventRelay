@@ -1,6 +1,6 @@
-# Lumen UX walk (current read-only audit)
+# Lumen end-to-end UX walk audit (current flows)
 
-This is a **read-only** audit of the current entry-to-completion routing in the live web app.
+This is a **read-only, end-to-end** audit of the current entry-to-completion routing in the live web app.
 
 ## Scope
 

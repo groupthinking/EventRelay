@@ -35,7 +35,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
   it('presents a responsive YouTube URL-to-Studio conversion hierarchy', () => {
     const home = readSource('app/page.tsx');
 
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack in Studio.');
+    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
     expect(home).toContain('transcript, event, and action outputs');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]');
@@ -52,7 +52,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const structured = readSource('components/StructuredData.tsx');
     const ogAlt = readSource('app/opengraph-image.tsx');
     const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack in Studio.');
+    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('Transcript quality varies by source');
     expect(home).toMatch(/No guaranteed production\s+outcome\./);
@@ -89,8 +89,11 @@ describe('Home is a sell page; Studio is the workbench', () => {
 
   it('keeps the live workbench only on /studio', () => {
     const studio = readSource('app/studio/page.tsx');
+    const shell = readSource('app/studio/StudioShell.tsx');
     const workbench = readSource('components/OneLoopStudio.tsx');
-    expect(studio).toContain('OneLoopStudio');
+    expect(studio).toContain('StudioShell');
+    expect(studio).not.toContain('OneLoopStudio');
+    expect(shell).toContain('OneLoopStudio');
     expect(workbench).toContain('applyStudioQueryAutoStart');
     expect(workbench).toContain('processVideo');
   });

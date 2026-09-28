@@ -15,6 +15,39 @@ export interface YouTubeMetadata {
   channel: string;
   description: string;
   chapters: { time: string; title: string }[];
+  /** Wall-clock duration when present on the watch page (seconds). */
+  durationSeconds: number | null;
+}
+
+/** Result of a cheap YouTube availability probe before gateway extract. */
+export type YouTubeSourcePreflight = 'available' | 'not_found' | 'unknown';
+
+/**
+ * Preflight YouTube watch URL via oEmbed. Deleted/private videos typically return 404.
+ * Returns `unknown` on network errors or non-404 failures so extract can still proceed.
+ */
+export async function preflightYouTubeVideoSource(url: string): Promise<YouTubeSourcePreflight> {
+  const videoId = extractVideoId(url);
+  if (!videoId) return 'unknown';
+
+  const watchUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`;
+
+  try {
+    const response = await fetch(oembedUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; EventRelay/2.0)',
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.status === 404) return 'not_found';
+    if (!response.ok) return 'unknown';
+    return 'available';
+  } catch (e) {
+    console.warn('[YouTube] oEmbed preflight failed:', e);
+    return 'unknown';
+  }
 }
 
 /**
@@ -101,7 +134,17 @@ export async function fetchYouTubeMetadata(url: string): Promise<YouTubeMetadata
 
     const chapters = parseChapters(description);
 
-    return { videoId, title, channel, description, chapters };
+    let durationSeconds: number | null = null;
+    const lengthMatch =
+      html.match(/"lengthSeconds":"(\d+)"/) ?? html.match(/"lengthSeconds":(\d+)/);
+    if (lengthMatch) {
+      const parsed = Number(lengthMatch[1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        durationSeconds = parsed;
+      }
+    }
+
+    return { videoId, title, channel, description, chapters, durationSeconds };
   } catch (e) {
     console.warn('[YouTube] Metadata fetch failed:', e);
     return null;
