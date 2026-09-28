@@ -239,6 +239,10 @@ class BaseDeploymentAdapter(ABC):
                         recoverable=True
                     )
 
+    def _deployment_status(self, status_data: dict[str, Any]) -> str:
+        """Read the provider's status without interpreting a URL as completion."""
+        return str(status_data.get('status') or '').lower()
+
     async def _poll_deployment_status(self,
                                     status_url: str,
                                     success_statuses: list[str],
@@ -253,7 +257,7 @@ class BaseDeploymentAdapter(ABC):
             try:
                 status_data = await self._make_request_with_retry('GET', status_url, headers=headers)
 
-                status = status_data.get('status', '').lower()
+                status = self._deployment_status(status_data)
                 if status in [s.lower() for s in success_statuses]:
                     return status_data
                 elif status in ['failed', 'error', 'cancelled', 'canceled']:

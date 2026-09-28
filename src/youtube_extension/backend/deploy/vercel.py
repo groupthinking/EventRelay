@@ -21,6 +21,10 @@ class VercelAdapter(BaseDeploymentAdapter):
     def __init__(self):
         super().__init__('vercel')
 
+    def _deployment_status(self, status_data: dict[str, Any]) -> str:
+        # Vercel returns readyState; other adapters retain their status field.
+        return str(status_data.get('readyState') or status_data.get('status') or '').lower()
+
     @staticmethod
     def _ensure_https(url: Optional[str]) -> Optional[str]:
         """Ensure URL has https:// prefix (Vercel API returns bare domains)"""
@@ -74,6 +78,17 @@ class VercelAdapter(BaseDeploymentAdapter):
             f"uvai-{project_config.get('title', 'project').lower().replace(' ', '-')}"
         )
 
+        # Let the provider use its framework defaults unless explicitly configured.
+        # Never suppress install failures or replace a real build with an echo.
+        project_settings = {"framework": self._detect_framework(project_config)}
+        for config_key, api_key in (
+            ("install_command", "installCommand"),
+            ("build_command", "buildCommand"),
+            ("output_directory", "outputDirectory"),
+        ):
+            if config_key in project_config:
+                project_settings[api_key] = project_config[config_key]
+
         # Prepare deployment payload using Vercel REST API v13 gitSource format
         payload = {
             "name": project_name,
@@ -83,12 +98,7 @@ class VercelAdapter(BaseDeploymentAdapter):
                 "repo": repo_name,
                 "ref": project_config.get("branch", "main")
             },
-            "projectSettings": {
-                "framework": self._detect_framework(project_config),
-                "installCommand": project_config.get("install_command", "npm install || true"),
-                "buildCommand": project_config.get("build_command", "echo 'static'"),
-                "outputDirectory": project_config.get("output_directory", ".")
-            }
+            "projectSettings": project_settings
         }
 
         # Optionally scope to a Vercel team
@@ -115,7 +125,6 @@ class VercelAdapter(BaseDeploymentAdapter):
             return DeploymentResult(
                 status='failed',
                 platform=self.platform,
-                url=import_url,
                 error_message=f"API deployment failed: {e.message}. Use the import URL to deploy manually.",
                 build_log_url=import_url,
                 metadata={
@@ -127,14 +136,12 @@ class VercelAdapter(BaseDeploymentAdapter):
             )
 
         deployment_id = deployment_data.get('id')
-        deployment_url = self._ensure_https(deployment_data.get('url'))
 
         if not deployment_id:
             import_url = self._vercel_import_url(org, repo_name)
             return DeploymentResult(
                 status='failed',
                 platform=self.platform,
-                url=import_url,
                 error_message="Vercel deployment creation returned no deployment ID. Use the import URL to deploy manually.",
                 build_log_url=import_url,
                 metadata={
@@ -145,8 +152,15 @@ class VercelAdapter(BaseDeploymentAdapter):
             )
 
         # Poll for deployment completion
-        ready = deployment_data.get('readyState', deployment_data.get('status', ''))
-        if ready.upper() != 'READY':
+        final_status = deployment_data
+        ready = self._deployment_status(deployment_data)
+        if ready in ('failed', 'error', 'cancelled', 'canceled'):
+            return DeploymentResult(
+                status='failed', platform=self.platform, deployment_id=deployment_id,
+                error_message=f"Vercel deployment {ready}",
+                metadata={'deployment_data': deployment_data},
+            )
+        if ready != 'ready':
             status_url = f"{VERCEL_API}/v13/deployments/{deployment_id}"
             if team_id:
                 status_url = f"{status_url}?teamId={team_id}"
@@ -159,13 +173,23 @@ class VercelAdapter(BaseDeploymentAdapter):
                     success_statuses=['READY'],
                     timeout_minutes=15
                 )
-                deployment_url = self._ensure_https(final_status.get('url', '')) or deployment_url
             except DeploymentError as poll_err:
-                self.logger.warning(f"Polling failed: {poll_err.message}, using initial URL")
+                return DeploymentResult(
+                    status='failed', platform=self.platform, deployment_id=deployment_id,
+                    error_message=poll_err.message,
+                    metadata={'deployment_data': deployment_data,
+                              'error_details': poll_err.details,
+                              'recoverable': poll_err.recoverable},
+                )
 
-        # Ensure we have a usable URL
-        if not deployment_url:
-            deployment_url = f"https://{project_name}.vercel.app"
+        # Only the final provider response can establish readiness and its URL.
+        deployment_url = self._ensure_https(final_status.get('url'))
+        if self._deployment_status(final_status) != 'ready' or not deployment_url:
+            return DeploymentResult(
+                status='failed', platform=self.platform, deployment_id=deployment_id,
+                error_message="Vercel did not return READY with a deployment URL",
+                metadata={'deployment_data': final_status},
+            )
 
         return DeploymentResult(
             status='success',
@@ -176,7 +200,8 @@ class VercelAdapter(BaseDeploymentAdapter):
             metadata={
                 'project_name': project_name,
                 'framework': self._detect_framework(project_config),
-                'deployment_data': deployment_data
+                'deployment_data': final_status,
+                'ready_state': 'READY',
             }
         )
 
