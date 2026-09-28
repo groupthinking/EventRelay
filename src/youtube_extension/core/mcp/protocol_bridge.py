@@ -14,7 +14,9 @@ Key Responsibilities:
 """
 
 import asyncio
+import hashlib
 import ipaddress
+import json
 import logging
 import os
 import socket
@@ -689,10 +691,17 @@ class AnthropicAdapter(ProtocolAdapter):
     """Anthropic Claude API Protocol Adapter"""
 
     _DEFAULT_TIMEOUT = 120
+    _INLINE_MCP_BETAS = ("inline-tools-2026-09-15", "mcp-client-2026-09-15")
+    _MCP_LISTING_CONTRACT = (
+        "https://platform.claude.com/docs/en/build-with-claude/"
+        "mid-conversation-system-messages"
+    )
+    _MAX_LISTING_BYTES = 4_194_304
 
     def __init__(self) -> None:
         self.api_key: Optional[str] = None
         self.model: str = "claude-opus-4-8"
+        self.inline_mcp_tool_listings = False
         self._client: Any = None
 
     @property
@@ -703,6 +712,11 @@ class AnthropicAdapter(ProtocolAdapter):
         """Initialize Anthropic adapter"""
         self.api_key = config.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
         self.model = config.get("model", "claude-opus-4-8")
+        inline_mcp_tool_listings = config.get("inline_mcp_tool_listings", False)
+        if not isinstance(inline_mcp_tool_listings, bool):
+            logger.error("inline_mcp_tool_listings must be a boolean")
+            return False
+        self.inline_mcp_tool_listings = inline_mcp_tool_listings
 
         if not self.api_key:
             logger.error("Anthropic API key not provided")
@@ -729,18 +743,41 @@ class AnthropicAdapter(ProtocolAdapter):
         model = request.get("model", self.model)
         max_tokens = request.get("max_tokens", 8192)
 
-        response = await self._client.messages.create(
-            model=model,
-            max_tokens=max_tokens,
-            thinking={"type": "adaptive"},
-            messages=messages,
+        create_message = self._client.messages.create
+        create_kwargs: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens,
+            "thinking": {"type": "adaptive"},
+            "messages": messages,
+        }
+        if self.inline_mcp_tool_listings:
+            create_message = self._client.beta.messages.create
+            create_kwargs["betas"] = list(self._INLINE_MCP_BETAS)
+            for field in ("mcp_servers", "tools"):
+                if field in request:
+                    create_kwargs[field] = request[field]
+
+        response = await create_message(
+            **create_kwargs,
         )
 
         # Extract text content from response blocks
-        text_blocks = [b.text for b in response.content if b.type == "text"]
+        text_blocks = [
+            self._block_value(block, "text")
+            for block in response.content
+            if self._block_value(block, "type") == "text"
+        ]
         content = "\n".join(text_blocks) if text_blocks else None
 
-        return {
+        listing_receipt = None
+        if self.inline_mcp_tool_listings:
+            listing_receipt = self._build_mcp_listing_receipt(
+                response.content,
+                model=response.model,
+                approval=request.get("mcp_listing_approval"),
+            )
+
+        result = {
             "protocol": "anthropic",
             "model": response.model,
             "content": content,
@@ -750,6 +787,118 @@ class AnthropicAdapter(ProtocolAdapter):
                 "output_tokens": response.usage.output_tokens,
             },
             "context_id": context.id,
+        }
+        if self.inline_mcp_tool_listings:
+            result["mcp_tool_listing_receipt"] = listing_receipt
+        return result
+
+    @staticmethod
+    def _block_value(block: Any, name: str) -> Any:
+        if isinstance(block, Mapping):
+            return block.get(name)
+        return getattr(block, name, None)
+
+    @classmethod
+    def _build_mcp_listing_receipt(
+        cls,
+        blocks: list[Any],
+        *,
+        model: str,
+        approval: Any,
+    ) -> Optional[dict[str, Any]]:
+        """Validate MCP listing blocks and create a provenance-only receipt."""
+        listing_blocks = [
+            block for block in blocks if cls._block_value(block, "type") == "mcp_tool_listing"
+        ]
+        if not listing_blocks:
+            return None
+
+        servers: list[dict[str, Any]] = []
+        server_names: set[str] = set()
+        total_bytes = 0
+
+        for block in listing_blocks:
+            server_name = cls._block_value(block, "mcp_server_name")
+            tools = cls._block_value(block, "tools")
+            if not isinstance(server_name, str) or not server_name.strip():
+                raise ValueError("Malformed Anthropic MCP listing: missing server name")
+            if server_name in server_names:
+                raise ValueError("Malformed Anthropic MCP listing: duplicate server")
+            if not isinstance(tools, list):
+                raise ValueError("Malformed Anthropic MCP listing: tools must be a list")
+            server_names.add(server_name)
+
+            normalized_tools: list[dict[str, Any]] = []
+            tool_names: set[str] = set()
+            for tool in tools:
+                name = cls._block_value(tool, "name")
+                description = cls._block_value(tool, "description")
+                input_schema = cls._block_value(tool, "input_schema")
+                if not isinstance(name, str) or not name.strip():
+                    raise ValueError("Malformed Anthropic MCP listing: missing tool name")
+                if name in tool_names:
+                    raise ValueError("Malformed Anthropic MCP listing: duplicate tool")
+                if description is not None and not isinstance(description, str):
+                    raise ValueError("Malformed Anthropic MCP listing: invalid description")
+                if not isinstance(input_schema, Mapping):
+                    raise ValueError("Malformed Anthropic MCP listing: invalid input schema")
+                tool_names.add(name)
+
+                definition = {
+                    "name": name,
+                    "description": description or "",
+                    "input_schema": dict(input_schema),
+                }
+                canonical_definition = json.dumps(
+                    definition,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                total_bytes += len(canonical_definition)
+                if total_bytes > cls._MAX_LISTING_BYTES:
+                    raise ValueError("Anthropic MCP listing exceeds size limit")
+                normalized_tools.append(
+                    {
+                        "identity": {
+                            "provider": "anthropic",
+                            "server_name": server_name,
+                            "tool_name": name,
+                        },
+                        "definition_digest": hashlib.sha256(canonical_definition).hexdigest(),
+                        **definition,
+                    }
+                )
+
+            normalized_tools.sort(key=lambda item: item["name"])
+            servers.append({"server_name": server_name, "tools": normalized_tools})
+
+        servers.sort(key=lambda item: item["server_name"])
+        canonical_listing = json.dumps(
+            servers,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        listing_digest = hashlib.sha256(canonical_listing).hexdigest()
+
+        approved_digest = approval.get("listing_digest") if isinstance(approval, Mapping) else None
+        approval_state = "not_provided"
+        if approved_digest is not None:
+            approval_state = "bound" if approved_digest == listing_digest else "invalidated"
+
+        return {
+            "source_contract": cls._MCP_LISTING_CONTRACT,
+            "beta_headers": list(cls._INLINE_MCP_BETAS),
+            "model": model,
+            "listing_digest": listing_digest,
+            "servers": servers,
+            "approval": {
+                "state": approval_state,
+                "listing_digest": approved_digest,
+                "authority_from_listing": False,
+            },
+            "outcome": "validated",
         }
 
     async def health_check(self) -> bool:
