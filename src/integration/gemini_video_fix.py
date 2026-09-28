@@ -23,6 +23,13 @@ from typing import Any, Literal, Optional, cast
 
 import httpx
 
+try:
+    from youtube_extension.exceptions import FailoverError
+except ImportError:
+    class FailoverError(Exception):  # type: ignore[no-redef]
+        """Raised when model failover or fallback fails or encounters an unrecoverable error."""
+        pass
+
 logger = logging.getLogger(__name__)
 
 
@@ -191,6 +198,8 @@ class GeminiVideoService:
                 return VideoAnalysisResult(
                     summary=text, key_events=self._extract_events(text)
                 )
+        except FailoverError:
+            raise
         except Exception as gemini_error:
             # Gemini failed — activate Grok backup as per failover policy
             logger.warning(
@@ -263,7 +272,7 @@ class GeminiVideoService:
         can apply its native multimodal/X-integration capabilities.
         """
         if not self.grok_api_key:
-            raise RuntimeError(
+            raise FailoverError(
                 "Gemini video processing failed and no Grok API key is "
                 "configured (set XAI_API_KEY or XAI_GROK4_API). "
                 "Cannot complete video analysis."
@@ -295,14 +304,19 @@ class GeminiVideoService:
             "temperature": 0.4,
         }
 
-        response = await self.client.post(
-            self.GROK_API_URL,
-            headers=headers,
-            json=payload,
-        )
-        response.raise_for_status()
-        data = cast(dict[Any, Any], response.json())
-        text = data["choices"][0]["message"]["content"]
+        try:
+            response = await self.client.post(
+                self.GROK_API_URL,
+                headers=headers,
+                json=payload,
+            )
+            response.raise_for_status()
+            data = cast(dict[Any, Any], response.json())
+            text = data["choices"][0]["message"]["content"]
+        except FailoverError:
+            raise
+        except Exception as e:
+            raise FailoverError(f"Grok failover backup failed: {e}") from e
 
         try:
             parsed = json.loads(text)
