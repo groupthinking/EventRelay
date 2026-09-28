@@ -736,6 +736,42 @@ class TestProcessVideoBasic:
 # ===========================================================================
 
 class TestProcessVideoToSoftware:
+    @pytest.mark.parametrize("aggregate,provider,target,expected", [
+        ("failed", "success", "vercel", "failed"),
+        ("partial_success", "success", "vercel", "failed"),
+        ("success", "failed", "vercel", "failed"),
+        ("success", "pending", "vercel", "failed"),
+        ("success", "success", "github", "generated"),
+    ])
+    async def test_urls_do_not_override_failed_or_repository_only_results(
+        self, aggregate, provider, target, expected
+    ):
+        svc = _make_service()
+        generator = MagicMock()
+        generator.generate_project = AsyncMock(return_value=self._make_generation_result())
+        manager = MagicMock()
+        manager.deploy_project = AsyncMock(return_value={
+            "status": aggregate,
+            "urls": {target: "https://fixture.example/result"},
+            "deployments": {target: {"status": provider}},
+        })
+        code_module = MagicMock()
+        code_module.get_code_generator.return_value = generator
+        deploy_module = MagicMock()
+        deploy_module.get_deployment_manager.return_value = manager
+        with patch.dict("sys.modules", {
+            "youtube_extension.backend.code_generator": code_module,
+            "youtube_extension.backend.deployment_manager": deploy_module,
+        }):
+            result = await svc.process_video_to_software(
+                _VIDEO_URL, deployment_target=target,
+                transcript="A supplied transcript for an isolated pipeline contract test.",
+            )
+        assert result["build_status"] == expected
+        assert result["status"] != "success"
+        assert result["live_url"] == ""
+        assert result["github_repo"] is None
+
     def _make_generation_result(self):
         return {
             "project_type": "my-project",
@@ -753,7 +789,8 @@ class TestProcessVideoToSoftware:
             "deployment_id": "dep-123",
             "urls": {target: f"https://my-app.{target}.app"},
             "deployments": {
-                "github": {"url": "https://github.com/user/repo"},
+                "github": {"status": "success", "url": "https://github.com/user/repo"},
+                target: {"status": status, "url": f"https://my-app.{target}.app"},
             },
             "errors": [],
         }
@@ -885,7 +922,7 @@ class TestProcessVideoToSoftware:
             with pytest.raises(ValueError, match="Video processing failed"):
                 await svc.process_video_to_software(_VIDEO_URL)
 
-    async def test_fallback_to_vercel_when_primary_url_missing(self):
+    async def test_other_platform_url_does_not_complete_requested_target(self):
         raw = _success_result()
         processor = _make_processor_with_process_video(raw)
         svc = _make_service(processor=processor)
@@ -917,9 +954,9 @@ class TestProcessVideoToSoftware:
                 _VIDEO_URL, project_type="web", deployment_target="aws"
             )
 
-        # aws not in urls, falls back to vercel url
-        assert result["build_status"] == "completed"
-        assert "vercel" in result["live_url"]
+        assert result["build_status"] == "failed"
+        assert result["status"] == "failed"
+        assert result["live_url"] == ""
 
     async def test_build_failed_when_no_urls(self):
         raw = _success_result()
@@ -955,6 +992,8 @@ class TestProcessVideoToSoftware:
 
         assert result["build_status"] == "failed"
         assert result["live_url"] == ""
+        assert result["status"] == "failed"
+        assert result["github_repo"] is None
 
     async def test_exception_propagated(self):
         raw = _success_result()

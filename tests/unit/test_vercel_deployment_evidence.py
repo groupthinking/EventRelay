@@ -70,7 +70,8 @@ class VercelDeploymentEvidenceTests(unittest.IsolatedAsyncioTestCase):
             "id": "dpl_fixture", "readyState": "BUILDING", "url": "initial.vercel.app"
         }
         # Exercise the real polling timeout branch without waiting fifteen minutes.
-        with patch("youtube_extension.backend.deploy.core.time.time", side_effect=[0, 901]):
+        with patch("youtube_extension.backend.deploy.core.time") as clock:
+            clock.time.side_effect = [0, 901]
             result = await self.deploy()
         self.assertEqual(result.status, "failed")
         self.assertIsNone(result.url)

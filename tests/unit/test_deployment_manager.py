@@ -922,6 +922,24 @@ class TestDeployProject:
 
 
 class TestDeployToGithub:
+    async def test_empty_upload_cannot_publish_success(self) -> None:
+        mgr = _make_manager(github_token="tok")
+        mgr._create_github_repository = AsyncMock(return_value={
+            "repo_name": "fixture", "owner": "example",
+        })
+        mgr._upload_to_github = AsyncMock(return_value={"files_uploaded": 0})
+        result = await mgr._deploy_to_github("/path", {})
+        assert result["status"] == "failed"
+        assert "url" not in result
+
+    async def test_incomplete_upload_cannot_publish_success(self) -> None:
+        mgr = _make_manager(github_token="tok")
+        mgr._create_github_repository = AsyncMock(return_value={"repo_name": "fixture"})
+        mgr._upload_to_github = AsyncMock(side_effect=RuntimeError("publication incomplete"))
+        result = await mgr._deploy_to_github("/path", {})
+        assert result["status"] == "failed"
+        assert "url" not in result
+
     async def test_no_token_returns_failed(self) -> None:
         mgr = _make_manager_without_github_token()
         result = await mgr._deploy_to_github("/some/path", {})
@@ -1325,7 +1343,7 @@ class TestUploadToGithub:
         assert result["files_uploaded"] == 1
         assert all(not Path(f).name.startswith(".") for f in result["file_list"])
 
-    async def test_upload_failure_warned_but_not_raised(self, tmp_path) -> None:
+    async def test_upload_failure_propagates(self, tmp_path) -> None:
         mgr = _make_manager(github_token="tok")
         (tmp_path / "app.ts").write_text("export const z = 3;")
 
@@ -1349,10 +1367,8 @@ class TestUploadToGithub:
         session_cm.__aexit__ = AsyncMock(return_value=False)
 
         with patch("youtube_extension.backend.deployment_manager.aiohttp.ClientSession", return_value=session_cm):
-            result = await mgr._upload_to_github(str(tmp_path), "repo")
-
-        # Upload failed but no exception raised; count stays 0
-        assert result["files_uploaded"] == 0
+            with pytest.raises(RuntimeError, match="publication incomplete.*app.ts"):
+                await mgr._upload_to_github(str(tmp_path), "repo")
 
 
 # ===========================================================================
@@ -1637,7 +1653,7 @@ class TestUploadToGithubOffLoopReads:
         assert captured[0]["message"] == "Add asset.bin"
 
     async def test_unreadable_file_does_not_abort_siblings(self, tmp_path) -> None:
-        """A read failure stays isolated to its own file."""
+        """Finish sibling uploads, then report the incomplete publication."""
         (tmp_path / "good.ts").write_text("ok")
         (tmp_path / "bad.ts").write_text("boom")
         mgr = _make_manager(github_token="tok")
@@ -1660,10 +1676,11 @@ class TestUploadToGithubOffLoopReads:
             selective_open,
             create=True,
         ):
-            result = await mgr._upload_to_github(str(tmp_path), "repo")
+            with pytest.raises(RuntimeError, match="publication incomplete.*bad.ts"):
+                await mgr._upload_to_github(str(tmp_path), "repo")
 
-        assert result["files_uploaded"] == 1
-        assert result["file_list"] == ["good.ts"]
+        assert len(captured) == 1
+        assert captured[0]["message"] == "Add good.ts"
 
     async def test_cancellation_is_not_swallowed(self, tmp_path) -> None:
         """``except Exception`` must never absorb cancellation.

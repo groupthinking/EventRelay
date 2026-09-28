@@ -516,6 +516,8 @@ class DeploymentManager:
 
             # Upload project files
             upload_result = await self._upload_to_github(project_path, repo_result["repo_name"])
+            if not upload_result.get("files_uploaded"):
+                raise ValueError("GitHub publication uploaded no project files")
 
             return {
                 "status": "success",
@@ -607,6 +609,7 @@ class DeploymentManager:
                 username = user_data["login"]
 
             uploaded_files = []
+            failed_files = []
             project_path_obj = Path(project_path)
 
             # Directories to exclude from GitHub upload (standard .gitignore patterns)
@@ -644,9 +647,11 @@ class DeploymentManager:
                             else:
                                 error_text = await response.text()
                                 logger.warning(f"Failed to upload {relative_path}: {error_text}")
+                                failed_files.append(str(relative_path))
 
                     except Exception as e:
                         logger.warning(f"Error uploading {file_path}: {e}")
+                        failed_files.append(str(relative_path))
 
             # Collect tasks
             for file_path in project_path_obj.rglob("*"):
@@ -660,6 +665,15 @@ class DeploymentManager:
             # Execute all uploads concurrently (limited by semaphore)
             if upload_tasks:
                 await asyncio.gather(*upload_tasks)
+
+            # Drain all uploads before failing: no sibling write is left running.
+            if failed_files:
+                raise RuntimeError(
+                    "GitHub publication incomplete; failed files: "
+                    + ", ".join(sorted(failed_files))
+                )
+            if not uploaded_files:
+                raise ValueError("GitHub publication uploaded no project files")
 
         return {
             "files_uploaded": len(uploaded_files),

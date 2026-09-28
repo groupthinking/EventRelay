@@ -413,30 +413,31 @@ class VideoProcessingService:
             processing_time = time.time() - start_time
             deployment_urls = deployment_result.get("urls", {})
 
-            # Determine build status and primary URL
+            # A URL from another platform or a failed/partial run is not success.
             deployment_status = deployment_result.get("status")
-            primary_url = deployment_urls.get(deployment_target)
+            deployments = deployment_result.get("deployments", {})
+            target_result = deployments.get(deployment_target, {})
+            target_url = deployment_urls.get(deployment_target)
+            hosted = deployment_target != "github"
+            deployment_succeeded = (
+                deployment_status == "success"
+                and target_result.get("status") == "success"
+                and bool(target_url)
+                and not deployment_result.get("errors")
+            )
+            primary_url = target_url if deployment_succeeded and hosted else ""
+            build_status = (
+                "completed" if deployment_succeeded and hosted
+                else "generated" if deployment_succeeded
+                else "failed"
+            )
 
-            # Fallback: If primary_url is missing or deployment failed, try other platforms
-            if deployment_status == "success" and primary_url:
-                build_status = "completed"
-            else:
-                # Try fallback to other deployment URLs (e.g., vercel, netlify)
-                fallback_url = None
-                for platform in ["vercel", "netlify"]:
-                    url = deployment_urls.get(platform)
-                    if url:
-                        fallback_url = url
-                        break
-                if fallback_url:
-                    primary_url = fallback_url
-                    build_status = "completed"
-                else:
-                    build_status = "failed"
-                    primary_url = ""  # Set to empty string on failure
-
-            github_deployment = deployment_result.get("deployments", {}).get("github", {})
-            github_url = github_deployment.get("url", "https://github.com/uvai-generated/project-pending")
+            github_deployment = deployments.get("github", {})
+            github_url = (
+                github_deployment.get("url")
+                if github_deployment.get("status") == "success"
+                else None
+            )
 
             return {
                 "video_url": video_url,
@@ -467,7 +468,9 @@ class VideoProcessingService:
                     "urls": deployment_urls,
                     "errors": deployment_result.get("errors", [])
                 },
-                "status": "success",
+                "status": "success" if build_status == "completed" else (
+                    "partial_success" if build_status == "generated" else "failed"
+                ),
                 "timestamp": datetime.now().isoformat(),
                 "real_implementation": True
             }
