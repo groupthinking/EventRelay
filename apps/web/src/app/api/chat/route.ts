@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
+import { isChatPaywallBypassed } from '@/lib/billing/paywall-bypass';
 import { checkFreeChatQuota } from '@/lib/billing/chat-quota';
 import { grokChatCompletion } from '@/lib/billing/grok-client';
 import { scoreLeadWithJev } from '@/lib/billing/jev-lead-score';
@@ -76,7 +77,9 @@ export async function POST(request: Request) {
     const body = await request.json();
     const billingEmail = await resolveTrustedBillingEmail(request);
     const quotaSubject = billingEmail ?? 'anonymous';
-    const isPro = await isProSubscriber(billingEmail);
+    const storedPro = await isProSubscriber(billingEmail);
+    const paywallBypass = !storedPro && isChatPaywallBypassed(billingEmail);
+    const isPro = storedPro || paywallBypass;
     routing = resolvePaidTierRouting(isPro);
 
     let packSystemPrompt: string | undefined;
@@ -125,7 +128,7 @@ export async function POST(request: Request) {
     }
 
     kaizenObserve('billing', 'chat_routed', `Chat for ${quotaSubject}`, {
-      decision: `model=${routing.model} runtime=${routing.runtime} plan=${routing.plan}`,
+      decision: `model=${routing.model} runtime=${routing.runtime} plan=${routing.plan} paywallBypass=${paywallBypass}`,
     });
 
     const history = Array.isArray(body.history)

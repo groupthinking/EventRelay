@@ -1,0 +1,15 @@
+{
+  "name": "uvai-enterprise-demo",
+  "version": "1.1.0",
+  "description": "UVAI Video Pack /d enterprise design prototype (tokens, transcript sync, simulated telemetry)",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "browser": "echo Open index.html in a modern browser"
+  },
+  "devDependencies": {
+    "electron": "^44.4.3"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

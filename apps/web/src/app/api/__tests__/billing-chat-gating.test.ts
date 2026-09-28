@@ -72,6 +72,8 @@ function cookieReq(email: string, query: string) {
   });
 }
 
+const savedPaywallEnv: { value: string | undefined } = { value: undefined };
+
 beforeEach(() => {
   resetEntitlementStoreForTests();
   resetChatQuotaForTests();
@@ -85,6 +87,9 @@ beforeEach(() => {
     savedGatewayEnv[key] = process.env[key];
   }
   setGatewayEnv(true);
+  // These cases lock the real paywall. The dogfood bypass is covered below.
+  savedPaywallEnv.value = process.env.TEMP_PAYWALL_OFF;
+  process.env.TEMP_PAYWALL_OFF = '0';
 });
 
 afterEach(() => {
@@ -95,6 +100,11 @@ afterEach(() => {
     } else {
       process.env[key] = original;
     }
+  }
+  if (savedPaywallEnv.value === undefined) {
+    delete process.env.TEMP_PAYWALL_OFF;
+  } else {
+    process.env.TEMP_PAYWALL_OFF = savedPaywallEnv.value;
   }
 });
 
@@ -206,6 +216,35 @@ describe('POST /api/chat billing gating', () => {
       },
       rationale: '',
     });
+  });
+
+  it('routes a signed-in free session to xAI while TEMP_PAYWALL_OFF is on', async () => {
+    delete process.env.TEMP_PAYWALL_OFF;
+    const email = 'dogfood-free@example.com';
+
+    for (let i = 0; i < 6; i++) {
+      const res = await POST(cookieReq(email, `dogfood ${i}`));
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.plan).toBe('pro');
+      expect(body.provider).toBe('xai');
+      expect(body.routing.runtime).toBe('grok-composer');
+    }
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('keeps anonymous chat on the free path during the paywall bypass', async () => {
+    delete process.env.TEMP_PAYWALL_OFF;
+    const res = await POST(new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'anonymous still free' }),
+    }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.plan).toBe('free');
+    expect(body.answer).toBe('free reply');
+    expect(body.provider).toBe('vercel-ai-gateway');
   });
 
   it('does not meter Pro users against the free daily quota', async () => {

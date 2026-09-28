@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+import json
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +16,51 @@ from youtube_extension.backend.services.notification_service import (
     NotificationMessage,
     NotificationService,
 )
+
+
+@pytest.mark.asyncio
+async def test_log_file_io_runs_off_event_loop(tmp_path, monkeypatch):
+    """Opening and writing the file must not run on the event-loop thread."""
+    import builtins
+    from youtube_extension.backend.services import notification_service
+
+    monkeypatch.chdir(tmp_path)
+    service = NotificationService()
+    loop_thread = threading.get_ident()
+    operations = []
+    real_open = builtins.open
+
+    class TracedFile:
+        def __init__(self, *args, **kwargs):
+            operations.append(("open", threading.get_ident()))
+            self.file = real_open(*args, **kwargs)
+
+        def __enter__(self):
+            return self
+
+        def write(self, value):
+            operations.append(("write", threading.get_ident()))
+            return self.file.write(value)
+
+        def __exit__(self, *args):
+            self.file.close()
+
+    monkeypatch.setattr(notification_service, "open", TracedFile, raising=False)
+    await service._log_to_file(NotificationMessage(title="first", message="one"))
+    await service._log_to_file(NotificationMessage(title="second", message="two"))
+    assert [json.loads(line)["title"] for line in service.notification_log.read_text().splitlines()] == ["first", "second"]
+    assert [operation for operation, _ in operations] == ["open", "write", "open", "write"]
+    assert all(thread != loop_thread for _, thread in operations)
+
+
+@pytest.mark.asyncio
+async def test_log_file_failure_is_reported_without_escaping(tmp_path, monkeypatch, caplog):
+    monkeypatch.chdir(tmp_path)
+    service = NotificationService()
+    service.notification_log = tmp_path / "missing" / "notifications.log"
+    await service._log_to_file(NotificationMessage(title="test", message="test"))
+    assert "Failed to log notification to file" in caplog.text
+    assert not service.notification_log.exists()
 
 # ===========================================================================
 # NotificationMessage dataclass + __post_init__

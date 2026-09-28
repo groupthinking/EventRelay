@@ -147,6 +147,45 @@ describe('evaluateStudioDeployTransition', () => {
     expect(result.reason_code).toBe('GATE_REJECT_CLAIM_MISMATCH');
   });
 
+  it('PASSes when a verified live URL has a successful HTTP probe receipt', () => {
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_probe_ok',
+      runId: 'wrun_probe_ok',
+      liveUrl: 'https://example.vercel.app',
+      runStatus: 'completed',
+      kind: 'live',
+      authority: { actor: 'signed-in' },
+      deploymentHttpProbe: {
+        ok: true,
+        statusCode: 200,
+        finalUrl: 'https://example.vercel.app/',
+      },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('PASS');
+    expect(result.reason_code).toBe('GATE_PASS');
+    expect(
+      result.receipt.evidence_refs.some(
+        (ref) => ref.kind === 'deployment_http_probe' && ref.id === 'ok',
+      ),
+    ).toBe(true);
+  });
+
+  it('HOLDs when HTTP probe fails for a hostname-valid live URL', () => {
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_probe_fail',
+      runId: 'wrun_probe_fail',
+      liveUrl: 'https://example.vercel.app',
+      runStatus: 'completed',
+      kind: 'live',
+      authority: { actor: 'signed-in' },
+      deploymentHttpProbe: { ok: false, error: 'timeout' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason_code).toBe('GATE_HOLD_DEPLOYMENT_UNREACHABLE');
+  });
+
   it('HOLD when workflow completed without a live receipt (no Deploy completed claim)', () => {
     const result = evaluateStudioDeployTransition({
       transitionId: 'wrun_done',

@@ -1,0 +1,22 @@
+:root{--bg:#0b1220;--panel:#111827;--ink:#e5e7eb;--muted:#9ca3af;--line:#1f2937;--accent:#2dd4bf;--chat:#0f172a}
+*{box-sizing:border-box}html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+.app{height:100%;display:flex;flex-direction:column}
+.topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line)}
+.brand{font-weight:700}.brand span{color:var(--accent)}
+.actions{display:flex;gap:8px}.actions button,.chip{border:1px solid var(--line);background:#0b1220;color:var(--ink);border-radius:999px;padding:8px 14px;cursor:pointer}
+.actions button.active{background:#134e4a;border-color:var(--accent);color:var(--accent)}
+.stage{flex:1;min-height:0;display:flex;flex-direction:column}.main{display:flex;flex:1;min-height:0}
+.workspace,.assistant,.termwrap{min-width:0;min-height:0}.workspace{display:flex;flex-direction:column}
+.work-top{display:flex;flex:1;min-height:0}
+.files{width:160px;border-right:1px solid var(--line);padding:10px;font-size:13px}
+.files button{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;padding:6px 8px;cursor:pointer}
+.files button.active{background:#134e4a}
+.edit-preview{flex:1;display:flex;flex-direction:column}#editor{flex:1}#preview{height:38%;border:0;border-top:1px solid var(--line);background:#fff}
+.assistant{display:flex;flex-direction:column;background:var(--chat)}.assistant header{padding:12px;border-bottom:1px solid var(--line)}
+.thread{flex:1;overflow:auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:92%;padding:10px 12px;border-radius:12px;font-size:13px}.msg.bot{background:#111827;border:1px solid var(--line)}
+.composer{display:flex;gap:8px;padding:10px;border-top:1px solid var(--line)}.composer input{flex:1;border:1px solid var(--line);border-radius:999px;padding:10px 14px;background:#0b1220;color:#fff}
+.composer button{background:var(--accent);color:#042f2e;border:0;border-radius:999px;padding:0 16px}
+.termwrap{display:flex;flex-direction:column;border-top:1px solid var(--line)}#terminal{flex:1;background:#0b1220}
+.gutter{background:#1f2937}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+.prompts{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px}.ticket{color:#a5b4fc}

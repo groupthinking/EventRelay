@@ -1,6 +1,7 @@
-"""Filesystem get-or-create store for VideoPack v0.
+"""Filesystem get-or-create store for VideoPack v0 (dev-only).
 
-Layout matches the existing convention documented in versioning.py:
+Deprecated for production: canonical persistence is Upstash REST
+(``VIDEO_PACK_FILESYSTEM_STORE=1`` for local dev). Layout:
 `storage/video_packs/<video_id>/pack.json`.
 """
 

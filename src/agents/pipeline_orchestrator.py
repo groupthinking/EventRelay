@@ -201,6 +201,11 @@ class VideoPipelineOrchestrator:
         except Exception as e:
             logger.debug("Sentry not configured or ai not available: %s", e)
         options = options or {}
+        logger.warning(
+            "Non-canonical agent path: src/agents/pipeline_orchestrator.run_pipeline — "
+            "production dispatch should use youtube_extension.services.agents AgentOrchestrator "
+            "(see docs/AGENT_ORCHESTRATION_TRUTH.md)",
+        )
         self.results = {}
         execution_mode = options.get("execution_mode", "sequential")
 

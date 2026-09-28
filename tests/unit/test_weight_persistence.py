@@ -72,6 +72,23 @@ def test_save_checkpoint(mock_env):
     assert history_data == data
 
 
+@pytest.mark.parametrize("operation", ["mkdir", "write_text", "rename"])
+def test_save_checkpoint_io_error_preserves_latest(mock_env, operation):
+    """A failed local save must raise and leave the previous checkpoint intact."""
+    from pathlib import Path
+
+    save_checkpoint({"training_samples": 42}, {"training_samples": 38})
+    previous = mock_env["checkpoint_file"].read_bytes()
+    with (
+        patch.object(Path, operation, side_effect=PermissionError("read-only checkpoint")),
+        patch("uvai.ml.weight_persistence._upload_to_gcs") as upload,
+        pytest.raises(PermissionError, match="read-only checkpoint"),
+    ):
+        save_checkpoint({"training_samples": 99}, {})
+    assert mock_env["checkpoint_file"].read_bytes() == previous
+    upload.assert_not_called()
+
+
 def test_save_checkpoint_partial_states(mock_env):
     """Test that saving only scorer or ranker preserves the untouched model's state."""
     # First, save both states
