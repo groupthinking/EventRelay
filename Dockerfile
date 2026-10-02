@@ -22,8 +22,7 @@ COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
 
 # Copy local file dependencies for npm workspace
-COPY src/dataconnect-generated ./src/dataconnect-generated
-COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+# (dataconnect-generated dirs removed in sprawl pass 2 — zero importers)
 
 # apps/web postinstall runs scripts/patch-world-vercel-undici-fetch.mjs, so the
 # scripts directory must exist in the builder stage before `npm ci`
@@ -68,9 +67,7 @@ COPY --from=builder /usr/local/bin /usr/local/bin
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 
-# Copy local dataconnect artifacts to avoid dangling symlinks
-COPY --from=builder /app/src/dataconnect-generated ./src/dataconnect-generated
-COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+# (dataconnect-generated dirs removed in sprawl pass 2 — zero importers)
 
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .
