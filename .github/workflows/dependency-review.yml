@@ -15,7 +15,7 @@ permissions:
 # Supersede superseded work instead of stacking it. Without this, every push
 # to a PR branch queued a brand-new full run alongside the ones it obsoleted;
 # with ~30 workflows and dozens of open PRs the Actions queue could not drain.
-#
+#allow-dependencies-licenses
 # PR runs are keyed by PR number and cancel their predecessors -- that is where
 # all the queue pressure comes from, since every `push:` trigger here is already
 # filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
@@ -154,7 +154,14 @@ jobs:
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0,
             BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD
+          # Docs/prototype pip deps (not shipped product code): the scanner reports regex with a
+          # CNRI-Python fragment (upstream misattribution; the package is Apache-2.0) and torch with
+          # a bundled BSL-1.0 component. Both live under docs/ only. Revisit if they move into
+          # shipped code. Added 2026-10-02: the finding is pre-existing on main and fails every PR
+          # touching any dependency manifest, including dependabot's.
           allow-dependencies-licenses: >-
+            pkg:pip/regex,
+            pkg:pip/torch,
             pkg:npm/caniuse-lite,
             pkg:npm/@sentry/nextjs,
             pkg:npm/@sentry/cli,
