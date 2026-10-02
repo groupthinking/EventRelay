@@ -21,7 +21,7 @@ import { zipUtf8Files } from '@/lib/zip-store';
  * Single product path for "act on findings" inside EventRelay:
  *
  *   1. Plan  — TranscriptActionAgent (backend) emits summary, task_board,
- *              and project_scaffold via /api/video or /api/pipeline/stream.
+ *              and project_scaffold via /api/video.
  *   2. Act   — Next action-agent (apps/web) runs POST /api/agents/actions;
  *              LLM chooses tools from action-tools.ts and executes them.
  *   3. Package — Deterministic scaffold files (README + tasks.json + stub)

@@ -33,11 +33,6 @@ const PUBLIC_API_EXACT = new Set([
   // (or anonymous), not a NextAuth session; it only opens a Stripe checkout, so
   // it is the same pre-payment surface class as /api/billing/checkout.
   '/api/billing/renew',
-  // Core pipeline SSE endpoint — the primary public entry point for the
-  // EventRelay workflow (YouTube link → transcript → events → agents).
-  // Must be accessible without a session so anonymous users can run the
-  // pipeline; the route handler applies its own rate limiting via proxy.ts.
-  '/api/pipeline/stream',
   // Home paste-URL pack emit + anonymous per-hash/per-video GET.
   // Exact paths so /api/video, /api/video/generate, and a packs listing stay gated.
   '/api/video/pack',
@@ -123,7 +118,6 @@ const AI_ROUTE_PREFIXES = [
   '/api/agents/dispatch',
   '/api/chat',
   '/api/extract-events',
-  '/api/pipeline',
   '/api/realtime',
   '/api/training',
   '/api/transcribe',
@@ -144,8 +138,8 @@ const AI_ROUTE_PREFIXES = [
  * rate-limit bucket is keyed by *class*, not by path — every AI prefix shares
  * one `ai:<ip>` counter. A Studio run polls its status ~40x/min against an
  * AI budget defaulting to 12/min, so without this exemption a single run
- * exhausts the shared allowance in ~17s and 429s /api/chat, /api/transcribe
- * and /api/pipeline along with itself.
+ * exhausts the shared allowance in ~17s and 429s /api/chat and /api/transcribe
+ * along with itself.
  *
  * Deliberately keyed per-prefix rather than exempting GET globally: the other
  * prefixes have no polling client, and a blanket GET exemption would be an

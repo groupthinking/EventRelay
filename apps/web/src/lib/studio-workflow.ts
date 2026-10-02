@@ -1,8 +1,9 @@
 /**
  * Studio helpers for the durable video → transcript → actions workflow (WDK Product v1).
  *
- * Complements `studio-deploy.ts` (FastAPI /api/pipeline job path). This path uses
- * Workflow DevKit: start returns a runId immediately; poll until terminal status.
+ * This path uses Workflow DevKit: start returns a runId immediately; poll
+ * until terminal status. The canonical video path is the Video Pack pipeline
+ * (`POST /api/video/pack` → Upstash → Studio → G.A.T.E.).
  */
 
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
