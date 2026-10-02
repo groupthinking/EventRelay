@@ -249,7 +249,7 @@ def main() -> int:
     print(f"\nNext steps:")
     print(f"  1. Review your .env file: {env_path}")
     print(f"  2. Validate your setup: python3 scripts/validate_env.py")
-    print(f"  3. Start the application: uvicorn uvai.api.main:app --reload")
+    print(f"  3. Start the application: see apps/web/README.md")
 
     return 0
 
