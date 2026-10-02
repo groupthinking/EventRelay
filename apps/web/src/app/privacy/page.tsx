@@ -84,7 +84,7 @@ export default function PrivacyPage() {
             <p>
               You can request deletion of artifacts associated with your
               account by emailing{' '}
-              <a className="text-teal-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+              <a className="text-amber-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
               . Because UVAI is open source under MIT, you can also self-host
@@ -96,11 +96,11 @@ export default function PrivacyPage() {
             <h2 className="font-heading text-2xl font-bold text-ink">Contact</h2>
             <p>
               Questions about this policy:{' '}
-              <a className="text-teal-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+              <a className="text-amber-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
               . See also our{' '}
-              <Link className="text-teal-400 hover:underline" href="/terms">
+              <Link className="text-amber-400 hover:underline" href="/terms">
                 Terms of Service
               </Link>
               .

@@ -82,11 +82,11 @@ export default function TermsPage() {
             <h2 className="font-heading text-2xl font-bold text-ink">Contact</h2>
             <p>
               Questions:{' '}
-              <a className="text-teal-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+              <a className="text-amber-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
               . See also our{' '}
-              <Link className="text-teal-400 hover:underline" href="/privacy">
+              <Link className="text-amber-400 hover:underline" href="/privacy">
                 Privacy Policy
               </Link>
               .

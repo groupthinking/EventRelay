@@ -7,13 +7,13 @@
    ============================================ */
 
 :root {
-  /* Core Brand Colors */
-  --color-primary: 20 184 166; /* teal-500 */
-  --color-primary-light: 45 212 191; /* teal-400 */
-  --color-primary-dark: 13 148 136; /* teal-600 */
+  /* Core Brand Colors — dark premium, warm amber accent */
+  --color-primary: 245 158 11; /* amber-500 */
+  --color-primary-light: 251 191 36; /* amber-400 */
+  --color-primary-dark: 217 119 6; /* amber-600 */
 
-  --color-accent: 34 211 238; /* cyan-400 */
-  --color-accent-dark: 6 182 212; /* cyan-500 */
+  --color-accent: 251 191 36; /* amber-400 */
+  --color-accent-dark: 245 158 11; /* amber-500 */
 
   /* Semantic Landing Tokens */
   --color-void: 5 5 8; /* near-black page bg */
@@ -33,14 +33,14 @@
   --color-info: 59 130 246; /* blue-500 */
 
   /* Evidence workspace */
-  --evidence-canvas: #090c10;
-  --evidence-surface: #0f1419;
-  --evidence-surface-raised: #151b21;
-  --evidence-border: rgba(232, 240, 236, 0.09);
-  --evidence-text: #f2f5f2;
-  --evidence-muted: #97a19d;
-  --evidence-accent: #6de1c6;
-  --evidence-accent-strong: #36bda1;
+  --evidence-canvas: #09090b;
+  --evidence-surface: #101013;
+  --evidence-surface-raised: #17171c;
+  --evidence-border: rgba(245, 158, 11, 0.12);
+  --evidence-text: #faf9f7;
+  --evidence-muted: #a1a1aa;
+  --evidence-accent: #fbbf24;
+  --evidence-accent-strong: #f59e0b;
 
   /* Glass Effect */
   --glass-bg: rgba(15, 23, 42, 0.7);
@@ -48,7 +48,7 @@
   --glass-blur: 20px;
 
   /* Shadows */
-  --shadow-glow: 0 0 60px -12px rgba(20, 184, 166, 0.4);
+  --shadow-glow: 0 0 60px -12px rgba(245, 158, 11, 0.4);
   --shadow-card:
     0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
   --shadow-elevated: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
@@ -68,6 +68,14 @@
 /* ============================================
    Base Styles
    ============================================ */
+
+/* Design-language lock: headings render in Space Grotesk (the --font-heading
+   variable loaded via next/font in app/layout.tsx). tailwind.config.js still
+   maps font-heading to Inter, so this unlayered rule overrides the Tailwind
+   utility everywhere (landing + Studio) without editing the shared config. */
+.font-heading {
+  font-family: var(--font-heading);
+}
 
 * {
   box-sizing: border-box;
@@ -103,12 +111,12 @@ body {
 
 .evidence-primary-button {
   background: var(--evidence-accent);
-  color: #06221d;
+  color: #050508;
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
 .evidence-primary-button:hover:not(:disabled) {
-  background: #8aead4;
+  background: #fcd34d;
 }
 
 .evidence-primary-button:active:not(:disabled) {
@@ -229,8 +237,8 @@ pre {
   padding: 1px;
   background: linear-gradient(
     135deg,
-    rgba(20, 184, 166, 0.5) 0%,
-    rgba(34, 211, 238, 0.5) 100%
+    rgba(245, 158, 11, 0.5) 0%,
+    rgba(251, 191, 36, 0.5) 100%
   );
   -webkit-mask:
     linear-gradient(#fff 0 0) content-box,
@@ -260,11 +268,11 @@ pre {
   0%,
   100% {
     opacity: 1;
-    box-shadow: 0 0 20px rgba(20, 184, 166, 0.4);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.4);
   }
   50% {
     opacity: 0.8;
-    box-shadow: 0 0 40px rgba(20, 184, 166, 0.6);
+    box-shadow: 0 0 40px rgba(245, 158, 11, 0.6);
   }
 }
 
@@ -396,12 +404,12 @@ pre {
 /* Focus states */
 .focus-ring:focus {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.4);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
 }
 
 .focus-ring:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.4);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.4);
 }
 
 /* ============================================
@@ -431,17 +439,17 @@ pre {
     rgb(var(--color-primary-dark)) 100%
   );
   color: white;
-  box-shadow: 0 4px 14px -4px rgba(20, 184, 166, 0.4);
+  box-shadow: 0 4px 14px -4px rgba(245, 158, 11, 0.4);
 }
 
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 12px 24px -8px rgba(20, 184, 166, 0.5);
+  box-shadow: 0 12px 24px -8px rgba(245, 158, 11, 0.5);
 }
 
 .btn-primary:active {
   transform: translateY(0);
-  box-shadow: 0 4px 14px -4px rgba(20, 184, 166, 0.4);
+  box-shadow: 0 4px 14px -4px rgba(245, 158, 11, 0.4);
 }
 
 .btn-secondary {
@@ -487,7 +495,7 @@ pre {
 .input:focus {
   outline: none;
   border-color: rgb(var(--color-primary));
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.2);
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
 }
 
 /* ============================================
@@ -504,8 +512,8 @@ pre {
 }
 
 .card:hover {
-  border-color: rgba(20, 184, 166, 0.3);
-  box-shadow: 0 0 40px -10px rgba(20, 184, 166, 0.2);
+  border-color: rgba(245, 158, 11, 0.3);
+  box-shadow: 0 0 40px -10px rgba(245, 158, 11, 0.2);
 }
 
 /* ============================================
@@ -525,8 +533,8 @@ pre {
 }
 
 .badge-primary {
-  background: rgba(20, 184, 166, 0.15);
-  border-color: rgba(20, 184, 166, 0.3);
+  background: rgba(245, 158, 11, 0.15);
+  border-color: rgba(245, 158, 11, 0.3);
   color: rgb(var(--color-primary-light));
 }
 
@@ -576,7 +584,7 @@ pre {
    ============================================ */
 
 ::selection {
-  background: rgba(20, 184, 166, 0.3);
+  background: rgba(245, 158, 11, 0.3);
   color: white;
 }
 
@@ -601,12 +609,12 @@ pre {
 .mesh-gradient,
 .bg-mesh {
   background:
-    radial-gradient(at 40% 20%, rgba(20, 184, 166, 0.15) 0px, transparent 50%),
-    radial-gradient(at 80% 0%, rgba(34, 211, 238, 0.1) 0px, transparent 50%),
-    radial-gradient(at 0% 50%, rgba(20, 184, 166, 0.1) 0px, transparent 50%),
-    radial-gradient(at 80% 50%, rgba(34, 211, 238, 0.08) 0px, transparent 50%),
-    radial-gradient(at 0% 100%, rgba(20, 184, 166, 0.1) 0px, transparent 50%),
-    radial-gradient(at 80% 100%, rgba(34, 211, 238, 0.08) 0px, transparent 50%);
+    radial-gradient(at 40% 20%, rgba(245, 158, 11, 0.15) 0px, transparent 50%),
+    radial-gradient(at 80% 0%, rgba(251, 191, 36, 0.1) 0px, transparent 50%),
+    radial-gradient(at 0% 50%, rgba(245, 158, 11, 0.1) 0px, transparent 50%),
+    radial-gradient(at 80% 50%, rgba(251, 191, 36, 0.08) 0px, transparent 50%),
+    radial-gradient(at 0% 100%, rgba(245, 158, 11, 0.1) 0px, transparent 50%),
+    radial-gradient(at 80% 100%, rgba(251, 191, 36, 0.08) 0px, transparent 50%);
 }
 
 /* ============================================
@@ -672,15 +680,15 @@ pre {
 
 .contact-form-input:focus {
   outline: none;
-  border-color: #6af2de;
-  box-shadow: 0 0 0 3px rgba(106, 242, 222, 0.15);
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15);
 }
 
 select.contact-form-input {
   appearance: none;
   background-image:
-    linear-gradient(45deg, transparent 50%, #6af2de 50%),
-    linear-gradient(135deg, #6af2de 50%, transparent 50%);
+    linear-gradient(45deg, transparent 50%, #fbbf24 50%),
+    linear-gradient(135deg, #fbbf24 50%, transparent 50%);
   background-position:
     calc(100% - 18px) 50%,
     calc(100% - 13px) 50%;

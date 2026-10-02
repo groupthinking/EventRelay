@@ -8,13 +8,13 @@ export default function ContactSection() {
     <section
       id="contact"
       className="scroll-mt-24 py-24 px-8"
-      style={{ background: 'rgba(8,10,14,0.98)' }}
+      style={{ background: 'rgba(5,5,8,0.98)' }}
     >
       <div className="max-w-[1440px] mx-auto">
         <div className="grid lg:grid-cols-2 gap-14 items-start">
           {/* Left: copy */}
           <div>
-            <p className="text-xs tracking-[0.3em] uppercase font-bold mb-5" style={{ color: '#6af2de' }}>
+            <p className="text-xs tracking-[0.3em] uppercase font-bold mb-5" style={{ color: '#fbbf24' }}>
               Inbound
             </p>
             <h2 className="font-heading text-[clamp(2rem,4vw,4rem)] font-black tracking-tighter leading-[0.95] text-ink mb-6">
@@ -34,7 +34,7 @@ export default function ContactSection() {
               <Link
                 href="/studio"
                 className="px-6 py-3 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95"
-                style={{ background: '#6af2de', color: '#021a18' }}
+                style={{ background: '#fbbf24', color: '#050508' }}
               >
                 Open studio
               </Link>

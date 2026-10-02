@@ -14,7 +14,7 @@ export default function LandingFooter() {
         <div className="flex items-center gap-2.5">
           <span
             className="inline-flex items-center justify-center w-7 h-7 rounded-lg"
-            style={{ border: '1.5px solid rgba(106,242,222,0.4)', color: '#6af2de' }}
+            style={{ border: '1.5px solid rgba(245,158,11,0.4)', color: '#fbbf24' }}
             aria-hidden
           >
             <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">

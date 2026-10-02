@@ -19,7 +19,7 @@ const EVENT_ROWS = [
 ];
 
 const TYPE_COLORS: Record<string, string> = {
-  decision: '#6af2de',
+  decision: '#f59e0b',
   task: '#fbbf24',
   topic: '#a78bfa',
   insight: '#f472b6',
@@ -39,7 +39,7 @@ export default function BentoFeatures() {
       <div className="mb-12">
         <p
           className="text-xs tracking-[0.3em] uppercase font-bold mb-4"
-          style={{ color: '#6af2de' }}
+          style={{ color: '#fbbf24' }}
         >
           What UVAI does
         </p>
@@ -50,7 +50,7 @@ export default function BentoFeatures() {
             style={{
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
-              backgroundImage: 'linear-gradient(135deg, #6af2de, #38fbf7)',
+              backgroundImage: 'linear-gradient(135deg, #fbbf24, #f59e0b)',
             }}
           >
             extract value from video.
@@ -65,12 +65,12 @@ export default function BentoFeatures() {
         <article
           className="lg:col-span-2 rounded-2xl overflow-hidden group"
           style={{
-            background: 'rgba(10,12,16,0.85)',
-            border: '1px solid rgba(106,242,222,0.1)',
+            background: 'rgba(5,5,8,0.85)',
+            border: '1px solid rgba(245,158,11,0.1)',
           }}
         >
           <div className="p-7">
-            <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#6af2de' }}>
+            <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#fbbf24' }}>
               01 — Transcript pipeline
             </p>
             <h3 className="font-heading text-2xl font-black tracking-tight text-ink mb-2">
@@ -98,14 +98,14 @@ export default function BentoFeatures() {
                 <polyline points="14 2 14 8 20 8" />
               </svg>
               transcript.txt
-              <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: 'rgba(106,242,222,0.1)', color: '#6af2de' }}>
+              <span className="ml-auto px-2 py-0.5 rounded text-[10px] font-bold" style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}>
                 READY
               </span>
             </div>
             <div className="px-4 py-4 font-mono text-xs leading-6 max-h-[160px] overflow-hidden" style={{ color: 'rgba(248,245,253,0.55)' }}>
               {TRANSCRIPT_LINES.map((line) => (
                 <div key={line.ts} className="flex gap-3">
-                  <span className="text-[10px] pt-0.5 flex-shrink-0 font-bold" style={{ color: '#6af2de' }}>{line.ts}</span>
+                  <span className="text-[10px] pt-0.5 flex-shrink-0 font-bold" style={{ color: '#fbbf24' }}>{line.ts}</span>
                   <span>{line.text}</span>
                 </div>
               ))}
@@ -120,11 +120,11 @@ export default function BentoFeatures() {
               key={s.label}
               className="rounded-2xl p-6 flex flex-col justify-between"
               style={{
-                background: 'rgba(10,12,16,0.85)',
-                border: '1px solid rgba(106,242,222,0.08)',
+                background: 'rgba(5,5,8,0.85)',
+                border: '1px solid rgba(245,158,11,0.08)',
               }}
             >
-              <p className="text-5xl font-black font-heading tracking-tight" style={{ color: '#6af2de' }}>
+              <p className="text-5xl font-black font-heading tracking-tight" style={{ color: '#fbbf24' }}>
                 {s.value}
               </p>
               <p className="text-sm text-ink/45 font-medium mt-2">{s.label}</p>
@@ -136,12 +136,12 @@ export default function BentoFeatures() {
         <article
           className="rounded-2xl overflow-hidden"
           style={{
-            background: 'rgba(10,12,16,0.85)',
-            border: '1px solid rgba(106,242,222,0.1)',
+            background: 'rgba(5,5,8,0.85)',
+            border: '1px solid rgba(245,158,11,0.1)',
           }}
         >
           <div className="p-7 pb-4">
-            <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#6af2de' }}>
+            <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#fbbf24' }}>
               02 — Typed events
             </p>
             <h3 className="font-heading text-xl font-black tracking-tight text-ink mb-1">
@@ -184,12 +184,12 @@ export default function BentoFeatures() {
         <article
           className="rounded-2xl overflow-hidden"
           style={{
-            background: 'rgba(10,12,16,0.85)',
-            border: '1px solid rgba(106,242,222,0.1)',
+            background: 'rgba(5,5,8,0.85)',
+            border: '1px solid rgba(245,158,11,0.1)',
           }}
         >
           <div className="p-7 pb-4">
-            <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#6af2de' }}>
+            <p className="text-xs uppercase tracking-widest font-bold mb-2" style={{ color: '#fbbf24' }}>
               03 — Agent analysis
             </p>
             <h3 className="font-heading text-xl font-black tracking-tight text-ink mb-1">
@@ -206,16 +206,16 @@ export default function BentoFeatures() {
               className="px-4 py-3 rounded-xl text-xs text-ink/70 leading-relaxed"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
             >
-              <span className="block text-[10px] uppercase tracking-widest font-bold mb-1.5" style={{ color: '#6af2de' }}>
+              <span className="block text-[10px] uppercase tracking-widest font-bold mb-1.5" style={{ color: '#fbbf24' }}>
                 Summary
               </span>
               This video covers event sourcing architecture decisions, with a focus on typed schema design and eliminating dual-write consistency risks.
             </div>
             <div
               className="flex items-start gap-2.5 px-4 py-3 rounded-xl text-xs"
-              style={{ background: 'rgba(106,242,222,0.04)', border: '1px solid rgba(106,242,222,0.12)' }}
+              style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.12)' }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6af2de" strokeWidth="2" className="mt-0.5 shrink-0">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" className="mt-0.5 shrink-0">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
               </svg>
               <span className="text-ink/60">
@@ -229,8 +229,8 @@ export default function BentoFeatures() {
         <article
           className="lg:col-span-3 rounded-2xl p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6"
           style={{
-            background: 'rgba(106,242,222,0.04)',
-            border: '1px solid rgba(106,242,222,0.15)',
+            background: 'rgba(245,158,11,0.04)',
+            border: '1px solid rgba(245,158,11,0.15)',
           }}
         >
           <div>
@@ -245,7 +245,7 @@ export default function BentoFeatures() {
             <Link
               href="/studio"
               className="px-7 py-3.5 rounded-xl font-bold text-sm transition-all duration-200 active:scale-95 whitespace-nowrap"
-              style={{ background: '#6af2de', color: '#021a18' }}
+              style={{ background: '#fbbf24', color: '#050508' }}
             >
               Open studio
             </Link>

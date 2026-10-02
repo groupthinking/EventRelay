@@ -44,10 +44,12 @@ afterEach(() => {
 });
 
 describe('OneLoopStudio Build live honesty (B3b)', () => {
-  it('renders workbench empty UI when no pack is stored', () => {
+  it('renders IDE empty UI when no pack is stored', () => {
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    expect(screen.getByTestId('studio-workbench-empty')).toBeTruthy();
-    expect(screen.getByText(/video pack not stored/i)).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
   });
 
   it('shows recovery CTAs when Build live fails for a missing pack', async () => {

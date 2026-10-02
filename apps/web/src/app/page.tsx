@@ -47,16 +47,16 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-12">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 font-heading text-xl font-black shadow-lg shadow-primary-500/25">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 font-heading text-xl font-black shadow-lg shadow-amber-500/25">
                   U
                 </div>
                 <span className="font-heading text-3xl font-black tracking-tight sm:text-4xl">UVAI</span>
               </div>
-              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.28em] text-teal-200">
+              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.28em] text-amber-200">
                 Universal Video Action Intelligence
               </p>
               {showCustomBadge && (
-                <p className="mt-4 inline-flex rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-semibold text-teal-100">
+                <p className="mt-4 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-100">
                   New: configurable with Vercel Flags
                 </p>
               )}
@@ -81,10 +81,10 @@ export default async function HomePage() {
             <aside
               id="get-pro"
               aria-labelledby="workflow-pro-heading"
-              className="min-w-0 rounded-[2rem] border border-teal-300/20 bg-surface-900/70 p-1 shadow-2xl shadow-black/30"
+              className="min-w-0 rounded-[2rem] border border-amber-300/20 bg-surface-900/70 p-1 shadow-2xl shadow-black/30"
             >
               <div className="px-5 pb-1 pt-5 sm:px-7 sm:pt-7">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
                   Workflow Pro
                 </p>
                 <h2 id="workflow-pro-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
@@ -102,7 +102,7 @@ export default async function HomePage() {
           <section aria-labelledby="offer-summary-heading" className="mt-12 border-t border-white/[0.08] pt-8 md:mt-16 md:pt-10">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">Options</p>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">Options</p>
                 <h2 id="offer-summary-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
                   Start in Studio, then choose the right level of support.
                 </h2>

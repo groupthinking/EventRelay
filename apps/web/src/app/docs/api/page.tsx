@@ -40,7 +40,7 @@ const ENDPOINTS: Endpoint[] = [
 ];
 
 const METHOD_COLOR: Record<Endpoint['method'], string> = {
-  GET: 'bg-teal-500/10 border-teal-500/30 text-teal-300',
+  GET: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
   POST: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
 };
 
@@ -62,14 +62,14 @@ export default function ApiDocsPage() {
 
         <section className="mb-10 rounded-xl border border-white/5 bg-white/[0.02] p-6">
           <h2 className="font-heading text-lg font-bold text-ink">Base URL</h2>
-          <code className="mt-2 block text-sm text-teal-300">https://uvai.io</code>
+          <code className="mt-2 block text-sm text-amber-300">https://uvai.io</code>
           <p className="mt-3 text-sm text-ink/60">
             Want to run it yourself? UVAI is MIT-licensed.{' '}
             <a
               href="https://github.com/groupthinking/EventRelay"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-teal-400 hover:underline"
+              className="text-amber-400 hover:underline"
             >
               See the EventRelay repo
             </a>{' '}
@@ -105,16 +105,16 @@ export default function ApiDocsPage() {
           <h2 className="font-heading text-2xl font-bold text-ink">Try it</h2>
           <p className="mt-2 text-ink/60">
             The{' '}
-            <Link href="/studio" className="text-teal-400 hover:underline">
+            <Link href="/studio" className="text-amber-400 hover:underline">
               studio
             </Link>{' '}
             runs the end-to-end YouTube workflow against a real URL: hashed Video
-            Pack via <code className="text-teal-300">/api/video/pack</code>, then{' '}
-            <code className="text-teal-300">/api/workflows/video-to-actions</code>.
+            Pack via <code className="text-amber-300">/api/video/pack</code>, then{' '}
+            <code className="text-amber-300">/api/workflows/video-to-actions</code>.
           </p>
           <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-ink/60">
             <li>Paste a YouTube URL on Home.</li>
-            <li>Home redirects to <code className="text-teal-300">/studio?video=...</code>.</li>
+            <li>Home redirects to <code className="text-amber-300">/studio?video=...</code>.</li>
             <li>Studio auto-starts analysis once for that handoff URL.</li>
             <li>Transcript and events flow into actions and output publishing.</li>
           </ol>

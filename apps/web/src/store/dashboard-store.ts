@@ -61,7 +61,7 @@ interface DashboardState {
   setLoading: (loading: boolean) => void;
 
   // Workflow actions
-  processVideo: (url: string) => Promise<string>;
+  processVideo: (url: string, opts?: { signal?: AbortSignal }) => Promise<string>;
   resumeProcessingRuns: () => Promise<void>;
   extractEvents: (videoId: string) => void;
   dispatchToAgents: (videoId: string) => Promise<void>;
@@ -386,8 +386,9 @@ export const useDashboardStore = create<DashboardState>()(
   },
 
   // ── Process a video URL through one durable, evidence-gated workflow ──
-  processVideo: async (url) => {
+  processVideo: async (url, opts) => {
     const { addVideo, updateVideo, addActivity } = get();
+    const signal = opts?.signal;
     const id = crypto.randomUUID();
     const startedAt = new Date().toISOString();
 
@@ -424,7 +425,22 @@ export const useDashboardStore = create<DashboardState>()(
         statusUrl: started.statusUrl,
         attempts: 180,
         delayMs: 2000,
+        signal,
       });
+
+      if (signal?.aborted) {
+        updateVideo(id, {
+          status: 'failed',
+          failure: {
+            stage: 'analysis',
+            message: 'Cancelled by user.',
+            retryable: true,
+            failedAt: new Date().toISOString(),
+          },
+        });
+        addActivity(`Processing cancelled: ${truncate(url, 40)}`, 'info');
+        return id;
+      }
 
       if (terminal.runStatus !== 'completed') {
         if (terminal.runStatus === 'running' || terminal.runStatus === 'pending') {

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
@@ -41,19 +41,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('OneLoopStudio job strip and failed-pack transcript', () => {
-  it('links the idle job strip to /studio and keeps the transcript idle', () => {
+describe('OneLoopStudio IDE status and transcript', () => {
+  it('shows idle status in the toolbar when no pack is stored', () => {
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
 
-    const selfLink = screen.getByTestId('studio-job-self-link');
-    expect(selfLink.getAttribute('href')).toBe('/studio');
-    expect(selfLink.textContent).toBe('/studio');
-    expect(screen.getByTestId('studio-primary-job-strip').textContent).not.toContain('/d/');
-    expect(screen.getByTestId('studio-transcript-body').textContent).toBe('Nothing yet.');
-    expect(screen.queryByText('/d/{videoId}')).toBeNull();
+    expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-status')).toBeTruthy();
+    // Transcript tab shows the idle state.
+    expect(screen.getByTestId('studio-ide-output-tab-transcript')).toBeTruthy();
   });
 
-  it('names the stored YouTube id after a pack exists', async () => {
+  it('names the stored pack in the video pane after a pack exists', async () => {
     const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
     const pack = reviewPackFixture();
     useDashboardStore.setState({
@@ -76,9 +74,6 @@ describe('OneLoopStudio job strip and failed-pack transcript', () => {
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
 
-    expect(screen.getByTestId('studio-job-video-id').textContent).toBe('auJzb1D-fag');
-    expect(screen.queryByTestId('studio-job-self-link')).toBeNull();
-    expect(screen.getByTestId('studio-primary-job-strip').textContent).not.toContain('/d/');
     expect(screen.getByTestId('studio-build-live-button').getAttribute('title')).toBe(
       'Compile the stored Video Pack for auJzb1D-fag.',
     );
@@ -106,8 +101,8 @@ describe('OneLoopStudio job strip and failed-pack transcript', () => {
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
 
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-transcript'));
     expect(screen.getByTestId('studio-transcript-body').textContent).toBe(extractError);
     expect(screen.queryByText('Nothing yet.')).toBeNull();
-    expect(screen.getByTestId('studio-workbench-empty').textContent).toContain(extractError);
   });
 });

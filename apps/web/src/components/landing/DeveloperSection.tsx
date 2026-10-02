@@ -44,12 +44,12 @@ export default function DeveloperSection() {
     <section
       id="developers"
       className="scroll-mt-24 py-24 px-8"
-      style={{ background: 'rgba(5,6,9,0.98)' }}
+      style={{ background: 'rgba(5,5,8,0.98)' }}
     >
       <div className="max-w-[1440px] mx-auto">
         {/* Heading */}
         <div className="mb-14">
-          <p className="text-xs tracking-[0.3em] uppercase font-bold mb-4" style={{ color: '#6af2de' }}>
+          <p className="text-xs tracking-[0.3em] uppercase font-bold mb-4" style={{ color: '#fbbf24' }}>
             Built for operators and developers
           </p>
           <h2 className="font-heading text-[clamp(2.5rem,5vw,5rem)] font-black tracking-tighter leading-[0.95] text-ink">
@@ -66,7 +66,7 @@ export default function DeveloperSection() {
                 key={d.head}
                 className="flex items-start gap-4 p-6 rounded-2xl transition-all duration-200"
                 style={{
-                  background: 'rgba(10,12,16,0.85)',
+                  background: 'rgba(5,5,8,0.85)',
                   border: '1px solid rgba(255,255,255,0.07)',
                 }}
               >
@@ -78,9 +78,9 @@ export default function DeveloperSection() {
                     <span
                       className="text-[9px] uppercase tracking-widest font-bold px-2 py-0.5 rounded"
                       style={{
-                        background: 'rgba(106,242,222,0.08)',
-                        color: '#6af2de',
-                        border: '1px solid rgba(106,242,222,0.2)',
+                        background: 'rgba(245,158,11,0.08)',
+                        color: '#fbbf24',
+                        border: '1px solid rgba(245,158,11,0.2)',
                       }}
                     >
                       {d.badge}
@@ -90,14 +90,14 @@ export default function DeveloperSection() {
                 </div>
                 <div
                   className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
-                  style={{ background: 'rgba(106,242,222,0.06)', border: '1px solid rgba(106,242,222,0.12)' }}
+                  style={{ background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.12)' }}
                 >
                   <svg
                     width="14"
                     height="14"
                     viewBox="0 0 24 24"
                     fill="none"
-                    stroke="#6af2de"
+                    stroke="#fbbf24"
                     strokeWidth="2"
                   >
                     <polyline points="20 6 9 17 4 12" />
@@ -111,9 +111,9 @@ export default function DeveloperSection() {
           <div
             className="rounded-2xl overflow-hidden sticky top-28"
             style={{
-              background: 'rgba(10,12,16,0.9)',
-              border: '1px solid rgba(106,242,222,0.12)',
-              boxShadow: '0 0 60px -20px rgba(106,242,222,0.15)',
+              background: 'rgba(5,5,8,0.9)',
+              border: '1px solid rgba(245,158,11,0.12)',
+              boxShadow: '0 0 60px -20px rgba(245,158,11,0.15)',
             }}
           >
             <div
@@ -142,7 +142,7 @@ export default function DeveloperSection() {
                       className="block"
                       style={{
                         color: isComment
-                          ? 'rgba(106,242,222,0.5)'
+                          ? 'rgba(245,158,11,0.5)'
                           : isKey
                           ? 'rgba(248,245,253,0.45)'
                           : undefined,
