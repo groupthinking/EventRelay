@@ -39,7 +39,7 @@ const COMPARISON = [
 ] as const;
 
 function Mark({ value }: { value: boolean | string }) {
-  if (value === true) return <Check className="mx-auto h-4 w-4 text-teal-300" aria-label="Included" />;
+  if (value === true) return <Check className="mx-auto h-4 w-4 text-amber-300" aria-label="Included" />;
   if (value === false) return <Minus className="mx-auto h-4 w-4 text-white/20" aria-label="Not included" />;
   return <span className="text-xs text-white/50">{value}</span>;
 }
@@ -60,7 +60,7 @@ export default function PricingPage() {
 
       <section className="px-6 pb-14 pt-12 text-center md:pt-16">
         <div className="mx-auto max-w-4xl">
-          <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.26em] text-teal-300/80">
+          <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.26em] text-amber-300/80">
             Plans and access
           </p>
           <h1 className="font-heading text-5xl font-black leading-tight tracking-tight md:text-7xl">
@@ -107,7 +107,7 @@ export default function PricingPage() {
           <ul className="mt-7 flex-1 space-y-3">
             {CORE_CAPABILITIES.map((capability) => (
               <li key={capability} className="flex items-start gap-2.5 text-sm text-white/65">
-                <Check className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" aria-hidden="true" />
+                <Check className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
                 {capability}
               </li>
             ))}
@@ -117,8 +117,8 @@ export default function PricingPage() {
           </Link>
         </article>
 
-        <article className="flex flex-col rounded-3xl border border-teal-400/35 bg-teal-400/[0.06] p-8 shadow-2xl shadow-teal-500/10">
-          <p className="text-sm font-bold uppercase tracking-wider text-teal-300">
+        <article className="flex flex-col rounded-3xl border border-amber-400/35 bg-amber-400/[0.06] p-8 shadow-2xl shadow-amber-500/10">
+          <p className="text-sm font-bold uppercase tracking-wider text-amber-300">
             {WORKFLOW_PRO_PRODUCT_NAME}
           </p>
           <p
@@ -137,7 +137,7 @@ export default function PricingPage() {
           <ul className="mt-7 flex-1 space-y-3">
             {PRO_CAPABILITIES.map((capability) => (
               <li key={capability} className="flex items-start gap-2.5 text-sm text-white/65">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" aria-hidden="true" />
+                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" aria-hidden="true" />
                 {capability}
               </li>
             ))}
@@ -183,7 +183,7 @@ export default function PricingPage() {
           <div className="grid grid-cols-4 border-b border-white/[0.07] bg-white/[0.03] text-sm font-semibold">
             <div className="p-4 text-white/45">Capability</div>
             <div className="p-4 text-center">Core</div>
-            <div className="p-4 text-center text-teal-300">{WORKFLOW_PRO_PRODUCT_NAME}</div>
+            <div className="p-4 text-center text-amber-300">{WORKFLOW_PRO_PRODUCT_NAME}</div>
             <div className="p-4 text-center text-cyan-300">Self-hosted</div>
           </div>
           {COMPARISON.map(([label, core, pro, selfHosted], index) => (
@@ -204,7 +204,7 @@ export default function PricingPage() {
       <section className="mx-auto max-w-4xl px-6 pb-24">
         <div className="rounded-[2rem] border border-white/[0.08] bg-white/[0.025] p-8 md:p-10">
           <div className="flex items-start gap-4">
-            <CreditCard className="mt-1 h-6 w-6 shrink-0 text-teal-300" aria-hidden="true" />
+            <CreditCard className="mt-1 h-6 w-6 shrink-0 text-amber-300" aria-hidden="true" />
             <div>
               <h2 className="font-heading text-2xl font-black">Before checkout</h2>
               <div className="mt-5 space-y-5 text-sm leading-7 text-white/50">

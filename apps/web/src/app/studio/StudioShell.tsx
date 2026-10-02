@@ -22,14 +22,14 @@ export default function StudioShell({ showAgentWorkflowUi }: { showAgentWorkflow
       <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2 text-sm">
         <button
           type="button"
-          className={`rounded-full px-3 py-1 ${embed ? 'bg-white/10' : 'bg-teal-500 text-black'}`}
+          className={`rounded-full px-3 py-1 ${embed ? 'bg-white/10' : 'bg-amber-500 text-black'}`}
           onClick={() => setView('pack')}
         >
           Pack
         </button>
         <button
           type="button"
-          className={`rounded-full px-3 py-1 ${embed ? 'bg-teal-500 text-black' : 'bg-white/10'}`}
+          className={`rounded-full px-3 py-1 ${embed ? 'bg-amber-500 text-black' : 'bg-white/10'}`}
           onClick={() => setView('embed')}
         >
           Embed

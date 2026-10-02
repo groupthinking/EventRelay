@@ -40,11 +40,11 @@ export default function HomePasteForm() {
           inputMode="url"
           aria-invalid={Boolean(error)}
           aria-describedby={helpId}
-          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/70 focus-visible:ring-2 focus-visible:ring-teal-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
+          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-400/70 focus-visible:ring-2 focus-visible:ring-amber-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
         />
         <button
           type="submit"
-          className="btn btn-primary justify-center px-6 py-3.5 text-sm focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 sm:min-w-[9rem]"
+          className="btn btn-primary justify-center px-6 py-3.5 text-sm focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 sm:min-w-[9rem]"
         >
           Run in Studio
         </button>

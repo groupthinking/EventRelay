@@ -18,9 +18,9 @@ export default function HomeProCheckout() {
   return (
     <div
       data-testid="home-pro-checkout"
-      className="rounded-3xl border border-teal-400/35 bg-teal-400/[0.06] p-6 text-left shadow-2xl shadow-teal-500/10 sm:p-8"
+      className="rounded-3xl border border-amber-400/35 bg-amber-400/[0.06] p-6 text-left shadow-2xl shadow-amber-500/10 sm:p-8"
     >
-      <p className="text-sm font-bold uppercase tracking-wider text-teal-300">Get Pro</p>
+      <p className="text-sm font-bold uppercase tracking-wider text-amber-300">Get Pro</p>
       <p
         data-testid="home-workflow-pro-selected-price"
         className="mt-3 font-heading text-3xl font-black tracking-tight md:text-4xl"
@@ -44,7 +44,7 @@ export default function HomeProCheckout() {
           type="button"
           onClick={() => setAnnual(false)}
           aria-pressed={!annual}
-          className={`w-full rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${!annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
+          className={`w-full rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${!annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
         >
           Monthly checkout
         </button>
@@ -52,7 +52,7 @@ export default function HomeProCheckout() {
           type="button"
           onClick={() => setAnnual(true)}
           aria-pressed={annual}
-          className={`w-full rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
+          className={`w-full rounded-xl px-5 py-2 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 ${annual ? 'bg-white/[0.1] text-white' : 'text-white/65'}`}
         >
           Annual checkout
         </button>
@@ -70,7 +70,7 @@ export default function HomeProCheckout() {
       <p className="mt-4 text-center">
         <Link
           href="/pricing"
-          className="rounded text-sm text-white/65 underline-offset-4 hover:text-white hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
+          className="rounded text-sm text-white/65 underline-offset-4 hover:text-white hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
         >
           See all plans
         </Link>
