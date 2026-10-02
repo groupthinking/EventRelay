@@ -30,8 +30,6 @@ apps/web/src/app/api/dashboard/route.ts
 apps/web/src/app/api/docs/route.ts
 apps/web/src/app/api/extract-events/route.ts
 apps/web/src/app/api/jobs/[jobId]/route.ts
-apps/web/src/app/api/pipeline/route.ts
-apps/web/src/app/api/pipeline/stream/route.ts
 apps/web/src/app/api/realtime/session/route.ts
 apps/web/src/app/api/route.ts
 apps/web/src/app/api/search/route.ts

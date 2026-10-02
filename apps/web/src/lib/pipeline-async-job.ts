@@ -89,8 +89,9 @@ export function studioDeployReadyTranscriptHold(message?: string): string {
 }
 
 /**
- * Kick off FastAPI async video processing (same contract as POST /api/pipeline async).
- * Used from WDK steps — no self-HTTP to /api/pipeline.
+ * Kick off FastAPI async video processing (the retired POST /api/pipeline
+ * async contract; the canonical path is now the Video Pack pipeline).
+ * Used from WDK steps — no self-HTTP.
  * When a usable transcript is already ready, do not start URL-only /videos/process
  * (that path re-hits YouTube / yt-dlp).
  */

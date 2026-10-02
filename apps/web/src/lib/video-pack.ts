@@ -420,6 +420,17 @@ export async function persistVideoPackExtraction(identity: VideoPackV0Json): Pro
       return { state: 'error' };
     }
     await putPackRecord({ state: 'ready', pack });
+    // Ancillary: index the ready pack for cross-video search. Honest skip
+    // when search is unconfigured; never fails the pack run.
+    try {
+      const { indexVideoPack } = await import('@/lib/search-indexer');
+      await indexVideoPack(pack);
+    } catch (error) {
+      console.warn(
+        '[video-pack] search indexing failed (non-fatal):',
+        error instanceof Error ? error.message : error,
+      );
+    }
     return { state: 'ready' };
   } catch (error) {
     const message =

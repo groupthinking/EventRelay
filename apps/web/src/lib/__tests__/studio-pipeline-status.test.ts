@@ -505,7 +505,6 @@ describe('studio-pipeline-status', () => {
 
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
     const pricing = readFileSync(join(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8');
     const apiDocs = readFileSync(join(process.cwd(), 'src/app/docs/api/page.tsx'), 'utf8');
     expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
@@ -515,18 +514,6 @@ describe('studio-pipeline-status', () => {
     expect(studio).toMatch(/pb-28|padding-bottom/);
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
-    expect(retired).not.toMatch(/Starting durable/);
-    expect(retired).not.toMatch(/Could not start durable workflow/);
-    expect(retired).not.toMatch(/runs a durable video-to-transcript/);
-    expect(retired).not.toMatch(/signed-in durable workflow/);
-    expect(retired).not.toMatch(/durable Workflow DevKit/);
-  });
-
-  it('does not claim live deploy in retired studio without a verified receipt guard', () => {
-    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
-    expect(retired).toContain('studioVerifiedLiveUrl');
-    expect(retired).not.toContain('setActionMessage(`Deploy live: ${kick.live_url}`)');
-    expect(retired).not.toContain('setActionMessage(`Deploy ready: ${polled.live_url}`)');
   });
 
   it('renders review_action as a card with status, title, and detail', () => {

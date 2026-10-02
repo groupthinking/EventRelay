@@ -557,42 +557,6 @@ describe('dashboard-store · dispatchToAgents / refreshAgentStatus', () => {
   });
 });
 
-describe('dashboard-store · deployPipeline (mocked fetch)', () => {
-  it('records the deployment result on success', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce(
-        jsonResponse({
-          status: 'success',
-          result: {
-            live_url: 'https://live.example',
-            github_repo: 'octo/repo',
-            build_status: 'passing',
-            code_generation: { framework: 'next', files_created: ['index.ts'], entry_point: 'index.ts' },
-            deployment: { status: 'ready', platforms: ['vercel'], urls: {} },
-            features_implemented: [],
-          },
-        }),
-      ),
-    );
-    await store().deployPipeline('https://youtu.be/x');
-    const video = store().videos[0];
-    expect(video.status).toBe('complete');
-    expect(video.pipelineResult?.live_url).toBe('https://live.example');
-    expect(video.pipelineResult?.github_repo).toBe('octo/repo');
-    expect(store().activities.some((a) => a.event.includes('live.example'))).toBe(true);
-  });
-
-  it('preserves a deploy failure when the pipeline call errors', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({}, false, 500)));
-    await store().deployPipeline('https://youtu.be/x');
-    expect(store().videos[0].status).toBe('failed');
-    expect(store().videos[0].title).toContain('Deployment blocked');
-    expect(store().videos[0].pipelineResult?.build_status).toBe('failed_backend_unavailable');
-    expect(store().videos[0].failure?.stage).toBe('deployment');
-  });
-});
-
 describe('dashboard-store · performSearch (mocked fetch)', () => {
   it('clears results and skips the request for an empty query', async () => {
     const fetchMock = vi.fn();

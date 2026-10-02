@@ -18,8 +18,7 @@ export async function GET() {
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || 'production',
       endpoints: {
-        pipeline: 'POST /api/pipeline - Full end-to-end video pipeline',
-        pipeline_stream: 'POST /api/pipeline/stream - Real-time SSE streaming',
+        video_pack: 'POST /api/video/pack - Emit a hashed Video Pack from a YouTube URL',
         transcribe: 'POST /api/transcribe - Extract video transcripts',
         video: 'POST /api/video - Video analysis only',
         health: 'GET /api - This endpoint',
