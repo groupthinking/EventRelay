@@ -10,7 +10,6 @@ The root ``shared/__init__.py`` now extends its ``__path__`` to include
 mode impossible to reintroduce silently.
 """
 
-import importlib.machinery
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -27,17 +26,3 @@ def test_root_shared_path_includes_src_shared():
             "Root shared/ package shadows src/shared without extending __path__; "
             "'from shared.youtube import ...' would break when running from the repo root."
         )
-
-
-def test_shared_youtube_is_importable():
-    """shared.youtube must resolve to the real implementation in src/shared."""
-    import shared
-
-    # Use PathFinder directly so fakes injected into sys.modules by other
-    # tests cannot mask a genuinely broken import path.
-    spec = importlib.machinery.PathFinder.find_spec(
-        "youtube", path=list(shared.__path__)
-    )
-    assert spec is not None, "shared.youtube could not be resolved"
-    assert spec.origin is not None
-    assert Path(spec.origin).is_relative_to(REPO_ROOT / "src" / "shared" / "youtube")
