@@ -22,7 +22,7 @@
 | Start | `POST /api/workflows/video-to-actions` `{ "url", "videoTitle?" }` → `{ runId, statusUrl }` |
 | Status | `GET /api/workflows/video-to-actions/:runId` → `{ runStatus, result? }` |
 | Client helpers | `apps/web/src/lib/studio-workflow.ts` |
-| Studio UI | **Act on findings** button in `VideoWorkflowStudio` |
+| Studio UI | **Act on findings** button in `OneLoopStudio` (canonical studio) |
 
 Steps: **transcribe** (`fetchTranscript`) → **run action agent** (`runActionAgent`). No self-HTTP loopback.
 

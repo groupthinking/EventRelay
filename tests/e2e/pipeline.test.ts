@@ -30,7 +30,14 @@ const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
   'https://www.youtube.com/watch?v=auJzb1D-fag';
-const TEST_VIDEO_ID = 'auJzb1D-fag';
+/** Derive the 11-char video id from the configured URL (watch?v= or youtu.be/). */
+function videoIdFromUrl(url: string): string {
+  const match =
+    url.match(/[?&]v=([A-Za-z0-9_-]{11})/) || url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
+  if (!match) throw new Error(`TEST_YOUTUBE_URL is not a recognized YouTube URL: ${url}`);
+  return match[1];
+}
+const TEST_VIDEO_ID = videoIdFromUrl(TEST_YOUTUBE_URL);
 
 // To exercise a protected deployment (e.g. a Vercel preview, which returns 401
 // to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's

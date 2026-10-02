@@ -31,6 +31,7 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
   { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'GET', path: '/api/video/pack', summary: 'Poll a pack by video_id or source_hash until ready (202 processing → 200 success).', body: '?video_id=auJzb1D-fag' },
   { method: 'GET', path: '/api/video/sandbox', summary: 'Materialize an App Builder Workspace sandbox from a stored Video Pack (startup.sh, 8080, browser-smoke, build/typecheck).' },
   { method: 'POST', path: '/api/video/sandbox', summary: 'Same sandbox emit by paste-URL identity. Requires a ready pack from POST /api/video/pack.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
   { method: 'GET', path: '/api/video/assemble', summary: 'Same stored-pack lookup as sandbox plus a planned assembly receipt (file hashes, pinned deps, unresolved requirements). Gates are labeled untested — HTTP does not run npm.' },

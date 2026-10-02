@@ -133,8 +133,8 @@ curl -sSI https://uvai.io/api/docs | head
 Expected:
 
 - `/` returns the configured security headers.
-- `/api/pipeline` reports a healthy backend or a clearly bounded provider
-  outage.
+- `POST /api/video/pack` returns 202 (processing) or 200 (ready pack);
+  `GET /api/video/pack?video_id=…` resolves to the ready pack.
 - malformed Realtime SDP returns `400`.
 - `/api/docs` returns a redirect to `/docs/api`, and `/docs/api` renders the
   API reference.
