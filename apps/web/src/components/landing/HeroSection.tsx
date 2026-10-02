@@ -16,11 +16,11 @@ const TRUST_PILLS = [
 
 // Animated pipeline rows that cycle through processing states
 const PIPELINE_ITEMS = [
-  { id: 'transcript', label: 'Transcript', value: 'Fetching captions…', done: 'timestamped text', color: '#6af2de' },
-  { id: 'events', label: 'Typed events', value: 'Extracting decisions…', done: 'typed JSON', color: '#6af2de' },
-  { id: 'actions', label: 'Action items', value: 'Identifying tasks…', done: 'owner-ready tasks', color: '#6af2de' },
-  { id: 'analysis', label: 'AI analysis', value: 'Gemini pass running…', done: 'strategic insights', color: '#6af2de' },
-  { id: 'chat', label: 'Video chat', value: 'Indexing context…', done: 'ask the video', color: '#6af2de' },
+  { id: 'transcript', label: 'Transcript', value: 'Fetching captions…', done: 'timestamped text', color: '#fbbf24' },
+  { id: 'events', label: 'Typed events', value: 'Extracting decisions…', done: 'typed JSON', color: '#fbbf24' },
+  { id: 'actions', label: 'Action items', value: 'Identifying tasks…', done: 'owner-ready tasks', color: '#fbbf24' },
+  { id: 'analysis', label: 'AI analysis', value: 'Gemini pass running…', done: 'strategic insights', color: '#fbbf24' },
+  { id: 'chat', label: 'Video chat', value: 'Indexing context…', done: 'ask the video', color: '#fbbf24' },
 ];
 
 export default function HeroSection() {
@@ -55,7 +55,7 @@ export default function HeroSection() {
       className="relative min-h-screen flex flex-col pt-20"
       style={{
         background:
-          'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(106,242,222,0.12) 0%, transparent 70%)',
+          'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245,158,11,0.12) 0%, transparent 70%)',
       }}
     >
       {/* Subtle grid overlay */}
@@ -63,7 +63,7 @@ export default function HeroSection() {
         className="absolute inset-0 pointer-events-none"
         style={{
           backgroundImage:
-            'linear-gradient(rgba(106,242,222,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(106,242,222,0.03) 1px, transparent 1px)',
+            'linear-gradient(rgba(245,158,11,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(245,158,11,0.03) 1px, transparent 1px)',
           backgroundSize: '80px 80px',
         }}
         aria-hidden
@@ -75,14 +75,14 @@ export default function HeroSection() {
           <span
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-[0.2em]"
             style={{
-              background: 'rgba(106,242,222,0.08)',
-              border: '1px solid rgba(106,242,222,0.2)',
-              color: '#6af2de',
+              background: 'rgba(245,158,11,0.08)',
+              border: '1px solid rgba(245,158,11,0.2)',
+              color: '#fbbf24',
             }}
           >
             <span
               className="w-1.5 h-1.5 rounded-full animate-pulse"
-              style={{ background: '#6af2de' }}
+              style={{ background: '#fbbf24' }}
               aria-hidden
             />
             The action layer for video
@@ -96,7 +96,7 @@ export default function HeroSection() {
             style={{
               WebkitBackgroundClip: 'text',
               WebkitTextFillColor: 'transparent',
-              backgroundImage: 'linear-gradient(135deg, #6af2de 0%, #38fbf7 50%, #14b8a6 100%)',
+              backgroundImage: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 50%, #d97706 100%)',
             }}
           >
             Build from it.
@@ -113,8 +113,8 @@ export default function HeroSection() {
         <div className="flex flex-wrap items-center justify-center gap-4 mb-16">
           <Link
             href="/"
-            className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
-            style={{ background: '#6af2de', color: '#021a18' }}
+            className="group inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24]"
+            style={{ background: '#fbbf24', color: '#050508' }}
           >
             Try a YouTube URL
             <svg
@@ -131,7 +131,7 @@ export default function HeroSection() {
           </Link>
           <a
             href="#features"
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 text-ink/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
+            className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-bold text-base transition-all duration-200 text-ink/70 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24]"
             style={{ border: '1px solid rgba(255,255,255,0.1)' }}
           >
             See how it works
@@ -146,9 +146,9 @@ export default function HeroSection() {
                 key={i}
                 className="inline-flex shrink-0 items-center px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-widest"
                 style={{
-                  background: 'rgba(106,242,222,0.06)',
-                  border: '1px solid rgba(106,242,222,0.15)',
-                  color: 'rgba(106,242,222,0.8)',
+                  background: 'rgba(245,158,11,0.06)',
+                  border: '1px solid rgba(245,158,11,0.15)',
+                  color: 'rgba(245,158,11,0.8)',
                 }}
               >
                 {p}
@@ -162,9 +162,9 @@ export default function HeroSection() {
           <div
             className="rounded-2xl overflow-hidden"
             style={{
-              background: 'rgba(10,12,16,0.9)',
-              border: '1px solid rgba(106,242,222,0.12)',
-              boxShadow: '0 0 80px -20px rgba(106,242,222,0.25), 0 40px 80px -20px rgba(0,0,0,0.6)',
+              background: 'rgba(5,5,8,0.9)',
+              border: '1px solid rgba(245,158,11,0.12)',
+              boxShadow: '0 0 80px -20px rgba(245,158,11,0.25), 0 40px 80px -20px rgba(0,0,0,0.6)',
             }}
           >
             {/* Window chrome */}
@@ -180,14 +180,14 @@ export default function HeroSection() {
               <div
                 className="flex items-center gap-2 text-xs px-3 py-1 rounded-full"
                 style={{
-                  background: 'rgba(106,242,222,0.08)',
-                  border: '1px solid rgba(106,242,222,0.15)',
-                  color: '#6af2de',
+                  background: 'rgba(245,158,11,0.08)',
+                  border: '1px solid rgba(245,158,11,0.15)',
+                  color: '#fbbf24',
                 }}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full animate-pulse"
-                  style={{ background: '#6af2de' }}
+                  style={{ background: '#fbbf24' }}
                   aria-hidden
                 />
                 Pipeline running
@@ -218,7 +218,7 @@ export default function HeroSection() {
                 <span className="text-ink/70">auJzb1D-fag</span>
                 <span
                   className="ml-auto text-[10px] px-2 py-0.5 rounded-full uppercase tracking-widest font-bold"
-                  style={{ background: 'rgba(106,242,222,0.1)', color: '#6af2de' }}
+                  style={{ background: 'rgba(245,158,11,0.1)', color: '#fbbf24' }}
                 >
                   Analyzing
                 </span>
@@ -236,14 +236,14 @@ export default function HeroSection() {
                     className="flex items-center gap-4 px-4 py-3.5 rounded-xl transition-all duration-500"
                     style={{
                       background: isActive
-                        ? 'rgba(106,242,222,0.06)'
+                        ? 'rgba(245,158,11,0.06)'
                         : isDone
-                        ? 'rgba(106,242,222,0.03)'
+                        ? 'rgba(245,158,11,0.03)'
                         : 'rgba(255,255,255,0.02)',
                       border: isActive
-                        ? '1px solid rgba(106,242,222,0.2)'
+                        ? '1px solid rgba(245,158,11,0.2)'
                         : isDone
-                        ? '1px solid rgba(106,242,222,0.08)'
+                        ? '1px solid rgba(245,158,11,0.08)'
                         : '1px solid rgba(255,255,255,0.04)',
                     }}
                   >
@@ -252,14 +252,14 @@ export default function HeroSection() {
                       className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300"
                       style={{
                         background: isDone
-                          ? 'rgba(106,242,222,0.15)'
+                          ? 'rgba(245,158,11,0.15)'
                           : isActive
-                          ? 'rgba(106,242,222,0.08)'
+                          ? 'rgba(245,158,11,0.08)'
                           : 'rgba(255,255,255,0.04)',
                         border: isDone
-                          ? '1px solid rgba(106,242,222,0.4)'
+                          ? '1px solid rgba(245,158,11,0.4)'
                           : isActive
-                          ? '1px solid rgba(106,242,222,0.25)'
+                          ? '1px solid rgba(245,158,11,0.25)'
                           : '1px solid rgba(255,255,255,0.08)',
                       }}
                     >
@@ -269,7 +269,7 @@ export default function HeroSection() {
                           height="12"
                           viewBox="0 0 24 24"
                           fill="none"
-                          stroke="#6af2de"
+                          stroke="#fbbf24"
                           strokeWidth="3"
                           strokeLinecap="round"
                         >
@@ -278,7 +278,7 @@ export default function HeroSection() {
                       ) : isActive ? (
                         <span
                           className="w-2 h-2 rounded-full animate-pulse"
-                          style={{ background: '#6af2de' }}
+                          style={{ background: '#fbbf24' }}
                           aria-hidden
                         />
                       ) : (
@@ -297,7 +297,7 @@ export default function HeroSection() {
                     {/* Value */}
                     <span
                       className="text-xs font-mono transition-all duration-500"
-                      style={{ color: isDone ? '#6af2de' : 'rgba(248,245,253,0.25)' }}
+                      style={{ color: isDone ? '#fbbf24' : 'rgba(248,245,253,0.25)' }}
                     >
                       {isDone ? item.done : isActive ? item.value : '—'}
                     </span>

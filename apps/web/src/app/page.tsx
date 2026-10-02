@@ -47,7 +47,7 @@ export default async function HomePage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-12">
             <div className="min-w-0">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 font-heading text-xl font-black shadow-lg shadow-primary-500/25">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 font-heading text-xl font-black shadow-lg shadow-amber-500/25">
                   U
                 </div>
                 <span className="font-heading text-3xl font-black tracking-tight sm:text-4xl">UVAI</span>

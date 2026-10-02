@@ -40,12 +40,12 @@ export default function WorkflowSection() {
     <section
       id="workflow"
       className="scroll-mt-24 py-24 px-8"
-      style={{ background: 'rgba(8,10,14,0.95)' }}
+      style={{ background: 'rgba(5,5,8,0.95)' }}
     >
       <div className="max-w-[1440px] mx-auto">
         {/* Eyebrow + heading */}
         <div className="mb-16 max-w-2xl">
-          <p className="text-xs tracking-[0.3em] uppercase font-bold mb-4" style={{ color: '#6af2de' }}>
+          <p className="text-xs tracking-[0.3em] uppercase font-bold mb-4" style={{ color: '#fbbf24' }}>
             How it works
           </p>
           <h2 className="font-heading text-[clamp(2.5rem,5vw,5rem)] font-black tracking-tighter leading-[0.95] text-ink">
@@ -63,14 +63,14 @@ export default function WorkflowSection() {
               key={s.n}
               className="relative rounded-2xl p-8 overflow-hidden group"
               style={{
-                background: 'rgba(10,12,16,0.85)',
-                border: '1px solid rgba(106,242,222,0.08)',
+                background: 'rgba(5,5,8,0.85)',
+                border: '1px solid rgba(245,158,11,0.08)',
               }}
             >
               {/* Ghost number */}
               <span
                 className="absolute right-6 top-4 font-heading text-8xl font-black leading-none select-none pointer-events-none transition-all duration-500 group-hover:opacity-100"
-                style={{ color: 'rgba(106,242,222,0.05)' }}
+                style={{ color: 'rgba(245,158,11,0.05)' }}
                 aria-hidden
               >
                 {s.n}
@@ -80,15 +80,15 @@ export default function WorkflowSection() {
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center mb-6 transition-all duration-300"
                 style={{
-                  background: 'rgba(106,242,222,0.08)',
-                  border: '1px solid rgba(106,242,222,0.15)',
-                  color: '#6af2de',
+                  background: 'rgba(245,158,11,0.08)',
+                  border: '1px solid rgba(245,158,11,0.15)',
+                  color: '#fbbf24',
                 }}
               >
                 {s.icon}
               </div>
 
-              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#6af2de' }}>
+              <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: '#fbbf24' }}>
                 Step {s.n}
               </p>
               <h3 className="font-heading text-xl font-black tracking-tight text-ink mb-3">
@@ -112,7 +112,7 @@ export default function WorkflowSection() {
               {idx < STEPS.length - 1 && (
                 <div
                   className="hidden md:block absolute top-1/2 -right-2.5 w-5 h-px"
-                  style={{ background: 'rgba(106,242,222,0.25)' }}
+                  style={{ background: 'rgba(245,158,11,0.25)' }}
                   aria-hidden
                 />
               )}

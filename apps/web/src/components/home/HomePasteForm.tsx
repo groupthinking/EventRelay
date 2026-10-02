@@ -44,7 +44,7 @@ export default function HomePasteForm() {
         />
         <button
           type="submit"
-          className="btn btn-primary justify-center px-6 py-3.5 text-sm focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 sm:min-w-[9rem]"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508] sm:min-w-[9rem]"
         >
           Run in Studio
         </button>

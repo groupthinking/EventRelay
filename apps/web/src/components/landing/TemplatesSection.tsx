@@ -33,7 +33,7 @@ export default function TemplatesSection() {
       {/* Heading */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-14">
         <div>
-          <p className="text-xs tracking-[0.3em] uppercase font-bold mb-4" style={{ color: '#6af2de' }}>
+          <p className="text-xs tracking-[0.3em] uppercase font-bold mb-4" style={{ color: '#fbbf24' }}>
             Workflow starting points
           </p>
           <h2 className="font-heading text-[clamp(2.5rem,4vw,4rem)] font-black tracking-tighter leading-[0.95] text-ink">
@@ -54,9 +54,9 @@ export default function TemplatesSection() {
             key={t.title}
             className="rounded-2xl p-8 transition-all duration-300 hover:-translate-y-0.5 cursor-default group"
             style={{
-              background: t.featured ? 'rgba(106,242,222,0.04)' : 'rgba(10,12,16,0.85)',
+              background: t.featured ? 'rgba(245,158,11,0.04)' : 'rgba(5,5,8,0.85)',
               border: t.featured
-                ? '1px solid rgba(106,242,222,0.2)'
+                ? '1px solid rgba(245,158,11,0.2)'
                 : '1px solid rgba(255,255,255,0.07)',
             }}
           >
@@ -64,9 +64,9 @@ export default function TemplatesSection() {
               <span
                 className="inline-flex mb-4 text-[10px] uppercase tracking-widest font-bold px-2.5 py-1 rounded-full"
                 style={{
-                  background: 'rgba(106,242,222,0.12)',
-                  color: '#6af2de',
-                  border: '1px solid rgba(106,242,222,0.25)',
+                  background: 'rgba(245,158,11,0.12)',
+                  color: '#fbbf24',
+                  border: '1px solid rgba(245,158,11,0.25)',
                 }}
               >
                 Popular
@@ -99,7 +99,7 @@ export default function TemplatesSection() {
         <Link
           href="/studio"
           className="group inline-flex items-center gap-2 text-sm font-bold"
-          style={{ color: '#6af2de' }}
+          style={{ color: '#fbbf24' }}
         >
           See all 9 templates in the studio
           <svg

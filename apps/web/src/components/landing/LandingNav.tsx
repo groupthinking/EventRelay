@@ -35,15 +35,15 @@ export default function LandingNav() {
           : 'transparent',
         backdropFilter: scrolled ? 'blur(24px)' : 'none',
         WebkitBackdropFilter: scrolled ? 'blur(24px)' : 'none',
-        borderBottom: scrolled ? '1px solid rgba(106,242,222,0.08)' : '1px solid transparent',
+        borderBottom: scrolled ? '1px solid rgba(245,158,11,0.08)' : '1px solid transparent',
       }}
     >
       <div className="mx-auto flex max-w-[1440px] items-center justify-between px-4 py-4 sm:px-6 md:px-8 md:py-5">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2.5 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] rounded-lg" aria-label="UVAI home">
+        <Link href="/" className="flex items-center gap-2.5 group focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24] rounded-lg" aria-label="UVAI home">
           <span
             className="inline-flex items-center justify-center w-8 h-8 rounded-lg transition-all duration-300 group-hover:scale-110"
-            style={{ border: '2px solid #6af2de', color: '#6af2de' }}
+            style={{ border: '2px solid #fbbf24', color: '#fbbf24' }}
             aria-hidden
           >
             <Play className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
@@ -60,7 +60,7 @@ export default function LandingNav() {
                 key={l.href}
                 href={l.href}
                 className={clsx(
-                  'text-sm px-4 py-2 rounded-lg transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]',
+                  'text-sm px-4 py-2 rounded-lg transition-all duration-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24]',
                   isActive
                     ? 'text-ink/90 bg-white/[0.06]'
                     : 'text-ink/50 hover:text-ink/90 hover:bg-white/[0.04]'
@@ -79,15 +79,15 @@ export default function LandingNav() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="EventRelay source code on GitHub (opens in new tab)"
-            className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-ink/50 hover:text-ink/80 border border-transparent hover:border-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
+            className="hidden sm:inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 text-ink/50 hover:text-ink/80 border border-transparent hover:border-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24]"
           >
             <GitFork className="h-3.5 w-3.5 opacity-70" aria-hidden="true" />
             GitHub
           </a>
           <Link
             href="/studio"
-            className="hidden rounded-lg px-5 py-2.5 text-sm font-bold transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] sm:inline-flex"
-            style={{ background: '#6af2de', color: '#021a18' }}
+            className="hidden rounded-lg px-5 py-2.5 text-sm font-bold transition-all duration-200 active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24] sm:inline-flex"
+            style={{ background: '#fbbf24', color: '#050508' }}
           >
             Open studio
           </Link>
@@ -97,7 +97,7 @@ export default function LandingNav() {
             aria-controls="mobile-navigation"
             aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
             onClick={() => setMobileOpen((open) => !open)}
-            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-white/10 text-ink/70 transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de] md:hidden"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-white/10 text-ink/70 transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24] md:hidden"
           >
             {mobileOpen ? <X className="h-5 w-5" aria-hidden="true" /> : <Menu className="h-5 w-5" aria-hidden="true" />}
           </button>
@@ -111,7 +111,7 @@ export default function LandingNav() {
                 key={link.href}
                 href={link.href}
                 onClick={() => setMobileOpen(false)}
-                className="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-ink/70 transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6af2de]"
+                className="flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-ink/70 transition-colors hover:bg-white/[0.06] hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#fbbf24]"
               >
                 {link.label}
               </Link>
