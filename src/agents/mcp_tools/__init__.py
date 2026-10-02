@@ -11,13 +11,8 @@ from .tri_model_consensus_tool import (
     TriModelConsensusTool,
     get_tri_model_consensus_tool,
 )
-from .youtube_tool import MCP_TOOLS as YOUTUBE_TOOLS
-from .youtube_tool import YouTubeMCPTool, get_youtube_tool
 
 __all__ = [
-    "YouTubeMCPTool",
-    "get_youtube_tool",
-    "YOUTUBE_TOOLS",
     "BuildValidatorMCPTool",
     "get_build_validator_tool",
     "BUILD_VALIDATOR_TOOLS",
