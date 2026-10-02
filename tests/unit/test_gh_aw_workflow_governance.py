@@ -79,7 +79,7 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
     # (6,525 / 7,748 statements) is measured over the complete `tests/` suite
     # in coverage.yml. Enforcing it on this reduced scope, against the same
     # package-wide denominator, would fail every run. coverage.yml is authoritative.
-    assert "--cov-fail-under" not in test_script
+    assert "--cov-fail-under=0" in test_script
     assert "--override-ini" not in test_script
     for suppression in ("|| true", "2>/dev/null", "set +e"):
         assert suppression not in install_script
