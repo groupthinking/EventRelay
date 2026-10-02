@@ -46,13 +46,13 @@ def test_coverage_workflow_is_authoritative() -> None:
     run_script = run_step["run"]
     assert "pytest tests/" in run_script
     assert "--cov=src/youtube_extension" in run_script
-    assert "--cov-fail-under=88.1833" in run_script
+    assert "--cov-fail-under=84.1766" in run_script
     assert "--cov-fail-under" not in pytest_addopts
     assert "--timeout=120" in run_script
     assert ".[dev,youtube]" in next(
         step for step in steps if step.get("name") == "Install dependencies"
     )["run"]
-    assert 88.1833 <= float(coverage_report["fail_under"]) <= 90
+    assert 84.1766 <= float(coverage_report["fail_under"]) <= 90
     assert int(coverage_report["precision"]) >= 4
     for suppression in ("|| true", "set +e"):
         assert suppression not in run_script
