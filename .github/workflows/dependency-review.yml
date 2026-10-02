@@ -160,8 +160,8 @@ jobs:
           # shipped code. Added 2026-10-02: the finding is pre-existing on main and fails every PR
           # touching any dependency manifest, including dependabot's.
           allow-dependencies-licenses: >-
-            pkg:pip/regex,
-            pkg:pip/torch,
+            pkg:pypi/regex,
+            pkg:pypi/torch,
             pkg:npm/caniuse-lite,
             pkg:npm/@sentry/nextjs,
             pkg:npm/@sentry/cli,
