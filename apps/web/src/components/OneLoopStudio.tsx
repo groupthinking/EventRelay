@@ -1214,6 +1214,19 @@ export default function OneLoopStudio({
                       {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
                     </p>
                   ) : null}
+                  {scopedDeployReceipt ? (
+                    <p className="mt-1">
+                      <a
+                        data-testid="studio-gate-live-url"
+                        href={scopedDeployReceipt}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="break-all text-sm text-[#e8b86d] underline"
+                      >
+                        {scopedDeployReceipt}
+                      </a>
+                    </p>
+                  ) : null}
                 </div>
               </div>
             ) : null}

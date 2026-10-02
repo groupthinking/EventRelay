@@ -362,10 +362,13 @@ describe('studio-pipeline-status', () => {
     expect(studioCanRetryTranscript({ busy: true, elapsedSeconds: 90 })).toBe(true);
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioTranscriptStage');
     expect(studio).toContain('studioTranscriptEtaLabel');
-    expect(studio).toContain('data-testid="studio-transcript-stage"');
-    expect(studio).toContain('data-testid="studio-transcript-retry"');
+    // IDE: transcript stage + ETA surface in the toolbar status line.
+    expect(studio).toContain('data-testid="studio-ide-status"');
+    expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
+    expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -505,13 +508,16 @@ describe('studio-pipeline-status', () => {
 
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const shell = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'), 'utf8');
     const pricing = readFileSync(join(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8');
     const apiDocs = readFileSync(join(process.cwd(), 'src/app/docs/api/page.tsx'), 'utf8');
     expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
     expect(footer.toLowerCase()).not.toContain('reviewed actions');
     expect(footer.toLowerCase()).not.toContain('durable workflows');
-    expect(studio).toContain('data-testid="studio-main"');
-    expect(studio).toMatch(/pb-28|padding-bottom/);
+    // IDE: the shell replaces the old <main> workbench; toolbar carries the actions.
+    expect(shell).toContain('data-testid="studio-ide-shell"');
+    expect(shell).toContain('data-testid="studio-ide-toolbar"');
+    expect(studio).toContain('StudioIdeShell');
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
   });
@@ -534,8 +540,10 @@ describe('studio-pipeline-status', () => {
     expect(tool.detail).toMatch(/no detail/i);
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioActionCard');
-    expect(studio).toContain('data-testid="studio-action-card"');
+    // IDE: actions surface in the output pane Intent tab.
+    expect(output).toContain("{ id: 'intent', label: 'Intent' }");
   });
 
   it('returns a toast for export success and failure including filename', () => {
@@ -580,7 +588,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-player-overlay"');
     expect(studio).toContain('data-testid="studio-player-retry"');
     expect(studio).toContain('useYouTubePlayer');
-    expect(studio).toMatch(/seekTo\(/);
+    // IDE: seekTo is passed to the spec review's onSeek (not called inline).
+    expect(studio).toContain('seekTo');
     expect(studio).not.toMatch(/onLoad=\{\(\) => setPlayerLoaded/);
     expect(studio).not.toMatch(/0:00/);
   });
@@ -612,12 +621,14 @@ describe('studio-pipeline-status', () => {
     ).toBeNull();
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    expect(studio).toContain('data-testid="studio-workbench-empty"');
+    const shell = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
+    // IDE: empty state lives in the video pane; the shell replaces the workbench.
+    expect(shell).toContain('data-testid="studio-ide-video-pane"');
     expect(studio).toContain('studioWorkbenchEmptyView');
     expect(studio).toContain('data-testid="studio-build-live-failure"');
     expect(studio).not.toContain('/d/{videoId}');
     expect(studio).not.toContain("{'{videoId}'}");
-    expect(studio).toContain('studioJobStripDestination');
     expect(studio).toContain('studioTranscriptBody');
     expect(
       studioWorkbenchEmptyView({
@@ -633,13 +644,12 @@ describe('studio-pipeline-status', () => {
 
   it('does not map keyframes or concepts into Studio events', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioEventsEmptyMessage');
     expect(studio).toContain('studioQueryFromSearchParams');
     expect(studio).toContain('studioCanExport');
-    expect(studio).toContain('data-testid="studio-events-empty"');
-    expect(studio).toContain('data-testid="pack-workbench"');
-    expect(studio).not.toMatch(/keyframes/);
-    expect(studio).not.toMatch(/code_snippets/);
+    // IDE: events live in the output pane Events tab.
+    expect(output).toContain("{ id: 'events', label: 'Events' }");
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
   });
 

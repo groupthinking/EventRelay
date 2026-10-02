@@ -37,7 +37,9 @@ describe('UVAI is one product surface', () => {
     expect(nav).not.toContain("href: '/features'");
     expect(nav).toContain("href: '/pricing'");
     expect(studio).not.toContain('href="/dashboard"');
-    expect(studio).toContain('Stack checks');
+    // IDE: stack/tools surface in the output pane Tools tab.
+    const output = readSource('components/studio/StudioIdeOutput.tsx');
+    expect(output).toContain("{ id: 'tools', label: 'Tools' }");
   });
 
   it('308s /dashboard, /app, and /prototype into the canonical workbench', () => {
