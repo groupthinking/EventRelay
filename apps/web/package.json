@@ -19,7 +19,6 @@
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.90",
     "@ai-sdk/react": "4.0.117",
-    "@dataconnect/generated": "file:src/dataconnect-generated",
     "@flags-sdk/vercel": "^1.4.9",
     "@google/genai": "^2.24.0",
     "@google/generative-ai": "^0.24.1",
