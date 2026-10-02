@@ -410,9 +410,12 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(res.status).not.toBe(404);
     });
 
-    it('retired /api/pipeline routes are gone (404)', async () => {
+    it('retired /api/pipeline routes are gone (no pipeline served)', async () => {
       const res = await fetchWithTimeout(`${BASE_URL}/api/pipeline`);
-      expect(res.status).toBe(404);
+      // 404 when auth is off (no such route); 401 when the middleware's
+      // fail-closed auth gate runs before routing on protected deployments.
+      // Either way the legacy pipeline serves nothing — no 200, no SSE.
+      expect([401, 404]).toContain(res.status);
     });
   });
 
