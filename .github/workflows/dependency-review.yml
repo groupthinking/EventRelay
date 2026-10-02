@@ -15,7 +15,7 @@ permissions:
 # Supersede superseded work instead of stacking it. Without this, every push
 # to a PR branch queued a brand-new full run alongside the ones it obsoleted;
 # with ~30 workflows and dozens of open PRs the Actions queue could not drain.
-#allow-dependencies-licenses
+#
 # PR runs are keyed by PR number and cancel their predecessors -- that is where
 # all the queue pressure comes from, since every `push:` trigger here is already
 # filtered to main. Non-PR runs (push, schedule) are keyed by commit SHA so they
