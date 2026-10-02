@@ -310,6 +310,7 @@ export default function OneLoopStudio({
   const [message, setMessage] = useState('Paste a YouTube URL. Transcript and events land here.');
   const [actBusy, setActBusy] = useState(false);
   const [deployBusy, setDeployBusy] = useState(false);
+  const runAbortRef = useRef<AbortController | null>(null);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
   const [actRunId, setActRunId] = useState<string | null>(null);
   const [usedSameRun, setUsedSameRun] = useState(false);
@@ -452,6 +453,10 @@ export default function OneLoopStudio({
     }
     const next = handoff.watchUrl;
     setUrl(next);
+    // Cancel any in-flight run before starting a new one.
+    runAbortRef.current?.abort();
+    const controller = new AbortController();
+    runAbortRef.current = controller;
     setBusy(true);
     setWorkflowActions(null);
     setActRunId(null);
@@ -465,7 +470,11 @@ export default function OneLoopStudio({
       selectVideo(matches[0].id);
     }, 250);
     try {
-      const id = await processVideo(next);
+      const id = await processVideo(next, { signal: controller.signal });
+      if (controller.signal.aborted) {
+        setMessage('Analysis cancelled.');
+        return;
+      }
       selectVideo(id);
       const video = useDashboardStore.getState().videos.find((v) => v.id === id);
       const ready =
@@ -481,12 +490,24 @@ export default function OneLoopStudio({
         );
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Analysis failed.');
+      if (controller.signal.aborted) {
+        setMessage('Analysis cancelled.');
+      } else {
+        setMessage(err instanceof Error ? err.message : 'Analysis failed.');
+      }
     } finally {
       window.clearInterval(tick);
-      setBusy(false);
+      if (runAbortRef.current === controller) {
+        runAbortRef.current = null;
+        setBusy(false);
+      }
     }
   };
+
+  const cancelAnalysis = useCallback(() => {
+    runAbortRef.current?.abort();
+    setMessage('Cancelling analysis…');
+  }, []);
 
   useEffect(() => {
     applyStudioQueryAutoStart({
@@ -1049,7 +1070,7 @@ export default function OneLoopStudio({
               data-testid="studio-primary-job-strip"
               className="mt-2 font-mono text-[11px] tracking-wide text-white/40"
             >
-              Paste URL → Run → Build live → open{' '}
+              {`Paste URL → Run → Build live → open `}
               <StudioJobStripDestination
                 destination={studioJobStripDestination(selected?.videoPack?.videoId)}
               />
