@@ -79,6 +79,11 @@ class DeploymentManager:
     def __init__(self, github_token: Optional[str] = None):
         self.github_token = github_token or os.getenv('GITHUB_TOKEN')
         self.github_agent = None
+        # In-process registry of deployments started via deploy_project().
+        # Scoped to this process only: it is a status record, not a durable
+        # store, and get_deployment_status() reports "unknown" for any id
+        # this process did not start rather than fabricating a result.
+        self._deployments: dict[str, dict[str, Any]] = {}
 
         if self.github_token and GitHubDeploymentAgent:
             try:
@@ -372,6 +377,24 @@ class DeploymentManager:
         result["final_verification"] = verification
         return result
 
+    def _record_deployment(self, results: dict[str, Any]) -> None:
+        """Record a deployment outcome in the in-process registry.
+
+        Only deployments started by this process via deploy_project() are
+        recorded. The registry is process-scoped, not durable storage.
+        """
+        deployment_id = results.get("deployment_id")
+        if not deployment_id:
+            return
+        self._deployments[deployment_id] = {
+            "deployment_id": deployment_id,
+            "status": results.get("status", "unknown"),
+            "timestamp": results.get("timestamp"),
+            "urls": results.get("urls", {}),
+            "summary": results.get("summary", {}),
+            "errors": list(results.get("errors", [])),
+        }
+
     async def deploy_project(self,
                            project_path: str,
                            project_config: dict[str, Any],
@@ -405,6 +428,7 @@ class DeploymentManager:
                 results["errors"].append("Build verification failed after auto-fix attempts")
                 results["errors"].extend(final_ver.get("npm_build", {}).get("errors", [])[:5])
                 results["auto_fix_attempts"] = verification_result.get("fixes_applied", [])
+                self._record_deployment(results)
                 return results
 
             logger.info("✅ Verification passed - proceeding with deployment")
@@ -466,12 +490,14 @@ class DeploymentManager:
                 results["status"] = "success"
 
             logger.info(f"✅ Deployment completed: {results['status']}")
+            self._record_deployment(results)
             return results
 
         except Exception as e:
             logger.error(f"❌ Deployment failed: {e}")
             results["status"] = "failed"
             results["errors"].append(str(e))
+            self._record_deployment(results)
             return results
 
     def _generate_deployment_summary(self, deployments: dict[str, Any]) -> dict[str, Any]:
@@ -745,11 +771,29 @@ class DeploymentManager:
         return urls
 
     async def get_deployment_status(self, deployment_id: str) -> dict[str, Any]:
-        """Get the status of a deployment (placeholder for real implementation)"""
+        """Return the recorded status of a deployment started by this process.
+
+        This is a lookup over the in-process deployment registry, not a live
+        probe of any provider. Unknown ids report ``status: "unknown"`` —
+        never a fabricated success.
+        """
+        recorded = self._deployments.get(deployment_id)
+        if recorded is None:
+            return {
+                "deployment_id": deployment_id,
+                "status": "unknown",
+                "message": (
+                    "No record of this deployment id in this process. "
+                    "Status was not verified; do not treat as a success."
+                ),
+            }
         return {
             "deployment_id": deployment_id,
-            "status": "completed",
-            "message": "Deployment status checking not implemented yet"
+            "status": recorded["status"],
+            "timestamp": recorded.get("timestamp"),
+            "urls": recorded.get("urls", {}),
+            "errors": recorded.get("errors", []),
+            "message": "Recorded outcome of a deployment started by this process.",
         }
 
 # Utility functions

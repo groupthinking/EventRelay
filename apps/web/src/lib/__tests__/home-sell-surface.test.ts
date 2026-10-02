@@ -20,7 +20,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('OneLoopStudio');
     expect(home).not.toContain('Loading studio');
     expect(home).toContain('Universal Video Action Intelligence');
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack in Studio.');
+    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
     expect(home).toContain('hashed Video Pack');
     expect(home).toContain('transcript, event, and action outputs');
     expect(home).toContain('HomePasteForm');

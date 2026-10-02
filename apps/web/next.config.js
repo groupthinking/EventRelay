@@ -2,7 +2,10 @@ const path = require('path');
 
 let withSentryConfig = (config) => config;
 try {
-  ({ withSentryConfig } = require('@sentry/nextjs'));
+  // @sentry/nextjs v11 moved withSentryConfig to the /config subpath
+  // (root export removed). Keep the passthrough fallback for environments
+  // where the Sentry peers are unavailable.
+  ({ withSentryConfig } = require('@sentry/nextjs/config'));
 } catch {
   // Allow builds to continue when optional Sentry runtime peers are unavailable.
 }

@@ -25,6 +25,19 @@ vi.mock('@/lib/video-pack-extractor', async (importOriginal) => {
   };
 });
 
+// The salvage test below drives the real extractVideoPackSpec with injected
+// model deps. Stub the YouTube network surface (preflight + metadata scrape)
+// so the test stays hermetic: its subject is truncated-JSON salvage, not
+// youtube.com availability or latency.
+vi.mock('@/lib/youtube-metadata', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/youtube-metadata')>();
+  return {
+    ...actual,
+    preflightYouTubeVideoSource: vi.fn(async () => 'available' as const),
+    fetchYouTubeMetadata: vi.fn(async () => null),
+  };
+});
+
 function specFor(videoId: string) {
   return {
     transcript: {
