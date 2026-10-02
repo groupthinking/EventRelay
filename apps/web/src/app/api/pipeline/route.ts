@@ -1,4 +1,9 @@
 import { NextResponse } from 'next/server';
+/**
+ * LEGACY ROUTE. The canonical video path is the Video Pack pipeline
+ * (`POST /api/video/pack` → Upstash → Studio → G.A.T.E.). This route stays
+ * live for the Studio Run flow; do not build new features on it.
+ */
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';
 import { analyzeVideoWithGemini } from '@/lib/gemini-video-analyzer';
