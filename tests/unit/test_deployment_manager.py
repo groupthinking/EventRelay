@@ -357,15 +357,32 @@ class TestGetDeploymentStatus:
         result = await mgr.get_deployment_status("deploy-123")
         assert result["deployment_id"] == "deploy-123"
 
-    async def test_status_is_completed(self) -> None:
+    async def test_unknown_id_is_not_completed(self) -> None:
+        # Honesty: an id this process never started must not fabricate success.
         mgr = _make_manager()
         result = await mgr.get_deployment_status("any-id")
-        assert result["status"] == "completed"
+        assert result["status"] == "unknown"
+        assert "not verified" in result["message"].lower()
 
     async def test_has_message(self) -> None:
         mgr = _make_manager()
         result = await mgr.get_deployment_status("x")
         assert "message" in result
+
+    async def test_recorded_deployment_returns_recorded_status(self) -> None:
+        mgr = _make_manager()
+        mgr._record_deployment(
+            {
+                "deployment_id": "uvai_42",
+                "status": "failed",
+                "timestamp": "2026-10-01T00:00:00",
+                "urls": {},
+                "errors": ["boom"],
+            }
+        )
+        result = await mgr.get_deployment_status("uvai_42")
+        assert result["status"] == "failed"
+        assert result["errors"] == ["boom"]
 
 
 # ===========================================================================
