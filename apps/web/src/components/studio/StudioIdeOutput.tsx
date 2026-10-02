@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 
-type OutputSection = 'events' | 'lingo' | 'tools' | 'intent' | 'signals';
+type OutputSection = 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'events', label: 'Events' },
@@ -12,6 +12,8 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'tools', label: 'Tools' },
   { id: 'intent', label: 'Intent' },
   { id: 'signals', label: 'Signals' },
+  { id: 'spec', label: 'Spec' },
+  { id: 'transcript', label: 'Transcript' },
 ];
 
 /**
@@ -23,19 +25,18 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
  * - Tools: named tools, stack, and SOP steps
  * - Intent: action items — what to do next
  * - Signals: visual / nonverbal cues from keyframes and visual context
+ * - Spec: grounded spec review (G.A.T.E. acknowledgment surface)
  */
-export default function StudioIdeOutput({ video }: { video: Video | undefined }) {
+export default function StudioIdeOutput({
+  video,
+  specReview,
+}: {
+  video: Video | undefined;
+  specReview?: React.ReactNode;
+}) {
   const [active, setActive] = useState<OutputSection>('events');
 
-  if (!video?.videoPack && !video?.events?.length && !video?.insights) {
-    return (
-      <div className="flex h-full items-center justify-center px-6 text-center">
-        <p className="text-sm text-white/40">
-          Run a video and the extracted actions land here — events, lingo, tools, intent, signals.
-        </p>
-      </div>
-    );
-  }
+  const hasContent = Boolean(video?.videoPack || video?.events?.length || video?.insights);
 
   const pack = video?.videoPack?.pack;
   const events: ExtractedEvent[] = video?.events ?? [];
@@ -77,6 +78,14 @@ export default function StudioIdeOutput({ video }: { video: Video | undefined })
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
+        {!hasContent && active !== 'transcript' ? (
+          <div className="flex h-full items-center justify-center px-6 text-center">
+            <p className="text-sm text-white/40">
+              Run a video and the extracted actions land here — events, lingo, tools, intent, signals.
+            </p>
+          </div>
+        ) : (
+          <>
         {active === 'events' && (
           <ul className="flex flex-col gap-2" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
@@ -224,6 +233,27 @@ export default function StudioIdeOutput({ video }: { video: Video | undefined })
               </>
             )}
           </div>
+        )}
+        {active === 'spec' && (
+          <div data-testid="studio-ide-output-spec">
+            {specReview ?? <EmptyNote text="No grounded spec on this pack." />}
+          </div>
+        )}
+
+        {active === 'transcript' && (
+          <div data-testid="studio-transcript-body" className="px-1">
+            {video?.transcript?.trim() ? (
+              <p className="whitespace-pre-wrap text-xs leading-relaxed text-white/75">
+                {video.transcript}
+              </p>
+            ) : video?.failure?.message ? (
+              <p className="text-xs text-red-200/80">{video.failure.message}</p>
+            ) : (
+              <p className="py-4 text-center text-xs text-white/35">Nothing yet.</p>
+            )}
+          </div>
+        )}
+          </>
         )}
       </div>
     </div>

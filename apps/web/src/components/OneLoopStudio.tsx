@@ -115,7 +115,9 @@ import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { ExtractedEvent } from '@/lib/types';
 import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
 import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
-import StudioThreePanelShell from '@/components/studio/StudioThreePanelShell';
+import StudioIdeShell from '@/components/studio/StudioIdeShell';
+import StudioIdeChat from '@/components/studio/StudioIdeChat';
+import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
 import {
   chaptersFromPack,
   sopStepsFromPack,
@@ -341,6 +343,7 @@ export default function OneLoopStudio({
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const updateVideo = useDashboardStore((s) => s.updateVideo);
+  const removeVideo = useDashboardStore((s) => s.removeVideo);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
@@ -1057,771 +1060,254 @@ export default function OneLoopStudio({
     <div className="flex min-h-screen flex-col bg-[#0b0c10] text-[#f4f1ea]">
       <Nav rightSlot={<StudioAuthNavLink />} />
 
-      <header className="border-b border-white/10 bg-[#11131a]">
-        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6">
-          <div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">
-              Paste a YouTube URL
-            </h1>
-            <p className="mt-1 text-sm text-white/55">
-              Transcript, events, and tools stay on this page.
-            </p>
-            <p
-              data-testid="studio-primary-job-strip"
-              className="mt-2 font-mono text-[11px] tracking-wide text-white/40"
-            >
-              {`Paste URL → Run → Build live → open `}
-              <StudioJobStripDestination
-                destination={studioJobStripDestination(selected?.videoPack?.videoId)}
+      <StudioIdeShell
+        toolbar={
+          <>
+            <form onSubmit={analyze} className="flex min-w-0 flex-1 items-center gap-2" data-testid="studio-ide-url-form">
+              <label className="sr-only" htmlFor="youtube-url">
+                YouTube URL
+              </label>
+              <input
+                id="youtube-url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                placeholder={FIXTURE}
+                autoComplete="off"
+                className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0b0c10] px-3 py-1.5 font-mono text-sm text-white outline-none focus:border-amber-500/60"
               />
-            </p>
-          </div>
-          <form onSubmit={analyze} className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
-            <label className="sr-only" htmlFor="youtube-url">
-              YouTube URL
-            </label>
-            <input
-              id="youtube-url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              placeholder={FIXTURE}
-              autoComplete="off"
-              className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0b0c10] px-4 py-3 font-mono text-sm text-white outline-none focus:border-[#e8b86d]"
-            />
-            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => setUrl(FIXTURE)}
-                className="rounded-lg border border-white/15 px-3 py-3 text-sm text-white/70 hover:bg-white/5"
+                disabled={busy}
+                className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
               >
                 Sample
               </button>
-              <button
-                type="submit"
-                disabled={busy}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[#e8b86d] px-5 py-3 text-sm font-semibold text-[#1a1408] disabled:opacity-50 sm:flex-none"
-              >
-                <Play className="h-4 w-4" aria-hidden />
-                {busy ? `Running ${elapsed}s` : 'Run'}
-              </button>
-            </div>
-          </form>
-          {videos.some((video) => video.videoPack) ? (
-            <FieldGroup>
-              <Field>
-                <FieldLabel htmlFor="stored-pack">Stored packs</FieldLabel>
+              {busy ? (
+                <button
+                  type="button"
+                  onClick={cancelAnalysis}
+                  data-testid="studio-ide-cancel"
+                  className="rounded-lg border border-red-400/50 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/20"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  data-testid="studio-ide-run"
+                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400"
+                >
+                  Run
+                </button>
+              )}
+            </form>
+            {videos.some((video) => video.videoPack) ? (
+              <div className="flex items-center gap-1.5" data-testid="studio-ide-packs">
                 <select
                   id="stored-pack"
                   value={selected?.videoPack ? selected.id : ''}
                   disabled={busy}
                   onChange={(event) => selectVideo(event.target.value || null)}
-                  aria-describedby="stored-pack-hint"
-                  className="min-w-0 rounded-lg border border-ink/15 bg-void px-3 py-2 font-sans text-sm text-ink focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                  aria-label="Stored packs"
+                  className="max-w-44 truncate rounded-lg border border-white/15 bg-[#0b0c10] px-2 py-1.5 text-xs text-white/80 disabled:opacity-40"
                 >
-                  <option value="">Choose a stored pack</option>
+                  <option value="">Stored packs</option>
                   {videos.filter((video) => video.videoPack).map((video) => (
                     <option key={video.id} value={video.id}>{video.title}</option>
                   ))}
                 </select>
-                <FieldDescription id="stored-pack-hint">Reopen a pack stored in this browser without running analysis.</FieldDescription>
-              </Field>
-            </FieldGroup>
-          ) : null}
-          <p className="font-mono text-xs text-[#e8b86d]/90" role="status">
-            {statusText}
-          </p>
-          {gateReceipt ? (
-            <div
-              data-testid="studio-gate-receipt"
-              role="status"
-              className="mt-2 flex flex-wrap items-start gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
-            >
-              <span
-                data-testid="studio-gate-decision"
-                className={clsx(
-                  'inline-flex rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em]',
-                  gateDecisionChipClass(gateReceipt.decision),
-                )}
-              >
-                {gateReceipt.decision}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p data-testid="studio-gate-reason" className="text-sm text-white/80">
-                  {gateReceipt.reason}
-                </p>
-                <p className="text-sm text-white/55">
-                  {gateReceipt.version === 'eventrelay.gate-receipt.v2'
-                    ? 'Server decision. Later stages require separate Loop approval.'
-                    : 'Local diagnostic only — not an authorization receipt.'}
-                </p>
-                {gateReceipt.transitionId ? (
-                  <p className="break-all text-sm opacity-60">
-                    Transition: {gateReceipt.transitionId}
-                    {' · '}
-                    {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
-                  </p>
+                {selected?.videoPack ? (
+                  <button
+                    type="button"
+                    onClick={() => removeVideo(selected.id)}
+                    disabled={busy}
+                    aria-label="Delete this pack"
+                    title="Delete this pack"
+                    data-testid="studio-ide-delete-pack"
+                    className="rounded-lg border border-white/15 px-2 py-1.5 text-xs text-white/60 hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40"
+                  >
+                    ✕
+                  </button>
                 ) : null}
-                {scopedDeployReceipt ? (
-                  <p className="mt-1">
-                    <a
-                      data-testid="studio-gate-live-url"
-                      href={scopedDeployReceipt}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="break-all text-sm text-[#e8b86d] underline"
-                    >
-                      {scopedDeployReceipt}
-                    </a>
-                  </p>
-                ) : null}
-                <p className="mt-1 break-all font-mono text-[11px] text-white/45">
-                  <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
-                  {' · '}
-                  <span data-testid="studio-gate-receipt-hash">{gateReceipt.receiptHash}</span>
-                  {' · '}
-                  {gateReceipt.version}
-                </p>
               </div>
-            </div>
-          ) : null}
-          {selected?.videoPack && (
-            <p
-              data-testid="video-pack-citation"
-              className="break-all font-mono text-[11px] text-white/55"
-            >
-              {studioPackCitation(selected.videoPack)}
-            </p>
-          )}
-          {transcriptWorking && (
-            <div className="h-1 overflow-hidden rounded-full bg-white/10">
-              <div
-                className="h-full bg-[#e8b86d] transition-all"
-                style={{ width: `${Math.min(95, selected?.progress || 8 + elapsed * 2)}%` }}
-              />
-            </div>
-          )}
-        </div>
-      </header>
-
-      <main
-        data-testid="studio-main"
-        className={clsx(
-          'mx-auto flex w-full flex-1 flex-col gap-4 px-4 py-6 pb-28 sm:px-6',
-          resultReadyShell ? 'max-w-[min(100%,96rem)]' : 'max-w-6xl grid lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]',
-        )}
-      >
-        {(() => {
-          const workspace = (
-            <>
-        {inWorkbench ? (
-          <nav
-            data-testid="studio-workbench-tabs"
-            aria-label="Workbench panes"
-            className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-[#11131a] p-1"
-          >
-            {workbenchTabs.map((tab) => (
+            ) : null}
+            <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
               <button
-                key={tab.id}
                 type="button"
-                data-testid={`studio-workbench-tab-${tab.id}`}
-                data-pane={tab.id}
-                data-active={activePane === tab.id ? 'true' : 'false'}
-                aria-pressed={activePane === tab.id}
-                onClick={() => setRequestedPane(tab.id)}
-                className={clsx(
-                  'rounded-lg px-3 py-1.5 text-sm',
-                  activePane === tab.id
-                    ? 'bg-[#e8b86d] text-[#1a1408]'
-                    : 'text-white/70 hover:bg-white/5',
-                )}
+                onClick={exportPkg}
+                disabled={!hasPayload}
+                data-testid="studio-ide-export"
+                className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-40"
               >
-                {tab.label}
+                Export
               </button>
-            ))}
-          </nav>
-        ) : null}
-        {paneVisible('video') && (
-        <section
-          id="studio-shell-video"
-          className="relative overflow-hidden rounded-xl border border-white/10 bg-black"
-        >
-          {videoId ? (
-            <>
-              <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
-                <div
-                  ref={containerRef}
-                  className="h-full w-full"
-                  data-testid="studio-player"
-                  title="YouTube source"
-                />
-              </div>
-              {playerOverlay ? (
-                <div
-                  data-testid="studio-player-overlay"
-                  className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#14151c] px-6 text-center"
+              <button
+                type="button"
+                data-testid="studio-build-live-button"
+                onClick={() => void buildLive()}
+                disabled={buildBusy || !canAttemptBuildLive}
+                title={
+                  selected?.videoPack
+                    ? `Compile the stored Video Pack for ${selected.videoPack.videoId}.`
+                    : canAttemptBuildLive
+                      ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
+                      : 'Paste a YouTube URL and run analysis first.'
+                }
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200 disabled:opacity-40"
+              >
+                {buildBusy ? 'Building…' : 'Build live'}
+              </button>
+              <button
+                type="button"
+                data-testid="studio-deploy-button"
+                onClick={() => void deploy()}
+                disabled={deployBusy || !hasPayload || Boolean(holdReason)}
+                aria-describedby="studio-preflight-hint"
+                title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+                className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-40"
+              >
+                {deployBusy ? 'Checking preflight…' : 'Check preflight'}
+              </button>
+            </div>
+            <p id="studio-preflight-hint" className="w-full text-[11px] text-white/40">
+              {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+            </p>
+            <p className="w-full font-mono text-[11px] text-white/40" role="status" data-testid="studio-ide-status">
+              {statusText}
+            </p>
+            {gateReceipt ? (
+              <div
+                data-testid="studio-gate-receipt"
+                role="status"
+                className="flex w-full flex-wrap items-start gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+              >
+                <span
+                  data-testid="studio-gate-decision"
+                  className={clsx(
+                    'inline-flex rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em]',
+                    gateDecisionChipClass(gateReceipt.decision),
+                  )}
                 >
-                  <p className="text-sm text-white/80">{playerOverlay}</p>
-                  {playerPhase === 'error' ? (
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        data-testid="studio-player-retry"
-                        onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
-                        className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
-                      >
-                        Retry player
-                      </button>
-                      <a
-                        href={`https://www.youtube.com/watch?v=${videoId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70"
-                      >
-                        Open on YouTube
-                      </a>
-                    </div>
+                  {gateReceipt.decision}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p data-testid="studio-gate-reason" className="text-sm text-white/80">
+                    {gateReceipt.reason}
+                  </p>
+                  <p className="text-sm text-white/55">
+                    {gateReceipt.version === 'eventrelay.gate-receipt.v2'
+                      ? 'Server decision. Later stages require separate Loop approval.'
+                      : 'Local diagnostic only — not an authorization receipt.'}
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-white/40">
+                    <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
+                    {' · '}
+                    <span data-testid="studio-gate-receipt-hash">{gateReceipt.receiptHash}</span>
+                    {' · '}
+                    {gateReceipt.version}
+                  </p>
+                  {gateReceipt.transitionId ? (
+                    <p className="break-all text-sm opacity-60">
+                      Transition: {gateReceipt.transitionId}
+                      {' · '}
+                      {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
+                    </p>
                   ) : null}
                 </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
-              Paste a link. The video plays here while we pull the transcript.
+              </div>
+            ) : null}
+          </>
+        }
+        videoPane={
+          <div className="flex flex-col gap-3">
+            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
+              {videoId ? (
+                <>
+                  <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
+                    <div
+                      ref={containerRef}
+                      className="h-full w-full"
+                      data-testid="studio-player"
+                      title="YouTube source"
+                    />
+                  </div>
+                  {playerOverlay ? (
+                    <div
+                      data-testid="studio-player-overlay"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#14151c] px-6 text-center"
+                    >
+                      <p className="text-sm text-white/80">{playerOverlay}</p>
+                      {playerPhase === 'error' ? (
+                        <div className="flex flex-wrap items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            data-testid="studio-player-retry"
+                            onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
+                            className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-sm text-amber-200"
+                          >
+                            Retry player
+                          </button>
+                          <a
+                            href={`https://www.youtube.com/watch?v=${videoId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70"
+                          >
+                            Open on YouTube
+                          </a>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
+                  Paste a link above. The video plays here while we pull the transcript.
+                </div>
+              )}
             </div>
-          )}
-        </section>
-        )}
-
-        {paneVisible('transcript') && (
-        <section
-          id="studio-shell-transcript"
-          className="flex min-h-[280px] flex-col rounded-xl border border-white/10 bg-[#11131a]"
-        >
-          <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-              Transcript
-            </h2>
-            {selected?.transcript ? (
-              <span className="font-mono text-[11px] text-white/35">
-                {transcriptWordCount} words
-              </span>
+            {selected?.videoPack ? (
+              <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
+                <p className="font-mono text-[11px] text-white/50">
+                  Pack <span className="text-amber-200/90">{selected.videoPack.sourceHash.slice(0, 12)}…</span>
+                </p>
+                <p className="mt-0.5 truncate text-xs text-white/40">{selected.videoPack.sourceUrl}</p>
+              </div>
             ) : null}
           </div>
-          {(transcriptStage.id !== 'idle' || showTranscriptRetry) && (
-            <div
-              data-testid="studio-transcript-stage"
-              className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 px-4 py-2"
-            >
-              <div>
-                <p className="text-sm text-white/80">{transcriptStage.label}</p>
-                {transcriptWorking && !selected?.transcript && (
-                  <p className="font-mono text-[11px] text-white/40">
-                    {studioTranscriptEtaLabel(elapsed)}
-                  </p>
-                )}
-              </div>
-              {showTranscriptRetry ? (
-                <button
-                  type="button"
-                  data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
-                >
-                  Retry transcript
-                </button>
-              ) : null}
-            </div>
-          )}
-          {/* Collapsed by default: a one-line summary instead of every segment
-              in the page flow. Expand reveals the body in-pane. */}
-          {selected?.transcript?.trim() ? (
-            <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-2">
-              <p data-testid="studio-transcript-summary" className="text-sm text-white/70">
-                {studioTranscriptSummaryLabel({
-                  transcript: selected?.transcript,
-                  stageLabel: transcriptStage.label,
-                })}
-              </p>
-              <button
-                type="button"
-                data-testid="studio-transcript-toggle"
-                aria-expanded={transcriptExpanded}
-                onClick={() => setTranscriptExpanded((open) => !open)}
-                className="rounded-lg border border-white/15 px-3 py-1 text-sm text-white/70 hover:bg-white/5"
-              >
-                {transcriptExpanded ? 'Collapse' : 'Expand'}
-              </button>
-            </div>
-          ) : null}
-          {(transcriptExpanded || !selected?.transcript?.trim()) && (
-            <div
-              data-testid="studio-transcript-body"
-              className="max-h-[420px] flex-1 overflow-auto px-4 py-3 text-sm leading-6 text-white/80"
-            >
-              {studioTranscriptBody({
-                transcript: selected?.transcript,
-                busy: transcriptWorking,
-                failed: selected?.status === 'failed',
-                failureMessage: selected?.failure?.message,
-              })}
-            </div>
-          )}
-        </section>
-        )}
-
-        {workbenchEmpty ? (
-          <section
-            data-testid="studio-workbench-empty"
-            className={clsx(!resultReadyShell && 'lg:col-span-2')}
-            aria-labelledby="studio-workbench-empty-title"
-          >
-            <Empty
-              className="border-white/15 bg-[#11131a] text-[#f4f1ea] min-h-[12rem]"
-            >
-              <EmptyHeader>
-                <EmptyMedia variant="icon" className="bg-white/10 text-white/60">
-                  ◇
-                </EmptyMedia>
-                <EmptyTitle
-                  id="studio-workbench-empty-title"
-                  className="text-[#f4f1ea]"
-                >
-                  {workbenchEmpty.title}
-                </EmptyTitle>
-                <EmptyDescription className="text-white/55">
-                  {workbenchEmpty.description}
-                </EmptyDescription>
-              </EmptyHeader>
-              {workbenchEmpty.primaryAction ? (
-                <EmptyContent>
-                  <button
-                    type="button"
-                    data-testid="studio-workbench-empty-action"
-                    onClick={() =>
-                      void runAnalysis(url || selected?.url || '')
-                    }
-                    className="rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm text-[#e8b86d]"
-                  >
-                    {workbenchEmpty.primaryAction === 'retry'
-                      ? 'Retry analysis'
-                      : 'Re-run analysis'}
-                  </button>
-                </EmptyContent>
-              ) : null}
-            </Empty>
-          </section>
-        ) : null}
-
-        {paneVisible('spec') && selected?.videoPack?.pack ? (
-          <div id="studio-shell-result" data-testid="studio-result-ready-pane">
-            <GroundedSpecReview
-              key={selected.id}
-              videoId={selected.id}
-              pack={selected.videoPack.pack}
-              acknowledgment={selected.specReviewAcknowledgment}
-              persistenceAvailable={dashboardPersistenceSucceeded()}
-              onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
-              onAcknowledge={(value) => {
-                if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
-                updateVideo(selected.id, { specReviewAcknowledgment: value });
-                return dashboardPersistenceSucceeded();
-              }}
-            />
-          </div>
-        ) : null}
-
-        {paneVisible('pack') && promotePack ? (
-          <PackWorkbench
-            architecture={packFormation.architecture}
-            artifacts={packFormation.artifacts}
-            onExport={exportPkg}
-            canExport={hasPayload}
+        }
+        chatPane={
+          <StudioIdeChat
+            videoId={selected?.videoPack?.videoId ?? videoId ?? null}
+            packId={selected?.videoPack?.packId ?? null}
+            disabled={busy}
           />
-        ) : null}
+        }
+        outputPane={
+          <StudioIdeOutput
+            video={selected}
+            specReview={
+              selected?.videoPack?.pack ? (
+                <GroundedSpecReview
+                  key={selected.id}
+                  videoId={selected.id}
+                  pack={selected.videoPack.pack}
+                  acknowledgment={selected.specReviewAcknowledgment}
+                  persistenceAvailable={dashboardPersistenceSucceeded()}
+                  onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
+                  onAcknowledge={(value) => {
+                    if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
+                    updateVideo(selected.id, { specReviewAcknowledgment: value });
+                    return dashboardPersistenceSucceeded();
+                  }}
+                />
+              ) : undefined
+            }
+          />
+        }
+      />
 
-        {paneVisible('events') && (
-        <section
-          className={clsx(
-            'rounded-xl border border-white/10 bg-[#11131a]',
-            !resultReadyShell && 'lg:col-span-2',
-          )}
-        >
-          <div className="border-b border-white/10 px-4 py-3">
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-              Events
-            </h2>
-          </div>
-          <ul className="divide-y divide-white/5">
-            {(selected?.events || []).length === 0 && (
-              <li data-testid="studio-events-empty" className="px-4 py-4 text-sm text-white/40">
-                {studioEventsEmptyMessage({
-                  busy: busy || selected?.status === 'processing',
-                  hasCompletedRun: selected != null && selected.status !== 'processing' && !busy,
-                  eventCount: 0,
-                  hasTranscript: Boolean(selected?.transcript?.trim()),
-                  hasArchitecture: Boolean(packFormation.architecture),
-                  artifactCount: packFormation.artifacts.length,
-                  toolCount: packFormation.tools.length,
-                })}
-              </li>
-            )}
-            {(selected?.events || []).map((event) => {
-              const seconds = parseTimestampToSeconds(event.timestamp);
-              return (
-              <li key={event.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
-                {seconds != null ? (
-                  <button
-                    type="button"
-                    onClick={() => seekTo(seconds)}
-                    className="text-left font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]"
-                  >
-                    {formatSeconds(seconds)}
-                  </button>
-                ) : (
-                  <div className="font-mono text-[11px] uppercase tracking-wider text-[#e8b86d]">
-                    {event.type}
-                  </div>
-                )}
-                <div>
-                  <div className="text-sm font-medium text-white">{event.title}</div>
-                  {event.description && (
-                    <div className="mt-0.5 text-sm text-white/55">{event.description}</div>
-                  )}
-                </div>
-              </li>
-              );
-            })}
-          </ul>
-        </section>
-        )}
-
-        {paneVisible('workflow') && hasWorkflowPane && (
-          <section
-            id="studio-shell-sop"
-            className={clsx(
-              'rounded-xl border border-white/10 bg-[#11131a]',
-              !resultReadyShell && 'lg:col-span-2',
-            )}
-          >
-            <div className="border-b border-white/10 px-4 py-3">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                Named tools
-              </h2>
-            </div>
-            <div className="flex flex-wrap gap-2 px-4 py-3">
-              {supplementalEntities.length === 0 && packFormation.tools.length === 0 && (
-                <p className="text-sm text-white/40">No catalogued tools in this transcript.</p>
-              )}
-              {packFormation.tools.map((tool) => (
-                <span
-                  key={`pack-${tool.name}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-[#e8b86d]/30 bg-[#e8b86d]/10 px-3 py-1.5 text-sm"
-                >
-                  <span className="font-medium text-white">{tool.name}</span>
-                </span>
-              ))}
-              {supplementalEntities.map((entity) => (
-                <span
-                  key={entity.name}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-sm"
-                >
-                  <a
-                    href={entity.officialUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-medium text-white hover:text-[#e8b86d]"
-                  >
-                    {entity.name}
-                  </a>
-                  {entity.docsUrl && entity.docsUrl !== entity.officialUrl && (
-                    <a
-                      href={entity.docsUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[11px] uppercase tracking-wider text-white/45 hover:text-[#e8b86d]"
-                    >
-                      docs
-                    </a>
-                  )}
-                  {entity.timestamps[0] != null && (
-                    <button
-                      type="button"
-                      onClick={() => seekTo(entity.timestamps[0])}
-                      className="font-mono text-[11px] text-[#e8b86d]"
-                    >
-                      {formatSeconds(entity.timestamps[0])}
-                    </button>
-                  )}
-                </span>
-              ))}
-            </div>
-
-            <div className="border-t border-white/10 px-4 py-3">
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                SOP
-              </h2>
-            </div>
-            <ol className="divide-y divide-white/5">
-              {dedupedSopSteps.length === 0 && (
-                <li className="px-4 py-3 text-sm text-white/40">
-                  {(linkedSop?.steps.length ?? 0) > 0
-                    ? 'SOP steps mirror the Events list for this run.'
-                    : 'No ordered SOP in this run.'}
-                </li>
-              )}
-              {dedupedSopSteps.map((step) => {
-                const approved = approvedSpecIds.includes(step.id);
-                return (
-                <li key={step.id} className="grid gap-1 px-4 py-3 sm:grid-cols-[7rem_1fr]">
-                  {step.timestamp != null ? (
-                    <button
-                      type="button"
-                      onClick={() => seekTo(step.timestamp!)}
-                      className="text-left font-mono text-[11px] text-[#e8b86d]"
-                    >
-                      {formatSeconds(step.timestamp)}
-                    </button>
-                  ) : (
-                    <div className="font-mono text-[11px] text-white/35">{step.order}</div>
-                  )}
-                  <div>
-                    <label className="mb-1 inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.12em] text-white/45">
-                      <input
-                        type="checkbox"
-                        checked={approved}
-                        onChange={() =>
-                          setApprovedSpecIds((current) =>
-                            current.includes(step.id)
-                              ? current.filter((id) => id !== step.id)
-                              : [...current, step.id],
-                          )
-                        }
-                        className="h-3.5 w-3.5 accent-[#e8b86d]"
-                      />
-                      Approved for PR
-                    </label>
-                    <div className="text-sm font-medium text-white">{step.title}</div>
-                    {step.description && (
-                      <div className="mt-0.5 text-sm text-white/55">{step.description}</div>
-                    )}
-                  </div>
-                </li>
-                );
-              })}
-            </ol>
-
-            {stackChecks.length > 0 && (
-              <>
-                <div className="border-t border-white/10 px-4 py-3">
-                  <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                    Stack checks
-                  </h2>
-                </div>
-                <ul className="divide-y divide-white/5">
-                  {stackChecks.map((item) => {
-                      const checked = completedChecks.includes(item.id);
-                      const status = stackCheckStatus(item, completedChecks, 'anonymous');
-                      return (
-                      <li key={item.id} className="flex items-start gap-3 px-4 py-3 text-sm">
-                        <input
-                          id={`check-${item.id}`}
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => {
-                            setCompletedChecks((current) =>
-                              current.includes(item.id)
-                                ? current.filter((id) => id !== item.id)
-                                : [...current, item.id],
-                            );
-                          }}
-                          className="mt-1 h-4 w-4 accent-[#e8b86d]"
-                        />
-                        <label htmlFor={`check-${item.id}`} className="min-w-0 flex-1">
-                          {item.href ? (
-                            <a
-                              href={item.href}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-white hover:text-[#e8b86d]"
-                            >
-                              {item.title}
-                            </a>
-                          ) : (
-                            <span className="text-white">{item.title}</span>
-                          )}
-                          <div className="mt-0.5 text-[11px] uppercase tracking-[0.12em] text-white/40">
-                            {stackCheckStatusLabel(status)}
-                          </div>
-                        </label>
-                      </li>
-                      );
-                    })}
-                </ul>
-              </>
-            )}
-          </section>
-        )}
-
-        {paneVisible('pack') && selected?.videoPack && (
-          <section
-            id="studio-shell-pack"
-            data-testid="video-pack"
-            className={clsx(
-              'rounded-xl border border-white/10 bg-[#11131a] p-4',
-              !resultReadyShell && 'lg:col-span-2',
-            )}
-          >
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-              Video pack
-            </h2>
-            <p className="mt-3 break-all font-mono text-sm text-white/80">
-              {studioPackCitation(selected.videoPack)}
-            </p>
-            <dl className="mt-3 grid gap-2 font-mono text-[11px] text-white/55 sm:grid-cols-2">
-              <div>
-                <dt className="uppercase tracking-[0.16em] text-white/35">source_url</dt>
-                <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceUrl}</dd>
-              </div>
-              <div>
-                <dt className="uppercase tracking-[0.16em] text-white/35">source_hash</dt>
-                <dd className="mt-1 break-all text-white/80">{selected.videoPack.sourceHash}</dd>
-              </div>
-            </dl>
-            {!promotePack && packFormation.architecture && (
-              <div data-testid="pack-architecture" className="mt-4">
-                <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">
-                  Architecture
-                </h3>
-                {packFormation.architecture.summary && (
-                  <p className="mt-2 text-sm text-white/70">{packFormation.architecture.summary}</p>
-                )}
-                {packFormation.architecture.stages.length > 0 && (
-                  <ol className="mt-2 space-y-1 text-sm text-white/80">
-                    {packFormation.architecture.stages.map((stage) => (
-                      <li key={stage.id}>
-                        <span className="font-medium text-white">{stage.name}</span>
-                        {stage.description ? ` — ${stage.description}` : ''}
-                      </li>
-                    ))}
-                  </ol>
-                )}
-                {packFormation.architecture.mermaid && (
-                  <pre className="mt-2 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/65">
-                    {packFormation.architecture.mermaid}
-                  </pre>
-                )}
-              </div>
-            )}
-            {!promotePack && packFormation.artifacts.length > 0 && (
-              <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
-                {packFormation.artifacts.map((artifact) => (
-                  <li
-                    key={artifact.path_hint}
-                    className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
-                  >
-                    <div className="font-mono text-[12px] text-[#e8b86d]">{artifact.path_hint}</div>
-                    <div className="mt-1 text-white/80">{artifact.purpose}</div>
-                    <div className="mt-1 font-mono text-[11px] text-white/55">{artifact.interface}</div>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <pre
-              data-testid="video-pack-json"
-              className="mt-3 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/75"
-            >
-              {identityPackJson(selected.videoPack)}
-            </pre>
-          </section>
-        )}
-
-        {paneVisible('summary') && hasSummaryPane && selected?.insights && (
-          <section
-            className={clsx(
-              'rounded-xl border border-white/10 bg-[#11131a] p-4',
-              !resultReadyShell && 'lg:col-span-2',
-            )}
-          >
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-              Summary
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-white/80">{selected.insights.summary}</p>
-          </section>
-        )}
-
-        {paneVisible('actions') && showAgentWorkflowUi && (actRunId || workflowActions) && (
-          <section
-            id="act-results"
-            data-testid="act-results"
-            className={clsx(
-              'rounded-xl border border-[#e8b86d]/30 bg-[#e8b86d]/5 p-4',
-              !resultReadyShell && 'lg:col-span-2',
-            )}
-          >
-            <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
-              Tool results
-            </h2>
-            {actRunId && (
-              <p className="mt-2 font-mono text-[11px] text-white/40">
-                {actRunId}
-                {usedSameRun ? ' · this transcript' : ''}
-              </p>
-            )}
-            {workflowActions ? (
-              <ul className="mt-3 space-y-2 text-sm">
-                {workflowActions.actions.length === 0 && (
-                  <li className="text-white/50">No tool results from this run.</li>
-                )}
-                {workflowActions.actions.map((action, i) => {
-                  const card = studioActionCard(action);
-                  return (
-                    <li
-                      key={`${action.tool}-${i}`}
-                      data-testid="studio-action-card"
-                      className="rounded-lg border border-white/10 bg-black/20 px-3 py-2"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium text-white">{card.title}</span>
-                        <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-[#e8b86d]">
-                          {card.statusLabel}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-white/70">{card.detail}</p>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <p className="mt-3 text-sm text-white/60">
-                {actBusy ? 'Running tools…' : 'Waiting for tool results.'}
-              </p>
-            )}
-          </section>
-        )}
-            </>
-          );
-          if (resultReadyShell && selected?.videoPack) {
-            return (
-              <StudioThreePanelShell
-                youtubeVideoId={selected.videoPack.videoId}
-                sourceHash={selected.videoPack.sourceHash}
-                sourceUrl={selected.videoPack.sourceUrl}
-                chapters={shellChapters}
-                sopSteps={shellSopSteps}
-                outlineSections={workbenchTabs.map((tab) => ({
-                  id: studioPaneToOutlineSection(tab.id),
-                  label: tab.label,
-                }))}
-                activeOutlineId={studioPaneToOutlineSection(activePane)}
-                onOutlineSelect={selectShellPane}
-              >
-                <div className="flex flex-col gap-4">{workspace}</div>
-              </StudioThreePanelShell>
-            );
-          }
-          return workspace;
-        })()}
-      </main>
 
       {exportToast ? (
         <div
@@ -1939,77 +1425,6 @@ export default function OneLoopStudio({
         </div>
       ) : null}
 
-      <footer className="sticky bottom-0 border-t border-white/10 bg-[#11131a]/95 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-4 py-3 sm:px-6">
-          {showAgentWorkflowUi && (
-            <button
-              type="button"
-              onClick={() => void act()}
-              disabled={actBusy || !hasPayload}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408] disabled:opacity-40"
-            >
-              {actBusy ? 'Running tools…' : 'Run tools'}
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={exportPkg}
-            disabled={!hasPayload}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
-          >
-            <Download className="h-4 w-4" aria-hidden />
-            {promotePack ? 'Export pack' : 'Export'}
-          </button>
-          <button
-            type="button"
-            data-testid="studio-build-live-button"
-            onClick={() => void buildLive()}
-            disabled={buildBusy || !canAttemptBuildLive}
-            title={
-              selected?.videoPack
-                ? `Compile the stored Video Pack for ${selected.videoPack.videoId}.`
-                : canAttemptBuildLive
-                  ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
-                  : 'Paste a YouTube URL and run analysis first.'
-            }
-            className="inline-flex items-center gap-2 rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm text-[#e8b86d] disabled:opacity-40"
-          >
-            <Hammer className="h-4 w-4" aria-hidden />
-            {buildBusy ? 'Building…' : scopedPackLiveUrl ? 'Open live app' : 'Build live'}
-          </button>
-          <button
-            type="button"
-            data-testid="studio-deploy-button"
-            onClick={() => void deploy()}
-            disabled={deployBusy || !hasPayload || Boolean(holdReason)}
-            title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
-            aria-describedby="studio-preflight-hint"
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
-          >
-            <Rocket className="h-4 w-4" aria-hidden />
-            {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
-          </button>
-          <button
-            type="button"
-            data-testid="studio-open-prs-button"
-            onClick={() => void openApprovedSpecsPrs()}
-            disabled={openingPrs || approvedSpecIds.length === 0}
-            title={approvedSpecIds.length === 0 ? 'Approve at least one SOP spec first.' : undefined}
-            className="inline-flex items-center gap-2 rounded-lg border border-white/15 px-4 py-2 text-sm disabled:opacity-40"
-          >
-            <GitPullRequest className="h-4 w-4" aria-hidden />
-            {openingPrs ? 'Opening PRs…' : `Open GitHub PRs (${approvedSpecIds.length})`}
-          </button>
-          <p id="studio-preflight-hint" className="basis-full text-sm opacity-60">
-            {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
-          </p>
-          {holdReason && (
-            <p className="basis-full text-xs text-[#e8b86d] sm:basis-auto sm:max-w-xl">
-              {holdReason}
-            </p>
-          )}
-        </div>
-      </footer>
     </div>
   );
 }
