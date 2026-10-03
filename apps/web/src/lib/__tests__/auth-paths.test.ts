@@ -32,6 +32,14 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/billing/renew')).toBe(false);
   });
 
+  it('keeps workspace export reachable without a NextAuth session (paywall is the gate)', () => {
+    // Export enforces the Pro paywall in the route handler itself
+    // (402 + Stripe checkout URL for non-Pro). Middleware must not 401
+    // anonymous users before they ever see the paywall.
+    expect(isPublicApiPath('/api/workspace/export')).toBe(true);
+    expect(needsAuthentication('/api/workspace/export')).toBe(false);
+  });
+
   it('keeps the retired /api/pipeline surface non-public', () => {
     // The legacy pipeline routes were removed (Video Pack pipeline is
     // canonical). They must not be re-added as public by accident.

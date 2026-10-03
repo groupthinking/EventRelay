@@ -45,6 +45,11 @@ const PUBLIC_API_EXACT = new Set([
   '/api/v1/video/assemble',
   // Hosted /d pack-grounded chat (#2122): session-optional; proxy AI rate limit + route quota.
   '/api/chat',
+  // Workspace ZIP export: session-optional BY DESIGN. The route handler enforces
+  // the Pro paywall itself (402 + Stripe checkout URL for non-Pro). Gating it
+  // behind a NextAuth session in middleware would 401 anonymous users before
+  // they ever see the paywall — the paywall IS the gate, per product direction.
+  '/api/workspace/export',
 ]);
 
 /** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
