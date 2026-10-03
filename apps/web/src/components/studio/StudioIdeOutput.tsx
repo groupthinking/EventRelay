@@ -20,6 +20,10 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
  * Right-pane output for the Studio IDE, structured around ACTION EXTRACTION:
  * what the viewer can do or make from the video — not a summary.
  *
+ * Presented in the locked light card system (DESIGN_LANGUAGE.md):
+ * white cards on soft blue-gray. Card = one structured idea —
+ * small icon, label, value. Documents are first-class rows.
+ *
  * - Events: timestamped things that happened (from the event extractor)
  * - Lingo: domain verbiage / topics the video uses
  * - Tools: named tools, stack, and SOP steps
@@ -53,11 +57,11 @@ export default function StudioIdeOutput({
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
   return (
-    <div data-testid="studio-ide-output" className="flex h-full min-h-0 flex-col">
+    <div data-testid="studio-ide-output" className="flex h-full min-h-0 flex-col bg-white">
       <div
         role="tablist"
         aria-label="Output sections"
-        className="flex shrink-0 gap-1 border-b border-white/10 px-2 py-1.5"
+        className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-3 py-2"
       >
         {SECTIONS.map((s) => (
           <button
@@ -66,10 +70,10 @@ export default function StudioIdeOutput({
             aria-selected={active === s.id}
             data-testid={`studio-ide-output-tab-${s.id}`}
             onClick={() => setActive(s.id)}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               active === s.id
-                ? 'bg-amber-500/15 text-amber-200'
-                : 'text-white/50 hover:bg-white/5 hover:text-white/75'
+                ? 'bg-amber-600 text-white shadow-sm'
+                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
             }`}
           >
             {s.label}
@@ -77,36 +81,35 @@ export default function StudioIdeOutput({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f2f5f9] p-4">
         {!hasContent && active !== 'transcript' ? (
-          <div className="flex h-full items-center justify-center px-6 text-center">
-            <p className="text-sm text-white/40">
-              Run a video and the extracted actions land here — events, lingo, tools, intent, signals.
+          <div className="uvai-empty">
+            <p className="font-medium text-slate-600">
+              Run a video and the extracted actions land here
             </p>
+            <p className="text-xs">Events, lingo, tools, intent, signals — as structured cards.</p>
           </div>
         ) : (
           <>
         {active === 'events' && (
-          <ul className="flex flex-col gap-2" data-testid="studio-ide-output-events">
+          <ul className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
               <EmptyNote text="No events extracted from this video yet." />
             ) : (
               events.map((e) => (
-                <li
-                  key={e.id}
-                  className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2"
-                >
+                <li key={e.id} className="uvai-card p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-200/80">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                      <DotIcon />
                       {e.type}
                     </span>
                     {e.timestamp ? (
-                      <span className="font-mono text-[11px] text-white/40">{e.timestamp}</span>
+                      <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
                     ) : null}
                   </div>
-                  <p className="mt-1 text-sm text-white/85">{e.title}</p>
+                  <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
                   {e.description ? (
-                    <p className="mt-0.5 text-xs text-white/50">{e.description}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
                   ) : null}
                 </li>
               ))
@@ -119,47 +122,55 @@ export default function StudioIdeOutput({
             {topics.length === 0 ? (
               <EmptyNote text="No domain lingo identified yet." />
             ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {topics.map((t, i) => (
-                  <span
-                    key={`${t}-${i}`}
-                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 text-xs text-white/75"
-                  >
-                    {t}
-                  </span>
-                ))}
+              <div className="uvai-card p-4">
+                <p className="uvai-section-label mb-3">Domain terms</p>
+                <div className="flex flex-wrap gap-2">
+                  {topics.map((t, i) => (
+                    <span
+                      key={`${t}-${i}`}
+                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         )}
 
         {active === 'tools' && (
-          <div data-testid="studio-ide-output-tools">
+          <div data-testid="studio-ide-output-tools" className="flex flex-col gap-3">
             {toolNames.length === 0 && !linkedSop?.steps.length ? (
               <EmptyNote text="No tools named in this video yet." />
             ) : (
               <>
                 {toolNames.length > 0 ? (
-                  <ul className="flex flex-col gap-1.5">
-                    {toolNames.map((t, i) => (
-                      <li
-                        key={`${t}-${i}`}
-                        className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 font-mono text-xs text-white/80"
-                      >
-                        {t}
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="uvai-card p-4">
+                    <p className="uvai-section-label mb-3">Named tools</p>
+                    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {toolNames.map((t, i) => (
+                        <li key={`${t}-${i}`} className="uvai-metric">
+                          <div className="uvai-metric-icon">
+                            <WrenchIcon />
+                          </div>
+                          <p className="font-mono text-xs font-semibold text-slate-800">{t}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
                 {linkedSop?.steps?.length ? (
-                  <div className="mt-3">
-                    <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-white/50">
-                      SOP steps
-                    </h4>
-                    <ol className="flex list-decimal flex-col gap-1.5 pl-5">
+                  <div className="uvai-card p-4">
+                    <p className="uvai-section-label mb-3">SOP steps</p>
+                    <ol className="flex flex-col gap-2">
                       {linkedSop.steps.map((s, i) => (
-                        <li key={s.id ?? i} className="text-xs text-white/70">
-                          {s.title}
+                        <li key={s.id ?? i} className="uvai-doc-row">
+                          <span className="uvai-doc-icon">{String(i + 1).padStart(2, '0')}</span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-800">{s.title}</p>
+                            <p className="text-xs text-slate-400">Step {i + 1}</p>
+                          </div>
                         </li>
                       ))}
                     </ol>
@@ -171,19 +182,23 @@ export default function StudioIdeOutput({
         )}
 
         {active === 'intent' && (
-          <ul className="flex flex-col gap-2" data-testid="studio-ide-output-intent">
+          <ul className="flex flex-col gap-3" data-testid="studio-ide-output-intent">
             {actionItems.length === 0 ? (
               <EmptyNote text="No action items extracted yet — what should the viewer do or make from this video?" />
             ) : (
               actionItems.map((a, i) => (
-                <li
-                  key={a.id ?? i}
-                  className="rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2"
-                >
-                  <p className="text-sm text-white/85">{a.title}</p>
-                  {a.description ? (
-                    <p className="mt-0.5 text-xs text-white/50">{a.description}</p>
-                  ) : null}
+                <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-amber-600 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="uvai-metric-icon mt-0.5 shrink-0">
+                      <ArrowIcon />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-900">{a.title}</p>
+                      {a.description ? (
+                        <p className="mt-1 text-xs leading-relaxed text-slate-500">{a.description}</p>
+                      ) : null}
+                    </div>
+                  </div>
                 </li>
               ))
             )}
@@ -191,38 +206,36 @@ export default function StudioIdeOutput({
         )}
 
         {active === 'signals' && (
-          <div data-testid="studio-ide-output-signals">
+          <div data-testid="studio-ide-output-signals" className="flex flex-col gap-3">
             {!visualContext && keyframes.length === 0 ? (
               <EmptyNote text="No visual signals captured yet." />
             ) : (
               <>
                 {visualContext?.summary ? (
-                  <p className="mb-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/70">
-                    {visualContext.summary}
-                  </p>
+                  <div className="uvai-card p-4">
+                    <p className="uvai-section-label mb-2">Visual summary</p>
+                    <p className="text-xs leading-relaxed text-slate-600">{visualContext.summary}</p>
+                  </div>
                 ) : null}
                 {keyframes.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     {keyframes.map((k, i) => (
-                      <figure
-                        key={k.t_s ?? i}
-                        className="overflow-hidden rounded-lg border border-white/10"
-                      >
+                      <figure key={k.t_s ?? i} className="uvai-card overflow-hidden">
                         {k.image_path ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
                             src={k.image_path}
-                            alt={k.desc || `Keyframe ${i + 1}`}
+                            alt={`Keyframe ${i + 1}`}
                             className="aspect-video w-full object-cover"
                             loading="lazy"
                           />
                         ) : (
-                          <div className="flex aspect-video items-center justify-center bg-black/40 text-[11px] text-white/40">
+                          <div className="flex aspect-video items-center justify-center bg-slate-100 text-[11px] font-medium text-slate-400">
                             {k.t_s != null ? `${k.t_s}s` : `Frame ${i + 1}`}
                           </div>
                         )}
                         {k.desc ? (
-                          <figcaption className="px-2 py-1 text-[11px] text-white/55">
+                          <figcaption className="border-t border-slate-100 px-3 py-2 text-[11px] leading-snug text-slate-500">
                             {k.desc}
                           </figcaption>
                         ) : null}
@@ -241,15 +254,15 @@ export default function StudioIdeOutput({
         )}
 
         {active === 'transcript' && (
-          <div data-testid="studio-transcript-body" className="px-1">
+          <div data-testid="studio-transcript-body" className="uvai-card p-4">
             {video?.transcript?.trim() ? (
-              <p className="whitespace-pre-wrap text-xs leading-relaxed text-white/75">
+              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
                 {video.transcript}
               </p>
             ) : video?.failure?.message ? (
-              <p className="text-xs text-red-200/80">{video.failure.message}</p>
+              <p className="text-xs text-red-700">{video.failure.message}</p>
             ) : (
-              <p className="py-4 text-center text-xs text-white/35">Nothing yet.</p>
+              <p className="py-4 text-center text-xs text-slate-400">Nothing yet.</p>
             )}
           </div>
         )}
@@ -261,5 +274,34 @@ export default function StudioIdeOutput({
 }
 
 function EmptyNote({ text }: { text: string }) {
-  return <p className="px-1 py-4 text-center text-xs text-white/35">{text}</p>;
+  return (
+    <div className="uvai-card p-8 text-center">
+      <p className="text-xs text-slate-400">{text}</p>
+    </div>
+  );
+}
+
+function DotIcon() {
+  return (
+    <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor" aria-hidden="true">
+      <circle cx="3" cy="3" r="3" />
+    </svg>
+  );
+}
+
+function WrenchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+    </svg>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </svg>
+  );
 }

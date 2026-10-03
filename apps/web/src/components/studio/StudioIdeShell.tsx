@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
+import '@/styles/studio-cards.css';
 
 type StudioIdeShellProps = {
   toolbar: ReactNode;
@@ -15,6 +16,9 @@ const MAX_SIDE = 560;
 /**
  * Three-pane Studio IDE shell: top toolbar, then video | chat | output.
  * Side panes are resizable; widths persist per session in memory.
+ *
+ * Styled in the locked light card system (DESIGN_LANGUAGE.md):
+ * white cards on soft blue-gray, airy spacing.
  */
 export default function StudioIdeShell({
   toolbar,
@@ -59,35 +63,34 @@ export default function StudioIdeShell({
   );
 
   return (
-    <div ref={shellRef} data-testid="studio-ide-shell" className="flex min-h-0 flex-1 flex-col">
-      <div
-        data-testid="studio-ide-toolbar"
-        className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#11131a] px-3 py-2"
-      >
+    <div
+      ref={shellRef}
+      data-testid="studio-ide-shell"
+      className="uvai-cards flex min-h-0 flex-1 flex-col"
+    >
+      <div data-testid="studio-ide-toolbar" className="uvai-toolbar">
         {toolbar}
       </div>
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-3 p-3">
         {/* LEFT: video */}
         {!leftCollapsed ? (
           <aside
             data-testid="studio-ide-video-pane"
             aria-label="Video"
-            className="flex min-h-0 w-[var(--ide-left-w)] shrink-0 flex-col border-r border-white/10"
+            className="uvai-card flex min-h-0 w-[var(--ide-left-w)] shrink-0 flex-col overflow-hidden"
           >
-            <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                Video
-              </span>
+            <div className="uvai-pane-header">
+              <span className="uvai-section-label">Video</span>
               <button
                 type="button"
                 aria-label="Collapse video pane"
                 onClick={() => setLeftCollapsed(true)}
-                className="rounded px-1 text-white/40 hover:bg-white/10 hover:text-white/70"
+                className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 ‹
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-3">{videoPane}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">{videoPane}</div>
           </aside>
         ) : null}
         {!leftCollapsed ? (
@@ -96,7 +99,7 @@ export default function StudioIdeShell({
             aria-orientation="vertical"
             aria-label="Resize video pane"
             data-testid="studio-ide-splitter-left"
-            className="w-1 shrink-0 cursor-col-resize bg-white/5 hover:bg-amber-500/40"
+            className="uvai-splitter"
             onPointerDown={(e) => {
               e.preventDefault();
               startResize('left', e.currentTarget);
@@ -108,17 +111,15 @@ export default function StudioIdeShell({
         <main
           data-testid="studio-ide-chat-pane"
           aria-label="Chat"
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
+          className="uvai-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
-          <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-white/50">
-              Chat
-            </span>
+          <div className="uvai-pane-header">
+            <span className="uvai-section-label">Chat</span>
             {leftCollapsed ? (
               <button
                 type="button"
                 onClick={() => setLeftCollapsed(false)}
-                className="rounded border border-white/15 px-2 py-0.5 text-xs text-white/60 hover:bg-white/5"
+                className="uvai-btn !px-2.5 !py-1 !text-xs"
               >
                 Show video
               </button>
@@ -133,7 +134,7 @@ export default function StudioIdeShell({
             aria-orientation="vertical"
             aria-label="Resize output pane"
             data-testid="studio-ide-splitter-right"
-            className="w-1 shrink-0 cursor-col-resize bg-white/5 hover:bg-amber-500/40"
+            className="uvai-splitter"
             onPointerDown={(e) => {
               e.preventDefault();
               startResize('right', e.currentTarget);
@@ -146,17 +147,15 @@ export default function StudioIdeShell({
           <aside
             data-testid="studio-ide-output-pane"
             aria-label="Output"
-            className="flex min-h-0 w-[var(--ide-right-w)] shrink-0 flex-col border-l border-white/10"
+            className="uvai-card flex min-h-0 w-[var(--ide-right-w)] shrink-0 flex-col overflow-hidden"
           >
-            <div className="flex items-center justify-between border-b border-white/10 px-3 py-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider text-white/50">
-                Output
-              </span>
+            <div className="uvai-pane-header">
+              <span className="uvai-section-label">Output</span>
               <button
                 type="button"
                 aria-label="Collapse output pane"
                 onClick={() => setRightCollapsed(true)}
-                className="rounded px-1 text-white/40 hover:bg-white/10 hover:text-white/70"
+                className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 ›
               </button>
@@ -167,7 +166,7 @@ export default function StudioIdeShell({
           <button
             type="button"
             onClick={() => setRightCollapsed(false)}
-            className="shrink-0 border-l border-white/10 px-2 text-xs text-white/60 hover:bg-white/5"
+            className="uvai-card shrink-0 px-2 text-xs font-medium text-slate-500 hover:text-slate-700"
             aria-label="Show output pane"
           >
             Output

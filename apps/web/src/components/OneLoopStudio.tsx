@@ -128,13 +128,13 @@ const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 function gateDecisionChipClass(decision: GateDecision): string {
   switch (decision) {
     case 'PASS':
-      return 'border-emerald-400/40 bg-emerald-950/50 text-emerald-200';
+      return 'border-emerald-300 bg-emerald-50 text-emerald-700';
     case 'HOLD':
-      return 'border-[#e8b86d]/40 bg-[#1a1408] text-[#e8b86d]';
+      return 'border-amber-300 bg-amber-50 text-amber-700';
     case 'REJECT':
-      return 'border-red-400/40 bg-[#2a1212] text-red-100';
+      return 'border-red-300 bg-red-50 text-red-700';
     case 'ESCALATE':
-      return 'border-violet-400/40 bg-violet-950/40 text-violet-200';
+      return 'border-violet-300 bg-violet-50 text-violet-700';
     default: {
       const _exhaustive: never = decision;
       return _exhaustive;
@@ -213,17 +213,17 @@ function PackWorkbench({
   return (
     <section
       data-testid="pack-workbench"
-      className="rounded-xl border border-[#e8b86d]/30 bg-[#11131a] p-4 lg:col-span-2"
+      className="uvai-card p-4 lg:col-span-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e8b86d]">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
           From this pack
         </h2>
         <button
           type="button"
           onClick={onExport}
           disabled={!canExport}
-          className="inline-flex items-center gap-2 rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d] disabled:opacity-40"
+          className="uvai-btn inline-flex items-center gap-2 disabled:opacity-40"
         >
           <Download className="h-4 w-4" aria-hidden />
           Export pack
@@ -231,22 +231,22 @@ function PackWorkbench({
       </div>
       {architecture ? (
         <div data-testid="pack-architecture" className="mt-4">
-          <h3 className="text-[11px] uppercase tracking-[0.16em] text-white/35">Architecture</h3>
+          <h3 className="uvai-section-label">Architecture</h3>
           {architecture.summary ? (
-            <p className="mt-2 text-sm text-white/70">{architecture.summary}</p>
+            <p className="mt-2 text-sm text-slate-600">{architecture.summary}</p>
           ) : null}
           {architecture.stages.length > 0 ? (
-            <ol className="mt-2 space-y-1 text-sm text-white/80">
+            <ol className="mt-2 space-y-1 text-sm text-slate-700">
               {architecture.stages.map((stage) => (
                 <li key={stage.id}>
-                  <span className="font-medium text-white">{stage.name}</span>
+                  <span className="font-medium text-slate-900">{stage.name}</span>
                   {stage.description ? ` — ${stage.description}` : ''}
                 </li>
               ))}
             </ol>
           ) : null}
           {architecture.mermaid ? (
-            <pre className="mt-2 overflow-auto rounded-lg bg-black/40 p-3 font-mono text-[11px] leading-5 text-white/65">
+            <pre className="mt-2 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-5 text-slate-200">
               {architecture.mermaid}
             </pre>
           ) : null}
@@ -257,11 +257,13 @@ function PackWorkbench({
           {artifacts.map((artifact) => (
             <li
               key={artifact.path_hint}
-              className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+              className="uvai-doc-row"
             >
-              <div className="font-mono text-[12px] text-[#e8b86d]">{artifact.path_hint}</div>
-              <div className="mt-1 text-white/80">{artifact.purpose}</div>
-              <div className="mt-1 font-mono text-[11px] text-white/55">{artifact.interface}</div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-mono text-[12px] font-semibold text-blue-700">{artifact.path_hint}</div>
+                <div className="mt-0.5 truncate text-sm text-slate-700">{artifact.purpose}</div>
+                <div className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{artifact.interface}</div>
+              </div>
             </li>
           ))}
         </ul>
@@ -278,7 +280,7 @@ function StudioJobStripDestination({
   switch (destination.kind) {
     case 'video':
       return (
-        <span data-testid="studio-job-video-id" className="text-white/55">
+        <span data-testid="studio-job-video-id" className="text-slate-500">
           {destination.label}
         </span>
       );
@@ -287,7 +289,7 @@ function StudioJobStripDestination({
         <Link
           href={destination.href}
           data-testid="studio-job-self-link"
-          className="text-white/55 underline decoration-white/20 underline-offset-2 hover:text-white/80"
+          className="text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
         >
           {destination.label}
         </Link>
@@ -1057,7 +1059,7 @@ export default function OneLoopStudio({
     : 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#0b0c10] text-[#f4f1ea]">
+    <div className="flex min-h-screen flex-col bg-[#f2f5f9] text-slate-900">
       <Nav rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
@@ -1073,13 +1075,13 @@ export default function OneLoopStudio({
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={FIXTURE}
                 autoComplete="off"
-                className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0b0c10] px-3 py-1.5 font-mono text-sm text-white outline-none focus:border-amber-500/60"
+                className="uvai-input min-w-0 flex-1 font-mono disabled:opacity-40"
               />
               <button
                 type="button"
                 onClick={() => setUrl(FIXTURE)}
                 disabled={busy}
-                className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+                className="uvai-btn !px-2.5 disabled:opacity-40"
               >
                 Sample
               </button>
@@ -1088,7 +1090,7 @@ export default function OneLoopStudio({
                   type="button"
                   onClick={cancelAnalysis}
                   data-testid="studio-ide-cancel"
-                  className="rounded-lg border border-red-400/50 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-200 hover:bg-red-500/20"
+                  className="uvai-btn uvai-btn-danger !font-semibold"
                 >
                   Cancel
                 </button>
@@ -1096,7 +1098,7 @@ export default function OneLoopStudio({
                 <button
                   type="submit"
                   data-testid="studio-ide-run"
-                  className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-amber-400"
+                  className="uvai-btn uvai-btn-primary"
                 >
                   Run
                 </button>
@@ -1110,7 +1112,7 @@ export default function OneLoopStudio({
                   disabled={busy}
                   onChange={(event) => selectVideo(event.target.value || null)}
                   aria-label="Stored packs"
-                  className="max-w-44 truncate rounded-lg border border-white/15 bg-[#0b0c10] px-2 py-1.5 text-xs text-white/80 disabled:opacity-40"
+                  className="uvai-input max-w-44 truncate !py-1.5 !text-xs disabled:opacity-40"
                 >
                   <option value="">Stored packs</option>
                   {videos.filter((video) => video.videoPack).map((video) => (
@@ -1125,7 +1127,7 @@ export default function OneLoopStudio({
                     aria-label="Delete this pack"
                     title="Delete this pack"
                     data-testid="studio-ide-delete-pack"
-                    className="rounded-lg border border-white/15 px-2 py-1.5 text-xs text-white/60 hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40"
+                    className="uvai-btn uvai-btn-danger !px-2.5 !py-1.5 disabled:opacity-40"
                   >
                     ✕
                   </button>
@@ -1138,7 +1140,7 @@ export default function OneLoopStudio({
                 onClick={exportPkg}
                 disabled={!hasPayload}
                 data-testid="studio-ide-export"
-                className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-40"
+                className="uvai-btn disabled:opacity-40"
               >
                 Export
               </button>
@@ -1154,7 +1156,7 @@ export default function OneLoopStudio({
                       ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                       : 'Paste a YouTube URL and run analysis first.'
                 }
-                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-xs text-amber-200 disabled:opacity-40"
+                className="uvai-btn uvai-btn-primary disabled:opacity-40"
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
@@ -1165,22 +1167,22 @@ export default function OneLoopStudio({
                 disabled={deployBusy || !hasPayload || Boolean(holdReason)}
                 aria-describedby="studio-preflight-hint"
                 title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
-                className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/5 disabled:opacity-40"
+                className="uvai-btn disabled:opacity-40"
               >
                 {deployBusy ? 'Checking preflight…' : 'Check preflight'}
               </button>
             </div>
-            <p id="studio-preflight-hint" className="w-full text-[11px] text-white/40">
+            <p id="studio-preflight-hint" className="w-full text-[11px] text-slate-400">
               {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
             </p>
-            <p className="w-full font-mono text-[11px] text-white/40" role="status" data-testid="studio-ide-status">
+            <p className="w-full font-mono text-[11px] text-slate-500" role="status" data-testid="studio-ide-status">
               {statusText}
             </p>
             {gateReceipt ? (
               <div
                 data-testid="studio-gate-receipt"
                 role="status"
-                className="flex w-full flex-wrap items-start gap-2 rounded-lg border border-white/10 bg-black/30 px-3 py-2"
+                className="uvai-card flex w-full flex-wrap items-start gap-2 px-3 py-2.5"
               >
                 <span
                   data-testid="studio-gate-decision"
@@ -1192,15 +1194,15 @@ export default function OneLoopStudio({
                   {gateReceipt.decision}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p data-testid="studio-gate-reason" className="text-sm text-white/80">
+                  <p data-testid="studio-gate-reason" className="text-sm text-slate-800">
                     {gateReceipt.reason}
                   </p>
-                  <p className="text-sm text-white/55">
+                  <p className="text-sm text-slate-500">
                     {gateReceipt.version === 'eventrelay.gate-receipt.v2'
                       ? 'Server decision. Later stages require separate Loop approval.'
                       : 'Local diagnostic only — not an authorization receipt.'}
                   </p>
-                  <p className="mt-1 font-mono text-[11px] text-white/40">
+                  <p className="mt-1 font-mono text-[11px] text-slate-400">
                     <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
                     {' · '}
                     <span data-testid="studio-gate-receipt-hash">{gateReceipt.receiptHash}</span>
@@ -1208,7 +1210,7 @@ export default function OneLoopStudio({
                     {gateReceipt.version}
                   </p>
                   {gateReceipt.transitionId ? (
-                    <p className="break-all text-sm opacity-60">
+                    <p className="break-all text-sm text-slate-400">
                       Transition: {gateReceipt.transitionId}
                       {' · '}
                       {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
@@ -1221,7 +1223,7 @@ export default function OneLoopStudio({
                         href={scopedDeployReceipt}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="break-all text-sm text-[#e8b86d] underline"
+                        className="break-all text-sm text-blue-700 underline"
                       >
                         {scopedDeployReceipt}
                       </a>
@@ -1234,7 +1236,7 @@ export default function OneLoopStudio({
         }
         videoPane={
           <div className="flex flex-col gap-3">
-            <div className="relative overflow-hidden rounded-xl border border-white/10 bg-black">
+            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-sm">
               {videoId ? (
                 <>
                   <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
@@ -1248,16 +1250,16 @@ export default function OneLoopStudio({
                   {playerOverlay ? (
                     <div
                       data-testid="studio-player-overlay"
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#14151c] px-6 text-center"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 px-6 text-center"
                     >
-                      <p className="text-sm text-white/80">{playerOverlay}</p>
+                      <p className="text-sm text-slate-700">{playerOverlay}</p>
                       {playerPhase === 'error' ? (
                         <div className="flex flex-wrap items-center justify-center gap-2">
                           <button
                             type="button"
                             data-testid="studio-player-retry"
                             onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
-                            className="rounded-lg border border-amber-500/40 px-3 py-1.5 text-sm text-amber-200"
+                            className="uvai-btn uvai-btn-primary"
                           >
                             Retry player
                           </button>
@@ -1265,7 +1267,7 @@ export default function OneLoopStudio({
                             href={`https://www.youtube.com/watch?v=${videoId}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-white/70"
+                            className="uvai-btn"
                           >
                             Open on YouTube
                           </a>
@@ -1275,17 +1277,18 @@ export default function OneLoopStudio({
                   ) : null}
                 </>
               ) : (
-                <div className="flex aspect-video items-center justify-center bg-[#14151c] px-6 text-center text-sm text-white/40">
+                <div className="flex aspect-video items-center justify-center bg-slate-100 px-6 text-center text-sm text-slate-500">
                   Paste a link above. The video plays here while we pull the transcript.
                 </div>
               )}
             </div>
             {selected?.videoPack ? (
-              <div className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2">
-                <p className="font-mono text-[11px] text-white/50">
-                  Pack <span className="text-amber-200/90">{selected.videoPack.sourceHash.slice(0, 12)}…</span>
+              <div className="uvai-card p-3">
+                <p className="uvai-section-label">Video pack</p>
+                <p className="mt-1.5 font-mono text-[11px] text-slate-500">
+                  <span className="font-semibold text-amber-700">{selected.videoPack.sourceHash.slice(0, 12)}…</span>
                 </p>
-                <p className="mt-0.5 truncate text-xs text-white/40">{selected.videoPack.sourceUrl}</p>
+                <p className="mt-0.5 truncate text-xs text-slate-400">{selected.videoPack.sourceUrl}</p>
               </div>
             ) : null}
           </div>
@@ -1329,8 +1332,8 @@ export default function OneLoopStudio({
           className={clsx(
             'fixed bottom-20 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
             exportToast.tone === 'success'
-              ? 'border-[#e8b86d]/40 bg-[#1a1408] text-[#e8b86d]'
-              : 'border-red-400/40 bg-[#2a1212] text-red-100',
+              ? 'border-amber-300 bg-amber-50 text-amber-800'
+              : 'border-red-300 bg-red-50 text-red-800',
           )}
         >
           {exportToast.text}
@@ -1341,32 +1344,32 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-pack-build-live-result"
           role="status"
-          className="border-t border-[#e8b86d]/30 bg-[#1a1408]/95"
+          className="border-t border-amber-200 bg-amber-50/80"
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
             <div className="flex flex-wrap items-start gap-2">
               <span
                 data-testid="studio-pack-build-live-state"
-                className="inline-flex rounded-full border border-[#e8b86d]/50 bg-[#e8b86d]/10 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#e8b86d]"
+                className="inline-flex rounded-full border border-amber-300 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700"
               >
                 Ready
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#f4f1ea]">
+                <p className="text-sm font-medium text-slate-900">
                   {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
                 </p>
-                <p className="mt-1 text-sm text-white/70">
+                <p className="mt-1 text-sm text-slate-600">
                   YouTube video id{' '}
                   <span
                     data-testid="studio-pack-build-live-video-id"
-                    className="font-mono text-[#e8b86d]"
+                    className="font-mono text-amber-700"
                   >
                     {scopedPackBuildLiveSuccess.youtubeVideoId}
                   </span>
                 </p>
                 <p
                   data-testid="studio-pack-build-live-reason-code"
-                  className="mt-1 font-mono text-[11px] text-white/50"
+                  className="mt-1 font-mono text-[11px] text-slate-400"
                 >
                   {scopedPackBuildLiveSuccess.reasonCode}
                 </p>
@@ -1376,14 +1379,14 @@ export default function OneLoopStudio({
               <Link
                 data-testid="studio-pack-build-live-artifact-link"
                 href={scopedPackBuildLiveSuccess.artifactPath}
-                className="inline-flex w-fit items-center justify-center rounded-lg bg-[#e8b86d] px-4 py-2 text-sm font-semibold text-[#1a1408]"
+                className="uvai-btn uvai-btn-primary inline-flex w-fit items-center justify-center"
               >
                 Open {scopedPackBuildLiveSuccess.artifactPath}
               </Link>
               <Link
                 data-testid="studio-pack-build-live-pro-cta"
                 href="/#get-pro"
-                className="inline-flex w-fit items-center justify-center rounded-lg border border-[#e8b86d]/40 bg-[#e8b86d]/10 px-4 py-2 text-sm font-medium text-[#e8b86d]"
+                className="uvai-btn inline-flex w-fit items-center justify-center"
               >
                 Unlock Workflow Pro
               </Link>
@@ -1396,14 +1399,14 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-build-live-failure"
           role="alert"
-          className="border-t border-red-400/30 bg-[#2a1212]/95"
+          className="border-t border-red-200 bg-red-50/80"
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
             <div>
-              <p className="text-sm font-medium text-red-100">{buildLiveFailure.title}</p>
-              <p className="mt-1 text-sm text-red-100/85">{buildLiveFailure.message}</p>
+              <p className="text-sm font-medium text-red-800">{buildLiveFailure.title}</p>
+              <p className="mt-1 text-sm text-red-700/85">{buildLiveFailure.message}</p>
               {buildLiveFailure.reasonCode ? (
-                <p className="mt-1 font-mono text-[11px] text-red-100/60">
+                <p className="mt-1 font-mono text-[11px] text-red-600/60">
                   {buildLiveFailure.reasonCode}
                 </p>
               ) : null}
@@ -1417,7 +1420,7 @@ export default function OneLoopStudio({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="studio-build-live-recovery-open-hosted"
-                    className="rounded-lg border border-[#e8b86d]/40 px-3 py-1.5 text-sm text-[#e8b86d]"
+                    className="uvai-btn"
                   >
                     {action.label}
                   </a>
@@ -1427,7 +1430,7 @@ export default function OneLoopStudio({
                     type="button"
                     data-testid={`studio-build-live-recovery-${action.id}`}
                     onClick={() => runBuildLiveRecovery(action)}
-                    className="rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white/90"
+                    className="uvai-btn"
                   >
                     {action.label}
                   </button>

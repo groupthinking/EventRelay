@@ -20,6 +20,8 @@ const FREE_QUOTA_MESSAGE = 'Free plan includes 5 AI chat messages per day.';
  * Center-pane chat for the Studio IDE. Wired to the real POST /api/chat
  * endpoint with pack grounding (video_id), not a stub. Free tier gets
  * 5 messages/day; the API returns 402 with upgradeRequired when exceeded.
+ *
+ * Styled in the locked light card system (DESIGN_LANGUAGE.md).
  */
 export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -114,49 +116,43 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
     <section
       aria-label="Pack chat"
       data-testid="studio-ide-chat"
-      className="flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-col bg-white"
     >
       <div
         ref={messagesRef}
         data-testid="studio-ide-chat-messages"
-        className="min-h-0 flex-1 overflow-y-auto px-3 py-3"
+        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center gap-2 px-4 text-center">
-            <p className="text-sm font-medium text-white/70">
+          <div className="uvai-empty">
+            <p className="text-sm font-semibold text-slate-700">
               {canChat ? 'Ask about this pack' : 'Run a video to start chatting'}
             </p>
-            <p className="max-w-[26ch] text-xs text-white/40">
+            <p className="max-w-[30ch] text-xs text-slate-500">
               {canChat
                 ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
                 : 'Paste a YouTube URL above and hit Run.'}
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             {messages.map((m) => (
               <div
                 key={m.id}
                 data-testid={m.role === 'user' ? 'chat-msg-user' : 'chat-msg-assistant'}
-                className={
-                  m.role === 'user'
-                    ? 'self-end rounded-lg bg-amber-500/15 px-3 py-2 text-sm text-amber-100'
-                    : 'self-start rounded-lg bg-white/5 px-3 py-2 text-sm text-white/85'
-                }
+                className={m.role === 'user' ? 'uvai-chat-user' : 'uvai-chat-assistant'}
               >
                 {m.content}
               </div>
             ))}
             {sending ? (
-              <div className="self-start rounded-lg bg-white/5 px-3 py-2 text-sm text-white/40">
-                Thinking…
-              </div>
+              <div className="uvai-chat-assistant text-slate-400">Thinking…</div>
             ) : null}
           </div>
         )}
       </div>
       {quotaHit ? (
-        <div className="border-t border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+        <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
           Daily free limit reached.{' '}
           <a href="/pricing" className="font-semibold underline">
             Upgrade to Pro
@@ -165,12 +161,12 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         </div>
       ) : null}
       {error && !sending ? (
-        <div className="border-t border-white/10 px-3 py-1 text-xs text-red-300/80">{error}</div>
+        <div className="border-t border-red-100 bg-red-50 px-4 py-1.5 text-xs text-red-700">{error}</div>
       ) : null}
       <form
         onSubmit={send}
         data-testid="studio-ide-chat-composer"
-        className="border-t border-white/10 p-2"
+        className="border-t border-slate-100 bg-slate-50/60 p-3"
       >
         <div className="flex gap-2">
           <input
@@ -181,13 +177,13 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"
-            className="min-w-0 flex-1 rounded-lg border border-white/15 bg-[#0b0c10] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-500/60 disabled:opacity-40"
+            className="uvai-input min-w-0 flex-1 disabled:opacity-40"
           />
           <button
             type="submit"
             disabled={!canChat || sending || draft.trim().length === 0}
             data-testid="studio-ide-chat-send"
-            className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-black disabled:opacity-40"
+            className="uvai-btn uvai-btn-primary"
           >
             {sending ? '…' : 'Send'}
           </button>
