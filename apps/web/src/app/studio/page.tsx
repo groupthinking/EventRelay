@@ -13,7 +13,7 @@ export default async function StudioPage() {
   const showAgentWorkflowUi = await agentWorkflowUi();
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-surface-950" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#f2f5f9]" />}>
       <StudioShell showAgentWorkflowUi={showAgentWorkflowUi} />
     </Suspense>
   );

@@ -1,0 +1,276 @@
+/* ============================================================
+   UVAI Studio — Light Card System
+   Locked 2026-10-02 per Hayden + apps/web/DESIGN_LANGUAGE.md.
+
+   White cards on soft blue-gray. Airy spacing. Professional, not playful.
+   Card = one structured idea: small icon, label, value. Documents are
+   first-class rows (file-type icon + title + subtitle).
+
+   Scoped under .uvai-cards so the dark landing skin is untouched.
+   ============================================================ */
+
+.uvai-cards {
+  --card-bg: #f2f5f9; /* soft blue-gray page */
+  --card-surface: #ffffff; /* white card */
+  --card-surface-muted: #f8fafc; /* inner sections */
+  --card-border: #e2e8f0; /* slate-200 */
+  --card-border-soft: #eef2f7;
+  --card-text: #0f172a; /* slate-900 */
+  --card-text-body: #334155; /* slate-700 */
+  --card-muted: #64748b; /* slate-500 */
+  --card-faint: #94a3b8; /* slate-400 */
+  --card-accent: #d97706; /* amber-600 — primary actions */
+  --card-accent-hover: #b45309; /* amber-700 */
+  --card-accent-soft: #fef3c7; /* amber-100 */
+  --card-link: #1d4ed8; /* blue-700 — document links */
+  --card-success: #15803d;
+  --card-warning: #b45309;
+  --card-danger: #b91c1c;
+  --card-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 4px 12px -2px rgba(15, 23, 42, 0.06);
+  --card-shadow-lg:
+    0 2px 4px rgba(15, 23, 42, 0.05),
+    0 12px 32px -8px rgba(15, 23, 42, 0.12);
+  --card-radius: 16px;
+  --card-radius-sm: 10px;
+  background: var(--card-bg);
+  color: var(--card-text);
+}
+
+/* ---- Base card ---- */
+.uvai-card {
+  background: var(--card-surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+}
+
+/* ---- Section label: small-caps-ish, per design doc ---- */
+.uvai-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--card-muted);
+}
+
+/* ---- Buttons ---- */
+.uvai-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--card-surface);
+  color: var(--card-text-body);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 14px;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.uvai-btn:hover:not(:disabled) {
+  background: var(--card-surface-muted);
+  border-color: #cbd5e1;
+}
+.uvai-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.uvai-btn-primary {
+  background: var(--card-accent);
+  border-color: var(--card-accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+.uvai-btn-primary:hover:not(:disabled) {
+  background: var(--card-accent-hover);
+  border-color: var(--card-accent-hover);
+}
+.uvai-btn-danger {
+  color: var(--card-danger);
+  border-color: #fecaca;
+}
+.uvai-btn-danger:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #fca5a5;
+}
+
+/* ---- Inputs ---- */
+.uvai-input {
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  background: var(--card-surface);
+  color: var(--card-text);
+  font-size: 14px;
+  padding: 8px 12px;
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.uvai-input::placeholder {
+  color: var(--card-faint);
+}
+.uvai-input:focus {
+  border-color: var(--card-accent);
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.15);
+}
+
+/* ---- Document row: file-type icon + title + subtitle ---- */
+.uvai-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--card-radius-sm);
+  border: 1px solid var(--card-border-soft);
+  background: var(--card-surface);
+  padding: 10px 12px;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.uvai-doc-row:hover {
+  border-color: #cbd5e1;
+  box-shadow: var(--card-shadow);
+}
+.uvai-doc-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: var(--card-link);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+/* ---- Metric / data tile: icon + label + value ---- */
+.uvai-metric {
+  border-radius: var(--card-radius-sm);
+  border: 1px solid var(--card-border-soft);
+  background: var(--card-surface-muted);
+  padding: 12px;
+}
+.uvai-metric-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--card-accent-soft);
+  color: var(--card-accent);
+  margin-bottom: 8px;
+}
+
+/* ---- Chat bubbles (light) ---- */
+.uvai-chat-user {
+  align-self: flex-end;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--card-accent);
+  color: #ffffff;
+  padding: 8px 12px;
+  font-size: 14px;
+  max-width: 85%;
+}
+.uvai-chat-assistant {
+  align-self: flex-start;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--card-surface);
+  border: 1px solid var(--card-border);
+  color: var(--card-text-body);
+  padding: 8px 12px;
+  font-size: 14px;
+  max-width: 90%;
+  box-shadow: var(--card-shadow);
+}
+
+/* ---- Filter chip (search surfaces) ---- */
+.uvai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  background: var(--card-surface);
+  color: var(--card-text-body);
+  font-size: 13px;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+.uvai-chip[aria-pressed='true'] {
+  border-color: var(--card-link);
+  background: #eff6ff;
+  color: var(--card-link);
+  font-weight: 600;
+}
+
+/* ---- Floating contextual pill (codes / standards) ---- */
+.uvai-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--card-surface);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow-lg);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--card-text-body);
+}
+
+/* ---- Empty state ---- */
+.uvai-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--card-muted);
+  font-size: 14px;
+}
+
+/* ---- Pane chrome (toolbar / pane headers) ---- */
+.uvai-pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--card-border-soft);
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+}
+.uvai-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--card-surface);
+  border-bottom: 1px solid var(--card-border);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.uvai-splitter {
+  width: 4px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 150ms ease;
+}
+.uvai-splitter:hover {
+  background: rgba(217, 119, 6, 0.25);
+}
