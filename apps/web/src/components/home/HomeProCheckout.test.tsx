@@ -39,9 +39,9 @@ describe('HomeProCheckout', () => {
   it('uses readable secondary copy in the checkout card', () => {
     render(<HomeProCheckout />);
 
-    expect(screen.getByText(/UVAI Workflow Pro ·/).className).toContain('text-white/70');
-    expect(screen.getByText(/Bot-protected checkout/).className).toContain('text-white/70');
-    expect(screen.getByText(/Same checkout as Pricing/).className).toContain('text-white/70');
+    expect(screen.getByText(/UVAI Workflow Pro ·/).className).toContain('text-slate-500');
+    expect(screen.getByText(/Bot-protected checkout/).className).toContain('text-slate-600');
+    expect(screen.getByText(/Same checkout as Pricing/).className).toContain('text-slate-500');
   });
 
   it('stacks billing cadence controls on narrow checkout cards', () => {
