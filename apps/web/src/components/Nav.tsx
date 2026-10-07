@@ -2,22 +2,15 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { clsx } from 'clsx';
 import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 
 interface NavProps {
-  /** Optional right-side content override (e.g., processing status badge) */
   rightSlot?: React.ReactNode;
-  /** Optional subtitle shown next to the logo (e.g., "Dashboard", breadcrumb JSX) */
   subtitle?: React.ReactNode;
-  /** Whether to use the sticky/fixed variant (for marketing pages) */
   fixed?: boolean;
-  /** Color tone. 'light' matches the card system (DESIGN_LANGUAGE.md); 'dark' is the legacy skin. */
-  tone?: 'dark' | 'light';
 }
 
-/** Primary product navigation — Home sells; Studio is the workbench. */
 const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/studio', label: 'Studio' },
@@ -29,86 +22,67 @@ function isNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-/** Secondary / developer surfaces — not part of the default user path. */
-const DEV_LINKS = [
-  { href: '/docs/api', label: 'API' },
-];
-
 /**
- * Renders the main site navigation bar.
+ * Minimal top bar. Warm paper, quiet type, one accent CTA.
+ * Muse design language: nothing shouts, everything breathes.
  */
-export default function Nav({ rightSlot, subtitle, fixed = false, tone = 'dark' }: NavProps) {
+export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const light = tone === 'light';
 
   return (
     <nav
-      className={clsx(
-        'flex flex-wrap items-center justify-between px-6 lg:px-12 py-4 border-b z-50',
-        light
-          ? 'border-slate-200 bg-white/85 backdrop-blur-xl'
-          : 'border-white/[0.05] bg-surface-950/80 backdrop-blur-xl',
-        fixed && 'fixed top-0 left-0 right-0'
-      )}
+      className="flex flex-wrap items-center justify-between px-6 lg:px-12 py-4 z-50"
+      style={{
+        borderBottom: '1px solid var(--uvai-border)',
+        background: 'var(--uvai-bg)',
+        position: fixed ? 'fixed' : undefined,
+        top: fixed ? 0 : undefined,
+        left: fixed ? 0 : undefined,
+        right: fixed ? 0 : undefined,
+      }}
     >
-      <div className="flex items-center gap-4">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center font-black text-base text-white shadow-lg shadow-amber-500/25 transition-transform group-hover:scale-105">
+      <div className="flex items-center gap-6">
+        <Link href="/" className="flex items-center gap-2.5">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm"
+            style={{ background: 'var(--uvai-accent)' }}
+          >
             U
           </div>
-          <span className={clsx('font-bold text-lg font-heading', light ? 'text-slate-900' : 'text-white')}>UVAI</span>
+          <span className="font-semibold text-lg tracking-tight" style={{ color: 'var(--uvai-ink)' }}>
+            UVAI
+          </span>
         </Link>
 
         {subtitle && (
-          <>
-            <div className={clsx('h-5 w-px', light ? 'bg-slate-200' : 'bg-white/[0.08]')} />
-            <span className={clsx('font-medium text-sm', light ? 'text-slate-500' : 'text-white/50')}>{subtitle}</span>
-          </>
+          <span className="text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>{subtitle}</span>
         )}
 
-        <div className="hidden md:flex items-center gap-1 ml-4">
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={isNavActive(pathname, href) ? 'page' : undefined}
-              className={clsx(
-                'text-sm px-3 py-2 rounded-lg transition-colors',
-                isNavActive(pathname, href)
-                  ? light
-                    ? 'text-slate-900 bg-slate-100'
-                    : 'text-white bg-white/[0.08]'
-                  : light
-                    ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-100/60'
-                    : 'text-white/55 hover:text-white hover:bg-white/[0.04]'
-              )}
-            >
-              {label}
-            </Link>
-          ))}
-          <div className={clsx('h-5 w-px mx-1', light ? 'bg-slate-200' : 'bg-white/[0.08]')} />
-          {DEV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className={clsx(
-                'hidden text-sm px-3 py-2 rounded-lg transition-colors xl:inline-flex',
-                light
-                  ? 'text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'
-                  : 'text-white/30 hover:text-white/55 hover:bg-white/[0.03]',
-                pathname === href && (light ? 'text-slate-600 bg-slate-100/60' : 'text-white/60 bg-white/[0.04]')
-              )}
-            >
-              {label}
-            </Link>
-          ))}
+        <div className="hidden md:flex items-center gap-1">
+          {NAV_LINKS.map(({ href, label }) => {
+            const active = isNavActive(pathname, href);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className="text-sm px-3 py-2 rounded-lg transition-colors"
+                style={{
+                  color: active ? 'var(--uvai-ink)' : 'var(--uvai-ink-soft)',
+                  background: active ? 'var(--uvai-surface-warm)' : 'transparent',
+                }}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/#get-pro" className="btn btn-primary py-2 px-5 text-sm">
+          <Link href="/#get-pro" className="uvai-btn uvai-btn-primary py-2 px-5 text-sm">
             Get Pro
           </Link>
         )}
@@ -118,45 +92,22 @@ export default function Nav({ rightSlot, subtitle, fixed = false, tone = 'dark' 
           aria-expanded={mobileOpen}
           aria-controls="mobile-nav"
           aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          className={clsx(
-            'md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/50',
-            light
-              ? 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
-              : 'text-white/70 hover:text-white hover:bg-white/[0.05]'
-          )}
+          className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg"
+          style={{ color: 'var(--uvai-ink-soft)' }}
         >
-          {mobileOpen ? (
-            <X className="h-5 w-5" aria-hidden="true" />
-          ) : (
-            <Menu className="h-5 w-5" aria-hidden="true" />
-          )}
+          {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </div>
 
       {mobileOpen && (
-        <div
-          id="mobile-nav"
-          className={clsx(
-            'md:hidden w-full mt-3 flex flex-col gap-1 border-t pt-3',
-            light ? 'border-slate-200' : 'border-white/[0.05]'
-          )}
-        >
+        <div id="mobile-nav" className="md:hidden w-full mt-3 flex flex-col gap-1 pt-3" style={{ borderTop: '1px solid var(--uvai-border)' }}>
           {NAV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
               href={href}
               onClick={() => setMobileOpen(false)}
-              aria-current={isNavActive(pathname, href) ? 'page' : undefined}
-              className={clsx(
-                'text-sm px-3 py-2.5 rounded-lg transition-colors',
-                isNavActive(pathname, href)
-                  ? light
-                    ? 'text-slate-900 bg-slate-100'
-                    : 'text-white/90 bg-white/[0.05]'
-                  : light
-                    ? 'text-slate-500 hover:text-slate-800 hover:bg-slate-100/60'
-                    : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
-              )}
+              className="text-sm px-3 py-2.5 rounded-lg"
+              style={{ color: isNavActive(pathname, href) ? 'var(--uvai-ink)' : 'var(--uvai-ink-soft)' }}
             >
               {label}
             </Link>

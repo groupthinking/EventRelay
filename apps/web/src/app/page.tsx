@@ -3,7 +3,6 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
 import HomeProCheckout from '@/components/home/HomeProCheckout';
-import '@/styles/studio-cards.css';
 import {
   WORKFLOW_PRO_PRODUCT_NAME,
   workflowProPriceLabel,
@@ -33,99 +32,84 @@ const OFFERS = [
 ] as const;
 
 /**
- * Render the landing page with a YouTube URL-to-Studio handoff and Workflow Pro checkout.
- * Light card system per apps/web/DESIGN_LANGUAGE.md. Copy and pricing unchanged.
- * The optional badge appears only when its feature flag is enabled.
+ * Landing page — Muse design language.
+ * Warm paper, serif headlines, quiet cards. Nothing shouts.
  */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
 
   return (
-    <main className="uvai-cards min-h-screen overflow-hidden">
-      <Nav tone="light" />
+    <main className="min-h-screen" style={{ background: 'var(--uvai-bg)' }}>
+      <Nav />
 
-      <section aria-labelledby="home-heading" className="px-5 pb-16 pt-12 sm:px-6 md:pb-24 md:pt-20">
+      <section aria-labelledby="home-heading" className="px-6 lg:px-12 pb-20 pt-16 md:pt-24">
         <div className="mx-auto max-w-6xl">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-8">
-            <div className="uvai-card min-w-0 p-8 sm:p-10">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 font-heading text-xl font-black text-white shadow-lg shadow-amber-500/25">
-                  U
-                </div>
-                <span className="font-heading text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">UVAI</span>
-              </div>
-              <p className="uvai-section-label mt-5">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)] lg:items-start">
+            {/* Hero card */}
+            <div className="uvai-card p-8 sm:p-12">
+              <p className="uvai-label">
                 Universal Video Action Intelligence
               </p>
               {showCustomBadge && (
-                <p className="mt-4 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                <p className="mt-4 inline-flex rounded-full px-3 py-1 text-xs font-medium"
+                   style={{ border: '1px solid var(--uvai-border)', background: 'var(--uvai-accent-soft)', color: 'var(--uvai-accent)' }}>
                   New: configurable with Vercel Flags
                 </p>
               )}
 
-              <h1
-                id="home-heading"
-                className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance text-slate-900 sm:text-5xl md:mt-8 md:text-6xl"
-              >
+              <h1 id="home-heading" className="font-display mt-6 max-w-2xl text-4xl sm:text-5xl md:text-6xl" style={{ color: 'var(--uvai-ink)' }}>
                 Your videos know what to do next.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
+              <p className="mt-6 max-w-xl text-lg leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
                 Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it,
-                lines up the next move for your approval, and turns it into something real.
+                prepares proposed work and build rails for you to review in Studio.
+              </p>
+              <p className="mt-3 text-sm" style={{ color: 'var(--uvai-ink-faint)' }}>
                 Transcript quality varies by source. No guaranteed production outcome.
               </p>
 
-              <div className="mt-8 w-full max-w-2xl md:mt-10">
+              <div className="mt-10 w-full max-w-xl">
                 <HomePasteForm />
               </div>
             </div>
 
-            <aside
-              id="get-pro"
-              aria-labelledby="workflow-pro-heading"
-              className="uvai-card min-w-0 p-1"
-            >
-              <div className="px-5 pb-1 pt-5 sm:px-7 sm:pt-7">
-                <p className="uvai-section-label">
-                  Workflow Pro
-                </p>
-                <h2 id="workflow-pro-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight text-slate-900">
-                  Get Pro through the existing checkout.
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Choose a billing cadence for the existing Workflow Pro checkout. Stripe confirms
-                  the amount and renewal terms before payment.
-                </p>
+            {/* Pro checkout */}
+            <aside id="get-pro" aria-labelledby="workflow-pro-heading" className="uvai-card p-8">
+              <p className="uvai-label">Workflow Pro</p>
+              <h2 id="workflow-pro-heading" className="font-display mt-3 text-2xl" style={{ color: 'var(--uvai-ink)' }}>
+                Get Pro through the existing checkout.
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+                Choose a billing cadence for the existing Workflow Pro checkout. Stripe confirms
+                the amount and renewal terms before payment.
+              </p>
+              <div className="mt-6">
+                <HomeProCheckout />
               </div>
-              <HomeProCheckout />
             </aside>
           </div>
 
-          <section aria-labelledby="offer-summary-heading" className="mt-8 md:mt-12">
-            <div className="uvai-card px-6 py-8 sm:px-8 md:px-10 md:py-10">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="uvai-section-label">Options</p>
-                  <h2 id="offer-summary-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight text-slate-900">
-                    Start in Studio, then choose the right level of support.
-                  </h2>
-                </div>
-                <p className="max-w-sm text-sm leading-6 text-slate-600">
-                  Workflow Pro is the available self-serve checkout. Ship and Maintain remain
-                  request-based options.
-                </p>
-              </div>
+          {/* Offers */}
+          <section aria-labelledby="offer-summary-heading" className="mt-12">
+            <div className="uvai-card px-8 py-10 sm:px-10">
+              <p className="uvai-label">Options</p>
+              <h2 id="offer-summary-heading" className="font-display mt-3 text-3xl" style={{ color: 'var(--uvai-ink)' }}>
+                Start in Studio, then choose the right level of support.
+              </h2>
+              <p className="mt-3 max-w-lg text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+                Workflow Pro is the available self-serve checkout. Ship and Maintain remain
+                request-based options.
+              </p>
 
-              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
                 {OFFERS.map((offer) => (
                   <article
                     key={offer.name}
-                    className="rounded-2xl border border-slate-200 bg-slate-50/60 px-5 py-5"
+                    className="rounded-xl px-6 py-6"
+                    style={{ border: '1px solid var(--uvai-border)', background: 'var(--uvai-surface-warm)' }}
                   >
-                    <p className="uvai-section-label">
-                      {offer.name}
-                    </p>
-                    <p className="mt-2 font-heading text-lg font-bold text-slate-900">{offer.price}</p>
+                    <p className="uvai-label">{offer.name}</p>
+                    <p className="mt-2 text-lg font-semibold" style={{ color: 'var(--uvai-ink)' }}>{offer.price}</p>
                   </article>
                 ))}
               </div>
@@ -134,7 +118,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <Footer variant="full" tone="light" />
+      <Footer variant="full" />
     </main>
   );
 }

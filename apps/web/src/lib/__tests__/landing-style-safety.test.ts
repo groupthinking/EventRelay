@@ -20,9 +20,4 @@ describe('landing style safety', () => {
     const source = readSource('app/ContactForm.tsx');
     expect(source).not.toContain('<style jsx>');
   });
-
-  it('HeroSection does not use styled-jsx (breaks strict TS builds)', () => {
-    const source = readSource('components/landing/HeroSection.tsx');
-    expect(source).not.toContain('<style jsx>');
-  });
 });

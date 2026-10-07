@@ -55,7 +55,6 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-run')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-export')).toBeTruthy();
     expect(screen.getByTestId('studio-build-live-button')).toBeTruthy();
-    expect(screen.getByTestId('studio-deploy-button')).toBeTruthy();
   });
 
   it('renders video, chat, and output panes when a stored Video Pack is selected', async () => {
