@@ -38,8 +38,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('lines up the next move for your approval');
     expect(home).toContain('Transcript quality varies by source.');
-    expect(home).toContain('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]');
-    expect(home).toContain('min-w-0');
+    expect(home).toContain('grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('HomeProCheckout');
   });
@@ -77,7 +76,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(paste).toContain('id="home-youtube-url-error"');
     expect(paste).toContain('id="home-youtube-url-help"');
     expect(paste).toContain('role="alert"');
-    expect(paste).toContain('focus-visible:ring-2');
+    // Focus visibility via .uvai-input CSS (:focus with accent border + ring)
+    expect(paste).toContain('uvai-input');
   });
 
   it('keeps the checkout controls and pricing link keyboard-visible', () => {

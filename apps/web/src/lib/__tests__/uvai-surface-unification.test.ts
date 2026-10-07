@@ -57,13 +57,15 @@ describe('UVAI is one product surface', () => {
   it('points sell-page CTAs at Home or Studio, not a second skin', () => {
     const features = readSource('app/features/page.tsx');
     const pricing = readSource('app/pricing/page.tsx');
-    const landingNav = readSource('components/landing/LandingNav.tsx');
+    const nav = readSource('components/Nav.tsx');
     expect(features).toContain('redirect(');
     expect(pricing).toContain("from '@/components/Nav'");
     expect(features).not.toContain('href="/dashboard"');
     expect(pricing).not.toContain('href="/dashboard"');
-    expect(landingNav).not.toContain('href="/dashboard"');
-    expect(landingNav).toContain("href: '/studio'");
+    // Orphaned landing/ components deleted per product direction (2026-10-07).
+    // Nav is the single navigation surface.
+    expect(nav).not.toContain('href="/dashboard"');
+    expect(nav).toContain("href: '/studio'");
   });
 
   it('keeps stack-check unlock on the same OneLoopStudio page', () => {

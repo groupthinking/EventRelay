@@ -462,9 +462,10 @@ describe('studio-pipeline-status', () => {
     }
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    expect(studio).toContain('studioDeployOutcomeMessage');
-    expect(studio).not.toMatch(/pollStudioDeploy\([^)]*attempts:\s*20\b/);
-    expect(studio).toContain('startStudioDeploy({ url: next })');
+    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
+    // The Studio no longer contains a deploy call site.
+    expect(studio).not.toContain('const deploy = async');
+    expect(studio).not.toContain('studio-deploy-button');
     expect(studio).toContain('usableProvidedTranscript');
     const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
     expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
@@ -490,11 +491,11 @@ describe('studio-pipeline-status', () => {
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
     expect(asyncJob).not.toMatch(/isGatewayTimeoutKickoff\(undefined, message\) \{\s*return STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    expect(studio).toContain('studioDeployButtonLabel');
-    expect(studio).toContain('studioDeployReceiptForSelection');
-    expect(studio).toContain('studioVerifiedLiveUrl');
-    expect(studio).toContain('setDeployReceiptUrl(null)');
-    expect(studio).toContain('setGateReceipt(null)');
+    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
+    expect(studio).not.toContain('studioDeployButtonLabel');
+    expect(studio).not.toContain('studioDeployReceiptForSelection');
+    expect(studio).not.toContain('setDeployReceiptUrl(null)');
+    expect(studio).not.toContain('setGateReceipt(null)');
     expect(studio).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
     expect(studio).not.toContain('Deploy attempt started. Waiting for a verified https live URL.');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
