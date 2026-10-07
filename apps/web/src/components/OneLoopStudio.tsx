@@ -1060,7 +1060,7 @@ export default function OneLoopStudio({
 
   return (
     <div className="flex min-h-screen flex-col bg-[#f2f5f9] text-slate-900">
-      <Nav rightSlot={<StudioAuthNavLink />} />
+      <Nav tone="light" rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
         toolbar={

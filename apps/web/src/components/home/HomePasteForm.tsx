@@ -27,7 +27,7 @@ export default function HomePasteForm() {
 
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-2xl">
-      <label htmlFor="home-youtube-url" className="mb-2 block text-left text-sm font-semibold text-white/80">
+      <label htmlFor="home-youtube-url" className="mb-2 block text-left text-sm font-semibold text-slate-700">
         YouTube URL
       </label>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -40,21 +40,21 @@ export default function HomePasteForm() {
           inputMode="url"
           aria-invalid={Boolean(error)}
           aria-describedby={helpId}
-          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-amber-400/70 focus-visible:ring-2 focus-visible:ring-amber-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
+          className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3.5 font-mono text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
         />
         <button
           type="submit"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-6 py-3.5 text-sm font-semibold text-black transition hover:bg-amber-400 focus-visible:ring-2 focus-visible:ring-amber-200 focus-visible:ring-offset-2 focus-visible:ring-offset-[#050508] sm:min-w-[9rem]"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:min-w-[9rem]"
         >
           Run in Studio
         </button>
       </div>
       {error ? (
-        <p id="home-youtube-url-error" className="mt-2 text-left text-sm text-amber-300/90" role="alert">
+        <p id="home-youtube-url-error" className="mt-2 text-left text-sm font-medium text-red-700" role="alert">
           {error}
         </p>
       ) : (
-        <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-white/55">
+        <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-slate-500">
           Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
         </p>
       )}

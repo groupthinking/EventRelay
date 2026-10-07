@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { clsx } from 'clsx';
 import { STUDIO_PRODUCT_TAGLINE } from '@/lib/studio-pipeline-status';
 
 const PRODUCT_LINKS = [
@@ -17,6 +18,8 @@ const EXTERNAL_LINKS = [
 interface FooterProps {
   /** Use the compact variant (just copyright + links) for app pages */
   variant?: 'full' | 'compact';
+  /** Color tone. 'light' matches the card system (DESIGN_LANGUAGE.md); 'dark' is the legacy skin. */
+  tone?: 'dark' | 'light';
 }
 
 /**
@@ -24,24 +27,33 @@ interface FooterProps {
  *
  * @param variant - The footer layout to render.
  */
-export default function Footer({ variant = 'compact' }: FooterProps) {
+export default function Footer({ variant = 'compact', tone = 'dark' }: FooterProps) {
+  const light = tone === 'light';
+  const heading = light ? 'text-slate-500' : 'text-white/40';
+  const body = light ? 'text-slate-500' : 'text-white/35';
+  const linkHover = light ? 'hover:text-slate-900' : 'hover:text-white/60';
+  const faint = light ? 'text-slate-400' : 'text-white/25';
+  const faintHover = light ? 'hover:text-slate-700' : 'hover:text-white/50';
+  const border = light ? 'border-slate-200' : 'border-white/[0.06]';
+  const borderSoft = light ? 'border-slate-200/70' : 'border-white/[0.05]';
+
   if (variant === 'compact') {
     return (
-      <footer className="border-t border-white/[0.06] py-6">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs text-white/25">
+      <footer className={clsx('border-t py-6', border)}>
+        <div className={clsx('max-w-6xl mx-auto px-6 flex items-center justify-between text-xs', faint)}>
           <span>UVAI video intelligence</span>
           <div className="flex items-center gap-4">
-            <Link href="/studio" className="hover:text-white/50 transition py-2 px-1">
+            <Link href="/studio" className={clsx('transition py-2 px-1', faintHover)}>
               Studio
             </Link>
-            <Link href="/docs/api" className="hover:text-white/50 transition py-2 px-1">
+            <Link href="/docs/api" className={clsx('transition py-2 px-1', faintHover)}>
               API
             </Link>
             <a
               href="https://github.com/groupthinking/EventRelay"
               target="_blank"
               rel="noopener noreferrer"
-              className="hover:text-white/50 transition py-2 px-1"
+              className={clsx('transition py-2 px-1', faintHover)}
             >
               GitHub
             </a>
@@ -52,28 +64,28 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
   }
 
   return (
-    <footer className="border-t border-white/[0.06] py-10">
+    <footer className={clsx('border-t py-10', border)}>
       <div className="max-w-6xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-xs">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center font-black text-xs text-white">
                 U
               </div>
-              <span className="font-bold text-sm">UVAI</span>
+              <span className={clsx('font-bold text-sm', light ? 'text-slate-900' : 'text-white')}>UVAI</span>
             </div>
-            <p className="text-xs text-white/30 leading-relaxed">
+            <p className={clsx('text-xs leading-relaxed', light ? 'text-slate-400' : 'text-white/30')}>
               {STUDIO_PRODUCT_TAGLINE}
             </p>
           </div>
           <div>
-            <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">
+            <div className={clsx('text-xs font-semibold uppercase tracking-wider mb-4', heading)}>
               Product
             </div>
-            <ul className="space-y-2.5 text-xs text-white/35">
+            <ul className={clsx('space-y-2.5 text-xs', body)}>
               {PRODUCT_LINKS.map(({ label, href }) => (
                 <li key={label}>
-                  <Link href={href} className="hover:text-white/60 transition">
+                  <Link href={href} className={clsx('transition', linkHover)}>
                     {label}
                   </Link>
                 </li>
@@ -81,10 +93,10 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
             </ul>
           </div>
           <div>
-            <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">
+            <div className={clsx('text-xs font-semibold uppercase tracking-wider mb-4', heading)}>
               Use Cases
             </div>
-            <ul className="space-y-2.5 text-xs text-white/35">
+            <ul className={clsx('space-y-2.5 text-xs', body)}>
               {USE_CASES.map((u) => (
                 <li key={u}>
                   <span className="cursor-default">{u}</span>
@@ -93,17 +105,17 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
             </ul>
           </div>
           <div>
-            <div className="text-xs font-semibold text-white/40 uppercase tracking-wider mb-4">
+            <div className={clsx('text-xs font-semibold uppercase tracking-wider mb-4', heading)}>
               Links
             </div>
-            <ul className="space-y-2.5 text-xs text-white/35">
+            <ul className={clsx('space-y-2.5 text-xs', body)}>
               {EXTERNAL_LINKS.map(({ label, href }) => (
                 <li key={label}>
                   <a
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="hover:text-white/60 transition"
+                    className={clsx('transition', linkHover)}
                   >
                     {label}
                   </a>
@@ -112,13 +124,13 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
             </ul>
           </div>
         </div>
-        <div className="border-t border-white/[0.05] pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs text-white/25">
+        <div className={clsx('border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs', borderSoft, faint)}>
           <span>© 2026 UVAI. MIT License.</span>
           <a
             href="https://github.com/groupthinking/EventRelay"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-white/50 transition"
+            className={clsx('transition', faintHover)}
           >
             Inspect current source on GitHub
           </a>
