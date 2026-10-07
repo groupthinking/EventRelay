@@ -6,7 +6,8 @@
    Card = one structured idea: small icon, label, value. Documents are
    first-class rows (file-type icon + title + subtitle).
 
-   Scoped under .uvai-cards so the dark landing skin is untouched.
+   Scoped under .uvai-cards so it composes cleanly with page-level skins.
+   Used by the Studio workbench and the landing page.
    ============================================================ */
 
 .uvai-cards {
