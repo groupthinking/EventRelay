@@ -20,9 +20,9 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('OneLoopStudio');
     expect(home).not.toContain('Loading studio');
     expect(home).toContain('Universal Video Action Intelligence');
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
+    expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('hashed Video Pack');
-    expect(home).toContain('transcript, event, and action outputs');
+    expect(home).toContain('lines up the next move for your approval');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
     expect(home).toContain('HomeProCheckout');
@@ -35,8 +35,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
   it('presents a responsive YouTube URL-to-Studio conversion hierarchy', () => {
     const home = readSource('app/page.tsx');
 
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
-    expect(home).toContain('transcript, event, and action outputs');
+    expect(home).toContain('Your videos know what to do next.');
+    expect(home).toContain('lines up the next move for your approval');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]');
     expect(home).toContain('min-w-0');
@@ -52,7 +52,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const structured = readSource('components/StructuredData.tsx');
     const ogAlt = readSource('app/opengraph-image.tsx');
     const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
+    expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('Transcript quality varies by source');
     expect(home).toMatch(/No guaranteed production\s+outcome\./);

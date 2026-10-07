@@ -67,12 +67,12 @@ export default async function HomePage() {
                 id="home-heading"
                 className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance text-slate-900 sm:text-5xl md:mt-8 md:text-6xl"
               >
-                Turn a YouTube URL into a hashed Video Pack, then open it in Studio.
+                Your videos know what to do next.
               </h1>
               <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
-                Paste a YouTube URL to open Studio and review transcript, event, and action outputs
-                from your source. Transcript quality varies by source. No guaranteed production
-                outcome.
+                Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it,
+                lines up the next move for your approval, and turns it into something real.
+                Transcript quality varies by source. No guaranteed production outcome.
               </p>
 
               <div className="mt-8 w-full max-w-2xl md:mt-10">

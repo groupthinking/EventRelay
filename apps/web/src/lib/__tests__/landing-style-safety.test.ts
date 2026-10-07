@@ -13,7 +13,7 @@ describe('landing style safety', () => {
   it('keeps one clear heading for the YouTube URL to Studio workflow', () => {
     const source = readSource('app/page.tsx');
     expect(source.match(/<h1\b/g)).toHaveLength(1);
-    expect(source).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
+    expect(source).toContain('Your videos know what to do next.');
   });
 
   it('ContactForm does not use styled-jsx (breaks strict TS builds)', () => {
