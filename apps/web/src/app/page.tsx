@@ -118,7 +118,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <Footer />
+      <Footer variant="full" />
     </main>
   );
 }
