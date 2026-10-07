@@ -3,6 +3,7 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
 import HomeProCheckout from '@/components/home/HomeProCheckout';
+import '@/styles/studio-cards.css';
 import {
   WORKFLOW_PRO_PRODUCT_NAME,
   workflowProPriceLabel,
@@ -33,41 +34,42 @@ const OFFERS = [
 
 /**
  * Render the landing page with a YouTube URL-to-Studio handoff and Workflow Pro checkout.
+ * Light card system per apps/web/DESIGN_LANGUAGE.md. Copy and pricing unchanged.
  * The optional badge appears only when its feature flag is enabled.
  */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
 
   return (
-    <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
-      <Nav />
+    <main className="uvai-cards min-h-screen overflow-hidden">
+      <Nav tone="light" />
 
       <section aria-labelledby="home-heading" className="px-5 pb-16 pt-12 sm:px-6 md:pb-24 md:pt-20">
         <div className="mx-auto max-w-6xl">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-12">
-            <div className="min-w-0">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-8">
+            <div className="uvai-card min-w-0 p-8 sm:p-10">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 font-heading text-xl font-black shadow-lg shadow-amber-500/25">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-amber-600 font-heading text-xl font-black text-white shadow-lg shadow-amber-500/25">
                   U
                 </div>
-                <span className="font-heading text-3xl font-black tracking-tight sm:text-4xl">UVAI</span>
+                <span className="font-heading text-3xl font-black tracking-tight text-slate-900 sm:text-4xl">UVAI</span>
               </div>
-              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.28em] text-amber-200">
+              <p className="uvai-section-label mt-5">
                 Universal Video Action Intelligence
               </p>
               {showCustomBadge && (
-                <p className="mt-4 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-xs font-semibold text-amber-100">
+                <p className="mt-4 inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
                   New: configurable with Vercel Flags
                 </p>
               )}
 
               <h1
                 id="home-heading"
-                className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance sm:text-5xl md:mt-8 md:text-6xl"
+                className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance text-slate-900 sm:text-5xl md:mt-8 md:text-6xl"
               >
                 Turn a YouTube URL into a hashed Video Pack, then open it in Studio.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-8 text-white/70 md:text-lg">
+              <p className="mt-5 max-w-2xl text-base leading-8 text-slate-600 md:text-lg">
                 Paste a YouTube URL to open Studio and review transcript, event, and action outputs
                 from your source. Transcript quality varies by source. No guaranteed production
                 outcome.
@@ -81,16 +83,16 @@ export default async function HomePage() {
             <aside
               id="get-pro"
               aria-labelledby="workflow-pro-heading"
-              className="min-w-0 rounded-[2rem] border border-amber-300/20 bg-surface-900/70 p-1 shadow-2xl shadow-black/30"
+              className="uvai-card min-w-0 p-1"
             >
               <div className="px-5 pb-1 pt-5 sm:px-7 sm:pt-7">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">
+                <p className="uvai-section-label">
                   Workflow Pro
                 </p>
-                <h2 id="workflow-pro-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
+                <h2 id="workflow-pro-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight text-slate-900">
                   Get Pro through the existing checkout.
                 </h2>
-                <p className="mt-3 text-sm leading-6 text-white/65">
+                <p className="mt-3 text-sm leading-6 text-slate-600">
                   Choose a billing cadence for the existing Workflow Pro checkout. Stripe confirms
                   the amount and renewal terms before payment.
                 </p>
@@ -99,38 +101,40 @@ export default async function HomePage() {
             </aside>
           </div>
 
-          <section aria-labelledby="offer-summary-heading" className="mt-12 border-t border-white/[0.08] pt-8 md:mt-16 md:pt-10">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-200">Options</p>
-                <h2 id="offer-summary-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
-                  Start in Studio, then choose the right level of support.
-                </h2>
+          <section aria-labelledby="offer-summary-heading" className="mt-8 md:mt-12">
+            <div className="uvai-card px-6 py-8 sm:px-8 md:px-10 md:py-10">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="uvai-section-label">Options</p>
+                  <h2 id="offer-summary-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight text-slate-900">
+                    Start in Studio, then choose the right level of support.
+                  </h2>
+                </div>
+                <p className="max-w-sm text-sm leading-6 text-slate-600">
+                  Workflow Pro is the available self-serve checkout. Ship and Maintain remain
+                  request-based options.
+                </p>
               </div>
-              <p className="max-w-sm text-sm leading-6 text-white/65">
-                Workflow Pro is the available self-serve checkout. Ship and Maintain remain
-                request-based options.
-              </p>
-            </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {OFFERS.map((offer) => (
-                <article
-                  key={offer.name}
-                  className="min-w-0 rounded-2xl border border-white/[0.1] bg-white/[0.035] px-5 py-5"
-                >
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/65">
-                    {offer.name}
-                  </p>
-                  <p className="mt-2 font-heading text-lg font-bold text-white">{offer.price}</p>
-                </article>
-              ))}
+              <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {OFFERS.map((offer) => (
+                  <article
+                    key={offer.name}
+                    className="rounded-2xl border border-slate-200 bg-slate-50/60 px-5 py-5"
+                  >
+                    <p className="uvai-section-label">
+                      {offer.name}
+                    </p>
+                    <p className="mt-2 font-heading text-lg font-bold text-slate-900">{offer.price}</p>
+                  </article>
+                ))}
+              </div>
             </div>
           </section>
         </div>
       </section>
 
-      <Footer variant="full" />
+      <Footer variant="full" tone="light" />
     </main>
   );
 }
