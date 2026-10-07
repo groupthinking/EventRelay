@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import { Inter, JetBrains_Mono, Newsreader } from 'next/font/google';
 import './globals.css';
 import { StructuredData } from '@/components/StructuredData';
 import { AuthSessionProvider } from '@/components/AuthSessionProvider';
@@ -18,10 +18,12 @@ const jetBrainsMono = JetBrains_Mono({
   variable: '--font-mono',
 });
 
-const spaceGrotesk = Space_Grotesk({
+const newsreader = Newsreader({
   subsets: ['latin'],
   display: 'swap',
-  variable: '--font-heading',
+  variable: '--font-display',
+  weight: ['400', '500'],
+  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -72,10 +74,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#14b8a6' },
-    { media: '(prefers-color-scheme: dark)', color: '#020617' },
-  ],
+  themeColor: '#FAF9F7',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -95,12 +94,9 @@ export default function RootLayout({
         <link rel="preconnect" href="https://i.ytimg.com" crossOrigin="anonymous" />
       </head>
       <body
-        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-surface-950 font-sans antialiased`}
+        className={`${inter.variable} ${jetBrainsMono.variable} ${newsreader.variable} min-h-screen font-sans antialiased`}
+        style={{ background: 'var(--uvai-bg)', color: 'var(--uvai-ink)' }}
       >
-        {/* Global background effects */}
-        <div className="fixed inset-0 bg-mesh pointer-events-none" />
-        <div className="fixed inset-0 noise pointer-events-none" />
-
         {/* Main content */}
         <div className="relative z-10">
           {/* Keep JSON-LD away from preview scripts injected into the head. */}
