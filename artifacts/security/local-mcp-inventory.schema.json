@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries", "errors", "status"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "status": {"enum": ["BLOCKED", "REVIEW_REQUIRED"]},
+    "errors": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["config", "code"], "properties": {"config": {"type": "string"}, "code": {"const": "INVALID_CONFIG"}}}},
+    "entries": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["config", "server", "transport", "executable", "package", "version", "publisher_source", "credential_names", "filesystem_roots", "network_destinations", "tool_catalog_digest", "findings", "disposition"],
+      "properties": {
+        "config": {"type": "string"}, "server": {"type": "string"},
+        "transport": {"enum": ["stdio", "remote"]},
+        "executable": {"type": ["string", "null"]}, "package": {"type": ["string", "null"]}, "version": {"type": ["string", "null"]},
+        "publisher_source": {"type": "null"}, "filesystem_roots": {"type": "null"}, "tool_catalog_digest": {"type": "null"},
+        "credential_names": {"type": "array", "items": {"type": "string"}},
+        "network_destinations": {"type": "array", "items": {"type": "string"}},
+        "findings": {"type": "array", "items": {"type": "string"}},
+        "disposition": {"enum": ["BLOCKED", "REVIEW_REQUIRED"]}
+      }
+    }}
+  }
+}
