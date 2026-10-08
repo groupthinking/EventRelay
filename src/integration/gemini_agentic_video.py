@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 ProcessingMode = Literal["agentic", "static"]
