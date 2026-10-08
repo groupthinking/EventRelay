@@ -38,7 +38,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
     expect(home).toContain('Transcript quality varies by source.');
-    expect(home).toContain('grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]');
+    expect(home).toContain('HomeTemplateShell');
+    expect(home).toContain('Inspect the Video Pack');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('HomeProCheckout');
   });
