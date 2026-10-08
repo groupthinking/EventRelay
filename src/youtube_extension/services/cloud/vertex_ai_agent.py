@@ -14,6 +14,8 @@ import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
+
 try:
     import vertexai
     from google.cloud import aiplatform
@@ -123,7 +125,7 @@ class VertexAIAgentService:
 
         self.model = GenerativeModel(
             model_name=self.agent_config.model_name,
-            generation_config=generation_config,
+            generation_config=without_deprecated_sampling(self.agent_config.model_name, generation_config),
             safety_settings=self.agent_config.safety_settings,
             tools=self.agent_config.tools,
         )

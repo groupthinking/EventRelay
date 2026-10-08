@@ -217,7 +217,7 @@ class TestGeminiServiceInit:
              patch.object(m, "genai") as mock_genai:
             mock_genai.configure = MagicMock()
             mock_genai.GenerativeModel = MagicMock(return_value=MagicMock())
-            cfg = m.GeminiConfig(api_key="key123", temperature=0.8, top_k=32)
+            cfg = m.GeminiConfig(api_key="key123", model_name="gemini-2.5-pro", temperature=0.8, top_k=32)
             m.GeminiService(cfg)
         call_kwargs = mock_genai.GenerativeModel.call_args[1]
         assert call_kwargs["generation_config"]["temperature"] == pytest.approx(0.8)
@@ -407,7 +407,7 @@ class TestPrepareGenerationArgs:
         with patch.object(m, "GEMINI_AVAILABLE", False), \
              patch.object(m, "VERTEX_AVAILABLE", False), \
              patch.object(m, "TRANSFORMERS_AVAILABLE", False):
-            svc = m.GeminiService()
+            svc = m.GeminiService(m.GeminiConfig(model_name="gemini-2.5-pro"))
         return svc
 
     def test_defaults_from_config(self):
@@ -1944,3 +1944,34 @@ class TestPrepareImage:
         result = svc._prepare_image(str(img_path))
         # Returns a PIL Image
         assert hasattr(result, "size")
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"])
+def test_sampling_policy_covers_init_switch_and_per_call(model):
+    m = _import_module()
+    with patch.object(m, "GEMINI_AVAILABLE", True), patch.object(m, "VERTEX_AVAILABLE", False), patch.object(m, "genai") as api:
+        svc = m.GeminiService(m.GeminiConfig(api_key="test-key", model_name=model))
+        initial = api.GenerativeModel.call_args.kwargs["generation_config"]
+        expected = model.startswith("gemini-2")
+        assert ("temperature" in initial) == expected
+        overrides = {"temperature": .8, "top_p": .8, "top_k": 10, "max_tokens": 123}
+        config, _ = svc._prepare_generation_args(overrides)
+        assert ("temperature" in config) == expected
+        assert config["max_output_tokens"] == 123
+        assert not overrides
+        svc.select_model("gemini-2.0-flash")
+        assert "temperature" in api.GenerativeModel.call_args.kwargs["generation_config"]
+        svc.select_model("gemini-3.7-flash")
+        assert "temperature" not in api.GenerativeModel.call_args.kwargs["generation_config"]
+        svc.select_model(model)  # cached model must use its own policy
+        config, _ = svc._prepare_generation_args({})
+        assert ("temperature" in config) == expected
+
+
+def test_vertex_request_overrides_use_same_model_policy():
+    m = _import_module()
+    with patch.object(m, "GEMINI_AVAILABLE", False), patch.object(m, "VERTEX_AVAILABLE", True), patch.object(m, "vertexai", create=True), patch.object(m, "GenerativeModel", create=True):
+        svc = m.GeminiService(m.GeminiConfig(project_id="test-project", model_name="gemini-3.8-flash"))
+        assert svc._use_vertex
+        config, _ = svc._prepare_generation_args({"temperature": .8})
+        assert config == {"max_output_tokens": 8192}

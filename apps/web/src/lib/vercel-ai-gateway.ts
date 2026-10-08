@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { geminiSampling } from '@/lib/gemini-parameters';
+
 /**
  * Vercel AI Gateway — OpenAI-compatible routing to Google/Anthropic/OpenAI models.
  * https://vercel.com/docs/ai-gateway
@@ -201,7 +203,7 @@ export async function gatewayChat(options: GatewayChatOptions): Promise<GatewayC
         model,
         messages: options.messages,
         max_tokens: options.max_tokens ?? 4096,
-        temperature: options.temperature ?? 0.2,
+        ...geminiSampling(model, options.temperature ?? 0.2),
       }),
       signal: controller.signal,
     });

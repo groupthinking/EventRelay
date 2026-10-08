@@ -21,6 +21,8 @@ from typing import Any, Optional, Union
 
 from PIL import Image
 
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
+
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
@@ -351,12 +353,12 @@ class GeminiService:
                 genai.configure(api_key=self.config.api_key)
                 self._model = genai.GenerativeModel(
                     model_name=self.config.model_name,
-                    generation_config={
+                    generation_config=without_deprecated_sampling(self.config.model_name, {
                         "temperature": self.config.temperature,
                         "top_p": self.config.top_p,
                         "top_k": self.config.top_k,
                         "max_output_tokens": self.config.max_output_tokens,
-                    },
+                    }),
                     safety_settings=self.config.safety_settings
                 )
                 self._use_vertex = False
@@ -434,7 +436,7 @@ class GeminiService:
         if safety_settings:
             request_kwargs['safety_settings'] = safety_settings
 
-        return generation_config, request_kwargs
+        return without_deprecated_sampling(self.config.model_name, generation_config), request_kwargs
 
     def select_model(self, model_name: Optional[str]) -> None:
         """Ensure the requested Gemini model is ready for the next call."""
@@ -500,7 +502,7 @@ class GeminiService:
                 }
                 model = genai.GenerativeModel(
                     model_name=model_name,
-                    generation_config=generation_config,
+                    generation_config=without_deprecated_sampling(model_name, generation_config),
                     safety_settings=self.config.safety_settings,
                 )
                 backend = "gemini"
