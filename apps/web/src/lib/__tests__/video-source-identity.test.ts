@@ -23,3 +23,7 @@ describe('YouTube source identity confinement', () => {
     expect(() => canonicalYouTubeSource('invalid')).toThrow('Invalid YouTube');
   });
 });
+import { it as regression, expect as check } from 'vitest';
+regression('rejects raw and encoded dot-segment normalization tricks', () => {
+  for (const url of ['https://youtube.com/foo/../watch?v=auJzb1D-fag', 'https://youtube.com/%2e%2e/watch?v=auJzb1D-fag', 'https://youtu.be/ignored/../auJzb1D-fag']) check(resolveYouTubeSourceId(url)).toBeNull();
+});

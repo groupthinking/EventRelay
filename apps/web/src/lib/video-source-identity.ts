@@ -9,6 +9,8 @@ export function resolveYouTubeSourceId(input: string): string | null {
   // URL normalizes explicit default ports and backslashes; reject them first.
   const authority = /^https:\/\/([^/?#]+)/.exec(value)?.[1];
   if (!authority || authority.includes(':') || authority.includes('@') || authority.includes('%')) return null;
+  const rawPath = value.slice(8 + authority.length).split(/[?#]/, 1)[0];
+  if (rawPath.split('/').some(segment => /^\.{1,2}$/.test(segment.replace(/%2e/gi, '.')))) return null;
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
