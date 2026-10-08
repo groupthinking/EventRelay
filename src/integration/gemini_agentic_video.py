@@ -40,7 +40,7 @@ class AgenticVideoReceipt:
 class GeminiAgenticVideoService:
     """Run Gemini's Think -> Act -> Observe video-analysis loop."""
 
-    DEFAULT_MODEL = "gemini-3.7-flash"
+    DEFAULT_MODEL = "gemini-3.8-flash"
 
     def __init__(
         self,

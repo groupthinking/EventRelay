@@ -15,7 +15,7 @@ import 'server-only';
  */
 
 import { GoogleGenAI } from '@google/genai';
-import { hasAiGatewayKey } from './vercel-ai-gateway';
+import { hasAiGatewayKey, VERCEL_AI_GATEWAY_DEFAULT_MODEL } from './vercel-ai-gateway';
 
 export type GeminiAuthMode = 'gateway' | 'studio' | 'vertex' | 'none';
 
@@ -86,7 +86,7 @@ export function hasGeminiKey(): boolean {
 export function getGeminiRoutingLabel(): string {
   const mode = getGeminiAuthMode();
   if (mode === 'gateway') {
-    return `gateway:${process.env.VERCEL_AI_GATEWAY_MODEL?.trim() || 'google/gemini-2.5-flash'}`;
+    return `gateway:${VERCEL_AI_GATEWAY_DEFAULT_MODEL}`;
   }
   if (mode === 'vertex') return 'vertex';
   if (mode === 'studio') return 'studio';
