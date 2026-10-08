@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Film, FileText, Layers, Workflow } from 'lucide-react';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
@@ -44,7 +45,7 @@ export default async function HomePage() {
     <main className="min-h-screen" style={{ background: 'var(--uvai-bg)' }}>
       <Nav />
 
-      <section aria-labelledby="home-heading" className="px-4 sm:px-6 lg:px-12 pb-20 pt-8 md:pt-12">
+      <section aria-labelledby="home-heading" className="template-home px-4 sm:px-6 lg:px-12 pb-16 pt-6">
         <div className="mx-auto max-w-6xl">
           <HomeTemplateShell context={
             <div>
@@ -75,7 +76,8 @@ export default async function HomePage() {
               </div>
             </div>
           }>
-            <div>
+            <div className="template-welcome">
+              <div className="template-mark" aria-hidden="true"><Film size={28} /></div>
               <p className="uvai-label">
                 Universal Video Action Intelligence
               </p>
@@ -86,10 +88,10 @@ export default async function HomePage() {
                 </p>
               )}
 
-              <h1 id="home-heading" className="mt-6 max-w-2xl text-4xl sm:text-5xl md:text-6xl" style={{ color: 'var(--uvai-ink)' }}>
+              <h1 id="home-heading" className="mt-5 max-w-2xl text-3xl sm:text-4xl" style={{ color: 'var(--uvai-ink)' }}>
                 Your videos know what to do next.
               </h1>
-              <p className="mt-6 max-w-xl text-lg leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+              <p className="mt-4 max-w-xl text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
                 Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it,
                 prepares proposed work and build rails for you to review in Studio.
               </p>
@@ -99,6 +101,11 @@ export default async function HomePage() {
 
               <div className="home-source-composer w-full max-w-xl">
                 <HomePasteForm />
+              </div>
+              <div className="template-use-cases" aria-label="Supported source examples">
+                <div><FileText size={18} aria-hidden="true" /><strong>Software tutorial</strong><span>Inspect steps and prerequisites</span></div>
+                <div><Layers size={18} aria-hidden="true" /><strong>Product walkthrough</strong><span>Review features and interactions</span></div>
+                <div><Workflow size={18} aria-hidden="true" /><strong>Process recording</strong><span>Explore proposed work</span></div>
               </div>
             </div>
 
