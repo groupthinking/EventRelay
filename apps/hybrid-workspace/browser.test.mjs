@@ -52,8 +52,10 @@ try {
   await page.locator('#composer button').click();
   assert.equal(await page.locator('#thread img').count(),0);
   await page.locator('[data-action="escalate"]').click();
+  const ticketsBefore = await page.locator('#thread .ticket').count();
   await page.evaluate(() => window.fixtureType('ask file a ticket\r'));
+  assert.equal(await page.locator('#thread .ticket').count(), ticketsBefore + 1);
   assert.match(await page.locator('#thread').innerText(),/session only/);
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({status:'VERIFIED',surface:'hybrid-workspace',boundary:'Chromium DOM + sandbox',externalServices:'disabled',editor:'fixture adapter',checks:['identity','embed','edited summary','extract','ask escaping','terminal escalation','sandbox confinement','credential access trap','console health']}));
+  console.log(JSON.stringify({status:'VERIFIED',head:process.env.VERIFIED_HEAD || 'local-unpinned',surface:'hybrid-workspace',boundary:'Chromium DOM + sandbox',externalServices:'disabled',editor:'fixture adapter',checks:['identity','embed','edited summary','extract','ask escaping','terminal escalation','sandbox confinement','credential access trap','console health']}));
 } finally { await browser?.close(); await new Promise(r=>server.close(r)); }

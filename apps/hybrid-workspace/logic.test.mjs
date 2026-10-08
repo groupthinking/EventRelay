@@ -32,5 +32,8 @@ assert.match(hostile, /content:"\$&"/);
 assert.doesNotMatch(hostile, /<\/script><img>/);
 assert.equal(injectVirtualAssets('<script src="appXjs"></script>', { "app.js": "1" }), '<script src="appXjs"></script>');
 assert.equal(injectVirtualAssets('<link href="missing.css">', { "styles.css": "1" }), '<link href="missing.css">');
+for (const markup of ['<link data-href="styles.css">', `<link title=' href="styles.css"'>`, '<script data-src="app.js"></script>', `<script title=' src="app.js"'></script>`]) {
+  assert.equal(injectVirtualAssets(markup, {"styles.css":"bad", "app.js":"bad"}), markup);
+}
 assert.equal(summarizeFrom({"index.html":{value:'<title>Edited</title><h1>New</h1>'},"lesson.md":{value:'<img onerror="x">'}}).title,'Edited');
 

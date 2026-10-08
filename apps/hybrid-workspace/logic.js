@@ -4,20 +4,28 @@ export function escapeHtml(s) {
   }[c]));
 }
 
+function attributeValue(tag, wanted) {
+  // Consume complete quoted values so href/src-looking text inside another
+  // attribute cannot become an active asset reference. First duplicate wins.
+  const attributes = tag.replace(/^<\w+\b/, '');
+  const pattern = /\s+([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  for (const match of attributes.matchAll(pattern)) {
+    if (match[1].toLowerCase() === wanted) return match[2] ?? match[3] ?? match[4] ?? '';
+  }
+  return null;
+}
+
 export function injectVirtualAssets(html, assets) {
   let out = String(html);
   for (const [name, body] of Object.entries(assets)) {
-    const pattern = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    if (name.endsWith(".css")) {
-      out = out.replace(
-        new RegExp(`<link\\b[^>]*href=["']${pattern}["'][^>]*>`, "gi"),
-        () => `<style>${String(body).replace(/<\/style/gi, "<\\/style")}</style>`,
-      );
-    } else if (name.endsWith(".js")) {
-      out = out.replace(
-        new RegExp(`<script\\b[^>]*src=["']${pattern}["'][^>]*>\\s*</script>`, "gi"),
-        () => `<script>${String(body).replace(/<\/script/gi, "<\\/script")}</script>`,
-      );
+    if (name.endsWith('.css')) {
+      out = out.replace(/<link\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi, tag =>
+        attributeValue(tag, 'href') === name
+          ? `<style>${String(body).replace(/<\/style/gi, '<\\/style')}</style>` : tag);
+    } else if (name.endsWith('.js')) {
+      out = out.replace(/(<script\b(?:[^>"']|"[^"]*"|'[^']*')*>)\s*<\/script>/gi, (whole, tag) =>
+        attributeValue(tag, 'src') === name
+          ? `<script>${String(body).replace(/<\/script/gi, '<\\/script')}</script>` : whole);
     }
   }
   return out;

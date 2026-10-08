@@ -11,6 +11,8 @@ jobs:
     name: Hybrid workspace browser boundary
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      VERIFIED_HEAD: ${{ github.event.pull_request.head.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@v7
