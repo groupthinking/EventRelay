@@ -12,7 +12,7 @@ for (const width of [390, 1280]) {
     expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#171717');
     await page.getByLabel('YouTube URL').fill('unsupported-source');
     await page.getByRole('button', { name: 'Run in Studio' }).click();
-    await expect(page.getByRole('alert')).toHaveText('Need a valid YouTube URL.');
+    await expect(page.locator('#home-youtube-url-error')).toHaveText('Need a valid YouTube URL.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath(`home-${width}.png`), fullPage: true });
 
