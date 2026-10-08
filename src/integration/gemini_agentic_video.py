@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 ProcessingMode = Literal["agentic", "static"]
@@ -40,7 +41,7 @@ class AgenticVideoReceipt:
 class GeminiAgenticVideoService:
     """Run Gemini's Think -> Act -> Observe video-analysis loop."""
 
-    DEFAULT_MODEL = "gemini-3.7-flash"
+    DEFAULT_MODEL = "gemini-3.8-flash"
 
     def __init__(
         self,

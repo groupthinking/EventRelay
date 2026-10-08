@@ -10,7 +10,7 @@ Addresses the "incorrect ingredients" bug found in YouTube comment analysis.
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from google import genai
 from google.genai import types
@@ -32,11 +32,11 @@ class PrecisionExtractorAgent:
             raise ValueError("GOOGLE_API_KEY or GEMINI_API_KEY required")
 
         self.client = genai.Client(api_key=self.api_key)
-        self.model_id = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.5-flash")
+        self.model_id = os.getenv("GEMINI_VIDEO_MODEL", "gemini-3.8-flash")
 
     async def extract_precision_data(
         self, video_url: str, context: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Extract high-precision data by analyzing video frames directly.
 
@@ -101,7 +101,7 @@ if __name__ == "__main__":
     # Quick test
 
     async def test():
-        agent = PrecisionExtractorAgent()
+        _agent = PrecisionExtractorAgent()
         # Test with a known cooking video or similar if possible
         # For now, just a placeholder run
         # res = await agent.extract_precision_data("gs://bucket/video.mp4")

@@ -31,7 +31,8 @@ class FakeInteractions:
 
 
 @pytest.mark.asyncio
-async def test_agentic_youtube_request_returns_execution_receipt():
+async def test_agentic_youtube_request_returns_execution_receipt(monkeypatch):
+    monkeypatch.delenv("GEMINI_AGENTIC_VIDEO_MODEL", raising=False)
     interactions = FakeInteractions()
     client = SimpleNamespace(interactions=interactions)
     service = GeminiAgenticVideoService(client=client)
@@ -42,7 +43,7 @@ async def test_agentic_youtube_request_returns_execution_receipt():
     )
 
     assert interactions.request == {
-        "model": "gemini-3.7-flash",
+        "model": "gemini-3.8-flash",
         "input": [
             {
                 "type": "video",
@@ -91,3 +92,18 @@ def test_malformed_video_uri_fails_before_calling_provider(uri):
 def test_invalid_requests_fail_before_calling_provider(videos, prompt):
     with pytest.raises(ValueError):
         GeminiAgenticVideoService.build_input(videos, prompt)
+
+
+@pytest.mark.asyncio
+async def test_model_overrides_preserve_older_models(monkeypatch):
+    monkeypatch.setenv("GEMINI_AGENTIC_VIDEO_MODEL", "gemini-3.7-flash")
+    interactions = FakeInteractions()
+    service = GeminiAgenticVideoService(client=SimpleNamespace(interactions=interactions))
+    videos = [VideoInput("https://youtu.be/auJzb1D-fag")]
+    receipt = await service.analyze(videos, "Find the steps.")
+    assert interactions.request["model"] == receipt.model == "gemini-3.7-flash"
+    service = GeminiAgenticVideoService(client=service._client, model="gemini-2.5-pro")
+    receipt = await service.analyze(videos, "Find the steps.")
+    assert interactions.request["model"] == receipt.model == "gemini-2.5-pro"
+    receipt = await service.analyze(videos, "Find the steps.", model="gemini-3.8-flash")
+    assert interactions.request["model"] == receipt.model == "gemini-3.8-flash"

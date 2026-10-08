@@ -7,9 +7,10 @@ import 'server-only';
  * transcripts, descriptions, chapters, and metadata from YouTube videos.
  * Based on the UVAI PK=998 implementation pattern.
  *
- * Uses gemini-2.5-flash with responseSchema when a real transcript is available.
- * When no transcript exists, falls back to googleSearch grounding without schema
- * (gemini-2.5-flash cannot combine responseSchema + googleSearch).
+ * Uses GEMINI_STRUCTURED_MODEL with responseSchema when a real transcript is available.
+ * Without a transcript, uses GEMINI_SEARCH_MODEL with googleSearch grounding and no schema.
+ * Both default to Gemini 3.8 Flash; the separate request shapes preserve compatibility
+ * with older model overrides that cannot combine responseSchema and googleSearch.
  */
 
 import { Type } from '@google/genai';
