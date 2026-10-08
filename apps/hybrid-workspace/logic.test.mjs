@@ -25,3 +25,12 @@ assert.deepEqual(parseTermCommand("summarize"), { action: "summarize", text: "" 
 assert.deepEqual(parseTermCommand("ask why css"), { action: "ask", text: "why css" });
 
 console.log("hybrid-workspace logic tests passed");
+assert.equal(shouldEscalate("please file a ticket", "ask"), true);
+const reordered = `<link href='styles.css' rel='stylesheet'><script defer src='app.js'></script>`;
+const hostile = injectVirtualAssets(reordered, { "styles.css": 'a{content:"$&"}', "app.js": 'console.log("</script><img>")' });
+assert.match(hostile, /content:"\$&"/);
+assert.doesNotMatch(hostile, /<\/script><img>/);
+assert.equal(injectVirtualAssets('<script src="appXjs"></script>', { "app.js": "1" }), '<script src="appXjs"></script>');
+assert.equal(injectVirtualAssets('<link href="missing.css">', { "styles.css": "1" }), '<link href="missing.css">');
+assert.equal(summarizeFrom({"index.html":{value:'<title>Edited</title><h1>New</h1>'},"lesson.md":{value:'<img onerror="x">'}}).title,'Edited');
+

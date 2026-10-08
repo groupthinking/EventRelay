@@ -7,15 +7,16 @@ export function escapeHtml(s) {
 export function injectVirtualAssets(html, assets) {
   let out = String(html);
   for (const [name, body] of Object.entries(assets)) {
+    const pattern = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     if (name.endsWith(".css")) {
       out = out.replace(
-        new RegExp(`<link\\b[^>]*href=["']${name}["'][^>]*>`, "i"),
-        `<style>${body}</style>`,
+        new RegExp(`<link\\b[^>]*href=["']${pattern}["'][^>]*>`, "gi"),
+        () => `<style>${String(body).replace(/<\/style/gi, "<\\/style")}</style>`,
       );
     } else if (name.endsWith(".js")) {
       out = out.replace(
-        new RegExp(`<script\\b[^>]*src=["']${name}["'][^>]*>\\s*</script>`, "i"),
-        `<script>${body}</script>`,
+        new RegExp(`<script\\b[^>]*src=["']${pattern}["'][^>]*>\\s*</script>`, "gi"),
+        () => `<script>${String(body).replace(/<\/script/gi, "<\\/script")}</script>`,
       );
     }
   }
@@ -25,14 +26,14 @@ export function injectVirtualAssets(html, assets) {
 export function shouldEscalate(text, action) {
   if (action === "escalate") return true;
   const q = String(text || "").toLowerCase();
-  return /\\b(escalate|file a ticket|human support|support ticket)\\b/.test(q);
+  return /\b(escalate|file a ticket|human support|support ticket)\b/.test(q);
 }
 
 export function summarizeFrom(files) {
   const lesson = files["lesson.md"]?.value || "";
   const html = files["index.html"]?.value || "";
-  const title = (html.match(/<title>([^<]+)<\\/title>/i) || [, "Untitled"])[1];
-  const headings = [...html.matchAll(/<h1[^>]*>([^<]+)<\\/h1>/gi)].map((m) => m[1]);
+  const title = (html.match(/<title>([^<]+)<\/title>/i) || [, "Untitled"])[1];
+  const headings = [...html.matchAll(/<h1[^>]*>([^<]+)<\/h1>/gi)].map((m) => m[1]);
   const excerpt = lesson.split("\n").slice(0, 8).join("\n");
   return {
     title,
@@ -50,3 +51,4 @@ export function parseTermCommand(line) {
   if (cmd === "ask") return { action: "ask", text };
   return { action: "ask", text: raw };
 }
+

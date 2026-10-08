@@ -1,0 +1,22 @@
+name: Hybrid Workspace Boundary
+on:
+  pull_request:
+    paths:
+      - 'apps/hybrid-workspace/**'
+      - '.github/workflows/hybrid-workspace-boundary.yml'
+permissions:
+  contents: read
+jobs:
+  browser:
+    name: Hybrid workspace browser boundary
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+      - run: node apps/hybrid-workspace/logic.test.mjs
+      - run: cd apps/web && npx --no-install playwright install --with-deps chromium
+      - run: node apps/hybrid-workspace/browser.test.mjs

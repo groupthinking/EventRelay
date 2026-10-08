@@ -31,3 +31,12 @@ token. `python -m http.server` cannot resolve `libfx/browser` or inject
 
 The iframe uses `sandbox="allow-scripts"` only (no `allow-same-origin`) so
 student JS cannot read the parent page.
+
+## Deterministic boundary verification
+
+From the repository root run `node apps/hybrid-workspace/logic.test.mjs`. After installing locked dependencies and Playwright Chromium run `node apps/hybrid-workspace/browser.test.mjs`.
+
+The browser test serves actual app modules on loopback, substitutes fixture adapters for CDN editor/terminal/layout APIs, and blocks external requests. It covers Embed, edited Summarize, Extract, Ask escaping, Escalate, terminal input, parent-DOM sandbox confinement, and forbidden Gateway-key access. It does not certify live Monaco compatibility or Gateway execution. The dedicated PR workflow requires no production credentials.
+
+Helper tests passed locally on 2026-10-08; Chromium execution was blocked because no executable existed and its download returned an invalid archive. Browser status remains NOT RUN until the runner provides success. Parent #2202 stays open pending browser evidence and remaining coverage. `/studio` remains canonical.
+

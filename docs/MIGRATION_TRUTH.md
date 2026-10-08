@@ -1,19 +1,15 @@
-# SQL model vs migration truth (AUDIT-007 / #2169)
+# SQL model and migration truth (AUDIT-007 / #2169)
 
-## Current state
+## Current repository evidence — 2026-10-08
 
-| Area | Location | Notes |
-| --- | --- | --- |
-| Model mixins | `src/youtube_extension/backend/models/base.py` | Timestamps, tenant, UUID, soft-delete |
-| Model modules | `src/youtube_extension/backend/models/*.py` | Multiple domain modules |
-| Alembic revisions | `src/youtube_extension/backend/migrations/versions/` | **3** committed revisions (`001`–`003`) |
+The previous inventory in this file named backend model modules and three Alembic revisions. That inventory is obsolete: the current recursive repository tree does not contain `src/youtube_extension/backend/models/`, `src/youtube_extension/backend/migrations/`, or `tests/unit/test_migration_truth.py`. `alembic.ini` still points to the missing migration directory. Do not treat the old count guard or directory list as verified current coverage.
 
-## Policy
+One SQL migration is present at `apps/web/supabase/migrations/20260912214530_create_private_studio_chat_ownership.sql`. Its presence alone does not prove that all live tables, tenant policies, deployed revisions, or Python persistence models are reconciled.
 
-1. Any model used in production request paths must have a matching migration revision or an explicit “non-prod / optional store” doc entry here.
-2. New tables/columns require Alembic revision in the same PR as model changes.
-3. CI guard: `tests/unit/test_migration_truth.py` fails if revision count drops or model package disappears.
+## Acceptance and blocking requirements
 
-## Follow-up (tracked)
+Issue #2169 remains open. Before creating migrations, identify the actual active database and owning service, inventory current persistence models and deployed revision/RLS state using approved read-only access, and map each model to its authoritative migration history. The missing legacy directory needs an explicit retirement or restoration decision; do not silently manufacture a replacement migration chain.
 
-Generate incremental migrations for unmigrated model domains after inventory sign-off. Do not auto-generate destructive migrations in CI.
+No live schema comparison, database access, migration generation, or migration application was performed in this correction. A destructive migration requires separate approval. New tables/columns must accompany the matching migration and fixture validation in the same PR.
+
+Historical claim retained for audit: the previous file asserted three committed revisions (`001`–`003`) and a `test_migration_truth.py` guard. That claim is not valid for the inspected current tree.
