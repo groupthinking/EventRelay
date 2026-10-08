@@ -1,0 +1,41 @@
+/* OpenAI Responses starter's 70/30 workspace/context layout, adapted for UVAI. */
+.home-template-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(18rem, 3fr);
+  min-height: 38rem;
+  overflow: hidden;
+  border: 1px solid var(--uvai-border);
+  border-radius: 20px;
+  background: var(--uvai-surface);
+}
+.home-template-primary {
+  min-width: 0;
+  padding: clamp(1.5rem, 4vw, 4rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.home-template-primary h1 {
+  font-family: var(--font-body);
+  font-weight: 500;
+  letter-spacing: -0.055em;
+  line-height: 1.06;
+}
+.home-template-context {
+  min-width: 0;
+  border-left: 1px solid var(--uvai-border);
+  background: var(--uvai-surface-warm);
+  padding: 2rem;
+}
+.home-template-context h2 { font-family: var(--font-body); font-weight: 500; }
+.home-context-toggle { display: none; }
+.home-workflow-step { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); gap: 0.75rem; }
+.home-step-number { color: var(--uvai-accent); font-family: var(--font-mono); font-size: 0.75rem; padding-top: 0.25rem; }
+.home-source-composer { border-top: 1px solid var(--uvai-border); padding-top: 2rem; margin-top: 2rem; }
+.home-template-shell :is(button, a):focus-visible { outline: 2px solid var(--uvai-accent); outline-offset: 4px; }
+@media (max-width: 1023px) {
+  .home-template-shell { grid-template-columns: minmax(0, 1fr); min-height: auto; }
+  .home-template-context { display: none; border-left: 0; border-top: 1px solid var(--uvai-border); padding: 1.5rem; }
+  .home-template-context.is-open { display: block; }
+  .home-context-toggle { display: inline-flex; align-self: flex-start; margin-top: 1.5rem; }
+}
