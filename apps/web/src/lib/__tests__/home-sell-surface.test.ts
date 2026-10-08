@@ -22,7 +22,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Universal Video Action Intelligence');
     expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('hashed Video Pack');
-    expect(home).toContain('lines up the next move for your approval');
+    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
     expect(home).toContain('HomeProCheckout');
@@ -36,7 +36,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const home = readSource('app/page.tsx');
 
     expect(home).toContain('Your videos know what to do next.');
-    expect(home).toContain('lines up the next move for your approval');
+    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]');
     expect(home).toContain('HomePasteForm');
@@ -54,6 +54,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('Transcript quality varies by source');
+    expect(home).not.toContain('turns it into something real');
+    expect(home).not.toContain('next move for your approval');
     expect(home).toMatch(/No guaranteed production\s+outcome\./);
     expect(layout).toContain('Transcript quality varies by source');
     expect(structured).toContain('Transcript quality varies by source');
