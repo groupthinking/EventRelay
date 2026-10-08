@@ -19,9 +19,38 @@ DEFAULT_RECEIPT = (
     REPO_ROOT / "tests/fixtures/mcp_conformance/official-2026-07-28-receipt.json"
 )
 CONFORMANCE_COMMIT = "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+SCOPE_STEP_UP_SDK_COMMIT = "60321700871029401a2e3bed8fdf4f02c9ec3331"
+UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_ISSUE = (
+    "https://github.com/modelcontextprotocol/conformance/issues/480"
+)
+UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR = (
+    "https://github.com/modelcontextprotocol/conformance/pull/481"
+)
 CONFORMANCE_PACKAGE = (
     f"git+https://github.com/modelcontextprotocol/conformance.git#{CONFORMANCE_COMMIT}"
 )
+SCOPE_STEP_UP_RECEIPT_POLICY = {
+    "configured_policy": {
+        "live_oauth": "disabled_by_default",
+        "authorization_source": "fixture_only_provenance_bound_approval",
+        "challenge_surfaces": [
+            "tools/call",
+            "resources/read:static",
+            "resources/read:template",
+            "prompts/get",
+        ],
+        "challenge_semantics": "single_minimal_complete_scope_set",
+    },
+    "observed_enforcement": {
+        "status": "not_executed_by_official_suite",
+        "evidence_surface": "tests/unit/test_official_mcp_conformance.py",
+    },
+    "exclusions": {
+        "official_conformance_claim": "excluded_until_upstream_pr_merges_and_is_executed",
+        "live_oauth": True,
+        "production_authorization": True,
+    },
+}
 SERVER_SCENARIOS = (
     {"scenario": "tools-list", "spec_version": "2026-07-28", "required": True},
     {
@@ -372,6 +401,13 @@ def build_receipt(run_records: list[dict[str, Any]]) -> dict[str, Any]:
         "conformance": {
             "package": CONFORMANCE_PACKAGE,
             "commit": CONFORMANCE_COMMIT,
+            "scope_step_up_sdk_commit": SCOPE_STEP_UP_SDK_COMMIT,
+            "scope_step_up_conformance_tracking": {
+                "issue": UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_ISSUE,
+                "pull_request": UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR,
+                "status": "unmerged",
+                "official_claim_excluded": True,
+            },
         },
         "implementation": {
             "commit": implementation_commit,
@@ -382,6 +418,9 @@ def build_receipt(run_records: list[dict[str, Any]]) -> dict[str, Any]:
             "node": node_version,
             "npm": npm_version,
         },
+        "scope_step_up_receipt_policy": json.loads(
+            json.dumps(SCOPE_STEP_UP_RECEIPT_POLICY, sort_keys=True)
+        ),
         "inventory": {
             "certified": {
                 "server": [entry["scenario"] for entry in SERVER_SCENARIOS],

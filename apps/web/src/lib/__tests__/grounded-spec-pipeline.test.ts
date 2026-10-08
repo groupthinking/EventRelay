@@ -4,6 +4,15 @@ import { applyExtractedSpec, buildIdentityPack, GOLDEN_IDENTITY_HASHES } from '@
 import { verifyIdentityPack } from '@/lib/emit-video-pack';
 import { browserSpecFixture } from '@/test/grounded-spec-fixture';
 
+// This single-clip boundary test must not fetch live metadata or select real-video shards.
+vi.mock('@/lib/youtube-metadata', () => ({
+  preflightYouTubeVideoSource: vi.fn(async () => 'available'),
+  fetchYouTubeMetadata: vi.fn(async () => ({
+    videoId: 'auJzb1D-fag', title: 'Synthetic boundary fixture', channel: 'Test',
+    description: '', chapters: [], durationSeconds: 60,
+  })),
+}));
+
 vi.mock('@/lib/youtube-captions', () => ({
   fetchYouTubeCaptions: vi.fn(async () => null),
 }));

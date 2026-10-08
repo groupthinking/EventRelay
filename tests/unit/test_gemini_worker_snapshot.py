@@ -15,7 +15,7 @@ from youtube_extension.services.ai import gemini_service as module
 @pytest.mark.parametrize("fails", [False, True])
 @pytest.mark.parametrize("kind,old_model,new_model,backend", [
     *[(kind, old, new, "gemini")
-      for kind in ("text", "image", "video", "audio")
+      for kind in ("text", "image", "video", "audio", "youtube")
       for old, new in (("gemini-2.5-flash", "gemini-3.8-flash"),
                        ("gemini-3.8-flash", "gemini-2.5-flash"))],
     ("veo", "veo-2.0", "gemini-3.8-flash", "veo"),
@@ -35,9 +35,11 @@ async def test_queued_request_keeps_model_snapshot(monkeypatch, tmp_path, kind, 
     new_client = SimpleNamespace(generate_content=Mock(return_value=SimpleNamespace(text="new result")))
     # The switch changes the provider format as well as the selected model.
     service._register_model(new_model, new_client, backend="gemini", use_vertex=False)
-    service._register_model(old_model, old_client, backend=backend, use_vertex=backend == "gemini")
+    service._register_model(old_model, old_client, backend=backend, use_vertex=backend == "gemini" and kind != "youtube")
     if kind == "text":
         request = service.process_text("question", temperature=0.3, max_tokens=123)
+    elif kind == "youtube":
+        request = service.process_youtube("https://youtu.be/auJzb1D-fag", "question", temperature=0.3, max_tokens=123)
     elif kind == "image":
         request = service.process_image(Image.new("RGB", (2, 2)), "question", temperature=0.3, max_tokens=123)
     else:
@@ -72,7 +74,7 @@ async def test_queued_request_keeps_model_snapshot(monkeypatch, tmp_path, kind, 
     if fails:
         assert result.error == "provider failure"
     assert result.model_name == old_model
-    assert result.backend == (backend if kind in {"text", "veo"} else "vertex")
+    assert result.backend == (backend if kind in {"text", "veo"} else "api" if kind == "youtube" else "vertex")
     old_client.generate_content.assert_called_once()
     new_client.generate_content.assert_not_called()
     config = old_client.generate_content.call_args.kwargs["generation_config"]
