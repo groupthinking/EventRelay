@@ -2,11 +2,13 @@
 import argparse
 import hashlib
 import json
+import os
 import re
+import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
 
-EXACT = re.compile(r"(?:@[^/\s]+/)?[^@\s]+@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$")
+EXACT = re.compile(r"(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$")
 PLACEHOLDER = re.compile(r"\$(?:\{env:([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))")
 SENSITIVE = re.compile(r"token|secret|password|authorization|api[_-]?key", re.I)
 
@@ -48,7 +50,11 @@ def audit(config, label):
         for key, value in list(env.items()) + list(headers.items()):
             if SENSITIVE.search(str(key)):
                 credentials.add(str(key))
-                if not isinstance(value, str) or not PLACEHOLDER.search(value):
+                placeholder = isinstance(value, str) and PLACEHOLDER.fullmatch(value) is not None
+                if isinstance(value, str) and str(key).lower() == 'authorization':
+                    prefix = re.fullmatch(r'(?:Bearer|Basic) (.+)', value, re.I)
+                    placeholder = placeholder or (prefix is not None and PLACEHOLDER.fullmatch(prefix[1]) is not None)
+                if not placeholder:
                     findings.append("LITERAL_CREDENTIAL")
         for arg in args:
             credentials.update(a or b for a, b in PLACEHOLDER.findall(arg) if SENSITIVE.search(a or b))
@@ -112,6 +118,13 @@ def main():
     parser.add_argument("--config", action="append", required=True)
     parser.add_argument("--receipt", required=True)
     options = parser.parse_args()
+    destination = Path(options.receipt)
+    for config_path in options.config:
+        source = Path(config_path)
+        if destination.resolve() == source.resolve() or (
+            destination.exists() and source.exists() and destination.samefile(source)
+        ):
+            parser.error('receipt must not overwrite an input configuration')
     entries, errors = [], []
     for path in sorted(set(options.config)):
         try:
@@ -120,12 +133,21 @@ def main():
             errors.append({"config": path, "code": "INVALID_CONFIG"})
     receipt = {"schema_version": 1, "entries": entries, "errors": errors,
                "status": "BLOCKED" if errors or any(e["disposition"] == "BLOCKED" for e in entries) else "REVIEW_REQUIRED"}
-    destination = Path(options.receipt)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(canonical(receipt) + "\n")
+    # Atomic replacement never follows a destination symlink during the write.
+    with tempfile.NamedTemporaryFile(mode='w', dir=destination.parent, delete=False) as handle:
+        temporary = Path(handle.name)
+        try:
+            handle.write(canonical(receipt) + "\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
     # No static config alone proves provenance, containment or authorization.
     return 1
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
+

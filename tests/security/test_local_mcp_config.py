@@ -84,3 +84,39 @@ def test_deterministic_cli_and_failure_receipt(tmp_path, monkeypatch):
     assert audit.main() == 1
     assert receipt.read_bytes() == first
     assert json.loads(first)["status"] == "BLOCKED"
+
+
+def test_credential_url_never_enters_package_receipt():
+    marker = 'fixture-secret-value'
+    entry = audit.audit({'mcpServers': {'x': {'command': 'npx', 'args': [f'https://example.com/pkg.tgz?access_token={marker}@1.2.3']}}}, 'fixture')[0]
+    assert entry['package'] is None
+    assert marker not in audit.canonical(entry)
+    assert entry['disposition'] == 'BLOCKED'
+
+
+@pytest.mark.parametrize('value', ['Bearer fixture-secret${env:SUFFIX}', '${env:TOKEN}fixture-secret', 'fixture-secret${env:TOKEN}'])
+def test_mixed_literal_placeholder_is_blocked(value):
+    entry = audit.audit({'mcpServers': {'x': {'url': 'https://example.com/mcp', 'headers': {'Authorization': value}}}}, 'fixture')[0]
+    assert 'LITERAL_CREDENTIAL' in entry['findings']
+    assert entry['disposition'] == 'BLOCKED'
+    assert 'fixture-secret' not in audit.canonical(entry)
+
+
+@pytest.mark.parametrize('kind', ['direct', 'symlink', 'hardlink'])
+def test_receipt_cannot_overwrite_input(tmp_path, monkeypatch, kind):
+    config = tmp_path / 'input.json'
+    original = '{"mcpServers": {}}'
+    config.write_text(original)
+    destination = config
+    if kind == 'symlink':
+        destination = tmp_path / 'link.json'
+        destination.symlink_to(config)
+    if kind == 'hardlink':
+        destination = tmp_path / 'hard.json'
+        destination.hardlink_to(config)
+    monkeypatch.setattr('sys.argv', ['audit', '--config', str(config), '--receipt', str(destination)])
+    with pytest.raises(SystemExit) as error:
+        audit.main()
+    assert error.value.code == 2
+    assert config.read_text() == original
+
