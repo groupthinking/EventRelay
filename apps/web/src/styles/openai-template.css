@@ -12,6 +12,7 @@
   --uvai-accent: #171717;
   --uvai-accent-hover: #404040;
   --uvai-accent-soft: #f5f5f5;
+  --font-display: var(--font-body);
 }
 h1, h2, h3, .font-display { font-family: var(--font-body), sans-serif; font-weight: 500; letter-spacing: -0.035em; }
 .template-nav { min-height: 64px; }
@@ -52,7 +53,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-ink); outl
 @media (max-width: 900px) {
   .template-pane-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--uvai-border); }
   .template-pane-tabs button { flex: 1; border-radius: 8px; font-size: 12px; padding: 10px 4px; color: var(--uvai-ink-soft); }
-  .template-pane-tabs button[aria-selected='true'] { background: #171717; color: white; }
+  .template-pane-tabs button[aria-pressed='true'] { background: #171717; color: white; }
   .template-studio-shell { height: auto; min-height: calc(100dvh - 65px); }
   .template-studio-panes { min-height: 520px; }
   .template-studio-panes > aside, .template-studio-panes > main { width: 100%; min-width: 0; border: 0; }

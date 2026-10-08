@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import { Inter, JetBrains_Mono, Newsreader } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import '@/styles/openai-template.css';
 import { StructuredData } from '@/components/StructuredData';
@@ -17,14 +17,6 @@ const jetBrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-mono',
-});
-
-const newsreader = Newsreader({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-display',
-  weight: ['400', '500'],
-  style: ['normal', 'italic'],
 });
 
 export const metadata: Metadata = {
@@ -75,7 +67,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#FAF9F7',
+  themeColor: '#ffffff',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -95,7 +87,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://i.ytimg.com" crossOrigin="anonymous" />
       </head>
       <body
-        className={`${inter.variable} ${jetBrainsMono.variable} ${newsreader.variable} min-h-screen font-sans antialiased`}
+        className={`${inter.variable} ${jetBrainsMono.variable} min-h-screen font-sans antialiased`}
         style={{ background: 'var(--uvai-bg)', color: 'var(--uvai-ink)' }}
       >
         {/* Main content */}

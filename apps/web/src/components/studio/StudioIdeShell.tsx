@@ -74,10 +74,10 @@ export default function StudioIdeShell({
       <div data-testid="studio-ide-toolbar" className="uvai-toolbar">
         {toolbar}
       </div>
-      <div className="template-pane-tabs" role="tablist" aria-label="Studio views">
+      <div className="template-pane-tabs" role="toolbar" aria-label="Studio views">
         {(['video', 'chat', 'output'] as const).map((pane) => (
-          <button key={pane} type="button" role="tab" id={`studio-tab-${pane}`}
-            aria-selected={mobilePane === pane} aria-controls={`studio-panel-${pane}`}
+          <button key={pane} type="button" id={`studio-tab-${pane}`}
+            aria-pressed={mobilePane === pane} aria-controls={`studio-panel-${pane}`}
             tabIndex={mobilePane === pane ? 0 : -1}
             onKeyDown={(event) => {
               const panes = ['video', 'chat', 'output'] as const;
@@ -108,7 +108,7 @@ export default function StudioIdeShell({
               <button
                 type="button"
                 aria-label="Collapse video pane"
-                onClick={() => setLeftCollapsed(true)}
+                onClick={() => { setLeftCollapsed(true); setMobilePane('chat'); }}
                 className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 ‹
@@ -180,7 +180,7 @@ export default function StudioIdeShell({
               <button
                 type="button"
                 aria-label="Collapse output pane"
-                onClick={() => setRightCollapsed(true)}
+                onClick={() => { setRightCollapsed(true); setMobilePane('chat'); }}
                 className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
                 ›
