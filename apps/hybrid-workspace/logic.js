@@ -4,31 +4,34 @@ export function escapeHtml(s) {
   }[c]));
 }
 
-function attributeValue(tag, wanted) {
-  // Consume complete quoted values so href/src-looking text inside another
-  // attribute cannot become an active asset reference. First duplicate wins.
-  const attributes = tag.replace(/^<\w+\b/, '');
-  const pattern = /\s+([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
-  for (const match of attributes.matchAll(pattern)) {
-    if (match[1].toLowerCase() === wanted) return match[2] ?? match[3] ?? match[4] ?? '';
-  }
-  return null;
-}
-
 export function injectVirtualAssets(html, assets) {
-  let out = String(html);
+  // Native HTML parsing gives real attribute, duplicate, comment and end-tag
+  // semantics. This substitutes virtual assets; it is not an HTML sanitizer.
+  // Edited JavaScript executes only in the opaque-origin sandboxed preview.
+  const original = String(html);
+  const doc = new DOMParser().parseFromString(original, 'text/html');
+  let changed = false;
   for (const [name, body] of Object.entries(assets)) {
     if (name.endsWith('.css')) {
-      out = out.replace(/<link\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi, tag =>
-        attributeValue(tag, 'href') === name
-          ? `<style>${String(body).replace(/<\/style/gi, '<\\/style')}</style>` : tag);
+      for (const link of doc.querySelectorAll('link[href]')) {
+        if (link.getAttribute('href') !== name) continue;
+        const style = doc.createElement('style');
+        if (link.hasAttribute('media')) style.setAttribute('media', link.getAttribute('media'));
+        style.textContent = String(body).replace(/<\/style/gi, '<\\/style');
+        link.replaceWith(style);
+        changed = true;
+      }
     } else if (name.endsWith('.js')) {
-      out = out.replace(/(<script\b(?:[^>"']|"[^"]*"|'[^']*')*>)\s*<\/script\s*>/gi, (whole, tag) =>
-        attributeValue(tag, 'src') === name
-          ? `<script>${String(body).replace(/<\/script/gi, '<\\/script')}</script>` : whole);
+      for (const script of doc.querySelectorAll('script[src]')) {
+        if (script.getAttribute('src') !== name) continue;
+        script.removeAttribute('src');
+        script.textContent = String(body).replace(/<\/script/gi, '<\\/script');
+        changed = true;
+      }
     }
   }
-  return out;
+  if (!changed) return original;
+  return (doc.doctype ? '<!DOCTYPE html>\n' : '') + doc.documentElement.outerHTML;
 }
 
 export function shouldEscalate(text, action) {
