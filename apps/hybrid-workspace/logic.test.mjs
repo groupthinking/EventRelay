@@ -7,6 +7,7 @@ const html = `<html><head><link rel="stylesheet" href="styles.css" /></head><bod
 const injected = injectVirtualAssets(html, { "styles.css": "body{color:red}", "app.js": "1" });
 assert.match(injected, /<style>body\{color:red\}<\/style>/);
 assert.match(injected, /<script>1<\/script>/);
+assert.equal(injectVirtualAssets('<script src="app.js"></script >', {"app.js":"1"}), '<script>1</script>');
 assert.doesNotMatch(injected, /src="app\.js"/);
 
 assert.equal(shouldEscalate("help me understand this CSS", "ask"), false);

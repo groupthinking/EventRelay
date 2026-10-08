@@ -23,7 +23,7 @@ export function injectVirtualAssets(html, assets) {
         attributeValue(tag, 'href') === name
           ? `<style>${String(body).replace(/<\/style/gi, '<\\/style')}</style>` : tag);
     } else if (name.endsWith('.js')) {
-      out = out.replace(/(<script\b(?:[^>"']|"[^"]*"|'[^']*')*>)\s*<\/script>/gi, (whole, tag) =>
+      out = out.replace(/(<script\b(?:[^>"']|"[^"]*"|'[^']*')*>)\s*<\/script\s*>/gi, (whole, tag) =>
         attributeValue(tag, 'src') === name
           ? `<script>${String(body).replace(/<\/script/gi, '<\\/script')}</script>` : whole);
     }
