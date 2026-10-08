@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from typing import Any, Protocol
 from urllib.parse import urlparse
 
-ANTIGRAVITY_AGENT = "antigravity-preview-05-2026"
+ANTIGRAVITY_AGENT = "antigravity-preview-09-2026"
 _MCP_NAME = re.compile(r"^[a-z0-9_-]+$")
 
 

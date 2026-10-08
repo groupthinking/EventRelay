@@ -22,18 +22,16 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'GET', path: '/api', summary: 'Service descriptor (name, version, status).' },
   { method: 'POST', path: '/api/transcribe', summary: 'Fetch a transcript for a YouTube URL.', body: '{ "url": "https://youtu.be/..." }' },
   { method: 'POST', path: '/api/extract-events', summary: 'Extract typed events from a transcript.' },
-  { method: 'GET', path: '/api/pipeline', summary: 'Inspect available pipeline stages.' },
-  { method: 'POST', path: '/api/pipeline', summary: 'Run the full intake to agents pipeline.' },
-  { method: 'POST', path: '/api/pipeline/stream', summary: 'Streaming variant of /api/pipeline (SSE).' },
   { method: 'POST', path: '/api/chat', summary: 'Conversational query over an analyzed video.' },
-  { method: 'GET', path: '/api/video', summary: 'List recently analyzed videos.' },
-  { method: 'POST', path: '/api/video', summary: 'Register a new video for analysis.' },
+  { method: 'GET', path: '/api/video', summary: 'List recently analyzed videos. [DEPRECATED — use /api/video/pack]' },
+  { method: 'POST', path: '/api/video', summary: 'Register a new video for analysis. [DEPRECATED — use /api/video/pack]' },
   { method: 'GET', path: '/api/video/search', summary: 'Semantic search across stored videos.' },
   { method: 'GET', path: '/api/dashboard', summary: 'Dashboard aggregates and recent runs.' },
   { method: 'POST', path: '/api/dashboard', summary: 'Mutate dashboard state (pin, archive, etc.).' },
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
   { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
+  { method: 'GET', path: '/api/video/pack', summary: 'Poll a pack by video_id or source_hash until ready (202 processing → 200 success).', body: '?video_id=auJzb1D-fag' },
   { method: 'GET', path: '/api/video/sandbox', summary: 'Materialize an App Builder Workspace sandbox from a stored Video Pack (startup.sh, 8080, browser-smoke, build/typecheck).' },
   { method: 'POST', path: '/api/video/sandbox', summary: 'Same sandbox emit by paste-URL identity. Requires a ready pack from POST /api/video/pack.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
   { method: 'GET', path: '/api/video/assemble', summary: 'Same stored-pack lookup as sandbox plus a planned assembly receipt (file hashes, pinned deps, unresolved requirements). Gates are labeled untested — HTTP does not run npm.' },
@@ -42,7 +40,7 @@ const ENDPOINTS: Endpoint[] = [
 ];
 
 const METHOD_COLOR: Record<Endpoint['method'], string> = {
-  GET: 'bg-teal-500/10 border-teal-500/30 text-teal-300',
+  GET: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
   POST: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
 };
 
@@ -64,14 +62,14 @@ export default function ApiDocsPage() {
 
         <section className="mb-10 rounded-xl border border-white/5 bg-white/[0.02] p-6">
           <h2 className="font-heading text-lg font-bold text-ink">Base URL</h2>
-          <code className="mt-2 block text-sm text-teal-300">https://uvai.io</code>
+          <code className="mt-2 block text-sm text-amber-300">https://uvai.io</code>
           <p className="mt-3 text-sm text-ink/60">
             Want to run it yourself? UVAI is MIT-licensed.{' '}
             <a
               href="https://github.com/groupthinking/EventRelay"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-teal-400 hover:underline"
+              className="text-amber-400 hover:underline"
             >
               See the EventRelay repo
             </a>{' '}
@@ -107,16 +105,16 @@ export default function ApiDocsPage() {
           <h2 className="font-heading text-2xl font-bold text-ink">Try it</h2>
           <p className="mt-2 text-ink/60">
             The{' '}
-            <Link href="/studio" className="text-teal-400 hover:underline">
+            <Link href="/studio" className="text-amber-400 hover:underline">
               studio
             </Link>{' '}
             runs the end-to-end YouTube workflow against a real URL: hashed Video
-            Pack via <code className="text-teal-300">/api/video/pack</code>, then{' '}
-            <code className="text-teal-300">/api/workflows/video-to-actions</code>.
+            Pack via <code className="text-amber-300">/api/video/pack</code>, then{' '}
+            <code className="text-amber-300">/api/workflows/video-to-actions</code>.
           </p>
           <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-ink/60">
             <li>Paste a YouTube URL on Home.</li>
-            <li>Home redirects to <code className="text-teal-300">/studio?video=...</code>.</li>
+            <li>Home redirects to <code className="text-amber-300">/studio?video=...</code>.</li>
             <li>Studio auto-starts analysis once for that handoff URL.</li>
             <li>Transcript and events flow into actions and output publishing.</li>
           </ol>

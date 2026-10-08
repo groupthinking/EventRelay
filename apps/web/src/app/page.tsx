@@ -31,96 +31,88 @@ const OFFERS = [
   },
 ] as const;
 
+/**
+ * Landing page — Muse design language.
+ * Warm paper, serif headlines, quiet cards. Nothing shouts.
+ */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
 
   return (
-    <main className="min-h-screen overflow-hidden bg-surface-950 text-white">
+    <main className="min-h-screen" style={{ background: 'var(--uvai-bg)' }}>
       <Nav />
 
-      <section aria-labelledby="home-heading" className="px-5 pb-16 pt-12 sm:px-6 md:pb-24 md:pt-20">
+      <section aria-labelledby="home-heading" className="px-6 lg:px-12 pb-20 pt-16 md:pt-24">
         <div className="mx-auto max-w-6xl">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)] lg:items-start lg:gap-12">
-            <div className="min-w-0">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600 font-heading text-xl font-black shadow-lg shadow-primary-500/25">
-                  U
-                </div>
-                <span className="font-heading text-3xl font-black tracking-tight sm:text-4xl">UVAI</span>
-              </div>
-              <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.28em] text-teal-200">
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)] lg:items-start">
+            {/* Hero card */}
+            <div className="uvai-card p-8 sm:p-12">
+              <p className="uvai-label">
                 Universal Video Action Intelligence
               </p>
               {showCustomBadge && (
-                <p className="mt-4 inline-flex rounded-full border border-teal-300/30 bg-teal-300/10 px-3 py-1 text-xs font-semibold text-teal-100">
+                <p className="mt-4 inline-flex rounded-full px-3 py-1 text-xs font-medium"
+                   style={{ border: '1px solid var(--uvai-border)', background: 'var(--uvai-accent-soft)', color: 'var(--uvai-accent)' }}>
                   New: configurable with Vercel Flags
                 </p>
               )}
 
-              <h1
-                id="home-heading"
-                className="mt-6 max-w-3xl font-heading text-4xl font-black leading-[1.06] tracking-tight text-balance sm:text-5xl md:mt-8 md:text-6xl"
-              >
-                Turn a YouTube URL into a hashed Video Pack in Studio.
+              <h1 id="home-heading" className="font-display mt-6 max-w-2xl text-4xl sm:text-5xl md:text-6xl" style={{ color: 'var(--uvai-ink)' }}>
+                Your videos know what to do next.
               </h1>
-              <p className="mt-5 max-w-2xl text-base leading-8 text-white/70 md:text-lg">
-                Paste a YouTube URL to open Studio and review transcript, event, and action outputs
-                from your source. Transcript quality varies by source. No guaranteed production
-                outcome.
+              <p className="mt-6 max-w-xl text-lg leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+                Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it,
+                prepares proposed work and build rails for you to review in Studio.
+              </p>
+              <p className="mt-3 text-sm" style={{ color: 'var(--uvai-ink-faint)' }}>
+                Transcript quality varies by source. No guaranteed production outcome.
               </p>
 
-              <div className="mt-8 w-full max-w-2xl md:mt-10">
+              <div className="mt-10 w-full max-w-xl">
                 <HomePasteForm />
               </div>
             </div>
 
-            <aside
-              id="get-pro"
-              aria-labelledby="workflow-pro-heading"
-              className="min-w-0 rounded-[2rem] border border-teal-300/20 bg-surface-900/70 p-1 shadow-2xl shadow-black/30"
-            >
-              <div className="px-5 pb-1 pt-5 sm:px-7 sm:pt-7">
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">
-                  Workflow Pro
-                </p>
-                <h2 id="workflow-pro-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
-                  Get Pro through the existing checkout.
-                </h2>
-                <p className="mt-3 text-sm leading-6 text-white/65">
-                  Choose a billing cadence for the existing Workflow Pro checkout. Stripe confirms
-                  the amount and renewal terms before payment.
-                </p>
+            {/* Pro checkout */}
+            <aside id="get-pro" aria-labelledby="workflow-pro-heading" className="uvai-card p-8">
+              <p className="uvai-label">Workflow Pro</p>
+              <h2 id="workflow-pro-heading" className="font-display mt-3 text-2xl" style={{ color: 'var(--uvai-ink)' }}>
+                Get Pro through the existing checkout.
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+                Choose a billing cadence for the existing Workflow Pro checkout. Stripe confirms
+                the amount and renewal terms before payment.
+              </p>
+              <div className="mt-6">
+                <HomeProCheckout />
               </div>
-              <HomeProCheckout />
             </aside>
           </div>
 
-          <section aria-labelledby="offer-summary-heading" className="mt-12 border-t border-white/[0.08] pt-8 md:mt-16 md:pt-10">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-teal-200">Options</p>
-                <h2 id="offer-summary-heading" className="mt-2 font-heading text-2xl font-bold tracking-tight">
-                  Start in Studio, then choose the right level of support.
-                </h2>
-              </div>
-              <p className="max-w-sm text-sm leading-6 text-white/65">
+          {/* Offers */}
+          <section aria-labelledby="offer-summary-heading" className="mt-12">
+            <div className="uvai-card px-8 py-10 sm:px-10">
+              <p className="uvai-label">Options</p>
+              <h2 id="offer-summary-heading" className="font-display mt-3 text-3xl" style={{ color: 'var(--uvai-ink)' }}>
+                Start in Studio, then choose the right level of support.
+              </h2>
+              <p className="mt-3 max-w-lg text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
                 Workflow Pro is the available self-serve checkout. Ship and Maintain remain
                 request-based options.
               </p>
-            </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {OFFERS.map((offer) => (
-                <article
-                  key={offer.name}
-                  className="min-w-0 rounded-2xl border border-white/[0.1] bg-white/[0.035] px-5 py-5"
-                >
-                  <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/65">
-                    {offer.name}
-                  </p>
-                  <p className="mt-2 font-heading text-lg font-bold text-white">{offer.price}</p>
-                </article>
-              ))}
+              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                {OFFERS.map((offer) => (
+                  <article
+                    key={offer.name}
+                    className="rounded-xl px-6 py-6"
+                    style={{ border: '1px solid var(--uvai-border)', background: 'var(--uvai-surface-warm)' }}
+                  >
+                    <p className="uvai-label">{offer.name}</p>
+                    <p className="mt-2 text-lg font-semibold" style={{ color: 'var(--uvai-ink)' }}>{offer.price}</p>
+                  </article>
+                ))}
+              </div>
             </div>
           </section>
         </div>

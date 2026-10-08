@@ -18,8 +18,11 @@ describe('UVAI is one product surface', () => {
   it('keeps Home as a sell page and Studio as the sole workbench', () => {
     const home = readSource('app/page.tsx');
     const studio = readSource('app/studio/page.tsx');
+    const shell = readSource('app/studio/StudioShell.tsx');
     expect(home).not.toContain('OneLoopStudio');
-    expect(studio).toContain('OneLoopStudio');
+    expect(studio).toContain('StudioShell');
+    expect(studio).not.toContain('OneLoopStudio');
+    expect(shell).toContain('OneLoopStudio');
     expect(home).not.toContain("redirect('/dashboard')");
   });
 
@@ -34,7 +37,9 @@ describe('UVAI is one product surface', () => {
     expect(nav).not.toContain("href: '/features'");
     expect(nav).toContain("href: '/pricing'");
     expect(studio).not.toContain('href="/dashboard"');
-    expect(studio).toContain('Stack checks');
+    // IDE: stack/tools surface in the output pane Tools tab.
+    const output = readSource('components/studio/StudioIdeOutput.tsx');
+    expect(output).toContain("{ id: 'tools', label: 'Tools' }");
   });
 
   it('308s /dashboard, /app, and /prototype into the canonical workbench', () => {
@@ -52,13 +57,15 @@ describe('UVAI is one product surface', () => {
   it('points sell-page CTAs at Home or Studio, not a second skin', () => {
     const features = readSource('app/features/page.tsx');
     const pricing = readSource('app/pricing/page.tsx');
-    const landingNav = readSource('components/landing/LandingNav.tsx');
+    const nav = readSource('components/Nav.tsx');
     expect(features).toContain('redirect(');
     expect(pricing).toContain("from '@/components/Nav'");
     expect(features).not.toContain('href="/dashboard"');
     expect(pricing).not.toContain('href="/dashboard"');
-    expect(landingNav).not.toContain('href="/dashboard"');
-    expect(landingNav).toContain("href: '/studio'");
+    // Orphaned landing/ components deleted per product direction (2026-10-07).
+    // Nav is the single navigation surface.
+    expect(nav).not.toContain('href="/dashboard"');
+    expect(nav).toContain("href: '/studio'");
   });
 
   it('keeps stack-check unlock on the same OneLoopStudio page', () => {

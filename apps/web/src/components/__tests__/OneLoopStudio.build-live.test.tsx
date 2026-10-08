@@ -44,10 +44,12 @@ afterEach(() => {
 });
 
 describe('OneLoopStudio Build live honesty (B3b)', () => {
-  it('renders workbench empty UI when no pack is stored', () => {
+  it('renders IDE empty UI when no pack is stored', () => {
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    expect(screen.getByTestId('studio-workbench-empty')).toBeTruthy();
-    expect(screen.getByText(/video pack not stored/i)).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
   });
 
   it('shows recovery CTAs when Build live fails for a missing pack', async () => {
@@ -131,5 +133,58 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
       'FACTORY_DELIVER_READY',
     );
     expect(screen.queryByTestId('studio-build-live-failure')).toBeNull();
+  });
+
+  it('keeps the Ready receipt card visible after a later failed retry for the same video', async () => {
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
+    const youtubeId = pack.video_id;
+    const liveUrl = `https://uvai.io/d/${youtubeId}`;
+    vi.spyOn(packBuildLive, 'verifyPackBuildLive')
+      .mockResolvedValueOnce({
+        ok: true,
+        liveUrl,
+        reasonCode: 'FACTORY_DELIVER_READY',
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        message: 'No stored Video Pack for this video. Run analysis on this URL, then try Build live again.',
+        reasonCode: 'HOSTED_PACK_NOT_FOUND',
+      });
+    useDashboardStore.setState({
+      videos: [
+        {
+          ...baseVideo,
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        },
+      ],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
+    });
+    expect(screen.getByTestId('studio-pack-build-live-video-id').textContent).toBe(youtubeId);
+
+    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-build-live-failure')).toBeTruthy();
+    });
+    expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
+    expect(screen.getByTestId('studio-pack-build-live-video-id').textContent).toBe(youtubeId);
+    expect(screen.getByTestId('studio-pack-build-live-reason-code').textContent).toBe(
+      'FACTORY_DELIVER_READY',
+    );
   });
 });

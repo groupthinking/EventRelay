@@ -32,12 +32,19 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/billing/renew')).toBe(false);
   });
 
-  it('keeps /api/pipeline/stream public (core EventRelay pipeline entry point)', () => {
-    // The pipeline/stream SSE endpoint is the primary unauthenticated entry
-    // point for the YouTube → transcript → agents workflow. Gating it behind
-    // a session would block the E2E smoke tests and anonymous end-users.
-    expect(isPublicApiPath('/api/pipeline/stream')).toBe(true);
-    expect(needsAuthentication('/api/pipeline/stream')).toBe(false);
+  it('keeps workspace export reachable without a NextAuth session (paywall is the gate)', () => {
+    // Export enforces the Pro paywall in the route handler itself
+    // (402 + Stripe checkout URL for non-Pro). Middleware must not 401
+    // anonymous users before they ever see the paywall.
+    expect(isPublicApiPath('/api/workspace/export')).toBe(true);
+    expect(needsAuthentication('/api/workspace/export')).toBe(false);
+  });
+
+  it('keeps the retired /api/pipeline surface non-public', () => {
+    // The legacy pipeline routes were removed (Video Pack pipeline is
+    // canonical). They must not be re-added as public by accident.
+    expect(isPublicApiPath('/api/pipeline')).toBe(false);
+    expect(isPublicApiPath('/api/pipeline/stream')).toBe(false);
   });
 
   it('keeps Studio Act on findings (WDK video-to-actions) reachable without a session', () => {
@@ -63,7 +70,6 @@ describe('auth path policy', () => {
 
   it('requires auth for product APIs but not the retired dashboard skin', () => {
     expect(needsAuthentication('/api/chat')).toBe(false);
-    expect(needsAuthentication('/api/pipeline')).toBe(true);
     expect(needsAuthentication('/api/video')).toBe(true);
     expect(needsAuthentication('/dashboard')).toBe(false);
     expect(needsAuthentication('/dashboard/agents')).toBe(false);
@@ -187,7 +193,6 @@ describe('AI route classification (rate-limit budget)', () => {
       '/api/agents/dispatch',
       '/api/chat',
       '/api/extract-events',
-      '/api/pipeline',
       '/api/realtime',
       '/api/training',
       '/api/transcribe',

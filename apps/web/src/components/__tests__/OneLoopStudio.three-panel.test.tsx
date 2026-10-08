@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
@@ -21,8 +21,8 @@ vi.mock('@/lib/use-youtube-player', () => ({
 }));
 
 const baseVideo: Video = {
-  id: 'row-three-panel',
-  title: 'Three panel parity',
+  id: 'row-ide',
+  title: 'IDE shell',
   url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
   status: 'complete',
   progress: 100,
@@ -41,15 +41,23 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('OneLoopStudio Result Ready three-panel shell (P1.7)', () => {
-  it('does not render SaaS shell markers when idle with no stored pack', () => {
+describe('OneLoopStudio IDE shell', () => {
+  it('renders the IDE shell with toolbar and three panes when idle', () => {
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    expect(screen.getByTestId('studio-workbench-empty')).toBeTruthy();
-    expect(screen.queryByTestId('shell-nav-panel')).toBeNull();
-    expect(screen.queryByTestId('saas-three-panel-shell')).toBeNull();
+    expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-toolbar')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-splitter-left')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-splitter-right')).toBeTruthy();
+    // Toolbar carries the run + pack actions.
+    expect(screen.getByTestId('studio-ide-run')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-export')).toBeTruthy();
+    expect(screen.getByTestId('studio-build-live-button')).toBeTruthy();
   });
 
-  it('renders adjustable three-panel shell when a stored Video Pack is selected', async () => {
+  it('renders video, chat, and output panes when a stored Video Pack is selected', async () => {
     const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
     const pack = reviewPackFixture();
     useDashboardStore.setState({
@@ -71,17 +79,27 @@ describe('OneLoopStudio Result Ready three-panel shell (P1.7)', () => {
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
 
-    expect(screen.queryByTestId('studio-workbench-empty')).toBeNull();
-    expect(screen.getByTestId('saas-three-panel-shell')).toBeTruthy();
-    expect(screen.getByTestId('shell-nav-panel')).toBeTruthy();
-    expect(screen.getByTestId('shell-splitter-left')).toBeTruthy();
-    expect(screen.getByTestId('shell-splitter-right')).toBeTruthy();
-    expect(screen.getByTestId('shell-chat-panel')).toBeTruthy();
-    expect(screen.getByTestId('shell-nav-collapse')).toBeTruthy();
-    expect(screen.getByTestId('chat-cta-summarize')).toBeTruthy();
-    expect(screen.getByTestId('chat-cta-extract')).toBeTruthy();
-    expect(screen.getByTestId('chat-cta-open-d')).toBeTruthy();
-    expect(screen.getByTestId('studio-result-ready-pane')).toBeTruthy();
-    expect(screen.getByTestId('grounded-spec-review')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output')).toBeTruthy();
+    // Chat composer is live (wired to /api/chat), not a preview stub.
+    expect(screen.getByTestId('studio-ide-chat-input')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat-send')).toBeTruthy();
+    // Output pane shows the action-extraction tabs.
+    expect(screen.getByTestId('studio-ide-output-tab-events')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-tab-lingo')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-tab-tools')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-tab-intent')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-tab-signals')).toBeTruthy();
+  });
+
+  it('shows a cancel button while a run is in flight', async () => {
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    const input = screen.getByLabelText('YouTube URL');
+    fireEvent.change(input, { target: { value: 'https://www.youtube.com/watch?v=auJzb1D-fag' } });
+    // Run is async; the cancel button appears once busy flips true.
+    fireEvent.click(screen.getByTestId('studio-ide-run'));
+    expect(await screen.findByTestId('studio-ide-cancel')).toBeTruthy();
   });
 });

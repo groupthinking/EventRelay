@@ -20,11 +20,11 @@ export default async function LoginPage({
   const callbackUrl = safeCallbackPath(raw ?? CANONICAL_STUDIO_PATH);
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-6 py-12">
-      <section className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/80 p-8 shadow-2xl backdrop-blur">
-        <p className="text-sm font-semibold tracking-[0.2em] text-teal-300">UVAI</p>
-        <h1 className="mt-4 text-3xl font-bold text-white">Sign in to your workspace</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-300">
+    <main className="flex min-h-screen items-center justify-center px-6 py-12" style={{ background: 'var(--uvai-bg)' }}>
+      <section className="uvai-card w-full max-w-md p-8">
+        <p className="uvai-label">UVAI</p>
+        <h1 className="font-display mt-4 text-3xl">Sign in to your workspace</h1>
+        <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
           Use your Google account to access your studio and saved workflows.
         </p>
         <div className="mt-8">

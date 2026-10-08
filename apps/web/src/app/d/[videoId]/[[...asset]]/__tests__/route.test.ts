@@ -114,7 +114,9 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     const body = await res.text();
     expect(body).toContain(`Video Pack ${QJ_VIDEO_ID}`);
     expect(body).toContain(`/d/${QJ_VIDEO_ID}/src/main.ts`);
-  });
+    // Cold module import (typescript compiler) can exceed the default 5s
+    // timeout on slow machines; the assertions above are the actual subject.
+  }, 30_000);
 
   it('serves transpiled JavaScript for hosted TypeScript assets', async () => {
     const loaded = await loadHostedRoute();
@@ -134,7 +136,8 @@ describe('GET /d/[videoId]/[[...asset]]', () => {
     const body = await res.text();
     expect(body).toContain('querySelector');
     expect(body).not.toContain('type ChecklistState');
-  });
+    // First ts.transpileModule in the process is slow; see above.
+  }, 30_000);
 
   it('serves the hosted compiled app index for XYMcBrFSJ4c banked pack', async () => {
     const loaded = await loadHostedRoute();

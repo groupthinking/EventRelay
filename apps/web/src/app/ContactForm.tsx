@@ -9,8 +9,8 @@ import {
   validateContactForm,
 } from '@/lib/contact-form-validation';
 
-const TEAL = '#6af2de';
-const TEAL_DEEP = '#10b7a5';
+const AMBER = '#fbbf24';
+const AMBER_DEEP = '#d97706';
 const INK = '#f8f5fd';
 const BORDER = 'rgba(72, 71, 77, 0.18)';
 const MUTED = 'rgba(248,245,253,0.55)';
@@ -143,7 +143,7 @@ export default function ContactForm() {
           style={{
             color:
               status.kind === 'pending'
-                ? TEAL
+                ? AMBER
                 : status.kind === 'error'
                   ? '#ff8a8a'
                   : FAINT,
@@ -154,7 +154,7 @@ export default function ContactForm() {
         <button
           type="submit"
           className="px-6 py-3 rounded-lg font-bold text-sm transition-all duration-300 active:scale-95"
-          style={{ background: `linear-gradient(135deg, ${TEAL}, ${TEAL_DEEP})`, color: '#002b26' }}
+          style={{ background: `linear-gradient(135deg, ${AMBER}, ${AMBER_DEEP})`, color: '#050508' }}
         >
           Send request
         </button>

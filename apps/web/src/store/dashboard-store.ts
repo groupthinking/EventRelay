@@ -61,9 +61,8 @@ interface DashboardState {
   setLoading: (loading: boolean) => void;
 
   // Workflow actions
-  processVideo: (url: string) => Promise<string>;
+  processVideo: (url: string, opts?: { signal?: AbortSignal }) => Promise<string>;
   resumeProcessingRuns: () => Promise<void>;
-  deployPipeline: (url: string) => Promise<void>;
   extractEvents: (videoId: string) => void;
   dispatchToAgents: (videoId: string) => Promise<void>;
   refreshAgentStatus: (videoId: string) => Promise<void>;
@@ -387,8 +386,9 @@ export const useDashboardStore = create<DashboardState>()(
   },
 
   // ── Process a video URL through one durable, evidence-gated workflow ──
-  processVideo: async (url) => {
+  processVideo: async (url, opts) => {
     const { addVideo, updateVideo, addActivity } = get();
+    const signal = opts?.signal;
     const id = crypto.randomUUID();
     const startedAt = new Date().toISOString();
 
@@ -425,7 +425,22 @@ export const useDashboardStore = create<DashboardState>()(
         statusUrl: started.statusUrl,
         attempts: 180,
         delayMs: 2000,
+        signal,
       });
+
+      if (signal?.aborted) {
+        updateVideo(id, {
+          status: 'failed',
+          failure: {
+            stage: 'analysis',
+            message: 'Cancelled by user.',
+            retryable: true,
+            failedAt: new Date().toISOString(),
+          },
+        });
+        addActivity(`Processing cancelled: ${truncate(url, 40)}`, 'info');
+        return id;
+      }
 
       if (terminal.runStatus !== 'completed') {
         if (terminal.runStatus === 'running' || terminal.runStatus === 'pending') {
@@ -486,134 +501,6 @@ export const useDashboardStore = create<DashboardState>()(
       }
     }));
   },
-
-  // ── Full end-to-end pipeline: YouTube URL → deployed software ──
-  deployPipeline: async (url) => {
-    const { addVideo, updateVideo, addActivity } = get();
-    const id = crypto.randomUUID();
-
-    const video: Video = {
-      id,
-      title: `Deploying: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`,
-      url,
-      status: 'processing',
-      progress: 0,
-      pipelineMode: 'live',
-    };
-    addVideo(video);
-    addActivity(`Pipeline started: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`, 'info');
-
-    try {
-      const res = await fetch('/api/pipeline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, project_type: 'web', deployment_target: 'vercel', async: true }),
-      });
-      if (!res.ok) throw new Error(`Pipeline error: ${res.status}`);
-
-      const result = await res.json();
-      // Support async kickoff response (job pending) vs full sync result
-      const isAsyncPending = result.async_processing || result.status === 'pending' || !!result.job_id;
-      const pipelineResult: PipelineResult = {
-        live_url: (result.result || result).live_url || null,
-        github_repo: (result.result || result).github_repo || null,
-        build_status: (result.result || result).build_status || (isAsyncPending ? 'pending' : 'unknown'),
-        code_generation: (result.result || result).code_generation || null,
-        deployment: (result.result || result).deployment || null,
-      };
-      const terminalSuccess =
-        !isAsyncPending &&
-        (result.status === 'success' || result.status === 'complete') &&
-        typeof pipelineResult.live_url === 'string' &&
-        pipelineResult.live_url.startsWith('https://') &&
-        !String(pipelineResult.build_status).includes('handoff') &&
-        !String(pipelineResult.build_status).includes('fallback');
-      const terminalFailure = !isAsyncPending && !terminalSuccess;
-      const now = new Date().toISOString();
-
-      updateVideo(id, {
-        status: isAsyncPending ? 'processing' : terminalSuccess ? 'complete' : 'failed',
-        progress: isAsyncPending ? 20 : 100,
-        title: terminalSuccess
-          ? `Deployed: ${url.length > 40 ? url.substring(0, 37) + '…' : url}`
-          : terminalFailure
-            ? `Deployment blocked: ${url.length > 34 ? url.substring(0, 31) + '…' : url}`
-            : `Deployment queued: ${url.length > 35 ? url.substring(0, 32) + '…' : url}`,
-        processedAt: isAsyncPending ? undefined : now,
-        pipelineResult,
-        failure: terminalFailure
-          ? {
-              stage: 'deployment',
-              message: result.message || 'Pipeline ended without a verified live deployment URL.',
-              retryable: true,
-              failedAt: now,
-            }
-          : undefined,
-        insights: {
-          summary:
-            (result.result?.video_analysis?.extracted_info?.title || result.video_analysis?.title) ||
-            (isAsyncPending
-              ? 'Deployment job queued. Completion has not yet been verified.'
-              : terminalSuccess
-                ? 'Deployment verified with a live HTTPS URL.'
-                : 'Deployment did not produce a verified live URL.'),
-          actions: normalizeDashboardActions(
-            result.result?.features_implemented || result.features_implemented,
-          ),
-          sentiment: 'Unscored',
-          topics: (result.result?.code_generation?.files_created || result.code_generation?.files) || [],
-        },
-        jobId: result.job_id || result.id,
-        statusUrl: result.status_url,
-      });
-
-      if (pipelineResult.live_url) {
-        addActivity(`Live URL returned: ${pipelineResult.live_url}`, terminalSuccess ? 'success' : 'info');
-      }
-      if (pipelineResult.github_repo) {
-        addActivity(`Repository: ${pipelineResult.github_repo}`, 'success');
-      }
-      addActivity(
-        isAsyncPending
-          ? 'Deployment job queued; awaiting a terminal status'
-          : terminalSuccess
-            ? `Deployment verified (${result.processing_time || 'duration unavailable'})`
-            : 'Deployment blocked: no verified live result was returned',
-        isAsyncPending ? 'info' : terminalSuccess ? 'success' : 'error',
-      );
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : 'Unknown error';
-      const failedAt = new Date().toISOString();
-      console.warn('[Dashboard] Pipeline deploy failed:', error);
-      updateVideo(id, {
-        status: 'failed',
-        progress: 100,
-        title: `Deployment blocked: ${truncate(url, 34)}`,
-        processedAt: failedAt,
-        pipelineResult: {
-          live_url: null,
-          github_repo: null,
-          build_status: 'failed_backend_unavailable',
-          code_generation: null,
-          deployment: null,
-        },
-        failure: {
-          stage: 'deployment',
-          message: reason,
-          retryable: true,
-          failedAt,
-        },
-        insights: {
-          summary: `Deployment was not completed: ${reason}`,
-          actions: [],
-          sentiment: 'Unscored',
-          topics: [],
-        },
-      });
-      addActivity(`Deployment blocked: ${reason}`, 'error');
-    }
-  },
-
   // ── Re-derive events from a completed video's insights ──
   extractEvents: (videoId) => {
     const { videos, updateVideo, addActivity } = get();

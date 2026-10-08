@@ -17,6 +17,8 @@ import {
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackIdentity,
+  studioResolveAutoSelectedPackId,
   studioFormationSupplementalEntities,
   studioPackFormation,
   studioPasteOutcomeMessage,
@@ -26,6 +28,8 @@ import {
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
+  studioJobStripDestination,
+  studioTranscriptBody,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
   studioWorkbenchEmptyView,
@@ -307,6 +311,50 @@ describe('studio-pipeline-status', () => {
     expect(studioTranscriptStage({ busy: false, elapsedSeconds: 12, hasFailed: true }).id).toBe(
       'failed',
     );
+    // Pack identity short-circuits the open-ended "Building transcript" label
+    // even when the elapsed/progress heuristics would otherwise report it.
+    const identityStage = studioTranscriptStage({
+      busy: true,
+      elapsedSeconds: 40,
+      progress: 12,
+      hasPackIdentity: true,
+    });
+    expect(identityStage.id).toBe('pack');
+    expect(identityStage.label).toMatch(/pack identity/i);
+    expect(identityStage.label).not.toMatch(/building transcript/i);
+    // A real transcript still advances past pack identity to events.
+    expect(
+      studioTranscriptStage({
+        busy: true,
+        elapsedSeconds: 40,
+        hasPackIdentity: true,
+        hasTranscript: true,
+      }).id,
+    ).toBe('events');
+    expect(
+      studioTranscriptBody({ transcript: '', busy: false, failed: false }),
+    ).toBe('Nothing yet.');
+    expect(
+      studioTranscriptBody({
+        transcript: '   ',
+        busy: false,
+        failed: true,
+        failureMessage: 'Gemini 3.8 Flash returned no extracted spec content.',
+      }),
+    ).toBe('Gemini 3.8 Flash returned no extracted spec content.');
+    expect(
+      studioTranscriptBody({ transcript: null, busy: false, failed: true, failureMessage: '  ' }),
+    ).toBe('Transcript failed.');
+    expect(studioJobStripDestination(null)).toEqual({
+      kind: 'studio',
+      label: '/studio',
+      href: '/studio',
+    });
+    expect(studioJobStripDestination('auJzb1D-fag')).toEqual({
+      kind: 'video',
+      label: 'auJzb1D-fag',
+    });
+    expect(JSON.stringify(studioJobStripDestination('auJzb1D-fag'))).not.toContain('/d/');
     expect(studioTranscriptEtaLabel(10)).toMatch(/about 35s left/i);
     expect(studioTranscriptEtaLabel(45)).toMatch(/typical/i);
     expect(studioCanRetryTranscript({ busy: false, hasFailed: true, retryable: true })).toBe(true);
@@ -314,10 +362,13 @@ describe('studio-pipeline-status', () => {
     expect(studioCanRetryTranscript({ busy: true, elapsedSeconds: 90 })).toBe(true);
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioTranscriptStage');
     expect(studio).toContain('studioTranscriptEtaLabel');
-    expect(studio).toContain('data-testid="studio-transcript-stage"');
-    expect(studio).toContain('data-testid="studio-transcript-retry"');
+    // IDE: transcript stage + ETA surface in the toolbar status line.
+    expect(studio).toContain('data-testid="studio-ide-status"');
+    expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
+    expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -411,9 +462,10 @@ describe('studio-pipeline-status', () => {
     }
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    expect(studio).toContain('studioDeployOutcomeMessage');
-    expect(studio).not.toMatch(/pollStudioDeploy\([^)]*attempts:\s*20\b/);
-    expect(studio).toContain('startStudioDeploy({ url: next })');
+    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
+    // The Studio no longer contains a deploy call site.
+    expect(studio).not.toContain('const deploy = async');
+    expect(studio).not.toContain('studio-deploy-button');
     expect(studio).toContain('usableProvidedTranscript');
     const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
     expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
@@ -439,11 +491,11 @@ describe('studio-pipeline-status', () => {
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
     expect(asyncJob).not.toMatch(/isGatewayTimeoutKickoff\(undefined, message\) \{\s*return STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    expect(studio).toContain('studioDeployButtonLabel');
-    expect(studio).toContain('studioDeployReceiptForSelection');
-    expect(studio).toContain('studioVerifiedLiveUrl');
-    expect(studio).toContain('setDeployReceiptUrl(null)');
-    expect(studio).toContain('setGateReceipt(null)');
+    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
+    expect(studio).not.toContain('studioDeployButtonLabel');
+    expect(studio).not.toContain('studioDeployReceiptForSelection');
+    expect(studio).not.toContain('setDeployReceiptUrl(null)');
+    expect(studio).not.toContain('setGateReceipt(null)');
     expect(studio).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
     expect(studio).not.toContain('Deploy attempt started. Waiting for a verified https live URL.');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
@@ -457,28 +509,18 @@ describe('studio-pipeline-status', () => {
 
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
+    const shell = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'), 'utf8');
     const pricing = readFileSync(join(process.cwd(), 'src/app/pricing/page.tsx'), 'utf8');
     const apiDocs = readFileSync(join(process.cwd(), 'src/app/docs/api/page.tsx'), 'utf8');
     expect(footer).toContain('STUDIO_PRODUCT_TAGLINE');
     expect(footer.toLowerCase()).not.toContain('reviewed actions');
     expect(footer.toLowerCase()).not.toContain('durable workflows');
-    expect(studio).toContain('data-testid="studio-main"');
-    expect(studio).toMatch(/pb-28|padding-bottom/);
+    // IDE: the shell replaces the old <main> workbench; toolbar carries the actions.
+    expect(shell).toContain('data-testid="studio-ide-shell"');
+    expect(shell).toContain('data-testid="studio-ide-toolbar"');
+    expect(studio).toContain('StudioIdeShell');
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
-    expect(retired).not.toMatch(/Starting durable/);
-    expect(retired).not.toMatch(/Could not start durable workflow/);
-    expect(retired).not.toMatch(/runs a durable video-to-transcript/);
-    expect(retired).not.toMatch(/signed-in durable workflow/);
-    expect(retired).not.toMatch(/durable Workflow DevKit/);
-  });
-
-  it('does not claim live deploy in retired studio without a verified receipt guard', () => {
-    const retired = readFileSync(join(process.cwd(), 'src/components/VideoWorkflowStudio.tsx'), 'utf8');
-    expect(retired).toContain('studioVerifiedLiveUrl');
-    expect(retired).not.toContain('setActionMessage(`Deploy live: ${kick.live_url}`)');
-    expect(retired).not.toContain('setActionMessage(`Deploy ready: ${polled.live_url}`)');
   });
 
   it('renders review_action as a card with status, title, and detail', () => {
@@ -499,8 +541,10 @@ describe('studio-pipeline-status', () => {
     expect(tool.detail).toMatch(/no detail/i);
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioActionCard');
-    expect(studio).toContain('data-testid="studio-action-card"');
+    // IDE: actions surface in the output pane Intent tab.
+    expect(output).toContain("{ id: 'intent', label: 'Intent' }");
   });
 
   it('returns a toast for export success and failure including filename', () => {
@@ -545,7 +589,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-player-overlay"');
     expect(studio).toContain('data-testid="studio-player-retry"');
     expect(studio).toContain('useYouTubePlayer');
-    expect(studio).toMatch(/seekTo\(/);
+    // IDE: seekTo is passed to the spec review's onSeek (not called inline).
+    expect(studio).toContain('seekTo');
     expect(studio).not.toMatch(/onLoad=\{\(\) => setPlayerLoaded/);
     expect(studio).not.toMatch(/0:00/);
   });
@@ -577,20 +622,139 @@ describe('studio-pipeline-status', () => {
     ).toBeNull();
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    expect(studio).toContain('data-testid="studio-workbench-empty"');
+    const shell = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
+    // IDE: empty state lives in the video pane; the shell replaces the workbench.
+    expect(shell).toContain('data-testid="studio-ide-video-pane"');
     expect(studio).toContain('studioWorkbenchEmptyView');
     expect(studio).toContain('data-testid="studio-build-live-failure"');
+    expect(studio).not.toContain('/d/{videoId}');
+    expect(studio).not.toContain("{'{videoId}'}");
+    expect(studio).toContain('studioTranscriptBody');
+    expect(
+      studioWorkbenchEmptyView({
+        busy: false,
+        hasSelection: true,
+        hasVideoPack: false,
+        analysisReady: false,
+        failed: true,
+        failureMessage: 'Gemini 3.8 Flash returned no extracted spec content.',
+      })?.description,
+    ).toBe('Gemini 3.8 Flash returned no extracted spec content.');
   });
 
   it('does not map keyframes or concepts into Studio events', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioEventsEmptyMessage');
     expect(studio).toContain('studioQueryFromSearchParams');
     expect(studio).toContain('studioCanExport');
-    expect(studio).toContain('data-testid="studio-events-empty"');
-    expect(studio).toContain('data-testid="pack-workbench"');
-    expect(studio).not.toMatch(/keyframes/);
-    expect(studio).not.toMatch(/code_snippets/);
+    // IDE: events live in the output pane Events tab.
+    expect(output).toContain("{ id: 'events', label: 'Events' }");
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
+  });
+
+  it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    // The header/transcript follow a resolved selection, and pack identity is
+    // wired into the transcript stage so the status leaves "Building transcript".
+    expect(studio).toContain('studioResolveAutoSelectedPackId');
+    expect(studio).toContain('studioPackIdentity');
+    expect(studio).toContain('hasPackIdentity');
+    // Combobox change still drives selection via the store.
+    expect(studio).toMatch(/onChange=\{\(event\) => selectVideo\(event\.target\.value \|\| null\)\}/);
+  });
+});
+
+function fixturePackCitation(overrides?: {
+  videoId?: string;
+  sourceUrl?: string | null;
+  sourceHash?: string | null;
+}) {
+  const videoId = overrides?.videoId ?? 'auJzb1D-fag';
+  const sourceUrl =
+    overrides && 'sourceUrl' in overrides
+      ? overrides.sourceUrl
+      : `https://www.youtube.com/watch?v=${videoId}`;
+  const sourceHash =
+    overrides && 'sourceHash' in overrides
+      ? overrides.sourceHash
+      : '2778c5fc21eef3d12a4543ce2108ca28fd6f829db1da120d7e75655ab471f97d';
+  return {
+    version: 'v0',
+    videoId,
+    packId: `vp:v0:${videoId}`,
+    sourceUrl: sourceUrl ?? '',
+    sourceHash: sourceHash ?? '',
+    pack: {
+      version: 'v0',
+      id: `vp:v0:${videoId}`,
+      video_id: videoId,
+      source_url: sourceUrl ?? '',
+      provenance: { source_hash: sourceHash ?? '' },
+    },
+  };
+}
+
+describe('studioPackIdentity', () => {
+  it('returns the youtube id and citation when source_url + source_hash exist', () => {
+    const identity = studioPackIdentity(fixturePackCitation());
+    expect(identity).not.toBeNull();
+    expect(identity?.videoId).toBe('auJzb1D-fag');
+    expect(identity?.citation).toContain('cite:youtube:auJzb1D-fag');
+  });
+
+  it('returns null when the pack is missing or lacks identity fields', () => {
+    expect(studioPackIdentity(null)).toBeNull();
+    expect(studioPackIdentity(undefined)).toBeNull();
+    expect(studioPackIdentity(fixturePackCitation({ sourceUrl: '' }))).toBeNull();
+    expect(studioPackIdentity(fixturePackCitation({ sourceHash: '   ' }))).toBeNull();
+  });
+});
+
+describe('studioResolveAutoSelectedPackId', () => {
+  it('picks the newest stored pack with identity when nothing is selected', () => {
+    const target = studioResolveAutoSelectedPackId({
+      selectedVideoId: null,
+      videos: [
+        { id: 'newest', videoPack: fixturePackCitation({ videoId: 'auJzb1D-fag' }) },
+        { id: 'older', videoPack: fixturePackCitation({ videoId: 'jNQXAC9IVRw' }) },
+      ],
+    });
+    expect(target).toBe('newest');
+  });
+
+  it('skips rows without pack identity', () => {
+    const target = studioResolveAutoSelectedPackId({
+      selectedVideoId: null,
+      videos: [
+        { id: 'no-pack', videoPack: null },
+        { id: 'no-identity', videoPack: fixturePackCitation({ sourceHash: '' }) },
+        { id: 'ready', videoPack: fixturePackCitation() },
+      ],
+    });
+    expect(target).toBe('ready');
+  });
+
+  it('never overrides an existing selection or a pending handoff', () => {
+    expect(
+      studioResolveAutoSelectedPackId({
+        selectedVideoId: 'already',
+        videos: [{ id: 'ready', videoPack: fixturePackCitation() }],
+      }),
+    ).toBeNull();
+    expect(
+      studioResolveAutoSelectedPackId({
+        selectedVideoId: null,
+        hasPendingHandoff: true,
+        videos: [{ id: 'ready', videoPack: fixturePackCitation() }],
+      }),
+    ).toBeNull();
+  });
+
+  it('returns null when no stored pack exists', () => {
+    expect(
+      studioResolveAutoSelectedPackId({ selectedVideoId: null, videos: [] }),
+    ).toBeNull();
   });
 });

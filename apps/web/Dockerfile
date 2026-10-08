@@ -19,8 +19,7 @@ COPY apps/web/package.json ./apps/web/
 COPY apps/web/scripts/patch-world-vercel-undici-fetch.mjs ./apps/web/scripts/
 
 # Copy the file: dependency sources required by package.json manifests
-COPY src/dataconnect-generated ./src/dataconnect-generated
-COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+# (dataconnect-generated dirs removed in sprawl pass 2 — zero importers)
 
 # Install dependencies for the workspace at the root level
 # This ensures package-lock.json is respected and hoisting works correctly
@@ -36,8 +35,11 @@ COPY --from=deps /app ./
 # Copy the rest of the application source code
 COPY . .
 
-# Build the Next.js application
-RUN npm run build --workspace=apps/web
+# Production typecheck must not see a dev typegen tree. The CI job builds on
+# the host first, and a copied apps/web/.next/dev/types/validator.ts can be
+# syntactically invalid (TS1434/TS1002) while .next/types stays valid.
+ENV NODE_ENV=production
+RUN rm -rf apps/web/.next && npm run build --workspace=apps/web
 
 # Stage 4: Runner
 FROM base AS runner
@@ -62,8 +64,7 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder /app/apps/web/next.config.js ./apps/web/
 
 # Copy the file: dependency sources to avoid dangling symlinks in node_modules
-COPY --from=builder /app/src/dataconnect-generated ./src/dataconnect-generated
-COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+# (dataconnect-generated dirs removed in sprawl pass 2 — zero importers)
 
 USER nextjs
 

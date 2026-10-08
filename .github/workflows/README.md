@@ -29,8 +29,6 @@ workflow; this README is the index.
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
-| API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
-| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
 | Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; repository state changes | Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
 
@@ -123,15 +121,6 @@ record, so any artifact can be linked back to its originating run.
   QA stage — reports success. The deliverables artifact upload is conditioned on
   that status, so a blocked run publishes evidence but never deliverables.
 
-### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
-
-The only backend deployment path. It remains manual (`workflow_dispatch`) so a
-protected-environment reviewer can approve the exact tested SHA. The workflow
-requires all three PostgreSQL migration checks, authenticates only through
-Workload Identity Federation, pins numeric secret versions, migrates before
-either runtime, promotes the API only after candidate readiness succeeds, and
-reuses the latest successful staging run's exact image digest in production.
-
 ## Adding More Workflows
 
 1. Create a new `.yml` file in this directory (always include a top-level
@@ -154,6 +143,9 @@ A full audit of this directory was performed (see
 - **Removed** `verify-litert-mcp.yml` and `vision-reasoning.yml` — both only
   exercised the `mcp-servers/` tree, which was deleted in the dead-code cleanup;
   with the target modules gone every run failed, so the workflows were removed.
+- **Removed** `verification.yml` — the branch-specific hybrid-refactor gates no
+  longer had an owner, overlapped with `ci.yml`/`security.yml`/`e2e-tests.yml`,
+  and its last seven runs all failed without affecting the current delivery path.
 - **Renamed** `.yaml` → `stale.yml` — the file had no basename.
 - **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
   job (`@main`, dead paths) and switched the Node cache from a dead
@@ -164,6 +156,8 @@ A full audit of this directory was performed (see
 - **Fixed** `auto-assign.yml` — replaced `gh issue edit` with the REST
   assignees endpoint after run logs showed GitHub App installation tokens cannot
   use the CLI's GraphQL assignable mutation for this assignment.
+- **Removed** `api-cost-postgres.yml` — exercised the deleted Python backend (`youtube_extension.backend.api_cost_migrate`); with the backend removed every run would fail, so the workflow was removed.
+- **Removed** `deploy-cloud-run.yml` — deployed the deleted Python backend (`uvai-backend` service) to Cloud Run; nothing remains to deploy (`BACKEND_URL` is unset in every environment), so the workflow was removed.
 
 ## Resources
 

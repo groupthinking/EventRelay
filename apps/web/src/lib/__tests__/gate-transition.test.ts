@@ -147,6 +147,45 @@ describe('evaluateStudioDeployTransition', () => {
     expect(result.reason_code).toBe('GATE_REJECT_CLAIM_MISMATCH');
   });
 
+  it('PASSes when a verified live URL has a successful HTTP probe receipt', () => {
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_probe_ok',
+      runId: 'wrun_probe_ok',
+      liveUrl: 'https://example.vercel.app',
+      runStatus: 'completed',
+      kind: 'live',
+      authority: { actor: 'signed-in' },
+      deploymentHttpProbe: {
+        ok: true,
+        statusCode: 200,
+        finalUrl: 'https://example.vercel.app/',
+      },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('PASS');
+    expect(result.reason_code).toBe('GATE_PASS');
+    expect(
+      result.receipt.evidence_refs.some(
+        (ref) => ref.kind === 'deployment_http_probe' && ref.id === 'ok',
+      ),
+    ).toBe(true);
+  });
+
+  it('HOLDs when HTTP probe fails for a hostname-valid live URL', () => {
+    const result = evaluateStudioDeployTransition({
+      transitionId: 'wrun_probe_fail',
+      runId: 'wrun_probe_fail',
+      liveUrl: 'https://example.vercel.app',
+      runStatus: 'completed',
+      kind: 'live',
+      authority: { actor: 'signed-in' },
+      deploymentHttpProbe: { ok: false, error: 'timeout' },
+      issuedAt: ISSUED_AT,
+    });
+    expect(result.decision).toBe('HOLD');
+    expect(result.reason_code).toBe('GATE_HOLD_DEPLOYMENT_UNREACHABLE');
+  });
+
   it('HOLD when workflow completed without a live receipt (no Deploy completed claim)', () => {
     const result = evaluateStudioDeployTransition({
       transitionId: 'wrun_done',
@@ -548,46 +587,3 @@ describe('studioGateReceiptView', () => {
   });
 });
 
-describe('Studio deploy call site', () => {
-  it('runs G.A.T.E. before claiming a live deploy receipt', () => {
-    const studio = readFileSync(
-      join(process.cwd(), 'src/components/OneLoopStudio.tsx'),
-      'utf8',
-    );
-    const deployFn = studio.slice(studio.indexOf('const deploy = async'));
-    expect(deployFn).toContain('evaluateStudioDeployTransition');
-    const gateIdx = deployFn.indexOf('evaluateStudioDeployTransition');
-    const claimIdx = deployFn.indexOf('studioDeployOutcomeMessage');
-    expect(gateIdx).toBeGreaterThan(-1);
-    expect(claimIdx).toBeGreaterThan(gateIdx);
-    expect(studio).not.toContain('Deploy ${polled.runStatus');
-    expect(studio).toContain('studioGateReceiptView');
-    expect(studio).toContain('data-testid="studio-gate-receipt"');
-    expect(studio).toContain('data-testid="studio-gate-decision"');
-    expect(studio).toContain('data-testid="studio-gate-reason"');
-    expect(studio).toContain('data-testid="studio-gate-receipt-hash"');
-    expect(studio).toContain('data-testid="studio-gate-live-url"');
-    expect(studio).toContain('scopedDeployReceipt');
-    const failIdx = deployFn.indexOf('if (!started.ok || !started.runId)');
-    expect(failIdx).toBeGreaterThan(-1);
-    const failBlock = deployFn.slice(failIdx, deployFn.indexOf('return;', failIdx));
-    expect(failBlock).toContain('evaluateStudioDeployTransition');
-    expect(failBlock).toContain('studioGateReceiptView');
-    expect(deployFn).toMatch(/setGateReceipt\(\s*null\s*\)/);
-    const runIdIdx = deployFn.indexOf('setDeployRunId(started.runId)');
-    const pollIdx = deployFn.indexOf('pollStudioDeploy(started.runId)');
-    expect(runIdIdx).toBeGreaterThan(-1);
-    expect(pollIdx).toBeGreaterThan(runIdIdx);
-    const betweenStartAndPoll = deployFn.slice(runIdIdx, pollIdx);
-    expect(betweenStartAndPoll).not.toContain('evaluateStudioDeployTransition');
-    expect(betweenStartAndPoll).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
-    expect(betweenStartAndPoll).not.toContain(
-      'Deploy attempt started. Waiting for a verified https live URL.',
-    );
-    expect(betweenStartAndPoll).toContain('started.runId');
-    expect(betweenStartAndPoll).not.toContain('wrun_01M2ABB1NJ5TFZ153CTRNTPNW9');
-    const afterPoll = deployFn.slice(pollIdx);
-    expect(afterPoll).toContain('evaluateStudioDeployTransition');
-    expect(afterPoll).toContain('studioDeployPollResidual');
-  });
-});

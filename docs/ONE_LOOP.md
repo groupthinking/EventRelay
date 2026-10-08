@@ -8,7 +8,7 @@
 
 | Source | What we take | What we do not build |
 |--------|----------------|----------------------|
-| L4 accept | Five wires, Run = public `/api/pipeline/stream` | Fake `buildPackage` brief |
+| L4 accept | Five wires, Run = `POST /api/video/pack` (Video Pack pipeline) | Fake `buildPackage` brief |
 | Google Doc “UVAI MASTER FILE DUMP” | Digital Refinery: video → structured action (`docs/landscape/google-doc-deep-research.json`, `intent_match: false`) | ADK/LWP Virtual Ports, Ultron, OPA, canvas glyphs |
 | Notion `approach` | Taskmaster: take action, not a chatbot | Enterprise fleet / contest theater as a second product |
 | HF `ViralNow/uvai` | Timestamp-grounded events idea | NVIDIA AV-Skills 2.8M-row **noncommercial** trainer |
@@ -19,7 +19,7 @@
 ```
 uvai.io (/ and /studio)
   paste YouTube
-    → processVideo → POST /api/pipeline/stream (public)
+    → processVideo → POST /api/video/pack (public)
     → transcript + events on the same page
     → Act (WDK video-to-actions)
     → Export (buildScaffoldPackage)

@@ -1,6 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
-import OneLoopStudio from '@/components/OneLoopStudio';
+import StudioShell from './StudioShell';
 import { agentWorkflowUi } from '@/flags';
 
 export const metadata: Metadata = {
@@ -13,8 +13,8 @@ export default async function StudioPage() {
   const showAgentWorkflowUi = await agentWorkflowUi();
 
   return (
-    <Suspense fallback={<div className="min-h-screen bg-surface-950" />}>
-      <OneLoopStudio showAgentWorkflowUi={showAgentWorkflowUi} />
+    <Suspense fallback={<div className="min-h-screen bg-[#f2f5f9]" />}>
+      <StudioShell showAgentWorkflowUi={showAgentWorkflowUi} />
     </Suspense>
   );
 }

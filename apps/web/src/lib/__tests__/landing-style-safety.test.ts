@@ -10,13 +10,14 @@ function readSource(relativePath: string) {
 }
 
 describe('landing style safety', () => {
-  it('ContactForm does not use styled-jsx (breaks strict TS builds)', () => {
-    const source = readSource('app/ContactForm.tsx');
-    expect(source).not.toContain('<style jsx>');
+  it('keeps one clear heading for the YouTube URL to Studio workflow', () => {
+    const source = readSource('app/page.tsx');
+    expect(source.match(/<h1\b/g)).toHaveLength(1);
+    expect(source).toContain('Your videos know what to do next.');
   });
 
-  it('HeroSection does not use styled-jsx (breaks strict TS builds)', () => {
-    const source = readSource('components/landing/HeroSection.tsx');
+  it('ContactForm does not use styled-jsx (breaks strict TS builds)', () => {
+    const source = readSource('app/ContactForm.tsx');
     expect(source).not.toContain('<style jsx>');
   });
 });

@@ -27,7 +27,7 @@ export default function HomePasteForm() {
 
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-2xl">
-      <label htmlFor="home-youtube-url" className="mb-2 block text-left text-sm font-semibold text-white/80">
+      <label htmlFor="home-youtube-url" className="uvai-label mb-2 block text-left">
         YouTube URL
       </label>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
@@ -40,21 +40,21 @@ export default function HomePasteForm() {
           inputMode="url"
           aria-invalid={Boolean(error)}
           aria-describedby={helpId}
-          className="min-w-0 flex-1 rounded-xl border border-white/15 bg-black/40 px-4 py-3.5 font-mono text-sm text-white outline-none placeholder:text-white/30 focus:border-teal-400/70 focus-visible:ring-2 focus-visible:ring-teal-300/80 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950"
+          className="uvai-input min-w-0 flex-1 font-mono text-sm"
         />
         <button
           type="submit"
-          className="btn btn-primary justify-center px-6 py-3.5 text-sm focus-visible:ring-2 focus-visible:ring-teal-200 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-950 sm:min-w-[9rem]"
+          className="uvai-btn uvai-btn-primary sm:min-w-[9rem]"
         >
           Run in Studio
         </button>
       </div>
       {error ? (
-        <p id="home-youtube-url-error" className="mt-2 text-left text-sm text-amber-300/90" role="alert">
+        <p id="home-youtube-url-error" className="mt-2 text-left text-sm font-medium" style={{ color: 'var(--uvai-danger)' }} role="alert">
           {error}
         </p>
       ) : (
-        <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-white/55">
+        <p id="home-youtube-url-help" className="mt-2 text-left text-xs" style={{ color: 'var(--uvai-ink-faint)' }}>
           Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
         </p>
       )}

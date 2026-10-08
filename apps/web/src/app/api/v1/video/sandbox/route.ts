@@ -1,15 +1,5 @@
-import {
-  handleAppBuilderSandboxGet,
-  handleAppBuilderSandboxPost,
-} from '@/lib/app-builder-sandbox-route';
-
+/** AUDIT-005: compatibility alias — canonical route at /api/video/sandbox */
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-export async function POST(request: Request): Promise<Response> {
-  return handleAppBuilderSandboxPost(request);
-}
-
-export async function GET(request: Request): Promise<Response> {
-  return handleAppBuilderSandboxGet(request);
-}
+export { GET, POST } from '../../../video/sandbox/route';

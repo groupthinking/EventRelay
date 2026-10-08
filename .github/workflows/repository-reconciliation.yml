@@ -21,9 +21,9 @@ on:
   delete:
 
 permissions:
-  contents: read
-  issues: write
-  pull-requests: read
+  contents: read # branch inventory + PR metadata; intentionally avoids admin-only branch protection reads
+  issues: write # upsert the drift report issue and comment on untracked PRs
+  pull-requests: write # remediation comments; issues:write alone 403s on pull requests
 
 concurrency:
   group: repository-reconciliation
@@ -41,6 +41,7 @@ jobs:
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const repoFullName = `${owner}/${repo}`;
+            const defaultBranch = context.payload.repository?.default_branch || "main";
             const escapedRepoFullName = repoFullName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             const now = Date.now();
             const staleAfterMs = 14 * 24 * 60 * 60 * 1000;
@@ -82,9 +83,17 @@ jobs:
             const pulls = await github.paginate(github.rest.pulls.list, {
               owner, repo, state: "open", per_page: 100
             });
+            const protectedBranches = await github.paginate(github.rest.repos.listBranches, {
+              owner, repo, protected: true, per_page: 100
+            });
+            const protectedNames = new Set(
+              (protectedBranches || []).map(branch => branch.name)
+            );
             // Branch commit metadata comes from GraphQL with the branch page, avoiding one
             // REST getCommit call per stale branch. The reconciliation trigger intentionally
             // excludes pull_request.synchronize so it cannot compete with preview E2E lookup.
+            // This query must stay within contents:read; branchProtectionRule requires elevated
+            // admin scope and breaks pull_request_target / schedule runs with installation tokens.
             const branchQuery = `
               query BranchInventory($owner: String!, $repo: String!, $cursor: String) {
                 repository(owner: $owner, name: $repo) {
@@ -93,7 +102,6 @@ jobs:
                     pageInfo { hasNextPage endCursor }
                     nodes {
                       name
-                      branchProtectionRule { id }
                       target {
                         ... on Commit { oid committedDate }
                       }
@@ -116,8 +124,19 @@ jobs:
                 branchCursor = refs.pageInfo.hasNextPage ? refs.pageInfo.endCursor : null;
               } while (branchCursor);
             } catch (err) {
-              if (err.status === 403 && /rate limit/i.test(err.message || "")) {
-                core.info("Repository reconciliation deferred: GitHub API rate limit reached before branch inventory completed.");
+              const integrationForbidden =
+                (Array.isArray(err.errors) &&
+                  err.errors.some(
+                    (e) =>
+                      e.type === "FORBIDDEN" ||
+                      /not accessible by integration/i.test(e.message || ""),
+                  )) ||
+                /not accessible by integration/i.test(err.message || "");
+              if (
+                (err.status === 403 && /rate limit/i.test(err.message || ""))
+                || integrationForbidden
+              ) {
+                core.info("Repository reconciliation deferred: GitHub API branch inventory was unavailable before reconciliation completed.");
                 return;
               }
               throw err;
@@ -174,8 +193,8 @@ jobs:
 
             const staleBranches = [];
             for (const branch of branches) {
-              // Exclude main, protected branches, and branches attached to open PRs.
-              if (branch.name === "main" || branch.branchProtectionRule || activeHeads.has(branch.name)) continue;
+              // Exclude the default branch, protected branches, and branches attached to open PRs.
+              if (branch.name === defaultBranch || protectedNames.has(branch.name) || activeHeads.has(branch.name)) continue;
               const date = branch.target?.committedDate;
               if (date && now - new Date(date).getTime() > staleAfterMs) {
                 staleBranches.push({ name: branch.name, date, sha: branch.target.oid.slice(0, 8) });
@@ -235,16 +254,24 @@ jobs:
             }
 
             // --- Remediation: comment on non-draft PRs missing a canonical issue ---
+            // Per-PR failures (permissions, locked threads, mid-run closes) warn and
+            // continue so one un-commentable PR cannot fail the whole report.
             const botTag = "<!-- reconciliation-missing-issue -->";
             for (const pr of untracked) {
-              const comments = await github.paginate(github.rest.issues.listComments, {
-                owner, repo, issue_number: pr.number, per_page: 100
-              });
-              if (comments.some(c => (c.body || "").includes(botTag))) continue;
-              await github.rest.issues.createComment({
-                owner, repo, issue_number: pr.number,
-                body: `${botTag}\n⚠️ **Repository reconciliation**: this PR does not reference exactly one canonical issue.\n\nPlease add a \`Closes #<issue>\` reference in the PR description so it can be tracked against the delivery plan.\n\nSee governance: #898`
-              });
+              try {
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  owner, repo, issue_number: pr.number, per_page: 100
+                });
+                if (comments.some(c => (c.body || "").includes(botTag))) continue;
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number: pr.number,
+                  body: `${botTag}\n⚠️ **Repository reconciliation**: this PR does not reference exactly one canonical issue.\n\nPlease add a \`Closes #<issue>\` reference in the PR description so it can be tracked against the delivery plan.\n\nSee governance: #898`
+                });
+              } catch (err) {
+                core.warning(
+                  `Remediation comment skipped for PR #${pr.number}: ${err.status || ''} ${err.message || err}`.trim()
+                );
+              }
             }
 
             // Competing PRs remain report-only: body text is not closure authority.
