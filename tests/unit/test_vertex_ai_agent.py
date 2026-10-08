@@ -689,3 +689,18 @@ class TestGetVertexAIService:
         assert mod._vertex_ai_service is None
         svc = get_vertex_ai_service()
         assert mod._vertex_ai_service is svc
+
+
+@pytest.mark.parametrize("model", ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-2.5-pro"])
+def test_model_sampling_policy_preserves_schema_and_tools(mock_vertexai, model):
+    from youtube_extension.services.cloud.vertex_ai_agent import AgentConfig, VertexAIAgentService
+    schema = {"type": "object"}
+    config = AgentConfig(model_name=model, response_schema=schema, tools=["tool"])
+    service = VertexAIAgentService(project_id="test", agent_config=config)
+    kwargs = mock_vertexai["GenerativeModel"].call_args.kwargs
+    generation = kwargs["generation_config"]
+    assert ("temperature" in generation) == model.startswith("gemini-2")
+    assert generation["response_schema"] == schema
+    assert kwargs["tools"] == ["tool"]
+    service._initialize_model()
+    assert mock_vertexai["GenerativeModel"].call_args.kwargs == kwargs

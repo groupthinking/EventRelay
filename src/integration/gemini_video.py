@@ -23,6 +23,8 @@ from typing import Any, Literal, Optional, cast
 
 import httpx
 
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
+
 try:
     from youtube_extension.exceptions import FailoverError
 except ImportError:
@@ -215,6 +217,9 @@ class GeminiVideoService:
         self, model: str, payload: dict, retries: int = 3
     ) -> dict:
         """Make API request with key rotation on failure."""
+        payload = {**payload, "generationConfig": without_deprecated_sampling(
+            model, payload.get("generationConfig", {})
+        )}
         last_error = None
 
         for _attempt in range(retries):
@@ -237,10 +242,10 @@ class GeminiVideoService:
                     # try fallback with simpler payload
                     payload_copy = {
                         "contents": payload["contents"],
-                        "generationConfig": {
+                        "generationConfig": without_deprecated_sampling(self.FALLBACK_MODEL, {
                             "temperature": 0.4,
                             "maxOutputTokens": 8192,
-                        },
+                        }),
                     }
 
                     fallback_url = (
