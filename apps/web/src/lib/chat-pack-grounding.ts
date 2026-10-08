@@ -3,9 +3,10 @@ import {
   isIdentityOnlyPack,
   type VideoPackV0Json,
 } from '@/lib/video-pack';
+import { resolveYouTubeSourceId } from '@/lib/video-source-identity';
 import { getPackRecordWithMeta, type VideoPackRecord } from '@/lib/video-pack-store';
 
-const PACK_ID_RE = /^vp:v0:[A-Za-z0-9_-]+$/;
+const PACK_ID_RE = /^vp:v0:[A-Za-z0-9_-]{11}$/;
 const MAX_TRANSCRIPT_CHARS = 12_000;
 const MAX_VISUAL_EVENTS = 24;
 const MAX_SOP_STEPS = 32;
@@ -43,7 +44,7 @@ export function parseChatPackBinding(input: {
   if (!videoId && rawPack && PACK_ID_RE.test(rawPack)) {
     videoId = rawPack.slice('vp:v0:'.length);
   }
-  if (!videoId) return null;
+  if (!videoId || resolveYouTubeSourceId(videoId) !== videoId) return null;
 
   const expectedPackId = `vp:v0:${videoId}`;
   if (rawPack) {
@@ -150,6 +151,9 @@ function readyPackFromRecord(
 export async function resolveChatPackGrounding(
   binding: ChatPackBinding,
 ): Promise<ChatPackGroundingResult> {
+  if (resolveYouTubeSourceId(binding.videoId) !== binding.videoId || binding.packId !== `vp:v0:${binding.videoId}`) {
+    return packFailure(400, 'pack_id_mismatch', 'A canonical video and pack identity is required.');
+  }
   const identity = buildIdentityPack(binding.videoId);
   const lookup = await getPackRecordWithMeta(identity.provenance.source_hash);
 
@@ -170,3 +174,4 @@ export async function resolveChatPackGrounding(
 
   return readyPackFromRecord(lookup.record, binding);
 }
+
