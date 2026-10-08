@@ -202,9 +202,13 @@ describe('AI route classification (rate-limit budget)', () => {
     }
   });
 
-  it('does not meter identity pack emit as AI work', () => {
-    expect(isAiRoute('/api/video/pack', 'POST')).toBe(false);
-    expect(isAiRoute('/api/v1/video/pack', 'POST')).toBe(false);
+  it('meters durable pack POST as AI work and leaves identity reads general', () => {
+    expect(isAiRoute('/api/video/pack', 'POST')).toBe(true);
+    expect(isAiRoute('/api/video/pack', 'GET')).toBe(false);
+    expect(isAiRoute('/api/video/pack', 'HEAD')).toBe(false);
+    expect(isAiRoute('/api/v1/video/pack', 'POST')).toBe(true);
+    expect(isAiRoute('/api/v1/video/pack', 'GET')).toBe(false);
+    expect(isAiRoute('/api/v1/video/pack')).toBe(true);
     expect(isAiRoute('/api/video/sandbox', 'GET')).toBe(false);
     expect(isAiRoute('/api/v1/video/sandbox', 'POST')).toBe(false);
     expect(isAiRoute('/api/video/assemble', 'GET')).toBe(false);
@@ -285,3 +289,4 @@ describe('AI route classification (rate-limit budget)', () => {
     expect(isAiRoute('/api/transcribe/status', 'GET')).toBe(true);
   });
 });
+
