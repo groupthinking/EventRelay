@@ -24,7 +24,7 @@ describe('OpenAI template Studio navigation', () => {
     vi.stubGlobal('React', React);
     render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
     for (const [view, collapse] of [['Source', 'Collapse video pane'], ['Deliverables', 'Collapse output pane']]) {
-      fireEvent.click(screen.getByRole('button', { name: view, exact: true }));
+      fireEvent.click(screen.getByRole('button', { name: view }));
       fireEvent.click(screen.getByRole('button', { name: collapse }));
       expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('chat');
       expect(screen.getByRole('button', { name: 'Conversation' }).getAttribute('aria-pressed')).toBe('true');
