@@ -24,3 +24,5 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+The completed site adaptation also uses the starter’s neutral color system, sans-serif typography, rounded conversation composer, and assistant/context canvas in Home and Studio. Source references: `app/globals.css`, `components/chat.tsx`, `components/tools-panel.tsx`, and `app/page.tsx` at the pinned commit above. Existing UVAI processing, billing, auth, and authority policies remain the implementation behind these surfaces. No OpenAI fonts are redistributed.

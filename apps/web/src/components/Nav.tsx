@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Film } from 'lucide-react';
 
 interface NavProps {
   rightSlot?: React.ReactNode;
@@ -32,7 +32,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
 
   return (
     <nav
-      className="flex flex-wrap items-center justify-between px-6 lg:px-12 py-4 z-50"
+      className="template-nav flex flex-wrap items-center justify-between px-4 sm:px-6 lg:px-10 py-3 z-50"
       style={{
         borderBottom: '1px solid var(--uvai-border)',
         background: 'var(--uvai-bg)',
@@ -48,7 +48,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm"
             style={{ background: 'var(--uvai-accent)' }}
           >
-            U
+            <Film size={18} aria-hidden="true" />
           </div>
           <span className="font-semibold text-lg tracking-tight" style={{ color: 'var(--uvai-ink)' }}>
             UVAI

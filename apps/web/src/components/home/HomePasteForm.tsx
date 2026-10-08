@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { ArrowUp, Link2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { submitHomePaste } from '@/lib/studio-handoff';
 
@@ -30,7 +31,8 @@ export default function HomePasteForm() {
       <label htmlFor="home-youtube-url" className="uvai-label mb-2 block text-left">
         YouTube URL
       </label>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+      <div className="template-source-input">
+        <Link2 size={18} aria-hidden="true" className="template-source-icon" />
         <input
           id="home-youtube-url"
           value={value}
@@ -44,9 +46,10 @@ export default function HomePasteForm() {
         />
         <button
           type="submit"
-          className="uvai-btn uvai-btn-primary sm:min-w-[9rem]"
+          aria-label="Run in Studio"
+          className="template-send"
         >
-          Run in Studio
+          <ArrowUp size={20} aria-hidden="true" />
         </button>
       </div>
       {error ? (

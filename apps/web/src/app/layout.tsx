@@ -3,6 +3,7 @@ import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { Inter, JetBrains_Mono, Newsreader } from 'next/font/google';
 import './globals.css';
+import '@/styles/openai-template.css';
 import { StructuredData } from '@/components/StructuredData';
 import { AuthSessionProvider } from '@/components/AuthSessionProvider';
 

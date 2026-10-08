@@ -26,9 +26,10 @@ export default function StudioIdeShell({
   chatPane,
   outputPane,
 }: StudioIdeShellProps) {
+  const [mobilePane, setMobilePane] = useState<'video' | 'chat' | 'output'>('chat');
   const shellRef = useRef<HTMLDivElement>(null);
-  const [leftWidth, setLeftWidth] = useState(380);
-  const [rightWidth, setRightWidth] = useState(420);
+  const [leftWidth, setLeftWidth] = useState(280);
+  const [rightWidth, setRightWidth] = useState(340);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
 
@@ -66,21 +67,44 @@ export default function StudioIdeShell({
     <div
       ref={shellRef}
       data-testid="studio-ide-shell"
-      className="uvai-cards flex min-h-0 flex-1 flex-col"
+      data-template="openai-responses-starter"
+      data-mobile-pane={mobilePane}
+      className="uvai-cards template-studio-shell flex min-h-0 flex-1 flex-col"
     >
       <div data-testid="studio-ide-toolbar" className="uvai-toolbar">
         {toolbar}
       </div>
-      <div className="flex min-h-0 flex-1 gap-3 p-3">
+      <div className="template-pane-tabs" role="tablist" aria-label="Studio views">
+        {(['video', 'chat', 'output'] as const).map((pane) => (
+          <button key={pane} type="button" role="tab" id={`studio-tab-${pane}`}
+            aria-selected={mobilePane === pane} aria-controls={`studio-panel-${pane}`}
+            tabIndex={mobilePane === pane ? 0 : -1}
+            onKeyDown={(event) => {
+              const panes = ['video', 'chat', 'output'] as const;
+              const index = panes.indexOf(pane);
+              const next = event.key === 'ArrowRight' ? panes[(index + 1) % 3]
+                : event.key === 'ArrowLeft' ? panes[(index + 2) % 3]
+                  : event.key === 'Home' ? 'video' : event.key === 'End' ? 'output' : null;
+              if (next) {
+                event.preventDefault(); setMobilePane(next); setLeftCollapsed(false); setRightCollapsed(false);
+                document.getElementById(`studio-tab-${next}`)?.focus();
+              }
+            }}
+            onClick={() => { setMobilePane(pane); setLeftCollapsed(false); setRightCollapsed(false); }}
+          >{pane === 'video' ? 'Source' : pane === 'chat' ? 'Conversation' : 'Deliverables'}</button>
+        ))}
+      </div>
+      <div className="template-studio-panes flex min-h-0 flex-1">
         {/* LEFT: video */}
         {!leftCollapsed ? (
           <aside
+            id="studio-panel-video"
             data-testid="studio-ide-video-pane"
             aria-label="Video"
             className="uvai-card flex min-h-0 w-[var(--ide-left-w)] shrink-0 flex-col overflow-hidden"
           >
             <div className="uvai-pane-header">
-              <span className="uvai-section-label">Video</span>
+              <span className="uvai-section-label">Source video</span>
               <button
                 type="button"
                 aria-label="Collapse video pane"
@@ -109,12 +133,13 @@ export default function StudioIdeShell({
 
         {/* CENTER: chat */}
         <main
+          id="studio-panel-chat"
           data-testid="studio-ide-chat-pane"
           aria-label="Chat"
           className="uvai-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
           <div className="uvai-pane-header">
-            <span className="uvai-section-label">Chat</span>
+            <span className="uvai-section-label">Conversation</span>
             {leftCollapsed ? (
               <button
                 type="button"
@@ -145,12 +170,13 @@ export default function StudioIdeShell({
         {/* RIGHT: output */}
         {!rightCollapsed ? (
           <aside
+            id="studio-panel-output"
             data-testid="studio-ide-output-pane"
             aria-label="Output"
             className="uvai-card flex min-h-0 w-[var(--ide-right-w)] shrink-0 flex-col overflow-hidden"
           >
             <div className="uvai-pane-header">
-              <span className="uvai-section-label">Output</span>
+              <span className="uvai-section-label">Deliverables</span>
               <button
                 type="button"
                 aria-label="Collapse output pane"
