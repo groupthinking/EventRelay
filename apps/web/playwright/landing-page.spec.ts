@@ -27,6 +27,16 @@ for (const viewport of viewports) {
     await expect(page.getByText('UVAI Workflow Pro').last()).toBeVisible();
     await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
     await expect(page.getByRole('link', { name: 'See all plans' })).toBeVisible();
+    const context = page.getByRole('complementary', { name: 'Video workflow context' });
+    const toggle = page.getByRole('button', { name: 'Show workflow details' });
+    if (viewport.width >= 1024) {
+      await expect(context).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Inspect the Video Pack' })).toBeVisible();
+      await expect(toggle).toBeHidden();
+    } else {
+      await expect(context).toBeHidden();
+      await expect(toggle).toBeVisible();
+    }
     await expectNoHorizontalOverflow(page);
   });
 }
