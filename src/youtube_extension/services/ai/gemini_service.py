@@ -1166,42 +1166,43 @@ class GeminiService:
             GeminiResult with analysis
         """
         start_time = time.time()
+        snapshot = self._snapshot_model()
 
         if not self.is_available() or not self._is_initialized:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="none",
                 error="Gemini not available or not initialized"
             )
 
-        if self._use_vertex:
+        if snapshot.use_vertex:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="vertex",
                 error="YouTube URL processing not supported in Vertex AI"
             )
 
-        if self._backend_kind != "gemini":
-            error = f"{self._backend_kind} backend does not handle YouTube ingestion"
+        if snapshot.backend != "gemini":
+            error = f"{snapshot.backend} backend does not handle YouTube ingestion"
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend=self._backend_kind,
+                model_name=snapshot.model_name,
+                backend=snapshot.backend,
                 error=error,
             )
 
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
             response = await loop.run_in_executor(
                 None,
@@ -1211,6 +1212,7 @@ class GeminiService:
                 video_metadata,
                 generation_config,
                 request_kwargs,
+                snapshot,
             )
 
             latency = time.time() - start_time
@@ -1219,7 +1221,7 @@ class GeminiService:
                 success=True,
                 response=response.text,
                 latency=latency,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="api",
                 usage_metadata=getattr(response, "usage_metadata", None),
             )
@@ -1230,7 +1232,7 @@ class GeminiService:
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="api",
                 error=str(e)
             )
@@ -1242,8 +1244,10 @@ class GeminiService:
         video_metadata: Optional[dict[str, Any]],
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Synchronous YouTube processing in executor"""
+        snapshot = snapshot or self._snapshot_model()
         if genai_types:
             metadata_obj = None
             if video_metadata:
@@ -1263,7 +1267,7 @@ class GeminiService:
                 )
             prompt_part = genai_types.Part(text=prompt)
             content = genai_types.Content(role="user", parts=[youtube_part, prompt_part])
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 [content],
                 generation_config=generation_config,
                 **request_kwargs,
@@ -1276,7 +1280,7 @@ class GeminiService:
                 "data": youtube_url
             }
         }
-        return self._model.generate_content(
+        return snapshot.client.generate_content(
             [prompt, youtube_part],
             generation_config=generation_config,
             **request_kwargs,

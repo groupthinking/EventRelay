@@ -946,7 +946,7 @@ export default function OneLoopStudio({
     : 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f2f5f9] text-slate-900">
+    <div className="template-studio flex min-h-screen flex-col text-slate-900">
       <Nav rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
