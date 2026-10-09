@@ -5,18 +5,9 @@ const textPartSchema = z.object({
   type: z.enum(["text"]),
 });
 
-const filePartSchema = z.object({
-  mediaType: z.enum(["image/jpeg", "image/png"]),
-  name: z.string().min(1).max(100),
-  type: z.enum(["file"]),
-  url: z.url(),
-});
-
-const partSchema = z.union([textPartSchema, filePartSchema]);
-
 const userMessageSchema = z.object({
   id: z.uuid(),
-  parts: z.array(partSchema),
+  parts: z.array(textPartSchema).min(1).max(10),
   role: z.enum(["user"]),
 });
 
@@ -32,6 +23,6 @@ export const postRequestBodySchema = z.object({
   messages: z.array(toolApprovalMessageSchema).optional(),
   selectedChatModel: z.string(),
   selectedVisibilityType: z.enum(["public", "private"]),
-});
+}).refine(body => Boolean(body.message) && body.messages === undefined, { message: "Only text user messages are supported; tool approval replay is disabled." });
 
 export type PostRequestBody = z.infer<typeof postRequestBodySchema>;

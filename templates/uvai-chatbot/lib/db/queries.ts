@@ -589,3 +589,19 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     throw new ChatbotError("bad_request:database", { cause: error });
   }
 }
+
+// Transaction-scoped locks work across server instances and release on crash.
+// These locks protect generation, not Video Pack storage (which remains Upstash REST).
+export async function withVideoGuideGenerationLock<T>(userId: string, guideId: string, action: () => Promise<T>): Promise<{ acquired: false; reason: "guide_busy" | "user_busy" } | { acquired: true; result: T }> {
+  return client.begin(async (transaction) => {
+    const [guideLock] = await transaction`SELECT pg_try_advisory_xact_lock(hashtextextended(${'uvai-guide:' + guideId}, 0)) AS acquired`;
+    if (!guideLock.acquired) return { acquired: false, reason: "guide_busy" } as const;
+    const [userLock] = await transaction`SELECT pg_try_advisory_xact_lock(hashtextextended(${'uvai-guide-user:' + userId}, 0)) AS acquired`;
+    if (!userLock.acquired) return { acquired: false, reason: "user_busy" } as const;
+    return { acquired: true, result: await action() } as const;
+  }) as Promise<{ acquired: false; reason: "guide_busy" | "user_busy" } | { acquired: true; result: T }>;
+}
+
+export async function closeDatabaseConnections() {
+  await client.end({ timeout: 5 });
+}

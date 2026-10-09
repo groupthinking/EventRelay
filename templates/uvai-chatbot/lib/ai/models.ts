@@ -1,11 +1,10 @@
-export const DEFAULT_CHAT_MODEL = "moonshotai/kimi-k2.5";
+export const DEFAULT_CHAT_MODEL = "google/gemini-3.8-flash";
 
 export const titleModel = {
-  description: "Fast model for title generation",
-  gatewayOrder: ["fireworks", "bedrock"],
-  id: "moonshotai/kimi-k2.5",
-  name: "Kimi K2.5",
-  provider: "moonshotai",
+  description: "UVAI guide workspace titles",
+  id: DEFAULT_CHAT_MODEL,
+  name: "Gemini 3.8 Flash",
+  provider: "google",
 };
 
 export type ModelCapabilities = {
@@ -24,6 +23,12 @@ export type ChatModel = {
 };
 
 export const chatModels: ChatModel[] = [
+  {
+    description: "UVAI default for grounded guides and follow-up",
+    id: DEFAULT_CHAT_MODEL,
+    name: "Gemini 3.8 Flash",
+    provider: "google",
+  },
   {
     description: "Fast and capable model with tool use",
     gatewayOrder: ["bedrock", "deepinfra"],

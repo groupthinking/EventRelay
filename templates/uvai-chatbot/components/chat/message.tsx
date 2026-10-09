@@ -15,6 +15,7 @@ import {
 } from "../ai-elements/tool";
 import { useDataStream } from "./data-stream-provider";
 import { DocumentToolResult } from "./document";
+import { SourceEvidencePanel } from "./source-evidence-panel";
 import { DocumentPreview } from "./document-preview";
 import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
@@ -195,9 +196,10 @@ const PurePreviewMessage = ({
       const download = output && "download" in output ? output.download : undefined;
       return (
         <div className="w-full max-w-[560px] rounded-xl border p-4 text-sm" key={part.toolCallId}>
-          <p role="status">{complete ? creating ? "Guide saved" : "Source evidence retrieved" : output?.status === "processing" ? "Source extraction is still processing. Retry this request to check again." : output ? `Guide unavailable: ${"code" in output ? output.code : output.status}` : creating ? "Extracting source evidence and generating guide…" : "Reading saved guide evidence…"}</p>
+          <p role="status">{complete ? creating ? "Guide saved" : "Source evidence retrieved" : output?.status === "processing" ? "code" in output && output.code === "guide_generation_busy" ? "Guide generation is already running. Retry to check its result." : "Source extraction is still processing. Retry this request to check again." : output ? `Guide unavailable: ${"code" in output ? output.code : output.status}` : creating ? "Extracting source evidence and generating guide…" : "Reading saved guide evidence…"}</p>
           {download && <a className="mt-2 inline-block underline" href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${download}`}>Download timestamped guide</a>}
           {output && "gaps" in output && output.gaps?.length ? <ul className="mt-2 list-disc pl-5 text-muted-foreground">{output.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul> : null}
+          {complete && creating && output && "videoId" in output && "evidence" in output && output.videoId && output.evidence ? <SourceEvidencePanel videoId={output.videoId} evidence={output.evidence} /> : null}
           {complete && creating && output && "id" in output && output.id ? <DocumentPreview isReadonly={isReadonly} result={{ id: output.id, kind: "text", title: "Timestamped video guide" }} /> : null}
         </div>
       );

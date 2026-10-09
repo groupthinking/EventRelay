@@ -1,5 +1,5 @@
 {
-  "verifiedAt": "2026-10-09T21:34:14.694219+00:00",
+  "verifiedAt": "2026-10-09T22:43:29.892968+00:00",
   "repository": "https://github.com/vercel/chatbot",
   "commit": "c2f8235e1f3ea903ad8b7f61447c4f74164b5c58",
   "omittedDirectories": [
@@ -7,7 +7,7 @@
     ".husky/"
   ],
   "importedTrackedFiles": 178,
-  "unchangedFiles": 162,
+  "unchangedFiles": 156,
   "files": [
     {
       "path": ".cursor/rules/ultracite.mdc",
@@ -18,7 +18,7 @@
     {
       "path": ".env.example",
       "upstreamSha256": "db7f0b012e66be3f14d7d79e3371808d5e685fa8c6e4c5a775f2b0822bca44f3",
-      "importSha256": "d503f8cc50cf96ef614e0763a3801e582d71280b2c148f61ab403056ed3c0524",
+      "importSha256": "c8a3bdc10fa047131d8a1ea0f38648bfb316d3e5367c3ed04a692b372f935cb6",
       "adapted": true
     },
     {
@@ -102,8 +102,8 @@
     {
       "path": "app/(chat)/actions.ts",
       "upstreamSha256": "8e9540eb60122fd3b44f037bb2b49c6972885f2979980abe002c198d84310213",
-      "importSha256": "8e9540eb60122fd3b44f037bb2b49c6972885f2979980abe002c198d84310213",
-      "adapted": false
+      "importSha256": "d09369a3a7f6c7031e5528e77d0f2cc9971d2208298a5e32e89a9e383f01d92f",
+      "adapted": true
     },
     {
       "path": "app/(chat)/api/chat/[id]/stream/route.ts",
@@ -120,8 +120,8 @@
     {
       "path": "app/(chat)/api/chat/schema.ts",
       "upstreamSha256": "2b2a1b48cfd1a6b2763299b3cd11a3bffd6a4e8b0eee7e821c5310a0c2482700",
-      "importSha256": "2b2a1b48cfd1a6b2763299b3cd11a3bffd6a4e8b0eee7e821c5310a0c2482700",
-      "adapted": false
+      "importSha256": "e61522c08022295c125bc256305834df7a5cb528dc29b1092bddd977f23f49a7",
+      "adapted": true
     },
     {
       "path": "app/(chat)/api/document/route.ts",
@@ -462,7 +462,7 @@
     {
       "path": "components/chat/message.tsx",
       "upstreamSha256": "8631abfa4366e45b28d125ffd91134c7306e04788f21b3e6649fd636c0385f67",
-      "importSha256": "f078c513e106507e8bcc4685cb32e4fa5be423e6bd334ea03a34adfcf9630522",
+      "importSha256": "2f2e4dd8fc136f74b497b4a1e06fb058b39ab1d31850b1949f215e055bafc560",
       "adapted": true
     },
     {
@@ -810,8 +810,8 @@
     {
       "path": "lib/ai/models.ts",
       "upstreamSha256": "f7ebbfe73b49b0c52d4d6613b0fd7dbec3f1514a253271b2352f235817421675",
-      "importSha256": "f7ebbfe73b49b0c52d4d6613b0fd7dbec3f1514a253271b2352f235817421675",
-      "adapted": false
+      "importSha256": "6648f6a0e14c5233f747e36d471f19c167b655fe46838d7e8740e329fa31e637",
+      "adapted": true
     },
     {
       "path": "lib/ai/prompts.ts",
@@ -888,8 +888,8 @@
     {
       "path": "lib/db/queries.ts",
       "upstreamSha256": "7e12f2b6bf2c7763bc1ca48db2020cf0e098ca21ece23ce1c9172c99645fcc60",
-      "importSha256": "7e12f2b6bf2c7763bc1ca48db2020cf0e098ca21ece23ce1c9172c99645fcc60",
-      "adapted": false
+      "importSha256": "45747065619cfcf8e52aaae0e52565053b9827c4609a55397faa3cac53b4e77d",
+      "adapted": true
     },
     {
       "path": "lib/db/schema.ts",
@@ -954,8 +954,8 @@
     {
       "path": "lib/utils.ts",
       "upstreamSha256": "0e6f2d0373d510f6418f6d77419a5e390419382c9e22d16b0f794645934836ef",
-      "importSha256": "0e6f2d0373d510f6418f6d77419a5e390419382c9e22d16b0f794645934836ef",
-      "adapted": false
+      "importSha256": "0bee90f3436de9a7a8439055a9bcd10f2df4688b1108ab64341bfb0c53411d4d",
+      "adapted": true
     },
     {
       "path": "next.config.ts",
@@ -966,7 +966,7 @@
     {
       "path": "package.json",
       "upstreamSha256": "b1ca1259ccaf3ec22abfc534c954a64d2749357db583789d8f9aa10ff8ed548c",
-      "importSha256": "b87fab67ff1b64784a473eb97fde9e116facd564ffe2be1ac3318b5e5da2dcfe",
+      "importSha256": "6213152dd28af6332d27e62c3caf1974ef5017775e676c42959a6a3e94e7d984",
       "adapted": true
     },
     {
@@ -978,8 +978,8 @@
     {
       "path": "pnpm-lock.yaml",
       "upstreamSha256": "89755153970535ec19f68306395b907ec9c43d0fa9d6420f74560d79e8280970",
-      "importSha256": "89755153970535ec19f68306395b907ec9c43d0fa9d6420f74560d79e8280970",
-      "adapted": false
+      "importSha256": "a60db583ab892c6bbca8e74b5749a9a98e251106a0ad97d503297f458038adb5",
+      "adapted": true
     },
     {
       "path": "postcss.config.mjs",
@@ -1077,5 +1077,6 @@
       "importSha256": "09ccb233849ac5b1ab2ea69fe8021fcfa6135742e6e9bd608f3727d32efbc40b",
       "adapted": false
     }
-  ]
+  ],
+  "dependencyNote": "Source pin retained; dependencies intentionally patched for security. Original lockfile hash remains in upstreamSha256."
 }

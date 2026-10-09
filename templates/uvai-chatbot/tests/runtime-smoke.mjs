@@ -21,12 +21,12 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200));
   }
   assert.ok(ready, 'Local production server did not become ready');
-  for (const [path, expectedStatus] of [['/login', 200], ['/register', 200], ['/api/auth/guest', 404], ['/api/video-guide/download?id=00000000-0000-0000-0000-000000000000', 401], ['/api/chat', 401], ['/', 307]]) {
-    const response = await fetch(`${base}${path}`, { redirect: 'manual', signal: AbortSignal.timeout(5000) });
+  for (const [path, expectedStatus, headers] of [['/login', 200], ['/register', 200], ['/api/auth/guest', 404], ['/api/video-guide/download?id=00000000-0000-0000-0000-000000000000', 401], ['/api/chat', 401], ['/api/chat', 401, { Authorization: 'Bearer %' }], ['/api/chat', 401, { Authorization: 'Bearer %E0%A4%A' }], ['/', 307]]) {
+    const response = await fetch(`${base}${path}`, { redirect: 'manual', headers, signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, expectedStatus, `${path} status`);
     if (path === '/') assert.equal(new URL(response.headers.get('location'), base).pathname, '/login');
     if (path === '/login') assert.match(await response.text(), /Welcome back/);
-    checks.push({ path, expectedStatus, actualStatus: response.status, passed: true });
+    checks.push({ path, expectedStatus, actualStatus: response.status, malformedAuthorization: Boolean(headers), passed: true });
   }
   writeFileSync('evidence/runtime-smoke.json', JSON.stringify({ verifiedAt: new Date().toISOString(), environment: 'local production build', credentials: 'ephemeral auth test secret; no database or AI provider', checks, limitations: ['No authenticated customer journey', 'No browser or provider-quality verification', 'No database migrations or cross-tenant verification'] }, null, 2) + '\n');
   console.log(JSON.stringify({ passed: checks.length, failed: 0 }));

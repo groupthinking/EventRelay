@@ -43,3 +43,13 @@ test("reuse identity is isolated by user, source and requested outcome", () => {
   assert.notEqual(a, guideId("alice", "b".repeat(64), "guide"));
   assert.notEqual(a, guideId("alice", "a".repeat(64), "spec"));
 });
+
+import { sourcePlayback } from "../lib/uvai/source-player.ts";
+test("source player timestamps use only validated fixed-origin URLs", () => {
+  const view = sourcePlayback("auJzb1D-fag", 62.9);
+  assert.equal(view.label, "1:02");
+  assert.equal(view.embed, "https://www.youtube-nocookie.com/embed/auJzb1D-fag?start=62");
+  assert.equal(view.external, "https://www.youtube.com/watch?v=auJzb1D-fag&t=62s");
+  for (const time of [-1, Infinity, NaN, 86401]) assert.throws(() => sourcePlayback("auJzb1D-fag", time));
+  assert.throws(() => sourcePlayback("javascript:alert(1)", 0));
+});

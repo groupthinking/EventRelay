@@ -1,0 +1,48 @@
+name: UVAI Chatbot foundation
+
+on:
+  pull_request:
+    paths:
+      - "templates/uvai-chatbot/**"
+      - ".github/workflows/uvai-chatbot-foundation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: templates/uvai-chatbot
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: uvai-test-only
+          POSTGRES_DB: uvai_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      POSTGRES_URL: postgresql://postgres:uvai-test-only@127.0.0.1:5432/uvai_test
+      TEST_POSTGRES_URL: postgresql://postgres:uvai-test-only@127.0.0.1:5432/uvai_test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: "22"
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: npm run type-check
+      - run: npm run test:video-guide
+      - run: node --import tsx --test tests/security-id.test.mjs
+      - run: node --import tsx --test tests/chat-contract.test.mjs
+      - run: node --conditions=react-server --import tsx --test tests/guide-generation.integration.mjs
+      - run: npm run build
+      - run: node tests/runtime-smoke.mjs
