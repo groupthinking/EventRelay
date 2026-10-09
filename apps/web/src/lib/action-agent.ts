@@ -1,3 +1,4 @@
+import { geminiSampling } from '@/lib/gemini-parameters';
 import 'server-only';
 
 /**
@@ -214,7 +215,7 @@ async function runWithGemini(opts: RunActionAgentOptions, ctx: ToolContext): Pro
     model: MODEL_GEMINI,
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(opts.transcript, opts.videoTitle)}`,
     config: {
-      temperature: 0.3,
+      ...geminiSampling(MODEL_GEMINI, 0.3),
       tools: [{ functionDeclarations: toGeminiFunctionDeclarations() }],
     },
   });

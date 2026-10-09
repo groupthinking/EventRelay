@@ -72,7 +72,7 @@ export default function StudioIdeOutput({
             onClick={() => setActive(s.id)}
             className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               active === s.id
-                ? 'bg-amber-600 text-white shadow-sm'
+                ? 'bg-neutral-900 text-white shadow-sm'
                 : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
             }`}
           >
@@ -81,7 +81,7 @@ export default function StudioIdeOutput({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[#f2f5f9] p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-4">
         {!hasContent && active !== 'transcript' ? (
           <div className="uvai-empty">
             <p className="font-medium text-slate-600">
@@ -99,7 +99,7 @@ export default function StudioIdeOutput({
               events.map((e) => (
                 <li key={e.id} className="uvai-card p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-800">
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
                       <DotIcon />
                       {e.type}
                     </span>
@@ -187,7 +187,7 @@ export default function StudioIdeOutput({
               <EmptyNote text="No action items extracted yet — what should the viewer do or make from this video?" />
             ) : (
               actionItems.map((a, i) => (
-                <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-amber-600 p-4">
+                <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-neutral-900 p-4">
                   <div className="flex items-start gap-3">
                     <span className="uvai-metric-icon mt-0.5 shrink-0">
                       <ArrowIcon />
