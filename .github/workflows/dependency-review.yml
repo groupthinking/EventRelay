@@ -159,7 +159,13 @@ jobs:
           # a bundled BSL-1.0 component. Both live under docs/ only. Revisit if they move into
           # shipped code. Added 2026-10-02: the finding is pre-existing on main and fails every PR
           # touching any dependency manifest, including dependabot's.
+          # UVAI pinned Chatbot: postgres 3.4.9 (database driver) and robust-predicates
+          # 3.0.2 (Mermaid geometry) declare Unlicense. Checked the tagged upstream
+          # license / installed license and record hashes in the UVAI receipt. Limit
+          # these exceptions to those package versions; vulnerability checks stay on.
           allow-dependencies-licenses: >-
+            pkg:npm/postgres@3.4.9,
+            pkg:npm/robust-predicates@3.0.2,
             pkg:pypi/regex,
             pkg:pypi/torch,
             pkg:npm/caniuse-lite,

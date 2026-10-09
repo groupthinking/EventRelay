@@ -1,0 +1,715 @@
+﻿2026-10-09T22:44:30.0420653Z Current runner version: '2.337.0'
+2026-10-09T22:44:30.0445722Z ##[group]Runner Image Provisioner
+2026-10-09T22:44:30.0446638Z Hosted Compute Agent
+2026-10-09T22:44:30.0447309Z Version: 20261002.596
+2026-10-09T22:44:30.0447955Z Commit: c3d12f3313a95f25162a1503be624f3b0617f8c0
+2026-10-09T22:44:30.0448683Z Build Date: 2026-10-02T22:28:27Z
+2026-10-09T22:44:30.0449441Z Worker ID: {f4f508a6-c0ba-4a6e-86f8-9a0f9454f1cf}
+2026-10-09T22:44:30.0450179Z Region: eastus
+2026-10-09T22:44:30.0450744Z Cloud: Azure
+2026-10-09T22:44:30.0451291Z ##[endgroup]
+2026-10-09T22:44:30.0452730Z ##[group]Operating System
+2026-10-09T22:44:30.0453492Z Ubuntu
+2026-10-09T22:44:30.0454285Z 24.04.5
+2026-10-09T22:44:30.0454858Z LTS
+2026-10-09T22:44:30.0455387Z ##[endgroup]
+2026-10-09T22:44:30.0455944Z ##[group]Runner Image
+2026-10-09T22:44:30.0456604Z Image: ubuntu-24.04
+2026-10-09T22:44:30.0457214Z Version: 20261004.327.1
+2026-10-09T22:44:30.0458513Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261004.327/images/ubuntu/Ubuntu2404-Readme.md
+2026-10-09T22:44:30.0460125Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261004.327
+2026-10-09T22:44:30.0461154Z ##[endgroup]
+2026-10-09T22:44:30.0462312Z ##[group]GITHUB_TOKEN Permissions
+2026-10-09T22:44:30.0464789Z Contents: read
+2026-10-09T22:44:30.0465403Z Metadata: read
+2026-10-09T22:44:30.0465943Z ##[endgroup]
+2026-10-09T22:44:30.0468139Z Secret source: Actions
+2026-10-09T22:44:30.0469116Z Cache mode: write
+2026-10-09T22:44:30.0470159Z Prepare workflow directory
+2026-10-09T22:44:30.0925228Z Prepare all required actions
+2026-10-09T22:44:30.0976602Z Getting action download info
+2026-10-09T22:44:30.3066449Z Download action repository 'actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-10-09T22:44:30.3997437Z Download action repository 'actions/setup-node@820762786026740c76f36085b0efc47a31fe5020' (SHA:820762786026740c76f36085b0efc47a31fe5020)
+2026-10-09T22:44:30.6297249Z Complete job name: foundation
+2026-10-09T22:44:30.6826318Z ##[group]Checking docker version
+2026-10-09T22:44:30.6839494Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+2026-10-09T22:44:30.7657116Z '1.48'
+2026-10-09T22:44:30.7673497Z Docker daemon API version: '1.48'
+2026-10-09T22:44:30.7674942Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+2026-10-09T22:44:30.7833968Z '1.48'
+2026-10-09T22:44:30.7850485Z Docker client API version: '1.48'
+2026-10-09T22:44:30.7856465Z ##[endgroup]
+2026-10-09T22:44:30.7859384Z ##[group]Clean up resources from previous jobs
+2026-10-09T22:44:30.7865302Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=04ccee"
+2026-10-09T22:44:30.8006243Z ##[command]/usr/bin/docker network prune --force --filter "label=04ccee"
+2026-10-09T22:44:30.8133127Z ##[endgroup]
+2026-10-09T22:44:30.8133655Z ##[group]Create local container network
+2026-10-09T22:44:30.8143611Z ##[command]/usr/bin/docker network create --label 04ccee github_network_4416e104ccef4185b216741e11aafd1f
+2026-10-09T22:44:30.8656460Z 3bb1911c67c5edd36d7ff854559852c206e9d53bb21ec89edfa21a7e49099ec8
+2026-10-09T22:44:30.8676747Z ##[endgroup]
+2026-10-09T22:44:30.8700570Z ##[group]Starting postgres service container
+2026-10-09T22:44:30.8721954Z ##[command]/usr/bin/docker pull postgres:17-alpine
+2026-10-09T22:44:31.1219688Z 17-alpine: Pulling from library/postgres
+2026-10-09T22:44:31.1932349Z e2de96513ba9: Already exists
+2026-10-09T22:44:31.1959056Z 4ece9a32c307: Pulling fs layer
+2026-10-09T22:44:31.1960283Z 43f9814c9a3b: Pulling fs layer
+2026-10-09T22:44:31.1960876Z 3333950675b2: Pulling fs layer
+2026-10-09T22:44:31.1961887Z f3b07e8a357c: Pulling fs layer
+2026-10-09T22:44:31.1962772Z eb805f20f060: Pulling fs layer
+2026-10-09T22:44:31.1963308Z 7ccdb0dcae74: Pulling fs layer
+2026-10-09T22:44:31.1964193Z 93a3470d5852: Pulling fs layer
+2026-10-09T22:44:31.1964716Z b0a0d9d2abf2: Pulling fs layer
+2026-10-09T22:44:31.1965639Z a8a481ae6efc: Pulling fs layer
+2026-10-09T22:44:31.1966580Z 7ccdb0dcae74: Waiting
+2026-10-09T22:44:31.1967569Z 93a3470d5852: Waiting
+2026-10-09T22:44:31.1968172Z b0a0d9d2abf2: Waiting
+2026-10-09T22:44:31.1968629Z a8a481ae6efc: Waiting
+2026-10-09T22:44:31.1969260Z f3b07e8a357c: Waiting
+2026-10-09T22:44:31.1969716Z eb805f20f060: Waiting
+2026-10-09T22:44:31.4258635Z 4ece9a32c307: Verifying Checksum
+2026-10-09T22:44:31.4259962Z 4ece9a32c307: Download complete
+2026-10-09T22:44:31.4296757Z 3333950675b2: Verifying Checksum
+2026-10-09T22:44:31.4297849Z 3333950675b2: Download complete
+2026-10-09T22:44:31.4412551Z 43f9814c9a3b: Verifying Checksum
+2026-10-09T22:44:31.4422767Z 43f9814c9a3b: Download complete
+2026-10-09T22:44:31.4531882Z eb805f20f060: Verifying Checksum
+2026-10-09T22:44:31.4533096Z eb805f20f060: Download complete
+2026-10-09T22:44:31.4665912Z 7ccdb0dcae74: Verifying Checksum
+2026-10-09T22:44:31.4675677Z 7ccdb0dcae74: Download complete
+2026-10-09T22:44:31.4818935Z 93a3470d5852: Verifying Checksum
+2026-10-09T22:44:31.4820350Z 93a3470d5852: Download complete
+2026-10-09T22:44:31.4976043Z b0a0d9d2abf2: Verifying Checksum
+2026-10-09T22:44:31.4983384Z b0a0d9d2abf2: Download complete
+2026-10-09T22:44:31.5120060Z a8a481ae6efc: Verifying Checksum
+2026-10-09T22:44:31.5122029Z a8a481ae6efc: Download complete
+2026-10-09T22:44:31.8187157Z f3b07e8a357c: Verifying Checksum
+2026-10-09T22:44:31.8188354Z f3b07e8a357c: Download complete
+2026-10-09T22:44:33.8008009Z 4ece9a32c307: Pull complete
+2026-10-09T22:44:34.0512597Z 43f9814c9a3b: Pull complete
+2026-10-09T22:44:34.0596450Z 3333950675b2: Pull complete
+2026-10-09T22:44:36.4923467Z f3b07e8a357c: Pull complete
+2026-10-09T22:44:36.5485176Z eb805f20f060: Pull complete
+2026-10-09T22:44:36.5591521Z 7ccdb0dcae74: Pull complete
+2026-10-09T22:44:36.5680606Z 93a3470d5852: Pull complete
+2026-10-09T22:44:36.5788282Z b0a0d9d2abf2: Pull complete
+2026-10-09T22:44:36.5881050Z a8a481ae6efc: Pull complete
+2026-10-09T22:44:36.5914908Z Digest: sha256:b0f9560a2de083e2cc7382e75f808c7381a32852a7ec49117deedb300e552b24
+2026-10-09T22:44:36.5931843Z Status: Downloaded newer image for postgres:17-alpine
+2026-10-09T22:44:36.5945997Z docker.io/library/postgres:17-alpine
+2026-10-09T22:44:36.6030974Z ##[command]/usr/bin/docker create --name 0055252007ce4df9be2b5470776beebc_postgres17alpine_96b386 --label 04ccee --network github_network_4416e104ccef4185b216741e11aafd1f --network-alias postgres -p 5432:5432 --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10 -e "POSTGRES_PASSWORD=uvai-test-only" -e "POSTGRES_DB=uvai_test" -e GITHUB_ACTIONS=true -e CI=true postgres:17-alpine
+2026-10-09T22:44:36.6290123Z 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:36.6311394Z ##[command]/usr/bin/docker start 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:36.8326267Z 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:36.8347583Z ##[command]/usr/bin/docker ps --all --filter id=960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2026-10-09T22:44:36.8488439Z 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4 Up Less than a second (health: starting)
+2026-10-09T22:44:36.8519012Z ##[command]/usr/bin/docker port 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:36.8661415Z 5432/tcp -> 0.0.0.0:5432
+2026-10-09T22:44:36.8662083Z 5432/tcp -> [::]:5432
+2026-10-09T22:44:36.8711830Z ##[endgroup]
+2026-10-09T22:44:36.8720641Z ##[group]Waiting for all services to be ready
+2026-10-09T22:44:36.8734739Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:36.8879942Z starting
+2026-10-09T22:44:36.8902119Z postgres service is starting, waiting 2 seconds before checking again.
+2026-10-09T22:44:38.8898300Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:38.9016764Z starting
+2026-10-09T22:44:38.9028568Z postgres service is starting, waiting 4 seconds before checking again.
+2026-10-09T22:44:43.0079708Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:44:43.0206294Z healthy
+2026-10-09T22:44:43.0223627Z postgres service is healthy.
+2026-10-09T22:44:43.0224671Z ##[endgroup]
+2026-10-09T22:44:43.0604371Z ##[group]Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+2026-10-09T22:44:43.0605183Z with:
+2026-10-09T22:44:43.0605412Z   repository: groupthinking/EventRelay
+2026-10-09T22:44:43.0608052Z   token: ***
+2026-10-09T22:44:43.0608260Z   ssh-strict: true
+2026-10-09T22:44:43.0608458Z   ssh-user: git
+2026-10-09T22:44:43.0608664Z   persist-credentials: true
+2026-10-09T22:44:43.0608901Z   clean: true
+2026-10-09T22:44:43.0609108Z   sparse-checkout-cone-mode: true
+2026-10-09T22:44:43.0609374Z   fetch-depth: 1
+2026-10-09T22:44:43.0609576Z   fetch-tags: false
+2026-10-09T22:44:43.0609795Z   show-progress: true
+2026-10-09T22:44:43.0610029Z   lfs: false
+2026-10-09T22:44:43.0610209Z   submodules: false
+2026-10-09T22:44:43.0610407Z   set-safe-directory: true
+2026-10-09T22:44:43.0610648Z   allow-unsafe-pr-checkout: false
+2026-10-09T22:44:43.0611092Z env:
+2026-10-09T22:44:43.0611531Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:43.0612029Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:43.0612304Z ##[endgroup]
+2026-10-09T22:44:43.1558303Z Syncing repository: groupthinking/EventRelay
+2026-10-09T22:44:43.1559697Z ##[group]Getting Git version info
+2026-10-09T22:44:43.1560110Z Working directory is '/home/runner/work/EventRelay/EventRelay'
+2026-10-09T22:44:43.1560685Z [command]/usr/bin/git version
+2026-10-09T22:44:43.1635535Z git version 2.55.0
+2026-10-09T22:44:43.1656379Z ##[endgroup]
+2026-10-09T22:44:43.1666511Z Temporarily overriding HOME='/home/runner/work/_temp/b335aa4d-0f5f-4fe4-9ebd-a75c7008615d' before making global git config changes
+2026-10-09T22:44:43.1667813Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-09T22:44:43.1672247Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/EventRelay/EventRelay
+2026-10-09T22:44:43.1715347Z Deleting the contents of '/home/runner/work/EventRelay/EventRelay'
+2026-10-09T22:44:43.1718689Z ##[group]Determining repository object format
+2026-10-09T22:44:43.1719995Z ##[endgroup]
+2026-10-09T22:44:43.1720626Z ##[group]Initializing the repository
+2026-10-09T22:44:43.1724516Z [command]/usr/bin/git init /home/runner/work/EventRelay/EventRelay
+2026-10-09T22:44:43.1836435Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-10-09T22:44:43.1837667Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-10-09T22:44:43.1838775Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-10-09T22:44:43.1839627Z hint: call:
+2026-10-09T22:44:43.1840013Z hint:
+2026-10-09T22:44:43.1840605Z hint: 	git config --global init.defaultBranch <name>
+2026-10-09T22:44:43.1841277Z hint:
+2026-10-09T22:44:43.1841930Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-10-09T22:44:43.1843001Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-10-09T22:44:43.1843704Z hint:
+2026-10-09T22:44:43.1844283Z hint: 	git branch -m <name>
+2026-10-09T22:44:43.1844631Z hint:
+2026-10-09T22:44:43.1845266Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-10-09T22:44:43.1846343Z Initialized empty Git repository in /home/runner/work/EventRelay/EventRelay/.git/
+2026-10-09T22:44:43.1851183Z [command]/usr/bin/git remote add origin https://github.com/groupthinking/EventRelay
+2026-10-09T22:44:43.1895582Z ##[endgroup]
+2026-10-09T22:44:43.1895978Z ##[group]Disabling automatic garbage collection
+2026-10-09T22:44:43.1899118Z [command]/usr/bin/git config --local gc.auto 0
+2026-10-09T22:44:43.1929285Z ##[endgroup]
+2026-10-09T22:44:43.1929998Z ##[group]Setting up auth
+2026-10-09T22:44:43.1930511Z Removing SSH command configuration
+2026-10-09T22:44:43.1935928Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-09T22:44:43.1966341Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-09T22:44:43.2290547Z Removing HTTP extra header
+2026-10-09T22:44:43.2295724Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-09T22:44:43.2326271Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-09T22:44:43.2540109Z Removing includeIf entries pointing to credentials config files
+2026-10-09T22:44:43.2545992Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-09T22:44:43.2575557Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-09T22:44:43.2794226Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-10-09T22:44:43.2829497Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/EventRelay/EventRelay/.git.path /home/runner/work/_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:44:43.2860140Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/EventRelay/EventRelay/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:44:43.2894115Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:44:43.2925310Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:44:43.2950278Z ##[endgroup]
+2026-10-09T22:44:43.2950659Z ##[group]Fetching the repository
+2026-10-09T22:44:43.2958524Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +385dc083734803fcca80be2b4875762a295de21e:refs/remotes/pull/2393/merge
+2026-10-09T22:44:44.1215051Z From https://github.com/groupthinking/EventRelay
+2026-10-09T22:44:44.1215724Z  * [new ref]         385dc083734803fcca80be2b4875762a295de21e -> pull/2393/merge
+2026-10-09T22:44:44.1219967Z ##[endgroup]
+2026-10-09T22:44:44.1220404Z ##[group]Determining the checkout info
+2026-10-09T22:44:44.1221438Z ##[endgroup]
+2026-10-09T22:44:44.1227039Z [command]/usr/bin/git sparse-checkout disable
+2026-10-09T22:44:44.1277499Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-10-09T22:44:44.1306442Z ##[group]Checking out the ref
+2026-10-09T22:44:44.1329337Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/2393/merge
+2026-10-09T22:44:44.3508085Z Note: switching to 'refs/remotes/pull/2393/merge'.
+2026-10-09T22:44:44.3508499Z 
+2026-10-09T22:44:44.3508763Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-10-09T22:44:44.3509309Z changes and commit them, and you can discard any commits you make in this
+2026-10-09T22:44:44.3509775Z state without impacting any branches by switching back to a branch.
+2026-10-09T22:44:44.3510054Z 
+2026-10-09T22:44:44.3510259Z If you want to create a new branch to retain commits you create, you may
+2026-10-09T22:44:44.3510691Z do so (now or later) by using -c with the switch command. Example:
+2026-10-09T22:44:44.3510944Z 
+2026-10-09T22:44:44.3511051Z   git switch -c <new-branch-name>
+2026-10-09T22:44:44.3511450Z 
+2026-10-09T22:44:44.3511552Z Or undo this operation with:
+2026-10-09T22:44:44.3511703Z 
+2026-10-09T22:44:44.3511788Z   git switch -
+2026-10-09T22:44:44.3511916Z 
+2026-10-09T22:44:44.3512127Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-10-09T22:44:44.3512427Z 
+2026-10-09T22:44:44.3512773Z HEAD is now at 385dc08 Merge 366b64d9ff9d7a6d8b077072e8aa54bcf01d3054 into bd0f437180b994d8916fcba22ada610bf2fbae0a
+2026-10-09T22:44:44.3529072Z ##[endgroup]
+2026-10-09T22:44:44.3574728Z [command]/usr/bin/git log -1 --format=%H
+2026-10-09T22:44:44.3597967Z 385dc083734803fcca80be2b4875762a295de21e
+2026-10-09T22:44:44.3852854Z ##[group]Run actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+2026-10-09T22:44:44.3853253Z with:
+2026-10-09T22:44:44.3853719Z   node-version: 22
+2026-10-09T22:44:44.3854114Z   check-latest: false
+2026-10-09T22:44:44.3856983Z   token: ***
+2026-10-09T22:44:44.3857202Z   package-manager-cache: true
+2026-10-09T22:44:44.3857455Z env:
+2026-10-09T22:44:44.3857848Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:44.3858309Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:44.3858588Z ##[endgroup]
+2026-10-09T22:44:44.5153681Z Found in cache @ /opt/hostedtoolcache/node/22.23.3/x64
+2026-10-09T22:44:44.5155487Z ##[group]Environment details
+2026-10-09T22:44:44.8796373Z node: v22.23.3
+2026-10-09T22:44:44.8796796Z npm: 10.9.9
+2026-10-09T22:44:44.8797145Z yarn: 1.22.22
+2026-10-09T22:44:44.8798040Z ##[endgroup]
+2026-10-09T22:44:44.8803146Z Detected npm as the package manager from package.json's packageManager field. Auto caching has been enabled for npm. If you want to disable it, set package-manager-cache input to false
+2026-10-09T22:44:44.8822993Z [command]/opt/hostedtoolcache/node/22.23.3/x64/bin/npm config get cache
+2026-10-09T22:44:44.9916483Z /home/runner/.npm
+2026-10-09T22:44:45.0667365Z Cache hit for: node-cache-Linux-x64-npm-c5d588e45b66aea0760e6edeb366587d5192d64bf529cf157a930a1e55a0c031
+2026-10-09T22:44:46.1295451Z Received 264241152 of 317447577 (83.2%), 251.7 MBs/sec
+2026-10-09T22:44:46.4054642Z Received 317447577 of 317447577 (100.0%), 237.3 MBs/sec
+2026-10-09T22:44:46.4064715Z Cache Size: ~303 MB (317447577 B)
+2026-10-09T22:44:46.4121141Z [command]/usr/bin/tar -xf /home/runner/work/_temp/d5f30494-bf03-4c18-96af-6e61bfce9b78/cache.tzst -P -C /home/runner/work/EventRelay/EventRelay --use-compress-program unzstd
+2026-10-09T22:44:47.1328010Z Cache restored successfully
+2026-10-09T22:44:47.1471872Z Cache restored from key: node-cache-Linux-x64-npm-c5d588e45b66aea0760e6edeb366587d5192d64bf529cf157a930a1e55a0c031
+2026-10-09T22:44:47.1729338Z ##[group]Run corepack enable
+2026-10-09T22:44:47.1729861Z [36;1mcorepack enable[0m
+2026-10-09T22:44:47.1954974Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:44:47.1955248Z env:
+2026-10-09T22:44:47.1955731Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:47.1956211Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:47.1956515Z ##[endgroup]
+2026-10-09T22:44:47.2767230Z ##[group]Run pnpm install --frozen-lockfile --ignore-scripts
+2026-10-09T22:44:47.2767722Z [36;1mpnpm install --frozen-lockfile --ignore-scripts[0m
+2026-10-09T22:44:47.2832559Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:44:47.2832817Z env:
+2026-10-09T22:44:47.2833269Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:47.2833970Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:47.2834293Z ##[endgroup]
+2026-10-09T22:44:47.3520331Z ! Corepack is about to download https://registry.npmjs.org/pnpm/-/pnpm-10.32.1.tgz
+2026-10-09T22:44:48.8552104Z Lockfile is up to date, resolution step is skipped
+2026-10-09T22:44:48.9323588Z Progress: resolved 1, reused 0, downloaded 0, added 0
+2026-10-09T22:44:49.0332251Z Packages: +723
+2026-10-09T22:44:49.0344387Z ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-10-09T22:44:49.9365914Z Progress: resolved 723, reused 0, downloaded 114, added 76
+2026-10-09T22:44:50.9418286Z Progress: resolved 723, reused 0, downloaded 258, added 183
+2026-10-09T22:44:51.9427377Z Progress: resolved 723, reused 0, downloaded 324, added 216
+2026-10-09T22:44:52.9445540Z Progress: resolved 723, reused 0, downloaded 377, added 243
+2026-10-09T22:44:53.9477137Z Progress: resolved 723, reused 0, downloaded 547, added 375
+2026-10-09T22:44:54.9478924Z Progress: resolved 723, reused 0, downloaded 723, added 620
+2026-10-09T22:44:54.9859487Z Progress: resolved 723, reused 0, downloaded 723, added 723, done
+2026-10-09T22:44:55.3066921Z 
+2026-10-09T22:44:55.3067854Z dependencies:
+2026-10-09T22:44:55.3068401Z + @ai-sdk/otel 1.0.15
+2026-10-09T22:44:55.3068903Z + @ai-sdk/provider 4.0.2
+2026-10-09T22:44:55.3069365Z + @ai-sdk/react 4.0.16
+2026-10-09T22:44:55.3069859Z + @codemirror/lang-python 6.2.1
+2026-10-09T22:44:55.3070359Z + @codemirror/state 6.7.0
+2026-10-09T22:44:55.3070899Z + @codemirror/theme-one-dark 6.1.3
+2026-10-09T22:44:55.3071421Z + @codemirror/view 6.43.5
+2026-10-09T22:44:55.3071933Z + @opentelemetry/api 1.9.1
+2026-10-09T22:44:55.3072493Z + @opentelemetry/api-logs 0.223.0
+2026-10-09T22:44:55.3073070Z + @opentelemetry/instrumentation 0.223.0
+2026-10-09T22:44:55.3073680Z + @opentelemetry/resources 2.12.0
+2026-10-09T22:44:55.3074518Z + @opentelemetry/sdk-logs 0.223.0
+2026-10-09T22:44:55.3075041Z + @opentelemetry/sdk-metrics 2.12.0
+2026-10-09T22:44:55.3075570Z + @opentelemetry/sdk-trace-base 2.12.0
+2026-10-09T22:44:55.3076178Z + @radix-ui/react-use-controllable-state 1.2.3
+2026-10-09T22:44:55.3076706Z + @streamdown/cjk 1.0.3
+2026-10-09T22:44:55.3077102Z + @streamdown/code 1.0.3
+2026-10-09T22:44:55.3077564Z + @streamdown/math 1.0.2
+2026-10-09T22:44:55.3077981Z + @streamdown/mermaid 1.0.2
+2026-10-09T22:44:55.3078407Z + @vercel/analytics 2.0.1
+2026-10-09T22:44:55.3078823Z + @vercel/functions 3.7.5
+2026-10-09T22:44:55.3079216Z + @vercel/otel 2.1.3
+2026-10-09T22:44:55.3079565Z + ai 7.0.15
+2026-10-09T22:44:55.3079947Z + bcrypt-ts 8.0.1
+2026-10-09T22:44:55.3080324Z + botid 1.5.11
+2026-10-09T22:44:55.3080826Z + class-variance-authority 0.7.1
+2026-10-09T22:44:55.3081331Z + classnames 2.5.1
+2026-10-09T22:44:55.3081722Z + clsx 2.1.1
+2026-10-09T22:44:55.3082079Z + cmdk 1.1.1
+2026-10-09T22:44:55.3082459Z + codemirror 6.0.2
+2026-10-09T22:44:55.3082838Z + date-fns 4.4.0
+2026-10-09T22:44:55.3083262Z + diff-match-patch 1.0.5
+2026-10-09T22:44:55.3083693Z + dotenv 17.4.2
+2026-10-09T22:44:55.3084364Z + drizzle-orm 0.45.2
+2026-10-09T22:44:55.3084888Z + fast-deep-equal 3.1.3
+2026-10-09T22:44:55.3085341Z + framer-motion 12.42.2
+2026-10-09T22:44:55.3085746Z + katex 0.17.0
+2026-10-09T22:44:55.3086143Z + lucide-react 0.446.0
+2026-10-09T22:44:55.3086535Z + motion 12.42.2
+2026-10-09T22:44:55.3086890Z + nanoid 5.1.16
+2026-10-09T22:44:55.3087234Z + next 16.3.8
+2026-10-09T22:44:55.3087617Z + next-auth 5.0.0-beta.32
+2026-10-09T22:44:55.3088052Z + next-themes 0.3.0
+2026-10-09T22:44:55.3088508Z + orderedmap 2.1.1
+2026-10-09T22:44:55.3088914Z + papaparse 5.5.4
+2026-10-09T22:44:55.3089271Z + postgres 3.4.9
+2026-10-09T22:44:55.3090078Z + prosemirror-example-setup 1.2.3
+2026-10-09T22:44:55.3090685Z + prosemirror-inputrules 1.5.1
+2026-10-09T22:44:55.3091191Z + prosemirror-markdown 1.13.4
+2026-10-09T22:44:55.3091728Z + prosemirror-model 1.25.12
+2026-10-09T22:44:55.3092339Z + prosemirror-schema-basic 1.2.4
+2026-10-09T22:44:55.3092957Z + prosemirror-schema-list 1.5.1
+2026-10-09T22:44:55.3093506Z + prosemirror-state 1.4.4
+2026-10-09T22:44:55.3094274Z + prosemirror-view 1.42.6
+2026-10-09T22:44:55.3094750Z + radix-ui 1.6.1
+2026-10-09T22:44:55.3095190Z + react 19.2.7
+2026-10-09T22:44:55.3095681Z + react-data-grid 7.0.0-beta.47
+2026-10-09T22:44:55.3096181Z + react-dom 19.2.7
+2026-10-09T22:44:55.3096605Z + redis 6.1.0
+2026-10-09T22:44:55.3097083Z + resumable-stream 2.2.12
+2026-10-09T22:44:55.3097568Z + server-only 0.0.1
+2026-10-09T22:44:55.3098015Z + shiki 3.21.0
+2026-10-09T22:44:55.3098413Z + sonner 2.0.7
+2026-10-09T22:44:55.3098862Z + streamdown 2.3.0
+2026-10-09T22:44:55.3099415Z + swr 2.4.2
+2026-10-09T22:44:55.3099847Z + tailwind-merge 3.6.0
+2026-10-09T22:44:55.3100706Z + tailwindcss-animate 1.0.7
+2026-10-09T22:44:55.3101237Z + use-stick-to-bottom 1.1.6
+2026-10-09T22:44:55.3101775Z + usehooks-ts 3.1.1
+2026-10-09T22:44:55.3102189Z + zod 4.4.3
+2026-10-09T22:44:55.3102398Z 
+2026-10-09T22:44:55.3102605Z devDependencies:
+2026-10-09T22:44:55.3103054Z + @biomejs/biome 2.5.2
+2026-10-09T22:44:55.3103523Z + @playwright/test 1.61.1
+2026-10-09T22:44:55.3104285Z + @tailwindcss/postcss 4.3.2
+2026-10-09T22:44:55.3104907Z + @tailwindcss/typography 0.5.20
+2026-10-09T22:44:55.3105433Z + @types/d3-scale 4.0.9
+2026-10-09T22:44:55.3105920Z + @types/node 24.13.2
+2026-10-09T22:44:55.3106379Z + @types/papaparse 5.5.2
+2026-10-09T22:44:55.3106875Z + @types/pdf-parse 1.1.5
+2026-10-09T22:44:55.3107380Z + @types/react 18.3.31
+2026-10-09T22:44:55.3107960Z + @types/react-dom 18.3.7
+2026-10-09T22:44:55.3108621Z + babel-plugin-react-compiler 1.0.0
+2026-10-09T22:44:55.3109231Z + drizzle-kit 0.31.11
+2026-10-09T22:44:55.3109759Z + husky 9.1.7
+2026-10-09T22:44:55.3110219Z + lint-staged 16.4.0
+2026-10-09T22:44:55.3110802Z + postcss 8.5.29
+2026-10-09T22:44:55.3111264Z + tailwindcss 4.3.2
+2026-10-09T22:44:55.3111726Z + tsx 4.23.0
+2026-10-09T22:44:55.3112171Z + typescript 5.8.2
+2026-10-09T22:44:55.3112622Z + ultracite 7.9.0
+2026-10-09T22:44:55.3112890Z 
+2026-10-09T22:44:55.3284694Z Done in 6.8s using pnpm v10.32.1
+2026-10-09T22:44:55.3743295Z ##[group]Run npm run type-check
+2026-10-09T22:44:55.3743621Z [36;1mnpm run type-check[0m
+2026-10-09T22:44:55.3808103Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:44:55.3808366Z env:
+2026-10-09T22:44:55.3808867Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:55.3809336Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:44:55.3809634Z ##[endgroup]
+2026-10-09T22:44:55.5216551Z 
+2026-10-09T22:44:55.5217031Z > uvai-chatbot-foundation@3.1.0 type-check
+2026-10-09T22:44:55.5217440Z > tsc --noEmit
+2026-10-09T22:44:55.5217580Z 
+2026-10-09T22:45:07.3832826Z ##[group]Run npm run test:video-guide
+2026-10-09T22:45:07.3833377Z [36;1mnpm run test:video-guide[0m
+2026-10-09T22:45:07.3916119Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:45:07.3916542Z env:
+2026-10-09T22:45:07.3917434Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:07.3918229Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:07.3918729Z ##[endgroup]
+2026-10-09T22:45:07.5355371Z 
+2026-10-09T22:45:07.5356083Z > uvai-chatbot-foundation@3.1.0 test:video-guide
+2026-10-09T22:45:07.5356725Z > node --experimental-strip-types --test tests/video-guide.test.mjs
+2026-10-09T22:45:07.5357064Z 
+2026-10-09T22:45:07.5818193Z TAP version 13
+2026-10-09T22:45:07.6718377Z # (node:2914) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///home/runner/work/EventRelay/EventRelay/templates/uvai-chatbot/lib/uvai/video-guide.ts is not specified and it doesn't parse as CommonJS.
+2026-10-09T22:45:07.6721091Z # Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+2026-10-09T22:45:07.6722970Z # To eliminate this warning, add "type": "module" to /home/runner/work/EventRelay/EventRelay/templates/uvai-chatbot/package.json.
+2026-10-09T22:45:07.6724782Z # (Use `node --trace-warnings ...` to show where the warning was created)
+2026-10-09T22:45:07.6741868Z # Subtest: source validation rejects arbitrary hosts, credentials, ports and malformed ids
+2026-10-09T22:45:07.6749812Z ok 1 - source validation rejects arbitrary hosts, credentials, ports and malformed ids
+2026-10-09T22:45:07.6754642Z   ---
+2026-10-09T22:45:07.6756574Z   duration_ms: 1.360352
+2026-10-09T22:45:07.6757199Z   type: 'test'
+2026-10-09T22:45:07.6757714Z   ...
+2026-10-09T22:45:07.6758531Z # Subtest: pack source mismatch cannot be used for guide grounding
+2026-10-09T22:45:07.6759742Z ok 2 - pack source mismatch cannot be used for guide grounding
+2026-10-09T22:45:07.6760539Z   ---
+2026-10-09T22:45:07.6761564Z   duration_ms: 0.550468
+2026-10-09T22:45:07.6762233Z   type: 'test'
+2026-10-09T22:45:07.6762763Z   ...
+2026-10-09T22:45:07.6763672Z # Subtest: untimed audio fails rather than inventing citations
+2026-10-09T22:45:07.6765719Z ok 3 - untimed audio fails rather than inventing citations
+2026-10-09T22:45:07.6766678Z   ---
+2026-10-09T22:45:07.6767279Z   duration_ms: 0.276687
+2026-10-09T22:45:07.6767863Z   type: 'test'
+2026-10-09T22:45:07.6768373Z   ...
+2026-10-09T22:45:07.6769174Z # Subtest: frame references alone never establish visual processing
+2026-10-09T22:45:07.6770322Z ok 4 - frame references alone never establish visual processing
+2026-10-09T22:45:07.6771141Z   ---
+2026-10-09T22:45:07.6771641Z   duration_ms: 0.328864
+2026-10-09T22:45:07.6772189Z   type: 'test'
+2026-10-09T22:45:07.6772684Z   ...
+2026-10-09T22:45:07.6773597Z # Subtest: visual observations retain provenance and sparse coverage disclaimer
+2026-10-09T22:45:07.6775304Z ok 5 - visual observations retain provenance and sparse coverage disclaimer
+2026-10-09T22:45:07.6776306Z   ---
+2026-10-09T22:45:07.6776866Z   duration_ms: 0.277158
+2026-10-09T22:45:07.6777468Z   type: 'test'
+2026-10-09T22:45:07.6777942Z   ...
+2026-10-09T22:45:07.6781311Z # Subtest: invented and absent citations fail closed
+2026-10-09T22:45:07.6782375Z ok 6 - invented and absent citations fail closed
+2026-10-09T22:45:07.6783121Z   ---
+2026-10-09T22:45:07.6783678Z   duration_ms: 0.391121
+2026-10-09T22:45:07.6784514Z   type: 'test'
+2026-10-09T22:45:07.6784999Z   ...
+2026-10-09T22:45:07.6785979Z # Subtest: downloads contain timestamp links and escape source/model Markdown injection
+2026-10-09T22:45:07.6787394Z ok 7 - downloads contain timestamp links and escape source/model Markdown injection
+2026-10-09T22:45:07.6788313Z   ---
+2026-10-09T22:45:07.6788792Z   duration_ms: 0.571288
+2026-10-09T22:45:07.6789401Z   type: 'test'
+2026-10-09T22:45:07.6789973Z   ...
+2026-10-09T22:45:07.6790981Z # Subtest: reuse identity is isolated by user, source and requested outcome
+2026-10-09T22:45:07.6792777Z ok 8 - reuse identity is isolated by user, source and requested outcome
+2026-10-09T22:45:07.6799127Z   ---
+2026-10-09T22:45:07.6799527Z   duration_ms: 0.577028
+2026-10-09T22:45:07.6799971Z   type: 'test'
+2026-10-09T22:45:07.6800347Z   ...
+2026-10-09T22:45:07.6801083Z # Subtest: source player timestamps use only validated fixed-origin URLs
+2026-10-09T22:45:07.6802195Z ok 9 - source player timestamps use only validated fixed-origin URLs
+2026-10-09T22:45:07.6804577Z   ---
+2026-10-09T22:45:07.6805056Z   duration_ms: 0.520212
+2026-10-09T22:45:07.6805566Z   type: 'test'
+2026-10-09T22:45:07.6806072Z   ...
+2026-10-09T22:45:07.6901292Z 1..9
+2026-10-09T22:45:07.6901629Z # tests 9
+2026-10-09T22:45:07.6902137Z # suites 0
+2026-10-09T22:45:07.6902702Z # pass 9
+2026-10-09T22:45:07.6903174Z # fail 0
+2026-10-09T22:45:07.6903702Z # cancelled 0
+2026-10-09T22:45:07.6904567Z # skipped 0
+2026-10-09T22:45:07.6907480Z # todo 0
+2026-10-09T22:45:07.6907991Z # duration_ms 120.506121
+2026-10-09T22:45:07.7484473Z ##[group]Run node --import tsx --test tests/security-id.test.mjs
+2026-10-09T22:45:07.7485030Z [36;1mnode --import tsx --test tests/security-id.test.mjs[0m
+2026-10-09T22:45:07.7563314Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:45:07.7563598Z env:
+2026-10-09T22:45:07.7564380Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:07.7564855Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:07.7565147Z ##[endgroup]
+2026-10-09T22:45:07.8352205Z TAP version 13
+2026-10-09T22:45:08.2625596Z # Subtest: entity IDs remain valid and independent of insecure randomness
+2026-10-09T22:45:08.2655147Z ok 1 - entity IDs remain valid and independent of insecure randomness
+2026-10-09T22:45:08.2655866Z   ---
+2026-10-09T22:45:08.2656294Z   duration_ms: 8.61699
+2026-10-09T22:45:08.2656723Z   type: 'test'
+2026-10-09T22:45:08.2657242Z   ...
+2026-10-09T22:45:08.2857580Z 1..1
+2026-10-09T22:45:08.2884551Z # tests 1
+2026-10-09T22:45:08.2885577Z # suites 0
+2026-10-09T22:45:08.2900337Z # pass 1
+2026-10-09T22:45:08.2901026Z # fail 0
+2026-10-09T22:45:08.2901559Z # cancelled 0
+2026-10-09T22:45:08.2902130Z # skipped 0
+2026-10-09T22:45:08.2902666Z # todo 0
+2026-10-09T22:45:08.2903246Z # duration_ms 461.844367
+2026-10-09T22:45:08.3541149Z ##[group]Run node --import tsx --test tests/chat-contract.test.mjs
+2026-10-09T22:45:08.3541959Z [36;1mnode --import tsx --test tests/chat-contract.test.mjs[0m
+2026-10-09T22:45:08.3618980Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:45:08.3619243Z env:
+2026-10-09T22:45:08.3619713Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:08.3620173Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:08.3620462Z ##[endgroup]
+2026-10-09T22:45:08.4384459Z TAP version 13
+2026-10-09T22:45:08.7344678Z # Subtest: bounded text requests remain accepted
+2026-10-09T22:45:08.7353112Z ok 1 - bounded text requests remain accepted
+2026-10-09T22:45:08.7364611Z   ---
+2026-10-09T22:45:08.7364848Z   duration_ms: 2.958874
+2026-10-09T22:45:08.7365096Z   type: 'test'
+2026-10-09T22:45:08.7365295Z   ...
+2026-10-09T22:45:08.7365746Z # Subtest: generic attachments and supplied tool results cannot enter model input
+2026-10-09T22:45:08.7366690Z ok 2 - generic attachments and supplied tool results cannot enter model input
+2026-10-09T22:45:08.7367095Z   ---
+2026-10-09T22:45:08.7367287Z   duration_ms: 1.626256
+2026-10-09T22:45:08.7367515Z   type: 'test'
+2026-10-09T22:45:08.7367703Z   ...
+2026-10-09T22:45:08.7368309Z # Subtest: empty and oversized message part arrays are rejected
+2026-10-09T22:45:08.7377055Z ok 3 - empty and oversized message part arrays are rejected
+2026-10-09T22:45:08.7377701Z   ---
+2026-10-09T22:45:08.7378069Z   duration_ms: 0.670572
+2026-10-09T22:45:08.7378481Z   type: 'test'
+2026-10-09T22:45:08.7378837Z   ...
+2026-10-09T22:45:08.7548746Z 1..3
+2026-10-09T22:45:08.7549297Z # tests 3
+2026-10-09T22:45:08.7549770Z # suites 0
+2026-10-09T22:45:08.7551214Z # pass 3
+2026-10-09T22:45:08.7552484Z # fail 0
+2026-10-09T22:45:08.7554395Z # cancelled 0
+2026-10-09T22:45:08.7565506Z # skipped 0
+2026-10-09T22:45:08.7566056Z # todo 0
+2026-10-09T22:45:08.7566719Z # duration_ms 328.257447
+2026-10-09T22:45:08.7672364Z ##[group]Run node --conditions=react-server --import tsx --test tests/guide-generation.integration.mjs
+2026-10-09T22:45:08.7673636Z [36;1mnode --conditions=react-server --import tsx --test tests/guide-generation.integration.mjs[0m
+2026-10-09T22:45:08.7757100Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:45:08.7757512Z env:
+2026-10-09T22:45:08.7758209Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:08.7758997Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:08.7759382Z ##[endgroup]
+2026-10-09T22:45:08.8316826Z TAP version 13
+2026-10-09T22:45:09.6270089Z # Subtest: PostgreSQL prevents concurrent guide generation and releases locks after failures
+2026-10-09T22:45:09.6281054Z ok 1 - PostgreSQL prevents concurrent guide generation and releases locks after failures
+2026-10-09T22:45:09.6282265Z   ---
+2026-10-09T22:45:09.6282609Z   duration_ms: 45.366827
+2026-10-09T22:45:09.6282999Z   type: 'test'
+2026-10-09T22:45:09.6283325Z   ...
+2026-10-09T22:45:09.6519678Z 1..1
+2026-10-09T22:45:09.6521436Z # tests 1
+2026-10-09T22:45:09.6522410Z # suites 0
+2026-10-09T22:45:09.6523206Z # pass 1
+2026-10-09T22:45:09.6525655Z # fail 0
+2026-10-09T22:45:09.6526486Z # cancelled 0
+2026-10-09T22:45:09.6527290Z # skipped 0
+2026-10-09T22:45:09.6529062Z # todo 0
+2026-10-09T22:45:09.6529624Z # duration_ms 832.020445
+2026-10-09T22:45:09.6626084Z ##[group]Run npm run build
+2026-10-09T22:45:09.6626585Z [36;1mnpm run build[0m
+2026-10-09T22:45:09.6695411Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:45:09.6695849Z env:
+2026-10-09T22:45:09.6696583Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:09.6697411Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:09.6697888Z ##[endgroup]
+2026-10-09T22:45:09.7852558Z 
+2026-10-09T22:45:09.7853144Z > uvai-chatbot-foundation@3.1.0 build
+2026-10-09T22:45:09.7853656Z > node --import tsx lib/db/migrate.ts && next build
+2026-10-09T22:45:09.7854172Z 
+2026-10-09T22:45:10.0919999Z ◇ injected env (0) from .env.local // tip: ⌘ enable debugging { debug: true }
+2026-10-09T22:45:10.0942036Z Running migrations...
+2026-10-09T22:45:10.1482557Z Migrations completed in 53 ms
+2026-10-09T22:45:10.5488709Z ▲ Next.js 16.3.8 (Turbopack)
+2026-10-09T22:45:10.5850111Z ✓ Running next.config.ts took 35ms
+2026-10-09T22:45:10.5853746Z ⚠ No build cache found. Please configure build caching for faster rebuilds. Read more: https://nextjs.org/docs/messages/no-cache
+2026-10-09T22:45:10.5934868Z Attention: Next.js now collects completely anonymous telemetry regarding usage.
+2026-10-09T22:45:10.5936071Z This information is used to shape Next.js' roadmap and prioritize features.
+2026-10-09T22:45:10.5937622Z You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+2026-10-09T22:45:10.5938751Z https://nextjs.org/telemetry
+2026-10-09T22:45:10.5939081Z 
+2026-10-09T22:45:10.6098482Z - Cache Components enabled
+2026-10-09T22:45:10.6100829Z - Experiments (use with caution):
+2026-10-09T22:45:10.6101587Z   ✓ cachedNavigations
+2026-10-09T22:45:10.6102192Z   ✓ inlineCss
+2026-10-09T22:45:10.6102364Z 
+2026-10-09T22:45:10.6632465Z   Creating an optimized production build ...
+2026-10-09T22:45:40.7455215Z ✓ Compiled successfully in 29.7s
+2026-10-09T22:45:40.7724784Z   Running TypeScript ...
+2026-10-09T22:45:53.5719475Z   Finished TypeScript in 12.8s ...
+2026-10-09T22:45:53.5781281Z   Collecting page data using 3 workers ...
+2026-10-09T22:45:54.7690407Z   Generating static pages using 3 workers (0/19) ...
+2026-10-09T22:45:55.2095238Z   Generating static pages using 3 workers (4/19) 
+2026-10-09T22:45:55.3926817Z   Generating static pages using 3 workers (9/19) 
+2026-10-09T22:45:55.6092129Z   Generating static pages using 3 workers (14/19) 
+2026-10-09T22:45:55.9394286Z ✓ Generating static pages using 3 workers (19/19) in 1170ms
+2026-10-09T22:45:55.9450364Z   Finalizing page optimization ...
+2026-10-09T22:45:55.9613744Z 
+2026-10-09T22:45:55.9643728Z Route (app)                      Revalidate  Expire
+2026-10-09T22:45:55.9644933Z ┌ ◐ /
+2026-10-09T22:45:55.9645633Z ├ ○ /_not-found
+2026-10-09T22:45:55.9646326Z ├ ƒ /api/auth/[...nextauth]
+2026-10-09T22:45:55.9647006Z ├ ƒ /api/auth/guest
+2026-10-09T22:45:55.9647578Z ├ ƒ /api/chat
+2026-10-09T22:45:55.9648358Z ├ ƒ /api/chat/[id]/stream
+2026-10-09T22:45:55.9649158Z ├ ƒ /api/document
+2026-10-09T22:45:55.9649921Z ├ ƒ /api/files/upload
+2026-10-09T22:45:55.9650495Z ├ ƒ /api/history
+2026-10-09T22:45:55.9651070Z ├ ƒ /api/messages
+2026-10-09T22:45:55.9651826Z ├ ○ /api/models                          1d      1y
+2026-10-09T22:45:55.9652640Z ├ ƒ /api/suggestions
+2026-10-09T22:45:55.9653339Z ├ ƒ /api/video-guide/download
+2026-10-09T22:45:55.9654341Z ├ ƒ /api/vote
+2026-10-09T22:45:55.9654955Z ├   /chat/[id]
+2026-10-09T22:45:55.9655513Z │ └ ◐ /chat/[id]
+2026-10-09T22:45:55.9656048Z ├ ○ /login
+2026-10-09T22:45:55.9656697Z ├ ○ /opengraph-image-12cog0.png
+2026-10-09T22:45:55.9657401Z ├ ○ /register
+2026-10-09T22:45:55.9658013Z └ ○ /twitter-image-12cog0.png
+2026-10-09T22:45:55.9658519Z 
+2026-10-09T22:45:55.9658739Z 
+2026-10-09T22:45:55.9659155Z ƒ Proxy (Middleware)
+2026-10-09T22:45:55.9659599Z 
+2026-10-09T22:45:55.9660188Z ○  (Static)             prerendered as static content
+2026-10-09T22:45:55.9661499Z ◐  (Partial Prerender)  prerendered as static HTML with dynamic server-streamed content
+2026-10-09T22:45:55.9663074Z ƒ  (Dynamic)            server-rendered on demand
+2026-10-09T22:45:55.9663650Z 
+2026-10-09T22:45:56.1221690Z ##[group]Run node tests/runtime-smoke.mjs
+2026-10-09T22:45:56.1222256Z [36;1mnode tests/runtime-smoke.mjs[0m
+2026-10-09T22:45:56.1312679Z shell: /usr/bin/bash -e {0}
+2026-10-09T22:45:56.1312951Z env:
+2026-10-09T22:45:56.1313633Z   POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:56.1314662Z   TEST_POSTGRES_URL: ***127.0.0.1:5432/uvai_test
+2026-10-09T22:45:56.1315368Z ##[endgroup]
+2026-10-09T22:45:57.1513724Z {"passed":8,"failed":0}
+2026-10-09T22:45:57.1847011Z Post job cleanup.
+2026-10-09T22:45:57.2935774Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-c5d588e45b66aea0760e6edeb366587d5192d64bf529cf157a930a1e55a0c031, not saving cache.
+2026-10-09T22:45:57.3063457Z Post job cleanup.
+2026-10-09T22:45:57.3888546Z [command]/usr/bin/git version
+2026-10-09T22:45:57.3926282Z git version 2.55.0
+2026-10-09T22:45:57.3962957Z Temporarily overriding HOME='/home/runner/work/_temp/1c0af3c0-9a29-449e-80d9-35b55ea957e6' before making global git config changes
+2026-10-09T22:45:57.3964995Z Adding repository directory to the temporary git global config as a safe directory
+2026-10-09T22:45:57.3968893Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/EventRelay/EventRelay
+2026-10-09T22:45:57.4017463Z Removing SSH command configuration
+2026-10-09T22:45:57.4018394Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-10-09T22:45:57.4042644Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-10-09T22:45:57.4269290Z Removing HTTP extra header
+2026-10-09T22:45:57.4276806Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-10-09T22:45:57.4311930Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-10-09T22:45:57.4532062Z Removing includeIf entries pointing to credentials config files
+2026-10-09T22:45:57.4539190Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-10-09T22:45:57.4561939Z includeif.gitdir:/home/runner/work/EventRelay/EventRelay/.git.path
+2026-10-09T22:45:57.4562967Z includeif.gitdir:/home/runner/work/EventRelay/EventRelay/.git/worktrees/*.path
+2026-10-09T22:45:57.4564628Z includeif.gitdir:/github/workspace/.git.path
+2026-10-09T22:45:57.4565483Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-09T22:45:57.4571837Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/EventRelay/EventRelay/.git.path
+2026-10-09T22:45:57.4593479Z /home/runner/work/_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:45:57.4604901Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/EventRelay/EventRelay/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-0d73b47a\-09b4\-445f\-a16c\-abba5d9259b7\.config
+2026-10-09T22:45:57.4640306Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/EventRelay/EventRelay/.git/worktrees/*.path
+2026-10-09T22:45:57.4668779Z /home/runner/work/_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:45:57.4677516Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/EventRelay/EventRelay/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-0d73b47a\-09b4\-445f\-a16c\-abba5d9259b7\.config
+2026-10-09T22:45:57.4710028Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-10-09T22:45:57.4731012Z /github/runner_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:45:57.4738522Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-0d73b47a\-09b4\-445f\-a16c\-abba5d9259b7\.config
+2026-10-09T22:45:57.4770005Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-10-09T22:45:57.4791188Z /github/runner_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config
+2026-10-09T22:45:57.4799721Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-0d73b47a\-09b4\-445f\-a16c\-abba5d9259b7\.config
+2026-10-09T22:45:57.4832107Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-10-09T22:45:57.5048224Z Removing credentials config '/home/runner/work/_temp/git-credentials-0d73b47a-09b4-445f-a16c-abba5d9259b7.config'
+2026-10-09T22:45:57.5159177Z Print service container logs: 0055252007ce4df9be2b5470776beebc_postgres17alpine_96b386
+2026-10-09T22:45:57.5164172Z ##[command]/usr/bin/docker logs --details 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:45:57.5282242Z  The files belonging to this database system will be owned by user "postgres".
+2026-10-09T22:45:57.5283022Z  This user must also own the server process.
+2026-10-09T22:45:57.5283483Z  
+2026-10-09T22:45:57.5284223Z  The database cluster will be initialized with locale "en_US.utf8".
+2026-10-09T22:45:57.5285026Z  The default database encoding has accordingly been set to "UTF8".
+2026-10-09T22:45:57.5285782Z  The default text search configuration will be set to "english".
+2026-10-09T22:45:57.5286231Z  
+2026-10-09T22:45:57.5287505Z  sh: locale: not found
+2026-10-09T22:45:57.5287883Z  2026-10-09 22:44:37.300 UTC [35] WARNING:  no usable system locales were found
+2026-10-09T22:45:57.5288444Z  initdb: warning: enabling "trust" authentication for local connections
+2026-10-09T22:45:57.5289190Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2026-10-09T22:45:57.5290080Z  2026-10-09 22:44:38.091 UTC [1] LOG:  starting PostgreSQL 17.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-10-09T22:45:57.5290727Z  2026-10-09 22:44:38.091 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-10-09T22:45:57.5291195Z  2026-10-09 22:44:38.091 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-10-09T22:45:57.5291718Z  2026-10-09 22:44:38.093 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-09T22:45:57.5292282Z  2026-10-09 22:44:38.095 UTC [57] LOG:  database system was shut down at 2026-10-09 22:44:37 UTC
+2026-10-09T22:45:57.5292786Z  2026-10-09 22:44:38.099 UTC [1] LOG:  database system is ready to accept connections
+2026-10-09T22:45:57.5293181Z  Data page checksums are disabled.
+2026-10-09T22:45:57.5293435Z  
+2026-10-09T22:45:57.5293729Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2026-10-09T22:45:57.5294391Z  creating subdirectories ... ok
+2026-10-09T22:45:57.5294708Z  selecting dynamic shared memory implementation ... posix
+2026-10-09T22:45:57.5295055Z  selecting default "max_connections" ... 100
+2026-10-09T22:45:57.5295362Z  selecting default "shared_buffers" ... 128MB
+2026-10-09T22:45:57.5295658Z  selecting default time zone ... UTC
+2026-10-09T22:45:57.5295925Z  creating configuration files ... ok
+2026-10-09T22:45:57.5296189Z  running bootstrap script ... ok
+2026-10-09T22:45:57.5296487Z  performing post-bootstrap initialization ... ok
+2026-10-09T22:45:57.5296788Z  syncing data to disk ... ok
+2026-10-09T22:45:57.5297011Z  
+2026-10-09T22:45:57.5297176Z  
+2026-10-09T22:45:57.5297410Z  Success. You can now start the database server using:
+2026-10-09T22:45:57.5297700Z  
+2026-10-09T22:45:57.5297928Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2026-10-09T22:45:57.5298238Z  
+2026-10-09T22:45:57.5298795Z  waiting for server to start....2026-10-09 22:44:37.824 UTC [41] LOG:  starting PostgreSQL 17.11 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-10-09T22:45:57.5299603Z  2026-10-09 22:44:37.825 UTC [41] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-10-09T22:45:57.5300177Z  2026-10-09 22:44:37.827 UTC [44] LOG:  database system was shut down at 2026-10-09 22:44:37 UTC
+2026-10-09T22:45:57.5300694Z  2026-10-09 22:44:37.831 UTC [41] LOG:  database system is ready to accept connections
+2026-10-09T22:45:57.5301059Z   done
+2026-10-09T22:45:57.5301241Z  server started
+2026-10-09T22:45:57.5301433Z  CREATE DATABASE
+2026-10-09T22:45:57.5301617Z  
+2026-10-09T22:45:57.5301777Z  
+2026-10-09T22:45:57.5302090Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2026-10-09T22:45:57.5302476Z  
+2026-10-09T22:45:57.5303119Z  waiting for server to shut down...2026-10-09 22:44:37.972 UTC [41] LOG:  received fast shutdown request
+2026-10-09T22:45:57.5304231Z  .2026-10-09 22:44:37.973 UTC [41] LOG:  aborting any active transactions
+2026-10-09T22:45:57.5305292Z  2026-10-09 22:44:37.975 UTC [41] LOG:  background worker "logical replication launcher" (PID 47) exited with exit code 1
+2026-10-09T22:45:57.5306208Z  2026-10-09 22:44:37.977 UTC [42] LOG:  shutting down
+2026-10-09T22:45:57.5306871Z  2026-10-09 22:44:37.977 UTC [42] LOG:  checkpoint starting: shutdown immediate
+2026-10-09T22:45:57.5308734Z  2026-10-09 22:44:37.991 UTC [42] LOG:  checkpoint complete: wrote 926 buffers (5.7%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.012 s, sync=0.002 s, total=0.015 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4266 kB, estimate=4266 kB; lsn=0/191E820, redo lsn=0/191E820
+2026-10-09T22:45:57.5310511Z  2026-10-09 22:44:37.998 UTC [41] LOG:  database system is shut down
+2026-10-09T22:45:57.5311058Z   done
+2026-10-09T22:45:57.5311358Z  server stopped
+2026-10-09T22:45:57.5311686Z  
+2026-10-09T22:45:57.5312088Z  PostgreSQL init process complete; ready for start up.
+2026-10-09T22:45:57.5312592Z  
+2026-10-09T22:45:57.5324760Z Stop and remove container: 0055252007ce4df9be2b5470776beebc_postgres17alpine_96b386
+2026-10-09T22:45:57.5329617Z ##[command]/usr/bin/docker rm --force 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:45:57.7043256Z 960e429882b622844708a365e5b84d29991edff3febaa2ea5518175b130155f4
+2026-10-09T22:45:57.7081295Z Remove container network: github_network_4416e104ccef4185b216741e11aafd1f
+2026-10-09T22:45:57.7088490Z ##[command]/usr/bin/docker network rm github_network_4416e104ccef4185b216741e11aafd1f
+2026-10-09T22:45:57.8092118Z github_network_4416e104ccef4185b216741e11aafd1f
+2026-10-09T22:45:57.8167368Z Cleaning up orphan processes

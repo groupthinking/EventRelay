@@ -5,6 +5,7 @@ on:
     paths:
       - "templates/uvai-chatbot/**"
       - ".github/workflows/uvai-chatbot-foundation.yml"
+      - ".github/workflows/dependency-review.yml"
 
 permissions:
   contents: read
