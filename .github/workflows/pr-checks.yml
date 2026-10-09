@@ -2,7 +2,7 @@ name: PR Checks
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, edited, ready_for_review]
+    types: [opened, reopened, synchronize, edited, ready_for_review, labeled, unlabeled]
 
 permissions: {}
 
@@ -42,6 +42,24 @@ jobs:
             }
             if (!pr.body || pr.body.length < 20) {
               findings.push('❌ PR description is required (minimum 20 characters)');
+            }
+            // Metadata-only validation: never check out or execute PR content here.
+            const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number, per_page: 100
+            });
+            const dependencyChange = changedFiles.some(file =>
+              /(^|\/)(package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock)$/.test(file.filename)
+            );
+            const securityUpdate = /\bsecurity\b|CVE-\d{4}-\d+|GHSA-[a-z0-9-]+/i.test(pr.title) ||
+              (pr.labels || []).some(label => label.name.toLowerCase() === 'security');
+            if (dependencyChange && securityUpdate) {
+              const evidence = (pr.body || '').split(/^## Security dependency evidence\s*$/m)[1]?.split(/^## /m)[0] || '';
+              for (const field of ['Advisory', 'Package and versions', 'Validation', 'Rollback']) {
+                const value = evidence.match(new RegExp('^- ' + field + ':[ \\t]*(.+)$', 'm'))?.[1]?.trim();
+                if (!value || /^(TODO|TBD|N\/A|<.*>|\.\.\.)$/i.test(value)) {
+                  findings.push('❌ Security dependency evidence missing: ' + field);
+                }
+              }
             }
             const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
             if (totalChanges > 500) {

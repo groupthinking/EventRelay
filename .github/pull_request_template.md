@@ -39,3 +39,14 @@ Provide the Vercel preview, production deployment, runtime evidence, or state wh
 - [ ] Acceptance criteria are satisfied
 - [ ] Required checks pass on the current head
 - [ ] Human decision is requested only for product, security, irreversible infrastructure, or production approval
+
+## Security dependency evidence
+
+<!-- For advisory-driven dependency changes: follow docs/security-dependency-maintenance.md.
+Mark the title with security or a CVE/GHSA ID, or use the security label.
+Replace every value below with evidence; omit this block for unrelated work. -->
+
+- Advisory: TODO
+- Package and versions: TODO
+- Validation: TODO
+- Rollback: TODO
