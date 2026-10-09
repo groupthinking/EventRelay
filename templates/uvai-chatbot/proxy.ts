@@ -5,6 +5,9 @@ import { guestRegex, isDevelopmentEnvironment } from "./lib/constants";
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  if (pathname === "/api/auth/guest") return new Response("Guest accounts are not enabled", { status: 404 });
+  if (["/login", "/register"].includes(pathname)) return NextResponse.next();
+
   if (pathname.startsWith("/ping")) {
     return new Response("pong", { status: 200 });
   }
@@ -22,11 +25,8 @@ export async function proxy(request: NextRequest) {
   const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
   if (!token) {
-    const redirectUrl = encodeURIComponent(new URL(request.url).pathname);
-
-    return NextResponse.redirect(
-      new URL(`${base}/api/auth/guest?redirectUrl=${redirectUrl}`, request.url)
-    );
+    if (pathname.startsWith("/api/")) return Response.json({ error: "authentication_required" }, { status: 401 });
+    return NextResponse.redirect(new URL(`${base}/login`, request.url));
   }
 
   const isGuest = guestRegex.test(token?.email ?? "");

@@ -1,0 +1,48 @@
+{
+  "verifiedAt": "2026-10-09T21:33:29.719Z",
+  "environment": "local production build",
+  "credentials": "ephemeral auth test secret; no database or AI provider",
+  "checks": [
+    {
+      "path": "/login",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "path": "/register",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "passed": true
+    },
+    {
+      "path": "/api/auth/guest",
+      "expectedStatus": 404,
+      "actualStatus": 404,
+      "passed": true
+    },
+    {
+      "path": "/api/video-guide/download?id=00000000-0000-0000-0000-000000000000",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "path": "/api/chat",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "passed": true
+    },
+    {
+      "path": "/",
+      "expectedStatus": 307,
+      "actualStatus": 307,
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "No authenticated customer journey",
+    "No browser or provider-quality verification",
+    "No database migrations or cross-tenant verification"
+  ]
+}

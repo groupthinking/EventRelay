@@ -1,6 +1,7 @@
 import type { InferUITool, UIMessage } from "ai";
 import { z } from "zod";
 import type { ArtifactKind } from "@/components/chat/artifact";
+import type { createVideoGuide, readVideoGuide } from "./ai/tools/create-video-guide";
 import type { createDocument } from "./ai/tools/create-document";
 import type { getWeather } from "./ai/tools/get-weather";
 import type { requestSuggestions } from "./ai/tools/request-suggestions";
@@ -21,6 +22,8 @@ type requestSuggestionsTool = InferUITool<
 >;
 
 export type ChatTools = {
+  createVideoGuide: InferUITool<ReturnType<typeof createVideoGuide>>;
+  readVideoGuide: InferUITool<ReturnType<typeof readVideoGuide>>;
   getWeather: weatherTool;
   createDocument: createDocumentTool;
   updateDocument: updateDocumentTool;

@@ -18,6 +18,7 @@ const nextConfig: NextConfig = {
         ],
       }
     : {}),
+  turbopack: { root: process.cwd() },
   cacheComponents: true,
   devIndicators: false,
   env: {

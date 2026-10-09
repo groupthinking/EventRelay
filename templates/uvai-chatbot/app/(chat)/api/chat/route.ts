@@ -43,7 +43,7 @@ import { convertToUIMessages, generateUUID } from "@/lib/utils";
 import { generateTitleFromUserMessage } from "../../actions";
 import { type PostRequestBody, postRequestBodySchema } from "./schema";
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const HEALTH_CHECK_DELAY_MS = 9000;
 
@@ -289,7 +289,9 @@ export async function POST(request: Request) {
               openai: { reasoningEffort: modelConfig.reasoningEffort },
             }),
           },
-          stopWhen: isStepCount(1),
+          stopWhen: isStepCount(2),
+          maxOutputTokens: 3000,
+          prepareStep: ({ stepNumber }) => stepNumber > 0 ? { activeTools: [] } : {},
           telemetry: {
             functionId: "stream-text",
             isEnabled: isProductionEnvironment,

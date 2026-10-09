@@ -188,6 +188,21 @@ const PurePreviewMessage = ({
       );
     }
 
+    if (type === "tool-createVideoGuide" || type === "tool-readVideoGuide") {
+      const output = part.state === "output-available" ? part.output : undefined;
+      const complete = output?.status === "complete";
+      const creating = type === "tool-createVideoGuide";
+      const download = output && "download" in output ? output.download : undefined;
+      return (
+        <div className="w-full max-w-[560px] rounded-xl border p-4 text-sm" key={part.toolCallId}>
+          <p role="status">{complete ? creating ? "Guide saved" : "Source evidence retrieved" : output?.status === "processing" ? "Source extraction is still processing. Retry this request to check again." : output ? `Guide unavailable: ${"code" in output ? output.code : output.status}` : creating ? "Extracting source evidence and generating guide…" : "Reading saved guide evidence…"}</p>
+          {download && <a className="mt-2 inline-block underline" href={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}${download}`}>Download timestamped guide</a>}
+          {output && "gaps" in output && output.gaps?.length ? <ul className="mt-2 list-disc pl-5 text-muted-foreground">{output.gaps.map((gap) => <li key={gap}>{gap}</li>)}</ul> : null}
+          {complete && creating && output && "id" in output && output.id ? <DocumentPreview isReadonly={isReadonly} result={{ id: output.id, kind: "text", title: "Timestamped video guide" }} /> : null}
+        </div>
+      );
+    }
+
     if (type === "tool-getWeather") {
       const { toolCallId, state } = part;
       const approvalId = (part as { approval?: { id: string } }).approval?.id;

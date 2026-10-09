@@ -13,9 +13,6 @@ import {
 } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import { useWindowSize } from "usehooks-ts";
-import { codeArtifact } from "@/artifacts/code/client";
-import { imageArtifact } from "@/artifacts/image/client";
-import { sheetArtifact } from "@/artifacts/sheet/client";
 import { textArtifact } from "@/artifacts/text/client";
 import { useArtifact } from "@/hooks/use-artifact";
 import type { Document, Vote } from "@/lib/db/schema";
@@ -29,13 +26,9 @@ import { Toolbar } from "./toolbar";
 import { VersionFooter } from "./version-footer";
 import type { VisibilityType } from "./visibility-selector";
 
-export const artifactDefinitions = [
-  textArtifact,
-  codeArtifact,
-  imageArtifact,
-  sheetArtifact,
-];
-export type ArtifactKind = (typeof artifactDefinitions)[number]["kind"];
+export const artifactDefinitions = [textArtifact];
+// Keep legacy type compatibility in dormant upstream modules; only text is rendered.
+export type ArtifactKind = "text" | "code" | "image" | "sheet";
 
 export type UIArtifact = {
   title: string;

@@ -69,10 +69,7 @@ export const createDocument = ({
       dataStream.write({ data: null, transient: true, type: "data-finish" });
 
       return {
-        content:
-          kind === "code"
-            ? "A script was created and is now visible to the user."
-            : "A document was created and is now visible to the user.",
+        content: "A document was created and is now visible to the user.",
         id,
         kind,
         title,
@@ -82,7 +79,7 @@ export const createDocument = ({
       kind: z
         .enum(artifactKinds)
         .describe(
-          "REQUIRED. 'code' for programming/algorithms, 'text' for essays/writing, 'sheet' for spreadsheets"
+          "REQUIRED. 'text' for grounded video guides"
         ),
       title: z.string().describe("The title of the artifact"),
     }),
