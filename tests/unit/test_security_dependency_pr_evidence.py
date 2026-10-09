@@ -39,6 +39,12 @@ listComments:'comments', updateComment:async()=>{},createComment:async()=>{}
     def test_security_label_and_nested_python_dependency_trigger(self):
         self.assertIn("failed", self.validate("fix: update library", ["services/requirements.txt"], "Closes #1. Updates library.", [{"name":"security"}]))
 
+    def test_python_inputs_and_annotated_placeholders_fail(self):
+        for path in ["requirements.in", "setup.py", "setup.cfg", "Pipfile", "Pipfile.lock", "pylock.toml", "constraints.in", "constraints.txt"]:
+            self.assertIn("failed", self.validate("fix: security patch", [path], "Closes #1. Updates library."))
+        body = "## Security dependency evidence\n- Advisory: TODO add link\n- Package and versions: example 1 -> 2\n- Validation: passed\n- Rollback: revert"
+        self.assertIn("failed", self.validate("fix: security patch", ["package.json"], body))
+
     def test_empty_field_does_not_consume_next_line(self):
         body = "## Security dependency evidence\n- Advisory:\n- Package and versions: example 1 -> 2\n- Validation: passed\n- Rollback: revert"
         self.assertIn("failed", self.validate("fix: security patch", ["package.json"], body))

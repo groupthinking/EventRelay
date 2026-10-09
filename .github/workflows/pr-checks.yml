@@ -48,7 +48,7 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number, per_page: 100
             });
             const dependencyChange = changedFiles.some(file =>
-              /(^|\/)(package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|requirements[^/]*\.txt|pyproject\.toml|poetry\.lock|uv\.lock)$/.test(file.filename)
+              /(^|\/)(package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|(?:requirements|constraints)[^/]*\.(?:txt|in)|setup\.(?:py|cfg)|Pipfile(?:\.lock)?|pylock\.toml|pyproject\.toml|poetry\.lock|uv\.lock)$/.test(file.filename)
             );
             const securityUpdate = /\bsecurity\b|CVE-\d{4}-\d+|GHSA-[a-z0-9-]+/i.test(pr.title) ||
               (pr.labels || []).some(label => label.name.toLowerCase() === 'security');
@@ -56,7 +56,7 @@ jobs:
               const evidence = (pr.body || '').split(/^## Security dependency evidence\s*$/m)[1]?.split(/^## /m)[0] || '';
               for (const field of ['Advisory', 'Package and versions', 'Validation', 'Rollback']) {
                 const value = evidence.match(new RegExp('^- ' + field + ':[ \\t]*(.+)$', 'm'))?.[1]?.trim();
-                if (!value || /^(TODO|TBD|N\/A|<.*>|\.\.\.)$/i.test(value)) {
+                if (!value || /^(?:TODO\b|TBD\b|N\/A\b|<.*>|\.\.\.)/i.test(value)) {
                   findings.push('❌ Security dependency evidence missing: ' + field);
                 }
               }
