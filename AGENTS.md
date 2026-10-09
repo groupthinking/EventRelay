@@ -101,3 +101,7 @@ When running the nightly first-principles audit (status &gt; 400 or latency &gt;
 ```bash
 PYTHONPATH=src python3 scripts/nightly_audit_agent.py --dry-run
 ```
+
+## Security dependency maintenance
+
+For an advisory-driven dependency update, follow [docs/security-dependency-maintenance.md](docs/security-dependency-maintenance.md). Reuse the canonical issue/PR, preserve direct versus transitive dependencies, and include the Security dependency evidence block. Before an authorized merge, re-fetch the exact head, applicable checks, reviews, unresolved threads, and mergeability; use expected-head protection and record the resulting merge commit. A recipe or green historical run is not current verification. This procedure grants no deployment or spending authority.
