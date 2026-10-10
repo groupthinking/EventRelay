@@ -8,7 +8,7 @@ beforeEach(() => {
   lookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
-afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
 describe('exact deployment target reachability', () => {
   it('accepts a public HTTPS 2xx response for the same normalized URL', async () => {
@@ -17,14 +17,14 @@ describe('exact deployment target reachability', () => {
     expect(await probeLiveDeploymentUrl('https://demo.vercel.app')).toEqual({
       ok: true, statusCode: 200, finalUrl: 'https://demo.vercel.app/',
     });
-    expect(fetcher).toHaveBeenCalledWith('https://demo.vercel.app/', expect.objectContaining({ redirect: 'error' }));
+    expect(fetcher).toHaveBeenCalledWith('https://demo.vercel.app/', expect.objectContaining({ redirect: 'manual' }));
   });
   it.each([301, 302, 303, 307, 308])('rejects redirect status %s without following Location', async (status) => {
     const fetcher = vi.fn().mockResolvedValue({ status, url: 'https://demo.vercel.app/', headers: new Headers({ Location: 'http://127.0.0.1/admin' }) });
     vi.stubGlobal('fetch', fetcher);
     expect(await probeLiveDeploymentUrl('https://demo.vercel.app')).toEqual({ ok: false, statusCode: status, error: 'redirect_rejected' });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls[0][1].redirect).toBe('error');
+    expect(fetcher.mock.calls[0][1].redirect).toBe('manual');
   });
   it.each(['http://127.0.0.1/admin', 'https://other.example/', 'https://demo.vercel.app/other'])('rejects substituted success URL %s', async (url) => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 200, url, redirected: false }));
@@ -72,5 +72,40 @@ describe('exact deployment target reachability', () => {
     expect((await probeLiveDeploymentUrl('')).ok).toBe(false);
     expect((await probeLiveDeploymentUrl('https://example.com/' + 'a'.repeat(2048))).ok).toBe(false);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+});
+
+describe('probe deadline and resolver capacity', () => {
+  it('bounds a stalled DNS validation and retains capacity until settlement', async () => {
+    vi.useFakeTimers();
+    const resolvers: Array<(answers: Array<{ address: string; family: number }>) => void> = [];
+    lookup.mockImplementation(() => new Promise((resolve) => { resolvers.push(resolve); }));
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const pending = Array.from({ length: 4 }, () => probeLiveDeploymentUrl('https://demo.vercel.app'));
+    expect(await probeLiveDeploymentUrl('https://demo.vercel.app')).toEqual({ ok: false, error: 'probe_busy' });
+    await vi.advanceTimersByTimeAsync(8_000);
+    expect(await Promise.all(pending)).toEqual(Array.from({ length: 4 }, () => ({ ok: false, error: 'probe_timeout' })));
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(await probeLiveDeploymentUrl('https://demo.vercel.app')).toEqual({ ok: false, error: 'probe_busy' });
+    resolvers.forEach((resolve) => resolve([{ address: '93.184.216.34', family: 4 }]));
+    await vi.advanceTimersByTimeAsync(0);
+    lookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    fetcher.mockResolvedValue({ status: 200, url: 'https://demo.vercel.app/', redirected: false });
+    expect((await probeLiveDeploymentUrl('https://demo.vercel.app')).ok).toBe(true);
+  });
+  it('gives fetch only the remaining overall deadline', async () => {
+    vi.useFakeTimers();
+    lookup.mockImplementation(() => new Promise((resolve) => setTimeout(() => resolve([{ address: '93.184.216.34', family: 4 }]), 7_000)));
+    const fetcher = vi.fn().mockImplementation(() => new Promise(() => {}));
+    vi.stubGlobal('fetch', fetcher);
+    const pending = probeLiveDeploymentUrl('https://demo.vercel.app');
+    await vi.advanceTimersByTimeAsync(7_000);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const signal = fetcher.mock.calls[0][1].signal as AbortSignal;
+    expect(signal.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await pending).toEqual({ ok: false, error: 'probe_timeout' });
+    expect(signal.aborted).toBe(true);
   });
 });

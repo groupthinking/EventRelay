@@ -17,8 +17,9 @@ Prerequisites: repository read access, Node 24+ for native TypeScript stripping/
    ```bash
    node --version
    node scripts/security/verify_deployment_probe_offline.mjs
+   node scripts/security/verify_manual_redirect_semantics.mjs
    ```
-   Expected: JSON with `passed: 22`, `networkRequests: 0`, `realDnsRequests: 0`, exit 0. The harness imports production TypeScript, replacing only the server-only marker, DNS lookup and fetch with fixtures.
+   Expected: JSON with `passed: 27`, `networkRequests: 0`, `realDnsRequests: 0`, exit 0. The fixture harness imports production TypeScript, replacing the server-only marker, DNS lookup, fetch and deadline clock. It verifies 27 assertions/scenarios including bounded stalled DNS and fetch, retained four-slot DNS capacity and recovery. The second harness makes one isolated loopback HTTP request using actual Node Fetch: manual mode must return302, with zero redirect-target hits and zero public-network requests. It proves Fetch semantics only.
 3. In an already dependency-installed web checkout run:
    ```bash
    cd apps/web
@@ -27,7 +28,7 @@ Prerequisites: repository read access, Node 24+ for native TypeScript stripping/
    npx --no-install eslint src/lib/live-deployment-probe.ts src/lib/__tests__/live-deployment-probe.test.ts
    ```
    Install nothing from this recipe without inspecting the lock and project scripts. Applicable CI remains a separate verification gate.
-4. Retain failing fixtures for 301/302/303/307/308, mismatched host/path/private final URL, redirected flag, credentials, HTTP, fragments, private/mixed DNS, resolver/transport failures and empty/over-budget URLs. Positive public HTTPS exact-target 200 must still succeed. No fallback tool or alternate URL on failure.
+4. Retain failing fixtures for 301/302/303/307/308, mismatched host/path/private final URL, redirected flag, credentials, HTTP, fragments, private/mixed DNS, resolver/transport failures and empty/over-budget URLs. Positive public HTTPS exact-target 200 must still succeed. No fallback tool or alternate URL on failure. DNS validation and fetch share one8-second deadline. At most four DNS validations remain outstanding in this module; because Node lookup cannot be cancelled, slots are retained until actual settlement. A hung resolver keeps its slot occupied and fails subsequent probes closed; this is bounded work, not cancellation or full-process DNS containment.
 5. Review exact head, all required checks, unresolved threads and mergeability before any authorized merge. This branch does not deploy or activate production. Redirect-only deployment URLs intentionally fail reachability: obtain canonical target and fresh exact-bound approval/evidence rather than automatically following Location.
 
 ESTIMATE: 15–30 minutes to inspect/run this regression; 1–2 hours for independent review and integration analysis, excluding CI/provider delays. Direct validation uses zero provider requests. Local/CI compute costs depend on the existing environment; no measured saving or cost reduction claimed.
@@ -36,7 +37,7 @@ ESTIMATE: 15–30 minutes to inspect/run this regression; 1–2 hours for indepe
 Deliverable: a small repeatable deployment-evidence regression pack for teams operating supervised video-to-action/agent workflows. It can be included in a separately scoped implementation/security review. Buyer/payment interest and revenue are hypotheses; no outreach, checkout or marketing performed.
 
 ## Verification and rollback
-VERIFIED: offline vulnerable-base response handling reproduced; patched production TypeScript passed 22 cases without live DNS/HTTP. This proves fixture-level exact-destination behavior, not a live SSRF exploit or full network containment.
+VERIFIED: offline vulnerable-base response handling reproduced; patched production TypeScript passed 27 cases without live DNS/HTTP. This proves fixture-level exact-destination behavior, not a live SSRF exploit or full network containment.
 NOT RUN locally: package Vitest, TypeScript, lint and full integration suite until their CI result is fetched. Retain actual CI results in the PR receipt; never infer them from this harness.
 Remaining limitation: DNS pre-resolution and fetch have a TOCTOU/rebinding gap. Network egress enforcement or a reviewed pinned transport is still needed. Private-range guarding alone is not complete containment.
 Rollback before merge: close PR and leave main untouched. If an explicitly approved merged change must be reverted, create a reviewed `git revert <verified-merge-commit>` PR; do not deploy it automatically. Reverting restores redirect risk, so HOLD affected transition paths until compensating controls are verified.
@@ -44,3 +45,6 @@ Rollback before merge: close PR and leave main untouched. If an explicitly appro
 Stable evidence key: `anthropic:claude:restriction-bypass-and-live-form-fallback:report-2026-10-09`.
 Repository finding key: `eventrelay:origin-gate:deployment-probe:redirect-target-substitution:bd0f437180b994d8916fcba22ada610bf2fbae0a`.
 Tracking: [#2394](https://github.com/groupthinking/EventRelay/issues/2394).
+
+## Review correction
+Initial head328320a used redirect:error with fixtures returning resolved3xx responses. Native Fetch rejects redirects in error mode, so those fixtures did not prove the explicit status branch. Review prompted manual mode plus a native loopback semantic test. Initial DNS validation also sat outside the fetch timeout; the revised overall deadline and retained validation slots address that review finding. Old receipts remain historical, not final-head proof.

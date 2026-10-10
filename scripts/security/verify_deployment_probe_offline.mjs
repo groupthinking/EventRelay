@@ -20,8 +20,8 @@ globalThis.fetch = async (url, init) => { calls.push({url,init}); if(fetchError)
 let cases = 0;
 const check = async (url, expected) => { calls=[]; assert.deepEqual(await probe(url), expected); cases++; };
 await check('https://demo.vercel.app', {ok:true,statusCode:200,finalUrl:'https://demo.vercel.app/'});
-assert.equal(calls[0].init.redirect, 'error');
-for(const status of [301,302,303,307,308]) { response={status,url:'https://demo.vercel.app/'}; await check('https://demo.vercel.app',{ok:false,statusCode:status,error:'redirect_rejected'});assert.equal(calls.length,1);assert.equal(calls[0].init.redirect,'error'); }
+assert.equal(calls[0].init.redirect, 'manual');
+for(const status of [301,302,303,307,308]) { response={status,url:'https://demo.vercel.app/'}; await check('https://demo.vercel.app',{ok:false,statusCode:status,error:'redirect_rejected'});assert.equal(calls.length,1);assert.equal(calls[0].init.redirect,'manual'); }
 for(const url of ['http://127.0.0.1/admin','https://other.example/','https://demo.vercel.app/other']) { response={status:200,url};await check('https://demo.vercel.app',{ok:false,error:'target_mismatch'}); }
 response={status:200,url:'https://demo.vercel.app/',redirected:true};await check('https://demo.vercel.app',{ok:false,error:'target_mismatch'});
 for(const url of ['http://example.com/','https://user:secret@example.com/','https://localhost/','https://127.0.0.1/','https://[::1]/','https://example.com/#fragment']) {await check(url,{ok:false,error:'invalid_target'});assert.equal(calls.length,0);}
@@ -32,4 +32,22 @@ fetchError=true;await check('https://demo.vercel.app',{ok:false,error:'probe_fai
 response={status:503,url:'https://demo.vercel.app/'};await check('https://demo.vercel.app',{ok:false,statusCode:503,error:'http_503'});assert.equal(calls.length,1);
 await check('',{ok:false,error:'empty_url'});assert.equal(calls.length,0);
 await check('https://example.com/'+'a'.repeat(2048),{ok:false,error:'invalid_target'});assert.equal(calls.length,0);
-console.log(JSON.stringify({passed:cases,networkRequests:0,realDnsRequests:0,source:'unchanged TypeScript with import hooks only',scope:'fixture regression, not live network containment'}));
+const savedTimer = globalThis.setTimeout;
+globalThis.setTimeout = (callback, delay, ...args) => savedTimer(callback, delay === 8000 ? 10 : delay, ...args);
+const resolvers = [];
+globalThis.__lookupFixture = () => new Promise(resolve => resolvers.push(resolve));
+const pending = Array.from({length:4}, () => probe('https://demo.vercel.app'));
+await check('https://demo.vercel.app', {ok:false,error:'probe_busy'});
+// Keep the fixture process alive while the production timer is unref'd.
+const keepAlive = savedTimer(() => {}, 1000);
+assert.deepEqual(await Promise.all(pending), Array.from({length:4}, () => ({ok:false,error:'probe_timeout'}))); cases++;
+await check('https://demo.vercel.app', {ok:false,error:'probe_busy'});
+resolvers.forEach(resolve => resolve(answers));
+await new Promise(resolve => savedTimer(resolve,0));
+globalThis.__lookupFixture = async () => answers;
+response={status:200,url:'https://demo.vercel.app/'};
+await check('https://demo.vercel.app',{ok:true,statusCode:200,finalUrl:'https://demo.vercel.app/'});
+globalThis.fetch = async () => new Promise(() => {});
+await check('https://demo.vercel.app',{ok:false,error:'probe_timeout'});
+clearTimeout(keepAlive);globalThis.setTimeout=savedTimer;
+console.log(JSON.stringify({passed:cases,networkRequests:0,realDnsRequests:0,source:'production TypeScript with fixture DNS/fetch/deadline clock',scope:'fixture regression, not live network containment'}));

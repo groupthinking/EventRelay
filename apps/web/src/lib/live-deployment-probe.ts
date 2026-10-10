@@ -10,6 +10,8 @@ export type LiveDeploymentProbeResult =
   | { ok: false; statusCode?: number; error: string };
 
 const PROBE_TIMEOUT_MS = 8_000;
+const MAX_PENDING_VALIDATIONS = 4;
+let pendingValidations = 0;
 
 export async function probeLiveDeploymentUrl(
   liveUrl: string,
@@ -23,18 +25,38 @@ export async function probeLiveDeploymentUrl(
         target.username || target.password || target.hash) {
       return { ok: false, error: 'invalid_target' };
     }
-    await assertPublicHttpUrl(target.href);
   } catch {
     return { ok: false, error: 'invalid_target' };
   }
+  // Node DNS lookup cannot be cancelled. Retain its slot until it settles,
+  // even after the caller times out, to bound outstanding resolver work.
+  if (pendingValidations >= MAX_PENDING_VALIDATIONS) {
+    return { ok: false, error: 'probe_busy' };
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), PROBE_TIMEOUT_MS);
+  timer.unref();
+  let onAbort: (() => void) | undefined;
+  const deadline = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new Error('Probe deadline exceeded'));
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+  });
+  let validating = true;
   try {
-    const response = await fetch(target.href, {
+    pendingValidations += 1;
+    const validation = assertPublicHttpUrl(target.href).finally(() => {
+      pendingValidations -= 1;
+    });
+    // Race attaches rejection handlers even if DNS settles after timeout.
+    await Promise.race([validation, deadline]);
+    validating = false;
+    const response = await Promise.race([fetch(target.href, {
       method: 'GET',
       // A failed target must not expand the destination or substitute evidence.
-      redirect: 'error',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+      redirect: 'manual',
+      signal: controller.signal,
       headers: { Accept: 'text/html,application/json;q=0.9,*/*;q=0.8' },
-    });
+    }), deadline]);
     if (response.status >= 300 && response.status < 400) {
       return { ok: false, statusCode: response.status, error: 'redirect_rejected' };
     }
@@ -47,6 +69,9 @@ export async function probeLiveDeploymentUrl(
     return { ok: false, statusCode: response.status, error: `http_${response.status}` };
   } catch {
     // Avoid returning DNS, credential or transport details to callers.
-    return { ok: false, error: 'probe_failed' };
+    return { ok: false, error: controller.signal.aborted ? 'probe_timeout' : validating ? 'invalid_target' : 'probe_failed' };
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
   }
 }
