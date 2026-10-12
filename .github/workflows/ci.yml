@@ -29,6 +29,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
+  mcp-catalog-offline:
+    name: MCP catalog offline regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Fixture-only approval and drift regressions
+        run: python -m unittest discover -s tests/security -p test_mcp_catalog_approval.py -v
+
   guards:
     # Fail fast on the class of breakage that shipped to main un-caught:
     # committed merge-conflict markers and import-time Python SyntaxErrors.
@@ -201,3 +213,5 @@ jobs:
           PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120
           --cov=src/youtube_extension --cov-fail-under=0
           --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
+      - name: Offline MCP inventory and approval regressions
+        run: python -m pytest tests/security/test_local_mcp_config.py tests/security/test_mcp_catalog_approval.py -q -o addopts=''
