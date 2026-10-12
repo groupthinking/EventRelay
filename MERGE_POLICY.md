@@ -113,27 +113,22 @@ strand a change permanently pending. v1 listed `Security` among its required
 six, and dropping every security scan out of the required set would be a
 weakening introduced by the rewrite that set out to make this gate precise.
 
-> **What requiring these does and does not buy you.** Four of the six cannot
-> fail on findings, by construction, in `.github/workflows/security.yml`:
->
-> | Job | Why it always reports `success` |
-> | --- | --- |
-> | `npm-audit` | `continue-on-error: true` |
-> | `python-safety` | `\|\| true` **and** `continue-on-error: true` |
-> | `bandit` | `\|\| true` |
-> | `trivy` | `exit-code: '0'` on both invocations |
->
-> `Security Scan - python` and `Security Scan - javascript` are CodeQL matrix
-> jobs; they report that analysis completed and upload alerts to the Security
-> tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
-> not something the workflow decides.
->
-> So gate 2 requires these security scan jobs (check-runs) to **run and complete** —
-> which catches a scan that crashed, timed out, or was silently dropped from the
-> pipeline. It is not a findings gate, and this policy should not be read as
-> claiming vulnerability enforcement. Making findings actually block is a change to
-> `security.yml`, with its own diff and its own blast radius; see *What is
-> deliberately not here*.
+`trivy` is a findings gate: the image scan fails on every reported HIGH or
+CRITICAL vulnerability, including findings without a fix. SARIF and exact image
+identity are retained even when the scan fails. The human-readable report does
+not override the enforcing scan's exit status.
+
+No exceptions are accepted by the current image gate. Existing bare IDs in
+`.trivyignore` are not evidence of approved risk acceptance and are not applied.
+Any future exception must be introduced in a separately reviewed change with
+an exact advisory/package/version/image scope, applicability evidence,
+compensating controls, an accountable approver, linked issue, expiry, and an
+enforced expiry check. A missing advisory or unproven exposure remains unresolved.
+
+The other security jobs remain completion gates: `npm-audit`, `python-safety`,
+and `bandit` still tolerate findings. CodeQL check failure also depends on the
+repository's code-scanning settings. Their green conclusions do not establish
+absence of vulnerabilities.
 
 > **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
 > `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads
@@ -252,16 +247,11 @@ laundering itself as enforcement.
 - **No evidence ledger requirement.** v1 mandated a receipt comment on #898 for
   every gate evaluation. Nothing consumed those receipts. Git history and
   check runs are the ledger.
-- **No change to what the security scans enforce.** Gate 2 requires the six
-  security checks to run and complete; four of them cannot fail on findings, as
-  documented there. Turning `npm-audit`, `python-safety`, `bandit`, and `trivy`
-  into blocking gates means removing their `continue-on-error` / `|| true` /
-  `exit-code: '0'` escapes in `security.yml`, which will fail pull requests on
-  the existing backlog of findings the moment it lands. That is a deliberate
-  decision about tolerance for known vulnerabilities, not a documentation fix,
-  so it is left to its own pull request. Requiring the checks first is still
-  worth doing: it makes a scan that crashes or quietly disappears from the
-  pipeline visible, which is the failure this policy can actually close.
+- **Image findings are enforced.** `trivy` must fail on unresolved HIGH and
+  CRITICAL findings. Reporting success while tolerating findings is confined to
+  the other explicitly advisory scanners. Do not automatically demote `trivy`
+  for a high failure rate caused by real unresolved vulnerabilities; the 50%
+  demotion rule applies to broken execution, not to valid security findings.
 
 ## Review clock
 

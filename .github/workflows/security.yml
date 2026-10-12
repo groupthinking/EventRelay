@@ -95,6 +95,8 @@ jobs:
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Cache Trivy DB
         uses: actions/cache@v6
         with:
@@ -104,31 +106,44 @@ jobs:
             trivy-db-
         continue-on-error: true
       - name: Build image for scanning
-        run: docker build -t eventrelay:test -f Dockerfile .
+        run: |
+          docker build -t eventrelay:test -f Dockerfile .
+          docker image inspect eventrelay:test > image-identity.json
+          git rev-parse HEAD > image-source-commit.txt
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: 'eventrelay:test'
           format: 'sarif'
           output: 'trivy-results.sarif'
-          exit-code: '0'
-          ignore-unfixed: true
+          exit-code: '1'
+          ignore-unfixed: false
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-          trivyignores: '.trivyignore'
+          trivyignores: '/dev/null'
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
-        if: hashFiles('trivy-results.sarif') != ''
+        if: always() && hashFiles('trivy-results.sarif') != ''
         with:
           sarif_file: 'trivy-results.sarif'
       - name: Generate human-readable report
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        if: success()
+        if: always()
         with:
           image-ref: 'eventrelay:test'
           format: 'table'
           exit-code: '0'
-          ignore-unfixed: true
+          ignore-unfixed: false
           vuln-type: 'os,library'
           severity: 'CRITICAL,HIGH'
-          trivyignores: '.trivyignore'
+          trivyignores: '/dev/null'
+      - name: Retain exact image scan evidence
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: trivy-image-evidence
+          path: |
+            trivy-results.sarif
+            image-identity.json
+            image-source-commit.txt
+          if-no-files-found: error
