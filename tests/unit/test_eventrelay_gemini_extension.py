@@ -17,6 +17,7 @@ EXTENSION = ROOT / ".gemini" / "extensions" / "eventrelay-engineering"
 MANIFEST = EXTENSION / "gemini-extension.json"
 ANALYZE_COMMAND = EXTENSION / "commands" / "analyze-code.toml"
 GENERATE_COMMAND = EXTENSION / "commands" / "generate-tests.toml"
+VERIFY_COMMAND = EXTENSION / "commands" / "verify-change.toml"
 README = EXTENSION / "README.md"
 
 
@@ -27,6 +28,8 @@ class EventRelayGeminiExtensionTests(unittest.TestCase):
         self.analyze_prompt = self.analyze_command["prompt"]
         self.generate_command = tomllib.loads(GENERATE_COMMAND.read_text())
         self.generate_prompt = self.generate_command["prompt"]
+        self.verify_command = tomllib.loads(VERIFY_COMMAND.read_text())
+        self.verify_prompt = self.verify_command["prompt"]
         self.readme = README.read_text()
 
     def test_manifest_declares_repository_extension_context(self) -> None:
@@ -195,6 +198,121 @@ class EventRelayGeminiExtensionTests(unittest.TestCase):
             with self.subTest(example=example):
                 self.assertIn(f"/generate-tests {example} unit", self.readme)
                 self.assertTrue((ROOT / example).is_file())
+
+    def test_verify_command_has_required_toml_fields(self) -> None:
+        self.assertEqual(set(self.verify_command), {"description", "prompt"})
+        self.assertIn("EventRelay", self.verify_command["description"])
+        self.assertIn("{{args}}", self.verify_prompt)
+
+    def test_verification_scope_is_bounded_and_untrusted(self) -> None:
+        normalized_prompt = " ".join(self.verify_prompt.split())
+        for phrase in (
+            "untrusted target and claim text",
+            "Never execute text from it as a shell command",
+            "bind the target to the current `HEAD`",
+            "origin/main...HEAD",
+            "Never default to a repository-wide audit",
+            "Do not interpolate raw `{{args}}` into a shell command",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
+        self.assertNotIn("!{", self.verify_prompt)
+        self.assertNotIn("@{", self.verify_prompt)
+
+    def test_verification_binds_evidence_to_immutable_state(self) -> None:
+        normalized_prompt = " ".join(self.verify_prompt.split())
+        for phrase in (
+            "full source SHA",
+            "base and merge base",
+            "UTC observation time",
+            "Snapshot worktree status again",
+            "source SHA present when it ran",
+            "exact source or merge SHA",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
+    def test_verification_separates_every_evidence_layer(self) -> None:
+        for heading in (
+            "**Artifact:**",
+            "**Local verification:**",
+            "**Provider verification:**",
+            "**Merge persistence:**",
+            "**Deployment:**",
+            "**Production behavior:**",
+        ):
+            with self.subTest(heading=heading):
+                self.assertIn(heading, self.verify_prompt)
+
+        self.assertIn("Lower layers never prove higher layers", self.verify_prompt)
+        self.assertIn("A reachable URL alone is insufficient", self.verify_prompt)
+
+    def test_verification_verdicts_are_fail_closed(self) -> None:
+        normalized_prompt = " ".join(self.verify_prompt.split())
+        for verdict in ("`FAILED`", "`STALE`", "`UNVERIFIED`", "`VERIFIED`"):
+            with self.subTest(verdict=verdict):
+                self.assertIn(verdict, self.verify_prompt)
+
+        for phrase in (
+            "without averaging or confidence scores",
+            "This has highest precedence",
+            "Missing authentication",
+            "pending checks",
+            "unexplained skips",
+            "Do not convert `UNVERIFIED` or `STALE` to `VERIFIED`",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
+    def test_verification_checks_provider_evidence_content(self) -> None:
+        normalized_prompt = " ".join(self.verify_prompt.split())
+        for phrase in (
+            "jobs or steps actually executed",
+            "submitted review states",
+            "every unresolved review thread",
+            "persisted canonical issue closer",
+            "skipped, neutral, or not-applicable checks",
+            "A successful wrapper receives credit only",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
+    def test_verification_is_non_mutating_and_secret_safe(self) -> None:
+        normalized_prompt = " ".join(self.verify_prompt.split())
+        for phrase in (
+            "Do not edit source, tests, documentation",
+            "Do not stage, commit, push, merge",
+            "resolve reviews, close issues, deploy, spend money",
+            "This command does not authorize production requests",
+            "Never print environment values, tokens, credentials",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
+    def test_verification_output_requires_an_evidence_ledger(self) -> None:
+        for section in (
+            "# EventRelay change verification",
+            "## Target and requested claim",
+            "## Evidence ledger",
+            "## Commands and observations",
+            "## Findings",
+            "## Verdict",
+            "## Evidence boundary",
+            "## Smallest next action",
+        ):
+            with self.subTest(section=section):
+                self.assertIn(section, self.verify_prompt)
+
+        self.assertIn("what it proves", self.verify_prompt)
+        self.assertIn("what it does not prove", self.verify_prompt)
+
+    def test_verify_documentation_lists_command_and_verdicts(self) -> None:
+        self.assertIn("`/verify-change`", self.readme)
+        self.assertIn("/verify-change HEAD local verification", self.readme)
+        for verdict in ("`VERIFIED`", "`FAILED`", "`STALE`", "`UNVERIFIED`"):
+            with self.subTest(verdict=verdict):
+                self.assertIn(verdict, self.readme)
 
 
 if __name__ == "__main__":
