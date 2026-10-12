@@ -73,6 +73,16 @@ class CatalogApprovalTests(unittest.TestCase):
         self.assertIn("DESCRIPTION_CHANGED", codes)
         self.assertNotIn("SCHEMA_CHANGED", codes)
 
+    def test_schema_array_order_remains_significant(self):
+        response = copy.deepcopy(self.response)
+        response["tools"][0]["inputSchema"]["required"] = ["path", "mode"]
+        approval = audit.catalog_record(self.identity, response)
+        approval["approved"] = True
+        response["tools"][0]["inputSchema"]["required"].reverse()
+        result = self.compare(response=response, approval=approval)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("SCHEMA_CHANGED", result["changes"][0]["codes"])
+
     def test_added_removed_and_renamed_tools(self):
         for tools, code in ((self.response["tools"][:1], "TOOL_REMOVED"),
                             (self.response["tools"] + [{"name": "new", "inputSchema": {}}], "TOOL_ADDED")):
