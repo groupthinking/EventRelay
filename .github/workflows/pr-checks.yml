@@ -47,7 +47,10 @@ jobs:
             const changedFiles = await github.paginate(github.rest.pulls.listFiles, {
               owner: context.repo.owner, repo: context.repo.repo, pull_number: pr.number, per_page: 100
             });
-            const dependencyChange = changedFiles.some(file =>
+            // GitHub caps the PR file listing at 3,000 files. A security-marked
+            // PR with an incomplete listing must fail closed into evidence review.
+            const fileListIncomplete = changedFiles.length < pr.changed_files;
+            const dependencyChange = fileListIncomplete || changedFiles.some(file =>
               /(^|\/)(package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|(?:requirements|constraints)[^/]*\.(?:txt|in)|setup\.(?:py|cfg)|Pipfile(?:\.lock)?|pylock\.toml|pyproject\.toml|poetry\.lock|uv\.lock)$/.test(file.filename)
             );
             const securityUpdate = /\bsecurity\b|CVE-\d{4}-\d+|GHSA-[a-z0-9-]+/i.test(pr.title) ||

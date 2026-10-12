@@ -8,11 +8,12 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/pr-checks.yml"
 
 class SecurityEvidenceTest(unittest.TestCase):
-    def validate(self, title, paths, body, labels=None):
+    def validate(self, title, paths, body, labels=None, changed_files=None):
         text = WORKFLOW.read_text()
         script = text.split("          script: |\n", 1)[1]
         script = "\n".join(line[12:] for line in script.splitlines())
-        payload = json.dumps({"title": title, "body": body, "labels": labels or [], "number": 1})
+        payload = json.dumps({"title": title, "body": body, "labels": labels or [], "number": 1,
+                              "changed_files": len(paths) if changed_files is None else changed_files})
         files = json.dumps([{"filename": path} for path in paths])
         harness = """
 const context = {payload: {pull_request: PR}, repo: {owner:'test',repo:'test'}};
@@ -48,6 +49,11 @@ listComments:'comments', updateComment:async()=>{},createComment:async()=>{}
     def test_empty_field_does_not_consume_next_line(self):
         body = "## Security dependency evidence\n- Advisory:\n- Package and versions: example 1 -> 2\n- Validation: passed\n- Rollback: revert"
         self.assertIn("failed", self.validate("fix: security patch", ["package.json"], body))
+
+    def test_incomplete_file_listing_requires_security_evidence(self):
+        self.assertIn("failed", self.validate(
+            "fix: security update", ["docs/visible-file.md"],
+            "Closes #1. Large security change.", changed_files=3001))
 
 if __name__ == "__main__":
     unittest.main()
