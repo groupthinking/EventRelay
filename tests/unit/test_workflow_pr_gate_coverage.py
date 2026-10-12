@@ -90,8 +90,10 @@ def test_e2e_job_does_not_skip_pull_requests_without_repo_var() -> None:
     )
 
 
-def _needs_vercel_preview(*paths: str) -> bool:
+def _needs_vercel_preview(*paths: str, changed_files: int | None = None) -> bool:
     manifest = json.loads(DEPLOYMENT_INPUTS.read_text())
+    if changed_files is not None and len(paths) < changed_files:
+        return True
     return any(
         path in manifest["files"]
         or any(path.startswith(prefix) for prefix in manifest["prefixes"])
@@ -141,10 +143,18 @@ def test_e2e_workflow_classifies_current_and_previous_file_names() -> None:
     script = impact["with"]["script"]
 
     assert "github.paginate(github.rest.pulls.listFiles" in script
+    assert "github.rest.pulls.get" in script
+    assert "files.length < pullRequest.changed_files" in script
     assert "file.filename" in script
     assert "file.previous_filename" in script
     assert "e2e-deployment-inputs.json" in script
+    assert "fileListIncomplete || deploymentInputs.length > 0" in script
     assert "core.setOutput('needs_preview', String(needsPreview))" in script
+
+
+def test_incomplete_pr_file_list_requires_a_preview() -> None:
+    """GitHub caps PR file listings; an unseen app path must not bypass E2E."""
+    assert _needs_vercel_preview("docs/first-3000-files.md", changed_files=3001)
 
 
 def test_e2e_execution_steps_require_deployment_impact_on_pull_requests() -> None:

@@ -76,12 +76,20 @@ jobs:
             const manifest = JSON.parse(
               fs.readFileSync('.github/e2e-deployment-inputs.json', 'utf8'),
             );
-            const files = await github.paginate(github.rest.pulls.listFiles, {
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              per_page: 100,
-            });
+            const [files, { data: pullRequest }] = await Promise.all([
+              github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              }),
+              github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              }),
+            ]);
+            const fileListIncomplete = files.length < pullRequest.changed_files;
             const changedPaths = files.flatMap((file) =>
               [file.filename, file.previous_filename].filter(Boolean),
             );
@@ -89,13 +97,18 @@ jobs:
               manifest.files.includes(path) ||
               manifest.prefixes.some((prefix) => path.startsWith(prefix)),
             );
-            const needsPreview = deploymentInputs.length > 0;
+            // GitHub caps pull-file listings at 3,000 entries. If that cap
+            // hides any path, fail closed and require a preview rather than
+            // allowing an unseen deployment input to bypass live E2E.
+            const needsPreview = fileListIncomplete || deploymentInputs.length > 0;
 
             core.setOutput('needs_preview', String(needsPreview));
             await core.summary
               .addHeading('E2E deployment impact', 3)
               .addRaw(
-                needsPreview
+                fileListIncomplete
+                  ? `GitHub returned ${files.length} of ${pullRequest.changed_files} changed files; the live E2E suite will fail closed and require this PR's preview.`
+                  : needsPreview
                   ? `A Vercel deployment input changed (${deploymentInputs.length} matching path(s)); the live E2E suite will run against this PR's preview.`
                   : 'No Vercel deployment input changed; the live E2E suite is not applicable to this PR.',
               )
