@@ -10,7 +10,7 @@ class ImageGatePolicyTests(unittest.TestCase):
         enforcing = workflow.split("name: Run Trivy vulnerability scanner", 1)[1].split("- name:", 1)[0]
         self.assertIn("exit-code: '1'", enforcing)
         self.assertIn("ignore-unfixed: false", enforcing)
-        self.assertIn("trivyignores: '/dev/null'", enforcing)
+        self.assertIn("trivyignores: '.github/trivy-no-exceptions.txt'", enforcing)
         self.assertIn("severity: 'CRITICAL,HIGH'", enforcing)
         self.assertIn("No exceptions are accepted", policy)
         self.assertIn("Do not automatically demote `trivy`", policy)
