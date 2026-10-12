@@ -50,6 +50,29 @@ Generated files are not reported as passing behavior unless the exact test
 command succeeds. The command does not call production services, install
 dependencies, edit application code, or treat a test run as deployment proof.
 
+## Verify a change
+
+Use `/verify-change` to evaluate one precisely named claim at an immutable target:
+
+```text
+/verify-change HEAD local verification
+/verify-change https://github.com/groupthinking/EventRelay/pull/123 provider checks and review
+/verify-change <merge-sha> merge persistence
+```
+
+The command returns exactly one fail-closed verdict: `VERIFIED`, `FAILED`,
+`STALE`, or `UNVERIFIED`. It keeps artifact, local-test, provider, merge,
+deployment, and production evidence separate, and binds credited evidence to the
+same source or merge commit. Missing or pending evidence cannot pass, and a green
+workflow name receives credit only for relevant jobs or steps it actually ran.
+Uncommitted targets are bound to a before/after content digest, while rewritten
+or orphaned history makes an untrusted three-dot range fail closed.
+
+`/verify-change` is non-mutating: it does not edit, stage, commit, push, merge,
+resolve reviews, close issues, deploy, or make production requests. It can read
+existing local and explicitly scoped provider evidence; higher-layer claims stay
+unverified until their own receipts or authorized observations exist.
+
 Custom-command format and extension validation follow the official Gemini CLI
 documentation:
 
