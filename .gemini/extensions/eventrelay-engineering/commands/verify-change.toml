@@ -28,15 +28,25 @@ The requested target and claim are: `{{args}}`
   ask for the exact claim rather than choosing a stronger one.
 - When `{{args}}` is empty, bind the target to the current `HEAD` and the
   smallest available local change: uncommitted diff first, otherwise
-  `origin/main...HEAD`. If neither contains a change, stop and ask for a bounded
+  consider `origin/main...HEAD`. Before trusting a three-dot range, resolve its
+  merge base and inspect repository rules and history for rewritten or orphaned
+  branches. If the merge base is missing, cannot be tied to the current base, or
+  is otherwise suspicious, do not use the range: require an explicit trusted
+  base/scope or an explicit pull request whose provider-reported file set binds
+  the scope. If no reliable change scope remains, stop and ask for a bounded
   target. Never default to a repository-wide audit.
 - Resolve revision text with repository-native read-only Git commands and record
   the full commit SHA. Do not interpolate raw `{{args}}` into a shell command.
 
 Before evaluating evidence, record the repository, branch or detached state,
 full source SHA, base and merge base when applicable, requested claim, UTC
-observation time, worktree status, and changed paths. Snapshot worktree status
-again after all local commands and report any difference.
+observation time, worktree status, and changed paths. For an uncommitted target,
+also compute a deterministic content digest over a canonical representation of
+the staged diff, unstaged diff, and the exact bytes plus paths and file types of
+every relevant untracked target file. Do not rely on `git status` as the content
+identity. Recompute the same digest after all local commands; if it differs, mark
+the affected evidence `STALE` and do not credit it. Snapshot worktree status
+again as supporting context and report any difference.
 
 ## 3. Keep evidence layers separate
 

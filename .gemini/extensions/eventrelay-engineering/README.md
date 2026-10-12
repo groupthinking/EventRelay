@@ -65,6 +65,8 @@ The command returns exactly one fail-closed verdict: `VERIFIED`, `FAILED`,
 deployment, and production evidence separate, and binds credited evidence to the
 same source or merge commit. Missing or pending evidence cannot pass, and a green
 workflow name receives credit only for relevant jobs or steps it actually ran.
+Uncommitted targets are bound to a before/after content digest, while rewritten
+or orphaned history makes an untrusted three-dot range fail closed.
 
 `/verify-change` is non-mutating: it does not edit, stage, commit, push, merge,
 resolve reviews, close issues, deploy, or make production requests. It can read

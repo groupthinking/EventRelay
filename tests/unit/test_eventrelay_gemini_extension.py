@@ -226,9 +226,28 @@ class EventRelayGeminiExtensionTests(unittest.TestCase):
             "full source SHA",
             "base and merge base",
             "UTC observation time",
-            "Snapshot worktree status again",
+            "deterministic content digest",
+            "staged diff, unstaged diff",
+            "exact bytes plus paths and file types",
+            "Do not rely on `git status` as the content identity",
+            "Recompute the same digest after all local commands",
+            "mark the affected evidence `STALE` and do not credit it",
             "source SHA present when it ran",
             "exact source or merge SHA",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
+    def test_verification_rejects_unreliable_three_dot_history(self) -> None:
+        normalized_prompt = " ".join(self.verify_prompt.split())
+        for phrase in (
+            "Before trusting a three-dot range, resolve its merge base",
+            "rewritten or orphaned branches",
+            "merge base is missing",
+            "otherwise suspicious",
+            "do not use the range",
+            "explicit trusted base/scope",
+            "provider-reported file set",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, normalized_prompt)
