@@ -73,9 +73,11 @@ the nearest established test location. Do not reinterpret silence as approval.
 - Assert observable behavior instead of private implementation details. Cover
   the smallest material success path plus relevant failure, boundary, security,
   concurrency, retry, or idempotency behavior evidenced by the target.
-- Use the repository's native naming and layout: Python tests follow the nearest
-  pytest or unittest style; JavaScript and TypeScript tests follow the nearest
-  Vitest configuration and existing `*.test.*` or `*.spec.*` convention.
+- Use the repository's native naming and layout. Select the nearest configured
+  runner for the target rather than assuming one globally: Python scopes may use
+  pytest or unittest, while JavaScript and TypeScript scopes may use Vitest,
+  Jest, or Playwright. Follow that runner's nearest existing `*.test.*` or
+  `*.spec.*` convention and configuration.
 
 ## 5. Measure the generated tests
 

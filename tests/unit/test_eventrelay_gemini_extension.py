@@ -161,6 +161,17 @@ class EventRelayGeminiExtensionTests(unittest.TestCase):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, normalized_prompt)
 
+    def test_generation_uses_the_nearest_configured_runner(self) -> None:
+        normalized_prompt = " ".join(self.generate_prompt.split())
+        for phrase in (
+            "Select the nearest configured runner",
+            "rather than assuming one globally",
+            "pytest or unittest",
+            "Vitest, Jest, or Playwright",
+        ):
+            with self.subTest(phrase=phrase):
+                self.assertIn(phrase, normalized_prompt)
+
     def test_generation_requires_measured_verification(self) -> None:
         normalized_prompt = " ".join(self.generate_prompt.split())
         for phrase in (
