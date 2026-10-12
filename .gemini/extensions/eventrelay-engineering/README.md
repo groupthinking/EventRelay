@@ -21,7 +21,7 @@ Gemini CLI custom commands use a slash. The requested `@analyze-code` concept is
 therefore exposed as `/analyze-code` and invoked as:
 
 ```text
-/analyze-code services/ai/gemini_service.py
+/analyze-code src/youtube_extension/services/ai/gemini_service.py
 /analyze-code origin/main...HEAD
 ```
 

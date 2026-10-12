@@ -100,6 +100,12 @@ class EventRelayGeminiExtensionTests(unittest.TestCase):
         self.assertIn("gemini extensions validate", self.readme)
         self.assertIn("gemini extensions link", self.readme)
 
+    def test_documented_file_scope_example_exists(self) -> None:
+        example = "src/youtube_extension/services/ai/gemini_service.py"
+
+        self.assertIn(f"/analyze-code {example}", self.readme)
+        self.assertTrue((ROOT / example).is_file())
+
 
 if __name__ == "__main__":
     unittest.main()
