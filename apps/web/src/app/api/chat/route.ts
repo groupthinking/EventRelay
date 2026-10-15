@@ -14,6 +14,7 @@ import {
   parseChatPackBinding,
   resolveChatPackGrounding,
 } from '@/lib/chat-pack-grounding';
+import { resolveSparklePillsResponse } from '@/lib/sparkle-pills';
 type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -135,6 +136,14 @@ export async function POST(request: Request) {
       ? body.history.filter(isValidChatHistoryMessage)
       : [];
     const query = body.query || body.message || '';
+
+    const sparkleResponse = resolveSparklePillsResponse({
+      query: typeof query === 'string' ? query : String(query),
+      sparkleInterview: body.sparkleInterview,
+    });
+    if (sparkleResponse) {
+      return NextResponse.json(sparkleResponse);
+    }
 
     if (isPro) {
       const leadScore = await scoreLeadWithJev({ query, history });
