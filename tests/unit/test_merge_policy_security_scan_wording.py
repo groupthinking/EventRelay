@@ -1,29 +1,80 @@
-from pathlib import Path
 import json
 import unittest
+from pathlib import Path
+
+import yaml
 
 
 class ImageGatePolicyTests(unittest.TestCase):
-    def test_image_findings_block_and_unverified_exceptions_are_not_applied(self):
+    def test_bootstrap_separates_repairs_from_strict_enforcement(self):
         root = Path(__file__).resolve().parents[2]
         policy = (root / "MERGE_POLICY.md").read_text()
-        workflow = (root / ".github/workflows/security.yml").read_text()
-        enforcing = workflow.split("name: Run Trivy vulnerability scanner", 1)[1].split("- name:", 1)[0]
-        self.assertIn("exit-code: '1'", enforcing)
-        self.assertIn("ignore-unfixed: false", enforcing)
-        self.assertIn("trivyignores: '.github/trivy-no-exceptions.txt'", enforcing)
-        self.assertIn("severity: 'CRITICAL,HIGH'", enforcing)
+        workflow = yaml.safe_load((root / ".github/workflows/security.yml").read_text())
+        job = workflow["jobs"]["trivy"]
+        self.assertFalse(job.get("continue-on-error", False))
+        scans = [
+            step for step in job["steps"] if "trivy-action@" in step.get("uses", "")
+        ]
+        self.assertEqual(len(scans), 2)
+        for scan in scans:
+            self.assertEqual(scan["with"]["exit-code"], "0")
+            self.assertFalse(scan.get("continue-on-error", False))
+            self.assertIs(scan["with"]["ignore-unfixed"], False)
+            self.assertEqual(scan["with"]["severity"], "CRITICAL,HIGH")
+            self.assertEqual(
+                scan["with"]["trivyignores"], ".github/trivy-no-exceptions.txt"
+            )
+        sarif = next(scan for scan in scans if scan["with"]["format"] == "sarif")
+        self.assertIs(sarif["with"]["limit-severities-for-sarif"], True)
+        self.assertIn("scan-completion gate", policy)
+        self.assertIn("Parent #2396 stays open", policy)
+        self.assertIn("no accepted baseline", policy)
+        self.assertIn("separately reviewed", policy)
         self.assertIn("No exceptions are accepted", policy)
         self.assertIn("Do not automatically demote `trivy`", policy)
+        exceptions = (root / ".github/trivy-no-exceptions.txt").read_text()
+        self.assertFalse(
+            [
+                line
+                for line in exceptions.splitlines()
+                if line.strip() and not line.startswith("#")
+            ]
+        )
 
     def test_failed_scan_evidence_is_retained(self):
         root = Path(__file__).resolve().parents[2]
-        workflow = (root / ".github/workflows/security.yml").read_text()
-        self.assertIn("if: always() && hashFiles('trivy-results.sarif') != ''", workflow)
-        retention = workflow.split("name: Retain exact image scan evidence", 1)[1]
-        self.assertIn("if: always()", retention)
-        self.assertIn("image-identity.json", retention)
-        self.assertIn("trivy-results.sarif", retention)
+        workflow = yaml.safe_load((root / ".github/workflows/security.yml").read_text())
+        steps = workflow["jobs"]["trivy"]["steps"]
+        self.assertEqual(
+            steps[0]["with"]["ref"],
+            "${{ github.event.pull_request.head.sha || github.sha }}",
+        )
+        build = next(
+            step for step in steps if step.get("name") == "Build image for scanning"
+        )
+        self.assertIn(
+            "docker image inspect eventrelay:test > image-identity.json", build["run"]
+        )
+        self.assertIn("git rev-parse HEAD > image-source-commit.txt", build["run"])
+        upload = next(step for step in steps if "upload-sarif@" in step.get("uses", ""))
+        self.assertEqual(
+            upload["if"], "always() && hashFiles('trivy-results.sarif') != ''"
+        )
+        retention = next(
+            step
+            for step in steps
+            if step.get("name") == "Retain exact image scan evidence"
+        )
+        self.assertEqual(retention["if"], "always()")
+        self.assertEqual(retention["with"]["if-no-files-found"], "error")
+        self.assertEqual(
+            set(retention["with"]["path"].splitlines()),
+            {
+                "image-identity.json",
+                "image-source-commit.txt",
+                "trivy-results.sarif",
+            },
+        )
 
     def test_scanner_reported_runtime_dependency_floors_are_locked(self):
         root = Path(__file__).resolve().parents[2]

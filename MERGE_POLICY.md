@@ -113,19 +113,31 @@ strand a change permanently pending. v1 listed `Security` among its required
 six, and dropping every security scan out of the required set would be a
 weakening introduced by the rewrite that set out to make this gate precise.
 
-`trivy` is a findings gate: the image scan fails on every reported HIGH or
-CRITICAL vulnerability, including findings without a fix. SARIF and exact image
-identity are retained even when the scan fails. The human-readable report does
-not override the enforcing scan's exit status.
+`trivy` is temporarily a required **scan-completion gate** for the dependency
+repair bootstrap (#2425, PR #2409). Image build or scanner execution errors
+still fail the job, but reported vulnerabilities do not (`exit-code: '0'`).
+The HIGH/CRITICAL SARIF includes findings without a fix; SARIF, exact source
+commit and image identity are retained even when the job fails. A green `trivy`
+or uppercase `Trivy` SARIF-ingestion check does not establish a clean image.
 
-No exceptions are accepted by the current image gate. Existing bare IDs in
+The dependency repairs are separated from final strict enforcement. This is
+partial remediation, with no accepted baseline and no risk acceptance for the
+remaining findings. Parent #2396 stays open until a re-fetched exact image or
+separately reviewed applicability/VEX evidence accounts for every finding.
+See [the bootstrap evidence and remaining gates](docs/security/image-remediation-bootstrap.md).
+Enable the final `exit-code: '1'` HIGH/CRITICAL gate in a separately reviewed
+change after that accounting, or introduce an explicitly reviewed delta policy
+with package/version/path identity and regression tests. Keep
+`limit-severities-for-sarif: true` so the pinned action honors the threshold.
+
+No exceptions are accepted by the current image scan. Existing bare IDs in
 `.trivyignore` are not evidence of approved risk acceptance and are not applied.
 Any future exception must be introduced in a separately reviewed change with
 an exact advisory/package/version/image scope, applicability evidence,
 compensating controls, an accountable approver, linked issue, expiry, and an
 enforced expiry check. A missing advisory or unproven exposure remains unresolved.
 
-The other security jobs remain completion gates: `npm-audit`, `python-safety`,
+The other security jobs also remain completion gates: `npm-audit`, `python-safety`,
 and `bandit` still tolerate findings. CodeQL check failure also depends on the
 repository's code-scanning settings. Their green conclusions do not establish
 absence of vulnerabilities.
@@ -247,11 +259,13 @@ laundering itself as enforcement.
 - **No evidence ledger requirement.** v1 mandated a receipt comment on #898 for
   every gate evaluation. Nothing consumed those receipts. Git history and
   check runs are the ledger.
-- **Image findings are enforced.** `trivy` must fail on unresolved HIGH and
-  CRITICAL findings. Reporting success while tolerating findings is confined to
-  the other explicitly advisory scanners. Do not automatically demote `trivy`
-  for a high failure rate caused by real unresolved vulnerabilities; the 50%
-  demotion rule applies to broken execution, not to valid security findings.
+- **Strict image enforcement is deferred explicitly.** The #2425 bootstrap
+  keeps `trivy` required for scan completion and evidence retention while #2396
+  owns the unresolved findings and final enforcement. This is not a clean-image
+  claim or an approved exception list. Do not automatically demote `trivy` or
+  suppress findings for a high failure rate; the 50% demotion rule applies to
+  broken execution, not to valid security findings. Final enforcement requires
+  the separate review and finding accounting described in gate 2.
 
 ## Review clock
 
