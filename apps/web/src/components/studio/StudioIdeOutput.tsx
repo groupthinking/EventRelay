@@ -1,12 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 
-type OutputSection = 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
+type OutputSection =
+  | 'runbook'
+  | 'events'
+  | 'lingo'
+  | 'tools'
+  | 'intent'
+  | 'signals'
+  | 'spec'
+  | 'transcript';
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
+  { id: 'runbook', label: 'Runbook' },
   { id: 'events', label: 'Events' },
   { id: 'lingo', label: 'Lingo' },
   { id: 'tools', label: 'Tools' },
@@ -24,6 +33,7 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
  * white cards on soft blue-gray. Card = one structured idea —
  * small icon, label, value. Documents are first-class rows.
  *
+ * - Runbook: the synchronized Step Runner / RUNBOOK.md (default when the pack has one)
  * - Events: timestamped things that happened (from the event extractor)
  * - Lingo: domain verbiage / topics the video uses
  * - Tools: named tools, stack, and SOP steps
@@ -34,13 +44,23 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
 export default function StudioIdeOutput({
   video,
   specReview,
+  runbook,
 }: {
   video: Video | undefined;
-  specReview?: React.ReactNode;
+  specReview?: ReactNode;
+  /** Step Runner pane; when present the Runbook tab opens by default. */
+  runbook?: ReactNode;
 }) {
-  const [active, setActive] = useState<OutputSection>('events');
+  const hasRunbook = Boolean(runbook);
+  const [active, setActive] = useState<OutputSection>(() => (hasRunbook ? 'runbook' : 'events'));
+  const userChoseTab = useRef(false);
 
-  const hasContent = Boolean(video?.videoPack || video?.events?.length || video?.insights);
+  // A pack that finishes after mount opens on its runbook unless the user already picked a tab.
+  useEffect(() => {
+    if (hasRunbook && !userChoseTab.current) setActive('runbook');
+  }, [hasRunbook]);
+
+  const hasContent = Boolean(video?.videoPack || video?.events?.length || video?.insights || hasRunbook);
 
   const pack = video?.videoPack?.pack;
   const events: ExtractedEvent[] = video?.events ?? [];
@@ -69,7 +89,10 @@ export default function StudioIdeOutput({
             role="tab"
             aria-selected={active === s.id}
             data-testid={`studio-ide-output-tab-${s.id}`}
-            onClick={() => setActive(s.id)}
+            onClick={() => {
+              userChoseTab.current = true;
+              setActive(s.id);
+            }}
             className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               active === s.id
                 ? 'bg-neutral-900 text-white shadow-sm'
@@ -91,6 +114,12 @@ export default function StudioIdeOutput({
           </div>
         ) : (
           <>
+        {active === 'runbook' && (
+          <div data-testid="studio-ide-output-runbook">
+            {runbook ?? <EmptyNote text="Run a video and its step-by-step runbook lands here." />}
+          </div>
+        )}
+
         {active === 'events' && (
           <ul className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (

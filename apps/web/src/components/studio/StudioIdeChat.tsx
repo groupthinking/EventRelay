@@ -2,6 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, Sparkles } from 'lucide-react';
+import { formatSeconds } from '@/lib/timestamp';
+import type { ChatStepContext } from '@/lib/runbook-steps';
 
 type ChatMessage = {
   id: string;
@@ -13,6 +15,11 @@ type StudioIdeChatProps = {
   videoId: string | null;
   packId: string | null;
   disabled?: boolean;
+  /** Active Step Runner step; sent as `step` so the server grounds the answer to its evidence window. */
+  stepContext?: ChatStepContext | null;
+  onClearStepContext?: () => void;
+  /** Bump to focus the composer (Step Runner "Troubleshoot this step"). */
+  focusNonce?: number;
 };
 
 const FREE_QUOTA_MESSAGE = 'Free plan includes 5 AI chat messages per day.';
@@ -24,14 +31,26 @@ const FREE_QUOTA_MESSAGE = 'Free plan includes 5 AI chat messages per day.';
  *
  * Styled in the locked light card system (DESIGN_LANGUAGE.md).
  */
-export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeChatProps) {
+export default function StudioIdeChat({
+  videoId,
+  packId,
+  disabled,
+  stepContext,
+  onClearStepContext,
+  focusNonce,
+}: StudioIdeChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [quotaHit, setQuotaHit] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const idCounter = useRef(0);
+
+  useEffect(() => {
+    if (focusNonce) inputRef.current?.focus();
+  }, [focusNonce]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -70,6 +89,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       const body: Record<string, unknown> = { query, history };
       if (videoId) body.video_id = videoId;
       if (packId) body.pack_id = packId;
+      if (stepContext && (videoId || packId)) body.step = stepContext;
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -112,6 +132,15 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
   };
 
   const canChat = Boolean(videoId) && !disabled;
+  const stepRange = stepContext?.timestamp_range ?? null;
+  const stepRangeLabel = stepRange
+    ? `${formatSeconds(stepRange[0])}–${formatSeconds(stepRange[1])}`
+    : 'no verified timestamp';
+  const placeholder = !canChat
+    ? 'Run a video first'
+    : stepContext
+      ? `Paste the error or ask about Step ${stepContext.step_number}…`
+      : 'Ask about events, tools, intent…';
 
   return (
     <section
@@ -165,6 +194,30 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       {error && !sending ? (
         <div className="border-t border-red-100 bg-red-50 px-4 py-1.5 text-xs text-red-700">{error}</div>
       ) : null}
+      {stepContext && canChat ? (
+        <div
+          data-testid="studio-ide-chat-step"
+          role="status"
+          className="flex items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-4 py-1.5 text-[11px] text-amber-800"
+        >
+          <span className="truncate">
+            Grounded to Step {stepContext.step_number}
+            {stepContext.total_steps ? ` of ${stepContext.total_steps}` : ''} · {stepContext.title} ·{' '}
+            {stepRangeLabel}
+          </span>
+          {onClearStepContext ? (
+            <button
+              type="button"
+              onClick={onClearStepContext}
+              aria-label="Chat about the whole pack instead"
+              title="Chat about the whole pack instead"
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-amber-700 hover:bg-amber-100"
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <form
         onSubmit={send}
         data-testid="studio-ide-chat-composer"
@@ -172,10 +225,11 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       >
         <div className="template-source-input">
           <input
+            ref={inputRef}
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={canChat ? 'Ask about events, tools, intent…' : 'Run a video first'}
+            placeholder={placeholder}
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"

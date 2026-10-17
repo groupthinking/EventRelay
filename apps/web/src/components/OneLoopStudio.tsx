@@ -110,10 +110,19 @@ import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
+import StudioRunbookPane from '@/components/studio/StudioRunbookPane';
 import {
   chaptersFromPack,
   sopStepsFromPack,
 } from '@/lib/emit-app-builder-sandbox';
+import {
+  compileRunbook,
+  parseRunbookStepHash,
+  renderRunbookMarkdown,
+  runbookStepToChatContext,
+  type ChatStepContext,
+  type RunbookStep,
+} from '@/lib/runbook-steps';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -328,6 +337,10 @@ export default function OneLoopStudio({
   const autoSelectedPackRef = useRef(false);
   const [requestedPane, setRequestedPane] = useState<StudioPaneId | null>(null);
   const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  // Step Runner → chat grounding. The chip clears to whole-pack until the next step change.
+  const [stepChatContext, setStepChatContext] = useState<ChatStepContext | null>(null);
+  const [chatFocusNonce, setChatFocusNonce] = useState(0);
+  const selectionMountedRef = useRef(false);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
@@ -396,6 +409,17 @@ export default function OneLoopStudio({
     // A new row opens on the default Video pane with the transcript collapsed.
     setRequestedPane(null);
     setTranscriptExpanded(false);
+    setStepChatContext(null);
+    // A `#step-N` hash belongs to the pack it was opened on; drop it when the user switches
+    // packs (not on mount, so `/studio#step-3` deep links still restore the step).
+    if (selectionMountedRef.current && parseRunbookStepHash(window.location.hash) !== null) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${window.location.pathname}${window.location.search}`,
+      );
+    }
+    selectionMountedRef.current = true;
   }, [selectedVideoId]);
 
   useEffect(() => {
@@ -544,8 +568,15 @@ export default function OneLoopStudio({
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
-  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
-    useYouTubePlayer(videoId);
+  const {
+    containerRef,
+    ready: playerReady,
+    failed: playerFailed,
+    seekTo,
+    pause: playerPause,
+    currentTime: playerCurrentTime,
+    isPlaying: playerIsPlaying,
+  } = useYouTubePlayer(videoId);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
@@ -601,6 +632,39 @@ export default function OneLoopStudio({
       : null;
     return sopStepsFromPack({ requirements: shellPack.requirements, transcript });
   }, [shellPack]);
+  const runbook = useMemo(
+    () => (shellPack ? compileRunbook({ pack: shellPack, linkedSop }) : null),
+    [shellPack, linkedSop],
+  );
+  const runbookMarkdown = useMemo(
+    () => (runbook ? renderRunbookMarkdown(runbook, selected?.runbookProgress ?? null) : null),
+    [runbook, selected?.runbookProgress],
+  );
+  // The runner may only drive the player when the loaded video is this pack's video.
+  const runbookPlayer =
+    shellPack && videoId === shellPack.video_id
+      ? {
+          ready: playerReady,
+          currentTime: playerCurrentTime ?? 0,
+          isPlaying: Boolean(playerIsPlaying),
+          seekTo,
+          pause: playerPause,
+        }
+      : null;
+  const totalRunbookSteps = runbook?.steps.length ?? 0;
+  const onRunbookStepChange = useCallback(
+    (step: RunbookStep | null) => {
+      setStepChatContext(step ? runbookStepToChatContext(step, totalRunbookSteps) : null);
+    },
+    [totalRunbookSteps],
+  );
+  const onRunbookTroubleshoot = useCallback(
+    (step: RunbookStep) => {
+      setStepChatContext(runbookStepToChatContext(step, totalRunbookSteps));
+      setChatFocusNonce((nonce) => nonce + 1);
+    },
+    [totalRunbookSteps],
+  );
   const selectShellPane = useCallback((sectionId: string) => {
     const pane = studioOutlineSectionToPane(sectionId);
     if (pane) setRequestedPane(pane);
@@ -738,6 +802,7 @@ export default function OneLoopStudio({
           ? { full_text: selected.transcript }
           : selected?.videoPack?.pack.transcript,
         sopSteps: linkedSop?.steps,
+        runbookMarkdown,
       });
       const result = await downloadScaffoldPackage(pkg);
       if (!result.ok) {
@@ -1117,11 +1182,30 @@ export default function OneLoopStudio({
             videoId={selected?.videoPack?.videoId ?? videoId ?? null}
             packId={selected?.videoPack?.packId ?? null}
             disabled={busy}
+            stepContext={stepChatContext}
+            onClearStepContext={() => setStepChatContext(null)}
+            focusNonce={chatFocusNonce}
           />
         }
         outputPane={
           <StudioIdeOutput
             video={selected}
+            runbook={
+              runbook && selected ? (
+                <StudioRunbookPane
+                  key={selected.id}
+                  runbook={runbook}
+                  player={runbookPlayer}
+                  progress={selected.runbookProgress}
+                  onProgressChange={(progress) => {
+                    if (useDashboardStore.getState().selectedVideoId !== selected.id) return;
+                    updateVideo(selected.id, { runbookProgress: progress });
+                  }}
+                  onActiveStepChange={onRunbookStepChange}
+                  onTroubleshoot={onRunbookTroubleshoot}
+                />
+              ) : undefined
+            }
             specReview={
               selected?.videoPack?.pack ? (
                 <GroundedSpecReview

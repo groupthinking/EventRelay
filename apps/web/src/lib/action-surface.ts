@@ -275,8 +275,13 @@ export function buildStudioShipPackage(input: {
   transcript?: AppBuilderTranscript | null;
   visualEvents?: AppBuilderVisualEvent[];
   sopSteps?: AppBuilderSopStep[];
+  /** Rendered RUNBOOK.md from the Step Runner (reference copy of the synchronized steps). */
+  runbookMarkdown?: string | null;
 }): ScaffoldPackage {
   const scaffold = buildScaffoldPackage(input);
+  if (input.runbookMarkdown?.trim()) {
+    scaffold.files['RUNBOOK.md'] = input.runbookMarkdown;
+  }
   if (!input.videoPack) {
     return scaffold;
   }

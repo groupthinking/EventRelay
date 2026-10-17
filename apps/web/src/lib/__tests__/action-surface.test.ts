@@ -2,10 +2,41 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   actionsFromStudioRun,
   buildScaffoldPackage,
+  buildStudioShipPackage,
   downloadScaffoldPackage,
   summarizeProjectScaffold,
 } from '@/lib/action-surface';
 import { zipEntryNames, zipUtf8Files } from '@/lib/zip-store';
+import { compileRunbook, renderRunbookMarkdown } from '@/lib/runbook-steps';
+import { PBST6V_SOURCE_HASH, PBST6V_VIDEO_ID, pbst6vPackFixture } from '@/lib/__fixtures__/pbst6v-cio8-runbook';
+
+describe('buildStudioShipPackage RUNBOOK.md', () => {
+  it('ships the rendered runbook alongside the App Builder sandbox files', () => {
+    const pack = pbst6vPackFixture();
+    const runbook = compileRunbook({ pack });
+    const pkg = buildStudioShipPackage({
+      projectName: 'seadance-outreach',
+      actions: [],
+      videoPack: {
+        videoId: PBST6V_VIDEO_ID,
+        sourceUrl: pack.source_url,
+        sourceHash: PBST6V_SOURCE_HASH,
+        packId: pack.id,
+        requirements: pack.requirements,
+      },
+      transcript: { full_text: pack.transcript.full_text, segments: pack.transcript.segments },
+      runbookMarkdown: renderRunbookMarkdown(runbook),
+    });
+    expect(pkg.files['RUNBOOK.md']).toContain(`# Runbook — ${PBST6V_VIDEO_ID}`);
+    expect(pkg.files['RUNBOOK.md']).toContain('## Step 1 — AI Video Generation Tooling [4:07–4:14]');
+    expect(pkg.files['index.html']).toBeDefined();
+  });
+
+  it('omits RUNBOOK.md when no markdown is supplied', () => {
+    const pkg = buildStudioShipPackage({ projectName: 'plain', actions: [] });
+    expect(pkg.files['RUNBOOK.md']).toBeUndefined();
+  });
+});
 
 describe('action-surface (F3)', () => {
   const fetchMock = vi.fn();
