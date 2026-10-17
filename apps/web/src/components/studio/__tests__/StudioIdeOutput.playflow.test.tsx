@@ -41,6 +41,20 @@ describe('StudioIdeOutput playflow', () => {
     expect(row.textContent).not.toMatch(/production is held/i);
   });
 
+  it('uses the honest Events empty copy and can host a pack workbench', () => {
+    render(
+      <StudioIdeOutput
+        video={baseVideo}
+        eventsEmptyMessage="This pack has no extracted events. Architecture and artifacts stay on this page."
+        packWorkbench={<div data-testid="studio-pack-workbench">Pack workbench</div>}
+      />,
+    );
+    const events = screen.getByTestId('studio-ide-output-events');
+    expect(events.textContent).toMatch(/no extracted events/i);
+    expect(events.textContent).not.toMatch(/INSIGHT/i);
+    expect(screen.getByTestId('studio-pack-workbench')).toBeTruthy();
+  });
+
   it('renders review_action results as cards with status, title, and detail', () => {
     render(
       <StudioIdeOutput
@@ -48,6 +62,8 @@ describe('StudioIdeOutput playflow', () => {
         reviewActions={[
           { tool: 'review_action', status: 'proposed', result: 'Review evidence' },
         ]}
+        onAct={() => undefined}
+        canAct
       />,
     );
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
@@ -55,5 +71,6 @@ describe('StudioIdeOutput playflow', () => {
     expect(card.textContent).toMatch(/review this result/i);
     expect(card.textContent).toMatch(/needs review/i);
     expect(card.textContent).toMatch(/Review evidence/);
+    expect(screen.getByTestId('studio-review-act-button').textContent).toMatch(/Act on this run/);
   });
 });
