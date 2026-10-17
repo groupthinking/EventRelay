@@ -584,6 +584,9 @@ describe('studio-pipeline-status', () => {
     expect(output).toContain('data-testid="studio-review-action-card"');
     expect(output).toContain('data-testid="studio-action-cta"');
     expect(studio).toContain('data-testid="studio-act-button"');
+    expect(studio).not.toMatch(
+      /showAgentWorkflowUi[\s\S]{0,400}data-testid="studio-act-button"/,
+    );
     // IDE: actions surface in the output pane Intent tab.
     expect(output).toContain("{ id: 'intent', label: 'Intent' }");
   });
