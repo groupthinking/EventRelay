@@ -86,6 +86,83 @@ describe('POST /api/chat pack grounding (#2122)', () => {
     expect(gatewayArgs.messages?.some((m) => m.role === 'system')).toBe(false);
   });
 
+  it('re-grounds the system prompt to the active runbook step when a bounded step is supplied', async () => {
+    const pack = buildIdentityPack(QJ_VIDEO_ID);
+    pack.transcript = QJ_TRANSCRIPT;
+    pack.id = `vp:v0:${QJ_VIDEO_ID}`;
+    vi.spyOn(store, 'getPackRecordWithMeta').mockResolvedValue({
+      outcome: 'hit',
+      record: { state: 'ready', pack },
+      store: { backend: 'memory', ok: true },
+    });
+
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          query: 'The flashers did not come on. What did I miss?',
+          video_id: QJ_VIDEO_ID,
+          pack_id: `vp:v0:${QJ_VIDEO_ID}`,
+          step: {
+            id: 'rb-req-01',
+            step_number: 1,
+            total_steps: 5,
+            title: 'Safety and Vehicle Staging',
+            kind: 'action',
+            timestamp_range: [21.8, 30.8],
+            content_markdown: 'Engage emergency flashers, park on flat ground.',
+            verification: 'Compare with the video at 0:21–0:30.',
+            tools: [],
+          },
+        }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instructions: expect.stringContaining('Step 1 of 5: Safety and Vehicle Staging'),
+      }),
+    );
+    const instructions = (generateText.mock.calls[0]?.[0] as { instructions: string }).instructions;
+    expect(instructions).toContain('turn on your emergency flashers');
+    expect(instructions).not.toContain('Finish loosening the lugs');
+  });
+
+  it('rejects a malformed step context before any model call', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          query: 'help',
+          video_id: QJ_VIDEO_ID,
+          pack_id: `vp:v0:${QJ_VIDEO_ID}`,
+          step: { id: 'rb-1', title: 'x', step_number: 1, timestamp_range: [30, 10] },
+        }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('step_context_invalid');
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('rejects a step context without a pack binding', async () => {
+    const response = await POST(
+      new Request('http://localhost/api/chat', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          query: 'help',
+          step: { id: 'rb-1', title: 'x', step_number: 1 },
+        }),
+      }),
+    );
+    expect(response.status).toBe(400);
+    expect((await response.json()).code).toBe('step_context_requires_pack');
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
   it('fails closed when pack is missing', async () => {
     vi.spyOn(store, 'getPackRecordWithMeta').mockResolvedValue({
       outcome: 'miss',

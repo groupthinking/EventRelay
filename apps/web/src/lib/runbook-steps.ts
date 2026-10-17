@@ -871,6 +871,38 @@ export function compileRunbook(input: CompileRunbookInput): Runbook {
   };
 }
 
+// ── Chat grounding handoff ──────────────────────────────────────────────────
+
+/** Bounded step slice sent with /api/chat so the assistant re-grounds to one step. */
+export interface ChatStepContext {
+  id: string;
+  step_number: number;
+  total_steps?: number;
+  title: string;
+  kind?: RunbookStepKind;
+  timestamp_range?: [number, number] | null;
+  content_markdown?: string;
+  verification?: string;
+  tools?: string[];
+}
+
+export const CHAT_STEP_CONTENT_MAX = 4_000;
+export const CHAT_STEP_VERIFICATION_MAX = 1_000;
+
+export function runbookStepToChatContext(step: RunbookStep, totalSteps: number): ChatStepContext {
+  return {
+    id: step.id,
+    step_number: step.step_number,
+    total_steps: totalSteps,
+    title: step.title.slice(0, 160),
+    kind: step.kind,
+    timestamp_range: step.timestamp_range,
+    content_markdown: step.content_markdown.slice(0, CHAT_STEP_CONTENT_MAX),
+    verification: step.verification.slice(0, CHAT_STEP_VERIFICATION_MAX),
+    tools: step.inputs.slice(0, 32),
+  };
+}
+
 // ── Lookups ─────────────────────────────────────────────────────────────────
 
 /** First step (in runbook order) whose anchored range contains `seconds`. */
