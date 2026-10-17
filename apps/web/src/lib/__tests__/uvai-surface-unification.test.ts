@@ -81,6 +81,9 @@ describe('UVAI is one product surface', () => {
     expect(studio).toContain("deployHoldReason(linkedSop, completedChecks, 'anonymous')");
     expect(studio).toContain('stackCheckStatus');
     expect(studio).toContain('stackCheckStatusLabel');
+    expect(studio).toContain('studioShipCta');
+    expect(studio).toContain('data-testid="studio-ide-ship"');
     expect(studio).not.toContain('href="/ship"');
+    expect(studio).not.toContain('studio-deploy-button');
   });
 });

@@ -127,7 +127,8 @@ describe('OneLoopStudio playflow CTAs after the IDE rebuild', () => {
 
     render(<OneLoopStudio showAgentWorkflowUi />);
 
-    expect(screen.getByTestId('studio-ide-export').hasAttribute('disabled')).toBe(false);
+    expect(screen.getByTestId('studio-ide-ship').hasAttribute('disabled')).toBe(false);
+    expect(screen.getByTestId('studio-ide-ship').textContent).toMatch(/ship this/i);
     expect(screen.getByTestId('studio-build-live-button').hasAttribute('disabled')).toBe(false);
     expect(screen.getByTestId('studio-act-button').textContent).toMatch(/act on this run/i);
 

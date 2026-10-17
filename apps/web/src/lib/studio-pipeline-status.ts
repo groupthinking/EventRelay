@@ -156,7 +156,7 @@ export function studioWorkbenchEmptyView(input: {
     return {
       title: 'Analysis in progress',
       description:
-        'Waiting on transcript and pack storage. Export and Build live unlock when the run finishes.',
+        'Waiting on transcript and pack storage. Ship this and Build live unlock when the run finishes.',
       primaryAction: null,
     };
   }
@@ -238,6 +238,32 @@ export function studioCanExport(input: {
     Boolean(input.hasLinkedSopSteps) ||
     Boolean(input.hasProjectScaffold)
   );
+}
+
+/**
+ * Anonymous Ship this is pack-exportability only. Stack-check hold copy
+ * (SeaDance/Cluely-class unknown, signed-out vendor skip) never disables it.
+ */
+export function studioShipEnabled(input: {
+  canExport: boolean;
+  holdReason?: string | null;
+}): boolean {
+  void input.holdReason;
+  return input.canExport;
+}
+
+export function studioShipCta(input: {
+  canExport: boolean;
+  holdReason?: string | null;
+}): { label: 'Ship this'; enabled: boolean; hint: string } {
+  const enabled = studioShipEnabled(input);
+  return {
+    label: 'Ship this',
+    enabled,
+    hint: enabled
+      ? 'Download the Video Pack ZIP. Named tools that UVAI cannot run are skip/unknown — they do not block ship.'
+      : 'Run analysis first so there is a pack to ship.',
+  };
 }
 
 export function studioInvalidHandoffMessage(raw: string): string {

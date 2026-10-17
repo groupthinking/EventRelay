@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
 import type { Video } from '@/store/dashboard-types';
-import { studioActionCard, studioEventsEmptyMessage } from '@/lib/studio-pipeline-status';
+import { studioEventsEmptyMessage } from '@/lib/studio-pipeline-status';
 
 const emptyEventsVideo: Video = {
   id: 'pBsT6v-ciO8',
@@ -58,12 +58,14 @@ describe('StudioIdeOutput playflow (B/E/F + events vs Insights)', () => {
             title: 'Use SeaDance 2.5 as named in the video',
             status: 'unknown',
             statusLabel: 'Unknown — UVAI cannot run this check',
+            holdsShip: false,
           },
           {
             id: 'chk_cluely',
             title: 'Use Cluely Desktop as named in the video',
             status: 'unknown',
             statusLabel: 'Unknown — UVAI cannot run this check',
+            holdsShip: false,
           },
         ]}
       />,
@@ -78,16 +80,16 @@ describe('StudioIdeOutput playflow (B/E/F + events vs Insights)', () => {
   });
 
   it('renders review_action as a card with a clear CTA, not Run tools → review_action', () => {
-    const review = studioActionCard({
-      tool: 'review_action',
-      status: 'proposed',
-      result: 'Check the pack evidence before you ship.',
-    });
-
     render(
       <StudioIdeOutput
         video={emptyEventsVideo}
-        actionCards={[review]}
+        reviewActions={[
+          {
+            tool: 'review_action',
+            status: 'proposed',
+            result: 'Check the pack evidence before you ship.',
+          },
+        ]}
       />,
     );
 
