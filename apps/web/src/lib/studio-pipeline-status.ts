@@ -637,6 +637,7 @@ export function studioActionCard(action: {
   statusLabel: string;
   detail: string;
   kind: 'review' | 'tool';
+  ctaLabel: string;
 } {
   const isReview = action.tool === 'review_action';
   const statusLabel =
@@ -656,12 +657,15 @@ export function studioActionCard(action: {
         .join(' ');
   const detail =
     action.result?.trim() ||
-    (isReview ? 'Open the evidence on this page before you act.' : 'No detail from this tool.');
+    (isReview
+      ? 'Proposed finding — open the evidence on this page before you act.'
+      : 'No detail from this tool.');
   return {
     title,
     statusLabel,
     detail,
     kind: isReview ? 'review' : 'tool',
+    ctaLabel: isReview ? 'Act on this run' : 'Keep on this page',
   };
 }
 

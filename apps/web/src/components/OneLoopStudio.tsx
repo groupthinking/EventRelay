@@ -1035,6 +1035,15 @@ export default function OneLoopStudio({
             <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
               <button
                 type="button"
+                data-testid="studio-act-button"
+                onClick={() => void act()}
+                disabled={actBusy || !hasPayload}
+                className="uvai-btn disabled:opacity-40"
+              >
+                {actBusy ? 'Running tools…' : 'Act on this run'}
+              </button>
+              <button
+                type="button"
                 onClick={() => void exportPkg()}
                 disabled={!shipCta.enabled}
                 data-testid="studio-ide-ship"
@@ -1145,6 +1154,8 @@ export default function OneLoopStudio({
         outputPane={
           <StudioIdeOutput
             video={selected}
+            actBusy={actBusy}
+            onAct={() => void act()}
             stackChecks={stackCheckViews}
             reviewActions={(workflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
