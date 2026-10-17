@@ -1,5 +1,6 @@
 import { decodeGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import type {
+  VideoPackCodeSnippet,
   VideoPackKeyframe,
   VideoPackRequirement,
   VideoPackTranscriptSegment,
@@ -7,6 +8,7 @@ import type {
 } from '@/lib/video-pack';
 import {
   readPackFormation,
+  truncatePackText,
   type VideoPackActionItem,
   type VideoPackArchitecture,
   type VideoPackArtifact,
@@ -29,11 +31,32 @@ export interface EmittedVideoPack {
   visual_context?: VideoPackVisualContext | null;
   keyframes?: VideoPackKeyframe[];
   requirements?: VideoPackRequirement[];
+  /** Signature-level snippets (≤ 800 chars each) so the Step Runner can show code steps. */
+  code_snippets?: VideoPackCodeSnippet[];
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   stack?: VideoPackStack;
   chapters?: VideoPackChapter[];
   action_items?: VideoPackActionItem[];
+}
+
+const MAX_CITATION_SNIPPETS = 32;
+
+function readCodeSnippets(value: unknown): VideoPackCodeSnippet[] {
+  if (!Array.isArray(value)) return [];
+  const out: VideoPackCodeSnippet[] = [];
+  for (const item of value) {
+    if (out.length >= MAX_CITATION_SNIPPETS) break;
+    const row = asRecord(item);
+    const content = typeof row?.content === 'string' ? row.content.trim() : '';
+    if (!content) continue;
+    out.push({
+      path_hint: typeof row?.path_hint === 'string' ? row.path_hint : null,
+      lang: typeof row?.lang === 'string' ? row.lang : null,
+      content: truncatePackText(content),
+    });
+  }
+  return out;
 }
 
 export interface VideoPackCitation {
@@ -110,6 +133,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   const visualContext = data?.visual_context;
   const keyframes = Array.isArray(data?.keyframes) ? data.keyframes : undefined;
   const requirements = Array.isArray(data?.requirements) ? data.requirements : undefined;
+  const codeSnippets = readCodeSnippets(data?.code_snippets);
   const grounding = data ? decodeGroundedSpec(data) : undefined;
 
   return {
@@ -139,6 +163,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(visualContext ? { visual_context: visualContext as VideoPackVisualContext } : {}),
       ...(keyframes ? { keyframes: keyframes as VideoPackKeyframe[] } : {}),
       ...(requirements ? { requirements: requirements as VideoPackRequirement[] } : {}),
+      ...(codeSnippets.length > 0 ? { code_snippets: codeSnippets } : {}),
       ...(formation.architecture ? { architecture: formation.architecture } : {}),
       ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),

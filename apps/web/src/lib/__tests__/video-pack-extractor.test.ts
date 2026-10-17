@@ -414,6 +414,62 @@ describe('extractVideoPackSpec', () => {
     ]);
   });
 
+  it('asks Gemini for optional start_s/end_s on requirements and action_items and keeps only ordered ranges', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
+      const prompt = call.sectionPrompt;
+      expect(prompt).toMatch(/requirements: \[{ id, title, detail, priority, tags, start_s\?, end_s\? }\]/);
+      expect(prompt).toMatch(/action_items: \[{ id, type, title, description, difficulty: easy\|medium\|hard, start_s\?, end_s\? }\]/);
+      expect(prompt).toMatch(/omit start_s\/end_s when the range is not observed/i);
+      return {
+        text: JSON.stringify({
+          ...SPEC_JSON,
+          requirements: [
+            { ...SPEC_JSON.requirements[0], start_s: 1, end_s: 4.5 },
+            { id: 'req-2', title: 'Reversed range is dropped', detail: 'x', start_s: 9, end_s: 3 },
+            { id: 'req-3', title: 'Partial range is dropped', detail: 'x', start_s: 2 },
+          ],
+          action_items: [
+            {
+              id: 'act-1',
+              type: 'explore',
+              title: 'Walk to the enclosure',
+              description: 'Follow the speaker.',
+              difficulty: 'easy',
+              start_s: 0.5,
+              end_s: 5,
+            },
+            {
+              id: 'act-2',
+              type: 'explore',
+              title: 'Negative start is dropped',
+              description: 'x',
+              difficulty: 'easy',
+              start_s: -1,
+              end_s: 5,
+            },
+          ],
+        }),
+        interactionId: 'int-test',
+      };
+    });
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo },
+    );
+
+    expect(spec.requirements.map((row) => [row.id, row.start_s ?? null, row.end_s ?? null])).toEqual([
+      ['req-1', 1, 4.5],
+      ['req-2', null, null],
+      ['req-3', null, null],
+    ]);
+    expect(spec.action_items?.map((row) => [row.id, row.start_s ?? null, row.end_s ?? null])).toEqual([
+      ['act-1', 0.5, 5],
+      ['act-2', null, null],
+    ]);
+  });
+
   it('asks Gemini for keyframe t_s + desc only and forbids invented image_path URLs', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
