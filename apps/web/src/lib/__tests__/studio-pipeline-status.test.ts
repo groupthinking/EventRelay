@@ -683,6 +683,37 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
   });
 
+  it('rewires playflow B–G into the IDE (retry, Events≠INSIGHTs, stack skip, review cards)', () => {
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
+
+    // B — Retry transcript is a visible control, not only a computed flag.
+    expect(studio).toContain('data-testid="studio-transcript-retry"');
+    expect(studio).toMatch(/Retry transcript/);
+    expect(studio).toContain('showTranscriptRetry');
+
+    // API events[] vs UI label: Events tab, never INSIGHTs.
+    expect(output).toContain("{ id: 'events', label: 'Events' }");
+    expect(output).not.toMatch(/label:\s*['"]INSIGHT/i);
+    expect(output).not.toMatch(/label:\s*['"]Insights['"]/);
+    expect(output).toContain('eventsEmptyMessage');
+    expect(studio).toMatch(/studioEventsEmptyMessage\(/);
+    expect(studio).toMatch(/<PackWorkbench/);
+
+    // F — anonymous stack checks surface skip/unknown; Build live is not held.
+    expect(output).toContain('stackChecks');
+    expect(studio).toMatch(/stackCheckStatus\(/);
+    expect(studio).toMatch(/stackCheckStatusLabel\(/);
+    expect(studio).toMatch(/stackCheckStatus\([^)]*'anonymous'/);
+    expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
+    expect(studio).not.toContain('studio-deploy-button');
+
+    // E — review_action cards render in the Intent tab.
+    expect(output).toContain('reviewActions');
+    expect(studio).toMatch(/studioActionCard\(/);
+    expect(output).toMatch(/Needs review|statusLabel/);
+  });
+
   it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     // The header/transcript follow a resolved selection, and pack identity is

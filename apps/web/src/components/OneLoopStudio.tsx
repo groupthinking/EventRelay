@@ -570,6 +570,15 @@ export default function OneLoopStudio({
     artifactCount: packFormation.artifacts.length,
     toolCount: packFormation.tools.length,
   });
+  const eventsEmptyMessage = studioEventsEmptyMessage({
+    busy: transcriptWorking,
+    hasCompletedRun: Boolean(selected && selected.status !== 'processing'),
+    eventCount,
+    hasTranscript: Boolean(selected?.transcript?.trim()),
+    hasArchitecture: Boolean(packFormation.architecture),
+    artifactCount: packFormation.artifacts.length,
+    toolCount: packFormation.tools.length,
+  });
   const hasPayload = studioCanExport({
     transcript: selected?.transcript,
     eventCount,
@@ -1145,6 +1154,7 @@ export default function OneLoopStudio({
         outputPane={
           <StudioIdeOutput
             video={selected}
+            eventsEmptyMessage={eventsEmptyMessage}
             stackChecks={stackCheckViews}
             reviewActions={(workflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
@@ -1154,6 +1164,16 @@ export default function OneLoopStudio({
                 result: action.result ?? card.detail,
               };
             })}
+            packWorkbench={
+              promotePack ? (
+                <PackWorkbench
+                  architecture={packFormation.architecture}
+                  artifacts={packFormation.artifacts}
+                  onExport={() => void exportPkg()}
+                  canExport={hasPayload}
+                />
+              ) : undefined
+            }
             specReview={
               selected?.videoPack?.pack ? (
                 <GroundedSpecReview

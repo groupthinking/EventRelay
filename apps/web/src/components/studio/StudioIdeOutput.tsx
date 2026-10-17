@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
@@ -42,13 +42,17 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
 export default function StudioIdeOutput({
   video,
   specReview,
+  eventsEmptyMessage,
   stackChecks = [],
   reviewActions = [],
+  packWorkbench,
 }: {
   video: Video | undefined;
-  specReview?: React.ReactNode;
+  specReview?: ReactNode;
+  eventsEmptyMessage?: string;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
+  packWorkbench?: ReactNode;
 }) {
   const [active, setActive] = useState<OutputSection>('events');
 
@@ -56,8 +60,10 @@ export default function StudioIdeOutput({
     video?.videoPack ||
       video?.events?.length ||
       video?.insights ||
+      eventsEmptyMessage ||
       stackChecks.length > 0 ||
-      reviewActions.length > 0,
+      reviewActions.length > 0 ||
+      packWorkbench,
   );
 
   const pack = video?.videoPack?.pack;
@@ -110,29 +116,37 @@ export default function StudioIdeOutput({
         ) : (
           <>
         {active === 'events' && (
-          <ul className="flex flex-col gap-3" data-testid="studio-ide-output-events">
+          <div className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
-              <EmptyNote text="No events extracted from this video yet." />
+              <EmptyNote
+                text={
+                  eventsEmptyMessage ||
+                  'This run has no extracted events. Pack identity stays on this page.'
+                }
+              />
             ) : (
-              events.map((e) => (
-                <li key={e.id} className="uvai-card p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
-                      <DotIcon />
-                      {e.type}
-                    </span>
-                    {e.timestamp ? (
-                      <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+              <ul className="flex flex-col gap-3">
+                {events.map((e) => (
+                  <li key={e.id} className="uvai-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
+                        <DotIcon />
+                        {e.type}
+                      </span>
+                      {e.timestamp ? (
+                        <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
+                    {e.description ? (
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
                     ) : null}
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
-                  {e.description ? (
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
-                  ) : null}
-                </li>
-              ))
+                  </li>
+                ))}
+              </ul>
             )}
-          </ul>
+            {packWorkbench}
+          </div>
         )}
 
         {active === 'lingo' && (
