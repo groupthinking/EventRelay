@@ -81,6 +81,20 @@ export interface VideoPackActionItem {
   type?: string | null;
   difficulty?: 'easy' | 'medium' | 'hard' | null;
   priority?: 'low' | 'normal' | 'high' | null;
+  /** Seconds on the video timeline where this step is demonstrated (extractor-reported, optional). */
+  start_s?: number | null;
+  end_s?: number | null;
+}
+
+/** Optional extractor-reported time range; dropped unless both bounds are finite, non-negative and ordered. */
+export function parsePackTimeRange(
+  startRaw: unknown,
+  endRaw: unknown,
+): { start_s: number; end_s: number } | null {
+  const start = typeof startRaw === 'number' && Number.isFinite(startRaw) ? startRaw : null;
+  const end = typeof endRaw === 'number' && Number.isFinite(endRaw) ? endRaw : null;
+  if (start === null || end === null || start < 0 || end < start) return null;
+  return { start_s: start, end_s: end };
 }
 
 export const packChapterSchema = z.object({
@@ -97,6 +111,8 @@ export const packActionItemSchema = z.object({
   description: z.string().trim().min(1),
   difficulty: z.enum(['easy', 'medium', 'hard']).nullable().optional(),
   priority: z.enum(['low', 'normal', 'high']).nullable().optional(),
+  start_s: z.number().nullable().optional(),
+  end_s: z.number().nullable().optional(),
 });
 
 const MAX_PACK_CHAPTERS = 64;
@@ -145,6 +161,7 @@ export function parsePackActionItems(value: unknown): VideoPackActionItem[] {
     const title = parsed.data.title.trim();
     const description = parsed.data.description.trim();
     if (!title || !description) continue;
+    const range = parsePackTimeRange(parsed.data.start_s, parsed.data.end_s);
     items.push({
       id: parsed.data.id?.trim() || `action-${index + 1}`,
       title,
@@ -152,6 +169,7 @@ export function parsePackActionItems(value: unknown): VideoPackActionItem[] {
       type: parsed.data.type?.trim() || null,
       difficulty: parsed.data.difficulty ?? null,
       priority: parsed.data.priority ?? null,
+      ...(range ? range : {}),
     });
   }
   return items;

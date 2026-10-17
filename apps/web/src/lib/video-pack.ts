@@ -87,6 +87,9 @@ export interface VideoPackRequirement {
   detail?: string | null;
   priority?: string | null;
   tags?: string[];
+  /** Seconds on the video timeline where this requirement is demonstrated (extractor-reported, optional). */
+  start_s?: number | null;
+  end_s?: number | null;
 }
 
 export interface VideoPackCodeSnippet {
