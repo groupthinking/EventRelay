@@ -109,6 +109,9 @@ export default function StepRunner({
   const current = progress ?? emptyProgress();
   const activeStep: RunbookStep | null = active >= 1 ? (runbook.steps[active - 1] ?? null) : null;
   const canSeek = Boolean(player?.ready);
+  const seekBlockedReason = player
+    ? 'Player is still loading or failed to load; seeking enables once the video is ready.'
+    : 'Player is showing a different video than this pack.';
   const stepsCompleted = useMemo(
     () => runbook.steps.filter((step) => current.completedSteps.includes(step.id)).length,
     [runbook.steps, current.completedSteps],
@@ -206,45 +209,50 @@ export default function StepRunner({
           <button
             type="button"
             data-testid="step-runner-prev"
-            className="uvai-btn !px-2.5 disabled:opacity-40"
+            aria-label="Previous step"
+            className="uvai-btn shrink-0 !px-2.5 disabled:opacity-40"
             disabled={active <= 0}
             onClick={() => selectStep(active - 1, { seek: true })}
           >
-            ‹ Previous
+            ‹ Prev
           </button>
-          <p data-testid="step-runner-position" className="text-xs font-semibold text-slate-700">
+          <p
+            data-testid="step-runner-position"
+            className="min-w-0 truncate whitespace-nowrap text-center text-xs font-semibold text-slate-700"
+          >
             {active === 0 ? `Prerequisites · 0 of ${total}` : `Step ${active} of ${total}`}
           </p>
           <button
             type="button"
             data-testid="step-runner-next"
-            className="uvai-btn uvai-btn-primary !px-2.5 disabled:opacity-40"
+            aria-label="Next step"
+            className="uvai-btn uvai-btn-primary shrink-0 !px-2.5 disabled:opacity-40"
             disabled={active >= total}
             onClick={() => selectStep(active + 1, { seek: true })}
           >
             Next ›
           </button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="sr-only" htmlFor="step-runner-jump">
-            Jump to step
-          </label>
-          <select
-            id="step-runner-jump"
-            data-testid="step-runner-jump"
-            value={active}
-            onChange={(event) => selectStep(Number(event.target.value), { seek: true })}
-            className="uvai-input min-w-0 flex-1 truncate !py-1 !text-xs"
-          >
-            <option value={0}>0 · Prerequisites &amp; Environment</option>
-            {runbook.steps.map((step) => (
-              <option key={step.id} value={step.step_number}>
-                {step.step_number} · {step.title}
-                {current.completedSteps.includes(step.id) ? ' ✓' : ''}
-              </option>
-            ))}
-          </select>
-          <label className="inline-flex items-center gap-1.5 text-[11px] text-slate-600">
+        <label className="sr-only" htmlFor="step-runner-jump">
+          Jump to step
+        </label>
+        <select
+          id="step-runner-jump"
+          data-testid="step-runner-jump"
+          value={active}
+          onChange={(event) => selectStep(Number(event.target.value), { seek: true })}
+          className="uvai-input w-full min-w-0 truncate !py-1 !text-xs"
+        >
+          <option value={0}>0 · Prerequisites &amp; Environment</option>
+          {runbook.steps.map((step) => (
+            <option key={step.id} value={step.step_number}>
+              {step.step_number} · {step.title}
+              {current.completedSteps.includes(step.id) ? ' ✓' : ''}
+            </option>
+          ))}
+        </select>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <label className="inline-flex items-center gap-1.5 whitespace-nowrap text-[11px] text-slate-600">
             <input
               type="checkbox"
               data-testid="step-runner-autoplay"
@@ -256,17 +264,15 @@ export default function StepRunner({
             />
             Autoplay step clip
           </label>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
-            <div
-              className="h-full rounded-full bg-amber-500 transition-[width]"
-              style={{ width: `${total > 0 ? Math.round((stepsCompleted / total) * 100) : 0}%` }}
-            />
-          </div>
-          <p data-testid="step-runner-progress" className="font-mono text-[11px] text-slate-500">
+          <p data-testid="step-runner-progress" className="whitespace-nowrap font-mono text-[11px] text-slate-500">
             {stepsCompleted} / {total} steps · {prereqsChecked} / {runbook.prerequisites.length} prerequisites
           </p>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+          <div
+            className="h-full rounded-full bg-amber-500 transition-[width]"
+            style={{ width: `${total > 0 ? Math.round((stepsCompleted / total) * 100) : 0}%` }}
+          />
         </div>
         {playingStep && playingStep.step_number !== active ? (
           <div
@@ -355,6 +361,7 @@ export default function StepRunner({
           step={activeStep}
           completed={current.completedSteps.includes(activeStep.id)}
           canSeek={canSeek}
+          seekBlockedReason={seekBlockedReason}
           onSeek={() => {
             if (activeStep.timestamp_range && player?.ready) {
               player.seekTo(activeStep.timestamp_range[0], { autoplay: autoplayClip });
@@ -374,6 +381,7 @@ function StepCard({
   step,
   completed,
   canSeek,
+  seekBlockedReason,
   onSeek,
   onToggleComplete,
   onTroubleshoot,
@@ -381,6 +389,7 @@ function StepCard({
   step: RunbookStep;
   completed: boolean;
   canSeek: boolean;
+  seekBlockedReason: string;
   onSeek: () => void;
   onToggleComplete: () => void;
   onTroubleshoot?: () => void;
@@ -420,13 +429,11 @@ function StepCard({
               className="uvai-btn !px-2.5 !py-1 !text-xs disabled:opacity-40"
               disabled={!canSeek}
               onClick={onSeek}
-              title={canSeek ? 'Seek the source video to this step' : 'Load this pack’s video in the player to seek'}
+              title={canSeek ? 'Seek the source video to this step' : seekBlockedReason}
             >
               ▶ Seek to {formatSeconds(range[0])}
             </button>
-            {!canSeek ? (
-              <span className="text-[11px] text-slate-400">Player is not showing this pack’s video.</span>
-            ) : null}
+            {!canSeek ? <span className="text-[11px] text-slate-400">{seekBlockedReason}</span> : null}
           </div>
         ) : (
           <p className="text-[11px] text-slate-500">
