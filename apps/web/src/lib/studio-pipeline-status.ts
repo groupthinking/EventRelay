@@ -250,7 +250,7 @@ export function studioPasteOutcomeMessage(input: {
   packCitation?: string | null;
 }): string {
   if (input.hasUsableTranscript) {
-    return 'Ready — run tools, export, or save from this page.';
+    return 'Ready — act, export, or save from this page.';
   }
   if (input.packCitation) {
     return `Identity pack ${input.packCitation}. No usable transcript.`;
