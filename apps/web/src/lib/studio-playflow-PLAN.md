@@ -17,6 +17,7 @@
 - [x] Transcript retry control when `studioCanRetryTranscript`
 - [x] Export toast no longer uses sticky-footer `bottom-20`
 - [x] Focused Vitest
+- [x] Leftover after #2437: pricing Core copy (G) + ungated Act CTA on review cards (E)
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** Anonymous Studio on a seadance/cluely pack can click **Ship this** (ZIP export). Stack checks read skip/unknown and do not disable the button. No live hostname claim. Transcript retry and review cards are visible.
@@ -27,3 +28,4 @@
 * **What was done:** Restored a discoverable **Ship this** toolbar CTA that downloads the pack ZIP. Anonymous/unknown SeaDance/Cluely stack checks render as skip/unknown and never disable the button. Intent tab renders `review_action` cards. Transcript retry is visible on retryable failure. Export toast sits at `bottom-4` (no sticky footer). Origin deploy button was not restored.
 * **Why it was needed:** IDE shell left playflow helpers unwired; dogfood kill F was a disabled Deploy with no Ship this.
 * **How it was tested:** Focused Vitest (49 + 16), type-check, eslint. No production live claim. GitHub issue create was 403 so this cut has no new issue number.
+* **Leftover after #2437 (this PR):** Pricing Core copy no longer says durable/reviewed; Act on this run is a toolbar + Intent CTA without `agent-workflow-ui`. Focused Vitest 5 files / 53 passed plus 3 related files / 15 passed. Canonical leftover issue #2440.

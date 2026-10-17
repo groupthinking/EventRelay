@@ -546,7 +546,13 @@ describe('studio-pipeline-status', () => {
     expect(shell).toContain('data-testid="studio-ide-toolbar"');
     expect(studio).toContain('StudioIdeShell');
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
+    expect(pricing).not.toMatch(/Durable workflow run history/);
+    expect(pricing).not.toMatch(/reviewed actions/i);
+    expect(pricing).toContain('Proposed work from a Video Pack');
+    expect(pricing).toContain('Workflow run history');
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
+    expect(studio).toContain('data-testid="studio-act-button"');
+    expect(studio).toContain('Act on this run');
   });
 
   it('renders review_action as a card with status, title, and detail', () => {
@@ -559,18 +565,25 @@ describe('studio-pipeline-status', () => {
     expect(review.title).toMatch(/review this result/i);
     expect(review.statusLabel).toBe('Needs review');
     expect(review.detail).toBe('Review evidence');
+    expect(review.ctaLabel).toBe('Act on this run');
+
+    const proposed = studioActionCard({ tool: 'review_action', status: 'proposed' });
+    expect(proposed.detail).toMatch(/Proposed finding/);
 
     const tool = studioActionCard({ tool: 'persist_insight', status: 'completed' });
     expect(tool.kind).toBe('tool');
     expect(tool.title).toMatch(/persist insight/i);
     expect(tool.statusLabel).toBe('Done');
     expect(tool.detail).toMatch(/no detail/i);
+    expect(tool.ctaLabel).toBe('Keep on this page');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioActionCard');
     expect(output).toContain('studioActionCard');
     expect(output).toContain('data-testid="studio-review-action-card"');
+    expect(output).toContain('data-testid="studio-action-cta"');
+    expect(studio).toContain('data-testid="studio-act-button"');
     // IDE: actions surface in the output pane Intent tab.
     expect(output).toContain("{ id: 'intent', label: 'Intent' }");
   });

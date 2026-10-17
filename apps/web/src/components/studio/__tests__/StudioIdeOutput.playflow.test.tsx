@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
 import type { Video } from '@/store/dashboard-types';
 
@@ -55,5 +55,24 @@ describe('StudioIdeOutput playflow', () => {
     expect(card.textContent).toMatch(/review this result/i);
     expect(card.textContent).toMatch(/needs review/i);
     expect(card.textContent).toMatch(/Review evidence/);
+  });
+
+  it('renders review_action as a proposed card with Act on this run', () => {
+    const onAct = vi.fn();
+    render(
+      <StudioIdeOutput
+        video={baseVideo}
+        onAct={onAct}
+        reviewActions={[
+          { tool: 'review_action', status: 'proposed', result: 'Review evidence' },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
+    expect(screen.getByTestId('studio-review-action-card').textContent).toMatch(/Review this result/);
+    expect(screen.getByTestId('studio-action-cta').textContent).toBe('Act on this run');
+    fireEvent.click(screen.getByTestId('studio-action-cta'));
+    expect(onAct).toHaveBeenCalledTimes(1);
   });
 });

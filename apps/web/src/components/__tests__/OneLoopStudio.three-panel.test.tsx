@@ -95,6 +95,8 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-output-tab-signals')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-ship')).toBeTruthy();
     expect((screen.getByTestId('studio-ide-ship') as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId('studio-act-button').textContent).toBe('Act on this run');
+    expect((screen.getByTestId('studio-act-button') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('shows transcript retry when analysis failed and is retryable', () => {
