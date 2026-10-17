@@ -88,6 +88,29 @@ export function stackCheckStatusLabel(status: StackCheckStatus): string {
   }
 }
 
+export interface StudioStackCheckView {
+  id: string;
+  title: string;
+  status: StackCheckStatus;
+  statusLabel: string;
+  holdsShip: boolean;
+}
+
+export function studioStackCheckView(
+  item: ChecklistItem,
+  completedIds: Iterable<string>,
+  viewer: StudioViewer = 'anonymous',
+): StudioStackCheckView {
+  const status = stackCheckStatus(item, completedIds, viewer);
+  return {
+    id: item.id,
+    title: item.title,
+    status,
+    statusLabel: stackCheckStatusLabel(status),
+    holdsShip: status === 'pending',
+  };
+}
+
 export function pickOfficialTemplate(sop: LinkedSop | null | undefined): OfficialTemplate | null {
   const stacks = detectedStacks(sop);
   if (stacks.has('vercel')) return NEXT;
