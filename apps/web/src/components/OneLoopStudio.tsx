@@ -503,6 +503,11 @@ export default function OneLoopStudio({
     setMessage('Cancelling analysis…');
   }, []);
 
+  const retryTranscript = () => {
+    const next = (selected?.url || url).trim();
+    if (next) void runAnalysis(next);
+  };
+
   useEffect(() => {
     applyStudioQueryAutoStart({
       query: studioQueryFromSearchParams(searchParams),
@@ -570,6 +575,17 @@ export default function OneLoopStudio({
     artifactCount: packFormation.artifacts.length,
     toolCount: packFormation.tools.length,
   });
+  const eventsEmptyMessage = selected
+    ? studioEventsEmptyMessage({
+        busy: transcriptWorking,
+        hasCompletedRun: selected.status !== 'processing',
+        eventCount,
+        hasTranscript: Boolean(selected.transcript?.trim()),
+        hasArchitecture: Boolean(packFormation.architecture),
+        artifactCount: packFormation.artifacts.length,
+        toolCount: packFormation.tools.length,
+      })
+    : undefined;
   const hasPayload = studioCanExport({
     transcript: selected?.transcript,
     eventCount,
@@ -1033,6 +1049,27 @@ export default function OneLoopStudio({
               </div>
             ) : null}
             <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
+              {showTranscriptRetry ? (
+                <button
+                  type="button"
+                  onClick={retryTranscript}
+                  data-testid="studio-transcript-retry"
+                  className="uvai-btn"
+                >
+                  Retry transcript
+                </button>
+              ) : null}
+              {showAgentWorkflowUi ? (
+                <button
+                  type="button"
+                  onClick={() => void act()}
+                  disabled={actBusy || busy || !getYouTubeId(url || selected?.url || '')}
+                  data-testid="studio-act-button"
+                  className="uvai-btn disabled:opacity-40"
+                >
+                  {actBusy ? 'Acting…' : 'Act on this run'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => void exportPkg()}
@@ -1060,16 +1097,6 @@ export default function OneLoopStudio({
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
-              {showTranscriptRetry ? (
-                <button
-                  type="button"
-                  data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn"
-                >
-                  Retry transcript
-                </button>
-              ) : null}
             </div>
             <p className="w-full font-mono text-[11px]" style={{ color: 'var(--uvai-ink-faint)' }} role="status" data-testid="studio-ide-status">
               {statusText}
@@ -1145,6 +1172,19 @@ export default function OneLoopStudio({
         outputPane={
           <StudioIdeOutput
             video={selected}
+            eventsEmptyMessage={eventsEmptyMessage}
+            packWorkbench={
+              promotePack ? (
+                <PackWorkbench
+                  architecture={packFormation.architecture}
+                  artifacts={packFormation.artifacts}
+                  onExport={() => void exportPkg()}
+                  canExport={hasPayload}
+                />
+              ) : undefined
+            }
+            showTranscriptRetry={showTranscriptRetry}
+            onRetryTranscript={retryTranscript}
             stackChecks={stackCheckViews}
             reviewActions={(workflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
