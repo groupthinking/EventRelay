@@ -62,6 +62,8 @@ describe('StudioIdeOutput playflow', () => {
         reviewActions={[
           { tool: 'review_action', status: 'proposed', result: 'Review evidence' },
         ]}
+        onAct={() => undefined}
+        canAct
       />,
     );
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
@@ -69,5 +71,6 @@ describe('StudioIdeOutput playflow', () => {
     expect(card.textContent).toMatch(/review this result/i);
     expect(card.textContent).toMatch(/needs review/i);
     expect(card.textContent).toMatch(/Review evidence/);
+    expect(screen.getByTestId('studio-review-act-button').textContent).toMatch(/Act on this run/);
   });
 });

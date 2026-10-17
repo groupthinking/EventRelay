@@ -17,8 +17,8 @@ const CORE_CAPABILITIES = [
   'Evidence-gated YouTube analysis',
   'Timed caption transcript',
   'Visible source provenance',
-  'Durable workflow run history',
-  'Review-only action preparation',
+  'Workflow run history',
+  'Proposed work from a Video Pack',
   'Export after quality verification',
 ];
 
@@ -32,7 +32,7 @@ const PRO_CAPABILITIES = [
 const COMPARISON = [
   ['Verified video analysis', true, true, true],
   ['Timed transcript and provenance', true, true, true],
-  ['Review-only action plans', true, true, true],
+  ['Proposed work from a Video Pack', true, true, true],
   ['External agent dispatch', false, true, 'User-managed'],
   ['Knowledge-store writes', false, true, 'User-managed'],
   ['Infrastructure and provider keys', 'Hosted', 'Hosted', 'User-managed'],

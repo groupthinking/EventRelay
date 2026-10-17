@@ -23,4 +23,4 @@
 ## 4. Post-Task Reflection
 * **What was done:** Rebased #2436 onto #2437. Wired honest Events empty copy and PackWorkbench into the IDE without dropping Ship this.
 * **Why it was needed:** The required closer check was a stale FAILURE on the old SHA, and main had moved (CONFLICTING/DIRTY).
-* **How it was tested:** Focused Vitest after rebase.
+* **How it was tested:** Focused Vitest after rebase. Required closer then failed because #2435 closed when #2437 merged; remaining E/G lives on open #2440 (Act CTA + pricing copy).

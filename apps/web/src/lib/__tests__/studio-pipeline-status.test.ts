@@ -546,6 +546,10 @@ describe('studio-pipeline-status', () => {
     expect(shell).toContain('data-testid="studio-ide-toolbar"');
     expect(studio).toContain('StudioIdeShell');
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
+    expect(pricing).not.toContain('Durable workflow run history');
+    expect(pricing).not.toContain('Review-only action preparation');
+    expect(pricing).toContain('Workflow run history');
+    expect(pricing).toContain('Proposed work from a Video Pack');
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
   });
 
@@ -708,10 +712,14 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
     expect(studio).not.toContain('studio-deploy-button');
 
-    // E — review_action cards render in the Intent tab.
+    // E — review_action cards render in the Intent tab, with Act CTA un-gated.
     expect(output).toContain('reviewActions');
     expect(studio).toMatch(/studioActionCard\(/);
     expect(output).toMatch(/Needs review|statusLabel/);
+    expect(studio).toContain('data-testid="studio-act-button"');
+    expect(studio).toMatch(/Act on this run/);
+    expect(studio).not.toMatch(/showAgentWorkflowUi\s*&&\s*[\s\S]{0,80}studio-act-button/);
+    expect(output).toContain('studio-review-act-button');
   });
 
   it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {

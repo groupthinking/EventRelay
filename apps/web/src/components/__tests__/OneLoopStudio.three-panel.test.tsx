@@ -55,6 +55,8 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-run')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-ship')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-ship').textContent).toMatch(/Ship this/);
+    expect(screen.getByTestId('studio-act-button')).toBeTruthy();
+    expect(screen.getByTestId('studio-act-button').textContent).toMatch(/Act on this run/);
     expect(screen.getByTestId('studio-build-live-button')).toBeTruthy();
   });
 

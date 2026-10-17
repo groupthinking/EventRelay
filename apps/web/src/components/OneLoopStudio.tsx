@@ -628,6 +628,7 @@ export default function OneLoopStudio({
   const canAttemptBuildLive = Boolean(
     getYouTubeId(url || selected?.url || '') && (selected || url.trim()),
   );
+  const canAct = Boolean(getYouTubeId(url || selected?.url || ''));
 
   const act = async () => {
     const next = (selected?.url || url).trim();
@@ -1055,6 +1056,20 @@ export default function OneLoopStudio({
               </button>
               <button
                 type="button"
+                data-testid="studio-act-button"
+                onClick={() => void act()}
+                disabled={actBusy || !canAct}
+                title={
+                  canAct
+                    ? 'Prepare proposed work from this Video Pack. Review before you act.'
+                    : 'Paste a YouTube URL and run analysis first.'
+                }
+                className="uvai-btn disabled:opacity-40"
+              >
+                {actBusy ? 'Acting…' : 'Act on this run'}
+              </button>
+              <button
+                type="button"
                 data-testid="studio-build-live-button"
                 onClick={() => void buildLive()}
                 disabled={buildBusy || !canAttemptBuildLive}
@@ -1164,6 +1179,9 @@ export default function OneLoopStudio({
                 result: action.result ?? card.detail,
               };
             })}
+            onAct={() => void act()}
+            actBusy={actBusy}
+            canAct={canAct}
             packWorkbench={
               promotePack ? (
                 <PackWorkbench

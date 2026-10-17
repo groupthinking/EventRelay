@@ -46,6 +46,9 @@ export default function StudioIdeOutput({
   stackChecks = [],
   reviewActions = [],
   packWorkbench,
+  onAct,
+  actBusy = false,
+  canAct = false,
 }: {
   video: Video | undefined;
   specReview?: ReactNode;
@@ -53,6 +56,9 @@ export default function StudioIdeOutput({
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
   packWorkbench?: ReactNode;
+  onAct?: () => void;
+  actBusy?: boolean;
+  canAct?: boolean;
 }) {
   const [active, setActive] = useState<OutputSection>('events');
 
@@ -259,6 +265,17 @@ export default function StudioIdeOutput({
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
+                          {card.kind === 'review' && onAct ? (
+                            <button
+                              type="button"
+                              data-testid="studio-review-act-button"
+                              onClick={onAct}
+                              disabled={actBusy || !canAct}
+                              className="uvai-btn uvai-btn-primary mt-3 disabled:opacity-40"
+                            >
+                              {actBusy ? 'Acting…' : 'Act on this run'}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                     </li>
