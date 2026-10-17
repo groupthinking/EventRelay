@@ -42,23 +42,29 @@
 3. **Both (chosen):** additive optional `start_s/end_s` in the extractor for new packs, plus deterministic derivation with explicit `anchor` provenance for everything else. Unanchored steps stay `timestamp_range: null`.
 
 ## 2. Execution Plan
-- [ ] RED: `runbook-steps.test.ts` on a fixture trimmed from the real `pBsT6v-ciO8` pack (ids, anchors, kinds, verification, prerequisites, markdown, time lookup, hash).
-- [ ] GREEN: `runbook-steps.ts`.
-- [ ] Schema: optional `start_s/end_s` (types, zod, parser, prompt) + `code_snippets` passthrough; tests.
-- [ ] Player hook: cue-only seek option; test.
-- [ ] Chat: step context validation + windowed prompt; grounding + route tests.
-- [ ] UI: `StepRunner`, `StudioRunbookPane`, Runbook tab, chat chip; jsdom tests (Next seeks, hash, autoplay toggle, prerequisites, markdown mode, troubleshoot).
-- [ ] Wire `OneLoopStudio`; `RUNBOOK.md` export; progress persistence.
-- [ ] Verify: focused Vitest, `tsc --noEmit`, eslint on touched files, full web suite.
+- [x] RED: `runbook-steps.test.ts` on the real `pBsT6v-ciO8` pack slice (ids, anchors, kinds, verification, prerequisites, markdown, time lookup, hash). First run: 13/16 passed; the 3 failures were the range-extension rule producing `[268, 290.5]` for REQ-03 (segments 35–36 continue the outreach step) — verified against the segment text and pinned.
+- [x] GREEN: `runbook-steps.ts` (16/16).
+- [x] Schema: optional `start_s/end_s` (types, zod, parser, both prompts) + `code_snippets` passthrough; tests.
+- [x] Player hook: `seekTo(seconds, { autoplay })`; jsdom hook test with stubbed IFrame API.
+- [x] Chat: `parseChatStepContext` (zod, strict, bounded) + windowed prompt; grounding + route tests (400 `step_context_invalid` / `step_context_requires_pack`).
+- [x] UI: `StepRunner`, `StudioRunbookPane`, Runbook tab (first, default when present), chat chip; 9 jsdom tests.
+- [x] Wire `OneLoopStudio`; `RUNBOOK.md` export; `Video.runbookProgress`; 5 integration tests.
+- [x] Verify: focused Vitest, `tsc --noEmit`, eslint on touched files, full web suite, `next build`, live route round-trip, headed browser walkthrough.
 
 ## 3. Definition of Done (Success Verification)
 * **Expected Outcome:** With a stored pack selected, Deliverables opens on **Runbook → Step-by-Step Runner**. Step 0 is a prerequisites checklist from `stack.tools`/stack checks. `Next` advances `Step n of N`, scrolls the runner to top, writes `#step-n`, seeks the player to the step's anchored start (cue-only when autoplay is off, pauses at range end when on), and the chat chip reads "Grounded to Step n". Steps without pack evidence show "No verified timestamp" and never seek. `Full Runbook Markdown` shows/copies/downloads `RUNBOOK.md`.
 * **Verification Method:**
   * `cd apps/web && npx vitest run src/lib/__tests__/runbook-steps.test.ts src/components/studio/__tests__/StepRunner.test.tsx src/components/__tests__/OneLoopStudio.runbook.test.tsx src/lib/__tests__/chat-pack-grounding.test.ts src/app/api/__tests__/chat-pack-grounding-route.test.ts src/lib/__tests__/use-youtube-player.test.ts src/lib/__tests__/emit-video-pack.test.ts src/lib/__tests__/video-pack-structure.test.ts src/lib/__tests__/action-surface.test.ts`
   * `npx tsc --noEmit` · `npx eslint <touched files>` · `npx vitest run` (full web suite)
-* **Proof Artifact:** (filled in §4 on completion)
+* **Proof Artifact (2026-10-17, head of `cursor/studio-step-runner-3c1b`):**
+  * Focused Vitest (listed above): all green — `runbook-steps` 16, `StepRunner` 9, `OneLoopStudio.runbook` 5, grounding 11, route 6, hook 3, plus extractor/emit/structure/action-surface additions.
+  * Full web suite: **173 files, 1563 passed, 28 skipped** (all pre-existing opt-ins: Redis-gated G.A.T.E. cases, one live clip probe).
+  * `npx tsc --noEmit` exit 0 · `npx eslint` on every touched file exit 0 · `npx next build` exit 0.
+  * Live route round-trip (one-off test outside the repo, real `POST /api/chat`, memory pack store seeded with the live pack, real Vercel AI Gateway call): HTTP 200 in 1086 ms, answer *"The speaker says, 'Step one: search up SeaDance 2.5, find any provider,' at 4:07–4:14 in the video."* — the step's anchored range and quote from the windowed transcript.
+  * Headed Chrome walkthrough on the production build with the live pack seeded in localStorage: Runbook tab default; Step 0 lists 3 tools; Next → `#step-1`, `4:07–4:14 · Transcript segment`, chat chip "Grounded to Step 1 of 7", keyframe `/api/video/pack/frames/pBsT6v-ciO8/249`; Step 3 shows `interface SpecAdPitch`; completion persisted to `runbookProgress`; RUNBOOK.md view + `download="RUNBOOK.md"`; Troubleshoot focused the composer with "Paste the error or ask about Step 3…". Recording: `studio-step-runner-walkthrough.mp4`.
+  * Not verifiable in this VM (environment, not code): the YouTube embed returned **Error 153** on `http://localhost` (embed requires an https referer; CSP already allows youtube.com; production is https), and the production-mode `src/proxy.ts` guard returned 503 "distributed rate limiting is not configured" because no Upstash credentials exist here. Live Gemini extraction of the new optional `start_s/end_s` fields was not exercised (no `GOOGLE_API_KEY`); the parser path is unit-tested.
 
 ## 4. Post-Task Reflection
-* **What was done:**
-* **Why it was needed:**
-* **How it was tested:**
+* **What was done:** Added a pure runbook compiler that anchors pack requirements / action items (or the linked SOP) to the video timeline from pack evidence only, with provenance per step and `null` when none exists; a Step Runner (stepper, Step 0 prerequisites, per-step action card, cue/clip playback, hash + scroll, local completion notes) and a RUNBOOK.md reference mode inside Deliverables; step-scoped chat grounding end to end (client chip → validated `step` field → windowed system prompt); optional extractor time ranges and client-visible code snippets; `RUNBOOK.md` in Export.
+* **Why it was needed:** The pipeline already produced time-anchored evidence, but the Deliverables pane showed it as static text, so the "active execution copilot" intent was unmet at the presentation layer (§0). The runner closes that gap without inventing evidence and without forcing a paid re-extract of stored packs.
+* **How it was tested:** RED→GREEN Vitest on the live `pBsT6v-ciO8` pack slice, jsdom component/integration tests, type-check, lint, production build, one real gateway round-trip through the real route, and a recorded headed-browser walkthrough of the production build.
