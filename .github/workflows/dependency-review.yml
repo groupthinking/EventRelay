@@ -126,11 +126,14 @@ jobs:
           snapshot-ref: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
 
       - name: Dependency Review
+        id: review
         if: >-
           ${{ github.event_name == 'pull_request' &&
               steps.dependency-changes.outputs.changed == 'true' }}
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.pull_request.head.sha }}
           fail-on-severity: moderate
           # The dependency graph API can briefly report "no snapshots found for the
           # head SHA" when a PR's dependency snapshot is submitted asynchronously and
@@ -190,6 +193,63 @@ jobs:
             pkg:npm/@img/sharp-win32-ia32,
             pkg:npm/@img/sharp-win32-x64
           comment-summary-in-pr: always
+
+      # Preserve the graph comparison even when a composite license is rejected.
+      # An empty/missing action output stays empty; it is not a clean result.
+      - name: Record dependency review evidence
+        if: >-
+          ${{ always() && github.event_name == 'pull_request' &&
+              steps.dependency-changes.outputs.changed == 'true' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          DEPENDENCY_CHANGES: ${{ steps.review.outputs.dependency-changes }}
+          INVALID_LICENSE_CHANGES: ${{ steps.review.outputs.invalid-license-changes }}
+          VULNERABLE_CHANGES: ${{ steps.review.outputs.vulnerable-changes }}
+          DENIED_CHANGES: ${{ steps.review.outputs.denied-changes }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          evidence = {
+              "schema_version": 1,
+              "base_sha": os.environ["BASE_SHA"],
+              "head_sha": os.environ["HEAD_SHA"],
+              "run_id": os.environ["GITHUB_RUN_ID"],
+              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
+              "review_outcome": os.environ["REVIEW_OUTCOME"],
+              # Retain the exact raw JSON strings, including duplicate entries,
+              # full SPDX expressions, and empty outputs from incomplete reviews.
+              "raw_outputs": {
+                  name: os.environ[variable]
+                  for name, variable in {
+                      "dependency-changes": "DEPENDENCY_CHANGES",
+                      "invalid-license-changes": "INVALID_LICENSE_CHANGES",
+                      "vulnerable-changes": "VULNERABLE_CHANGES",
+                      "denied-changes": "DENIED_CHANGES",
+                  }.items()
+              },
+          }
+          destination = Path("dependency-review-evidence")
+          destination.mkdir(exist_ok=True)
+          (destination / "review.json").write_text(
+              json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
+          )
+          PY
+
+      - name: Upload dependency review evidence
+        if: >-
+          ${{ always() && github.event_name == 'pull_request' &&
+              steps.dependency-changes.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-review-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          path: dependency-review-evidence/review.json
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Record no dependency delta
         if: >-
