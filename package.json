@@ -67,7 +67,7 @@
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.90",
     "@google-cloud/text-to-speech": "^7.1.0",
-    "@google/genai": "^2.24.0",
+    "@google/genai": "^2.30.0",
     "@opentelemetry/core": "^2.11.0",
     "@types/node": "^26.6.2",
     "ai": "^7.0.112",
