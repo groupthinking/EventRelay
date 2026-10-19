@@ -27,6 +27,28 @@ def _load_dependabot_config() -> dict:
     return yaml.safe_load(DEPENDABOT_CONFIG_PATH.read_text())
 
 
+@pytest.mark.parametrize(
+    "directory",
+    [
+        "/",
+        "/src/youtube_extension/backend",
+        "/sdk/python",
+        "/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0",
+    ],
+)
+def test_dependabot_tracks_python_packages_weekly(directory: str) -> None:
+    updates = [
+        update
+        for update in _load_dependabot_config()["updates"]
+        if update["package-ecosystem"] == "pip"
+        and update["directory"] == directory
+    ]
+
+    assert len(updates) == 1, f"Expected exactly one pip entry for {directory}"
+    assert updates[0]["schedule"]["interval"] == "weekly"
+    assert updates[0]["open-pull-requests-limit"] == 10
+
+
 def test_dependabot_workflow_uses_safe_triggers_and_permissions() -> None:
     workflow = _load_workflow()
 
