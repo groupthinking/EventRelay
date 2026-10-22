@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           # PR runs compare the exact base and head trees before asking the
@@ -120,7 +120,7 @@ jobs:
           ${{ github.event_name == 'push' ||
               (github.event.pull_request.head.repo.full_name == github.repository &&
                steps.dependency-changes.outputs.changed == 'true') }}
-        uses: advanced-security/component-detection-dependency-submission-action@b282c67b1008fde9b60da4bdfcd8849613e293b2 # v0.1.6
+        uses: advanced-security/component-detection-dependency-submission-action@v0.1.6
         with:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           snapshot-ref: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
@@ -129,7 +129,7 @@ jobs:
         if: >-
           ${{ github.event_name == 'pull_request' &&
               steps.dependency-changes.outputs.changed == 'true' }}
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@v5.0.0
         with:
           fail-on-severity: moderate
           # The dependency graph API can briefly report "no snapshots found for the
