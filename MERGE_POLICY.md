@@ -89,14 +89,14 @@ The real contexts, as observed on live pull requests:
 
 | Surface | Check-run names |
 | --- | --- |
-| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test (Python 3.10)`, `test (Python 3.11)`, `test (Python 3.12)`, `test-frontend` |
+| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test (Python 3.11)`, `test (Python 3.12)`, `test-frontend` |
 | Static analysis | `CodeQL` |
 | Security | `Security Scan - python`, `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy` |
 | Secrets | `gitleaks (working tree)` |
 | Dependencies | `dependency-review` |
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
-`lint-frontend`, `build`, `test (Python 3.10)`, `test (Python 3.11)`,
+`lint-frontend`, `build`, `test (Python 3.11)`,
 `test (Python 3.12)`, `test-frontend`, `CodeQL`,
 `gitleaks (working tree)`, `dependency-review`, `Security Scan - python`,
 `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy`.
