@@ -1,16 +1,93 @@
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
-WORKFLOW_PATH = Path(__file__).resolve().parents[2] / ".github/workflows/dependency-review.yml"
+WORKFLOW_PATH = (
+    Path(__file__).resolve().parents[2] / ".github/workflows/dependency-review.yml"
+)
 
 
 def _load_workflow() -> dict:
     assert WORKFLOW_PATH.exists(), "dependency-review workflow should exist"
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text())
     return workflow if "on" in workflow else {**workflow, "on": workflow[True]}
+
+
+@pytest.mark.parametrize(
+    ("changed_path", "expected_changed"),
+    [
+        (".github/workflows/actions.lock", True),
+        ("docs/actions.lock", False),
+        (".github/aw/actions-lock.json", False),
+    ],
+)
+def test_dependency_detector_handles_lockfile_only_changes(
+    tmp_path: Path, changed_path: str, expected_changed: bool
+) -> None:
+    """Run the workflow's detector against an actual one-file Git diff."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Workflow test",
+                "-c",
+                "user.email=workflow-test@example.invalid",
+                *args,
+            ],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "--quiet")
+    changed_file = repo / changed_path
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("before\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "baseline")
+    base = git("rev-parse", "HEAD")
+    changed_file.write_text("after\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "update one lockfile")
+    head = git("rev-parse", "HEAD")
+
+    steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
+    detection = next(step for step in steps if step.get("id") == "dependency-changes")
+    script = detection["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    output = tmp_path / "output"
+    summary = tmp_path / "summary"
+    subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo,
+        env={
+            **os.environ,
+            "BASE_SHA": base,
+            "HEAD_SHA": head,
+            "GITHUB_OUTPUT": str(output),
+            "GITHUB_STEP_SUMMARY": str(summary),
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert output.read_text() == (
+        f"changed={str(expected_changed).lower()}\ncount={int(expected_changed)}\n"
+    )
+    if expected_changed:
+        assert f"- `{changed_path}`" in summary.read_text()
+    else:
+        assert "No dependency manifests" in summary.read_text()
 
 
 def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> None:
@@ -82,5 +159,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     assert review["with"]["retry-on-snapshot-warnings"] is True
     assert review["with"]["retry-on-snapshot-warnings-timeout"] == 300
 
-    no_delta = next(step for step in steps if step["name"] == "Record no dependency delta")
+    no_delta = next(
+        step for step in steps if step["name"] == "Record no dependency delta"
+    )
     assert "steps.dependency-changes.outputs.changed == 'false'" in no_delta["if"]
