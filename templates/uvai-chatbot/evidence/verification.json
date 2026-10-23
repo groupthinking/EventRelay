@@ -1,0 +1,57 @@
+{
+  "verifiedAt": "2026-10-09T21:34:14.694219+00:00",
+  "install": {
+    "command": "corepack pnpm install --frozen-lockfile --ignore-scripts",
+    "exitCode": 0
+  },
+  "typeCheck": {
+    "command": "npm run type-check",
+    "exitCode": 0
+  },
+  "evidenceTests": {
+    "command": "npm run test:video-guide",
+    "passed": 8,
+    "failed": 0,
+    "fixtureOnly": true
+  },
+  "build": {
+    "command": "npm run build",
+    "exitCode": 0,
+    "log": "evidence/build.log"
+  },
+  "httpSmoke": {
+    "command": "node tests/runtime-smoke.mjs",
+    "passed": 6,
+    "failed": 0,
+    "receipt": "evidence/runtime-smoke.json"
+  },
+  "failedAttempts": [
+    {
+      "command": "npm install --ignore-scripts --package-lock=false",
+      "reason": "ERESOLVE upstream OpenTelemetry peer range; resolved using pinned pnpm lockfile"
+    },
+    {
+      "command": "original npm run build",
+      "reason": "tsx CLI Unix socket EPERM; replaced CLI invocation with node --import tsx"
+    },
+    {
+      "command": "overlapping npm run build",
+      "reason": "Next build lock; sequential final build exited 0"
+    },
+    {
+      "command": "initial runtime smoke",
+      "reason": "test incorrectly required absolute redirect URL; fixed relative Location assertion and reran 6 checks"
+    }
+  ],
+  "notVerified": [
+    "Database migrations (POSTGRES_URL absent; build skipped them)",
+    "Authenticated video-to-guide and follow-up/download journey",
+    "Live AI provider quality and costs",
+    "Frame-backed visual understanding",
+    "Browser customer journey",
+    "Uploaded video",
+    "Isolated prototype execution",
+    "Public deployment",
+    "Billing"
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "verifiedAt": "2026-10-09T22:43:29.892968+00:00",
+  "baseHead": "4bfc9b27952f761e67d5adf20c106a2cb2bd3aa2",
+  "checks": [
+    {
+      "name": "frozen-install",
+      "command": "corepack pnpm install --frozen-lockfile --ignore-scripts",
+      "exitCode": 0,
+      "log": "evidence/resume-frozen-install.log"
+    },
+    {
+      "name": "type-check",
+      "command": "npm run type-check",
+      "exitCode": 0,
+      "log": "evidence/resume-type-check.log"
+    },
+    {
+      "name": "video-guide",
+      "command": "npm run test:video-guide",
+      "exitCode": 0,
+      "log": "evidence/resume-video-guide.log"
+    },
+    {
+      "name": "security-id",
+      "command": "node --import tsx --test tests/security-id.test.mjs",
+      "exitCode": 0,
+      "log": "evidence/resume-security-id.log"
+    },
+    {
+      "name": "chat-contract",
+      "command": "node --import tsx --test tests/chat-contract.test.mjs",
+      "exitCode": 0,
+      "log": "evidence/resume-chat-contract.log"
+    },
+    {
+      "name": "generation-integration",
+      "command": "node --conditions=react-server --import tsx --test tests/guide-generation.integration.mjs",
+      "exitCode": 0,
+      "log": "evidence/resume-generation-integration.log"
+    },
+    {
+      "name": "migration-contract",
+      "command": "corepack pnpm exec drizzle-kit check",
+      "exitCode": 0,
+      "log": "evidence/resume-migration-contract.log"
+    },
+    {
+      "name": "build",
+      "command": "npm run build",
+      "exitCode": 0,
+      "log": "evidence/resume-build.log"
+    },
+    {
+      "name": "http-smoke",
+      "command": "node tests/runtime-smoke.mjs",
+      "exitCode": 0,
+      "log": "evidence/resume-http-smoke.log"
+    }
+  ],
+  "limitations": [
+    "PostgreSQL integration skips without TEST_POSTGRES_URL; inspect its log",
+    "No live AI or authenticated browser journey",
+    "No production deployment or payment tests"
+  ],
+  "focusedTests": {
+    "passed": 13,
+    "failed": 0,
+    "databaseIntegrationSkipped": 1,
+    "httpChecksPassed": 8
+  },
+  "finalEdits": "Gemini 3.8 default/title routing and truthful busy-state labels were followed by passing type-check/build/HTTP checks; logs replaced with latest results.",
+  "failedAttempts": [
+    "Security patch introduced conflicting ProseMirror model versions; deduplicated to 1.25.12 and type-check passed.",
+    "Default-model change left title routing reference; removed inherited provider routing and type-check/build passed."
+  ],
+  "aiGenerationRequests": 0,
+  "aiCostMeasured": null
+}

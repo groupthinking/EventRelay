@@ -1,0 +1,11 @@
+✔ bounded text requests remain accepted (2.35865ms)
+✔ generic attachments and supplied tool results cannot enter model input (1.349074ms)
+✔ empty and oversized message part arrays are rejected (0.52641ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 203.021153
