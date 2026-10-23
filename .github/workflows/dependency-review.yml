@@ -95,6 +95,7 @@ jobs:
                   or path.as_posix() in {
                       ".github/dependabot.yaml",
                       ".github/dependabot.yml",
+                      ".github/workflows/actions.lock",
                       ".github/workflows/dependency-review.yml",
                       "vendor/modules.txt",
                   }
