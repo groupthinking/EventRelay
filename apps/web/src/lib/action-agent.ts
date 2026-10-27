@@ -96,6 +96,7 @@ function toAction(
     input,
     status: status ?? (result.isError ? 'failed' : 'fulfilled'),
     result: result.summary,
+    ...(tool === 'create_workflow_task' && result.data ? { data: result.data } : {}),
     isError: result.isError,
   };
 }
@@ -302,6 +303,7 @@ export async function runActionAgent(opts: RunActionAgentOptions): Promise<RunAc
 }
 
 export interface ExecutePreparedActionsOptions {
+  ownerId?: string;
   actions: AgentAction[];
   jobId?: string;
   fetchImpl?: typeof fetch;
@@ -315,6 +317,7 @@ export async function executePreparedActions(
     backendBaseUrl: resolveBackendBaseUrl(),
     fetchImpl: opts.fetchImpl,
     jobId: opts.jobId,
+    ownerId: opts.ownerId,
   };
 
   const uniqueActions = dedupeAgentActions(opts.actions);
