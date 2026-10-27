@@ -20,5 +20,10 @@
       "destination": "https://uvai.io/$1",
       "permanent": true
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "codex/relay-durable-review-integration": false
+    }
+  }
 }
