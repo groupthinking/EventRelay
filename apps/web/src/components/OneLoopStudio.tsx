@@ -11,6 +11,7 @@ import {
   pickOfficialTemplate,
   stackCheckStatus,
   stackCheckStatusLabel,
+  studioStackCheckView,
 } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
@@ -76,6 +77,7 @@ import {
   studioPlayerPhase,
   studioPromotePackWorkbench,
   studioRunQuality,
+  studioShipCta,
   studioStatusLabel,
   studioStatusMessage,
   studioTranscriptBody,
@@ -406,6 +408,14 @@ export default function OneLoopStudio({
 
   const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
   const officialTemplate = pickOfficialTemplate(linkedSop);
+  const stackCheckViews = stackChecks.map((item) => {
+    const status = stackCheckStatus(item, completedChecks, 'anonymous');
+    return {
+      ...studioStackCheckView(item, completedChecks, 'anonymous'),
+      status,
+      statusLabel: stackCheckStatusLabel(status),
+    };
+  });
 
   useEffect(() => {
     useDashboardStore.persist.rehydrate();
@@ -569,6 +579,7 @@ export default function OneLoopStudio({
     hasLinkedSopSteps: Boolean(linkedSop?.steps.length),
     hasProjectScaffold: Boolean(selected?.insights?.project_scaffold),
   });
+  const shipCta = studioShipCta({ canExport: hasPayload, holdReason });
   const runState = busy ? 'working' : selected ? 'ready' : 'idle';
   const quality = studioRunQuality(
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
@@ -1024,12 +1035,14 @@ export default function OneLoopStudio({
             <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
               <button
                 type="button"
-                onClick={exportPkg}
-                disabled={!hasPayload}
-                data-testid="studio-ide-export"
-                className="uvai-btn disabled:opacity-40"
+                onClick={() => void exportPkg()}
+                disabled={!shipCta.enabled}
+                data-testid="studio-ide-ship"
+                title={shipCta.hint}
+                className="uvai-btn uvai-btn-primary inline-flex items-center gap-1.5 disabled:opacity-40"
               >
-                Export
+                <Rocket className="h-4 w-4" aria-hidden />
+                Ship this
               </button>
               <button
                 type="button"
@@ -1043,10 +1056,20 @@ export default function OneLoopStudio({
                       ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                       : 'Paste a YouTube URL and run analysis first.'
                 }
-                className="uvai-btn uvai-btn-primary disabled:opacity-40"
+                className="uvai-btn disabled:opacity-40"
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
+              {showTranscriptRetry ? (
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="uvai-btn"
+                >
+                  Retry transcript
+                </button>
+              ) : null}
             </div>
             <p className="w-full font-mono text-[11px]" style={{ color: 'var(--uvai-ink-faint)' }} role="status" data-testid="studio-ide-status">
               {statusText}
@@ -1122,6 +1145,15 @@ export default function OneLoopStudio({
         outputPane={
           <StudioIdeOutput
             video={selected}
+            stackChecks={stackCheckViews}
+            reviewActions={(workflowActions?.actions ?? []).map((action) => {
+              const card = studioActionCard(action);
+              return {
+                tool: action.tool,
+                status: action.status,
+                result: action.result ?? card.detail,
+              };
+            })}
             specReview={
               selected?.videoPack?.pack ? (
                 <GroundedSpecReview
@@ -1149,7 +1181,7 @@ export default function OneLoopStudio({
           data-testid="studio-export-toast"
           role={exportToast.tone === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'fixed bottom-20 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
+            'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
             exportToast.tone === 'success'
               ? 'border-amber-300 bg-amber-50 text-amber-800'
               : 'border-red-300 bg-red-50 text-red-800',

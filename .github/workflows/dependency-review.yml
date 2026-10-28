@@ -147,6 +147,9 @@ jobs:
           allow-ghsas: GHSA-w5hq-g745-h8pq
           # PR #295: vite/vitest tree (BlueOak-1.0.0, MPL-2.0 lightningcss), type-fest (CC0-1.0),
           # rollup@4.x compound SPDX (0BSD AND ISC AND MIT).
+          # Pillow 13 publishes the permissive MIT-CMU SPDX identifier; yt-dlp publishes
+          # the public-domain-equivalent Unlicense identifier. Both are direct runtime
+          # dependencies and are allowed explicitly here rather than excluded from review.
           # FSL-1.1-MIT is not a valid SPDX id for allow-licenses — exclude @sentry/* via purls.
           # caniuse-lite ships MIT code but a CC-BY-4.0 dataset; the scanner reports the data
           # license, which is not code we redistribute. It updates on nearly every browserslist
@@ -156,7 +159,7 @@ jobs:
           # already present, and the patched Sharp release only refreshes their versions.
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0,
-            BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD
+            BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD, MIT-CMU, Unlicense
           # Docs/prototype pip deps (not shipped product code): the scanner reports regex with a
           # CNRI-Python fragment (upstream misattribution; the package is Apache-2.0) and torch with
           # a bundled BSL-1.0 component. Both live under docs/ only. Revisit if they move into
