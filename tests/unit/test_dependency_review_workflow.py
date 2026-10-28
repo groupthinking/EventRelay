@@ -617,3 +617,74 @@ def test_dependency_review_rejects_warning_free_graph_drift(
         with pytest.raises(ValueError, match=error):
             record(rows, f"invalid-{index}")
         assert not destination.exists()
+
+
+def test_dependency_review_accepts_renamed_lockfile_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "diff.renames", "true"], cwd=repo, check=True)
+    lock = {
+        "lockfileVersion": 3,
+        "packages": {"node_modules/fast-uri": {"version": "3.1.7", "dev": True}},
+    }
+    (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    base = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    (repo / "deps").mkdir()
+    subprocess.run(
+        ["git", "mv", "package-lock.json", "deps/package-lock.json"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-qm", "move lockfile"], cwd=repo, check=True)
+    head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    monkeypatch.chdir(repo)
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    assert module["_changed_files"](base, head) == {
+        "package-lock.json",
+        "deps/package-lock.json",
+    }
+    removed = {
+        "change_type": "removed",
+        "manifest": "package-lock.json",
+        "ecosystem": "npm",
+        "name": "fast-uri",
+        "version": "3.1.7",
+        "scope": "development",
+    }
+    added = {**removed, "change_type": "added", "manifest": "deps/package-lock.json"}
+    raw = json.dumps([removed, added]).encode()
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    environment = {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    saved = module["record_dependency_review"](
+        environment,
+        tmp_path / "evidence",
+        opener=lambda request, timeout: ApiResponse(raw),
+    )
+    assert saved["dependency_diff_count"] == 2
+    assert (tmp_path / "evidence/dependency-diff.json").read_bytes() == raw

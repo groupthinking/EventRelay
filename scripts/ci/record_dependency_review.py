@@ -13,7 +13,7 @@ from urllib.request import Request, urlopen
 
 def _changed_files(base: str, head: str) -> set[str]:
     output = subprocess.run(
-        ["git", "diff", "--name-only", "-z", base, head],
+        ["git", "diff", "--name-only", "--no-renames", "-z", base, head],
         check=True,
         capture_output=True,
     ).stdout
