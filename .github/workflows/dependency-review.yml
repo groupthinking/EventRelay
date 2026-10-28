@@ -132,6 +132,18 @@ jobs:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           snapshot-ref: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
 
+      - name: Submit scoped uv lock snapshot
+        if: >-
+          ${{ (github.event_name == 'push' ||
+               (github.event.pull_request.head.repo.full_name == github.repository &&
+                steps.dependency-changes.outputs.changed == 'true')) &&
+              hashFiles('uv.lock') != '' }}
+        env:
+          SNAPSHOT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          SNAPSHOT_REF: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/submit_uv_lock_snapshot.py
+
       - name: Dependency Review
         id: review
         if: >-
