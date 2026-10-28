@@ -3,6 +3,14 @@
 import { useState } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
+import { studioActionCard } from '@/lib/studio-pipeline-status';
+import type { StudioStackCheckView } from '@/lib/official-templates';
+
+export type StudioReviewActionInput = {
+  tool: string;
+  status: string;
+  result?: string;
+};
 
 type OutputSection = 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
 
@@ -34,13 +42,23 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
 export default function StudioIdeOutput({
   video,
   specReview,
+  stackChecks = [],
+  reviewActions = [],
 }: {
   video: Video | undefined;
   specReview?: React.ReactNode;
+  stackChecks?: StudioStackCheckView[];
+  reviewActions?: StudioReviewActionInput[];
 }) {
   const [active, setActive] = useState<OutputSection>('events');
 
-  const hasContent = Boolean(video?.videoPack || video?.events?.length || video?.insights);
+  const hasContent = Boolean(
+    video?.videoPack ||
+      video?.events?.length ||
+      video?.insights ||
+      stackChecks.length > 0 ||
+      reviewActions.length > 0,
+  );
 
   const pack = video?.videoPack?.pack;
   const events: ExtractedEvent[] = video?.events ?? [];
@@ -141,7 +159,7 @@ export default function StudioIdeOutput({
 
         {active === 'tools' && (
           <div data-testid="studio-ide-output-tools" className="flex flex-col gap-3">
-            {toolNames.length === 0 && !linkedSop?.steps.length ? (
+            {toolNames.length === 0 && !linkedSop?.steps.length && stackChecks.length === 0 ? (
               <EmptyNote text="No tools named in this video yet." />
             ) : (
               <>
@@ -155,6 +173,28 @@ export default function StudioIdeOutput({
                             <WrenchIcon />
                           </div>
                           <p className="font-mono text-xs font-semibold text-slate-800">{t}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {stackChecks.length > 0 ? (
+                  <div className="uvai-card p-4" data-testid="studio-stack-checks">
+                    <p className="uvai-section-label mb-3">Stack checks</p>
+                    <ul className="flex flex-col gap-2">
+                      {stackChecks.map((check) => (
+                        <li
+                          key={check.id}
+                          data-testid={`studio-stack-check-${check.id}`}
+                          className="uvai-doc-row"
+                        >
+                          <span className="uvai-doc-icon" aria-hidden>
+                            {check.status === 'done' ? '✓' : check.status === 'pending' ? '•' : '?'}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-800">{check.title}</p>
+                            <p className="text-xs text-slate-400">{check.statusLabel}</p>
+                          </div>
                         </li>
                       ))}
                     </ul>
@@ -183,24 +223,49 @@ export default function StudioIdeOutput({
 
         {active === 'intent' && (
           <ul className="flex flex-col gap-3" data-testid="studio-ide-output-intent">
-            {actionItems.length === 0 ? (
+            {reviewActions.length === 0 && actionItems.length === 0 ? (
               <EmptyNote text="No action items extracted yet — what should the viewer do or make from this video?" />
             ) : (
-              actionItems.map((a, i) => (
-                <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-neutral-900 p-4">
-                  <div className="flex items-start gap-3">
-                    <span className="uvai-metric-icon mt-0.5 shrink-0">
-                      <ArrowIcon />
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900">{a.title}</p>
-                      {a.description ? (
-                        <p className="mt-1 text-xs leading-relaxed text-slate-500">{a.description}</p>
-                      ) : null}
+              <>
+                {reviewActions.map((action, i) => {
+                  const card = studioActionCard(action);
+                  return (
+                    <li
+                      key={`${action.tool}-${i}`}
+                      data-testid="studio-review-action-card"
+                      className="uvai-card border-l-4 !border-l-amber-500 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="uvai-metric-icon mt-0.5 shrink-0">
+                          <ArrowIcon />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                            {card.statusLabel}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
+                        </div>
+                      </div>
+                    </li>
+                  );
+                })}
+                {actionItems.map((a, i) => (
+                  <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-neutral-900 p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="uvai-metric-icon mt-0.5 shrink-0">
+                        <ArrowIcon />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900">{a.title}</p>
+                        {a.description ? (
+                          <p className="mt-1 text-xs leading-relaxed text-slate-500">{a.description}</p>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              ))
+                  </li>
+                ))}
+              </>
             )}
           </ul>
         )}
