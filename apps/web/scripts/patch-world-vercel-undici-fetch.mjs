@@ -4,9 +4,9 @@
  * Agent as `dispatcher`. Those are different undici class copies, so
  * dispatch() throws "Cannot read private member #P".
  *
- * Remove the custom dispatcher from world-vercel call sites that ultimately
- * reach Node/Next global fetch. For world-local, use npm `undici.fetch` with
- * the npm `Agent` so its long-running-step timeout configuration is preserved.
+ * Remove the custom dispatcher where a Request must reach Node/Next global
+ * fetch. For string URLs in Workflow 5's shared HTTP core and world-local,
+ * use npm `undici.fetch` with the npm `Agent` so transport settings survive.
  * Idempotent. Safe to skip if the package is absent.
  *
  * Lives under apps/web. Root .vercelignore must use `/scripts/` (anchored).
@@ -23,6 +23,8 @@ export function patchSource(src) {
   const hasAffectedCallSite =
     src.includes('await fetch(') ||
     src.includes('await undiciFetch(') ||
+    src.includes(': fetch(url, {') ||
+    src.includes(': undiciFetch(url, {') ||
     src.includes('dispatcher: getDispatcher(');
   if (!hasAffectedCallSite) {
     return { src, result: 'no-fetch-call' };
@@ -31,17 +33,26 @@ export function patchSource(src) {
   // Keep global/Next fetch. undici.fetch rejects Request objects
   // ("Failed to parse URL from [object Request]") which getRun uses.
   // dpl_BBme started (runId) but status poll 500'd after the rename.
-  if (next.includes('fetch as undiciFetch')) {
+  if (next.includes('await undiciFetch(')) {
     next = next.replace(
       /^import \{ fetch as undiciFetch \} from 'undici';\n/m,
       '',
     );
     next = next.replaceAll('await undiciFetch(', 'await fetch(');
   }
+  // Workflow 5's shared HTTP core uses a string URL. Keep its custom Agent
+  // paired with npm undici instead of passing it to Node/Next global fetch.
+  if (next.includes(': fetch(url, {') && next.includes('dispatcher,')) {
+    next = "import { fetch as undiciFetch } from 'undici';\n" + next;
+    next = next.replace(': fetch(url, {', ': undiciFetch(url, {');
+  }
   // Do not pass Agent across fetch (#P / #dispatch).
   next = next
     .replace(/\s*dispatcher:\s*getDispatcher\([^)]*\),?/g, '')
-    .replace(/^\s*dispatcher,\s*$/gm, '');
+    .replace(/^\s*dispatcher:\s*undiciDispatcher,\s*$/gm, '');
+  if (!next.includes(': undiciFetch(url, {')) {
+    next = next.replace(/^\s*dispatcher,\s*$/gm, '');
+  }
   if (next === src) {
     return { src, result: 'already-patched' };
   }

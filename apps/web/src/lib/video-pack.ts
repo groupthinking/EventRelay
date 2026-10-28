@@ -2,7 +2,6 @@ import { canonicalYouTubeSource, resolveYouTubeSourceId } from '@/lib/video-sour
 import { createHash } from 'node:crypto';
 import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
-import { start } from 'workflow/api';
 import { NextResponse } from 'next/server';
 import { resolveVideoUrl } from '@/lib/video-url-request';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
@@ -262,6 +261,7 @@ const SOURCE_HASH = /^[a-f0-9]{64}$/;
 type StartVideoPackExtraction = (identity: VideoPackV0Json) => Promise<void>;
 
 async function startDurableVideoPackExtraction(identity: VideoPackV0Json): Promise<void> {
+  const { start } = await import('workflow/api');
   await withWorldVercelFetch(async () => {
     await start(videoPackExtractionWorkflow, [identity]);
   });
