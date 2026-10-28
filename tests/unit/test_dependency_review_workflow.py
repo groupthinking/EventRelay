@@ -62,7 +62,6 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "vendor/modules.txt",
         "Dockerfile",
         ".github/dependabot.yaml",
-        ".github/workflows/dependency-review.yml",
     ):
         assert protected_input in detection_script
     assert '"git", "diff", "--name-only", "-z", base, head' in detection_script
@@ -146,7 +145,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         ),
         (["requirements.txt"], "true", ""),
         (["uv.lock", "requirements.txt"], "true", ""),
-        ([".github/workflows/dependency-review.yml"], "true", "UvLock,NpmLockfile3"),
+        ([".github/workflows/dependency-review.yml"], "false", ""),
         (["src/app.py"], "false", ""),
     ],
 )
@@ -440,9 +439,12 @@ def test_dependency_review_evidence_preserves_large_complete_api_diff(
     )
     seen_requests = []
 
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
     def fetch(request, timeout):
         seen_requests.append((request, timeout))
-        return io.BytesIO(raw)
+        return ApiResponse(raw)
 
     destination = tmp_path / "dependency-review-evidence"
     module["record_dependency_review"](environment, destination, opener=fetch)
@@ -459,3 +461,58 @@ def test_dependency_review_evidence_preserves_large_complete_api_diff(
     assert seen_requests[0][1] == 90
     assert seen_requests[0][0].get_header("Authorization") == "Bearer dummy-test-token"
     assert not (tmp_path / "injected").exists()
+
+
+@pytest.mark.parametrize("raw", [b"[]", b'[{"name":"partial"}]'])
+def test_dependency_review_evidence_rejects_snapshot_warnings_before_writing(
+    tmp_path: Path, raw: bytes
+) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+
+    class ApiResponse(io.BytesIO):
+        headers = {
+            "x-github-dependency-graph-snapshot-warnings": "bWlzc2luZyBzbmFwc2hvdHM="
+        }
+
+    destination = tmp_path / "dependency-review-evidence"
+    with pytest.raises(ValueError, match="missing snapshots"):
+        module["record_dependency_review"](
+            environment, destination, opener=lambda request, timeout: ApiResponse(raw)
+        )
+    assert not destination.exists()
+
+
+def test_dependency_review_evidence_saves_warning_free_empty_diff(tmp_path: Path) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    destination = tmp_path / "dependency-review-evidence"
+    saved = module["record_dependency_review"](
+        environment, destination, opener=lambda request, timeout: ApiResponse(b"[]")
+    )
+    assert saved["dependency_diff_count"] == 0
+    assert (destination / "dependency-diff.json").read_bytes() == b"[]"

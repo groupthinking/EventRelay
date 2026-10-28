@@ -84,6 +84,8 @@ jobs:
           }
 
           def is_dependency_input(path: PurePosixPath) -> bool:
+              # Workflow code changes are covered by CI tests; they do not
+              # change a dependency graph and should not force a comparison.
               name = path.name
               return (
                   name in exact_names
@@ -96,7 +98,6 @@ jobs:
                   or path.as_posix() in {
                       ".github/dependabot.yaml",
                       ".github/dependabot.yml",
-                      ".github/workflows/dependency-review.yml",
                       "vendor/modules.txt",
                   }
               )
@@ -145,9 +146,6 @@ jobs:
 
                   if root_valid and all(covered(path) for path in changed if PurePosixPath(path).name == "package.json"):
                       snapshot_detector = "NpmLockfile3"
-          elif changed == [".github/workflows/dependency-review.yml"]:
-              # Exercise both focused detectors on the workflow change itself.
-              snapshot_detector = "UvLock,NpmLockfile3"
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
               handle.write(f"changed={'true' if changed else 'false'}\n")
               handle.write(f"count={len(changed)}\n")
@@ -158,8 +156,8 @@ jobs:
                   handle.writelines(f"- `{path}`\n" for path in changed)
               else:
                   handle.write(
-                      "No dependency manifests, lockfiles, or dependency-review "
-                      "configuration changed between the exact base and head trees.\n"
+                      "No dependency inputs changed between the exact base "
+                      "and head trees.\n"
                   )
           PY
 
@@ -193,15 +191,7 @@ jobs:
               locks = [Path(raw.decode("utf-8")) for raw in delta.split(b"\0") if raw
                        and Path(raw.decode("utf-8")).name == "package-lock.json"]
           else:
-              # The workflow-only PR exercises both lockfile ecosystems.
-              locks = {Path("uv.lock")}
-              for sha in (os.environ["BASE_SHA"], os.environ["HEAD_SHA"]):
-                  tree = subprocess.run(
-                      ["git", "ls-tree", "-r", "--name-only", "-z", sha],
-                      check=True, capture_output=True,
-                  ).stdout
-                  locks.update(Path(raw.decode("utf-8")) for raw in tree.split(b"\0") if raw
-                               and Path(raw.decode("utf-8")).name == "package-lock.json")
+              raise ValueError(f"Unexpected focused snapshot detector: {detector}")
 
           for sha, directory in (
               (os.environ["BASE_SHA"], os.environ["SNAPSHOT_BASE_SOURCE"]),

@@ -36,6 +36,14 @@ def record_dependency_review(
     )
     with opener(request, timeout=90) as response:
         raw_diff = response.read()
+        snapshot_warning = response.headers.get(
+            "x-github-dependency-graph-snapshot-warnings"
+        )
+    if snapshot_warning:
+        raise ValueError(
+            "Dependency graph reported missing snapshots; refusing to save "
+            "an incomplete comparison as review evidence"
+        )
     changes = json.loads(raw_diff)
     if not isinstance(changes, list) or not all(isinstance(item, dict) for item in changes):
         raise ValueError("Dependency diff API did not return a complete change list")
