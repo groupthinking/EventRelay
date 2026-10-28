@@ -93,6 +93,16 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     )
     assert "detectorsFilter" not in submission["with"]
 
+    scoped_uv = next(
+        step for step in steps if step["name"] == "Submit scoped uv lock snapshot"
+    )
+    assert steps.index(scoped_uv) == steps.index(submission) + 1
+    assert "hashFiles('uv.lock') != ''" in scoped_uv["if"]
+    assert "steps.dependency-changes.outputs.changed == 'true'" in scoped_uv["if"]
+    assert scoped_uv["run"] == "python3 scripts/ci/submit_uv_lock_snapshot.py"
+    assert scoped_uv["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
+    assert scoped_uv["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
+
     review = next(step for step in steps if step["name"] == "Dependency Review")
     assert "github.event_name == 'pull_request'" in review["if"]
     assert "steps.dependency-changes.outputs.changed == 'true'" in review["if"]
@@ -423,7 +433,8 @@ def test_dependency_review_evidence_saves_warning_free_empty_diff(
 
     destination = tmp_path / "dependency-review-evidence"
     saved = module["record_dependency_review"](
-        environment, destination, opener=lambda request, timeout: ApiResponse(b"[]")
+        environment, destination, opener=lambda request, timeout: ApiResponse(b"[]"),
+        changed_files=set(),
     )
     assert saved["dependency_diff_count"] == 0
     assert (destination / "dependency-diff.json").read_bytes() == b"[]"
