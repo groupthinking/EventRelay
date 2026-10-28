@@ -108,10 +108,12 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     )
     assert steps.index(complete_npm) == steps.index(scoped_uv) + 1
     assert "github.event_name == 'push'" in complete_npm["if"]
+    assert "github.event.pull_request.head.repo.full_name == github.repository" in complete_npm["if"]
     assert "steps.dependency-changes.outputs.changed == 'true'" in complete_npm["if"]
     assert complete_npm["run"] == "python3 scripts/ci/submit_npm_lock_snapshot.py"
     assert complete_npm["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
     assert complete_npm["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
+    assert complete_npm["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
 
     review = next(step for step in steps if step["name"] == "Dependency Review")
     assert "github.event_name == 'pull_request'" in review["if"]
