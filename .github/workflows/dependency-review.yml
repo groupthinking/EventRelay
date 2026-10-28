@@ -32,7 +32,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    timeout-minutes: 25  # Allow full-tree scan, scoped uv submission, and base/head snapshot retry
+    timeout-minutes: 30  # Allow full-tree scan, scoped lock submissions, and base/head snapshot retry
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -124,9 +124,10 @@ jobs:
                steps.dependency-changes.outputs.changed == 'true') }}
         # Scan the same full tree on main and on dependency PRs so GitHub compares
         # matching snapshot sets. Bound each pip report; on a timeout, component-
-        # detection falls back to declared source dependencies.
+        # detection falls back to declared source dependencies. A 120-second
+        # bound produced base/head drift in the #2501 exact-lock canary.
         env:
-          PipReportFileLevelTimeoutSeconds: "120"
+          PipReportFileLevelTimeoutSeconds: "240"
         uses: advanced-security/component-detection-dependency-submission-action@a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0 # v0.2.0
         with:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
