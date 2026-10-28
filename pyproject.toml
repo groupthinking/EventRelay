@@ -7,7 +7,7 @@ name = "youtube_extension"
 version = "1.0.0"
 description = "UVAI Platform - Revolutionary AI-Powered Video Learning System"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.13"
 license = {text = "MIT"}
 authors = [
     {name = "UVAI Team", email = "team@uvai.com"},
@@ -22,8 +22,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Internet :: WWW/HTTP",
@@ -65,7 +63,7 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "PyYAML>=6.0.0",
     "requests>=2.31.0",
-    "Pillow>=10.0.0",
+    "Pillow>=13.0.0",
     "google-genai>=2.21.0",
     "google-generativeai>=0.3.0",
     "opentelemetry-distro>=0.40b0",
@@ -146,7 +144,7 @@ ml = [
     "tokenizers>=0.15.0",
     "sentence-transformers>=2.2.0",
     "openai>=1.3.0",
-    "anthropic>=0.105.0",
+    "anthropic>=0.105.0,<2",
     "google-generativeai>=0.3.0",
     "cohere>=4.37.0",
     "numpy>=1.24.0",
@@ -188,7 +186,7 @@ youtube_extension = ["templates/**/*", "static/**/*", "config/**/*"]
 
 [tool.black]
 line-length = 88
-target-version = ['py39', 'py310', 'py311', 'py312']
+target-version = ['py311', 'py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -225,7 +223,7 @@ known_third_party = [
 ]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -248,7 +246,7 @@ module = [
 ignore_errors = true
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py311"
 line-length = 88
 
 [tool.ruff.lint]
