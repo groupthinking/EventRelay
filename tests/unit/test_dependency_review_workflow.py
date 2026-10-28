@@ -28,7 +28,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     job = workflow["jobs"]["dependency-review"]
     steps = job["steps"]
 
-    assert triggers["push"]["branches"] == ["main"]
+    assert triggers["push"]["branches"] == ["main", "codex/verify-clean-snapshot-base"]
 
     checkout = next(step for step in steps if step["name"] == "Checkout code")
     assert checkout["with"]["ref"] == (

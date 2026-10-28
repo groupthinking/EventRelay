@@ -2,7 +2,7 @@ name: 🔍 Dependency Review
 
 on:
   push:
-    branches: [main]
+    branches: [main, codex/verify-clean-snapshot-base]
   # No base-branch filter — see the note in ci.yml.
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
