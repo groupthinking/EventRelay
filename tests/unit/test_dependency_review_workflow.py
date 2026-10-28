@@ -72,6 +72,10 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
     assert "snapshot_detector" not in submission["if"]
     assert not any("focused" in step["name"].lower() for step in steps)
+    assert submission["uses"] == (
+        "advanced-security/component-detection-dependency-submission-action"
+        "@a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0"
+    )
     assert submission["with"]["snapshot-sha"] == (
         "${{ github.event_name == 'pull_request' && "
         "github.event.pull_request.head.sha || github.sha }}"
