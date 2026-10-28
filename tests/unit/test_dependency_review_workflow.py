@@ -212,7 +212,10 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
     [("src/app.py", "false"), ("uv.lock", "true")],
 )
 def test_dependency_detection_ignores_base_only_update_on_stale_pr(
-    tmp_path: Path, pr_path: str, expected_changed: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pr_path: str,
+    expected_changed: str,
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -265,6 +268,17 @@ def test_dependency_detection_ignores_base_only_update_on_stale_pr(
     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert values["changed"] == expected_changed
     assert values["count"] == ("1" if expected_changed == "true" else "0")
+    monkeypatch.chdir(repo)
+    recorder = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    changed_files = recorder["_changed_files"](base, head)
+    assert changed_files == {pr_path}
+    if expected_changed == "true":
+        with pytest.raises(ValueError, match="unchanged manifest"):
+            recorder["_validate_changes"](
+                [{"manifest": "package-lock.json"}], base, head, changed_files
+            )
 
 
 def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:

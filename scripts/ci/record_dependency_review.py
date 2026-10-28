@@ -15,8 +15,14 @@ from scripts.ci.submit_uv_lock_snapshot import uv_manifest
 
 
 def _changed_files(base: str, head: str) -> set[str]:
+    merge_base = subprocess.run(
+        ["git", "merge-base", base, head],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     output = subprocess.run(
-        ["git", "diff", "--name-only", "--no-renames", "-z", base, head],
+        ["git", "diff", "--name-only", "--no-renames", "-z", merge_base, head],
         check=True,
         capture_output=True,
     ).stdout
