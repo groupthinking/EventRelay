@@ -61,7 +61,6 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "environment.yml",
         "vendor/modules.txt",
         "Dockerfile",
-        ".github/dependabot.yaml",
     ):
         assert protected_input in detection_script
     assert '"git", "diff", "--name-only", "-z", base, head' in detection_script
@@ -104,18 +103,21 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
 
 
 @pytest.mark.parametrize(
-    ("changed_paths", "expected_changed"),
+    ("changed_paths", "expected_changed", "expected_count"),
     [
-        (["pyproject.toml", "uv.lock"], "true"),
-        (["apps/web/package.json", "apps/web/package-lock.json"], "true"),
-        (["requirements.txt"], "true"),
-        (["uv.lock", "requirements.txt"], "true"),
-        ([".github/workflows/dependency-review.yml"], "false"),
-        (["src/app.py"], "false"),
+        (["pyproject.toml", "uv.lock"], "true", 2),
+        (["apps/web/package.json", "apps/web/package-lock.json"], "true", 2),
+        (["requirements.txt"], "true", 1),
+        (["uv.lock", "requirements.txt"], "true", 2),
+        ([".github/workflows/dependency-review.yml"], "false", 0),
+        ([".github/dependabot.yml"], "false", 0),
+        ([".github/dependabot.yaml"], "false", 0),
+        ([".github/dependabot.yml", "apps/web/package.json"], "true", 1),
+        (["src/app.py"], "false", 0),
     ],
 )
 def test_dependency_detection_selects_full_scan_for_manifest_changes(
-    tmp_path: Path, changed_paths: list[str], expected_changed: str
+    tmp_path: Path, changed_paths: list[str], expected_changed: str, expected_count: int
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
@@ -127,6 +129,8 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
         "requirements.txt",
         "src/app.py",
         ".github/workflows/dependency-review.yml",
+        ".github/dependabot.yml",
+        ".github/dependabot.yaml",
     }:
         path = repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -177,9 +181,7 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
     subprocess.run(["bash", "-c", detection["run"]], cwd=repo, env=env, check=True)
     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert values["changed"] == expected_changed
-    assert values["count"] == str(
-        len(changed_paths) if expected_changed == "true" else 0
-    )
+    assert values["count"] == str(expected_count)
     assert "snapshot_detector" not in values
     submission = next(
         step for step in steps if step["name"] == "Submit dependency snapshots"

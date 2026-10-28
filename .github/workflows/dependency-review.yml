@@ -83,8 +83,8 @@ jobs:
           }
 
           def is_dependency_input(path: PurePosixPath) -> bool:
-              # Workflow code changes are covered by CI tests; they do not
-              # change a dependency graph and should not force a comparison.
+              # Workflow and Dependabot configuration changes are covered by
+              # CI tests; they do not change the installed dependency graph.
               name = path.name
               return (
                   name in exact_names
@@ -94,11 +94,7 @@ jobs:
                       and name.endswith((".in", ".txt"))
                   )
                   or name.endswith((".csproj", ".fsproj", ".gradle", ".gradle.kts"))
-                  or path.as_posix() in {
-                      ".github/dependabot.yaml",
-                      ".github/dependabot.yml",
-                      "vendor/modules.txt",
-                  }
+                  or path.as_posix() == "vendor/modules.txt"
               )
 
           changed = sorted(path.as_posix() for path in paths if is_dependency_input(path))
