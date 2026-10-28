@@ -1,7 +1,9 @@
-"""Submit every resolved npm lockfile version to GitHub's dependency graph.
+"""Submit resolved npm and uv lockfiles in one dependency graph snapshot.
 
 Component Detection can omit a nested second version of one package.  Use the
 lockfile's installed paths as unique keys so both versions reach the review API.
+The review action requests five snapshots per page; one combined lock submission
+keeps the full-tree and lock submissions within that page on both sides.
 """
 
 from __future__ import annotations
@@ -11,11 +13,14 @@ import json
 import os
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-CORRELATOR = "0-eventrelay-npm-lock-complete"
+from scripts.ci.submit_uv_lock_snapshot import uv_manifest
+
+CORRELATOR = "0-eventrelay-complete-locks"
 
 
 def _package_name(location: str, package: dict) -> str | None:
@@ -124,6 +129,12 @@ def submit_snapshot(environment: dict[str, str], opener=urlopen) -> dict:
         manifests[path.as_posix()] = npm_manifest(
             json.loads(path.read_text()), path.as_posix()
         )
+    uv_path = Path("uv.lock")
+    if uv_path.is_file():
+        with uv_path.open("rb") as stream:
+            manifests[uv_path.as_posix()] = uv_manifest(
+                tomllib.load(stream), uv_path.as_posix()
+            )
     if not manifests:
         return {"snapshot_id": None, "manifest_count": 0, "package_count": 0}
     snapshot = {
@@ -136,8 +147,8 @@ def submit_snapshot(environment: dict[str, str], opener=urlopen) -> dict:
             "html_url": f"https://github.com/{repository}/actions/runs/{environment['GITHUB_RUN_ID']}",
         },
         "detector": {
-            "name": "EventRelay complete npm lock",
-            "version": "1",
+            "name": "EventRelay complete npm and scoped uv locks",
+            "version": "2",
             "url": f"https://github.com/{repository}/blob/{sha}/scripts/ci/submit_npm_lock_snapshot.py",
         },
         "scanned": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
