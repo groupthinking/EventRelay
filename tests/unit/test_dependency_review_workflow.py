@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
+import runpy
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -391,11 +393,9 @@ def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "review_outcome,raw_output", [("failure", None), ("success", "")]
-)
-def test_dependency_review_evidence_preserves_composite_license_and_unknown_outputs(
-    tmp_path: Path, review_outcome: str, raw_output: str | None
+@pytest.mark.parametrize("review_outcome", ["failure", "success"])
+def test_dependency_review_evidence_preserves_large_complete_api_diff(
+    tmp_path: Path, review_outcome: str
 ) -> None:
     steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
     review = next(step for step in steps if step["name"] == "Dependency Review")
@@ -410,47 +410,52 @@ def test_dependency_review_evidence_preserves_composite_license_and_unknown_outp
         assert "always()" in step["if"]
         assert "github.event_name == 'pull_request'" in step["if"]
         assert "steps.dependency-changes.outputs.changed == 'true'" in step["if"]
-    assert record["env"]["INVALID_LICENSE_CHANGES"] == (
-        "${{ steps.review.outputs.invalid-license-changes }}"
-    )
+    assert record["run"] == "python3 scripts/ci/record_dependency_review.py"
+    assert not any("steps.review.outputs" in value for value in record["env"].values())
     assert "github.event.pull_request.head.sha" in upload["with"]["name"]
-    assert upload["with"]["path"] == "dependency-review-evidence/review.json"
+    assert upload["with"]["path"] == "dependency-review-evidence/"
     assert upload["with"]["if-no-files-found"] == "error"
 
     expression = "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
     finding = {"name": "numpy", "version": "2.5.4", "license": expression}
-    # Keep duplicated occurrences, the full AND expression, and hostile text as data.
-    invalid = json.dumps(
-        {"forbidden": [finding, finding], "unresolved": [], "unlicensed": []}
-    )
-    dependencies = json.dumps([finding, {"name": "$(touch injected)"}])
+    # This response exceeds the Actions template-object limit hit by grouped PRs.
+    changes = [finding, finding, {"name": "$(touch injected)"}] + [
+        {"name": f"package-{index}", "license": "MIT", "version": "1.0.0"}
+        for index in range(1500)
+    ]
+    raw = json.dumps(changes).encode()
+    assert len(raw) > 64_000
     environment = {
-        # A failing subprocess may print its environment in pytest's traceback.
-        # Pass only this test's inputs, never credentials from the caller.
-        "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath)),
         "BASE_SHA": "a" * 40,
         "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_API_URL": "https://api.github.com",
+        "GITHUB_TOKEN": "dummy-test-token",
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": "2",
         "REVIEW_OUTCOME": review_outcome,
-        "DEPENDENCY_CHANGES": dependencies if raw_output is None else raw_output,
-        "INVALID_LICENSE_CHANGES": invalid if raw_output is None else raw_output,
-        "VULNERABLE_CHANGES": "[]" if raw_output is None else raw_output,
-        "DENIED_CHANGES": "",
     }
-    subprocess.run(
-        ["bash", "-e", "-c", record["run"]], cwd=tmp_path, env=environment, check=True
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
     )
-    saved = json.loads((tmp_path / upload["with"]["path"]).read_text())
+    seen_requests = []
+
+    def fetch(request, timeout):
+        seen_requests.append((request, timeout))
+        return io.BytesIO(raw)
+
+    destination = tmp_path / "dependency-review-evidence"
+    module["record_dependency_review"](environment, destination, opener=fetch)
+    saved = json.loads((destination / "review.json").read_text())
     assert saved["base_sha"] == "a" * 40
     assert saved["head_sha"] == "b" * 40
     assert saved["run_id"] == "123"
     assert saved["run_attempt"] == "2"
     assert saved["review_outcome"] == review_outcome
-    assert saved["raw_outputs"] == {
-        "dependency-changes": environment["DEPENDENCY_CHANGES"],
-        "invalid-license-changes": environment["INVALID_LICENSE_CHANGES"],
-        "vulnerable-changes": environment["VULNERABLE_CHANGES"],
-        "denied-changes": "",
-    }
+    assert saved["dependency_diff_count"] == len(changes)
+    assert saved["dependency_diff_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert (destination / saved["dependency_diff_file"]).read_bytes() == raw
+    assert saved["dependency_diff_source"] == seen_requests[0][0].full_url
+    assert seen_requests[0][1] == 90
+    assert seen_requests[0][0].get_header("Authorization") == "Bearer dummy-test-token"
     assert not (tmp_path / "injected").exists()
