@@ -42,8 +42,8 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
 
-  # MCP YouTube server dependencies.
-  - package-ecosystem: "pip"
+  # MCP YouTube server dependencies (pyproject.toml and uv.lock).
+  - package-ecosystem: "uv"
     directory: "/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0"
     schedule:
       interval: "weekly"

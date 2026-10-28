@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -28,23 +24,26 @@ def _load_dependabot_config() -> dict:
 
 
 @pytest.mark.parametrize(
-    "directory",
+    ("directory", "ecosystem"),
     [
-        "/",
-        "/src/youtube_extension/backend",
-        "/sdk/python",
-        "/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0",
+        ("/", "pip"),
+        ("/src/youtube_extension/backend", "pip"),
+        ("/sdk/python", "pip"),
+        ("/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0", "uv"),
     ],
 )
-def test_dependabot_tracks_python_packages_weekly(directory: str) -> None:
+def test_dependabot_tracks_python_packages_weekly(
+    directory: str, ecosystem: str
+) -> None:
     updates = [
         update
         for update in _load_dependabot_config()["updates"]
-        if update["package-ecosystem"] == "pip"
-        and update["directory"] == directory
+        if update["directory"] == directory
+        and update["package-ecosystem"] in {"pip", "uv"}
     ]
 
-    assert len(updates) == 1, f"Expected exactly one pip entry for {directory}"
+    assert len(updates) == 1, f"Expected exactly one entry for {directory}"
+    assert updates[0]["package-ecosystem"] == ecosystem
     assert updates[0]["schedule"]["interval"] == "weekly"
     assert updates[0]["open-pull-requests-limit"] == 10
 
