@@ -63,7 +63,8 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "Dockerfile",
     ):
         assert protected_input in detection_script
-    assert '"git", "diff", "--name-only", "-z", base, head' in detection_script
+    assert '"git", "merge-base", base, head' in detection_script
+    assert '"git", "diff", "--name-only", "-z", merge_base, head' in detection_script
 
     submission = next(
         step for step in steps if step["name"] == "Submit dependency snapshots"
@@ -192,6 +193,66 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
     )
     assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
     assert "steps.dependency-changes.outputs.snapshot_detector" not in submission["if"]
+
+
+@pytest.mark.parametrize(
+    ("pr_path", "expected_changed"),
+    [("src/app.py", "false"), ("uv.lock", "true")],
+)
+def test_dependency_detection_ignores_base_only_update_on_stale_pr(
+    tmp_path: Path, pr_path: str, expected_changed: str
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for name in ("package-lock.json", "uv.lock", "src/app.py"):
+        path = repo / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("before\n")
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    git("init", "-q", "-b", "main")
+    git("add", ".")
+    commit = (
+        "-c",
+        "user.name=Workflow test",
+        "-c",
+        "user.email=workflow@example.com",
+        "commit",
+        "-qm",
+    )
+    git(*commit, "initial")
+    git("switch", "-q", "-c", "feature")
+    (repo / pr_path).write_text("pr change\n")
+    git("add", ".")
+    git(*commit, "pr")
+    head = git("rev-parse", "HEAD")
+
+    git("switch", "-q", "main")
+    (repo / "package-lock.json").write_text("base update\n")
+    git("add", ".")
+    git(*commit, "base dependency update")
+    base = git("rev-parse", "HEAD")
+    assert "package-lock.json" in git("diff", "--name-only", base, head)
+
+    steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
+    detection = next(
+        step for step in steps if step["name"] == "Detect dependency manifest changes"
+    )
+    output = tmp_path / "github-output"
+    env = os.environ | {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_OUTPUT": str(output),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "github-summary"),
+    }
+    subprocess.run(["bash", "-c", detection["run"]], cwd=repo, env=env, check=True)
+    values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+    assert values["changed"] == expected_changed
+    assert values["count"] == ("1" if expected_changed == "true" else "0")
 
 
 def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:

@@ -38,10 +38,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          # PR runs compare the exact base and head trees before asking the
-          # dependency graph to compare snapshots. This prevents an unrelated
-          # source/test-only PR from inheriting stale graph metadata as a fake
-          # dependency addition.
+          # PR runs inspect changes introduced after the shared ancestor.
+          # A dependency update merged into main after this PR branched must
+          # not turn a source-only PR into a dependency-review run.
           fetch-depth: 0
           persist-credentials: false
 
@@ -60,8 +59,14 @@ jobs:
 
           base = os.environ["BASE_SHA"]
           head = os.environ["HEAD_SHA"]
+          merge_base = subprocess.run(
+              ["git", "merge-base", base, head],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.strip()
           output = subprocess.run(
-              ["git", "diff", "--name-only", "-z", base, head],
+              ["git", "diff", "--name-only", "-z", merge_base, head],
               check=True,
               capture_output=True,
           ).stdout
@@ -107,8 +112,8 @@ jobs:
                   handle.writelines(f"- `{path}`\n" for path in changed)
               else:
                   handle.write(
-                      "No dependency inputs changed between the exact base "
-                      "and head trees.\n"
+                      "No dependency inputs introduced by this PR since "
+                      "its merge base.\n"
                   )
           PY
 
