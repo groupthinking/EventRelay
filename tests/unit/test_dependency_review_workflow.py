@@ -103,6 +103,16 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     assert scoped_uv["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
     assert scoped_uv["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
 
+    complete_npm = next(
+        step for step in steps if step["name"] == "Submit complete npm lock snapshot"
+    )
+    assert steps.index(complete_npm) == steps.index(scoped_uv) + 1
+    assert "github.event_name == 'push'" in complete_npm["if"]
+    assert "steps.dependency-changes.outputs.changed == 'true'" in complete_npm["if"]
+    assert complete_npm["run"] == "python3 scripts/ci/submit_npm_lock_snapshot.py"
+    assert complete_npm["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
+    assert complete_npm["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
+
     review = next(step for step in steps if step["name"] == "Dependency Review")
     assert "github.event_name == 'pull_request'" in review["if"]
     assert "steps.dependency-changes.outputs.changed == 'true'" in review["if"]
@@ -467,13 +477,17 @@ def test_dependency_review_rejects_warning_free_graph_drift(
         ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
     )
 
-    def commit_lock(version: str) -> str:
+    def commit_lock(version: str, nested_version: str) -> str:
         lock = {
             "lockfileVersion": 3,
             "packages": {
                 "": {"name": "eventrelay", "version": "1.0.0"},
                 "node_modules/fast-uri": {"version": version, "dev": True},
                 "node_modules/hono": {"version": "4.13.7", "dev": True},
+                "node_modules/filelist/node_modules/brace-expansion": {
+                    "version": nested_version,
+                    "dev": True,
+                },
             },
         }
         (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
@@ -483,8 +497,8 @@ def test_dependency_review_rejects_warning_free_graph_drift(
             ["git", "rev-parse", "HEAD"], cwd=repo, text=True
         ).strip()
 
-    base = commit_lock("3.1.7")
-    head = commit_lock("3.1.9")
+    base = commit_lock("3.1.7", "2.1.4")
+    head = commit_lock("3.1.9", "2.1.7")
     monkeypatch.chdir(repo)
     module = runpy.run_path(
         str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
@@ -507,6 +521,12 @@ def test_dependency_review_rejects_warning_free_graph_drift(
         "scope": "development",
     }
     removed = {**added, "change_type": "removed", "version": "3.1.7"}
+    nested_added = {
+        **added,
+        "name": "brace-expansion",
+        "version": "2.1.7",
+    }
+    nested_removed = {**nested_added, "change_type": "removed", "version": "2.1.4"}
 
     class ApiResponse(io.BytesIO):
         headers: dict[str, str] = {}
@@ -522,12 +542,18 @@ def test_dependency_review_rejects_warning_free_graph_drift(
         return destination
 
     assert json.loads(
-        (record([added, removed], "valid") / "dependency-diff.json").read_text()
+        (
+            record([added, removed, nested_added, nested_removed], "valid")
+            / "dependency-diff.json"
+        ).read_text()
     ) == [
         added,
         removed,
+        nested_added,
+        nested_removed,
     ]
     invalid_cases = [
+        ([added, removed], "Incomplete npm dependency diff"),
         ([added, {**removed, "manifest": "uv.lock"}], "unchanged manifest"),
         ([added, {**removed, "scope": "runtime"}], "lockfile version/scope"),
         (

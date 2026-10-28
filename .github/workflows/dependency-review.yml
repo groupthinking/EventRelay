@@ -144,6 +144,16 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/ci/submit_uv_lock_snapshot.py
 
+      - name: Submit complete npm lock snapshot
+        if: >-
+          ${{ github.event_name == 'push' ||
+              (github.event_name == 'pull_request' &&
+               steps.dependency-changes.outputs.changed == 'true') }}
+        env:
+          SNAPSHOT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          SNAPSHOT_REF: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
+        run: python3 scripts/ci/submit_npm_lock_snapshot.py
+
       - name: Dependency Review
         id: review
         if: >-

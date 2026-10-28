@@ -68,6 +68,7 @@ def _validate_changes(
     changes: list[dict], base: str, head: str, changed_files: set[str]
 ) -> None:
     npm_locks: dict[tuple[str, str], set[tuple[str, str, str]]] = {}
+    observed_npm: dict[str, dict[str, set[tuple[str, str, str]]]] = {}
     uv_locks: dict[tuple[str, str], set[tuple[str, str, str]]] = {}
     observed_uv: dict[str, dict[str, set[tuple[str, str, str]]]] = {}
     for change in changes:
@@ -108,13 +109,31 @@ def _validate_changes(
         on_head = component in npm_locks[(head, manifest)]
         kind = change.get("change_type")
         if kind == "added" and on_head and not on_base:
+            observed_npm.setdefault(manifest, {"added": set(), "removed": set()})[
+                "added"
+            ].add(component)
             continue
         if kind == "removed" and on_base and not on_head:
+            observed_npm.setdefault(manifest, {"added": set(), "removed": set()})[
+                "removed"
+            ].add(component)
             continue
         raise ValueError(
             "npm dependency change does not match lockfile version/scope: "
             f"{manifest} {name}@{version} {scope} {kind}"
         )
+    for manifest in changed_files:
+        if not manifest.endswith("package-lock.json"):
+            continue
+        for sha in (base, head):
+            if (sha, manifest) not in npm_locks:
+                npm_locks[(sha, manifest)] = _npm_lock_components(sha, manifest)
+        expected = {
+            "added": npm_locks[(head, manifest)] - npm_locks[(base, manifest)],
+            "removed": npm_locks[(base, manifest)] - npm_locks[(head, manifest)],
+        }
+        if observed_npm.get(manifest, {"added": set(), "removed": set()}) != expected:
+            raise ValueError(f"Incomplete npm dependency diff for {manifest}")
     for manifest in changed_files:
         if manifest != "uv.lock":
             continue
