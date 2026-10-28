@@ -71,14 +71,31 @@ def test_real_npm_locks_include_all_resolved_versions() -> None:
     for path in locks:
         lock = json.loads(Path(path).read_text())
         manifest = npm_manifest(lock, path.as_posix())
-        expected = sum(
-            "node_modules/" in location
-            and bool(package.get("version"))
-            and not package.get("link")
-            and (bool(package.get("name")) or "node_modules/" in location)
-            for location, package in lock["packages"].items()
+        expected = len(
+            {
+                (
+                    package.get("name") or location.rsplit("node_modules/", 1)[1],
+                    package.get("version"),
+                )
+                for location, package in lock["packages"].items()
+                if "node_modules/" in location
+                and package.get("version")
+                and not package.get("link")
+            }
         )
         assert len(manifest["resolved"]) == expected
+
+
+def test_duplicate_version_uses_runtime_scope_regardless_of_path_order() -> None:
+    paths = [
+        ("node_modules/dev/node_modules/lru-cache", {"version": "11.5.3", "dev": True}),
+        ("node_modules/runtime/node_modules/lru-cache", {"version": "11.5.3"}),
+    ]
+    for ordered in (paths, list(reversed(paths))):
+        lock = {"lockfileVersion": 3, "packages": dict(ordered)}
+        rows = npm_manifest(lock, "package-lock.json")["resolved"]
+        assert list(rows) == ["lru-cache@11.5.3"]
+        assert rows["lru-cache@11.5.3"]["scope"] == "runtime"
 
 
 def test_npm_manifest_rejects_unknown_lock_format() -> None:
