@@ -55,6 +55,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import json
           from pathlib import PurePosixPath
           import subprocess
 
@@ -109,8 +110,41 @@ jobs:
               if "uv.lock" in changed:
                   snapshot_detector = "UvLock"
           elif changed and all(PurePosixPath(path).name in {"package.json", "package-lock.json"} for path in changed):
-              if any(PurePosixPath(path).name == "package-lock.json" for path in changed):
-                  snapshot_detector = "NpmLockfile3"
+              locks = {path for path in changed if PurePosixPath(path).name == "package-lock.json"}
+              if locks:
+                  workspace_patterns = []
+                  root_lock_packages = {}
+                  root_valid = True
+                  if "package-lock.json" in locks:
+                      def head_json(path):
+                          content = subprocess.run(
+                              ["git", "show", f"{head}:{path}"],
+                              check=True, capture_output=True,
+                          ).stdout
+                          return json.loads(content)
+
+                      try:
+                          root = head_json("package.json")
+                          workspaces = root.get("workspaces", [])
+                          workspace_patterns = workspaces.get("packages", []) if isinstance(workspaces, dict) else workspaces
+                          root_lock_packages = head_json("package-lock.json").get("packages", {})
+                          root_valid = isinstance(workspace_patterns, list) and isinstance(root_lock_packages, dict)
+                      except (subprocess.CalledProcessError, json.JSONDecodeError, AttributeError):
+                          root_valid = False
+
+                  def covered(manifest):
+                      path = PurePosixPath(manifest)
+                      if path.with_name("package-lock.json").as_posix() in locks:
+                          return True
+                      directory = path.parent.as_posix()
+                      return (
+                          "package-lock.json" in locks
+                          and directory in root_lock_packages
+                          and any(PurePosixPath(directory).match(pattern) for pattern in workspace_patterns)
+                      )
+
+                  if root_valid and all(covered(path) for path in changed if PurePosixPath(path).name == "package.json"):
+                      snapshot_detector = "NpmLockfile3"
           elif changed == [".github/workflows/dependency-review.yml"]:
               # Exercise both focused detectors on the workflow change itself.
               snapshot_detector = "UvLock,NpmLockfile3"
@@ -144,6 +178,7 @@ jobs:
         run: |
           python - <<'PY'
           import os
+          import json
           from pathlib import Path
           import subprocess
 
@@ -176,7 +211,25 @@ jobs:
               target.mkdir(parents=True, exist_ok=True)
               for lock in locks:
                   manifest = lock.with_name("pyproject.toml" if lock.name == "uv.lock" else "package.json")
-                  for source in (lock, manifest):
+                  sources = {lock, manifest}
+                  if lock == Path("package-lock.json"):
+                      root_result = subprocess.run(
+                          ["git", "show", f"{sha}:package.json"],
+                          capture_output=True,
+                      )
+                      lock_result = subprocess.run(
+                          ["git", "show", f"{sha}:package-lock.json"],
+                          capture_output=True,
+                      )
+                      if root_result.returncode == 0 and lock_result.returncode == 0:
+                          root = json.loads(root_result.stdout)
+                          workspaces = root.get("workspaces", [])
+                          patterns = workspaces.get("packages", []) if isinstance(workspaces, dict) else workspaces
+                          lock_data = json.loads(lock_result.stdout)
+                          for name in lock_data.get("packages", {}):
+                              if name and any(Path(name).match(pattern) for pattern in patterns):
+                                  sources.add(Path(name) / "package.json")
+                  for source in sources:
                       result = subprocess.run(
                           ["git", "show", f"{sha}:{source.as_posix()}"], capture_output=True,
                       )
