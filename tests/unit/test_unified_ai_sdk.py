@@ -62,6 +62,15 @@ class TestUnifiedAISDK:
         assert result.content == "alpha\nbeta"
         assert result.provider == "claude"
         assert result.tokens_used == 33
+        call_kwargs = sdk._anthropic_client.messages.create.await_args.kwargs
+        assert call_kwargs == {
+            "model": "claude-opus-4-8",
+            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": "Summarize this"}],
+            "timeout": 60.0,
+            "thinking": {"type": "adaptive"},
+        }
+        assert not {"temperature", "top_p", "top_k"} & call_kwargs.keys()
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize("model", ["gemini-2.5-flash", "gemini-3.8-flash"])
