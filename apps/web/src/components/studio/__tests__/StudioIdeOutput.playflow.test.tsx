@@ -62,8 +62,6 @@ describe('StudioIdeOutput playflow', () => {
         reviewActions={[
           { tool: 'review_action', status: 'proposed', result: 'Review evidence' },
         ]}
-        onAct={() => undefined}
-        canAct
       />,
     );
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
@@ -71,6 +69,24 @@ describe('StudioIdeOutput playflow', () => {
     expect(card.textContent).toMatch(/review this result/i);
     expect(card.textContent).toMatch(/needs review/i);
     expect(card.textContent).toMatch(/Review evidence/);
-    expect(screen.getByTestId('studio-review-act-button').textContent).toMatch(/Act on this run/);
+    fireEvent.click(screen.getByTestId('studio-review-act-button'));
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/No tool has been executed/i);
+  });
+
+  it('lets the viewer inspect a real pending tool proposal', () => {
+    render(
+      <StudioIdeOutput
+        video={baseVideo}
+        reviewActions={[
+          { tool: 'create_workflow_task', input: { title: 'Draft a task from the video' }, status: 'pending', result: 'Draft a task from the video' },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
+    expect(screen.getByText('Needs review')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('studio-review-act-button'));
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/create_workflow_task/);
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/"title": "Draft a task from the video"/);
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/No tool has been executed/i);
   });
 });

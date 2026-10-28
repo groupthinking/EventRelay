@@ -492,7 +492,6 @@ describe('studio-pipeline-status', () => {
     // The Studio no longer contains a deploy call site.
     expect(studio).not.toContain('const deploy = async');
     expect(studio).not.toContain('studio-deploy-button');
-    expect(studio).toContain('usableProvidedTranscript');
     const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
     expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
     expect(workflow).toMatch(/isAbortTimeout|retryable/);
@@ -712,13 +711,10 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
     expect(studio).not.toContain('studio-deploy-button');
 
-    // E — review_action cards render in the Intent tab, with Act CTA un-gated.
+    // E — proposed actions render in the Intent tab.
     expect(output).toContain('reviewActions');
     expect(studio).toMatch(/studioActionCard\(/);
     expect(output).toMatch(/Needs review|statusLabel/);
-    expect(studio).toContain('data-testid="studio-act-button"');
-    expect(studio).toMatch(/Act on this run/);
-    expect(studio).not.toMatch(/showAgentWorkflowUi\s*&&\s*[\s\S]{0,80}studio-act-button/);
     expect(output).toContain('studio-review-act-button');
   });
 

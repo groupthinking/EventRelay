@@ -8,6 +8,7 @@ import type { StudioStackCheckView } from '@/lib/official-templates';
 
 export type StudioReviewActionInput = {
   tool: string;
+  input?: Record<string, unknown>;
   status: string;
   result?: string;
 };
@@ -46,9 +47,6 @@ export default function StudioIdeOutput({
   stackChecks = [],
   reviewActions = [],
   packWorkbench,
-  onAct,
-  actBusy = false,
-  canAct = false,
 }: {
   video: Video | undefined;
   specReview?: ReactNode;
@@ -56,11 +54,9 @@ export default function StudioIdeOutput({
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
   packWorkbench?: ReactNode;
-  onAct?: () => void;
-  actBusy?: boolean;
-  canAct?: boolean;
 }) {
   const [active, setActive] = useState<OutputSection>('events');
+  const [reviewingAction, setReviewingAction] = useState<string | null>(null);
 
   const hasContent = Boolean(
     video?.videoPack ||
@@ -249,6 +245,7 @@ export default function StudioIdeOutput({
               <>
                 {reviewActions.map((action, i) => {
                   const card = studioActionCard(action);
+                  const actionKey = `${video?.id ?? 'none'}:${action.tool}:${i}`;
                   return (
                     <li
                       key={`${action.tool}-${i}`}
@@ -265,16 +262,30 @@ export default function StudioIdeOutput({
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
-                          {card.kind === 'review' && onAct ? (
+                          {card.kind === 'review' ? (
                             <button
                               type="button"
                               data-testid="studio-review-act-button"
-                              onClick={onAct}
-                              disabled={actBusy || !canAct}
-                              className="uvai-btn uvai-btn-primary mt-3 disabled:opacity-40"
+                              onClick={() => setReviewingAction(reviewingAction === actionKey ? null : actionKey)}
+                              aria-expanded={reviewingAction === actionKey}
+                              className="uvai-btn uvai-btn-primary mt-3"
                             >
-                              {actBusy ? 'Acting…' : 'Act on this run'}
+                              {reviewingAction === actionKey ? 'Hide proposal' : 'Review proposal'}
                             </button>
+                          ) : null}
+                          {reviewingAction === actionKey ? (
+                            <div data-testid="studio-proposal-detail" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                              <p>Proposed tool: {action.tool}</p>
+                              <p>Status: {action.status}. No tool has been executed from this review.</p>
+                              {action.input ? (
+                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 text-slate-800">
+                                  {JSON.stringify(action.input, null, 2)}
+                                </pre>
+                              ) : (
+                                <p>Proposal arguments are unavailable for this run.</p>
+                              )}
+                              <p>{card.detail}</p>
+                            </div>
                           ) : null}
                         </div>
                       </div>
