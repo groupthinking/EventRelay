@@ -21,17 +21,23 @@ DEVELOPMENT_EXTRAS = frozenset({"dev", "docs"})
 CORRELATOR = "0-eventrelay-uv-lock-scoped"
 
 
-def _reachable(roots: set[str], packages_by_name: dict[str, list[dict]]) -> set[str]:
-    visited: set[str] = set()
+def _reachable(roots: list[dict], packages_by_name: dict[str, list[dict]]) -> set[str]:
+    visited: set[tuple[str, tuple[str, ...]]] = set()
+    reachable: set[str] = set()
     pending = deque(roots)
     while pending:
-        name = pending.popleft()
-        if name in visited:
+        dependency = pending.popleft()
+        name = dependency["name"]
+        extras = tuple(sorted(dependency.get("extra", [])))
+        if (name, extras) in visited:
             continue
-        visited.add(name)
+        visited.add((name, extras))
+        reachable.add(name)
         for package in packages_by_name.get(name, []):
-            pending.extend(dependency["name"] for dependency in package.get("dependencies", []))
-    return visited
+            pending.extend(package.get("dependencies", []))
+            for extra in extras:
+                pending.extend(package.get("optional-dependencies", {}).get(extra, []))
+    return reachable
 
 
 def uv_manifest(lock: dict, location: str = "uv.lock") -> dict:
@@ -49,17 +55,19 @@ def uv_manifest(lock: dict, location: str = "uv.lock") -> dict:
     for package in packages:
         packages_by_name[package["name"]].append(package)
 
-    direct_runtime = {dependency["name"] for dependency in root.get("dependencies", [])}
-    direct_development: set[str] = set()
+    runtime_roots = list(root.get("dependencies", []))
+    development_roots: list[dict] = []
     for extra, dependencies in root.get("optional-dependencies", {}).items():
-        target = direct_development if extra in DEVELOPMENT_EXTRAS else direct_runtime
-        target.update(dependency["name"] for dependency in dependencies)
+        target = development_roots if extra in DEVELOPMENT_EXTRAS else runtime_roots
+        target.extend(dependencies)
     for group, dependencies in root.get("dev-dependencies", {}).items():
-        target = direct_development if group in DEVELOPMENT_EXTRAS else direct_runtime
-        target.update(dependency["name"] for dependency in dependencies)
+        target = development_roots if group in DEVELOPMENT_EXTRAS else runtime_roots
+        target.extend(dependencies)
 
-    runtime = _reachable(direct_runtime, packages_by_name)
-    development = _reachable(direct_development, packages_by_name)
+    direct_runtime = {dependency["name"] for dependency in runtime_roots}
+    direct_development = {dependency["name"] for dependency in development_roots}
+    runtime = _reachable(runtime_roots, packages_by_name)
+    development = _reachable(development_roots, packages_by_name)
     resolved = {}
     for package in packages:
         if "registry" not in package.get("source", {}):
