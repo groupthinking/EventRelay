@@ -17,7 +17,7 @@
     "test:studio-preflight:services": "node scripts/run-studio-preflight-services.mjs"
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^4.0.90",
+    "@ai-sdk/gateway": "4.0.126",
     "@ai-sdk/react": "4.0.117",
     "@flags-sdk/vercel": "^1.4.9",
     "@google/genai": "^2.24.0",
