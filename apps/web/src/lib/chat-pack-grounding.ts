@@ -309,6 +309,15 @@ function readyPackFromRecord(
       );
     }
     step = runbookStepToChatContext(canonicalStep, runbook.steps.length);
+    for (const field of Object.keys(options.step) as Array<keyof ChatStepContext>) {
+      if (JSON.stringify(options.step[field]) !== JSON.stringify(step[field])) {
+        return packFailure(
+          400,
+          'step_context_mismatch',
+          'This step does not match the saved Video Pack. Refresh the runbook and try again.',
+        );
+      }
+    }
   }
   return {
     ok: true,
