@@ -1,8 +1,10 @@
 import asyncio
 import json
 
-import anthropic
-import httpx2 as httpx
+import pytest
+
+anthropic = pytest.importorskip("anthropic", minversion="2.0")
+httpx = pytest.importorskip("httpx2")
 
 from agents.mcp_tools.tri_model_consensus_tool import TriModelConsensusTool
 from unified_ai_sdk import AIRequest, ModelProvider, TaskType, UnifiedAISDK
