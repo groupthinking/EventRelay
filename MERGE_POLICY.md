@@ -113,27 +113,34 @@ strand a change permanently pending. v1 listed `Security` among its required
 six, and dropping every security scan out of the required set would be a
 weakening introduced by the rewrite that set out to make this gate precise.
 
-> **What requiring these does and does not buy you.** Four of the six cannot
-> fail on findings, by construction, in `.github/workflows/security.yml`:
->
-> | Job | Why it always reports `success` |
-> | --- | --- |
-> | `npm-audit` | `continue-on-error: true` |
-> | `python-safety` | `\|\| true` **and** `continue-on-error: true` |
-> | `bandit` | `\|\| true` |
-> | `trivy` | `exit-code: '0'` on both invocations |
->
-> `Security Scan - python` and `Security Scan - javascript` are CodeQL matrix
-> jobs; they report that analysis completed and upload alerts to the Security
-> tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
-> not something the workflow decides.
->
-> So gate 2 requires these security scan jobs (check-runs) to **run and complete** —
-> which catches a scan that crashed, timed out, or was silently dropped from the
-> pipeline. It is not a findings gate, and this policy should not be read as
-> claiming vulnerability enforcement. Making findings actually block is a change to
-> `security.yml`, with its own diff and its own blast radius; see *What is
-> deliberately not here*.
+`trivy` is temporarily a required **scan-completion gate** for the dependency
+repair bootstrap (#2425, PR #2409). Image build or scanner execution errors
+still fail the job, but reported vulnerabilities do not (`exit-code: '0'`).
+The HIGH/CRITICAL SARIF includes findings without a fix; SARIF, exact source
+commit and image identity are retained even when the job fails. A green `trivy`
+or uppercase `Trivy` SARIF-ingestion check does not establish a clean image.
+
+The dependency repairs are separated from final strict enforcement. This is
+partial remediation, with no accepted baseline and no risk acceptance for the
+remaining findings. Parent #2396 stays open until a re-fetched exact image or
+separately reviewed applicability/VEX evidence accounts for every finding.
+See [the bootstrap evidence and remaining gates](docs/security/image-remediation-bootstrap.md).
+Enable the final `exit-code: '1'` HIGH/CRITICAL gate in a separately reviewed
+change after that accounting, or introduce an explicitly reviewed delta policy
+with package/version/path identity and regression tests. Keep
+`limit-severities-for-sarif: true` so the pinned action honors the threshold.
+
+No exceptions are accepted by the current image scan. Existing bare IDs in
+`.trivyignore` are not evidence of approved risk acceptance and are not applied.
+Any future exception must be introduced in a separately reviewed change with
+an exact advisory/package/version/image scope, applicability evidence,
+compensating controls, an accountable approver, linked issue, expiry, and an
+enforced expiry check. A missing advisory or unproven exposure remains unresolved.
+
+The other security jobs also remain completion gates: `npm-audit`, `python-safety`,
+and `bandit` still tolerate findings. CodeQL check failure also depends on the
+repository's code-scanning settings. Their green conclusions do not establish
+absence of vulnerabilities.
 
 > **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
 > `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads
@@ -252,16 +259,13 @@ laundering itself as enforcement.
 - **No evidence ledger requirement.** v1 mandated a receipt comment on #898 for
   every gate evaluation. Nothing consumed those receipts. Git history and
   check runs are the ledger.
-- **No change to what the security scans enforce.** Gate 2 requires the six
-  security checks to run and complete; four of them cannot fail on findings, as
-  documented there. Turning `npm-audit`, `python-safety`, `bandit`, and `trivy`
-  into blocking gates means removing their `continue-on-error` / `|| true` /
-  `exit-code: '0'` escapes in `security.yml`, which will fail pull requests on
-  the existing backlog of findings the moment it lands. That is a deliberate
-  decision about tolerance for known vulnerabilities, not a documentation fix,
-  so it is left to its own pull request. Requiring the checks first is still
-  worth doing: it makes a scan that crashes or quietly disappears from the
-  pipeline visible, which is the failure this policy can actually close.
+- **Strict image enforcement is deferred explicitly.** The #2425 bootstrap
+  keeps `trivy` required for scan completion and evidence retention while #2396
+  owns the unresolved findings and final enforcement. This is not a clean-image
+  claim or an approved exception list. Do not automatically demote `trivy` or
+  suppress findings for a high failure rate; the 50% demotion rule applies to
+  broken execution, not to valid security findings. Final enforcement requires
+  the separate review and finding accounting described in gate 2.
 
 ## Review clock
 
