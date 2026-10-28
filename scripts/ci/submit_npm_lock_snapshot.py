@@ -7,7 +7,6 @@ lockfile's installed paths as unique keys so both versions reach the review API.
 from __future__ import annotations
 
 import datetime
-import hashlib
 import json
 import os
 import re
@@ -71,10 +70,7 @@ def npm_manifest(lock: dict, location: str) -> dict:
         if name and isinstance(version, str) and not package.get("link"):
             entries[package_location] = (name, version, package)
 
-    keys = {
-        path: f"{name}@{version}#{hashlib.sha256(path.encode()).hexdigest()[:12]}"
-        for path, (name, version, _) in entries.items()
-    }
+    keys = {path: f"{name}@{version}" for path, (name, version, _) in entries.items()}
     locations = set(entries)
     resolved = {}
     for path, (name, version, package) in entries.items():
@@ -84,12 +80,22 @@ def npm_manifest(lock: dict, location: str) -> dict:
                 child = _resolve_child(path, child_name, locations)
                 if child is not None:
                     children.add(keys[child])
-        resolved[keys[path]] = {
-            "package_url": f"pkg:npm/{quote(name, safe='/')}@{quote(version, safe='')}",
-            "relationship": "direct" if name in direct_names else "indirect",
-            "scope": "development" if package.get("dev") is True else "runtime",
-            "dependencies": sorted(children),
-        }
+        key = keys[path]
+        scope = "development" if package.get("dev") is True else "runtime"
+        if key not in resolved:
+            resolved[key] = {
+                "package_url": f"pkg:npm/{quote(name, safe='/')}@{quote(version, safe='')}",
+                "relationship": "direct" if name in direct_names else "indirect",
+                "scope": scope,
+                "dependencies": set(),
+            }
+        elif scope == "runtime":
+            # The same version may occur at both dev and runtime paths. Its
+            # effective graph scope must be stable and include runtime.
+            resolved[key]["scope"] = "runtime"
+        resolved[key]["dependencies"].update(children)
+    for package in resolved.values():
+        package["dependencies"] = sorted(package["dependencies"])
     return {
         "name": location,
         "file": {"source_location": location},

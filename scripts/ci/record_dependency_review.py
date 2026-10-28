@@ -38,18 +38,22 @@ def _npm_lock_components(sha: str, manifest: str) -> set[tuple[str, str, str]]:
     packages = lock.get("packages")
     if not isinstance(packages, dict):
         raise ValueError(f"Invalid npm lockfile in {sha}:{manifest}")
-    components = set()
+    components: dict[tuple[str, str], str] = {}
     for location, package in packages.items():
         if not isinstance(location, str) or not isinstance(package, dict):
             raise ValueError(f"Invalid npm lockfile entry in {sha}:{manifest}")
+        if "node_modules/" not in location:
+            continue
         name = package.get("name")
         if not name and "node_modules/" in location:
             name = location.rsplit("node_modules/", 1)[1]
         version = package.get("version")
         if isinstance(name, str) and isinstance(version, str):
             scope = "development" if package.get("dev") is True else "runtime"
-            components.add((name, version, scope))
-    return components
+            identity = (name, version)
+            if identity not in components or scope == "runtime":
+                components[identity] = scope
+    return {(name, version, scope) for (name, version), scope in components.items()}
 
 
 def _uv_lock_components(sha: str, manifest: str) -> set[tuple[str, str, str]]:
