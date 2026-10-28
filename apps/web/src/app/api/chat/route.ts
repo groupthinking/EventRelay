@@ -137,12 +137,15 @@ export async function POST(request: Request) {
       : [];
     const query = body.query || body.message || '';
 
-    const sparkleResponse = resolveSparklePillsResponse({
-      query: typeof query === 'string' ? query : String(query),
-      sparkleInterview: body.sparkleInterview,
-    });
-    if (sparkleResponse) {
-      return NextResponse.json(sparkleResponse);
+    if (!packBinding) {
+      const sparkleResponse = resolveSparklePillsResponse({
+        query: typeof query === 'string' ? query : String(query),
+        sparkleIntent: body.sparkleIntent,
+        sparkleInterview: body.sparkleInterview,
+      });
+      if (sparkleResponse) {
+        return NextResponse.json(sparkleResponse);
+      }
     }
 
     if (isPro) {

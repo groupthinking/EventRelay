@@ -25,6 +25,9 @@ vi.mock('@/lib/billing/grok-client', () => ({
 import { POST } from '@/app/api/chat/route';
 import { resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
 import { resetChatQuotaForTests } from '@/lib/billing/chat-quota';
+import { buildIdentityPack } from '@/lib/video-pack';
+import { QJ_TRANSCRIPT, QJ_VIDEO_ID } from '@/lib/__fixtures__/qj-z5ohr7sga-emit';
+import * as store from '@/lib/video-pack-store';
 
 describe('POST /api/chat sparkle pills interview-first flow', () => {
   beforeEach(() => {
@@ -86,5 +89,88 @@ describe('POST /api/chat sparkle pills interview-first flow', () => {
     expect(body.answer).toContain('5 sessions completed per week');
     expect(generateText).not.toHaveBeenCalled();
     expect(grokChatCompletion).not.toHaveBeenCalled();
+  });
+
+  it('keeps pack-bound sparkle requests on grounded chat instead of deterministic planner', async () => {
+    const pack = buildIdentityPack(QJ_VIDEO_ID);
+    pack.transcript = QJ_TRANSCRIPT;
+    pack.id = `vp:v0:${QJ_VIDEO_ID}`;
+    vi.spyOn(store, 'getPackRecordWithMeta').mockResolvedValue({
+      outcome: 'hit',
+      record: { state: 'ready', pack },
+      store: { backend: 'memory', ok: true },
+    });
+
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query: 'Build me a system for using sparkle pills',
+        video_id: QJ_VIDEO_ID,
+        pack_id: `vp:v0:${QJ_VIDEO_ID}`,
+        sparkleInterview: {
+          useCase: 'Weekday focus sessions',
+          trigger: 'Weekdays at 08:30',
+          tools: ['Calendar', 'Slack'],
+          constraints: 'No messages after 21:00',
+          successSignal: '5 sessions weekly',
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.provider).toBe('vercel-ai-gateway');
+    expect(body.requiresInterview).toBeUndefined();
+    expect(body.answer).toBe('gateway reply');
+    expect(generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps pack-bound sparkle requests fail-closed when no ready pack exists', async () => {
+    vi.spyOn(store, 'getPackRecordWithMeta').mockResolvedValue({
+      outcome: 'miss',
+      store: { backend: 'memory', ok: true },
+    });
+
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query: 'Build me a system for using sparkle pills',
+        video_id: QJ_VIDEO_ID,
+        pack_id: `vp:v0:${QJ_VIDEO_ID}`,
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(404);
+    expect(body.code).toBe('pack_not_found');
+    expect(generateText).not.toHaveBeenCalled();
+  });
+
+  it('continues sparkle interview without repeating sparkle phrase by using sparkleIntent', async () => {
+    const request = new Request('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query: 'Use case: automate weekday focus sessions.',
+        sparkleIntent: true,
+        sparkleInterview: {
+          useCase: 'weekday focus sessions',
+        },
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.requiresInterview).toBe(true);
+    expect(body.interviewQuestions).toEqual(expect.arrayContaining([expect.any(String)]));
+    expect(generateText).not.toHaveBeenCalled();
   });
 });

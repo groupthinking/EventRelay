@@ -16,8 +16,7 @@ function compactList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
-    .filter((entry) => entry.length > 0)
-    .slice(0, 8);
+    .filter((entry) => entry.length > 0);
 }
 
 function parseAnswers(value: unknown): SparkleInterviewAnswers | null {
@@ -50,6 +49,7 @@ export function sparklePillsInterviewQuestions(): string[] {
 
 export function resolveSparklePillsResponse(input: {
   query: string;
+  sparkleIntent?: unknown;
   sparkleInterview?: unknown;
 }):
   | {
@@ -64,7 +64,10 @@ export function resolveSparklePillsResponse(input: {
       interview: SparkleInterviewAnswers;
     }
   | null {
-  if (!isSparklePillsRequest(input.query)) return null;
+  const intentActive =
+    isSparklePillsRequest(input.query)
+    || input.sparkleIntent === true;
+  if (!intentActive) return null;
 
   const interview = parseAnswers(input.sparkleInterview);
   if (!interview) {

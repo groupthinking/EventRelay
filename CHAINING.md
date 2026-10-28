@@ -8,16 +8,18 @@ For sparkle-pill requests, avoid jumping straight to a plan. First collect concr
 
 ## Runtime behavior
 
-1. Detect sparkle-pill intent in `query` or `message` (`/\bsparkle\s*pills?\b/i`).
+1. Detect sparkle-pill intent in `query`/`message` (`/\bsparkle\s*pills?\b/i`) or explicit `sparkleIntent: true` for interview follow-up turns.
 2. If required interview answers are missing, return interview questions and stop.
 3. If interview answers are present and complete, return a deterministic system plan.
 4. Do not call model providers for this branch (no Gateway or Grok dependency).
+5. If the request is pack-bound (`video_id`/`pack_id`), stay on the existing pack-grounded chat path instead of deterministic sparkle planning.
 
 ## Request payload
 
 ```json
 {
   "query": "Build me a system for using sparkle pills",
+  "sparkleIntent": true,
   "sparkleInterview": {
     "useCase": "I need to manage daily focus sessions across work and school.",
     "trigger": "Start each weekday at 08:30",

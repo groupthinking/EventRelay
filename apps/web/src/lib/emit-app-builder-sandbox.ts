@@ -1573,7 +1573,149 @@ function bindChatRail(): void {
   const prompts = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chat-prompt]'));
 
   const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
+  const sparkleFields = ['useCase', 'trigger', 'tools', 'constraints', 'successSignal'] as const;
+  type SparkleField = (typeof sparkleFields)[number];
+  type SparkleInterviewDraft = Partial<{
+    useCase: string;
+    trigger: string;
+    tools: string[];
+    constraints: string;
+    successSignal: string;
+  }>;
+  type ChatResponse = {
+    answer?: string;
+    requiresInterview?: boolean;
+    interviewQuestions?: string[];
+    provider?: string;
+  };
+
+  let sparkleInterviewQuestions: string[] | null = null;
+  let sparkleInterviewDraft: SparkleInterviewDraft = {};
   let inFlight = false;
+
+  function parseTools(value: string): string[] {
+    return value
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+  }
+
+  function normalizeInterviewKey(value: string): SparkleField | null {
+    const key = value.replace(/[^a-z]/gi, '').toLowerCase();
+    if (key === 'usecase' || key === 'workflow' || key === 'objective') return 'useCase';
+    if (key === 'trigger' || key === 'schedule') return 'trigger';
+    if (key === 'tools' || key === 'integrations' || key === 'systems') return 'tools';
+    if (key === 'constraints' || key === 'guardrails' || key === 'rules') return 'constraints';
+    if (key === 'successsignal' || key === 'successmetric' || key === 'success') return 'successSignal';
+    return null;
+  }
+
+  function parseStructuredInterviewAnswer(text: string): SparkleInterviewDraft | null {
+    const labelPattern =
+      /(useCase|workflow|objective|trigger|schedule|tools|integrations|systems|constraints|guardrails|rules|successSignal|successMetric|success)\s*:/gi;
+    const labelMatches = Array.from(text.matchAll(labelPattern));
+    if (labelMatches.length > 0) {
+      const fromLabels: SparkleInterviewDraft = {};
+      for (let index = 0; index < labelMatches.length; index += 1) {
+        const current = labelMatches[index];
+        const next = labelMatches[index + 1];
+        if (!current || current.index == null) continue;
+        const rawKey = current[1];
+        const key = rawKey ? normalizeInterviewKey(rawKey) : null;
+        if (!key) continue;
+        const valueStart = current.index + current[0].length;
+        const valueEnd = next?.index ?? text.length;
+        const rawValue = text.slice(valueStart, valueEnd).trim().replace(/[|,;]+$/, '').trim();
+        if (!rawValue) continue;
+        if (key === 'tools') {
+          fromLabels.tools = parseTools(rawValue);
+        } else {
+          fromLabels[key] = rawValue;
+        }
+      }
+      if (Object.keys(fromLabels).length > 0) return fromLabels;
+    }
+
+    const lines = text
+      .split(/\\r?\\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    const fromLabels: SparkleInterviewDraft = {};
+    let matchedLabel = false;
+    for (const line of lines) {
+      const idx = line.indexOf(':');
+      if (idx < 1) continue;
+      const key = normalizeInterviewKey(line.slice(0, idx).trim());
+      if (!key) continue;
+      const rawValue = line.slice(idx + 1).trim();
+      if (!rawValue) continue;
+      matchedLabel = true;
+      if (key === 'tools') {
+        fromLabels.tools = parseTools(rawValue);
+      } else {
+        fromLabels[key] = rawValue;
+      }
+    }
+    if (matchedLabel) return fromLabels;
+
+    const parts = text
+      .split('|')
+      .map((part) => part.trim())
+      .filter((part) => part.length > 0);
+    if (parts.length !== 5) return null;
+    return {
+      useCase: parts[0],
+      trigger: parts[1],
+      tools: parseTools(parts[2]),
+      constraints: parts[3],
+      successSignal: parts[4],
+    };
+  }
+
+  function mergeInterviewDraft(base: SparkleInterviewDraft, patch: SparkleInterviewDraft): SparkleInterviewDraft {
+    return {
+      ...base,
+      ...patch,
+      ...(patch.tools ? { tools: patch.tools } : {}),
+    };
+  }
+
+  function nextMissingInterviewField(interview: SparkleInterviewDraft): SparkleField | null {
+    for (const field of sparkleFields) {
+      if (field === 'tools') {
+        if (!Array.isArray(interview.tools) || interview.tools.length === 0) return field;
+        continue;
+      }
+      if (typeof interview[field] !== 'string' || interview[field]?.trim().length === 0) {
+        return field;
+      }
+    }
+    return null;
+  }
+
+  function withSequentialAnswer(base: SparkleInterviewDraft, answer: string): SparkleInterviewDraft {
+    const field = nextMissingInterviewField(base);
+    if (!field) return base;
+    const normalized = answer.trim();
+    if (!normalized) return base;
+    if (field === 'tools') return { ...base, tools: parseTools(normalized) };
+    return { ...base, [field]: normalized };
+  }
+
+  function composeInterviewAssistantMessage(answer: string, questions: string[]): string {
+    return [
+      answer.trim(),
+      '',
+      ...questions.map((question, index) => \`\${index + 1}. \${question}\`),
+      '',
+      'Reply in one message with:',
+      'useCase: ...',
+      'trigger: ...',
+      'tools: tool1, tool2',
+      'constraints: ...',
+      'successSignal: ...',
+    ].join('\\n');
+  }
 
   function appendBubble(text: string, kind: 'user' | 'assistant' | 'system'): void {
     if (!messages) return;
@@ -1609,6 +1751,13 @@ function bindChatRail(): void {
   async function postLiveChat(text: string): Promise<void> {
     setComposerBusy(true);
     try {
+      let sparklePayload: SparkleInterviewDraft | null = null;
+      if (sparkleInterviewQuestions) {
+        const structured = parseStructuredInterviewAnswer(text);
+        sparklePayload = structured
+          ? mergeInterviewDraft(sparkleInterviewDraft, structured)
+          : withSequentialAnswer(sparkleInterviewDraft, text);
+      }
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1619,17 +1768,34 @@ function bindChatRail(): void {
           pack_id: pack.packId,
           video_url: pack.sourceUrl,
           history: chatHistory,
+          ...(sparklePayload
+            ? { sparkleIntent: true, sparkleInterview: sparklePayload }
+            : {}),
         }),
         signal: AbortSignal.timeout(60_000),
       });
-      const data = (await response.json()) as { answer?: string };
+      const data = (await response.json()) as ChatResponse;
+      const interviewQuestions = Array.isArray(data.interviewQuestions)
+        ? data.interviewQuestions.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+        : [];
       const answer =
-        typeof data.answer === 'string' && data.answer.trim()
-          ? data.answer.trim()
+        typeof data.answer === 'string' && data.answer.trim().length > 0
+          ? (
+              data.requiresInterview && interviewQuestions.length > 0
+                ? composeInterviewAssistantMessage(data.answer, interviewQuestions)
+                : data.answer.trim()
+            )
           : 'No assistant reply returned.';
       if (!response.ok) {
         appendBubble(answer, 'system');
         return;
+      }
+      if (data.requiresInterview) {
+        sparkleInterviewQuestions = interviewQuestions;
+        sparkleInterviewDraft = sparklePayload ?? sparkleInterviewDraft;
+      } else if (data.provider === 'sparkle-pills-planner') {
+        sparkleInterviewQuestions = null;
+        sparkleInterviewDraft = {};
       }
       chatHistory.push({ role: 'user', content: text });
       chatHistory.push({ role: 'assistant', content: answer });
