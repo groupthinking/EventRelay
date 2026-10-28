@@ -144,3 +144,49 @@ def test_snapshot_submits_all_tracked_locks_at_exact_commit(
         "sdk/typescript/package-lock.json",
     }
     assert request.get_header("Authorization") == "Bearer test-token"
+
+
+def test_snapshot_combines_npm_and_scoped_uv_in_one_submission(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    subprocess.run(["git", "init", "-q"], check=True)
+    Path("package-lock.json").write_text(
+        json.dumps(
+            {
+                "lockfileVersion": 3,
+                "packages": {"node_modules/brace-expansion": {"version": "2.1.7"}},
+            }
+        )
+    )
+    Path("uv.lock").write_text(
+        'version = 1\n[[package]]\nname = "example"\nversion = "1.0"\n'
+        'source = { editable = "." }\n[package.optional-dependencies]\n'
+        'dev = [{ name = "black" }]\n[[package]]\nname = "black"\n'
+        'version = "24.0"\nsource = { registry = "https://pypi.org/simple" }\n'
+    )
+    subprocess.run(["git", "add", "."], check=True)
+    seen = []
+
+    def opener(request, timeout):
+        seen.append((request, timeout))
+        return io.BytesIO(b'{"id": 12345}')
+
+    result = submit_snapshot(
+        {
+            "SNAPSHOT_SHA": "a" * 40,
+            "SNAPSHOT_REF": "refs/heads/codex/test",
+            "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+            "GITHUB_RUN_ID": "987",
+            "GITHUB_TOKEN": "test-token",
+        },
+        opener=opener,
+    )
+    assert len(seen) == 1
+    assert result == {"snapshot_id": 12345, "manifest_count": 2, "package_count": 2}
+    snapshot = json.loads(seen[0][0].data)
+    assert set(snapshot["manifests"]) == {"package-lock.json", "uv.lock"}
+    assert (
+        snapshot["manifests"]["uv.lock"]["resolved"]["black@24.0"]["scope"]
+        == "development"
+    )

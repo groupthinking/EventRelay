@@ -92,24 +92,17 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     )
     assert "detectorsFilter" not in submission["with"]
 
-    scoped_uv = next(
-        step for step in steps if step["name"] == "Submit scoped uv lock snapshot"
-    )
-    assert steps.index(scoped_uv) == steps.index(submission) + 1
-    assert "hashFiles('uv.lock') != ''" in scoped_uv["if"]
-    assert "steps.dependency-changes.outputs.changed == 'true'" in scoped_uv["if"]
-    assert scoped_uv["run"] == "python3 scripts/ci/submit_uv_lock_snapshot.py"
-    assert scoped_uv["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
-    assert scoped_uv["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
-
     complete_npm = next(
-        step for step in steps if step["name"] == "Submit complete npm lock snapshot"
+        step for step in steps if step["name"] == "Submit complete lock snapshot"
     )
-    assert steps.index(complete_npm) == steps.index(scoped_uv) + 1
+    assert steps.index(complete_npm) == steps.index(submission) + 1
     assert "github.event_name == 'push'" in complete_npm["if"]
-    assert "github.event.pull_request.head.repo.full_name == github.repository" in complete_npm["if"]
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository"
+        in complete_npm["if"]
+    )
     assert "steps.dependency-changes.outputs.changed == 'true'" in complete_npm["if"]
-    assert complete_npm["run"] == "python3 scripts/ci/submit_npm_lock_snapshot.py"
+    assert complete_npm["run"] == "python3 -m scripts.ci.submit_npm_lock_snapshot"
     assert complete_npm["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
     assert complete_npm["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
     assert complete_npm["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
@@ -460,7 +453,9 @@ def test_dependency_review_evidence_saves_warning_free_empty_diff(
 
     destination = tmp_path / "dependency-review-evidence"
     saved = module["record_dependency_review"](
-        environment, destination, opener=lambda request, timeout: ApiResponse(b"[]"),
+        environment,
+        destination,
+        opener=lambda request, timeout: ApiResponse(b"[]"),
         changed_files=set(),
     )
     assert saved["dependency_diff_count"] == 0
