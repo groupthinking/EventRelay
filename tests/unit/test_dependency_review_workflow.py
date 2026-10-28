@@ -416,10 +416,21 @@ def test_dependency_review_evidence_preserves_large_complete_api_diff(
     assert upload["with"]["if-no-files-found"] == "error"
 
     expression = "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
-    finding = {"name": "numpy", "version": "2.5.4", "license": expression}
+    finding = {
+        "name": "numpy",
+        "version": "2.5.4",
+        "license": expression,
+        "manifest": "requirements.txt",
+        "ecosystem": "pip",
+    }
     # This response exceeds the Actions template-object limit hit by grouped PRs.
-    changes = [finding, finding, {"name": "$(touch injected)"}] + [
-        {"name": f"package-{index}", "license": "MIT", "version": "1.0.0"}
+    changes = [finding, finding, {**finding, "name": "$(touch injected)"}] + [
+        {
+            **finding,
+            "name": f"package-{index}",
+            "license": "MIT",
+            "version": "1.0.0",
+        }
         for index in range(1500)
     ]
     raw = json.dumps(changes).encode()
@@ -447,7 +458,9 @@ def test_dependency_review_evidence_preserves_large_complete_api_diff(
         return ApiResponse(raw)
 
     destination = tmp_path / "dependency-review-evidence"
-    module["record_dependency_review"](environment, destination, opener=fetch)
+    module["record_dependency_review"](
+        environment, destination, opener=fetch, changed_files={"requirements.txt"}
+    )
     saved = json.loads((destination / "review.json").read_text())
     assert saved["base_sha"] == "a" * 40
     assert saved["head_sha"] == "b" * 40
@@ -486,14 +499,16 @@ def test_dependency_review_evidence_rejects_snapshot_warnings_before_writing(
         }
 
     destination = tmp_path / "dependency-review-evidence"
-    with pytest.raises(ValueError, match="missing snapshots"):
+    with pytest.raises(ValueError, match="snapshot warnings"):
         module["record_dependency_review"](
             environment, destination, opener=lambda request, timeout: ApiResponse(raw)
         )
     assert not destination.exists()
 
 
-def test_dependency_review_evidence_saves_warning_free_empty_diff(tmp_path: Path) -> None:
+def test_dependency_review_evidence_saves_warning_free_empty_diff(
+    tmp_path: Path,
+) -> None:
     module = runpy.run_path(
         str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
     )
@@ -516,3 +531,89 @@ def test_dependency_review_evidence_saves_warning_free_empty_diff(tmp_path: Path
     )
     assert saved["dependency_diff_count"] == 0
     assert (destination / "dependency-diff.json").read_bytes() == b"[]"
+
+
+def test_dependency_review_rejects_warning_free_graph_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+    )
+
+    def commit_lock(version: str) -> str:
+        lock = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "eventrelay", "version": "1.0.0"},
+                "node_modules/fast-uri": {"version": version, "dev": True},
+                "node_modules/hono": {"version": "4.13.7", "dev": True},
+            },
+        }
+        (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
+        subprocess.run(["git", "add", "package-lock.json"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", version], cwd=repo, check=True)
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+        ).strip()
+
+    base = commit_lock("3.1.7")
+    head = commit_lock("3.1.9")
+    monkeypatch.chdir(repo)
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    added = {
+        "change_type": "added",
+        "manifest": "package-lock.json",
+        "ecosystem": "npm",
+        "name": "fast-uri",
+        "version": "3.1.9",
+        "scope": "development",
+    }
+    removed = {**added, "change_type": "removed", "version": "3.1.7"}
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    def record(rows: list[dict], name: str) -> Path:
+        destination = tmp_path / name
+        raw = json.dumps(rows).encode()
+        module["record_dependency_review"](
+            environment,
+            destination,
+            opener=lambda request, timeout: ApiResponse(raw),
+        )
+        return destination
+
+    assert json.loads(
+        (record([added, removed], "valid") / "dependency-diff.json").read_text()
+    ) == [
+        added,
+        removed,
+    ]
+    invalid_cases = [
+        ([added, {**removed, "manifest": "uv.lock"}], "unchanged manifest"),
+        ([added, {**removed, "scope": "runtime"}], "lockfile version/scope"),
+        (
+            [added, removed, {**added, "name": "hono", "version": "4.13.7"}],
+            "lockfile version/scope",
+        ),
+    ]
+    for index, (rows, error) in enumerate(invalid_cases):
+        destination = tmp_path / f"invalid-{index}"
+        with pytest.raises(ValueError, match=error):
+            record(rows, f"invalid-{index}")
+        assert not destination.exists()
