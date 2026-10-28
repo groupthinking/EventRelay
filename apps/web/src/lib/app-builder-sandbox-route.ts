@@ -76,7 +76,11 @@ function resolveIdentity(
   url: string,
 ): { identity: VideoPackV0Json } | NextResponse {
   const fromField = typeof rawId === 'string' ? resolveYouTubeVideoId(rawId) : null;
-  const videoId = fromField || (url ? resolveYouTubeVideoId(url) : null);
+  const fromUrl = url ? resolveYouTubeVideoId(url) : null;
+  if (url && (!fromUrl || (fromField && fromField !== fromUrl))) {
+    return NextResponse.json({ status: 'error', error: 'YouTube source does not match video identity' }, { status: 400 });
+  }
+  const videoId = fromField || fromUrl;
   if (!videoId) {
     return NextResponse.json(
       { status: 'error', error: 'A YouTube URL or video id is required' },
@@ -149,3 +153,4 @@ export async function handleAppBuilderSandboxPost(request: Request): Promise<Res
   }
   return sandboxFromIdentity(resolved.identity);
 }
+

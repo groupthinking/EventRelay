@@ -62,9 +62,19 @@ class TestUnifiedAISDK:
         assert result.content == "alpha\nbeta"
         assert result.provider == "claude"
         assert result.tokens_used == 33
+        call_kwargs = sdk._anthropic_client.messages.create.await_args.kwargs
+        assert call_kwargs == {
+            "model": "claude-opus-4-8",
+            "max_tokens": 4000,
+            "messages": [{"role": "user", "content": "Summarize this"}],
+            "timeout": 60.0,
+            "thinking": {"type": "adaptive"},
+        }
+        assert not {"temperature", "top_p", "top_k"} & call_kwargs.keys()
 
     @pytest.mark.asyncio
-    async def test_unified_request_uses_gemini_client(self, monkeypatch):
+    @pytest.mark.parametrize("model", ["gemini-2.5-flash", "gemini-3.8-flash"])
+    async def test_unified_request_uses_gemini_client(self, monkeypatch, model):
         sdk = UnifiedAISDK({"retry_attempts": 1})
         config_factory = MagicMock(side_effect=lambda **kwargs: kwargs)
         monkeypatch.setattr(sdk_mod, "_GENAI_AVAILABLE", True)
@@ -98,7 +108,7 @@ class TestUnifiedAISDK:
         result = await sdk.unified_request(
             AIRequest(
                 prompt="Analyze the video",
-                model="gemini-2.5-flash",
+                model=model,
                 provider=ModelProvider.GEMINI,
                 task_type=TaskType.VIDEO_ANALYSIS,
             )
@@ -108,10 +118,10 @@ class TestUnifiedAISDK:
         assert result.content == "part one\npart two"
         assert result.provider == "gemini"
         assert result.tokens_used == 88
-        assert config_factory.call_args.kwargs == {
-            "temperature": 0.7,
-            "max_output_tokens": 4000,
-        }
+        assert config_factory.call_args.kwargs == (
+            {"temperature": 0.7, "max_output_tokens": 4000}
+            if model == "gemini-2.5-flash" else {"max_output_tokens": 4000}
+        )
 
     @pytest.mark.asyncio
     async def test_unified_request_uses_grok_client(self):

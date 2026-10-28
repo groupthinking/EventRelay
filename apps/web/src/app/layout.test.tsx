@@ -9,7 +9,7 @@ import RootLayout from './layout';
 
 vi.mock('next/font/google', () => {
   const font = ({ variable }: { variable: string }) => ({ variable });
-  return { Inter: font, JetBrains_Mono: font, Space_Grotesk: font };
+  return { Inter: font, JetBrains_Mono: font, Newsreader: font };
 });
 
 vi.mock('@vercel/analytics/next', () => ({ Analytics: () => null }));

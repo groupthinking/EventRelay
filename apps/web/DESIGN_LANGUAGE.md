@@ -1,8 +1,15 @@
-# UVAI Design Language — Locked 2026-10-02 (Hayden)
+# UVAI Design Language — OpenAI template application (2026-10-08)
 
-Source of truth for how UVAI looks. Written because Hayden said: "We need to
-document our work or the agent will hallucinate." Do not invent a different
-direction. When in doubt, match this document, not a trend.
+Hayden explicitly requested applying the best-fitting official OpenAI template to UVAI, replacing the partial homepage-only adaptation. The official Responses starter at `0fae283f12ca3f71015cd9fa3f9b28df97e9ae21` is the selected source. This supersedes the previous warm editorial skin while preserving the professional light card and evidence requirements below.
+
+- Neutral white assistant canvas, gray source/context surfaces, black primary actions.
+- Sans-serif hierarchy across Home, Studio, Pricing, navigation and footer.
+- Rounded source and conversation composers; existing API behavior remains authoritative.
+- Studio keeps source, conversation and deliverables available side by side on desktop; on mobile, view tabs switch panes without unmounting them or losing drafts.
+- No example output is represented as a live result. Source examples on Home are use cases only.
+- Template provenance and license: `THIRD_PARTY_NOTICES.md`.
+
+## Previous product and interaction requirements
 
 ## Product thesis (UNCHANGED)
 

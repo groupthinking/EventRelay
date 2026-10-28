@@ -20,6 +20,8 @@ import os
 import urllib.error
 import urllib.request
 
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
+
 logger = logging.getLogger(__name__)
 
 GATEWAY_URL = "https://ai-gateway.vercel.sh/v1/chat/completions"
@@ -67,7 +69,7 @@ def chat(
     }
     req = urllib.request.Request(
         GATEWAY_URL,
-        data=json.dumps(payload).encode("utf-8"),
+        data=json.dumps(without_deprecated_sampling(payload["model"], payload)).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",

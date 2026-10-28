@@ -11,6 +11,7 @@ import {
   pickOfficialTemplate,
   stackCheckStatus,
   stackCheckStatusLabel,
+  studioStackCheckView,
 } from '@/lib/official-templates';
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
@@ -25,12 +26,8 @@ import {
   safeProjectName,
 } from '@/lib/action-surface';
 import {
-  pollStudioDeploy,
   pollVideoToActions,
-  probeStudioDeployLiveUrl,
-  startStudioDeploy,
   startVideoToActions,
-  studioDeployPollResidual,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
 import {
@@ -65,10 +62,6 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
-  studioDeployButtonLabel,
-  studioDeployEnabledHint,
-  studioDeployOutcomeMessage,
-  studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportToastMessage,
@@ -84,6 +77,7 @@ import {
   studioPlayerPhase,
   studioPromotePackWorkbench,
   studioRunQuality,
+  studioShipCta,
   studioStatusLabel,
   studioStatusMessage,
   studioTranscriptBody,
@@ -313,20 +307,15 @@ export default function OneLoopStudio({
   const [elapsed, setElapsed] = useState(0);
   const [message, setMessage] = useState('Paste a YouTube URL. Transcript and events land here.');
   const [actBusy, setActBusy] = useState(false);
-  const [deployBusy, setDeployBusy] = useState(false);
   const runAbortRef = useRef<AbortController | null>(null);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
   const [actRunId, setActRunId] = useState<string | null>(null);
   const [usedSameRun, setUsedSameRun] = useState(false);
-  const [deployRunId, setDeployRunId] = useState<string | null>(null);
-  const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
-  const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
-  const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
   const [openingPrs, setOpeningPrs] = useState(false);
@@ -349,11 +338,6 @@ export default function OneLoopStudio({
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
-  const scopedDeployReceipt = studioDeployReceiptForSelection({
-    selectedVideoId,
-    receiptVideoId: deployReceiptVideoId,
-    liveUrl: deployReceiptUrl,
-  });
   const scopedPackLiveUrl = studioPackLiveReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -406,9 +390,6 @@ export default function OneLoopStudio({
   useEffect(() => {
     setCompletedChecks([]);
     setApprovedSpecIds([]);
-    setDeployReceiptUrl(null);
-    setDeployReceiptVideoId(null);
-    setGateReceipt(null);
     setBuildLiveFailure(null);
     setPackLiveReceiptUrl(null);
     setPackLiveReceiptVideoId(null);
@@ -427,6 +408,14 @@ export default function OneLoopStudio({
 
   const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
   const officialTemplate = pickOfficialTemplate(linkedSop);
+  const stackCheckViews = stackChecks.map((item) => {
+    const status = stackCheckStatus(item, completedChecks, 'anonymous');
+    return {
+      ...studioStackCheckView(item, completedChecks, 'anonymous'),
+      status,
+      statusLabel: stackCheckStatusLabel(status),
+    };
+  });
 
   useEffect(() => {
     useDashboardStore.persist.rehydrate();
@@ -590,6 +579,7 @@ export default function OneLoopStudio({
     hasLinkedSopSteps: Boolean(linkedSop?.steps.length),
     hasProjectScaffold: Boolean(selected?.insights?.project_scaffold),
   });
+  const shipCta = studioShipCta({ canExport: hasPayload, holdReason });
   const runState = busy ? 'working' : selected ? 'ready' : 'idle';
   const quality = studioRunQuality(
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
@@ -798,98 +788,6 @@ export default function OneLoopStudio({
     }
   };
 
-  const deploy = async () => {
-    const next = (selected?.url || url).trim();
-    if (!getYouTubeId(next)) {
-      setMessage('Analyze a video before deploy.');
-      return;
-    }
-    if (holdReason) {
-      setMessage(holdReason);
-      return;
-    }
-    setDeployBusy(true);
-    const attemptVideoId = selectedVideoId ?? null;
-    setDeployReceiptUrl(null);
-    setDeployReceiptVideoId(attemptVideoId);
-    setGateReceipt(null);
-    try {
-      const started = await startStudioDeploy({ url: next });
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      if (started.status === 401 || started.status === 403) {
-        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
-        return;
-      }
-      if (started.gate) {
-        setGateReceipt(started.gate);
-        setMessage(started.gate.reason);
-        return;
-      }
-      if (!started.ok || !started.runId) {
-        const backendReason = started.error || started.message || 'Deploy needs sign-in.';
-        const gated = evaluateStudioDeployTransition({
-          transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
-          kind: 'handoff',
-          backendReason,
-          authority: { actor: 'anonymous' },
-        });
-        setGateReceipt(studioGateReceiptView(gated, { backendReason }));
-        setMessage(backendReason);
-        return;
-      }
-      setDeployRunId(started.runId);
-      const polled = await pollStudioDeploy(started.runId);
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      const backendReason = studioDeployPollResidual(polled);
-      const liveCandidate = polled.result?.live_url?.trim() ?? '';
-      const deploymentHttpProbe = liveCandidate
-        ? (await probeStudioDeployLiveUrl(liveCandidate)).probe
-        : undefined;
-      const gated = evaluateStudioDeployTransition({
-        transitionId: started.runId,
-        runId: started.runId,
-        jobId: polled.result?.jobId,
-        liveUrl: polled.result?.live_url,
-        runStatus: polled.runStatus,
-        kind: polled.result?.kind,
-        backendReason,
-        deploymentHttpProbe,
-        authority: { actor: 'anonymous' },
-      });
-      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
-      const liveUrl = gated.decision === 'PASS' ? polled.result?.live_url : undefined;
-      setDeployReceiptUrl(studioVerifiedLiveUrl(liveUrl));
-      setDeployReceiptVideoId(attemptVideoId);
-      setMessage(
-        studioDeployOutcomeMessage({
-          liveUrl,
-          runStatus: polled.runStatus,
-          error: backendReason || polled.error,
-          kind: polled.result?.kind,
-          message: polled.result?.message,
-          jobId: polled.result?.jobId,
-          jobStatus: polled.result?.jobStatus,
-        }),
-      );
-    } catch (err) {
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      const backendReason = studioDeployOutcomeMessage({
-        error: err instanceof Error ? err.message : 'Deploy failed.',
-        runStatus: 'failed',
-      });
-      const gated = evaluateStudioDeployTransition({
-        transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
-        kind: 'handoff',
-        backendReason,
-        authority: { actor: 'anonymous' },
-      });
-      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
-      setMessage(backendReason);
-    } finally {
-      setDeployBusy(false);
-    }
-  };
-
   const runBuildLiveRecovery = (action: PackBuildLiveFailureDetails['actions'][number]) => {
     const watch = (selected?.url || url).trim();
     if (action.id === 'open_hosted') {
@@ -1059,8 +957,8 @@ export default function OneLoopStudio({
     : 0;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#f2f5f9] text-slate-900">
-      <Nav tone="light" rightSlot={<StudioAuthNavLink />} />
+    <div className="template-studio flex min-h-screen flex-col text-slate-900">
+      <Nav rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
         toolbar={
@@ -1137,12 +1035,14 @@ export default function OneLoopStudio({
             <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
               <button
                 type="button"
-                onClick={exportPkg}
-                disabled={!hasPayload}
-                data-testid="studio-ide-export"
-                className="uvai-btn disabled:opacity-40"
+                onClick={() => void exportPkg()}
+                disabled={!shipCta.enabled}
+                data-testid="studio-ide-ship"
+                title={shipCta.hint}
+                className="uvai-btn uvai-btn-primary inline-flex items-center gap-1.5 disabled:opacity-40"
               >
-                Export
+                <Rocket className="h-4 w-4" aria-hidden />
+                Ship this
               </button>
               <button
                 type="button"
@@ -1156,82 +1056,24 @@ export default function OneLoopStudio({
                       ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                       : 'Paste a YouTube URL and run analysis first.'
                 }
-                className="uvai-btn uvai-btn-primary disabled:opacity-40"
+                className="uvai-btn disabled:opacity-40"
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
-              <button
-                type="button"
-                data-testid="studio-deploy-button"
-                onClick={() => void deploy()}
-                disabled={deployBusy || !hasPayload || Boolean(holdReason)}
-                aria-describedby="studio-preflight-hint"
-                title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
-                className="uvai-btn disabled:opacity-40"
-              >
-                {deployBusy ? 'Checking preflight…' : 'Check preflight'}
-              </button>
+              {showTranscriptRetry ? (
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="uvai-btn"
+                >
+                  Retry transcript
+                </button>
+              ) : null}
             </div>
-            <p id="studio-preflight-hint" className="w-full text-[11px] text-slate-400">
-              {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
-            </p>
-            <p className="w-full font-mono text-[11px] text-slate-500" role="status" data-testid="studio-ide-status">
+            <p className="w-full font-mono text-[11px]" style={{ color: 'var(--uvai-ink-faint)' }} role="status" data-testid="studio-ide-status">
               {statusText}
             </p>
-            {gateReceipt ? (
-              <div
-                data-testid="studio-gate-receipt"
-                role="status"
-                className="uvai-card flex w-full flex-wrap items-start gap-2 px-3 py-2.5"
-              >
-                <span
-                  data-testid="studio-gate-decision"
-                  className={clsx(
-                    'inline-flex rounded-full border px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em]',
-                    gateDecisionChipClass(gateReceipt.decision),
-                  )}
-                >
-                  {gateReceipt.decision}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p data-testid="studio-gate-reason" className="text-sm text-slate-800">
-                    {gateReceipt.reason}
-                  </p>
-                  <p className="text-sm text-slate-500">
-                    {gateReceipt.version === 'eventrelay.gate-receipt.v2'
-                      ? 'Server decision. Later stages require separate Loop approval.'
-                      : 'Local diagnostic only — not an authorization receipt.'}
-                  </p>
-                  <p className="mt-1 font-mono text-[11px] text-slate-400">
-                    <span data-testid="studio-gate-receipt-id">{gateReceipt.receiptId}</span>
-                    {' · '}
-                    <span data-testid="studio-gate-receipt-hash">{gateReceipt.receiptHash}</span>
-                    {' · '}
-                    {gateReceipt.version}
-                  </p>
-                  {gateReceipt.transitionId ? (
-                    <p className="break-all text-sm text-slate-400">
-                      Transition: {gateReceipt.transitionId}
-                      {' · '}
-                      {gateReceipt.retained ? 'Receipt retained' : 'Receipt not retained'}
-                    </p>
-                  ) : null}
-                  {scopedDeployReceipt ? (
-                    <p className="mt-1">
-                      <a
-                        data-testid="studio-gate-live-url"
-                        href={scopedDeployReceipt}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="break-all text-sm text-blue-700 underline"
-                      >
-                        {scopedDeployReceipt}
-                      </a>
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
           </>
         }
         videoPane={
@@ -1303,6 +1145,15 @@ export default function OneLoopStudio({
         outputPane={
           <StudioIdeOutput
             video={selected}
+            stackChecks={stackCheckViews}
+            reviewActions={(workflowActions?.actions ?? []).map((action) => {
+              const card = studioActionCard(action);
+              return {
+                tool: action.tool,
+                status: action.status,
+                result: action.result ?? card.detail,
+              };
+            })}
             specReview={
               selected?.videoPack?.pack ? (
                 <GroundedSpecReview
@@ -1330,7 +1181,7 @@ export default function OneLoopStudio({
           data-testid="studio-export-toast"
           role={exportToast.tone === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'fixed bottom-20 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
+            'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
             exportToast.tone === 'success'
               ? 'border-amber-300 bg-amber-50 text-amber-800'
               : 'border-red-300 bg-red-50 text-red-800',

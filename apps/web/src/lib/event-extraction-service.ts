@@ -1,3 +1,4 @@
+import { geminiSampling } from '@/lib/gemini-parameters';
 import 'server-only';
 
 import OpenAI from 'openai';
@@ -161,7 +162,7 @@ async function extractWithGemini(trimmed: string, videoTitle?: string, videoUrl?
     model: GEMINI_STRUCTURED_MODEL,
     contents: prompt,
     config: {
-      temperature: 0.3,
+      ...geminiSampling(GEMINI_STRUCTURED_MODEL, 0.3),
       responseMimeType: 'application/json',
       responseSchema: geminiResponseSchema,
     },
@@ -264,7 +265,7 @@ Respond with ONLY valid JSON matching the required structure.`;
           model: GEMINI_SEARCH_MODEL,
           contents: videoPrompt,
           config: {
-            temperature: 0.3,
+            ...geminiSampling(GEMINI_SEARCH_MODEL, 0.3),
             responseMimeType: 'application/json',
             tools: [{ googleSearch: {} }],
           },

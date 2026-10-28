@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowUp, Sparkles } from 'lucide-react';
 
 type ChatMessage = {
   id: string;
@@ -124,7 +125,8 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
       >
         {messages.length === 0 ? (
-          <div className="uvai-empty">
+          <div className="uvai-empty template-chat-welcome">
+            <div className="template-mark" aria-hidden="true"><Sparkles size={24} /></div>
             <p className="text-sm font-semibold text-slate-700">
               {canChat ? 'Ask about this pack' : 'Run a video to start chatting'}
             </p>
@@ -166,9 +168,9 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       <form
         onSubmit={send}
         data-testid="studio-ide-chat-composer"
-        className="border-t border-slate-100 bg-slate-50/60 p-3"
+        className="template-chat-composer p-4"
       >
-        <div className="flex gap-2">
+        <div className="template-source-input">
           <input
             type="text"
             value={draft}
@@ -183,9 +185,10 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
             type="submit"
             disabled={!canChat || sending || draft.trim().length === 0}
             data-testid="studio-ide-chat-send"
-            className="uvai-btn uvai-btn-primary"
+            aria-label={sending ? "Sending message" : "Send message"}
+            className="template-send"
           >
-            {sending ? '…' : 'Send'}
+            {sending ? '…' : <ArrowUp size={18} aria-hidden="true" />}
           </button>
         </div>
       </form>

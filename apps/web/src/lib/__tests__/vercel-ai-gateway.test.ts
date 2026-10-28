@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  gatewayChat,
   chunkTextForEmbedding,
   hasAiGatewayKey,
   resolveAiGatewayKey,
@@ -16,6 +17,7 @@ const ENV_KEYS = [
 ] as const;
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   for (const key of ENV_KEYS) delete process.env[key];
 });
 
@@ -48,4 +50,26 @@ describe('vercel-ai-gateway', () => {
       'Second idea',
     ]);
   });
+});
+
+it.each(['gemini-2.5-flash', 'gemini-3.8-flash', 'openai/gpt-4o'])('Gateway payload follows model policy for %s', async (model) => {
+  process.env.AI_GATEWAY_API_KEY = 'test-key';
+  const transport = vi.fn().mockResolvedValue({ ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: 'result' } }] }) });
+  vi.stubGlobal('fetch', transport);
+  await gatewayChat({ model, messages: [{ role: 'user', content: 'test' }], temperature: 0.3 });
+  const payload = JSON.parse(transport.mock.calls[0][1].body);
+  expect('temperature' in payload).toBe(model !== 'gemini-3.8-flash');
+  expect(payload.max_tokens).toBe(4096);
+});
+
+it('sends the Gemini 3.8 default without deprecated sampling fields', async () => {
+  process.env.AI_GATEWAY_API_KEY = 'test-key';
+  const transport = vi.fn().mockResolvedValue({ ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: 'result' } }] }) });
+  vi.stubGlobal('fetch', transport);
+  await gatewayChat({ messages: [{ role: 'user', content: 'test' }], temperature: 0.3 });
+  const payload = JSON.parse(transport.mock.calls[0][1].body);
+  expect(payload.model).toBe('google/gemini-3.8-flash');
+  for (const field of ['temperature', 'top_p', 'top_k', 'thinking_budget']) {
+    expect(payload).not.toHaveProperty(field);
+  }
 });

@@ -15,11 +15,14 @@ import mimetypes
 import os
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional, Union
 
 from PIL import Image
+
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
 
 try:
     import google.generativeai as genai
@@ -308,6 +311,16 @@ class GeminiResult:
     usage_metadata: Optional[Any] = None
 
 
+@dataclass(frozen=True)
+class _ModelSnapshot:
+    """Bind a queued request and its receipt to the selected provider client."""
+
+    client: Any
+    model_name: str
+    backend: str
+    use_vertex: bool
+
+
 class GeminiService:
     """
     Service for cloud-based vision-language processing using Google Gemini.
@@ -351,12 +364,12 @@ class GeminiService:
                 genai.configure(api_key=self.config.api_key)
                 self._model = genai.GenerativeModel(
                     model_name=self.config.model_name,
-                    generation_config={
+                    generation_config=without_deprecated_sampling(self.config.model_name, {
                         "temperature": self.config.temperature,
                         "top_p": self.config.top_p,
                         "top_k": self.config.top_k,
                         "max_output_tokens": self.config.max_output_tokens,
-                    },
+                    }),
                     safety_settings=self.config.safety_settings
                 )
                 self._use_vertex = False
@@ -399,7 +412,15 @@ class GeminiService:
         self._use_vertex = use_vertex
         self._is_initialized = True
 
-    def _prepare_generation_args(self, kwargs: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    def _snapshot_model(self) -> _ModelSnapshot:
+        return _ModelSnapshot(
+            client=self._model,
+            model_name=self.config.model_name,
+            backend=self._backend_kind,
+            use_vertex=self._use_vertex,
+        )
+
+    def _prepare_generation_args(self, kwargs: dict[str, Any], *, model_name: Optional[str] = None) -> tuple[dict[str, Any], dict[str, Any]]:
         """Split kwargs into generation_config and request kwargs."""
 
         generation_config = {
@@ -434,7 +455,7 @@ class GeminiService:
         if safety_settings:
             request_kwargs['safety_settings'] = safety_settings
 
-        return generation_config, request_kwargs
+        return without_deprecated_sampling(model_name or self.config.model_name, generation_config), request_kwargs
 
     def select_model(self, model_name: Optional[str]) -> None:
         """Ensure the requested Gemini model is ready for the next call."""
@@ -500,7 +521,7 @@ class GeminiService:
                 }
                 model = genai.GenerativeModel(
                     model_name=model_name,
-                    generation_config=generation_config,
+                    generation_config=without_deprecated_sampling(model_name, generation_config),
                     safety_settings=self.config.safety_settings,
                 )
                 backend = "gemini"
@@ -512,12 +533,14 @@ class GeminiService:
         except Exception as exc:
             self.logger.error("Failed to switch to model %s: %s", model_name, exc)
 
-    def _prepare_image(self, image: Union[str, Path, Image.Image]) -> Any:
+    def _prepare_image(self, image: Union[str, Path, Image.Image], *, use_vertex: Optional[bool] = None) -> Any:
         """Prepare image for Gemini API"""
         if isinstance(image, (str, Path)):
             image = Image.open(image).convert('RGB')
 
-        if self._use_vertex:
+        if use_vertex is None:
+            use_vertex = self._use_vertex
+        if use_vertex:
             # Vertex AI format
             buffer = io.BytesIO()
             image.save(buffer, format="PNG")
@@ -544,34 +567,35 @@ class GeminiService:
             GeminiResult with analysis results
         """
         start_time = time.time()
+        snapshot = self._snapshot_model()
 
         if not self.is_available() or not self._is_initialized:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="none",
                 error="Gemini not available or not initialized"
             )
 
-        if self._backend_kind != "gemini":
-            error = f"{self._backend_kind} backend does not support image processing"
+        if snapshot.backend != "gemini":
+            error = f"{snapshot.backend} backend does not support image processing"
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend=self._backend_kind,
+                model_name=snapshot.model_name,
+                backend=snapshot.backend,
                 error=error,
             )
 
         try:
             # Prepare image
-            prepared_image = self._prepare_image(image)
+            prepared_image = self._prepare_image(image, use_vertex=snapshot.use_vertex)
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
             response = await loop.run_in_executor(
                 None,
@@ -580,6 +604,7 @@ class GeminiService:
                 prompt,
                 generation_config,
                 request_kwargs,
+                snapshot,
             )
 
             latency = time.time() - start_time
@@ -588,8 +613,8 @@ class GeminiService:
                 success=True,
                 response=response.text,
                 latency=latency,
-                model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api",
+                model_name=snapshot.model_name,
+                backend="vertex" if snapshot.use_vertex else "api",
                 usage_metadata=getattr(response, "usage_metadata", None),
             )
 
@@ -599,8 +624,8 @@ class GeminiService:
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api",
+                model_name=snapshot.model_name,
+                backend="vertex" if snapshot.use_vertex else "api",
                 error=str(e)
             )
 
@@ -610,10 +635,12 @@ class GeminiService:
         prompt: str,
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Synchronous image processing in executor"""
-        if self._use_vertex:
-            return self._model.generate_content(
+        snapshot = snapshot or self._snapshot_model()
+        if snapshot.use_vertex:
+            return snapshot.client.generate_content(
                 [prompt, prepared_image],
                 generation_config=generation_config,
                 **request_kwargs,
@@ -623,13 +650,13 @@ class GeminiService:
             prompt_part = genai_types.Part(text=prompt)
             image_part = genai_types.Part(image=prepared_image)
             content = genai_types.Content(role="user", parts=[image_part, prompt_part])
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 [content],
                 generation_config=generation_config,
                 **request_kwargs,
             )
 
-        return self._model.generate_content(
+        return snapshot.client.generate_content(
             [prompt, prepared_image],
             generation_config=generation_config,
             **request_kwargs,
@@ -645,13 +672,14 @@ class GeminiService:
         """Process pure text requests across Gemini/Gemma/Veo backends."""
 
         start_time = time.time()
+        snapshot = self._snapshot_model()
 
         if not self.is_available():
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="none",
                 error="Text backend not available",
             )
@@ -661,7 +689,7 @@ class GeminiService:
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
             response = await loop.run_in_executor(
                 None,
@@ -670,25 +698,26 @@ class GeminiService:
                 prompt,
                 generation_config,
                 request_kwargs,
+                snapshot,
             )
 
             return GeminiResult(
                 success=True,
                 response=response.text if hasattr(response, "text") else str(response),
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend=self._backend_kind,
+                model_name=snapshot.model_name,
+                backend=snapshot.backend,
                 usage_metadata=getattr(response, "usage_metadata", None),
             )
 
         except Exception as exc:
-            self.logger.error("Error processing text with %s backend: %s", self._backend_kind, exc)
+            self.logger.error("Error processing text with %s backend: %s", snapshot.backend, exc)
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend=self._backend_kind,
+                model_name=snapshot.model_name,
+                backend=snapshot.backend,
                 error=str(exc),
             )
 
@@ -698,13 +727,15 @@ class GeminiService:
         prompt: str,
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Synchronous helper for text-only requests."""
+        snapshot = snapshot or self._snapshot_model()
 
-        backend = self._backend_kind
+        backend = snapshot.backend
 
         if backend == "gemma":
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 text_payload,
                 generation_config=generation_config,
                 **request_kwargs,
@@ -712,7 +743,7 @@ class GeminiService:
 
         if backend == "veo":
             # Veo supports prompt engineering for planning scripts; use generate_content.
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 text_payload,
                 generation_config=generation_config,
                 **request_kwargs,
@@ -723,7 +754,7 @@ class GeminiService:
         if text_payload and text_payload != prompt:
             contents.append(text_payload)
 
-        return self._model.generate_content(
+        return snapshot.client.generate_content(
             contents,
             generation_config=generation_config,
             **request_kwargs,
@@ -749,33 +780,34 @@ class GeminiService:
             GeminiResult with analysis
         """
         start_time = time.time()
+        snapshot = self._snapshot_model()
 
         if not self.is_available() or not self._is_initialized:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="none",
                 error="Gemini not available or not initialized"
             )
 
-        if self._backend_kind == "gemma":
+        if snapshot.backend == "gemma":
             error = "Gemma backend does not support video processing"
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="gemma",
                 error=error,
             )
 
-        if self._backend_kind == "veo":
+        if snapshot.backend == "veo":
             try:
                 loop = asyncio.get_event_loop()
                 temp_kwargs = dict(kwargs)
-                generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+                generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
                 response = await loop.run_in_executor(
                     None,
@@ -783,6 +815,7 @@ class GeminiService:
                     prompt,
                     generation_config,
                     request_kwargs,
+                    snapshot,
                 )
 
                 payload = self._summarize_veo_response(response)
@@ -791,7 +824,7 @@ class GeminiService:
                     success=True,
                     response=payload,
                     latency=time.time() - start_time,
-                    model_name=self.config.model_name,
+                    model_name=snapshot.model_name,
                     backend="veo",
                 )
 
@@ -801,7 +834,7 @@ class GeminiService:
                     success=False,
                     response=None,
                     latency=time.time() - start_time,
-                    model_name=self.config.model_name,
+                    model_name=snapshot.model_name,
                     backend="veo",
                     error=str(exc),
                 )
@@ -809,7 +842,7 @@ class GeminiService:
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
             response = await loop.run_in_executor(
                 None,
@@ -819,6 +852,7 @@ class GeminiService:
                 video_metadata,
                 generation_config,
                 request_kwargs,
+                snapshot,
             )
 
             latency = time.time() - start_time
@@ -827,8 +861,8 @@ class GeminiService:
                 success=True,
                 response=response.text,
                 latency=latency,
-                model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api",
+                model_name=snapshot.model_name,
+                backend="vertex" if snapshot.use_vertex else "api",
                 usage_metadata=getattr(response, "usage_metadata", None),
             )
 
@@ -838,8 +872,8 @@ class GeminiService:
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api",
+                model_name=snapshot.model_name,
+                backend="vertex" if snapshot.use_vertex else "api",
                 error=str(e)
             )
 
@@ -852,32 +886,33 @@ class GeminiService:
         """Process an audio file with Gemini."""
 
         start_time = time.time()
+        snapshot = self._snapshot_model()
 
         if not self.is_available() or not self._is_initialized:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="none",
                 error="Gemini not available or not initialized",
             )
 
-        if self._backend_kind != "gemini":
-            error = f"{self._backend_kind} backend does not support audio processing"
+        if snapshot.backend != "gemini":
+            error = f"{snapshot.backend} backend does not support audio processing"
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend=self._backend_kind,
+                model_name=snapshot.model_name,
+                backend=snapshot.backend,
                 error=error,
             )
 
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
             response = await loop.run_in_executor(
                 None,
@@ -886,6 +921,7 @@ class GeminiService:
                 prompt,
                 generation_config,
                 request_kwargs,
+                snapshot,
             )
 
             latency = time.time() - start_time
@@ -894,8 +930,8 @@ class GeminiService:
                 success=True,
                 response=response.text,
                 latency=latency,
-                model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api",
+                model_name=snapshot.model_name,
+                backend="vertex" if snapshot.use_vertex else "api",
                 usage_metadata=getattr(response, "usage_metadata", None),
             )
 
@@ -905,8 +941,8 @@ class GeminiService:
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend="vertex" if self._use_vertex else "api",
+                model_name=snapshot.model_name,
+                backend="vertex" if snapshot.use_vertex else "api",
                 error=str(e),
             )
 
@@ -917,26 +953,28 @@ class GeminiService:
         video_metadata: Optional[dict[str, Any]],
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Synchronous video processing in executor"""
+        snapshot = snapshot or self._snapshot_model()
         video_path = Path(video_path)
         mime_type, _ = mimetypes.guess_type(str(video_path))
         if not mime_type or not mime_type.startswith('video/'):
             mime_type = "video/mp4"  # Default fallback
 
-        if self._use_vertex:
+        if snapshot.use_vertex:
             with open(video_path, 'rb') as f:
                 video_part = Part.from_data(f.read(), mime_type=mime_type)
 
             if video_metadata:
-                return self._model.generate_content(
+                return snapshot.client.generate_content(
                     [prompt, video_part],
                     generation_config=generation_config,
                     video_metadata=video_metadata,
                     **request_kwargs,
                 )
 
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 [prompt, video_part],
                 generation_config=generation_config,
                 **request_kwargs,
@@ -976,13 +1014,13 @@ class GeminiService:
                     )
                 prompt_part = genai_types.Part(text=prompt)
                 content = genai_types.Content(role="user", parts=[video_part, prompt_part])
-                response = self._model.generate_content(
+                response = snapshot.client.generate_content(
                     [content],
                     generation_config=generation_config,
                     **request_kwargs,
                 )
             else:
-                response = self._model.generate_content(
+                response = snapshot.client.generate_content(
                     [video_file, prompt],
                     generation_config=generation_config,
                     **request_kwargs,
@@ -999,19 +1037,21 @@ class GeminiService:
         prompt: str,
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Synchronous audio processing in executor."""
+        snapshot = snapshot or self._snapshot_model()
 
         audio_path = Path(audio_path)
         mime_type, _ = mimetypes.guess_type(str(audio_path))
         if not mime_type or not mime_type.startswith('audio/'):
             mime_type = "audio/mpeg"
 
-        if self._use_vertex:
+        if snapshot.use_vertex:
             with open(audio_path, 'rb') as f:
                 audio_part = Part.from_data(f.read(), mime_type=mime_type)
 
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 [prompt, audio_part],
                 generation_config=generation_config,
                 **request_kwargs,
@@ -1037,13 +1077,13 @@ class GeminiService:
             )
             prompt_part = genai_types.Part(text=prompt)
             content = genai_types.Content(role="user", parts=[audio_part, prompt_part])
-            response = self._model.generate_content(
+            response = snapshot.client.generate_content(
                 [content],
                 generation_config=generation_config,
                 **request_kwargs,
             )
         else:
-            response = self._model.generate_content(
+            response = snapshot.client.generate_content(
                 [audio_file, prompt],
                 generation_config=generation_config,
                 **request_kwargs,
@@ -1058,10 +1098,12 @@ class GeminiService:
         prompt: str,
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Invoke Veo client in a worker thread."""
+        snapshot = snapshot or self._snapshot_model()
 
-        client = self._model
+        client = snapshot.client
         if hasattr(client, "generate_video"):
             return client.generate_video(
                 prompt,
@@ -1124,42 +1166,43 @@ class GeminiService:
             GeminiResult with analysis
         """
         start_time = time.time()
+        snapshot = self._snapshot_model()
 
         if not self.is_available() or not self._is_initialized:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="none",
                 error="Gemini not available or not initialized"
             )
 
-        if self._use_vertex:
+        if snapshot.use_vertex:
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="vertex",
                 error="YouTube URL processing not supported in Vertex AI"
             )
 
-        if self._backend_kind != "gemini":
-            error = f"{self._backend_kind} backend does not handle YouTube ingestion"
+        if snapshot.backend != "gemini":
+            error = f"{snapshot.backend} backend does not handle YouTube ingestion"
             return GeminiResult(
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
-                backend=self._backend_kind,
+                model_name=snapshot.model_name,
+                backend=snapshot.backend,
                 error=error,
             )
 
         try:
             loop = asyncio.get_event_loop()
             temp_kwargs = dict(kwargs)
-            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs)
+            generation_config, request_kwargs = self._prepare_generation_args(temp_kwargs, model_name=snapshot.model_name)
 
             response = await loop.run_in_executor(
                 None,
@@ -1169,6 +1212,7 @@ class GeminiService:
                 video_metadata,
                 generation_config,
                 request_kwargs,
+                snapshot,
             )
 
             latency = time.time() - start_time
@@ -1177,7 +1221,7 @@ class GeminiService:
                 success=True,
                 response=response.text,
                 latency=latency,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="api",
                 usage_metadata=getattr(response, "usage_metadata", None),
             )
@@ -1188,7 +1232,7 @@ class GeminiService:
                 success=False,
                 response=None,
                 latency=time.time() - start_time,
-                model_name=self.config.model_name,
+                model_name=snapshot.model_name,
                 backend="api",
                 error=str(e)
             )
@@ -1200,8 +1244,10 @@ class GeminiService:
         video_metadata: Optional[dict[str, Any]],
         generation_config: dict[str, Any],
         request_kwargs: dict[str, Any],
+        snapshot: Optional[_ModelSnapshot] = None,
     ):
         """Synchronous YouTube processing in executor"""
+        snapshot = snapshot or self._snapshot_model()
         if genai_types:
             metadata_obj = None
             if video_metadata:
@@ -1221,7 +1267,7 @@ class GeminiService:
                 )
             prompt_part = genai_types.Part(text=prompt)
             content = genai_types.Content(role="user", parts=[youtube_part, prompt_part])
-            return self._model.generate_content(
+            return snapshot.client.generate_content(
                 [content],
                 generation_config=generation_config,
                 **request_kwargs,
@@ -1234,7 +1280,7 @@ class GeminiService:
                 "data": youtube_url
             }
         }
-        return self._model.generate_content(
+        return snapshot.client.generate_content(
             [prompt, youtube_part],
             generation_config=generation_config,
             **request_kwargs,

@@ -6,6 +6,8 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
+  studioShipCta,
+  studioShipEnabled,
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
@@ -367,8 +369,32 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioTranscriptEtaLabel');
     // IDE: transcript stage + ETA surface in the toolbar status line.
     expect(studio).toContain('data-testid="studio-ide-status"');
+    expect(studio).toContain('data-testid="studio-transcript-retry"');
     expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
+  });
+
+  it('enables Ship this from pack exportability and ignores stack-check hold copy', () => {
+    expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
+    expect(
+      studioShipEnabled({
+        canExport: true,
+        holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+      }),
+    ).toBe(true);
+    expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
+    const cta = studioShipCta({ canExport: true, holdReason: 'Production is held until 4 stack check(s) pass.' });
+    expect(cta.label).toBe('Ship this');
+    expect(cta.enabled).toBe(true);
+    expect(cta.hint.toLowerCase()).toMatch(/skip|unknown/);
+    expect(studioShipCta({ canExport: false }).enabled).toBe(false);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioShipCta');
+    expect(studio).toContain('data-testid="studio-ide-ship"');
+    expect(studio).toContain('Ship this');
+    expect(studio).not.toContain('studio-deploy-button');
+    expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -462,9 +488,10 @@ describe('studio-pipeline-status', () => {
     }
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    expect(studio).toContain('studioDeployOutcomeMessage');
-    expect(studio).not.toMatch(/pollStudioDeploy\([^)]*attempts:\s*20\b/);
-    expect(studio).toContain('startStudioDeploy({ url: next })');
+    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
+    // The Studio no longer contains a deploy call site.
+    expect(studio).not.toContain('const deploy = async');
+    expect(studio).not.toContain('studio-deploy-button');
     expect(studio).toContain('usableProvidedTranscript');
     const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
     expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
@@ -490,11 +517,11 @@ describe('studio-pipeline-status', () => {
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
     expect(asyncJob).not.toMatch(/isGatewayTimeoutKickoff\(undefined, message\) \{\s*return STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    expect(studio).toContain('studioDeployButtonLabel');
-    expect(studio).toContain('studioDeployReceiptForSelection');
-    expect(studio).toContain('studioVerifiedLiveUrl');
-    expect(studio).toContain('setDeployReceiptUrl(null)');
-    expect(studio).toContain('setGateReceipt(null)');
+    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
+    expect(studio).not.toContain('studioDeployButtonLabel');
+    expect(studio).not.toContain('studioDeployReceiptForSelection');
+    expect(studio).not.toContain('setDeployReceiptUrl(null)');
+    expect(studio).not.toContain('setGateReceipt(null)');
     expect(studio).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
     expect(studio).not.toContain('Deploy attempt started. Waiting for a verified https live URL.');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
@@ -542,6 +569,8 @@ describe('studio-pipeline-status', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioActionCard');
+    expect(output).toContain('studioActionCard');
+    expect(output).toContain('data-testid="studio-review-action-card"');
     // IDE: actions surface in the output pane Intent tab.
     expect(output).toContain("{ id: 'intent', label: 'Intent' }");
   });
@@ -570,6 +599,7 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-export-toast"');
     expect(studio).not.toMatch(/setExportToast\(toast\);\s*setMessage\(/);
     expect(studio).toMatch(/role=\{exportToast\.tone === 'error' \? 'alert' : 'status'\}/);
+    expect(studio).not.toContain('bottom-20');
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {

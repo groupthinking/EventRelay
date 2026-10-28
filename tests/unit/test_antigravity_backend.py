@@ -85,7 +85,8 @@ async def test_execute_builds_bounded_request_and_receipt() -> None:
     assert len(receipt.request_sha256) == 64
 
     payload = transport.payloads[0]
-    assert payload["agent"] == "antigravity-preview-05-2026"
+    assert payload["agent"] == "antigravity-preview-09-2026"
+    assert payload["environment"] == "remote"
     assert payload["agent_config"]["max_total_tokens"] == 1_000
     assert payload["tools"] == [
         {

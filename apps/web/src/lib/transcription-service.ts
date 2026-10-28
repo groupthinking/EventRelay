@@ -1,3 +1,4 @@
+import { geminiSampling } from '@/lib/gemini-parameters';
 import 'server-only';
 
 import OpenAI from 'openai';
@@ -251,7 +252,7 @@ INSTRUCTIONS:
                   model: GEMINI_SEARCH_MODEL,
                   contents: geminiPrompt,
                   config: {
-                    temperature: 0.2,
+                    ...geminiSampling(GEMINI_SEARCH_MODEL, 0.2),
                     tools: [{ googleSearch: {} }],
                   },
                 })

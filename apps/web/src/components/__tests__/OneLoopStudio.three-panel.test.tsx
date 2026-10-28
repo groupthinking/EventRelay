@@ -53,9 +53,9 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-splitter-right')).toBeTruthy();
     // Toolbar carries the run + pack actions.
     expect(screen.getByTestId('studio-ide-run')).toBeTruthy();
-    expect(screen.getByTestId('studio-ide-export')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-ship')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-ship').textContent).toMatch(/Ship this/);
     expect(screen.getByTestId('studio-build-live-button')).toBeTruthy();
-    expect(screen.getByTestId('studio-deploy-button')).toBeTruthy();
   });
 
   it('renders video, chat, and output panes when a stored Video Pack is selected', async () => {
@@ -93,6 +93,28 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-output-tab-tools')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-output-tab-intent')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-output-tab-signals')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-ship')).toBeTruthy();
+    expect((screen.getByTestId('studio-ide-ship') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('shows transcript retry when analysis failed and is retryable', () => {
+    useDashboardStore.setState({
+      videos: [
+        {
+          ...baseVideo,
+          status: 'failed',
+          failure: {
+            stage: 'analysis',
+            message: 'Gemini 3.8 Flash returned no extracted spec content.',
+            retryable: true,
+            failedAt: '2026-10-17T00:00:00.000Z',
+          },
+        },
+      ],
+      selectedVideoId: baseVideo.id,
+    });
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    expect(screen.getByTestId('studio-transcript-retry')).toBeTruthy();
   });
 
   it('shows a cancel button while a run is in flight', async () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
+import { ArrowUp, Link2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { submitHomePaste } from '@/lib/studio-handoff';
 
@@ -27,10 +28,11 @@ export default function HomePasteForm() {
 
   return (
     <form onSubmit={onSubmit} className="mx-auto w-full max-w-2xl">
-      <label htmlFor="home-youtube-url" className="mb-2 block text-left text-sm font-semibold text-slate-700">
+      <label htmlFor="home-youtube-url" className="uvai-label mb-2 block text-left">
         YouTube URL
       </label>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+      <div className="template-source-input">
+        <Link2 size={18} aria-hidden="true" className="template-source-icon" />
         <input
           id="home-youtube-url"
           value={value}
@@ -40,21 +42,22 @@ export default function HomePasteForm() {
           inputMode="url"
           aria-invalid={Boolean(error)}
           aria-describedby={helpId}
-          className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 py-3.5 font-mono text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-amber-500 focus-visible:ring-2 focus-visible:ring-amber-500/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white"
+          className="uvai-input min-w-0 flex-1 font-mono text-sm"
         />
         <button
           type="submit"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-amber-600 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white sm:min-w-[9rem]"
+          aria-label="Run in Studio"
+          className="template-send"
         >
-          Run in Studio
+          <ArrowUp size={20} aria-hidden="true" />
         </button>
       </div>
       {error ? (
-        <p id="home-youtube-url-error" className="mt-2 text-left text-sm font-medium text-red-700" role="alert">
+        <p id="home-youtube-url-error" className="mt-2 text-left text-sm font-medium" style={{ color: 'var(--uvai-danger)' }} role="alert">
           {error}
         </p>
       ) : (
-        <p id="home-youtube-url-help" className="mt-2 text-left text-xs text-slate-500">
+        <p id="home-youtube-url-help" className="mt-2 text-left text-xs" style={{ color: 'var(--uvai-ink-faint)' }}>
           Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
         </p>
       )}

@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { geminiSampling } from '@/lib/gemini-parameters';
+
 /**
  * Vercel AI Gateway — OpenAI-compatible routing to Google/Anthropic/OpenAI models.
  * https://vercel.com/docs/ai-gateway
@@ -10,7 +12,7 @@ const GATEWAY_CHAT_URL = `${GATEWAY_BASE_URL}/chat/completions`;
 const GATEWAY_EMBEDDINGS_URL = `${GATEWAY_BASE_URL}/embeddings`;
 
 export const VERCEL_AI_GATEWAY_DEFAULT_MODEL =
-  process.env.VERCEL_AI_GATEWAY_MODEL?.trim() || 'google/gemini-2.5-flash';
+  process.env.VERCEL_AI_GATEWAY_MODEL?.trim() || 'google/gemini-3.8-flash';
 
 /** Default embedding model (Vercel embeddings demo uses openai/text-embedding-ada-002). */
 export const VERCEL_AI_GATEWAY_EMBEDDING_MODEL =
@@ -201,7 +203,7 @@ export async function gatewayChat(options: GatewayChatOptions): Promise<GatewayC
         model,
         messages: options.messages,
         max_tokens: options.max_tokens ?? 4096,
-        temperature: options.temperature ?? 0.2,
+        ...geminiSampling(model, options.temperature ?? 0.2),
       }),
       signal: controller.signal,
     });

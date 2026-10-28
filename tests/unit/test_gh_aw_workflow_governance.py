@@ -27,12 +27,13 @@ def _load_frontmatter(path: Path) -> dict:
     return yaml.safe_load(frontmatter)
 
 
-
 def test_coverage_workflow_is_authoritative() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/coverage.yml")
     job = workflow["jobs"]["coverage"]
     steps = job["steps"]
-    run_step = next(step for step in steps if step.get("name") == "Run tests with coverage")
+    run_step = next(
+        step for step in steps if step.get("name") == "Run tests with coverage"
+    )
     artifact_step = next(
         step for step in steps if step.get("name") == "Upload coverage artifacts"
     )
@@ -49,9 +50,12 @@ def test_coverage_workflow_is_authoritative() -> None:
     assert "--cov-fail-under=84.2" in run_script
     assert "--cov-fail-under" not in pytest_addopts
     assert "--timeout=120" in run_script
-    assert ".[dev,youtube]" in next(
-        step for step in steps if step.get("name") == "Install dependencies"
-    )["run"]
+    assert (
+        ".[dev,youtube]"
+        in next(step for step in steps if step.get("name") == "Install dependencies")[
+            "run"
+        ]
+    )
     assert 84.1766 <= float(coverage_report["fail_under"]) <= 90
     assert int(coverage_report["precision"]) >= 4
     for suppression in ("|| true", "set +e"):
@@ -68,9 +72,7 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
     install_script = next(
         step for step in steps if step.get("name") == "Install dependencies"
     )["run"]
-    test_script = next(
-        step for step in steps if step.get("name") == "Run tests"
-    )["run"]
+    test_script = next(step for step in steps if step.get("name") == "Run tests")["run"]
 
     assert 'python -m pip install -e ".[dev,youtube]"' in install_script
     assert "--timeout=120" in test_script
@@ -109,11 +111,10 @@ def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
     assert test_job.get("if") is None
     assert test_job["strategy"] == {
         "fail-fast": False,
-        "matrix": {"python-version": ["3.10", "3.11", "3.12"]},
+        "matrix": {"python-version": ["3.11", "3.12"]},
     }
     python_versions = test_job["strategy"]["matrix"]["python-version"]
     assert python_versions == [
-        "3.10",
         "3.11",
         "3.12",
     ]
@@ -130,12 +131,19 @@ def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
     assert test_script == (
         "PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 "
         "--cov=src/youtube_extension --cov-fail-under=0 "
-        "--ignore=tests/unit/test_transcript_action_workflow.py -k \"not integration\""
+        '--ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"'
     )
     assert not test_job.get("continue-on-error", False)
     assert not run_tests.get("continue-on-error", False)
     for suppression in ("|| true", "set +e", "--collect-only"):
         assert suppression not in test_script
+
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+    assert project["requires-python"] == ">=3.11,<3.13"
+    assert "Pillow>=13.0.0" in project["dependencies"]
+
+    dockerfile = (ROOT / "Dockerfile").read_text()
+    assert dockerfile.count("FROM python:3.11-slim") == 2
 
     immutable_action = re.compile(r"^[^@\s]+@[0-9a-f]{40}$")
     immutable_container = re.compile(r"^docker://[^@\s]+@sha256:[0-9a-f]{64}$")
@@ -249,7 +257,6 @@ def test_controller_does_not_claim_an_unavailable_live_lane() -> None:
     assert "## Jules reporting requirement" not in source
 
 
-
 def test_gh_aw_validation_pins_runtime_version() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/gh-aw-validation.yml")
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
@@ -259,7 +266,9 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v0.88.7"]
     assert setup_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
     assert setup_cli_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
-    step_scripts = [step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]]
+    step_scripts = [
+        step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]
+    ]
     combined = "\n".join(step_scripts)
     assert "gh extension install github/gh-aw --pin v0.88.7" in combined
     assert "eventrelay-ci-investigator" not in combined
@@ -282,8 +291,13 @@ def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert 'payload.selected = {\n            kind: "issue",' not in workflow_source
-    assert 'payload.selected = {\n            kind: "pull_request",' not in workflow_source
-    assert "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null" in workflow_source
+    assert (
+        'payload.selected = {\n            kind: "pull_request",' not in workflow_source
+    )
+    assert (
+        "recentFailingRuns[0] || stalePulls[0] || staleIssues[0] || null"
+        in workflow_source
+    )
 
 
 def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:

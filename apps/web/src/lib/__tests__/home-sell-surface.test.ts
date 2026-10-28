@@ -20,9 +20,9 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('OneLoopStudio');
     expect(home).not.toContain('Loading studio');
     expect(home).toContain('Universal Video Action Intelligence');
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
+    expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('hashed Video Pack');
-    expect(home).toContain('transcript, event, and action outputs');
+    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
     expect(home).toContain('HomeProCheckout');
@@ -35,11 +35,11 @@ describe('Home is a sell page; Studio is the workbench', () => {
   it('presents a responsive YouTube URL-to-Studio conversion hierarchy', () => {
     const home = readSource('app/page.tsx');
 
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
-    expect(home).toContain('transcript, event, and action outputs');
+    expect(home).toContain('Your videos know what to do next.');
+    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
     expect(home).toContain('Transcript quality varies by source.');
-    expect(home).toContain('grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]');
-    expect(home).toContain('min-w-0');
+    expect(home).toContain('HomeTemplateShell');
+    expect(home).toContain('Inspect the Video Pack');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('HomeProCheckout');
   });
@@ -52,9 +52,11 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const structured = readSource('components/StructuredData.tsx');
     const ogAlt = readSource('app/opengraph-image.tsx');
     const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
-    expect(home).toContain('Turn a YouTube URL into a hashed Video Pack, then open it in Studio.');
+    expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('Transcript quality varies by source');
+    expect(home).not.toContain('turns it into something real');
+    expect(home).not.toContain('next move for your approval');
     expect(home).toMatch(/No guaranteed production\s+outcome\./);
     expect(layout).toContain('Transcript quality varies by source');
     expect(structured).toContain('Transcript quality varies by source');
@@ -77,7 +79,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(paste).toContain('id="home-youtube-url-error"');
     expect(paste).toContain('id="home-youtube-url-help"');
     expect(paste).toContain('role="alert"');
-    expect(paste).toContain('focus-visible:ring-2');
+    // Focus visibility via .uvai-input CSS (:focus with accent border + ring)
+    expect(paste).toContain('uvai-input');
   });
 
   it('keeps the checkout controls and pricing link keyboard-visible', () => {

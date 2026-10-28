@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { signIn } from 'next-auth/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
 vi.mock('next-auth/react', () => ({ signIn: vi.fn() }));
 
 const genericError = 'Unable to start Google sign-in. Please try again.';
 const initialUrl = window.location.href;
+
+beforeEach(() => { vi.mocked(signIn).mockReset(); });
 
 afterEach(() => {
   cleanup();

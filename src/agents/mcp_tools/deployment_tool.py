@@ -205,19 +205,27 @@ dist/
 
             # Initial commit
             # SECURITY: subprocess call uses hardcoded command list.
-            subprocess.run(
+            add_result = subprocess.run(
                 ["git", "add", "."],
                 cwd=str(project_dir),
                 capture_output=True,
                 timeout=30
             )
 
-            subprocess.run(
+            if add_result.returncode != 0:
+                logger.error("Deployment handoff failed", extra={"stage": "git_add", "returncode": add_result.returncode})
+                return {"success": False, "error": "Git staging failed"}
+
+            commit_result = subprocess.run(
                 ["git", "commit", "-m", "Initial commit - AI generated project"],
                 cwd=str(project_dir),
                 capture_output=True,
                 timeout=30
             )
+
+            if commit_result.returncode != 0:
+                logger.error("Deployment handoff failed", extra={"stage": "git_commit", "returncode": commit_result.returncode})
+                return {"success": False, "error": "Git initial commit failed"}
 
             logger.info("✅ Git initialized")
             return {"success": True}
@@ -341,7 +349,8 @@ dist/
                         break
 
             if not deployment_url:
-                deployment_url = f"https://{project_name}.vercel.app"
+                logger.error("Deployment output lacked verified URL", extra={"stage": "vercel_output"})
+                return {"success": False, "error": "Vercel returned no verified deployment URL"}
 
             return {
                 "success": True,
@@ -363,11 +372,13 @@ dist/
                 timeout=10,
                 env={**os.environ, "GH_TOKEN": self.github_token}
             )
-            if result.returncode == 0:
+            if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()
-        except:
-            pass
-        return "unknown"
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            logger.error("GitHub identity lookup failed", extra={"stage": "github_identity", "error_class": type(exc).__name__})
+            raise RuntimeError("GitHub identity lookup failed") from exc
+        logger.error("GitHub identity lookup failed", extra={"stage": "github_identity", "returncode": result.returncode})
+        raise RuntimeError("GitHub identity lookup failed")
 
 
 # Singleton instance
@@ -384,3 +395,4 @@ def get_deployment_tool() -> DeploymentMCPTool:
 MCP_TOOLS = {
     "deploy_to_github_and_vercel": get_deployment_tool().deploy_to_github_and_vercel
 }
+

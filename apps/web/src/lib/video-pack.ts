@@ -1,3 +1,4 @@
+import { canonicalYouTubeSource, resolveYouTubeSourceId } from '@/lib/video-source-identity';
 import { createHash } from 'node:crypto';
 import { reasonEnvelope, reasonEnvelopeJson } from '@/lib/api-reason-envelope';
 import { canonicalReviewContent, invalidGroundedSpec, parseGroundedSpec, sourceForGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
@@ -151,32 +152,10 @@ export function identityHash(videoId: string, version: string = IDENTITY_VERSION
   return createHash('sha256').update(canonicalIdentityJson(videoId, version)).digest('hex');
 }
 
-export function resolveYouTubeVideoId(urlOrId: string): string | null {
-  const trimmed = urlOrId.trim();
-  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) {
-    return trimmed;
-  }
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/,
-    /(?:youtu\.be\/)([A-Za-z0-9_-]{11})/,
-    /(?:youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/,
-    /(?:youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/,
-    /(?:youtube\.com\/v\/)([A-Za-z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = trimmed.match(pattern);
-    if (match) {
-      return match[1];
-    }
-  }
-  return null;
-}
+export const resolveYouTubeVideoId = resolveYouTubeSourceId;
 
 export function buildIdentityPack(videoId: string, sourceUrl?: string, createdAt?: string): VideoPackV0Json {
-  const source_url =
-    sourceUrl && sourceUrl.startsWith('http')
-      ? sourceUrl
-      : `https://www.youtube.com/watch?v=${videoId}`;
+  const source_url = canonicalYouTubeSource(videoId, sourceUrl);
   return {
     version: IDENTITY_VERSION,
     id: `vp:${IDENTITY_VERSION}:${videoId}`,
@@ -336,6 +315,11 @@ function processingEnvelope(identity: {
 }
 
 async function recordToResponse(record: VideoPackRecord): Promise<NextResponse> {
+  const videoId = record.state === 'ready' ? record.pack.video_id : record.video_id;
+  const source = record.state === 'ready' ? record.pack.source_url : record.source_url;
+  if (resolveYouTubeVideoId(videoId) !== videoId || source !== canonicalYouTubeSource(videoId)) {
+    return NextResponse.json({ status: 'error', error: 'Stored pack source identity requires review' }, { status: 409 });
+  }
   switch (record.state) {
     case 'ready':
       if (isIdentityOnlyPack(record.pack)) {
@@ -387,6 +371,12 @@ function resolveIdentityFromFields(
   if (!videoId) {
     return NextResponse.json(
       { status: 'error', error: 'A YouTube URL or video id is required' },
+      { status: 400 },
+    );
+  }
+  if (url && resolveYouTubeVideoId(url) !== videoId) {
+    return NextResponse.json(
+      { status: 'error', error: 'YouTube source does not match video identity' },
       { status: 400 },
     );
   }
@@ -470,6 +460,14 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
   const sourceHash = identity.provenance.source_hash;
 
   const existing = await getPackRecord(sourceHash);
+  const existingVideoId = existing?.state === 'ready' ? existing.pack.video_id : existing?.video_id;
+  const existingSource = existing?.state === 'ready' ? existing.pack.source_url : existing?.source_url;
+  if (existing && (existingVideoId !== identity.video_id || existingSource !== identity.source_url)) {
+    return NextResponse.json(
+      { status: 'error', error: 'Stored pack source identity requires review' },
+      { status: 409 },
+    );
+  }
   const reclaimReady =
     existing?.state === 'ready' && packNeedsReextractOnPost(existing.pack);
   if (existing?.state === 'ready' && !isIdentityOnlyPack(existing.pack) && !reclaimReady) {
@@ -565,3 +563,4 @@ export async function handleIdentityPackGet(request: Request): Promise<Response>
   }
   return recordToResponse(record);
 }
+

@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { clsx } from 'clsx';
 import { STUDIO_PRODUCT_TAGLINE } from '@/lib/studio-pipeline-status';
 
 const PRODUCT_LINKS = [
@@ -11,50 +10,24 @@ const PRODUCT_LINKS = [
 
 const USE_CASES = ['Meeting Notes', 'Conference Talks', 'Tutorials', 'Product Demos', 'Podcasts'];
 
-const EXTERNAL_LINKS = [
-  { label: 'GitHub', href: 'https://github.com/groupthinking/EventRelay' },
-];
-
 interface FooterProps {
   /** Use the compact variant (just copyright + links) for app pages */
   variant?: 'full' | 'compact';
-  /** Color tone. 'light' matches the card system (DESIGN_LANGUAGE.md); 'dark' is the legacy skin. */
-  tone?: 'dark' | 'light';
 }
 
 /**
- * Renders the site footer in a compact or full layout.
- *
- * @param variant - The footer layout to render.
+ * Quiet footer. Warm paper, faint type. Nothing shouts.
  */
-export default function Footer({ variant = 'compact', tone = 'dark' }: FooterProps) {
-  const light = tone === 'light';
-  const heading = light ? 'text-slate-500' : 'text-white/40';
-  const body = light ? 'text-slate-500' : 'text-white/35';
-  const linkHover = light ? 'hover:text-slate-900' : 'hover:text-white/60';
-  const faint = light ? 'text-slate-400' : 'text-white/25';
-  const faintHover = light ? 'hover:text-slate-700' : 'hover:text-white/50';
-  const border = light ? 'border-slate-200' : 'border-white/[0.06]';
-  const borderSoft = light ? 'border-slate-200/70' : 'border-white/[0.05]';
-
+export default function Footer({ variant = 'compact' }: FooterProps) {
   if (variant === 'compact') {
     return (
-      <footer className={clsx('border-t py-6', border)}>
-        <div className={clsx('max-w-6xl mx-auto px-6 flex items-center justify-between text-xs', faint)}>
+      <footer style={{ borderTop: '1px solid var(--uvai-border)' }} className="py-6">
+        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs" style={{ color: 'var(--uvai-ink-faint)' }}>
           <span>UVAI video intelligence</span>
-          <div className="flex items-center gap-4">
-            <Link href="/studio" className={clsx('transition py-2 px-1', faintHover)}>
-              Studio
-            </Link>
-            <Link href="/docs/api" className={clsx('transition py-2 px-1', faintHover)}>
-              API
-            </Link>
-            <a
-              href="https://github.com/groupthinking/EventRelay"
-              target="_blank"
-              rel="noopener noreferrer"
-              className={clsx('transition py-2 px-1', faintHover)}
-            >
+          <div className="flex items-center gap-5">
+            <Link href="/studio" className="transition py-2 px-1 hover:opacity-70">Studio</Link>
+            <Link href="/docs/api" className="transition py-2 px-1 hover:opacity-70">API</Link>
+            <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="transition py-2 px-1 hover:opacity-70">
               GitHub
             </a>
           </div>
@@ -64,74 +37,52 @@ export default function Footer({ variant = 'compact', tone = 'dark' }: FooterPro
   }
 
   return (
-    <footer className={clsx('border-t py-10', border)}>
+    <footer style={{ borderTop: '1px solid var(--uvai-border)' }} className="py-12">
       <div className="max-w-6xl mx-auto px-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-amber-500 to-amber-600 flex items-center justify-center font-black text-xs text-white">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-semibold text-white" style={{ background: 'var(--uvai-accent)' }}>
                 U
               </div>
-              <span className={clsx('font-bold text-sm', light ? 'text-slate-900' : 'text-white')}>UVAI</span>
+              <span className="font-semibold text-sm" style={{ color: 'var(--uvai-ink)' }}>UVAI</span>
             </div>
-            <p className={clsx('text-xs leading-relaxed', light ? 'text-slate-400' : 'text-white/30')}>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--uvai-ink-faint)' }}>
               {STUDIO_PRODUCT_TAGLINE}
             </p>
           </div>
           <div>
-            <div className={clsx('text-xs font-semibold uppercase tracking-wider mb-4', heading)}>
-              Product
-            </div>
-            <ul className={clsx('space-y-2.5 text-xs', body)}>
+            <div className="uvai-label mb-4">Product</div>
+            <ul className="space-y-2.5 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>
               {PRODUCT_LINKS.map(({ label, href }) => (
                 <li key={label}>
-                  <Link href={href} className={clsx('transition', linkHover)}>
-                    {label}
-                  </Link>
+                  <Link href={href} className="transition hover:opacity-70">{label}</Link>
                 </li>
               ))}
             </ul>
           </div>
           <div>
-            <div className={clsx('text-xs font-semibold uppercase tracking-wider mb-4', heading)}>
-              Use Cases
-            </div>
-            <ul className={clsx('space-y-2.5 text-xs', body)}>
+            <div className="uvai-label mb-4">Use Cases</div>
+            <ul className="space-y-2.5 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>
               {USE_CASES.map((u) => (
-                <li key={u}>
-                  <span className="cursor-default">{u}</span>
-                </li>
+                <li key={u}><span className="cursor-default">{u}</span></li>
               ))}
             </ul>
           </div>
           <div>
-            <div className={clsx('text-xs font-semibold uppercase tracking-wider mb-4', heading)}>
-              Links
-            </div>
-            <ul className={clsx('space-y-2.5 text-xs', body)}>
-              {EXTERNAL_LINKS.map(({ label, href }) => (
-                <li key={label}>
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={clsx('transition', linkHover)}
-                  >
-                    {label}
-                  </a>
-                </li>
-              ))}
+            <div className="uvai-label mb-4">Links</div>
+            <ul className="space-y-2.5 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>
+              <li>
+                <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="transition hover:opacity-70">
+                  GitHub
+                </a>
+              </li>
             </ul>
           </div>
         </div>
-        <div className={clsx('border-t pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs', borderSoft, faint)}>
+        <div className="pt-6 flex flex-col md:flex-row items-center justify-between gap-3 text-xs" style={{ borderTop: '1px solid var(--uvai-border)', color: 'var(--uvai-ink-faint)' }}>
           <span>© 2026 UVAI. MIT License.</span>
-          <a
-            href="https://github.com/groupthinking/EventRelay"
-            target="_blank"
-            rel="noopener noreferrer"
-            className={clsx('transition', faintHover)}
-          >
+          <a href="https://github.com/groupthinking/EventRelay" target="_blank" rel="noopener noreferrer" className="transition hover:opacity-70">
             Inspect current source on GitHub
           </a>
         </div>

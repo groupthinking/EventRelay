@@ -77,7 +77,7 @@ npm --workspace=apps/web run type-check
 - **Import sorting**: isort (profile: black)
 - **Linter**: Ruff (E, W, F, I, B, C4, UP rules; E501 ignored)
 - **Type checking**: mypy strict mode (`disallow_untyped_defs = true`)
-- Target Python 3.10+ (`pyproject.toml` is authoritative)
+- Target Python 3.11–3.12 (`pyproject.toml` is authoritative)
 - Config in `pyproject.toml`
 
 ### TypeScript/JavaScript

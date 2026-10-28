@@ -1,3 +1,4 @@
+import { canonicalYouTubeSource, resolveYouTubeSourceId } from '@/lib/video-source-identity';
 import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
 import { reasonEnvelope, type ReasonEnvelope } from '@/lib/api-reason-envelope';
 import type { VideoPackV0Json } from '@/lib/video-pack';
@@ -229,6 +230,13 @@ export async function getVideoPackRedisForServer(): Promise<VideoPackRedisClient
   return getRedis();
 }
 
+function hasCanonicalSource(record: VideoPackRecord): boolean {
+  const identity = record.state === 'ready' ? record.pack : record;
+  return typeof identity?.video_id === 'string'
+    && resolveYouTubeSourceId(identity.video_id) === identity.video_id
+    && identity.source_url === canonicalYouTubeSource(identity.video_id);
+}
+
 function asRecord(value: unknown): VideoPackRecord | null {
   if (value === null || typeof value !== 'object') return null;
   const row = value as VideoPackRecord;
@@ -242,14 +250,14 @@ function asRecord(value: unknown): VideoPackRecord | null {
     typeof row.pack.transcript === 'object' &&
     typeof row.pack.transcript.full_text === 'string'
   ) {
-    return row;
+    return hasCanonicalSource(row) ? row : null;
   }
   if (
     (row.state === 'processing' || row.state === 'error') &&
     typeof row.source_hash === 'string' &&
     row.source_hash.length === 64
   ) {
-    return row;
+    return hasCanonicalSource(row) ? row : null;
   }
   return null;
 }
@@ -268,7 +276,7 @@ function decodeRecord(value: unknown): VideoPackRecord | null {
 
 function readLocalPackRecord(key: string, sourceHash: string): VideoPackRecord | null {
   const local = memoryStore.get(key);
-  if (local && recordHash(local) === sourceHash) {
+  if (local && recordHash(local) === sourceHash && hasCanonicalSource(local)) {
     return local;
   }
   return null;
@@ -383,6 +391,7 @@ export async function getPackRecord(sourceHash: string): Promise<VideoPackRecord
 }
 
 export async function putPackRecord(record: VideoPackRecord): Promise<void> {
+  if (!hasCanonicalSource(record)) throw new Error('Stored pack source identity requires review');
   const key = packStoreKey(recordHash(record));
   const redis = await getRedis();
   if (redis) {
@@ -416,6 +425,7 @@ export async function claimPackProcessing(
     started_at: now.toISOString(),
   };
 
+  if (!hasCanonicalSource(processing)) throw new Error('Invalid processing source identity');
   const key = packStoreKey(identity.source_hash);
   const redis = await getRedis();
   if (process.env.NODE_ENV === 'production' && !redis) {
@@ -454,6 +464,7 @@ export async function claimPackProcessing(
   }
 
   const local = memoryStore.get(key);
+  if (local && !hasCanonicalSource(local)) throw new Error('Stored pack source identity requires review');
   if (local?.state === 'ready' && !options.reclaimReady) {
     return local;
   }
@@ -476,3 +487,4 @@ export function setVideoPackRedisForTests(redis: VideoPackRedisClient | null): v
 export function seedVideoPackRecordForTests(record: VideoPackRecord): void {
   memoryStore.set(packStoreKey(recordHash(record)), record);
 }
+

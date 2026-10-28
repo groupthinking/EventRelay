@@ -21,12 +21,22 @@ for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Turn a YouTube URL into a hashed Video Pack in Studio.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Your videos know what to do next.' })).toBeVisible();
     await expect(page.getByLabel('YouTube URL')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Run in Studio' })).toBeVisible();
     await expect(page.getByText('UVAI Workflow Pro').last()).toBeVisible();
     await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
     await expect(page.getByRole('link', { name: 'See all plans' })).toBeVisible();
+    const context = page.getByRole('complementary', { name: 'Video workflow context' });
+    const toggle = page.getByRole('button', { name: 'Show workflow details' });
+    if (viewport.width >= 1024) {
+      await expect(context).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Inspect the Video Pack' })).toBeVisible();
+      await expect(toggle).toBeHidden();
+    } else {
+      await expect(context).toBeHidden();
+      await expect(toggle).toBeVisible();
+    }
     await expectNoHorizontalOverflow(page);
   });
 }
@@ -41,6 +51,22 @@ test('announces an invalid URL and exposes the invalid field state', async ({ pa
   await expect(input).toHaveAttribute('aria-invalid', 'true');
   await expect(input).toHaveAttribute('aria-describedby', 'home-youtube-url-error');
   await expect(page.locator('#home-youtube-url-error')).toHaveText('Need a valid YouTube URL.');
+});
+
+test('opens mobile workflow context without losing the source input', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto('/');
+  const input = page.getByLabel('YouTube URL');
+  await input.fill('https://www.youtube.com/watch?v=auJzb1D-fag');
+  const context = page.getByRole('complementary', { name: 'Video workflow context' });
+  await expect(context).toBeHidden();
+  await page.getByRole('button', { name: 'Show workflow details' }).click();
+  await expect(context).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Inspect the Video Pack' })).toBeVisible();
+  await expect(input).toHaveValue('https://www.youtube.com/watch?v=auJzb1D-fag');
+  await page.getByRole('button', { name: 'Hide workflow details' }).click();
+  await expect(context).toBeHidden();
+  await expectNoHorizontalOverflow(page);
 });
 
 test('keeps the keyboard path on native labelled controls', async ({ page }) => {

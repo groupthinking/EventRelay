@@ -1513,3 +1513,15 @@ class TestSendAiRequest:
 
         resp = await send_ai_request({"cmd": "test"}, protocol=ProtocolType.OPENAI)
         assert resp["protocol"] == "openai"
+
+
+@pytest.mark.parametrize("model", ["gemini-2.5-pro", "gemini-3.8-flash"])
+async def test_google_adapter_sampling_policy(model):
+    adapter = GoogleAIAdapter()
+    await adapter.initialize({"api_key": "test-key"})
+    response = MagicMock(text="result", candidates=[], usage_metadata=None)
+    adapter._client.models.generate_content = MagicMock(return_value=response)
+    context = _ctx_mod.get_context_manager().create_context(user="u", task="t", intent="i")
+    await adapter.send_request({"model": model, "prompt": "test", "temperature": .3, "max_tokens": 123}, context)
+    config = vars(adapter._client.models.generate_content.call_args.kwargs["config"])
+    assert config == ({"max_output_tokens": 123, "temperature": .3} if model.startswith("gemini-2") else {"max_output_tokens": 123})

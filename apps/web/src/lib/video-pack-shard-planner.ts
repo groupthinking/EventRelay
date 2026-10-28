@@ -90,6 +90,17 @@ export function planShardManifest(
   options: ShardPlanOptions = {},
   decisions?: ShardPlanDecisions,
 ): ShardManifest {
+  if (durationSeconds !== null && (!Number.isFinite(durationSeconds) || durationSeconds < 0)) {
+    throw new Error('Invalid shard duration');
+  }
+  const requestedWorkers = decisions?.maxWorkers ?? options.maxWorkers;
+  if (requestedWorkers !== undefined && (!Number.isInteger(requestedWorkers) || requestedWorkers < 1)) {
+    throw new Error('Invalid shard worker limit');
+  }
+  const requestedCost = decisions?.costBoundUnits ?? options.costBoundUnits;
+  if (requestedCost !== undefined && (!Number.isFinite(requestedCost) || requestedCost <= 0)) {
+    throw new Error('Invalid shard cost bound');
+  }
   const duration = durationSeconds && durationSeconds > 0 ? durationSeconds : 0;
   const sections = planVideoPackExtractSections(metadata, durationSeconds);
   const fromChapters = (metadata?.chapters.length ?? 0) >= 2 && sections.length >= 2 &&
@@ -132,6 +143,10 @@ export interface ManifestValidation {
 export function validateShardManifest(manifest: ShardManifest): ManifestValidation {
   const failures: string[] = [];
   const { shards, durationSeconds } = manifest;
+  if (!Number.isFinite(durationSeconds) || durationSeconds < 0) failures.push('durationSeconds must be finite and non-negative');
+  if (!Number.isInteger(manifest.parallelCap)) failures.push('parallelCap must be an integer');
+  if (!Number.isFinite(manifest.costUnits) || manifest.costUnits < 0) failures.push('costUnits must be finite and non-negative');
+  if (!Number.isFinite(manifest.costBoundUnits) || manifest.costBoundUnits <= 0) failures.push('costBoundUnits must be finite and positive');
 
   if (shards.length === 0) {
     failures.push('manifest has no shards');
@@ -141,6 +156,9 @@ export function validateShardManifest(manifest: ShardManifest): ManifestValidati
   for (const [position, shard] of ordered.entries()) {
     if (shard.index !== position) {
       failures.push(`shard index ${shard.index} breaks 0-based ordering at position ${position}`);
+    }
+    if (!Number.isFinite(shard.start_s) || !Number.isFinite(shard.end_s)) {
+      failures.push(`shard ${shard.index} must have finite bounds`);
     }
     if (!(shard.start_s >= 0)) {
       failures.push(`shard ${shard.index} has negative start_s ${shard.start_s}`);
@@ -199,3 +217,4 @@ export function validateShardManifest(manifest: ShardManifest): ManifestValidati
 
   return { ok: failures.length === 0 ? 1 : 0, failures };
 }
+

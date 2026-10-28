@@ -210,7 +210,6 @@ class TriModelConsensusTool:
                 model='gemini-3-pro-preview',
                 contents=prompt,
                 config=genai_types.GenerateContentConfig(
-                    temperature=0.7,  # Lower temperature for more consistent decisions
                     max_output_tokens=2048
                 )
             )

@@ -183,6 +183,9 @@ function isIdentityPackSurface(pathname: string): boolean {
  * limit) rather than silently widening the budget.
  */
 export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
+  if (pathname === '/api/video/pack' || pathname === '/api/v1/video/pack') {
+    return !new Set(['GET', 'HEAD']).has(method.toUpperCase());
+  }
   if (isIdentityPackSurface(pathname)) return false;
 
   const prefix = AI_ROUTE_PREFIXES.find((candidate) =>
@@ -240,3 +243,4 @@ export function resolveAuthGateMode(env: {
   if (env.nodeEnv === 'production') return 'misconfigured';
   return 'disabled';
 }
+
