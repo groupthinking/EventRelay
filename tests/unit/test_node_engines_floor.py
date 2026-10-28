@@ -55,10 +55,7 @@ RUNTIME_DEPS_UNDER_TEST = ("openai", "ai", "@ai-sdk/gateway")
 # CI installs and executes these packages directly, so the declared floor must
 # satisfy them too.
 CI_DEPS_UNDER_TEST = ("jsdom", "vitest")
-NODE_RANGE_DEPS = {
-    "jsdom": "node_modules/jsdom",
-    "vitest": "apps/web/node_modules/vitest",
-}
+NODE_RANGE_DEPS = ("jsdom", "vitest")
 
 # Anchored: the whole range must be one `>=` clause. An unanchored search would
 # happily pull `>=24.0.0` out of `^20.0.0 || ^22.0.0 || >=24.0.0` and report a
@@ -330,16 +327,13 @@ def test_declared_floor_satisfies_ci_installed_dependencies(dependency: str) -> 
     )
 
 
-@pytest.mark.parametrize(("dependency", "lock_path"), NODE_RANGE_DEPS.items())
-def test_declared_node_range_fits_ci_dependency_support(
-    dependency: str, lock_path: str
-) -> None:
+@pytest.mark.parametrize("dependency", NODE_RANGE_DEPS)
+def test_declared_node_range_fits_ci_dependency_support(dependency: str) -> None:
     """The repository must not advertise versions rejected by a gating dependency."""
     declared = (_load(PACKAGE_JSON).get("engines") or {}).get("node")
-    locked = (
-        (_load(PACKAGE_LOCK).get("packages") or {}).get(lock_path, {}).get("engines")
-        or {}
-    ).get("node")
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    lock_path, metadata = _nearest_locked_dependency(packages, "apps/web", dependency)
+    locked = (metadata.get("engines") or {}).get("node")
 
     assert locked, f"expected {lock_path} to declare engines.node"
     assert _range_is_subset(declared, locked), (
@@ -352,8 +346,7 @@ def test_declared_node_range_fits_ci_dependency_support(
 def test_jsdom_resolves_its_supported_undici_major() -> None:
     """The nearest Undici package jsdom loads must satisfy its declared range."""
     packages = _load(PACKAGE_LOCK).get("packages") or {}
-    jsdom_path = "node_modules/jsdom"
-    jsdom = packages.get(jsdom_path) or {}
+    jsdom_path, jsdom = _nearest_locked_dependency(packages, "apps/web", "jsdom")
     required = (jsdom.get("dependencies") or {}).get("undici")
     resolved_path, resolved = _nearest_locked_dependency(packages, jsdom_path, "undici")
 
@@ -443,8 +436,7 @@ def test_frontend_ci_uses_clean_installs_and_builds_the_web_image() -> None:
 
     dockerfile = WEB_DOCKERFILE.read_text()
     patch_copy = (
-        "COPY apps/web/scripts/patch-world-vercel-undici-fetch.mjs "
-        "./apps/web/scripts/"
+        "COPY apps/web/scripts/patch-world-vercel-undici-fetch.mjs ./apps/web/scripts/"
     )
     assert dockerfile.index(patch_copy) < dockerfile.index(
         "RUN npm ci --workspace=apps/web --legacy-peer-deps"
