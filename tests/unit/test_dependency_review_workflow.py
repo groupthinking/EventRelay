@@ -315,7 +315,7 @@ def test_dependency_review_evidence_preserves_large_complete_api_diff(
         assert "always()" in step["if"]
         assert "github.event_name == 'pull_request'" in step["if"]
         assert "steps.dependency-changes.outputs.changed == 'true'" in step["if"]
-    assert record["run"] == "python3 scripts/ci/record_dependency_review.py"
+    assert record["run"] == "python3 -m scripts.ci.record_dependency_review"
     assert not any("steps.review.outputs" in value for value in record["env"].values())
     assert "github.event.pull_request.head.sha" in upload["with"]["name"]
     assert upload["with"]["path"] == "dependency-review-evidence/"

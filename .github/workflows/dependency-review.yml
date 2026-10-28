@@ -228,7 +228,7 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 scripts/ci/record_dependency_review.py
+        run: python3 -m scripts.ci.record_dependency_review
 
       - name: Upload dependency review evidence
         if: >-
