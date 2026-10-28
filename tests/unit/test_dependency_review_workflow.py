@@ -111,6 +111,13 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "${{ github.event_name == 'pull_request' && "
         "format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}"
     )
+    assert submission["env"] == {"PipReportFileLevelTimeoutSeconds": "120"}
+    assert (
+        0
+        < int(submission["env"]["PipReportFileLevelTimeoutSeconds"])
+        < (job["timeout-minutes"] * 60)
+    )
+    assert "detectorsFilter" not in submission["with"]
 
     review = next(step for step in steps if step["name"] == "Dependency Review")
     assert "github.event_name == 'pull_request'" in review["if"]

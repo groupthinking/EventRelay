@@ -271,6 +271,10 @@ jobs:
               (github.event.pull_request.head.repo.full_name == github.repository &&
                steps.dependency-changes.outputs.changed == 'true' &&
                steps.dependency-changes.outputs.snapshot_detector == '') }}
+        # Keep scanning the full tree, but bound each pip report. On a report
+        # timeout component-detection falls back to declared source dependencies.
+        env:
+          PipReportFileLevelTimeoutSeconds: "120"
         uses: advanced-security/component-detection-dependency-submission-action@b282c67b1008fde9b60da4bdfcd8849613e293b2 # v0.1.6
         with:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
