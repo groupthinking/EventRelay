@@ -107,7 +107,9 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     assert "github.event_name == 'pull_request'" in review["if"]
     assert "steps.dependency-changes.outputs.changed == 'true'" in review["if"]
     assert review["with"]["retry-on-snapshot-warnings"] is True
-    assert review["with"]["retry-on-snapshot-warnings-timeout"] == 300
+    retry_seconds = review["with"]["retry-on-snapshot-warnings-timeout"]
+    assert retry_seconds >= 600
+    assert job["timeout-minutes"] * 60 >= retry_seconds + 600
     assert review["with"]["base-ref"] == "${{ github.event.pull_request.base.sha }}"
     assert review["with"]["head-ref"] == "${{ github.event.pull_request.head.sha }}"
 
