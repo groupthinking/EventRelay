@@ -120,8 +120,12 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
     repo = tmp_path / "repo"
     repo.mkdir()
     for name in {
-        "pyproject.toml", "uv.lock", "apps/web/package.json",
-        "apps/web/package-lock.json", "requirements.txt", "src/app.py",
+        "pyproject.toml",
+        "uv.lock",
+        "apps/web/package.json",
+        "apps/web/package-lock.json",
+        "requirements.txt",
+        "src/app.py",
         ".github/workflows/dependency-review.yml",
     }:
         path = repo / name
@@ -135,14 +139,28 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
 
     git("init", "-q")
     git("add", ".")
-    git("-c", "user.name=Workflow test", "-c", "user.email=workflow@example.com",
-        "commit", "-qm", "base")
+    git(
+        "-c",
+        "user.name=Workflow test",
+        "-c",
+        "user.email=workflow@example.com",
+        "commit",
+        "-qm",
+        "base",
+    )
     base = git("rev-parse", "HEAD")
     for name in changed_paths:
         (repo / name).write_text("after\n")
     git("add", ".")
-    git("-c", "user.name=Workflow test", "-c", "user.email=workflow@example.com",
-        "commit", "-qm", "change")
+    git(
+        "-c",
+        "user.name=Workflow test",
+        "-c",
+        "user.email=workflow@example.com",
+        "commit",
+        "-qm",
+        "change",
+    )
     head = git("rev-parse", "HEAD")
 
     steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
@@ -159,7 +177,9 @@ def test_dependency_detection_selects_full_scan_for_manifest_changes(
     subprocess.run(["bash", "-c", detection["run"]], cwd=repo, env=env, check=True)
     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert values["changed"] == expected_changed
-    assert values["count"] == str(len(changed_paths) if expected_changed == "true" else 0)
+    assert values["count"] == str(
+        len(changed_paths) if expected_changed == "true" else 0
+    )
     assert "snapshot_detector" not in values
     submission = next(
         step for step in steps if step["name"] == "Submit dependency snapshots"
@@ -302,7 +322,9 @@ def test_dependency_review_evidence_rejects_snapshot_warnings_before_writing(
     assert not destination.exists()
 
 
-def test_dependency_review_evidence_saves_warning_free_empty_diff(tmp_path: Path) -> None:
+def test_dependency_review_evidence_saves_warning_free_empty_diff(
+    tmp_path: Path,
+) -> None:
     module = runpy.run_path(
         str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
     )
