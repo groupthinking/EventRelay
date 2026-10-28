@@ -268,7 +268,9 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         const structured = parseStructuredInterviewAnswer(query);
         const nextDraft = structured
           ? mergeInterviewDraft(sparkleInterviewDraft, structured)
-          : withSequentialAnswer(sparkleInterviewDraft, query);
+          : sparkleInterviewQuestions
+            ? withSequentialAnswer(sparkleInterviewDraft, query)
+            : sparkleInterviewDraft;
         setSparkleInterviewQuestions(interviewQuestions.length > 0 ? interviewQuestions : []);
         setSparkleInterviewDraft(nextDraft);
       } else if (data.provider === 'sparkle-pills-planner') {

@@ -90,4 +90,35 @@ describe('StudioIdeChat sparkle interview chaining', () => {
     });
     await screen.findByText('Sparkle Pills System Plan');
   });
+
+  it('does not treat the request that starts the interview as its first answer', async () => {
+    const interview = {
+      answer: 'Before I design the system, I need a short use-case interview.',
+      requiresInterview: true,
+      interviewQuestions: ['What exact chore or workflow should sparkle pills automate?'],
+    };
+    const network = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => interview,
+    });
+    vi.stubGlobal('fetch', network);
+
+    render(<StudioIdeChat videoId="auJzb1D-fag" packId="vp:v0:auJzb1D-fag" />);
+    fireEvent.change(screen.getByTestId('studio-ide-chat-input'), {
+      target: { value: 'Build me a system for using sparkle pills' },
+    });
+    fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
+    await screen.findByText(/What exact chore or workflow should sparkle pills automate\?/i);
+
+    fireEvent.change(screen.getByTestId('studio-ide-chat-input'), {
+      target: { value: 'Manage weekday focus sessions' },
+    });
+    fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+
+    const secondBody = JSON.parse((network.mock.calls[1]?.[1] as RequestInit).body as string);
+    expect(secondBody.sparkleIntent).toBe(true);
+    expect(secondBody.sparkleInterview).toEqual({ useCase: 'Manage weekday focus sessions' });
+  });
 });
