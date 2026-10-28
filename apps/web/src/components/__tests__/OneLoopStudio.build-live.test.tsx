@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: navigation.push }),
   useSearchParams: () => new URLSearchParams(),
 }));
+vi.mock('next-auth/react', () => ({ useSession: () => ({ data: null, status: 'unauthenticated' }) }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
 vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({
