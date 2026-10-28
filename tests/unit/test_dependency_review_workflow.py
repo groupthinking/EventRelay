@@ -64,10 +64,16 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     focused = next(step for step in steps if step["name"] == "Submit focused dependency snapshot")
     assert "steps.dependency-changes.outputs.snapshot_detector != ''" in focused["if"]
     assert "github.event.pull_request.head.repo.full_name == github.repository" in focused["if"]
-    assert focused["with"]["filePath"] == "${{ runner.temp }}/dependency-review-input"
+    assert focused["with"]["filePath"] == "${{ runner.temp }}/dependency-review-head"
+    assert focused["with"]["correlator"] == "focused-lockfile-review"
     assert "UvLock=EnableIfDefaultOff" in focused["with"]["detectorArgs"]
     assert "NpmLockfile3=EnableIfDefaultOff" in focused["with"]["detectorArgs"]
     assert focused["with"]["snapshot-sha"] == "${{ github.event.pull_request.head.sha }}"
+
+    focused_base = next(step for step in steps if step["name"] == "Submit focused base dependency snapshot")
+    assert focused_base["with"]["filePath"] == "${{ runner.temp }}/dependency-review-base"
+    assert focused_base["with"]["correlator"] == focused["with"]["correlator"]
+    assert focused_base["with"]["snapshot-sha"] == "${{ github.event.pull_request.base.sha }}"
 
     submission = next(step for step in steps if step["name"] == "Submit dependency snapshots")
     assert "github.event_name == 'push'" in submission["if"]
@@ -157,19 +163,27 @@ def test_snapshot_detector_keeps_unrelated_pip_resolves_out_of_lockfile_prs(
             step for step in _load_workflow()["jobs"]["dependency-review"]["steps"]
             if step["name"] == "Stage focused dependency inputs"
         )
-        source = tmp_path / "focused-inputs"
+        base_source = tmp_path / "focused-base"
+        head_source = tmp_path / "focused-head"
         subprocess.run(
             ["bash", "-c", stage["run"]], cwd=repo, check=True,
             env=env | {
-                "SNAPSHOT_SOURCE": str(source),
+                "SNAPSHOT_BASE_SOURCE": str(base_source),
+                "SNAPSHOT_HEAD_SOURCE": str(head_source),
                 "SNAPSHOT_DETECTOR": expected_detector,
             },
         )
-        staged = {path.relative_to(source).as_posix() for path in source.rglob("*") if path.is_file()}
-        assert staged == (
+        expected = (
             {"uv.lock", "pyproject.toml"}
             if expected_detector == "UvLock" else
             {"apps/web/package-lock.json", "apps/web/package.json"}
             if expected_detector == "NpmLockfile3" else
             {"uv.lock", "pyproject.toml", "apps/web/package-lock.json", "apps/web/package.json"}
         )
+        for source in (base_source, head_source):
+            staged = {path.relative_to(source).as_posix() for path in source.rglob("*") if path.is_file()}
+            assert staged == expected
+        for name in changed_paths:
+            if name in expected:
+                assert (base_source / name).read_text() == "before\n"
+                assert (head_source / name).read_text() == "after\n"

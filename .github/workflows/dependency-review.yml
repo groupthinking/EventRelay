@@ -139,16 +139,14 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           SNAPSHOT_DETECTOR: ${{ steps.dependency-changes.outputs.snapshot_detector }}
-          SNAPSHOT_SOURCE: ${{ runner.temp }}/dependency-review-input
+          SNAPSHOT_BASE_SOURCE: ${{ runner.temp }}/dependency-review-base
+          SNAPSHOT_HEAD_SOURCE: ${{ runner.temp }}/dependency-review-head
         run: |
           python - <<'PY'
           import os
           from pathlib import Path
-          import shutil
           import subprocess
 
-          target = Path(os.environ["SNAPSHOT_SOURCE"])
-          target.mkdir(parents=True, exist_ok=True)
           detector = os.environ["SNAPSHOT_DETECTOR"]
           if detector == "UvLock":
               locks = [Path("uv.lock")]
@@ -161,16 +159,45 @@ jobs:
                        and Path(raw.decode("utf-8")).name == "package-lock.json"]
           else:
               # The workflow-only PR exercises both lockfile ecosystems.
-              locks = [Path("uv.lock"), *Path(".").rglob("package-lock.json")]
+              locks = {Path("uv.lock")}
+              for sha in (os.environ["BASE_SHA"], os.environ["HEAD_SHA"]):
+                  tree = subprocess.run(
+                      ["git", "ls-tree", "-r", "--name-only", "-z", sha],
+                      check=True, capture_output=True,
+                  ).stdout
+                  locks.update(Path(raw.decode("utf-8")) for raw in tree.split(b"\0") if raw
+                               and Path(raw.decode("utf-8")).name == "package-lock.json")
 
-          for lock in locks:
-              manifest = lock.with_name("pyproject.toml" if lock.name == "uv.lock" else "package.json")
-              for source in (lock, manifest):
-                  if source.is_file():
-                      destination = target / source
-                      destination.parent.mkdir(parents=True, exist_ok=True)
-                      shutil.copy2(source, destination)
+          for sha, directory in (
+              (os.environ["BASE_SHA"], os.environ["SNAPSHOT_BASE_SOURCE"]),
+              (os.environ["HEAD_SHA"], os.environ["SNAPSHOT_HEAD_SOURCE"]),
+          ):
+              target = Path(directory)
+              target.mkdir(parents=True, exist_ok=True)
+              for lock in locks:
+                  manifest = lock.with_name("pyproject.toml" if lock.name == "uv.lock" else "package.json")
+                  for source in (lock, manifest):
+                      result = subprocess.run(
+                          ["git", "show", f"{sha}:{source.as_posix()}"], capture_output=True,
+                      )
+                      if result.returncode == 0:
+                          destination = target / source
+                          destination.parent.mkdir(parents=True, exist_ok=True)
+                          destination.write_bytes(result.stdout)
           PY
+
+      - name: Submit focused base dependency snapshot
+        if: >-
+          ${{ github.event_name == 'pull_request' &&
+              github.event.pull_request.head.repo.full_name == github.repository &&
+              steps.dependency-changes.outputs.snapshot_detector != '' }}
+        uses: advanced-security/component-detection-dependency-submission-action@b282c67b1008fde9b60da4bdfcd8849613e293b2 # v0.1.6
+        with:
+          snapshot-sha: ${{ github.event.pull_request.base.sha }}
+          snapshot-ref: ${{ format('refs/heads/{0}', github.event.pull_request.base.ref) }}
+          filePath: ${{ runner.temp }}/dependency-review-base
+          correlator: focused-lockfile-review
+          detectorArgs: UvLock=EnableIfDefaultOff,NpmLockfile3=EnableIfDefaultOff
 
       - name: Submit focused dependency snapshot
         if: >-
@@ -181,7 +208,8 @@ jobs:
         with:
           snapshot-sha: ${{ github.event.pull_request.head.sha }}
           snapshot-ref: ${{ format('refs/heads/{0}', github.event.pull_request.head.ref) }}
-          filePath: ${{ runner.temp }}/dependency-review-input
+          filePath: ${{ runner.temp }}/dependency-review-head
+          correlator: focused-lockfile-review
           detectorArgs: UvLock=EnableIfDefaultOff,NpmLockfile3=EnableIfDefaultOff
 
       - name: Submit dependency snapshots
