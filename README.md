@@ -43,7 +43,7 @@ Do not restore the retired EventRelay Pro catalog or invent additional products 
 
 ## Development
 
-Requirements come from [package.json](package.json) and [pyproject.toml](pyproject.toml): Node.js 22+, npm 10.8.0 as the pinned package manager, and Python 3.10+ for the internal backend.
+Requirements come from [package.json](package.json) and [pyproject.toml](pyproject.toml): Node.js 22+, npm 10.8.0 as the pinned package manager, and Python 3.11 or 3.12 for the internal backend.
 
 From the repository root:
 

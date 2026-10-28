@@ -88,7 +88,7 @@ npm --workspace=apps/web run type-check
 - **Formatter**: Black, 88-char line length
 - **Linter**: Ruff (E, W, F, I, B, C4, UP; E501 ignored)
 - **Type checking**: mypy strict (`disallow_untyped_defs = true`)
-- Target Python 3.10+; `pyproject.toml` is authoritative
+- Target Python 3.11–3.12; `pyproject.toml` is authoritative
 
 ### TypeScript
 - Strict mode TypeScript (`apps/web/tsconfig.json`)
