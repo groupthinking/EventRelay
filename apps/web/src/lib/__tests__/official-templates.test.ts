@@ -7,6 +7,7 @@ import {
   stackCheckItems,
   stackCheckStatus,
   stackCheckStatusLabel,
+  studioStackCheckView,
 } from '@/lib/official-templates';
 
 /** Live pBsT6v-ciO8 pack.stack.tools — none are runnable in UVAI. */
@@ -83,6 +84,9 @@ describe('deployHoldReason', () => {
     expect(first).toBeDefined();
     expect(stackCheckStatus(first, [], 'anonymous')).toBe('skip');
     expect(stackCheckStatusLabel('skip')).toMatch(/not runnable while signed out/i);
+    expect(studioStackCheckView(first, [], 'anonymous').holdsShip).toBe(false);
+    expect(studioStackCheckView(first, [], 'signed-in').holdsShip).toBe(true);
+    expect(studioStackCheckView(first, [first.id], 'signed-in').holdsShip).toBe(false);
   });
 
   it('does not hold anonymous Deploy on pBsT6v-ciO8 seadance/cluely checks', () => {
@@ -107,6 +111,10 @@ describe('deployHoldReason', () => {
       expect(stackCheckStatus(item, [], 'signed-in')).toBe('unknown');
     }
     expect(stackCheckStatusLabel('unknown')).toMatch(/cannot run this check/i);
+    const rows = stack.map((item) => studioStackCheckView(item, [], 'anonymous'));
+    expect(rows.every((row) => row.status === 'unknown')).toBe(true);
+    expect(rows.every((row) => row.holdsShip === false)).toBe(true);
+    expect(rows[0]?.statusLabel).toMatch(/cannot run this check/i);
   });
 
   it('does not let unknown tool checks hold a signed-in Vercel pack', () => {
