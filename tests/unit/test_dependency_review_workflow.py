@@ -115,6 +115,8 @@ def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
         "MPL-2.0",
         "CC0-1.0",
         "0BSD",
+        "MIT-CMU",
+        "Unlicense",
     }
     exclusions = settings["allow-dependencies-licenses"].split(",")
     assert not any(
