@@ -51,6 +51,31 @@ def test_uv_manifest_classifies_editable_root_and_transitive_packages() -> None:
     assert resolved["cloud-api@3.0"]["scope"] == "runtime"
 
 
+def test_requested_runtime_extra_overrides_dev_reachability() -> None:
+    lock = _lock("24.0")
+    lock["package"][0]["dependencies"].append(
+        {"name": "uvicorn", "extra": ["standard"]}
+    )
+    lock["package"][0]["optional-dependencies"]["dev"].append(
+        {"name": "watchfiles"}
+    )
+    lock["package"].extend(
+        [
+            {
+                "name": "uvicorn", "version": "1.0",
+                "source": {"registry": "https://pypi.org/simple"},
+                "optional-dependencies": {"standard": [{"name": "watchfiles"}]},
+            },
+            {
+                "name": "watchfiles", "version": "2.0",
+                "source": {"registry": "https://pypi.org/simple"},
+            },
+        ]
+    )
+    resolved = MODULE["uv_manifest"](lock)["resolved"]
+    assert resolved["watchfiles@2.0"]["scope"] == "runtime"
+
+
 def test_current_uv_lock_keeps_dev_only_changes_out_of_runtime() -> None:
     with (ROOT / "uv.lock").open("rb") as stream:
         resolved = MODULE["uv_manifest"](tomllib.load(stream))["resolved"]
