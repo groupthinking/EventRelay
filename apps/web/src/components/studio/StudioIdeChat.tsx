@@ -47,6 +47,8 @@ export default function StudioIdeChat({
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const idCounter = useRef(0);
+  const conversationKey = JSON.stringify([videoId, packId, stepContext?.id ?? null]);
+  const conversationKeyRef = useRef(conversationKey);
 
   useEffect(() => {
     if (focusNonce) inputRef.current?.focus();
@@ -63,17 +65,21 @@ export default function StudioIdeChat({
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Reset conversation when the pack changes.
+  // Each step has its own evidence window. Do not pass another step's turns
+  // into this request, or display an older response after the step changes.
   useEffect(() => {
+    conversationKeyRef.current = conversationKey;
     setMessages([]);
     setQuotaHit(false);
     setError(null);
-  }, [videoId, packId]);
+    setSending(false);
+  }, [conversationKey]);
 
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
     const query = draft.trim();
     if (!query || sending || disabled) return;
+    const requestKey = conversationKey;
 
     const userMsg: ChatMessage = { id: `u-${idCounter.current++}`, role: 'user', content: query };
     setMessages((prev) => [...prev, userMsg]);
@@ -97,6 +103,7 @@ export default function StudioIdeChat({
         body: JSON.stringify(body),
       });
       const data = await res.json();
+      if (conversationKeyRef.current !== requestKey) return;
 
       if (res.status === 402 && data.upgradeRequired) {
         setQuotaHit(true);
@@ -120,6 +127,7 @@ export default function StudioIdeChat({
         { id: `a-${idCounter.current++}`, role: 'assistant', content: data.answer || '(empty response)' },
       ]);
     } catch (err) {
+      if (conversationKeyRef.current !== requestKey) return;
       const text = err instanceof Error ? err.message : 'Chat failed.';
       setError(text);
       setMessages((prev) => [
@@ -127,7 +135,7 @@ export default function StudioIdeChat({
         { id: `a-${idCounter.current++}`, role: 'assistant', content: `Error: ${text}` },
       ]);
     } finally {
-      setSending(false);
+      if (conversationKeyRef.current === requestKey) setSending(false);
     }
   };
 

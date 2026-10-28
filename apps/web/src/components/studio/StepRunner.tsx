@@ -364,6 +364,7 @@ export default function StepRunner({
           seekBlockedReason={seekBlockedReason}
           onSeek={() => {
             if (activeStep.timestamp_range && player?.ready) {
+              clipPausedForRef.current = null;
               player.seekTo(activeStep.timestamp_range[0], { autoplay: autoplayClip });
             }
           }}

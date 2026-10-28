@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests
-COPY pyproject.toml requirements.txt* ./
+COPY pyproject.toml requirements.txt* constraints.txt ./
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
 
@@ -32,8 +32,12 @@ COPY apps/web/package.json ./apps/web/
 COPY apps/web/scripts ./apps/web/scripts
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    (pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -e .)
+RUN pip install --no-cache-dir --upgrade \
+        pip \
+        "setuptools>=80.10.2" \
+        "wheel>=0.46.2" && \
+    (pip install --no-cache-dir -c constraints.txt -r requirements.txt || \
+     pip install --no-cache-dir -c constraints.txt -e .)
 
 # Install Node.js dependencies for the web app
 # Using workspace to ensure proper hoisting and dependency resolution
@@ -53,6 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
+    && npm install --global npm@12.2.0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
@@ -60,6 +65,10 @@ RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 # Copy installed Python packages from builder
+# The base image ships packaging metadata of its own. Clear it before copying
+# the builder environment so stale vulnerable dist-info/vendor records cannot
+# survive the directory overlay into the runtime image.
+RUN rm -rf /usr/local/lib/python3.11/site-packages/*
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 

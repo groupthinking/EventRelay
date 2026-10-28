@@ -111,8 +111,10 @@ export const packActionItemSchema = z.object({
   description: z.string().trim().min(1),
   difficulty: z.enum(['easy', 'medium', 'hard']).nullable().optional(),
   priority: z.enum(['low', 'normal', 'high']).nullable().optional(),
-  start_s: z.number().nullable().optional(),
-  end_s: z.number().nullable().optional(),
+  // Extractor timing is optional evidence; malformed timing must not discard
+  // an otherwise valid action item.
+  start_s: z.unknown().optional(),
+  end_s: z.unknown().optional(),
 });
 
 const MAX_PACK_CHAPTERS = 64;

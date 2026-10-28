@@ -713,6 +713,12 @@ export function compileRunbook(input: CompileRunbookInput): Runbook {
     let anchor: RunbookAnchor = 'none';
     let quote: string | undefined;
     let groundedIds: string[] = [];
+    const matches = scoreSegments(segmentIndex, stepTokens, titleTokens, bonuses);
+    let best: SegmentMatch | null = null;
+    for (const match of matches) {
+      if (!match.candidate) continue;
+      if (!best || match.score > best.score) best = match;
+    }
 
     if (candidate.explicitRange) {
       range = candidate.explicitRange;
@@ -723,12 +729,6 @@ export function compileRunbook(input: CompileRunbookInput): Runbook {
       anchor = 'event';
       quote = row?.text;
     } else {
-      const matches = scoreSegments(segmentIndex, stepTokens, titleTokens, bonuses);
-      let best: SegmentMatch | null = null;
-      for (const match of matches) {
-        if (!match.candidate) continue;
-        if (!best || match.score > best.score) best = match;
-      }
       if (best) {
         range = extendRange(segmentIndex, matches, best.position);
         const citations = grounded.byPosition.get(best.position) ?? [];
@@ -755,6 +755,19 @@ export function compileRunbook(input: CompileRunbookInput): Runbook {
             range = [derived, derived];
             anchor = 'visual';
           }
+        }
+      }
+    }
+
+    // Acceptance criteria follow the independently matched evidence, even
+    // when an extractor timestamp takes precedence for the playback anchor.
+    for (const citation of grounded.byPosition.get(best?.position ?? -1) ?? []) {
+      groundedIds.push(citation.requirementId);
+    }
+    for (const citations of grounded.byPosition.values()) {
+      for (const citation of citations) {
+        if (titlesAlign(citation.requirementTitle, candidate.title)) {
+          groundedIds.push(citation.requirementId);
         }
       }
     }
@@ -822,9 +835,13 @@ export function compileRunbook(input: CompileRunbookInput): Runbook {
       );
     }
 
-    let id = `rb-${slug(candidate.source.id)}`;
+    const baseId = `rb-${slug(candidate.source.id).slice(0, 61)}`;
+    let id = baseId;
     let n = 2;
-    while (usedIds.has(id)) id = `rb-${slug(candidate.source.id)}-${n++}`;
+    while (usedIds.has(id)) {
+      const suffix = `-${n++}`;
+      id = `${baseId.slice(0, 64 - suffix.length)}${suffix}`;
+    }
     usedIds.add(id);
 
     steps.push({

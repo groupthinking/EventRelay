@@ -8,27 +8,27 @@ import {
 } from '@/lib/action-surface';
 import { zipEntryNames, zipUtf8Files } from '@/lib/zip-store';
 import { compileRunbook, renderRunbookMarkdown } from '@/lib/runbook-steps';
-import { PBST6V_SOURCE_HASH, PBST6V_VIDEO_ID, pbst6vPackFixture } from '@/lib/__fixtures__/pbst6v-cio8-runbook';
+import { RUNBOOK_SOURCE_HASH, RUNBOOK_VIDEO_ID, runbookPackFixture } from '@/lib/__fixtures__/aujzb1d-fag-runbook';
 
 describe('buildStudioShipPackage RUNBOOK.md', () => {
   it('ships the rendered runbook alongside the App Builder sandbox files', () => {
-    const pack = pbst6vPackFixture();
+    const pack = runbookPackFixture();
     const runbook = compileRunbook({ pack });
     const pkg = buildStudioShipPackage({
-      projectName: 'seadance-outreach',
+      projectName: 'studio-runbook',
       actions: [],
       videoPack: {
-        videoId: PBST6V_VIDEO_ID,
+        videoId: RUNBOOK_VIDEO_ID,
         sourceUrl: pack.source_url,
-        sourceHash: PBST6V_SOURCE_HASH,
+        sourceHash: RUNBOOK_SOURCE_HASH,
         packId: pack.id,
         requirements: pack.requirements,
       },
       transcript: { full_text: pack.transcript.full_text, segments: pack.transcript.segments },
       runbookMarkdown: renderRunbookMarkdown(runbook),
     });
-    expect(pkg.files['RUNBOOK.md']).toContain(`# Runbook — ${PBST6V_VIDEO_ID}`);
-    expect(pkg.files['RUNBOOK.md']).toContain('## Step 1 — AI Video Generation Tooling [4:07–4:14]');
+    expect(pkg.files['RUNBOOK.md']).toContain(`# Runbook — ${RUNBOOK_VIDEO_ID}`);
+    expect(pkg.files['RUNBOOK.md']).toContain('## Step 1 — Long Context Video Ingestion [1:42–2:28]');
     expect(pkg.files['index.html']).toBeDefined();
   });
 

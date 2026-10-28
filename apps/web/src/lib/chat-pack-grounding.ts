@@ -10,6 +10,8 @@ import { formatSeconds } from '@/lib/timestamp';
 import {
   CHAT_STEP_CONTENT_MAX,
   CHAT_STEP_VERIFICATION_MAX,
+  compileRunbook,
+  runbookStepToChatContext,
   type ChatStepContext,
   type RunbookStepKind,
 } from '@/lib/runbook-steps';
@@ -291,10 +293,27 @@ function readyPackFromRecord(
       'No ready Video Pack is stored for this video yet. Run pack extraction before using live chat.',
     );
   }
+  let step: ChatStepContext | null = null;
+  if (options?.step) {
+    const runbook = compileRunbook({ pack });
+    const canonicalStep = runbook.steps.find(
+      (candidate) =>
+        candidate.id === options.step?.id &&
+        candidate.step_number === options.step.step_number,
+    );
+    if (!canonicalStep) {
+      return packFailure(
+        400,
+        'step_context_mismatch',
+        'This step does not match the saved Video Pack. Refresh the runbook and try again.',
+      );
+    }
+    step = runbookStepToChatContext(canonicalStep, runbook.steps.length);
+  }
   return {
     ok: true,
     pack,
-    systemPrompt: buildVideoPackChatSystemPrompt(pack, options),
+    systemPrompt: buildVideoPackChatSystemPrompt(pack, { step }),
   };
 }
 
