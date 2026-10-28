@@ -118,7 +118,7 @@ import {
   sopStepsFromPack,
 } from '@/lib/emit-app-builder-sandbox';
 import {
-  compileRunbook,
+  compileSavedPackRunbook,
   parseRunbookStepHash,
   renderRunbookMarkdown,
   runbookStepToChatContext,
@@ -648,8 +648,8 @@ export default function OneLoopStudio({
     return sopStepsFromPack({ requirements: shellPack.requirements, transcript });
   }, [shellPack]);
   const runbook = useMemo(
-    () => (shellPack ? compileRunbook({ pack: shellPack, linkedSop }) : null),
-    [shellPack, linkedSop],
+    () => (shellPack ? compileSavedPackRunbook(shellPack) : null),
+    [shellPack],
   );
   const runbookMarkdown = useMemo(
     () => (runbook ? renderRunbookMarkdown(runbook, selected?.runbookProgress ?? null) : null),

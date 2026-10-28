@@ -17,7 +17,7 @@ import {
   type AppBuilderChapter,
   type AppBuilderVisualEvent,
 } from '@/lib/emit-app-builder-sandbox';
-import type { LinkedSop } from '@/lib/linked-sop';
+import { compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import type { GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import type {
   VideoPackCodeSnippet,
@@ -886,6 +886,24 @@ export function compileRunbook(input: CompileRunbookInput): Runbook {
       total: steps.length,
     },
   };
+}
+
+/** Compile the same runbook in Studio and on the chat server from saved pack data only. */
+export function compileSavedPackRunbook(pack: RunbookPackInput): Runbook {
+  const linkedSop = compileLinkedSop({
+    transcript: pack.transcript?.full_text,
+    segments: pack.transcript?.segments?.map((segment) => ({
+      start: segment.start_s,
+      duration: Math.max(0, segment.end_s - segment.start_s),
+      text: segment.text,
+    })),
+    actions: pack.action_items?.map((item) => ({
+      title: item.title,
+      description: item.description,
+    })),
+    packTools: pack.stack?.tools,
+  });
+  return compileRunbook({ pack, linkedSop });
 }
 
 // ── Chat grounding handoff ──────────────────────────────────────────────────

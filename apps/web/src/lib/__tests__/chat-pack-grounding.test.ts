@@ -6,7 +6,7 @@ import {
   resolveChatPackGrounding,
 } from '@/lib/chat-pack-grounding';
 import { buildIdentityPack, identityHash } from '@/lib/video-pack';
-import { compileRunbook, runbookStepToChatContext, type ChatStepContext } from '@/lib/runbook-steps';
+import { compileRunbook, compileSavedPackRunbook, runbookStepToChatContext, type ChatStepContext } from '@/lib/runbook-steps';
 import {
   QJ_SOP_STEPS,
   QJ_TRANSCRIPT,
@@ -132,6 +132,31 @@ describe('chat-pack-grounding', () => {
       expect(result.systemPrompt).toContain(canonical.steps[0].title);
       expect(result.systemPrompt).toContain(step.verification);
     }
+  });
+
+  it('accepts a linked-SOP fallback step compiled from the saved pack on both sides', async () => {
+    const pack = qjPack();
+    pack.requirements = [];
+    pack.action_items = [];
+    pack.transcript = {
+      language: 'en',
+      full_text: 'In week one, build the initial team for the mission.',
+      segments: [{ idx: 0, start_s: 20, end_s: 30, text: 'In week one, build the initial team for the mission.' }],
+    };
+    const runbook = compileSavedPackRunbook(pack);
+    expect(runbook.steps.some((item) => item.source.kind === 'sop_step')).toBe(true);
+    const step = runbookStepToChatContext(runbook.steps[0], runbook.steps.length);
+    vi.spyOn(store, 'getPackRecordWithMeta').mockResolvedValue({
+      outcome: 'hit',
+      record: { state: 'ready', pack },
+      store: { backend: 'memory', ok: true },
+    });
+    const result = await resolveChatPackGrounding(
+      { videoId: QJ_VIDEO_ID, packId: pack.id },
+      { step },
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.systemPrompt).toContain(step.title);
   });
 
   it('rejects altered browser step details even when the id matches', async () => {

@@ -10,7 +10,7 @@ import { formatSeconds } from '@/lib/timestamp';
 import {
   CHAT_STEP_CONTENT_MAX,
   CHAT_STEP_VERIFICATION_MAX,
-  compileRunbook,
+  compileSavedPackRunbook,
   runbookStepToChatContext,
   type ChatStepContext,
   type RunbookStepKind,
@@ -295,7 +295,7 @@ function readyPackFromRecord(
   }
   let step: ChatStepContext | null = null;
   if (options?.step) {
-    const runbook = compileRunbook({ pack });
+    const runbook = compileSavedPackRunbook(pack);
     const canonicalStep = runbook.steps.find(
       (candidate) =>
         candidate.id === options.step?.id &&
