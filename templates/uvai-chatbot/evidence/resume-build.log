@@ -1,0 +1,55 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> uvai-chatbot-foundation@3.1.0 build
+> node --import tsx lib/db/migrate.ts && next build
+
+◇ injected env (0) from .env.local // tip: ◈ secrets for agents [www.dotenvx.com]
+POSTGRES_URL not defined, skipping migrations
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.ts took 27ms
+- Cache Components enabled
+- Experiments (use with caution):
+  ✓ cachedNavigations
+  ✓ inlineCss
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 3.5s
+  Running TypeScript ...
+  Finished TypeScript in 7.7s ...
+  Collecting page data using 8 workers ...
+  Generating static pages using 8 workers (0/19) ...
+  Generating static pages using 8 workers (4/19) 
+  Generating static pages using 8 workers (9/19) 
+  Generating static pages using 8 workers (14/19) 
+✓ Generating static pages using 8 workers (19/19) in 6.6s
+  Finalizing page optimization ...
+
+Route (app)                      Revalidate  Expire
+┌ ◐ /
+├ ○ /_not-found
+├ ƒ /api/auth/[...nextauth]
+├ ƒ /api/auth/guest
+├ ƒ /api/chat
+├ ƒ /api/chat/[id]/stream
+├ ƒ /api/document
+├ ƒ /api/files/upload
+├ ƒ /api/history
+├ ƒ /api/messages
+├ ○ /api/models                          1d      1y
+├ ƒ /api/suggestions
+├ ƒ /api/video-guide/download
+├ ƒ /api/vote
+├   /chat/[id]
+│ └ ◐ /chat/[id]
+├ ○ /login
+├ ○ /opengraph-image-12cog0.png
+├ ○ /register
+└ ○ /twitter-image-12cog0.png
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)             prerendered as static content
+◐  (Partial Prerender)  prerendered as static HTML with dynamic server-streamed content
+ƒ  (Dynamic)            server-rendered on demand
+

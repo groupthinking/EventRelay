@@ -1,0 +1,29 @@
+{
+  "inspectedHead": "4bfc9b27952f761e67d5adf20c106a2cb2bd3aa2",
+  "pr": 2393,
+  "canonicalIssue": 2390,
+  "previousHeadFailures": {
+    "build": {
+      "job": 114036283000,
+      "error": "Docker Hub unauthenticated pull rate limit while obtaining Redis image"
+    },
+    "trivy": {
+      "job": 114036284708,
+      "error": "Docker Hub auth token endpoint returned 504 Gateway Timeout"
+    },
+    "dependency-review": {
+      "job": 114036283133,
+      "error": "Imported @auth/core 0.37.2 includes critical/high advisories; patched next-auth to 5.0.0-beta.32 / @auth/core 0.41.3"
+    },
+    "CodeQL": "High-severity insecure randomness; Math.random-based UUID replaced with crypto.randomUUID; fresh scan required"
+  },
+  "localConfigurationPresent": {
+    "POSTGRES_URL": false,
+    "AUTH_SECRET": false,
+    "AI_GATEWAY_API_KEY": false,
+    "UVAI_PACK_SERVICE_ORIGIN": false
+  },
+  "dockerAvailable": false,
+  "postgresAvailable": false,
+  "liveQualityVerified": false
+}
