@@ -6,6 +6,7 @@ import json
 import os
 import runpy
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,88 @@ def _load_workflow() -> dict:
     assert WORKFLOW_PATH.exists(), "dependency-review workflow should exist"
     workflow = yaml.safe_load(WORKFLOW_PATH.read_text())
     return workflow if "on" in workflow else {**workflow, "on": workflow[True]}
+
+
+def _locked_action(uses: str) -> str:
+    """Resolve the actual runner pin, not the readable tag in the YAML."""
+    lock = yaml.safe_load(WORKFLOW_PATH.with_name("actions.lock").read_text())
+    assert uses in lock["workflows"][".github/workflows/dependency-review.yml"]
+    pin = lock["dependencies"][uses]
+    owner_repo, ref = uses.rsplit("@", 1)
+    assert pin["ref"] == ref
+    assert pin["commit"].startswith("sha1-")
+    return f"{owner_repo}@{pin['commit'].removeprefix('sha1-')}"
+
+
+@pytest.mark.parametrize(
+    ("changed_path", "expected_changed"),
+    [
+        (".github/workflows/actions.lock", True),
+        ("docs/actions.lock", False),
+        (".github/aw/actions-lock.json", False),
+    ],
+)
+def test_dependency_detector_handles_lockfile_only_changes(
+    tmp_path: Path, changed_path: str, expected_changed: bool
+) -> None:
+    """Run the workflow's detector against an actual one-file Git diff."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            [
+                "git",
+                "-c",
+                "user.name=Workflow test",
+                "-c",
+                "user.email=workflow-test@example.invalid",
+                *args,
+            ],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+
+    git("init", "--quiet")
+    changed_file = repo / changed_path
+    changed_file.parent.mkdir(parents=True, exist_ok=True)
+    changed_file.write_text("before\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "baseline")
+    base = git("rev-parse", "HEAD")
+    changed_file.write_text("after\n")
+    git("add", ".")
+    git("commit", "--quiet", "-m", "update one lockfile")
+    head = git("rev-parse", "HEAD")
+
+    steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
+    detection = next(step for step in steps if step.get("id") == "dependency-changes")
+    script = detection["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    output = tmp_path / "output"
+    summary = tmp_path / "summary"
+    subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=repo,
+        env={
+            **os.environ,
+            "BASE_SHA": base,
+            "HEAD_SHA": head,
+            "GITHUB_OUTPUT": str(output),
+            "GITHUB_STEP_SUMMARY": str(summary),
+        },
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert output.read_text() == (
+        f"changed={str(expected_changed).lower()}\ncount={int(expected_changed)}\n"
+    )
+    if expected_changed:
+        assert f"- `{changed_path}`" in summary.read_text()
+    else:
+        assert "No dependency inputs introduced by this PR" in summary.read_text()
 
 
 def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> None:
@@ -73,7 +156,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
     assert "snapshot_detector" not in submission["if"]
     assert not any("focused" in step["name"].lower() for step in steps)
-    assert submission["uses"] == (
+    assert _locked_action(submission["uses"]) == (
         "advanced-security/component-detection-dependency-submission-action"
         "@a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0"
     )
@@ -313,7 +396,7 @@ def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
     assert settings.get("license-check", True) is True
     assert settings.get("warn-only", False) is False
     assert "continue-on-error" not in review
-    assert review["uses"] == (
+    assert _locked_action(review["uses"]) == (
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294"
     )
 

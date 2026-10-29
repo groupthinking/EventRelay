@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 30  # Allow full-tree scan, scoped lock submissions, and base/head snapshot retry
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           # PR runs inspect changes introduced after the shared ancestor.
@@ -90,6 +90,7 @@ jobs:
           def is_dependency_input(path: PurePosixPath) -> bool:
               # Workflow and Dependabot configuration changes are covered by
               # CI tests; they do not change the installed dependency graph.
+              # The native Actions lockfile is an executable dependency input.
               name = path.name
               return (
                   name in exact_names
@@ -99,7 +100,7 @@ jobs:
                       and name.endswith((".in", ".txt"))
                   )
                   or name.endswith((".csproj", ".fsproj", ".gradle", ".gradle.kts"))
-                  or path.as_posix() == "vendor/modules.txt"
+                  or path.as_posix() in {"vendor/modules.txt", ".github/workflows/actions.lock"}
               )
 
           changed = sorted(path.as_posix() for path in paths if is_dependency_input(path))
@@ -128,7 +129,7 @@ jobs:
         # bound produced base/head drift in the #2501 exact-lock canary.
         env:
           PipReportFileLevelTimeoutSeconds: "240"
-        uses: advanced-security/component-detection-dependency-submission-action@a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0 # v0.2.0
+        uses: advanced-security/component-detection-dependency-submission-action@v0.2.0
         with:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           snapshot-ref: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
@@ -149,7 +150,7 @@ jobs:
         if: >-
           ${{ github.event_name == 'pull_request' &&
               steps.dependency-changes.outputs.changed == 'true' }}
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        uses: actions/dependency-review-action@v5.0.0
         with:
           base-ref: ${{ github.event.pull_request.base.sha }}
           head-ref: ${{ github.event.pull_request.head.sha }}
@@ -234,7 +235,7 @@ jobs:
         if: >-
           ${{ always() && github.event_name == 'pull_request' &&
               steps.dependency-changes.outputs.changed == 'true' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: dependency-review-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
           path: dependency-review-evidence/
