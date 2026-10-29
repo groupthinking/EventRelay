@@ -6,7 +6,8 @@ workflows:
     '.github/workflows/dependency-review.yml':
         - 'actions/checkout@v7.0.1'
         - 'actions/dependency-review-action@v5.0.0'
-        - 'advanced-security/component-detection-dependency-submission-action@v0.1.6'
+        - 'actions/upload-artifact@v7.0.1'
+        - 'advanced-security/component-detection-dependency-submission-action@v0.2.0'
 dependencies:
     'actions/checkout@v7.0.1':
         ref: 'v7.0.1'
@@ -18,8 +19,13 @@ dependencies:
         commit: 'sha1-a1d282b36b6f3519aa1f3fc636f609c47dddb294'
         owner_id: 44036562
         repo_id: 476372928
-    'advanced-security/component-detection-dependency-submission-action@v0.1.6':
-        ref: 'v0.1.6'
-        commit: 'sha1-b282c67b1008fde9b60da4bdfcd8849613e293b2'
+    'actions/upload-artifact@v7.0.1':
+        ref: 'v7.0.1'
+        commit: 'sha1-043fb46d1a93c77aae656e7c1c64a875d1fc6a0a'
+        owner_id: 44036562
+        repo_id: 192625955
+    'advanced-security/component-detection-dependency-submission-action@v0.2.0':
+        ref: 'v0.2.0'
+        commit: 'sha1-a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0'
         owner_id: 71494179
         repo_id: 604441937

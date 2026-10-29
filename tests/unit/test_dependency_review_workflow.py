@@ -23,6 +23,17 @@ def _load_workflow() -> dict:
     return workflow if "on" in workflow else {**workflow, "on": workflow[True]}
 
 
+def _locked_action(uses: str) -> str:
+    """Resolve the actual runner pin, not the readable tag in the YAML."""
+    lock = yaml.safe_load(WORKFLOW_PATH.with_name("actions.lock").read_text())
+    assert uses in lock["workflows"][".github/workflows/dependency-review.yml"]
+    pin = lock["dependencies"][uses]
+    owner_repo, ref = uses.rsplit("@", 1)
+    assert pin["ref"] == ref
+    assert pin["commit"].startswith("sha1-")
+    return f"{owner_repo}@{pin['commit'].removeprefix('sha1-')}"
+
+
 @pytest.mark.parametrize(
     ("changed_path", "expected_changed"),
     [
@@ -145,7 +156,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
     assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
     assert "snapshot_detector" not in submission["if"]
     assert not any("focused" in step["name"].lower() for step in steps)
-    assert submission["uses"] == (
+    assert _locked_action(submission["uses"]) == (
         "advanced-security/component-detection-dependency-submission-action"
         "@a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0"
     )
@@ -385,7 +396,7 @@ def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
     assert settings.get("license-check", True) is True
     assert settings.get("warn-only", False) is False
     assert "continue-on-error" not in review
-    assert review["uses"] == (
+    assert _locked_action(review["uses"]) == (
         "actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294"
     )
 
