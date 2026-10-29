@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+vi.mock('@/lib/workflow-task-store', () => ({ workflowTaskOwner: vi.fn(async () => 'user-1'), readWorkflowTask: vi.fn() }));
+
 vi.mock('@/lib/action-agent', () => ({
   AVAILABLE_TOOL_NAMES: ['create_workflow_task', 'dispatch_agent'],
   runActionAgent: vi.fn(),
@@ -13,7 +15,8 @@ vi.mock('@/lib/billing/entitlement-store', () => ({
   isProSubscriber: vi.fn(async () => false),
 }));
 
-import { POST } from '@/app/api/agents/actions/route';
+import { workflowTaskOwner, readWorkflowTask } from '@/lib/workflow-task-store';
+import { GET, POST } from '@/app/api/agents/actions/route';
 import { executePreparedActions, runActionAgent } from '@/lib/action-agent';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
 
@@ -32,6 +35,7 @@ function request(body: unknown): Request {
 describe('POST /api/agents/actions review gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(workflowTaskOwner).mockResolvedValue('user-1');
     mockedIsProSubscriber.mockResolvedValue(false);
   });
 
@@ -71,6 +75,7 @@ describe('POST /api/agents/actions review gate', () => {
     expect(mockedExecutePreparedActions).toHaveBeenCalledWith({
       actions: [prepared],
       jobId: 'job_1',
+      ownerId: 'user-1',
     });
     expect(mockedRunActionAgent).not.toHaveBeenCalled();
   });
@@ -111,4 +116,27 @@ describe('POST /api/agents/actions review gate', () => {
     expect((await POST(request({ mode: 'execute', actions: [] }))).status).toBe(400);
     expect((await POST(request({ mode: 'surprise' }))).status).toBe(400);
   });
+  it('rejects unauthenticated task writes even with a supplied owner', async () => {
+    vi.mocked(workflowTaskOwner).mockResolvedValue(null);
+    const response = await POST(request({ mode: 'execute', ownerId: 'spoof', jobId: 'run', actions: [{ tool: 'create_workflow_task', input: {} }] }));
+    expect(response.status).toBe(401);
+    expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
+  });
+
+  it('requires a stable run ID for task execution', async () => {
+    const response = await POST(request({ mode: 'execute', actions: [{ tool: 'create_workflow_task', input: {} }] }));
+    expect(response.status).toBe(400);
+    expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
+  });
+
+  it('reads only the current session owner namespace', async () => {
+    const id = 'a'.repeat(64);
+    vi.mocked(readWorkflowTask).mockResolvedValue(null);
+    const response = await GET(new Request(`http://localhost/api/agents/actions?taskId=${id}&ownerId=other`));
+    expect(response.status).toBe(404);
+    expect(readWorkflowTask).toHaveBeenCalledWith('user-1', id);
+    vi.mocked(workflowTaskOwner).mockResolvedValue(null);
+    expect((await GET(new Request(`http://localhost/api/agents/actions?taskId=${id}`))).status).toBe(401);
+  });
+
 });

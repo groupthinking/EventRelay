@@ -1,3 +1,4 @@
+import { workflowTaskOwner, readWorkflowTask } from '@/lib/workflow-task-store';
 import { NextResponse } from 'next/server';
 import { executePreparedActions, runActionAgent } from '@/lib/action-agent';
 import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
@@ -31,7 +32,17 @@ function isPreparedAction(value: unknown): value is AgentAction {
  * Advertises the executable tools the action agent can invoke, so the UI can
  * render affordances without hardcoding the list.
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(request?: Request): Promise<NextResponse> {
+  const taskId = request && new URL(request.url).searchParams.get('taskId');
+  if (taskId && request) {
+    const owner = await workflowTaskOwner(request);
+    if (!owner) return NextResponse.json({ error: 'Sign in to read tasks' }, { status: 401 });
+    if (!/^[a-f0-9]{64}$/.test(taskId)) return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 });
+    try {
+      const task = await readWorkflowTask(owner, taskId);
+      return NextResponse.json(task ? { task } : { error: 'Task not found' }, { status: task ? 200 : 404 });
+    } catch { return NextResponse.json({ error: 'Task storage unavailable' }, { status: 503 }); }
+  }
   const hasKey = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
   return NextResponse.json({ available: hasKey, tools: AVAILABLE_TOOL_NAMES });
 }
@@ -91,6 +102,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    let ownerId: string | undefined;
+    if (reviewedActions.some(action => action.tool === 'create_workflow_task')) {
+      ownerId = (await workflowTaskOwner(request)) ?? undefined;
+      if (!ownerId) return NextResponse.json({ success: false, error: 'Sign in to save tasks', actions: [] }, { status: 401 });
+      if (typeof jobId !== 'string' || !jobId.trim() || jobId.length > 200) return NextResponse.json({ success: false, error: 'A run ID is required', actions: [] }, { status: 400 });
+    }
+
     if (reviewedActions.some((action) => PRO_ACTION_TOOLS.has(action.tool))) {
       const billingEmail = await resolveTrustedBillingEmail(request);
       if (!(await isProSubscriber(billingEmail))) {
@@ -109,6 +127,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     try {
       const fulfilled = await executePreparedActions({
         actions: reviewedActions,
+        ownerId,
         jobId: typeof jobId === 'string' ? jobId : undefined,
       });
       return NextResponse.json({ success: true, provider: 'confirmed-plan', actions: fulfilled });

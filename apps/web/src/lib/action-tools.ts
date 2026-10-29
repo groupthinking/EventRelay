@@ -1,3 +1,4 @@
+import { createWorkflowTaskRecord } from './workflow-task-store';
 /**
  * Executable tool registry for the Transcription-Driven Action Agent.
  *
@@ -37,6 +38,8 @@ export interface ActionToolResult {
 
 /** Runtime context handed to every tool execution. */
 export interface ToolContext {
+  /** Server-verified identity, only supplied after explicit confirmation. */
+  ownerId?: string;
   /** Resolved FastAPI base URL, or null when no backend is configured. */
   backendBaseUrl: string | null;
   /** Injectable fetch (defaults to global fetch) so tools are testable. */
@@ -96,18 +99,13 @@ const createWorkflowTask: ActionTool = {
     required: ['title', 'description', 'category', 'priority'],
     additionalProperties: false,
   },
-  async execute(input) {
-    const title = str(input, 'title');
-    return {
-      summary: `Created task "${title}"`,
-      data: {
-        title,
-        description: str(input, 'description'),
-        category: str(input, 'category'),
-        priority: str(input, 'priority'),
-        createdAt: new Date().toISOString(),
-      },
-    };
+  async execute(input, ctx) {
+    try {
+      const task = await createWorkflowTaskRecord(input, ctx.ownerId, ctx.jobId, ctx.fetchImpl);
+      return { summary: `Saved task "${task.title}" (${task.id})`, data: task };
+    } catch {
+      return { summary: 'Task was not confirmed saved. Sign in, supply a run ID, and retry when durable storage is available.', isError: true };
+    }
   },
 };
 
