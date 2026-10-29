@@ -1,70 +1,37 @@
-# Sparkle Pills Chaining Contract
+# Video Pack planning contract
 
-This repository implements an interview-first chaining flow for sparkle-pill use cases in `POST /api/chat`.
+This repository supports an interview-first planning flow in `POST /api/chat` for a build derived from a hosted Video Pack. The plan is a source-bound starting point for codebase work, not a claim that the target repository has been changed.
 
-## Goal
+## Runtime flow
 
-For sparkle-pill requests, avoid jumping straight to a plan. First collect concrete use-case constraints, then emit an actionable system plan.
+1. The request must name a canonical `video_id` and matching `pack_id`. The existing chat grounding path loads a ready pack from its hashed identity and rejects missing, processing, error, identity-only, or mismatched packs.
+2. A planning request is detected from the query (including existing sparkle-pill requests) or `planIntent: true` on a follow-up turn. Without a ready pack, it returns `pack_required` or the existing pack error.
+3. The first turn returns five questions about the deliverable, trigger, available tools, constraints, and acceptance signal. The Studio and hosted App Builder chat clients display the questions and collect labeled or sequential answers.
+4. Once the answers are complete, the planner returns a deterministic plan. It separates user-supplied interview answers from excerpts extracted from the pack. Frontend, backend, middleware, database, LSP, MCP, tools, and environment sections show matching cited excerpts or state that the pack has no explicit evidence for that area.
+5. The plan proposes repository inspection, a bounded implementation slice, and build/test verification. It never claims the codebase was changed, tests passed, or anything deployed. The planning branch does not call a model provider.
 
-## Runtime behavior
-
-1. Detect sparkle-pill intent in `query`/`message` (`/\bsparkle\s*pills?\b/i`) or explicit `sparkleIntent: true` for interview follow-up turns.
-2. If required interview answers are missing, return interview questions and stop.
-3. If interview answers are present and complete, return a deterministic system plan.
-4. Do not call model providers for this branch (no Gateway or Grok dependency).
-5. If the request is pack-bound (`video_id`/`pack_id`), stay on the existing pack-grounded chat path instead of deterministic sparkle planning.
-
-## Request payload
+## Request shape
 
 ```json
 {
-  "query": "Build me a system for using sparkle pills",
-  "sparkleIntent": true,
-  "sparkleInterview": {
-    "useCase": "I need to manage daily focus sessions across work and school.",
-    "trigger": "Start each weekday at 08:30",
-    "tools": ["Google Calendar", "Slack"],
-    "constraints": "No notifications after 21:00",
-    "successSignal": "5 sessions completed per week"
+  "query": "Plan a build from this Video Pack",
+  "video_id": "auJzb1D-fag",
+  "pack_id": "vp:v0:auJzb1D-fag",
+  "planIntent": true,
+  "planInterview": {
+    "useCase": "The exact deliverable to build",
+    "trigger": "The event or action that starts it",
+    "tools": ["Tools available in the target codebase"],
+    "constraints": "Implementation boundaries",
+    "successSignal": "An observable acceptance result"
   }
 }
 ```
 
-## Interview-first response shape
+The first turn omits `planIntent` and `planInterview`. A follow-up turn sends the accumulated interview answers with `planIntent: true`, so the user's intent survives even if the follow-up query does not repeat “plan.” A normal pack chat request remains on the grounded model path.
 
-```json
-{
-  "answer": "Before I design the system...",
-  "requiresInterview": true,
-  "interviewQuestions": [
-    "What exact chore or workflow should sparkle pills automate?",
-    "What should trigger each run (time, event, or manual action)?",
-    "Which tools and systems must it update (for example Calendar, Slack, email)?",
-    "What rules or constraints must never be violated?",
-    "How will you measure success each week?"
-  ]
-}
-```
+## Implementation
 
-## Plan response shape
-
-```json
-{
-  "answer": "Sparkle Pills System Plan\n...",
-  "requiresInterview": false,
-  "provider": "sparkle-pills-planner",
-  "interview": {
-    "useCase": "...",
-    "trigger": "...",
-    "tools": ["..."],
-    "constraints": "...",
-    "successSignal": "..."
-  }
-}
-```
-
-## Files
-
-- `apps/web/src/lib/sparkle-pills.ts`
-- `apps/web/src/app/api/chat/route.ts`
-- `apps/web/src/app/api/__tests__/chat-sparkle-pills-route.test.ts`
+- `apps/web/src/lib/video-pack-plan.ts` holds intent detection, interview validation, evidence selection, and plan rendering.
+- `apps/web/src/app/api/chat/route.ts` invokes it only after ready pack verification and quota checks.
+- `apps/web/src/components/studio/StudioIdeChat.tsx` and the hosted chat in `apps/web/src/lib/emit-app-builder-sandbox.ts` handle the two-turn UI flow.

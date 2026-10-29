@@ -1573,9 +1573,9 @@ function bindChatRail(): void {
   const prompts = Array.from(document.querySelectorAll<HTMLButtonElement>('button[data-chat-prompt]'));
 
   const chatHistory: Array<{ role: 'user' | 'assistant'; content: string }> = [];
-  const sparkleFields = ['useCase', 'trigger', 'tools', 'constraints', 'successSignal'] as const;
-  type SparkleField = (typeof sparkleFields)[number];
-  type SparkleInterviewDraft = Partial<{
+  const planFields = ['useCase', 'trigger', 'tools', 'constraints', 'successSignal'] as const;
+  type PlanField = (typeof planFields)[number];
+  type PlanInterviewDraft = Partial<{
     useCase: string;
     trigger: string;
     tools: string[];
@@ -1589,8 +1589,8 @@ function bindChatRail(): void {
     provider?: string;
   };
 
-  let sparkleInterviewQuestions: string[] | null = null;
-  let sparkleInterviewDraft: SparkleInterviewDraft = {};
+  let planInterviewQuestions: string[] | null = null;
+  let planInterviewDraft: PlanInterviewDraft = {};
   let inFlight = false;
 
   function parseTools(value: string): string[] {
@@ -1600,7 +1600,7 @@ function bindChatRail(): void {
       .filter((entry) => entry.length > 0);
   }
 
-  function normalizeInterviewKey(value: string): SparkleField | null {
+  function normalizeInterviewKey(value: string): PlanField | null {
     const key = value.replace(/[^a-z]/gi, '').toLowerCase();
     if (key === 'usecase' || key === 'workflow' || key === 'objective') return 'useCase';
     if (key === 'trigger' || key === 'schedule') return 'trigger';
@@ -1610,12 +1610,12 @@ function bindChatRail(): void {
     return null;
   }
 
-  function parseStructuredInterviewAnswer(text: string): SparkleInterviewDraft | null {
+  function parseStructuredInterviewAnswer(text: string): PlanInterviewDraft | null {
     const labelPattern =
       /(useCase|workflow|objective|trigger|schedule|tools|integrations|systems|constraints|guardrails|rules|successSignal|successMetric|success)\s*:/gi;
     const labelMatches = Array.from(text.matchAll(labelPattern));
     if (labelMatches.length > 0) {
-      const fromLabels: SparkleInterviewDraft = {};
+      const fromLabels: PlanInterviewDraft = {};
       for (let index = 0; index < labelMatches.length; index += 1) {
         const current = labelMatches[index];
         const next = labelMatches[index + 1];
@@ -1640,7 +1640,7 @@ function bindChatRail(): void {
       .split(/\\r?\\n/)
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
-    const fromLabels: SparkleInterviewDraft = {};
+    const fromLabels: PlanInterviewDraft = {};
     let matchedLabel = false;
     for (const line of lines) {
       const idx = line.indexOf(':');
@@ -1672,7 +1672,7 @@ function bindChatRail(): void {
     };
   }
 
-  function mergeInterviewDraft(base: SparkleInterviewDraft, patch: SparkleInterviewDraft): SparkleInterviewDraft {
+  function mergeInterviewDraft(base: PlanInterviewDraft, patch: PlanInterviewDraft): PlanInterviewDraft {
     return {
       ...base,
       ...patch,
@@ -1680,8 +1680,8 @@ function bindChatRail(): void {
     };
   }
 
-  function nextMissingInterviewField(interview: SparkleInterviewDraft): SparkleField | null {
-    for (const field of sparkleFields) {
+  function nextMissingInterviewField(interview: PlanInterviewDraft): PlanField | null {
+    for (const field of planFields) {
       if (field === 'tools') {
         if (!Array.isArray(interview.tools) || interview.tools.length === 0) return field;
         continue;
@@ -1693,7 +1693,7 @@ function bindChatRail(): void {
     return null;
   }
 
-  function withSequentialAnswer(base: SparkleInterviewDraft, answer: string): SparkleInterviewDraft {
+  function withSequentialAnswer(base: PlanInterviewDraft, answer: string): PlanInterviewDraft {
     const field = nextMissingInterviewField(base);
     if (!field) return base;
     const normalized = answer.trim();
@@ -1751,12 +1751,12 @@ function bindChatRail(): void {
   async function postLiveChat(text: string): Promise<void> {
     setComposerBusy(true);
     try {
-      let sparklePayload: SparkleInterviewDraft | null = null;
-      if (sparkleInterviewQuestions) {
+      let planPayload: PlanInterviewDraft | null = null;
+      if (planInterviewQuestions) {
         const structured = parseStructuredInterviewAnswer(text);
-        sparklePayload = structured
-          ? mergeInterviewDraft(sparkleInterviewDraft, structured)
-          : withSequentialAnswer(sparkleInterviewDraft, text);
+        planPayload = structured
+          ? mergeInterviewDraft(planInterviewDraft, structured)
+          : withSequentialAnswer(planInterviewDraft, text);
       }
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -1768,8 +1768,8 @@ function bindChatRail(): void {
           pack_id: pack.packId,
           video_url: pack.sourceUrl,
           history: chatHistory,
-          ...(sparklePayload
-            ? { sparkleIntent: true, sparkleInterview: sparklePayload }
+          ...(planPayload
+            ? { planIntent: true, planInterview: planPayload }
             : {}),
         }),
         signal: AbortSignal.timeout(60_000),
@@ -1791,11 +1791,11 @@ function bindChatRail(): void {
         return;
       }
       if (data.requiresInterview) {
-        sparkleInterviewQuestions = interviewQuestions;
-        sparkleInterviewDraft = sparklePayload ?? sparkleInterviewDraft;
-      } else if (data.provider === 'sparkle-pills-planner') {
-        sparkleInterviewQuestions = null;
-        sparkleInterviewDraft = {};
+        planInterviewQuestions = interviewQuestions;
+        planInterviewDraft = planPayload ?? planInterviewDraft;
+      } else if (data.provider === 'video-pack-planner') {
+        planInterviewQuestions = null;
+        planInterviewDraft = {};
       }
       chatHistory.push({ role: 'user', content: text });
       chatHistory.push({ role: 'assistant', content: answer });

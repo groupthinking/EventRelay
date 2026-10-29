@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
 
-describe('StudioIdeChat sparkle interview chaining', () => {
+describe('StudioIdeChat plan interview chaining', () => {
   beforeEach(() => {
     vi.stubGlobal('React', React);
   });
@@ -15,7 +15,7 @@ describe('StudioIdeChat sparkle interview chaining', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders interview questions and keeps sparkle intent/interview payload on follow-up turn', async () => {
+  it('renders interview questions and keeps plan intent/interview payload on follow-up turn', async () => {
     const network = vi
       .fn()
       .mockResolvedValueOnce({
@@ -26,11 +26,11 @@ describe('StudioIdeChat sparkle interview chaining', () => {
             'Before I design the system, I need a short use-case interview so the workflow stays concrete and executable.',
           requiresInterview: true,
           interviewQuestions: [
-            'What exact chore or workflow should sparkle pills automate?',
-            'What should trigger each run (time, event, or manual action)?',
-            'Which tools and systems must it update (for example Calendar, Slack, email)?',
-            'What rules or constraints must never be violated?',
-            'How will you measure success each week?',
+            'What exact deliverable should the agent build from this video?',
+            'What event, schedule, or manual action should start the workflow?',
+            'Which tools or systems are available in the target codebase?',
+            'What constraints must the implementation respect?',
+            'What observable test or result will prove the deliverable works?',
           ],
         }),
       })
@@ -38,31 +38,31 @@ describe('StudioIdeChat sparkle interview chaining', () => {
         ok: true,
         status: 200,
         json: async () => ({
-          answer: 'Sparkle Pills System Plan',
+          answer: 'Video Pack Build Plan',
           requiresInterview: false,
-          provider: 'sparkle-pills-planner',
+          provider: 'video-pack-planner',
         }),
       });
     vi.stubGlobal('fetch', network);
 
     render(<StudioIdeChat videoId="auJzb1D-fag" packId="vp:v0:auJzb1D-fag" />);
 
-    fireEvent.change(screen.getByTestId('studio-ide-chat-input'), {
-      target: { value: 'Build me a system for using sparkle pills' },
-    });
+    fireEvent.click(screen.getByTestId('studio-ide-chat-plan-prompt'));
+    expect(screen.getByTestId('studio-ide-chat-input').tagName).toBe('TEXTAREA');
+    expect(screen.getByTestId('studio-ide-chat-input')).toHaveProperty('value', 'Plan a build from this Video Pack');
     fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
 
     await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
-    await screen.findByText(/What exact chore or workflow should sparkle pills automate\?/i);
+    await screen.findByText(/What exact deliverable should the agent build from this video\?/i);
 
     fireEvent.change(screen.getByTestId('studio-ide-chat-input'), {
       target: {
         value: [
-          'useCase: Manage weekday focus sessions',
-          'trigger: Start each weekday at 08:30',
-          'tools: Google Calendar, Slack, Notion',
-          'constraints: No notifications after 21:00',
-          'successSignal: 5 sessions completed per week',
+          'useCase: Build a safety checklist from the video',
+          'trigger: User selects the source video',
+          'tools: Git, npm, Playwright',
+          'constraints: No invented video claims',
+          'successSignal: Checklist steps match the cited source',
         ].join('\n'),
       },
     });
@@ -70,8 +70,8 @@ describe('StudioIdeChat sparkle interview chaining', () => {
 
     await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
     const secondBody = JSON.parse((network.mock.calls[1]?.[1] as RequestInit).body as string) as {
-      sparkleIntent?: boolean;
-      sparkleInterview?: {
+      planIntent?: boolean;
+      planInterview?: {
         useCase?: string;
         trigger?: string;
         tools?: string[];
@@ -80,22 +80,22 @@ describe('StudioIdeChat sparkle interview chaining', () => {
       };
     };
 
-    expect(secondBody.sparkleIntent).toBe(true);
-    expect(secondBody.sparkleInterview).toEqual({
-      useCase: 'Manage weekday focus sessions',
-      trigger: 'Start each weekday at 08:30',
-      tools: ['Google Calendar', 'Slack', 'Notion'],
-      constraints: 'No notifications after 21:00',
-      successSignal: '5 sessions completed per week',
+    expect(secondBody.planIntent).toBe(true);
+    expect(secondBody.planInterview).toEqual({
+      useCase: 'Build a safety checklist from the video',
+      trigger: 'User selects the source video',
+      tools: ['Git', 'npm', 'Playwright'],
+      constraints: 'No invented video claims',
+      successSignal: 'Checklist steps match the cited source',
     });
-    await screen.findByText('Sparkle Pills System Plan');
+    await screen.findByText('Video Pack Build Plan');
   });
 
   it('does not treat the request that starts the interview as its first answer', async () => {
     const interview = {
       answer: 'Before I design the system, I need a short use-case interview.',
       requiresInterview: true,
-      interviewQuestions: ['What exact chore or workflow should sparkle pills automate?'],
+      interviewQuestions: ['What exact deliverable should the agent build from this video?'],
     };
     const network = vi.fn().mockResolvedValue({
       ok: true,
@@ -106,19 +106,19 @@ describe('StudioIdeChat sparkle interview chaining', () => {
 
     render(<StudioIdeChat videoId="auJzb1D-fag" packId="vp:v0:auJzb1D-fag" />);
     fireEvent.change(screen.getByTestId('studio-ide-chat-input'), {
-      target: { value: 'Build me a system for using sparkle pills' },
+      target: { value: 'Plan a build from this Video Pack' },
     });
     fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
-    await screen.findByText(/What exact chore or workflow should sparkle pills automate\?/i);
+    await screen.findByText(/What exact deliverable should the agent build from this video\?/i);
 
     fireEvent.change(screen.getByTestId('studio-ide-chat-input'), {
-      target: { value: 'Manage weekday focus sessions' },
+      target: { value: 'Build a safety checklist from the video' },
     });
     fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
     await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
 
     const secondBody = JSON.parse((network.mock.calls[1]?.[1] as RequestInit).body as string);
-    expect(secondBody.sparkleIntent).toBe(true);
-    expect(secondBody.sparkleInterview).toEqual({ useCase: 'Manage weekday focus sessions' });
+    expect(secondBody.planIntent).toBe(true);
+    expect(secondBody.planInterview).toEqual({ useCase: 'Build a safety checklist from the video' });
   });
 });

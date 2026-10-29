@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, Sparkles } from 'lucide-react';
-import type { SparkleInterviewAnswers } from '@/lib/sparkle-pills';
+import type { VideoPlanInterviewAnswers } from '@/lib/video-pack-plan';
 
 type ChatMessage = {
   id: string;
@@ -17,15 +17,15 @@ type StudioIdeChatProps = {
 };
 
 const FREE_QUOTA_MESSAGE = 'Free plan includes 5 AI chat messages per day.';
-const SPARKLE_FIELDS = ['useCase', 'trigger', 'tools', 'constraints', 'successSignal'] as const;
-type SparkleField = (typeof SPARKLE_FIELDS)[number];
-type SparkleInterviewDraft = Partial<SparkleInterviewAnswers>;
-type SparkleChatResponse = {
+const PLAN_FIELDS = ['useCase', 'trigger', 'tools', 'constraints', 'successSignal'] as const;
+type PlanField = (typeof PLAN_FIELDS)[number];
+type PlanInterviewDraft = Partial<VideoPlanInterviewAnswers>;
+type PlanChatResponse = {
   answer?: string;
   requiresInterview?: boolean;
   interviewQuestions?: string[];
   provider?: string;
-  sparkleInterview?: unknown;
+  planInterview?: unknown;
   [key: string]: unknown;
 };
 
@@ -36,7 +36,7 @@ function parseTools(value: string): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-function normalizeInterviewKey(value: string): SparkleField | null {
+function normalizeInterviewKey(value: string): PlanField | null {
   const key = value.replace(/[^a-z]/gi, '').toLowerCase();
   if (key === 'usecase' || key === 'workflow' || key === 'objective') return 'useCase';
   if (key === 'trigger' || key === 'schedule') return 'trigger';
@@ -46,12 +46,12 @@ function normalizeInterviewKey(value: string): SparkleField | null {
   return null;
 }
 
-function parseStructuredInterviewAnswer(text: string): SparkleInterviewDraft | null {
+function parseStructuredInterviewAnswer(text: string): PlanInterviewDraft | null {
   const labelPattern =
     /(useCase|workflow|objective|trigger|schedule|tools|integrations|systems|constraints|guardrails|rules|successSignal|successMetric|success)\s*:/gi;
   const labelMatches = Array.from(text.matchAll(labelPattern));
   if (labelMatches.length > 0) {
-    const fromLabels: SparkleInterviewDraft = {};
+    const fromLabels: PlanInterviewDraft = {};
     for (let index = 0; index < labelMatches.length; index += 1) {
       const current = labelMatches[index];
       const next = labelMatches[index + 1];
@@ -76,7 +76,7 @@ function parseStructuredInterviewAnswer(text: string): SparkleInterviewDraft | n
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0);
-  const fromLabels: SparkleInterviewDraft = {};
+  const fromLabels: PlanInterviewDraft = {};
   let matchedLabel = false;
   for (const line of lines) {
     const idx = line.indexOf(':');
@@ -108,8 +108,8 @@ function parseStructuredInterviewAnswer(text: string): SparkleInterviewDraft | n
   };
 }
 
-function nextMissingInterviewField(interview: SparkleInterviewDraft): SparkleField | null {
-  for (const field of SPARKLE_FIELDS) {
+function nextMissingInterviewField(interview: PlanInterviewDraft): PlanField | null {
+  for (const field of PLAN_FIELDS) {
     if (field === 'tools') {
       if (!Array.isArray(interview.tools) || interview.tools.length === 0) return field;
       continue;
@@ -121,7 +121,7 @@ function nextMissingInterviewField(interview: SparkleInterviewDraft): SparkleFie
   return null;
 }
 
-function mergeInterviewDraft(base: SparkleInterviewDraft, patch: SparkleInterviewDraft): SparkleInterviewDraft {
+function mergeInterviewDraft(base: PlanInterviewDraft, patch: PlanInterviewDraft): PlanInterviewDraft {
   return {
     ...base,
     ...patch,
@@ -129,7 +129,7 @@ function mergeInterviewDraft(base: SparkleInterviewDraft, patch: SparkleIntervie
   };
 }
 
-function withSequentialAnswer(base: SparkleInterviewDraft, answer: string): SparkleInterviewDraft {
+function withSequentialAnswer(base: PlanInterviewDraft, answer: string): PlanInterviewDraft {
   const field = nextMissingInterviewField(base);
   if (!field) return base;
   const normalized = answer.trim();
@@ -168,8 +168,8 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
   const [sending, setSending] = useState(false);
   const [quotaHit, setQuotaHit] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sparkleInterviewQuestions, setSparkleInterviewQuestions] = useState<string[] | null>(null);
-  const [sparkleInterviewDraft, setSparkleInterviewDraft] = useState<SparkleInterviewDraft>({});
+  const [planInterviewQuestions, setPlanInterviewQuestions] = useState<string[] | null>(null);
+  const [planInterviewDraft, setPlanInterviewDraft] = useState<PlanInterviewDraft>({});
   const messagesRef = useRef<HTMLDivElement>(null);
   const idCounter = useRef(0);
 
@@ -189,8 +189,8 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
     setMessages([]);
     setQuotaHit(false);
     setError(null);
-    setSparkleInterviewQuestions(null);
-    setSparkleInterviewDraft({});
+    setPlanInterviewQuestions(null);
+    setPlanInterviewDraft({});
   }, [videoId, packId]);
 
   const send = async (event?: FormEvent) => {
@@ -212,13 +212,13 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       const body: Record<string, unknown> = { query, history };
       if (videoId) body.video_id = videoId;
       if (packId) body.pack_id = packId;
-      if (sparkleInterviewQuestions) {
+      if (planInterviewQuestions) {
         const structured = parseStructuredInterviewAnswer(query);
         const draftPayload = structured
-          ? mergeInterviewDraft(sparkleInterviewDraft, structured)
-          : withSequentialAnswer(sparkleInterviewDraft, query);
-        body.sparkleIntent = true;
-        body.sparkleInterview = draftPayload;
+          ? mergeInterviewDraft(planInterviewDraft, structured)
+          : withSequentialAnswer(planInterviewDraft, query);
+        body.planIntent = true;
+        body.planInterview = draftPayload;
       }
 
       const res = await fetch('/api/chat', {
@@ -226,7 +226,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const data = (await res.json()) as SparkleChatResponse;
+      const data = (await res.json()) as PlanChatResponse;
 
       if (res.status === 402 && data.upgradeRequired) {
         setQuotaHit(true);
@@ -267,17 +267,17 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       if (data.requiresInterview) {
         const structured = parseStructuredInterviewAnswer(query);
         const nextDraft = structured
-          ? mergeInterviewDraft(sparkleInterviewDraft, structured)
-          : sparkleInterviewQuestions
-            ? withSequentialAnswer(sparkleInterviewDraft, query)
-            : sparkleInterviewDraft;
-        setSparkleInterviewQuestions(interviewQuestions.length > 0 ? interviewQuestions : []);
-        setSparkleInterviewDraft(nextDraft);
-      } else if (data.provider === 'sparkle-pills-planner') {
-        setSparkleInterviewQuestions(null);
-        setSparkleInterviewDraft({});
+          ? mergeInterviewDraft(planInterviewDraft, structured)
+          : planInterviewQuestions
+            ? withSequentialAnswer(planInterviewDraft, query)
+            : planInterviewDraft;
+        setPlanInterviewQuestions(interviewQuestions.length > 0 ? interviewQuestions : []);
+        setPlanInterviewDraft(nextDraft);
+      } else if (data.provider === 'video-pack-planner') {
+        setPlanInterviewQuestions(null);
+        setPlanInterviewDraft({});
       } else if (!data.requiresInterview) {
-        setSparkleInterviewQuestions(null);
+        setPlanInterviewQuestions(null);
       }
     } catch (err) {
       const text = err instanceof Error ? err.message : 'Chat failed.';
@@ -308,13 +308,23 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
           <div className="uvai-empty template-chat-welcome">
             <div className="template-mark" aria-hidden="true"><Sparkles size={24} /></div>
             <p className="text-sm font-semibold text-slate-700">
-              {canChat ? 'Ask about this pack' : 'Run a video to start chatting'}
+              {canChat ? 'Ask about this pack or plan a build' : 'Run a video to start chatting'}
             </p>
             <p className="max-w-[30ch] text-xs text-slate-500">
               {canChat
                 ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
                 : 'Paste a YouTube URL above and hit Run.'}
             </p>
+            {canChat ? (
+              <button
+                type="button"
+                onClick={() => setDraft('Plan a build from this Video Pack')}
+                data-testid="studio-ide-chat-plan-prompt"
+                className="text-xs font-semibold text-blue-700 underline"
+              >
+                Plan a build from this video
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="flex flex-col gap-2.5">
@@ -351,15 +361,15 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         className="template-chat-composer p-4"
       >
         <div className="template-source-input">
-          <input
-            type="text"
+          <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={canChat ? 'Ask about events, tools, intent…' : 'Run a video first'}
+            placeholder={canChat ? 'Ask about this pack or plan a build…' : 'Run a video first'}
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"
-            className="uvai-input min-w-0 flex-1 disabled:opacity-40"
+            rows={3}
+            className="uvai-input min-w-0 flex-1 resize-y disabled:opacity-40"
           />
           <button
             type="submit"
