@@ -84,6 +84,8 @@ jobs:
           }
 
           def is_dependency_input(path: PurePosixPath) -> bool:
+              # Workflow code changes are covered by CI tests; they do not
+              # change a dependency graph and should not force a comparison.
               name = path.name
               return (
                   name in exact_names
@@ -96,7 +98,6 @@ jobs:
                   or path.as_posix() in {
                       ".github/dependabot.yaml",
                       ".github/dependabot.yml",
-                      ".github/workflows/dependency-review.yml",
                       "vendor/modules.txt",
                   }
               )
@@ -145,9 +146,6 @@ jobs:
 
                   if root_valid and all(covered(path) for path in changed if PurePosixPath(path).name == "package.json"):
                       snapshot_detector = "NpmLockfile3"
-          elif changed == [".github/workflows/dependency-review.yml"]:
-              # Exercise both focused detectors on the workflow change itself.
-              snapshot_detector = "UvLock,NpmLockfile3"
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
               handle.write(f"changed={'true' if changed else 'false'}\n")
               handle.write(f"count={len(changed)}\n")
@@ -158,8 +156,8 @@ jobs:
                   handle.writelines(f"- `{path}`\n" for path in changed)
               else:
                   handle.write(
-                      "No dependency manifests, lockfiles, or dependency-review "
-                      "configuration changed between the exact base and head trees.\n"
+                      "No dependency inputs changed between the exact base "
+                      "and head trees.\n"
                   )
           PY
 
@@ -193,15 +191,7 @@ jobs:
               locks = [Path(raw.decode("utf-8")) for raw in delta.split(b"\0") if raw
                        and Path(raw.decode("utf-8")).name == "package-lock.json"]
           else:
-              # The workflow-only PR exercises both lockfile ecosystems.
-              locks = {Path("uv.lock")}
-              for sha in (os.environ["BASE_SHA"], os.environ["HEAD_SHA"]):
-                  tree = subprocess.run(
-                      ["git", "ls-tree", "-r", "--name-only", "-z", sha],
-                      check=True, capture_output=True,
-                  ).stdout
-                  locks.update(Path(raw.decode("utf-8")) for raw in tree.split(b"\0") if raw
-                               and Path(raw.decode("utf-8")).name == "package-lock.json")
+              raise ValueError(f"Unexpected focused snapshot detector: {detector}")
 
           for sha, directory in (
               (os.environ["BASE_SHA"], os.environ["SNAPSHOT_BASE_SOURCE"]),
@@ -352,8 +342,9 @@ jobs:
             pkg:npm/@img/sharp-win32-x64
           comment-summary-in-pr: always
 
-      # Preserve the graph comparison even when a composite license is rejected.
-      # An empty/missing action output stays empty; it is not a clean result.
+      # Fetch the same dependency diff from GitHub's API instead of expanding
+      # dependency-changes in an Actions expression. Large grouped updates can
+      # exceed the runner's template-object limit before the record step starts.
       - name: Record dependency review evidence
         if: >-
           ${{ always() && github.event_name == 'pull_request' &&
@@ -362,41 +353,8 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REVIEW_OUTCOME: ${{ steps.review.outcome }}
-          DEPENDENCY_CHANGES: ${{ steps.review.outputs.dependency-changes }}
-          INVALID_LICENSE_CHANGES: ${{ steps.review.outputs.invalid-license-changes }}
-          VULNERABLE_CHANGES: ${{ steps.review.outputs.vulnerable-changes }}
-          DENIED_CHANGES: ${{ steps.review.outputs.denied-changes }}
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          from pathlib import Path
-
-          evidence = {
-              "schema_version": 1,
-              "base_sha": os.environ["BASE_SHA"],
-              "head_sha": os.environ["HEAD_SHA"],
-              "run_id": os.environ["GITHUB_RUN_ID"],
-              "run_attempt": os.environ["GITHUB_RUN_ATTEMPT"],
-              "review_outcome": os.environ["REVIEW_OUTCOME"],
-              # Retain the exact raw JSON strings, including duplicate entries,
-              # full SPDX expressions, and empty outputs from incomplete reviews.
-              "raw_outputs": {
-                  name: os.environ[variable]
-                  for name, variable in {
-                      "dependency-changes": "DEPENDENCY_CHANGES",
-                      "invalid-license-changes": "INVALID_LICENSE_CHANGES",
-                      "vulnerable-changes": "VULNERABLE_CHANGES",
-                      "denied-changes": "DENIED_CHANGES",
-                  }.items()
-              },
-          }
-          destination = Path("dependency-review-evidence")
-          destination.mkdir(exist_ok=True)
-          (destination / "review.json").write_text(
-              json.dumps(evidence, indent=2) + "\n", encoding="utf-8"
-          )
-          PY
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/record_dependency_review.py
 
       - name: Upload dependency review evidence
         if: >-
@@ -405,7 +363,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dependency-review-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
-          path: dependency-review-evidence/review.json
+          path: dependency-review-evidence/
           if-no-files-found: error
           retention-days: 30
 

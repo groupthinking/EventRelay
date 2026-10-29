@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
+import runpy
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -60,7 +62,6 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "vendor/modules.txt",
         "Dockerfile",
         ".github/dependabot.yaml",
-        ".github/workflows/dependency-review.yml",
     ):
         assert protected_input in detection_script
     assert '"git", "diff", "--name-only", "-z", base, head' in detection_script
@@ -144,7 +145,7 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         ),
         (["requirements.txt"], "true", ""),
         (["uv.lock", "requirements.txt"], "true", ""),
-        ([".github/workflows/dependency-review.yml"], "true", "UvLock,NpmLockfile3"),
+        ([".github/workflows/dependency-review.yml"], "false", ""),
         (["src/app.py"], "false", ""),
     ],
 )
@@ -391,11 +392,9 @@ def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "review_outcome,raw_output", [("failure", None), ("success", "")]
-)
-def test_dependency_review_evidence_preserves_composite_license_and_unknown_outputs(
-    tmp_path: Path, review_outcome: str, raw_output: str | None
+@pytest.mark.parametrize("review_outcome", ["failure", "success"])
+def test_dependency_review_evidence_preserves_large_complete_api_diff(
+    tmp_path: Path, review_outcome: str
 ) -> None:
     steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
     review = next(step for step in steps if step["name"] == "Dependency Review")
@@ -410,47 +409,282 @@ def test_dependency_review_evidence_preserves_composite_license_and_unknown_outp
         assert "always()" in step["if"]
         assert "github.event_name == 'pull_request'" in step["if"]
         assert "steps.dependency-changes.outputs.changed == 'true'" in step["if"]
-    assert record["env"]["INVALID_LICENSE_CHANGES"] == (
-        "${{ steps.review.outputs.invalid-license-changes }}"
-    )
+    assert record["run"] == "python3 scripts/ci/record_dependency_review.py"
+    assert not any("steps.review.outputs" in value for value in record["env"].values())
     assert "github.event.pull_request.head.sha" in upload["with"]["name"]
-    assert upload["with"]["path"] == "dependency-review-evidence/review.json"
+    assert upload["with"]["path"] == "dependency-review-evidence/"
     assert upload["with"]["if-no-files-found"] == "error"
 
     expression = "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
-    finding = {"name": "numpy", "version": "2.5.4", "license": expression}
-    # Keep duplicated occurrences, the full AND expression, and hostile text as data.
-    invalid = json.dumps(
-        {"forbidden": [finding, finding], "unresolved": [], "unlicensed": []}
-    )
-    dependencies = json.dumps([finding, {"name": "$(touch injected)"}])
+    finding = {
+        "name": "numpy",
+        "version": "2.5.4",
+        "license": expression,
+        "manifest": "requirements.txt",
+        "ecosystem": "pip",
+    }
+    # This response exceeds the Actions template-object limit hit by grouped PRs.
+    changes = [finding, finding, {**finding, "name": "$(touch injected)"}] + [
+        {
+            **finding,
+            "name": f"package-{index}",
+            "license": "MIT",
+            "version": "1.0.0",
+        }
+        for index in range(1500)
+    ]
+    raw = json.dumps(changes).encode()
+    assert len(raw) > 64_000
     environment = {
-        # A failing subprocess may print its environment in pytest's traceback.
-        # Pass only this test's inputs, never credentials from the caller.
-        "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath)),
         "BASE_SHA": "a" * 40,
         "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_API_URL": "https://api.github.com",
+        "GITHUB_TOKEN": "dummy-test-token",
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": "2",
         "REVIEW_OUTCOME": review_outcome,
-        "DEPENDENCY_CHANGES": dependencies if raw_output is None else raw_output,
-        "INVALID_LICENSE_CHANGES": invalid if raw_output is None else raw_output,
-        "VULNERABLE_CHANGES": "[]" if raw_output is None else raw_output,
-        "DENIED_CHANGES": "",
     }
-    subprocess.run(
-        ["bash", "-e", "-c", record["run"]], cwd=tmp_path, env=environment, check=True
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
     )
-    saved = json.loads((tmp_path / upload["with"]["path"]).read_text())
+    seen_requests = []
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    def fetch(request, timeout):
+        seen_requests.append((request, timeout))
+        return ApiResponse(raw)
+
+    destination = tmp_path / "dependency-review-evidence"
+    module["record_dependency_review"](
+        environment, destination, opener=fetch, changed_files={"requirements.txt"}
+    )
+    saved = json.loads((destination / "review.json").read_text())
     assert saved["base_sha"] == "a" * 40
     assert saved["head_sha"] == "b" * 40
     assert saved["run_id"] == "123"
     assert saved["run_attempt"] == "2"
     assert saved["review_outcome"] == review_outcome
-    assert saved["raw_outputs"] == {
-        "dependency-changes": environment["DEPENDENCY_CHANGES"],
-        "invalid-license-changes": environment["INVALID_LICENSE_CHANGES"],
-        "vulnerable-changes": environment["VULNERABLE_CHANGES"],
-        "denied-changes": "",
-    }
+    assert saved["dependency_diff_count"] == len(changes)
+    assert saved["dependency_diff_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert (destination / saved["dependency_diff_file"]).read_bytes() == raw
+    assert saved["dependency_diff_source"] == seen_requests[0][0].full_url
+    assert seen_requests[0][1] == 90
+    assert seen_requests[0][0].get_header("Authorization") == "Bearer dummy-test-token"
     assert not (tmp_path / "injected").exists()
+
+
+@pytest.mark.parametrize("raw", [b"[]", b'[{"name":"partial"}]'])
+def test_dependency_review_evidence_rejects_snapshot_warnings_before_writing(
+    tmp_path: Path, raw: bytes
+) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+
+    class ApiResponse(io.BytesIO):
+        headers = {
+            "x-github-dependency-graph-snapshot-warnings": "bWlzc2luZyBzbmFwc2hvdHM="
+        }
+
+    destination = tmp_path / "dependency-review-evidence"
+    with pytest.raises(ValueError, match="snapshot warnings"):
+        module["record_dependency_review"](
+            environment, destination, opener=lambda request, timeout: ApiResponse(raw)
+        )
+    assert not destination.exists()
+
+
+def test_dependency_review_evidence_saves_warning_free_empty_diff(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    destination = tmp_path / "dependency-review-evidence"
+    saved = module["record_dependency_review"](
+        environment, destination, opener=lambda request, timeout: ApiResponse(b"[]")
+    )
+    assert saved["dependency_diff_count"] == 0
+    assert (destination / "dependency-diff.json").read_bytes() == b"[]"
+
+
+def test_dependency_review_rejects_warning_free_graph_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+    )
+
+    def commit_lock(version: str) -> str:
+        lock = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "eventrelay", "version": "1.0.0"},
+                "node_modules/fast-uri": {"version": version, "dev": True},
+                "node_modules/hono": {"version": "4.13.7", "dev": True},
+            },
+        }
+        (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
+        subprocess.run(["git", "add", "package-lock.json"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", version], cwd=repo, check=True)
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+        ).strip()
+
+    base = commit_lock("3.1.7")
+    head = commit_lock("3.1.9")
+    monkeypatch.chdir(repo)
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    added = {
+        "change_type": "added",
+        "manifest": "package-lock.json",
+        "ecosystem": "npm",
+        "name": "fast-uri",
+        "version": "3.1.9",
+        "scope": "development",
+    }
+    removed = {**added, "change_type": "removed", "version": "3.1.7"}
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    def record(rows: list[dict], name: str) -> Path:
+        destination = tmp_path / name
+        raw = json.dumps(rows).encode()
+        module["record_dependency_review"](
+            environment,
+            destination,
+            opener=lambda request, timeout: ApiResponse(raw),
+        )
+        return destination
+
+    assert json.loads(
+        (record([added, removed], "valid") / "dependency-diff.json").read_text()
+    ) == [
+        added,
+        removed,
+    ]
+    invalid_cases = [
+        ([added, {**removed, "manifest": "uv.lock"}], "unchanged manifest"),
+        ([added, {**removed, "scope": "runtime"}], "lockfile version/scope"),
+        (
+            [added, removed, {**added, "name": "hono", "version": "4.13.7"}],
+            "lockfile version/scope",
+        ),
+    ]
+    for index, (rows, error) in enumerate(invalid_cases):
+        destination = tmp_path / f"invalid-{index}"
+        with pytest.raises(ValueError, match=error):
+            record(rows, f"invalid-{index}")
+        assert not destination.exists()
+
+
+def test_dependency_review_accepts_renamed_lockfile_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "diff.renames", "true"], cwd=repo, check=True)
+    lock = {
+        "lockfileVersion": 3,
+        "packages": {"node_modules/fast-uri": {"version": "3.1.7", "dev": True}},
+    }
+    (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    base = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    (repo / "deps").mkdir()
+    subprocess.run(
+        ["git", "mv", "package-lock.json", "deps/package-lock.json"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-qm", "move lockfile"], cwd=repo, check=True)
+    head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    monkeypatch.chdir(repo)
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    assert module["_changed_files"](base, head) == {
+        "package-lock.json",
+        "deps/package-lock.json",
+    }
+    removed = {
+        "change_type": "removed",
+        "manifest": "package-lock.json",
+        "ecosystem": "npm",
+        "name": "fast-uri",
+        "version": "3.1.7",
+        "scope": "development",
+    }
+    added = {**removed, "change_type": "added", "manifest": "deps/package-lock.json"}
+    raw = json.dumps([removed, added]).encode()
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    environment = {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    saved = module["record_dependency_review"](
+        environment,
+        tmp_path / "evidence",
+        opener=lambda request, timeout: ApiResponse(raw),
+    )
+    assert saved["dependency_diff_count"] == 2
+    assert (tmp_path / "evidence/dependency-diff.json").read_bytes() == raw
