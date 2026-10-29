@@ -19,24 +19,49 @@ from urllib.request import Request, urlopen
 
 DEVELOPMENT_EXTRAS = frozenset({"dev", "docs"})
 CORRELATOR = "0-eventrelay-uv-lock-scoped"
+PackageId = tuple[str, str, str]
 
 
-def _reachable(roots: list[dict], packages_by_name: dict[str, list[dict]]) -> set[str]:
-    visited: set[tuple[str, tuple[str, ...]]] = set()
-    reachable: set[str] = set()
+def _package_id(package: dict) -> PackageId:
+    return (
+        package["name"], package["version"],
+        json.dumps(package["source"], sort_keys=True, separators=(",", ":")),
+    )
+
+
+def _resolve_dependency(dependency: dict, packages_by_name: dict[str, list[dict]]) -> dict:
+    candidates = [
+        package for package in packages_by_name.get(dependency["name"], [])
+        if all(field not in dependency or package[field] == dependency[field]
+               for field in ("version", "source"))
+    ]
+    if not candidates:
+        raise ValueError(f"Unresolved uv dependency: {dependency!r}")
+    if len(candidates) != 1:
+        raise ValueError(f"Ambiguous uv dependency: {dependency!r}")
+    return candidates[0]
+
+
+def _reachable(
+    roots: list[dict], packages_by_name: dict[str, list[dict]]
+) -> dict[PackageId, set[str]]:
+    # Extras are traversal state, not part of a locked package's identity.
+    # Keep each scope's requested extras separate even for a shared package.
+    visited: set[tuple[PackageId, tuple[str, ...]]] = set()
+    reachable: dict[PackageId, set[str]] = defaultdict(set)
     pending = deque(roots)
     while pending:
         dependency = pending.popleft()
-        name = dependency["name"]
-        extras = tuple(sorted(dependency.get("extra", [])))
-        if (name, extras) in visited:
+        package = _resolve_dependency(dependency, packages_by_name)
+        identity = _package_id(package)
+        extras = tuple(sorted(set(dependency.get("extra", []))))
+        if (identity, extras) in visited:
             continue
-        visited.add((name, extras))
-        reachable.add(name)
-        for package in packages_by_name.get(name, []):
-            pending.extend(package.get("dependencies", []))
-            for extra in extras:
-                pending.extend(package.get("optional-dependencies", {}).get(extra, []))
+        visited.add((identity, extras))
+        reachable[identity].update(extras)
+        pending.extend(package.get("dependencies", []))
+        for extra in extras:
+            pending.extend(package.get("optional-dependencies", {}).get(extra, []))
     return reachable
 
 
@@ -52,8 +77,25 @@ def uv_manifest(lock: dict, location: str = "uv.lock") -> dict:
         raise ValueError(f"Expected one uv project root; found {len(roots)}")
     root = roots[0]
     packages_by_name: dict[str, list[dict]] = defaultdict(list)
+    package_ids = set()
+    registry_ids: dict[tuple[str, str], list[PackageId]] = defaultdict(list)
     for package in packages:
+        identity = _package_id(package)
+        if identity in package_ids:
+            raise ValueError(f"Duplicate uv package: {identity!r}")
+        package_ids.add(identity)
         packages_by_name[package["name"]].append(package)
+        if "registry" in package["source"]:
+            registry_ids[identity[:2]].append(identity)
+    # Preserve existing keys for ordinary locks, but do not collapse distinct
+    # sources of the same name/version into one scope or adjacency list.
+    keys = {
+        identity: f"{name}@{version}" + (
+            f"?source={quote(identity[2], safe='')}" if len(identities) > 1 else ""
+        )
+        for (name, version), identities in registry_ids.items()
+        for identity in identities
+    }
 
     runtime_roots = list(root.get("dependencies", []))
     development_roots: list[dict] = []
@@ -64,33 +106,31 @@ def uv_manifest(lock: dict, location: str = "uv.lock") -> dict:
         target = development_roots if group in DEVELOPMENT_EXTRAS else runtime_roots
         target.extend(dependencies)
 
-    direct_runtime = {dependency["name"] for dependency in runtime_roots}
-    direct_development = {dependency["name"] for dependency in development_roots}
+    direct = {
+        _package_id(_resolve_dependency(dependency, packages_by_name))
+        for dependency in runtime_roots + development_roots
+    }
     runtime = _reachable(runtime_roots, packages_by_name)
     development = _reachable(development_roots, packages_by_name)
     resolved = {}
     for package in packages:
         if "registry" not in package.get("source", {}):
             continue
+        identity = _package_id(package)
         name, version = package["name"], package["version"]
-        key = f"{name}@{version}"
-        if key in resolved:
-            raise ValueError(f"Duplicate uv package: {key}")
+        key = keys[identity]
         dependency_keys = set()
-        for dependency in package.get("dependencies", []):
-            candidates = packages_by_name.get(dependency["name"], [])
-            if "version" in dependency:
-                candidates = [item for item in candidates if item["version"] == dependency["version"]]
-            if not candidates:
-                raise ValueError(f"Unresolved uv dependency: {name} -> {dependency['name']}")
-            dependency_keys.update(
-                f"{item['name']}@{item['version']}"
-                for item in candidates if "registry" in item.get("source", {})
-            )
+        dependencies = list(package.get("dependencies", []))
+        for extra in runtime.get(identity, set()) | development.get(identity, set()):
+            dependencies.extend(package.get("optional-dependencies", {}).get(extra, []))
+        for dependency in dependencies:
+            target = _package_id(_resolve_dependency(dependency, packages_by_name))
+            if target in keys:
+                dependency_keys.add(keys[target])
         entry = {
             "package_url": f"pkg:pypi/{quote(name, safe='')}@{quote(version, safe='')}",
-            "relationship": "direct" if name in direct_runtime | direct_development else "indirect",
-            "scope": "development" if name in development and name not in runtime else "runtime",
+            "relationship": "direct" if identity in direct else "indirect",
+            "scope": "development" if identity in development and identity not in runtime else "runtime",
             "dependencies": sorted(dependency_keys),
         }
         resolved[key] = entry
