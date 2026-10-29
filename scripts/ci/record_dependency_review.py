@@ -7,13 +7,22 @@ import json
 import os
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+from scripts.ci.submit_uv_lock_snapshot import uv_manifest
+
 
 def _changed_files(base: str, head: str) -> set[str]:
+    merge_base = subprocess.run(
+        ["git", "merge-base", base, head],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
     output = subprocess.run(
-        ["git", "diff", "--name-only", "--no-renames", "-z", base, head],
+        ["git", "diff", "--name-only", "--no-renames", "-z", merge_base, head],
         check=True,
         capture_output=True,
     ).stdout
@@ -29,30 +38,61 @@ def _npm_lock_components(sha: str, manifest: str) -> set[tuple[str, str, str]]:
     packages = lock.get("packages")
     if not isinstance(packages, dict):
         raise ValueError(f"Invalid npm lockfile in {sha}:{manifest}")
-    components = set()
+    components: dict[tuple[str, str], str] = {}
     for location, package in packages.items():
         if not isinstance(location, str) or not isinstance(package, dict):
             raise ValueError(f"Invalid npm lockfile entry in {sha}:{manifest}")
+        if "node_modules/" not in location:
+            continue
         name = package.get("name")
         if not name and "node_modules/" in location:
             name = location.rsplit("node_modules/", 1)[1]
         version = package.get("version")
         if isinstance(name, str) and isinstance(version, str):
             scope = "development" if package.get("dev") is True else "runtime"
-            components.add((name, version, scope))
-    return components
+            identity = (name, version)
+            if identity not in components or scope == "runtime":
+                components[identity] = scope
+    return {(name, version, scope) for (name, version), scope in components.items()}
+
+
+def _uv_lock_components(sha: str, manifest: str) -> set[tuple[str, str, str]]:
+    result = subprocess.run(["git", "show", f"{sha}:{manifest}"], capture_output=True)
+    if result.returncode:
+        return set()
+    lock = tomllib.loads(result.stdout.decode())
+    resolved = uv_manifest(lock, manifest)["resolved"]
+    return {
+        (key.rsplit("@", 1)[0], key.rsplit("@", 1)[1], package["scope"])
+        for key, package in resolved.items()
+    }
 
 
 def _validate_changes(
     changes: list[dict], base: str, head: str, changed_files: set[str]
 ) -> None:
     npm_locks: dict[tuple[str, str], set[tuple[str, str, str]]] = {}
+    observed_npm: dict[str, dict[str, set[tuple[str, str, str]]]] = {}
+    uv_locks: dict[tuple[str, str], set[tuple[str, str, str]]] = {}
+    observed_uv: dict[str, dict[str, set[tuple[str, str, str]]]] = {}
     for change in changes:
         manifest = change.get("manifest")
         if not isinstance(manifest, str) or manifest not in changed_files:
             raise ValueError(
                 "Dependency graph includes a change in an unchanged manifest: "
                 f"{manifest!r}"
+            )
+        if manifest == "uv.lock":
+            name, version, scope, kind = (
+                change.get("name"), change.get("version"),
+                change.get("scope"), change.get("change_type"),
+            )
+            if not all(isinstance(value, str) for value in (name, version, scope)):
+                raise ValueError("uv dependency change lacks name, version, or scope")
+            if kind not in {"added", "removed"}:
+                raise ValueError(f"Unexpected uv dependency change type: {kind!r}")
+            observed_uv.setdefault(manifest, {"added": set(), "removed": set()})[kind].add(
+                (name, version, scope)
             )
         if change.get("ecosystem") != "npm" or not manifest.endswith(
             "package-lock.json"
@@ -73,13 +113,42 @@ def _validate_changes(
         on_head = component in npm_locks[(head, manifest)]
         kind = change.get("change_type")
         if kind == "added" and on_head and not on_base:
+            observed_npm.setdefault(manifest, {"added": set(), "removed": set()})[
+                "added"
+            ].add(component)
             continue
         if kind == "removed" and on_base and not on_head:
+            observed_npm.setdefault(manifest, {"added": set(), "removed": set()})[
+                "removed"
+            ].add(component)
             continue
         raise ValueError(
             "npm dependency change does not match lockfile version/scope: "
             f"{manifest} {name}@{version} {scope} {kind}"
         )
+    for manifest in changed_files:
+        if not manifest.endswith("package-lock.json"):
+            continue
+        for sha in (base, head):
+            if (sha, manifest) not in npm_locks:
+                npm_locks[(sha, manifest)] = _npm_lock_components(sha, manifest)
+        expected = {
+            "added": npm_locks[(head, manifest)] - npm_locks[(base, manifest)],
+            "removed": npm_locks[(base, manifest)] - npm_locks[(head, manifest)],
+        }
+        if observed_npm.get(manifest, {"added": set(), "removed": set()}) != expected:
+            raise ValueError(f"Incomplete npm dependency diff for {manifest}")
+    for manifest in changed_files:
+        if manifest != "uv.lock":
+            continue
+        for sha in (base, head):
+            uv_locks[(sha, manifest)] = _uv_lock_components(sha, manifest)
+        expected = {
+            "added": uv_locks[(head, manifest)] - uv_locks[(base, manifest)],
+            "removed": uv_locks[(base, manifest)] - uv_locks[(head, manifest)],
+        }
+        if observed_uv.get(manifest, {"added": set(), "removed": set()}) != expected:
+            raise ValueError("uv dependency diff does not match lockfile versions and scopes")
 
 
 def record_dependency_review(
@@ -122,13 +191,12 @@ def record_dependency_review(
         isinstance(item, dict) for item in changes
     ):
         raise ValueError("Dependency diff API did not return a complete change list")
-    if changes:
-        _validate_changes(
-            changes,
-            base,
-            head,
-            changed_files if changed_files is not None else _changed_files(base, head),
-        )
+    _validate_changes(
+        changes,
+        base,
+        head,
+        changed_files if changed_files is not None else _changed_files(base, head),
+    )
 
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "dependency-diff.json").write_bytes(raw_diff)
