@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
+import runpy
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -59,49 +61,21 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "environment.yml",
         "vendor/modules.txt",
         "Dockerfile",
-        ".github/dependabot.yaml",
-        ".github/workflows/dependency-review.yml",
     ):
         assert protected_input in detection_script
-    assert '"git", "diff", "--name-only", "-z", base, head' in detection_script
-
-    focused = next(
-        step for step in steps if step["name"] == "Submit focused dependency snapshot"
-    )
-    assert "steps.dependency-changes.outputs.snapshot_detector != ''" in focused["if"]
-    assert (
-        "github.event.pull_request.head.repo.full_name == github.repository"
-        in focused["if"]
-    )
-    assert focused["with"]["filePath"] == "${{ runner.temp }}/dependency-review-head"
-    assert focused["with"]["correlator"] == "focused-lockfile-review"
-    assert "UvLock=EnableIfDefaultOff" in focused["with"]["detectorArgs"]
-    assert "NpmLockfile3=EnableIfDefaultOff" in focused["with"]["detectorArgs"]
-    assert (
-        focused["with"]["snapshot-sha"] == "${{ github.event.pull_request.head.sha }}"
-    )
-
-    focused_base = next(
-        step
-        for step in steps
-        if step["name"] == "Submit focused base dependency snapshot"
-    )
-    assert (
-        focused_base["with"]["filePath"] == "${{ runner.temp }}/dependency-review-base"
-    )
-    assert focused_base["with"]["correlator"] == focused["with"]["correlator"]
-    assert (
-        focused_base["with"]["snapshot-sha"]
-        == "${{ github.event.pull_request.base.sha }}"
-    )
+    assert '"git", "merge-base", base, head' in detection_script
+    assert '"git", "diff", "--name-only", "-z", merge_base, head' in detection_script
 
     submission = next(
         step for step in steps if step["name"] == "Submit dependency snapshots"
     )
     assert "github.event_name == 'push'" in submission["if"]
     assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
-    assert (
-        "steps.dependency-changes.outputs.snapshot_detector == ''" in submission["if"]
+    assert "snapshot_detector" not in submission["if"]
+    assert not any("focused" in step["name"].lower() for step in steps)
+    assert submission["uses"] == (
+        "advanced-security/component-detection-dependency-submission-action"
+        "@a02aeda7a175ad4dd38a13c4d3ff2df9da8f2cf0"
     )
     assert submission["with"]["snapshot-sha"] == (
         "${{ github.event_name == 'pull_request' && "
@@ -111,19 +85,35 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
         "${{ github.event_name == 'pull_request' && "
         "format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}"
     )
-    assert submission["env"] == {"PipReportFileLevelTimeoutSeconds": "120"}
-    assert (
-        0
-        < int(submission["env"]["PipReportFileLevelTimeoutSeconds"])
-        < (job["timeout-minutes"] * 60)
+    assert submission["env"] == {"PipReportFileLevelTimeoutSeconds": "240"}
+    assert 240 <= int(submission["env"]["PipReportFileLevelTimeoutSeconds"])
+    assert int(submission["env"]["PipReportFileLevelTimeoutSeconds"]) < (
+        job["timeout-minutes"] * 60
     )
     assert "detectorsFilter" not in submission["with"]
+
+    complete_npm = next(
+        step for step in steps if step["name"] == "Submit complete lock snapshot"
+    )
+    assert steps.index(complete_npm) == steps.index(submission) + 1
+    assert "github.event_name == 'push'" in complete_npm["if"]
+    assert (
+        "github.event.pull_request.head.repo.full_name == github.repository"
+        in complete_npm["if"]
+    )
+    assert "steps.dependency-changes.outputs.changed == 'true'" in complete_npm["if"]
+    assert complete_npm["run"] == "python3 -m scripts.ci.submit_npm_lock_snapshot"
+    assert complete_npm["env"]["SNAPSHOT_SHA"] == submission["with"]["snapshot-sha"]
+    assert complete_npm["env"]["SNAPSHOT_REF"] == submission["with"]["snapshot-ref"]
+    assert complete_npm["env"]["GITHUB_TOKEN"] == "${{ github.token }}"
 
     review = next(step for step in steps if step["name"] == "Dependency Review")
     assert "github.event_name == 'pull_request'" in review["if"]
     assert "steps.dependency-changes.outputs.changed == 'true'" in review["if"]
     assert review["with"]["retry-on-snapshot-warnings"] is True
-    assert review["with"]["retry-on-snapshot-warnings-timeout"] == 300
+    retry_seconds = review["with"]["retry-on-snapshot-warnings-timeout"]
+    assert retry_seconds >= 600
+    assert job["timeout-minutes"] * 60 >= retry_seconds + 600
     assert review["with"]["base-ref"] == "${{ github.event.pull_request.base.sha }}"
     assert review["with"]["head-ref"] == "${{ github.event.pull_request.head.sha }}"
 
@@ -134,29 +124,25 @@ def test_dependency_review_submits_pr_head_snapshot_and_retries_warnings() -> No
 
 
 @pytest.mark.parametrize(
-    ("changed_paths", "expected_changed", "expected_detector"),
+    ("changed_paths", "expected_changed", "expected_count"),
     [
-        (["pyproject.toml", "uv.lock"], "true", "UvLock"),
-        (
-            ["apps/web/package.json", "apps/web/package-lock.json"],
-            "true",
-            "NpmLockfile3",
-        ),
-        (["requirements.txt"], "true", ""),
-        (["uv.lock", "requirements.txt"], "true", ""),
-        ([".github/workflows/dependency-review.yml"], "true", "UvLock,NpmLockfile3"),
-        (["src/app.py"], "false", ""),
+        (["pyproject.toml", "uv.lock"], "true", 2),
+        (["apps/web/package.json", "apps/web/package-lock.json"], "true", 2),
+        (["requirements.txt"], "true", 1),
+        (["uv.lock", "requirements.txt"], "true", 2),
+        ([".github/workflows/dependency-review.yml"], "false", 0),
+        ([".github/dependabot.yml"], "false", 0),
+        ([".github/dependabot.yaml"], "false", 0),
+        ([".github/dependabot.yml", "apps/web/package.json"], "true", 1),
+        (["src/app.py"], "false", 0),
     ],
 )
-def test_snapshot_detector_keeps_unrelated_pip_resolves_out_of_lockfile_prs(
-    tmp_path: Path,
-    changed_paths: list[str],
-    expected_changed: str,
-    expected_detector: str,
+def test_dependency_detection_selects_full_scan_for_manifest_changes(
+    tmp_path: Path, changed_paths: list[str], expected_changed: str, expected_count: int
 ) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
-    all_paths = {
+    for name in {
         "pyproject.toml",
         "uv.lock",
         "apps/web/package.json",
@@ -164,8 +150,9 @@ def test_snapshot_detector_keeps_unrelated_pip_resolves_out_of_lockfile_prs(
         "requirements.txt",
         "src/app.py",
         ".github/workflows/dependency-review.yml",
-    }
-    for name in all_paths:
+        ".github/dependabot.yml",
+        ".github/dependabot.yaml",
+    }:
         path = repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("before\n")
@@ -201,121 +188,74 @@ def test_snapshot_detector_keeps_unrelated_pip_resolves_out_of_lockfile_prs(
     )
     head = git("rev-parse", "HEAD")
 
+    steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
     detection = next(
-        step
-        for step in _load_workflow()["jobs"]["dependency-review"]["steps"]
-        if step["name"] == "Detect dependency manifest changes"
+        step for step in steps if step["name"] == "Detect dependency manifest changes"
     )
     output = tmp_path / "github-output"
-    summary = tmp_path / "github-summary"
     env = os.environ | {
         "BASE_SHA": base,
         "HEAD_SHA": head,
         "GITHUB_OUTPUT": str(output),
-        "GITHUB_STEP_SUMMARY": str(summary),
+        "GITHUB_STEP_SUMMARY": str(tmp_path / "github-summary"),
     }
     subprocess.run(["bash", "-c", detection["run"]], cwd=repo, env=env, check=True)
     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
     assert values["changed"] == expected_changed
-    assert values["snapshot_detector"] == expected_detector
-    if expected_detector:
-        stage = next(
-            step
-            for step in _load_workflow()["jobs"]["dependency-review"]["steps"]
-            if step["name"] == "Stage focused dependency inputs"
-        )
-        base_source = tmp_path / "focused-base"
-        head_source = tmp_path / "focused-head"
-        subprocess.run(
-            ["bash", "-c", stage["run"]],
-            cwd=repo,
-            check=True,
-            env=env
-            | {
-                "SNAPSHOT_BASE_SOURCE": str(base_source),
-                "SNAPSHOT_HEAD_SOURCE": str(head_source),
-                "SNAPSHOT_DETECTOR": expected_detector,
-            },
-        )
-        expected = (
-            {"uv.lock", "pyproject.toml"}
-            if expected_detector == "UvLock"
-            else {"apps/web/package-lock.json", "apps/web/package.json"}
-            if expected_detector == "NpmLockfile3"
-            else {
-                "uv.lock",
-                "pyproject.toml",
-                "apps/web/package-lock.json",
-                "apps/web/package.json",
-            }
-        )
-        for source in (base_source, head_source):
-            staged = {
-                path.relative_to(source).as_posix()
-                for path in source.rglob("*")
-                if path.is_file()
-            }
-            assert staged == expected
-        for name in changed_paths:
-            if name in expected:
-                assert (base_source / name).read_text() == "before\n"
-                assert (head_source / name).read_text() == "after\n"
+    assert values["count"] == str(expected_count)
+    assert "snapshot_detector" not in values
+    submission = next(
+        step for step in steps if step["name"] == "Submit dependency snapshots"
+    )
+    assert "steps.dependency-changes.outputs.changed == 'true'" in submission["if"]
+    assert "steps.dependency-changes.outputs.snapshot_detector" not in submission["if"]
 
 
 @pytest.mark.parametrize(
-    ("changed_paths", "expected_detector"),
-    [
-        (["package-lock.json"], "NpmLockfile3"),
-        (["package-lock.json", "apps/web/package.json"], "NpmLockfile3"),
-        (["package-lock.json", "sdk/typescript/package.json"], ""),
-        (["apps/web/package.json"], ""),
-    ],
+    ("pr_path", "expected_changed"),
+    [("src/app.py", "false"), ("uv.lock", "true")],
 )
-def test_root_npm_lock_stages_workspace_roots_and_rejects_uncovered_manifests(
-    tmp_path: Path, changed_paths: list[str], expected_detector: str
+def test_dependency_detection_ignores_base_only_update_on_stale_pr(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    pr_path: str,
+    expected_changed: str,
 ) -> None:
     repo = tmp_path / "repo"
-    for name, content in {
-        "package.json": '{"workspaces": ["apps/*"]}\n',
-        "package-lock.json": '{"packages": {"": {}, "apps/web": {}}}\n',
-        "apps/web/package.json": '{"name": "eventrelay-web"}\n',
-        "sdk/typescript/package.json": '{"name": "eventrelay-sdk"}\n',
-    }.items():
+    repo.mkdir()
+    for name in ("package-lock.json", "uv.lock", "src/app.py"):
         path = repo / name
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content)
+        path.write_text("before\n")
 
     def git(*args: str) -> str:
         return subprocess.run(
             ["git", *args], cwd=repo, check=True, capture_output=True, text=True
         ).stdout.strip()
 
-    git("init", "-q")
+    git("init", "-q", "-b", "main")
     git("add", ".")
-    git(
+    commit = (
         "-c",
         "user.name=Workflow test",
         "-c",
         "user.email=workflow@example.com",
         "commit",
         "-qm",
-        "base",
     )
-    base = git("rev-parse", "HEAD")
-    for name in changed_paths:
-        path = repo / name
-        path.write_text(path.read_text().rstrip()[:-1] + ', "test": "after"}\n')
+    git(*commit, "initial")
+    git("switch", "-q", "-c", "feature")
+    (repo / pr_path).write_text("pr change\n")
     git("add", ".")
-    git(
-        "-c",
-        "user.name=Workflow test",
-        "-c",
-        "user.email=workflow@example.com",
-        "commit",
-        "-qm",
-        "change",
-    )
+    git(*commit, "pr")
     head = git("rev-parse", "HEAD")
+
+    git("switch", "-q", "main")
+    (repo / "package-lock.json").write_text("base update\n")
+    git("add", ".")
+    git(*commit, "base dependency update")
+    base = git("rev-parse", "HEAD")
+    assert "package-lock.json" in git("diff", "--name-only", base, head)
 
     steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
     detection = next(
@@ -330,32 +270,19 @@ def test_root_npm_lock_stages_workspace_roots_and_rejects_uncovered_manifests(
     }
     subprocess.run(["bash", "-c", detection["run"]], cwd=repo, env=env, check=True)
     values = dict(line.split("=", 1) for line in output.read_text().splitlines())
-    assert values["snapshot_detector"] == expected_detector
-    if expected_detector:
-        stage = next(
-            step for step in steps if step["name"] == "Stage focused dependency inputs"
-        )
-        base_source = tmp_path / "focused-base"
-        head_source = tmp_path / "focused-head"
-        subprocess.run(
-            ["bash", "-c", stage["run"]],
-            cwd=repo,
-            check=True,
-            env=env
-            | {
-                "SNAPSHOT_BASE_SOURCE": str(base_source),
-                "SNAPSHOT_HEAD_SOURCE": str(head_source),
-                "SNAPSHOT_DETECTOR": expected_detector,
-            },
-        )
-        expected = {"package-lock.json", "package.json", "apps/web/package.json"}
-        for source in (base_source, head_source):
-            staged = {
-                path.relative_to(source).as_posix()
-                for path in source.rglob("*")
-                if path.is_file()
-            }
-            assert staged == expected
+    assert values["changed"] == expected_changed
+    assert values["count"] == ("1" if expected_changed == "true" else "0")
+    monkeypatch.chdir(repo)
+    recorder = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    changed_files = recorder["_changed_files"](base, head)
+    assert changed_files == {pr_path}
+    if expected_changed == "true":
+        with pytest.raises(ValueError, match="unchanged manifest"):
+            recorder["_validate_changes"](
+                [{"manifest": "package-lock.json"}], base, head, changed_files
+            )
 
 
 def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
@@ -391,11 +318,9 @@ def test_numpy_remains_subject_to_the_unchanged_license_policy() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "review_outcome,raw_output", [("failure", None), ("success", "")]
-)
-def test_dependency_review_evidence_preserves_composite_license_and_unknown_outputs(
-    tmp_path: Path, review_outcome: str, raw_output: str | None
+@pytest.mark.parametrize("review_outcome", ["failure", "success"])
+def test_dependency_review_evidence_preserves_large_complete_api_diff(
+    tmp_path: Path, review_outcome: str
 ) -> None:
     steps = _load_workflow()["jobs"]["dependency-review"]["steps"]
     review = next(step for step in steps if step["name"] == "Dependency Review")
@@ -410,47 +335,301 @@ def test_dependency_review_evidence_preserves_composite_license_and_unknown_outp
         assert "always()" in step["if"]
         assert "github.event_name == 'pull_request'" in step["if"]
         assert "steps.dependency-changes.outputs.changed == 'true'" in step["if"]
-    assert record["env"]["INVALID_LICENSE_CHANGES"] == (
-        "${{ steps.review.outputs.invalid-license-changes }}"
-    )
+    assert record["run"] == "python3 -m scripts.ci.record_dependency_review"
+    assert not any("steps.review.outputs" in value for value in record["env"].values())
     assert "github.event.pull_request.head.sha" in upload["with"]["name"]
-    assert upload["with"]["path"] == "dependency-review-evidence/review.json"
+    assert upload["with"]["path"] == "dependency-review-evidence/"
     assert upload["with"]["if-no-files-found"] == "error"
 
     expression = "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
-    finding = {"name": "numpy", "version": "2.5.4", "license": expression}
-    # Keep duplicated occurrences, the full AND expression, and hostile text as data.
-    invalid = json.dumps(
-        {"forbidden": [finding, finding], "unresolved": [], "unlicensed": []}
-    )
-    dependencies = json.dumps([finding, {"name": "$(touch injected)"}])
+    finding = {
+        "name": "numpy",
+        "version": "2.5.4",
+        "license": expression,
+        "manifest": "requirements.txt",
+        "ecosystem": "pip",
+    }
+    # This response exceeds the Actions template-object limit hit by grouped PRs.
+    changes = [finding, finding, {**finding, "name": "$(touch injected)"}] + [
+        {
+            **finding,
+            "name": f"package-{index}",
+            "license": "MIT",
+            "version": "1.0.0",
+        }
+        for index in range(1500)
+    ]
+    raw = json.dumps(changes).encode()
+    assert len(raw) > 64_000
     environment = {
-        # A failing subprocess may print its environment in pytest's traceback.
-        # Pass only this test's inputs, never credentials from the caller.
-        "PATH": os.pathsep.join((str(Path(sys.executable).parent), os.defpath)),
         "BASE_SHA": "a" * 40,
         "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_API_URL": "https://api.github.com",
+        "GITHUB_TOKEN": "dummy-test-token",
         "GITHUB_RUN_ID": "123",
         "GITHUB_RUN_ATTEMPT": "2",
         "REVIEW_OUTCOME": review_outcome,
-        "DEPENDENCY_CHANGES": dependencies if raw_output is None else raw_output,
-        "INVALID_LICENSE_CHANGES": invalid if raw_output is None else raw_output,
-        "VULNERABLE_CHANGES": "[]" if raw_output is None else raw_output,
-        "DENIED_CHANGES": "",
     }
-    subprocess.run(
-        ["bash", "-e", "-c", record["run"]], cwd=tmp_path, env=environment, check=True
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
     )
-    saved = json.loads((tmp_path / upload["with"]["path"]).read_text())
+    seen_requests = []
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    def fetch(request, timeout):
+        seen_requests.append((request, timeout))
+        return ApiResponse(raw)
+
+    destination = tmp_path / "dependency-review-evidence"
+    module["record_dependency_review"](
+        environment, destination, opener=fetch, changed_files={"requirements.txt"}
+    )
+    saved = json.loads((destination / "review.json").read_text())
     assert saved["base_sha"] == "a" * 40
     assert saved["head_sha"] == "b" * 40
     assert saved["run_id"] == "123"
     assert saved["run_attempt"] == "2"
     assert saved["review_outcome"] == review_outcome
-    assert saved["raw_outputs"] == {
-        "dependency-changes": environment["DEPENDENCY_CHANGES"],
-        "invalid-license-changes": environment["INVALID_LICENSE_CHANGES"],
-        "vulnerable-changes": environment["VULNERABLE_CHANGES"],
-        "denied-changes": "",
-    }
+    assert saved["dependency_diff_count"] == len(changes)
+    assert saved["dependency_diff_sha256"] == hashlib.sha256(raw).hexdigest()
+    assert (destination / saved["dependency_diff_file"]).read_bytes() == raw
+    assert saved["dependency_diff_source"] == seen_requests[0][0].full_url
+    assert seen_requests[0][1] == 90
+    assert seen_requests[0][0].get_header("Authorization") == "Bearer dummy-test-token"
     assert not (tmp_path / "injected").exists()
+
+
+@pytest.mark.parametrize("raw", [b"[]", b'[{"name":"partial"}]'])
+def test_dependency_review_evidence_rejects_snapshot_warnings_before_writing(
+    tmp_path: Path, raw: bytes
+) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+
+    class ApiResponse(io.BytesIO):
+        headers = {
+            "x-github-dependency-graph-snapshot-warnings": "bWlzc2luZyBzbmFwc2hvdHM="
+        }
+
+    destination = tmp_path / "dependency-review-evidence"
+    with pytest.raises(ValueError, match="snapshot warnings"):
+        module["record_dependency_review"](
+            environment, destination, opener=lambda request, timeout: ApiResponse(raw)
+        )
+    assert not destination.exists()
+
+
+def test_dependency_review_evidence_saves_warning_free_empty_diff(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    destination = tmp_path / "dependency-review-evidence"
+    saved = module["record_dependency_review"](
+        environment,
+        destination,
+        opener=lambda request, timeout: ApiResponse(b"[]"),
+        changed_files=set(),
+    )
+    assert saved["dependency_diff_count"] == 0
+    assert (destination / "dependency-diff.json").read_bytes() == b"[]"
+
+
+def test_dependency_review_rejects_warning_free_graph_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+    )
+
+    def commit_lock(version: str, nested_version: str) -> str:
+        lock = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "eventrelay", "version": "1.0.0"},
+                "node_modules/fast-uri": {"version": version, "dev": True},
+                "node_modules/hono": {"version": "4.13.7", "dev": True},
+                "node_modules/filelist/node_modules/brace-expansion": {
+                    "version": nested_version,
+                    "dev": True,
+                },
+            },
+        }
+        (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
+        subprocess.run(["git", "add", "package-lock.json"], cwd=repo, check=True)
+        subprocess.run(["git", "commit", "-qm", version], cwd=repo, check=True)
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+        ).strip()
+
+    base = commit_lock("3.1.7", "2.1.4")
+    head = commit_lock("3.1.9", "2.1.7")
+    monkeypatch.chdir(repo)
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    added = {
+        "change_type": "added",
+        "manifest": "package-lock.json",
+        "ecosystem": "npm",
+        "name": "fast-uri",
+        "version": "3.1.9",
+        "scope": "development",
+    }
+    removed = {**added, "change_type": "removed", "version": "3.1.7"}
+    nested_added = {
+        **added,
+        "name": "brace-expansion",
+        "version": "2.1.7",
+    }
+    nested_removed = {**nested_added, "change_type": "removed", "version": "2.1.4"}
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    def record(rows: list[dict], name: str) -> Path:
+        destination = tmp_path / name
+        raw = json.dumps(rows).encode()
+        module["record_dependency_review"](
+            environment,
+            destination,
+            opener=lambda request, timeout: ApiResponse(raw),
+        )
+        return destination
+
+    assert json.loads(
+        (
+            record([added, removed, nested_added, nested_removed], "valid")
+            / "dependency-diff.json"
+        ).read_text()
+    ) == [
+        added,
+        removed,
+        nested_added,
+        nested_removed,
+    ]
+    invalid_cases = [
+        ([added, removed], "Incomplete npm dependency diff"),
+        ([added, {**removed, "manifest": "uv.lock"}], "unchanged manifest"),
+        ([added, {**removed, "scope": "runtime"}], "lockfile version/scope"),
+        (
+            [added, removed, {**added, "name": "hono", "version": "4.13.7"}],
+            "lockfile version/scope",
+        ),
+    ]
+    for index, (rows, error) in enumerate(invalid_cases):
+        destination = tmp_path / f"invalid-{index}"
+        with pytest.raises(ValueError, match=error):
+            record(rows, f"invalid-{index}")
+        assert not destination.exists()
+
+
+def test_dependency_review_accepts_renamed_lockfile_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "test@example.com"], cwd=repo, check=True
+    )
+    subprocess.run(["git", "config", "diff.renames", "true"], cwd=repo, check=True)
+    lock = {
+        "lockfileVersion": 3,
+        "packages": {"node_modules/fast-uri": {"version": "3.1.7", "dev": True}},
+    }
+    (repo / "package-lock.json").write_text(json.dumps(lock) + "\n")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+    base = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    (repo / "deps").mkdir()
+    subprocess.run(
+        ["git", "mv", "package-lock.json", "deps/package-lock.json"],
+        cwd=repo,
+        check=True,
+    )
+    subprocess.run(["git", "commit", "-qm", "move lockfile"], cwd=repo, check=True)
+    head = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"], cwd=repo, text=True
+    ).strip()
+    monkeypatch.chdir(repo)
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    assert module["_changed_files"](base, head) == {
+        "package-lock.json",
+        "deps/package-lock.json",
+    }
+    removed = {
+        "change_type": "removed",
+        "manifest": "package-lock.json",
+        "ecosystem": "npm",
+        "name": "fast-uri",
+        "version": "3.1.7",
+        "scope": "development",
+    }
+    added = {**removed, "change_type": "added", "manifest": "deps/package-lock.json"}
+    raw = json.dumps([removed, added]).encode()
+
+    class ApiResponse(io.BytesIO):
+        headers: dict[str, str] = {}
+
+    environment = {
+        "BASE_SHA": base,
+        "HEAD_SHA": head,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    saved = module["record_dependency_review"](
+        environment,
+        tmp_path / "evidence",
+        opener=lambda request, timeout: ApiResponse(raw),
+    )
+    assert saved["dependency_diff_count"] == 2
+    assert (tmp_path / "evidence/dependency-diff.json").read_bytes() == raw
