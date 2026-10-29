@@ -9,6 +9,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
+from urllib.parse import unquote
 from urllib.request import Request, urlopen
 
 from scripts.ci.submit_uv_lock_snapshot import uv_manifest
@@ -62,10 +63,17 @@ def _uv_lock_components(sha: str, manifest: str) -> set[tuple[str, str, str]]:
         return set()
     lock = tomllib.loads(result.stdout.decode())
     resolved = uv_manifest(lock, manifest)["resolved"]
-    return {
-        (key.rsplit("@", 1)[0], key.rsplit("@", 1)[1], package["scope"])
-        for key, package in resolved.items()
-    }
+    # Snapshot keys can distinguish sources; the comparison API reports only
+    # name/version. Project to that boundary after identity-specific traversal,
+    # using runtime precedence for a component present in both scopes (as npm).
+    components: dict[tuple[str, str], str] = {}
+    for package in resolved.values():
+        name, version = package["package_url"].removeprefix("pkg:pypi/").rsplit("@", 1)
+        identity = (unquote(name), unquote(version))
+        scope = package["scope"]
+        if identity not in components or scope == "runtime":
+            components[identity] = scope
+    return {(name, version, scope) for (name, version), scope in components.items()}
 
 
 def _validate_changes(
