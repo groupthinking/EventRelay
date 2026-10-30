@@ -35,6 +35,14 @@ describe('parsePackChapters', () => {
 });
 
 describe('parsePackActionItems', () => {
+  it('keeps a valid action when its optional extractor timing is malformed', () => {
+    expect(parsePackActionItems([
+      { id: 'a1', title: 'Build the app', description: 'Use the shown flow.', start_s: '12', end_s: 20 },
+    ])).toEqual([
+      { id: 'a1', title: 'Build the app', description: 'Use the shown flow.', type: null, difficulty: null, priority: null },
+    ]);
+  });
+
   it('requires structured objects with title and description', () => {
     const items = parsePackActionItems([
       {

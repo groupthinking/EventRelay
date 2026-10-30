@@ -73,6 +73,35 @@ describe('verifyIdentityPack (CoS: fail closed)', () => {
     expect(citation.sourceHash).toBe(HASH);
   });
 
+  it('passes bounded code_snippets and requirement time ranges through a ready pack', () => {
+    const citation = verifyIdentityPack({
+      status: 'success',
+      data: {
+        ...VALID.data,
+        requirements: [{ id: 'REQ-01', title: 'Install the CLI', detail: 'npm i -g vercel', start_s: 12, end_s: 20 }],
+        code_snippets: [
+          { path_hint: 'scripts/deploy.sh', lang: 'bash', content: 'vercel deploy --prod' },
+          { path_hint: null, lang: null, content: '   ' },
+          { lang: 'ts' },
+          { path_hint: 'src/big.ts', lang: 'ts', content: 'x'.repeat(2_000) },
+        ],
+      },
+    });
+    expect(citation.pack.requirements?.[0]?.start_s).toBe(12);
+    expect(citation.pack.code_snippets).toHaveLength(2);
+    expect(citation.pack.code_snippets?.[0]).toEqual({
+      path_hint: 'scripts/deploy.sh',
+      lang: 'bash',
+      content: 'vercel deploy --prod',
+    });
+    expect(citation.pack.code_snippets?.[1]?.content).toHaveLength(800);
+  });
+
+  it('omits code_snippets from the citation when the pack has none', () => {
+    const citation = verifyIdentityPack(VALID);
+    expect(citation.pack.code_snippets).toBeUndefined();
+  });
+
   it('fails closed when source_url is missing', () => {
     const { source_url: _omit, ...data } = VALID.data;
     expect(() => verifyIdentityPack({ status: 'success', data })).toThrow(/source_url/i);

@@ -3,6 +3,7 @@ import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evid
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
 import type { LinkedSop } from '@/lib/linked-sop';
 import type { SpecReviewAcknowledgment } from '@/lib/grounded-build-spec';
+import type { RunbookProgress } from '@/lib/runbook-steps';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -53,6 +54,8 @@ export interface Video {
   /** Hashed VideoPack v0 citation emitted from paste-URL. */
   videoPack?: VideoPackCitation;
   specReviewAcknowledgment?: SpecReviewAcknowledgment;
+  /** Local Step Runner notes (checked prerequisites, completed steps). Not evidence of execution. */
+  runbookProgress?: RunbookProgress;
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
   failure?: {
