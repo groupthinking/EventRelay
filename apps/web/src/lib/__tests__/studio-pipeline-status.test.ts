@@ -532,6 +532,9 @@ describe('studio-pipeline-status', () => {
   it('softens reviewed/durable overclaim copy and pads the sticky footer', () => {
     expect(STUDIO_PRODUCT_TAGLINE.toLowerCase()).not.toMatch(/reviewed actions|durable workflows/);
     expect(STUDIO_PRODUCT_TAGLINE).toMatch(/video pack/i);
+    expect(
+      studioPasteOutcomeMessage({ hasUsableTranscript: true }).toLowerCase(),
+    ).not.toContain('run tools');
 
     const footer = readFileSync(join(process.cwd(), 'src/components/Footer.tsx'), 'utf8');
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');

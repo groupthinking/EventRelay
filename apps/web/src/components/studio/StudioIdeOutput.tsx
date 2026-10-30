@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
@@ -42,11 +42,19 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
 export default function StudioIdeOutput({
   video,
   specReview,
+  eventsEmptyMessage,
+  packWorkbench,
+  showTranscriptRetry,
+  onRetryTranscript,
   stackChecks = [],
   reviewActions = [],
 }: {
   video: Video | undefined;
-  specReview?: React.ReactNode;
+  specReview?: ReactNode;
+  eventsEmptyMessage?: string;
+  packWorkbench?: ReactNode;
+  showTranscriptRetry?: boolean;
+  onRetryTranscript?: () => void;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
 }) {
@@ -56,6 +64,10 @@ export default function StudioIdeOutput({
     video?.videoPack ||
       video?.events?.length ||
       video?.insights ||
+      video?.transcript?.trim() ||
+      video?.failure ||
+      eventsEmptyMessage ||
+      packWorkbench ||
       stackChecks.length > 0 ||
       reviewActions.length > 0,
   );
@@ -110,29 +122,39 @@ export default function StudioIdeOutput({
         ) : (
           <>
         {active === 'events' && (
-          <ul className="flex flex-col gap-3" data-testid="studio-ide-output-events">
+          <div className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
-              <EmptyNote text="No events extracted from this video yet." />
+              <>
+                <EmptyNote
+                  text={
+                    eventsEmptyMessage ||
+                    'No events extracted from this video yet.'
+                  }
+                />
+                {packWorkbench}
+              </>
             ) : (
-              events.map((e) => (
-                <li key={e.id} className="uvai-card p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
-                      <DotIcon />
-                      {e.type}
-                    </span>
-                    {e.timestamp ? (
-                      <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+              <ul className="flex flex-col gap-3">
+                {events.map((e) => (
+                  <li key={e.id} className="uvai-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
+                        <DotIcon />
+                        {e.type}
+                      </span>
+                      {e.timestamp ? (
+                        <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
+                    {e.description ? (
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
                     ) : null}
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
-                  {e.description ? (
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
-                  ) : null}
-                </li>
-              ))
+                  </li>
+                ))}
+              </ul>
             )}
-          </ul>
+          </div>
         )}
 
         {active === 'lingo' && (
@@ -319,16 +341,28 @@ export default function StudioIdeOutput({
         )}
 
         {active === 'transcript' && (
-          <div data-testid="studio-transcript-body" className="uvai-card p-4">
-            {video?.transcript?.trim() ? (
-              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
-                {video.transcript}
-              </p>
-            ) : video?.failure?.message ? (
-              <p className="text-xs text-red-700">{video.failure.message}</p>
-            ) : (
-              <p className="py-4 text-center text-xs text-slate-400">Nothing yet.</p>
-            )}
+          <div className="flex flex-col gap-3">
+            <div data-testid="studio-transcript-body" className="uvai-card p-4">
+              {video?.transcript?.trim() ? (
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+                  {video.transcript}
+                </p>
+              ) : video?.failure?.message ? (
+                <p className="text-xs text-red-700">{video.failure.message}</p>
+              ) : (
+                <p className="py-4 text-center text-xs text-slate-400">Nothing yet.</p>
+              )}
+            </div>
+            {showTranscriptRetry && onRetryTranscript ? (
+              <button
+                type="button"
+                data-testid="studio-transcript-retry"
+                onClick={onRetryTranscript}
+                className="uvai-btn uvai-btn-primary self-start"
+              >
+                Retry transcript
+              </button>
+            ) : null}
           </div>
         )}
           </>
