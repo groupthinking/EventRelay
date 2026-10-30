@@ -151,6 +151,17 @@ def _validate_changes(
             raise ValueError("uv dependency diff does not match lockfile versions and scopes")
 
 
+def _next_page_url(headers) -> str | None:
+    link_header = headers.get("Link")
+    if not isinstance(link_header, str) or not link_header:
+        return None
+    for part in link_header.split(","):
+        match = re.search(r"<([^>]+)>;\s*rel=\"next\"", part)
+        if match:
+            return match.group(1)
+    return None
+
+
 def record_dependency_review(
     environment: dict[str, str],
     destination: Path,
@@ -176,21 +187,39 @@ def record_dependency_review(
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with opener(request, timeout=90) as response:
-        raw_diff = response.read()
-        snapshot_warning = response.headers.get(
-            "x-github-dependency-graph-snapshot-warnings"
+    page_url: str | None = request.full_url
+    raw_pages: list[bytes] = []
+    changes: list[dict] = []
+    while page_url:
+        page_request = Request(
+            page_url,
+            headers=request.headers,
         )
-    if snapshot_warning:
-        raise ValueError(
-            "Dependency graph reported snapshot warnings; refusing to save "
-            "an incomplete comparison as review evidence"
-        )
-    changes = json.loads(raw_diff)
-    if not isinstance(changes, list) or not all(
-        isinstance(item, dict) for item in changes
-    ):
-        raise ValueError("Dependency diff API did not return a complete change list")
+        with opener(page_request, timeout=90) as response:
+            page_raw = response.read()
+            raw_pages.append(page_raw)
+            snapshot_warning = response.headers.get(
+                "x-github-dependency-graph-snapshot-warnings"
+            )
+            if snapshot_warning:
+                raise ValueError(
+                    "Dependency graph reported snapshot warnings; refusing to save "
+                    "an incomplete comparison as review evidence"
+                )
+            page_changes = json.loads(page_raw)
+            if not isinstance(page_changes, list) or not all(
+                isinstance(item, dict) for item in page_changes
+            ):
+                raise ValueError(
+                    "Dependency diff API did not return a complete change list"
+                )
+            changes.extend(page_changes)
+            page_url = _next_page_url(response.headers)
+    raw_diff = (
+        raw_pages[0]
+        if len(raw_pages) == 1
+        else json.dumps(changes).encode()
+    )
     _validate_changes(
         changes,
         base,
