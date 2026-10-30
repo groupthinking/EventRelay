@@ -32,16 +32,15 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    timeout-minutes: 10  # Prevent long-running jobs
+    timeout-minutes: 30  # Allow full-tree scan, scoped lock submissions, and base/head snapshot retry
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          # PR runs compare the exact base and head trees before asking the
-          # dependency graph to compare snapshots. This prevents an unrelated
-          # source/test-only PR from inheriting stale graph metadata as a fake
-          # dependency addition.
+          # PR runs inspect changes introduced after the shared ancestor.
+          # A dependency update merged into main after this PR branched must
+          # not turn a source-only PR into a dependency-review run.
           fetch-depth: 0
           persist-credentials: false
 
@@ -60,8 +59,14 @@ jobs:
 
           base = os.environ["BASE_SHA"]
           head = os.environ["HEAD_SHA"]
+          merge_base = subprocess.run(
+              ["git", "merge-base", base, head],
+              check=True,
+              capture_output=True,
+              text=True,
+          ).stdout.strip()
           output = subprocess.run(
-              ["git", "diff", "--name-only", "-z", base, head],
+              ["git", "diff", "--name-only", "-z", merge_base, head],
               check=True,
               capture_output=True,
           ).stdout
@@ -83,6 +88,9 @@ jobs:
           }
 
           def is_dependency_input(path: PurePosixPath) -> bool:
+              # Workflow and Dependabot configuration changes are covered by
+              # CI tests; they do not change the installed dependency graph.
+              # The native Actions lockfile is an executable dependency input.
               name = path.name
               return (
                   name in exact_names
@@ -92,12 +100,7 @@ jobs:
                       and name.endswith((".in", ".txt"))
                   )
                   or name.endswith((".csproj", ".fsproj", ".gradle", ".gradle.kts"))
-                  or path.as_posix() in {
-                      ".github/dependabot.yaml",
-                      ".github/dependabot.yml",
-                      ".github/workflows/dependency-review.yml",
-                      "vendor/modules.txt",
-                  }
+                  or path.as_posix() in {"vendor/modules.txt", ".github/workflows/actions.lock"}
               )
 
           changed = sorted(path.as_posix() for path in paths if is_dependency_input(path))
@@ -110,8 +113,8 @@ jobs:
                   handle.writelines(f"- `{path}`\n" for path in changed)
               else:
                   handle.write(
-                      "No dependency manifests, lockfiles, or dependency-review "
-                      "configuration changed between the exact base and head trees.\n"
+                      "No dependency inputs introduced by this PR since "
+                      "its merge base.\n"
                   )
           PY
 
@@ -120,23 +123,43 @@ jobs:
           ${{ github.event_name == 'push' ||
               (github.event.pull_request.head.repo.full_name == github.repository &&
                steps.dependency-changes.outputs.changed == 'true') }}
-        uses: advanced-security/component-detection-dependency-submission-action@b282c67b1008fde9b60da4bdfcd8849613e293b2 # v0.1.6
+        # Scan the same full tree on main and on dependency PRs so GitHub compares
+        # matching snapshot sets. Bound each pip report; on a timeout, component-
+        # detection falls back to declared source dependencies. A 120-second
+        # bound produced base/head drift in the #2501 exact-lock canary.
+        env:
+          PipReportFileLevelTimeoutSeconds: "240"
+        uses: advanced-security/component-detection-dependency-submission-action@v0.2.0
         with:
           snapshot-sha: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           snapshot-ref: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
 
+      - name: Submit complete lock snapshot
+        if: >-
+          ${{ github.event_name == 'push' ||
+              (github.event.pull_request.head.repo.full_name == github.repository &&
+               steps.dependency-changes.outputs.changed == 'true') }}
+        env:
+          SNAPSHOT_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          SNAPSHOT_REF: ${{ github.event_name == 'pull_request' && format('refs/heads/{0}', github.event.pull_request.head.ref) || github.ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m scripts.ci.submit_npm_lock_snapshot
+
       - name: Dependency Review
+        id: review
         if: >-
           ${{ github.event_name == 'pull_request' &&
               steps.dependency-changes.outputs.changed == 'true' }}
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@v5.0.0
         with:
+          base-ref: ${{ github.event.pull_request.base.sha }}
+          head-ref: ${{ github.event.pull_request.head.sha }}
           fail-on-severity: moderate
-          # The dependency graph API can briefly report "no snapshots found for the
-          # head SHA" when a PR's dependency snapshot is submitted asynchronously and
-          # hasn't finished indexing yet. Retry instead of failing/warning on that race.
+          # Base and head snapshot submissions can overlap. In the exact-lock
+          # canary, the base snapshots became available after the former 300-second
+          # retry expired; wait for both sides before judging dependency changes.
           retry-on-snapshot-warnings: true
-          retry-on-snapshot-warnings-timeout: 300
+          retry-on-snapshot-warnings-timeout: 600
           # GHSA-w5hq-g745-h8pq: transitive uuid@8.3.2 pulled by next-auth@4.24 (which pins uuid ^8.3.2).
           # The moderate advisory affects uuid v3/v5/v6 when a caller-provided buffer is passed; next-auth
           # only calls v4(), so the vulnerable code path is unreachable here. The first patched uuid is
@@ -144,6 +167,9 @@ jobs:
           allow-ghsas: GHSA-w5hq-g745-h8pq
           # PR #295: vite/vitest tree (BlueOak-1.0.0, MPL-2.0 lightningcss), type-fest (CC0-1.0),
           # rollup@4.x compound SPDX (0BSD AND ISC AND MIT).
+          # Pillow 13 publishes the permissive MIT-CMU SPDX identifier; yt-dlp publishes
+          # the public-domain-equivalent Unlicense identifier. Both are direct runtime
+          # dependencies and are allowed explicitly here rather than excluded from review.
           # FSL-1.1-MIT is not a valid SPDX id for allow-licenses — exclude @sentry/* via purls.
           # caniuse-lite ships MIT code but a CC-BY-4.0 dataset; the scanner reports the data
           # license, which is not code we redistribute. It updates on nearly every browserslist
@@ -153,7 +179,7 @@ jobs:
           # already present, and the patched Sharp release only refreshes their versions.
           allow-licenses: >-
             MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, Python-2.0,
-            BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD
+            BlueOak-1.0.0, MPL-2.0, CC0-1.0, 0BSD, MIT-CMU, Unlicense
           # Docs/prototype pip deps (not shipped product code): the scanner reports regex with a
           # CNRI-Python fragment (upstream misattribution; the package is Apache-2.0) and torch with
           # a bundled BSL-1.0 component. Both live under docs/ only. Revisit if they move into
@@ -190,6 +216,31 @@ jobs:
             pkg:npm/@img/sharp-win32-ia32,
             pkg:npm/@img/sharp-win32-x64
           comment-summary-in-pr: always
+
+      # Fetch the same dependency diff from GitHub's API instead of expanding
+      # dependency-changes in an Actions expression. Large grouped updates can
+      # exceed the runner's template-object limit before the record step starts.
+      - name: Record dependency review evidence
+        if: >-
+          ${{ always() && github.event_name == 'pull_request' &&
+              steps.dependency-changes.outputs.changed == 'true' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REVIEW_OUTCOME: ${{ steps.review.outcome }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m scripts.ci.record_dependency_review
+
+      - name: Upload dependency review evidence
+        if: >-
+          ${{ always() && github.event_name == 'pull_request' &&
+              steps.dependency-changes.outputs.changed == 'true' }}
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: dependency-review-${{ github.event.pull_request.head.sha }}-${{ github.run_attempt }}
+          path: dependency-review-evidence/
+          if-no-files-found: error
+          retention-days: 30
 
       - name: Record no dependency delta
         if: >-
