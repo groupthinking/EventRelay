@@ -43,7 +43,7 @@ export interface VideoToActionsResult {
   actionCount: number;
   provider?: string;
   usedProvidedTranscript?: boolean;
-  actions: Array<{ tool: string; status: string; result?: string }>;
+  actions: Array<{ tool: string; input?: Record<string, unknown>; status: string; result?: string }>;
   analysis: VideoAnalysisResult;
   provenance: AnalysisProvenance;
   quality: EvidenceAssessment;
@@ -84,6 +84,7 @@ export async function videoToActionsWorkflow(
   const provider = acted.provider || (await providerLabelStep());
   const actions = acted.actions.map((action) => ({
     tool: action.tool,
+    input: action.input,
     status: action.status,
     result: action.result,
   }));
@@ -190,7 +191,7 @@ async function providerLabelStep(): Promise<string> {
 async function actionAgentStep(input: {
   transcript: string;
   videoTitle?: string;
-}): Promise<{ provider: string; actions: Array<{ tool: string; status: string; result?: string }> }> {
+}): Promise<{ provider: string; actions: Array<{ tool: string; input: Record<string, unknown>; status: string; result?: string }> }> {
   'use step';
 
   const { runActionAgent } = await import('@/lib/action-agent');

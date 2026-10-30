@@ -41,6 +41,20 @@ describe('StudioIdeOutput playflow', () => {
     expect(row.textContent).not.toMatch(/production is held/i);
   });
 
+  it('uses the honest Events empty copy and can host a pack workbench', () => {
+    render(
+      <StudioIdeOutput
+        video={baseVideo}
+        eventsEmptyMessage="This pack has no extracted events. Architecture and artifacts stay on this page."
+        packWorkbench={<div data-testid="studio-pack-workbench">Pack workbench</div>}
+      />,
+    );
+    const events = screen.getByTestId('studio-ide-output-events');
+    expect(events.textContent).toMatch(/no extracted events/i);
+    expect(events.textContent).not.toMatch(/INSIGHT/i);
+    expect(screen.getByTestId('studio-pack-workbench')).toBeTruthy();
+  });
+
   it('renders review_action results as cards with status, title, and detail', () => {
     render(
       <StudioIdeOutput
@@ -55,5 +69,24 @@ describe('StudioIdeOutput playflow', () => {
     expect(card.textContent).toMatch(/review this result/i);
     expect(card.textContent).toMatch(/needs review/i);
     expect(card.textContent).toMatch(/Review evidence/);
+    fireEvent.click(screen.getByTestId('studio-review-act-button'));
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/No tool has been executed/i);
+  });
+
+  it('lets the viewer inspect a real pending tool proposal', () => {
+    render(
+      <StudioIdeOutput
+        video={baseVideo}
+        reviewActions={[
+          { tool: 'create_workflow_task', input: { title: 'Draft a task from the video' }, status: 'pending', result: 'Draft a task from the video' },
+        ]}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
+    expect(screen.getByText('Needs review')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('studio-review-act-button'));
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/create_workflow_task/);
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/"title": "Draft a task from the video"/);
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/No tool has been executed/i);
   });
 });

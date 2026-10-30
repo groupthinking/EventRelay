@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
@@ -55,7 +55,82 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-run')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-ship')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-ship').textContent).toMatch(/Ship this/);
+    expect(screen.queryByTestId('studio-act-button')).toBeNull();
     expect(screen.getByTestId('studio-build-live-button')).toBeTruthy();
+  });
+
+  it('reviews only the selected video run and hides Act behind the feature flag', async () => {
+    const fetchStatus = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        runId: 'run-ide',
+        runStatus: 'completed',
+        result: {
+          url: baseVideo.url,
+          transcriptChars: 80,
+          actionCount: 1,
+          actions: [{ tool: 'create_workflow_task', status: 'pending', result: 'Draft a task' }],
+        },
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchStatus);
+    useDashboardStore.setState({
+      videos: [{ ...baseVideo, runId: 'run-ide' }, { ...baseVideo, id: 'other-video', title: 'Other video' }],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi />);
+    const button = screen.getByTestId('studio-act-button') as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    });
+    expect(button.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: baseVideo.url },
+    });
+    fireEvent.click(button);
+    expect(await screen.findByText(/proposed action\(s\) from this run/i)).toBeTruthy();
+    expect(fetchStatus).toHaveBeenCalledWith(
+      '/api/workflows/video-to-actions/run-ide',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(fetchStatus.mock.calls.every(([, options]) => options?.method !== 'POST')).toBe(true);
+
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
+    expect(screen.getByText('Draft a task')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+    });
+    expect(screen.queryByText('Draft a task')).toBeNull();
+    act(() => useDashboardStore.getState().selectVideo('other-video'));
+    expect(screen.queryByText('Draft a task')).toBeNull();
+  });
+
+  it('shows the stack in a pack with tools and no architecture or artifacts', async () => {
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
+    pack.stack.tools = [{ name: 'Workflow API', kind: 'API', evidence: 'Source mentions workflow calls.' }];
+    useDashboardStore.setState({
+      videos: [{
+        ...baseVideo,
+        events: [],
+        videoPack: {
+          packId: pack.id,
+          videoId: pack.video_id,
+          sourceUrl: pack.source_url,
+          sourceHash: pack.provenance.source_hash,
+          version: pack.version,
+          pack,
+        },
+      }],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-events'));
+    expect(screen.getByTestId('pack-stack-tools').textContent).toMatch(/Workflow API/);
   });
 
   it('renders video, chat, and output panes when a stored Video Pack is selected', async () => {
