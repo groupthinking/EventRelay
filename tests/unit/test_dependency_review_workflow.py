@@ -545,6 +545,65 @@ def test_dependency_review_evidence_saves_warning_free_empty_diff(
     assert (destination / "dependency-diff.json").read_bytes() == b"[]"
 
 
+def test_dependency_review_evidence_fetches_all_compare_pages(
+    tmp_path: Path,
+) -> None:
+    module = runpy.run_path(
+        str(WORKFLOW_PATH.parents[2] / "scripts/ci/record_dependency_review.py")
+    )
+    environment = {
+        "BASE_SHA": "a" * 40,
+        "HEAD_SHA": "b" * 40,
+        "GITHUB_REPOSITORY": "groupthinking/EventRelay",
+        "GITHUB_TOKEN": "dummy-test-token",
+        "GITHUB_RUN_ID": "123",
+        "GITHUB_RUN_ATTEMPT": "1",
+        "REVIEW_OUTCOME": "success",
+    }
+    page_one = [
+        {"manifest": "requirements.txt", "name": "alpha"},
+        {"manifest": "requirements.txt", "name": "beta"},
+    ]
+    page_two = [{"manifest": "requirements.txt", "name": "gamma"}]
+    expected = page_one + page_two
+    api_root = "https://api.github.com"
+    first_url = (
+        f"{api_root}/repos/groupthinking/EventRelay/"
+        f"dependency-graph/compare/{'a' * 40}...{'b' * 40}"
+    )
+    second_url = f"{first_url}?page=2"
+
+    class ApiResponse(io.BytesIO):
+        def __init__(self, payload: bytes, headers: dict[str, str]) -> None:
+            super().__init__(payload)
+            self.headers = headers
+
+    requested_urls: list[str] = []
+
+    def opener(request, timeout):
+        assert timeout == 90
+        requested_urls.append(request.full_url)
+        if request.full_url == first_url:
+            return ApiResponse(
+                json.dumps(page_one).encode(),
+                {"Link": f'<{second_url}>; rel="next"'},
+            )
+        if request.full_url == second_url:
+            return ApiResponse(json.dumps(page_two).encode(), {})
+        raise AssertionError(f"Unexpected URL: {request.full_url}")
+
+    destination = tmp_path / "dependency-review-evidence"
+    saved = module["record_dependency_review"](
+        environment,
+        destination,
+        opener=opener,
+        changed_files={"requirements.txt"},
+    )
+    assert requested_urls == [first_url, second_url]
+    assert saved["dependency_diff_count"] == len(expected)
+    assert json.loads((destination / "dependency-diff.json").read_text()) == expected
+
+
 def test_dependency_review_rejects_warning_free_graph_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
