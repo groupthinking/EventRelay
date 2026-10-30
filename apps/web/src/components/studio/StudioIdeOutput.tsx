@@ -44,11 +44,15 @@ export default function StudioIdeOutput({
   specReview,
   stackChecks = [],
   reviewActions = [],
+  actBusy,
+  onAct,
 }: {
   video: Video | undefined;
   specReview?: React.ReactNode;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
+  actBusy?: boolean;
+  onAct?: () => void;
 }) {
   const [active, setActive] = useState<OutputSection>('events');
 
@@ -224,7 +228,22 @@ export default function StudioIdeOutput({
         {active === 'intent' && (
           <ul className="flex flex-col gap-3" data-testid="studio-ide-output-intent">
             {reviewActions.length === 0 && actionItems.length === 0 ? (
-              <EmptyNote text="No action items extracted yet — what should the viewer do or make from this video?" />
+              <li className="uvai-card p-8 text-center">
+                <p className="text-xs text-slate-400">
+                  No proposed actions yet — act on this run to review findings here.
+                </p>
+                {onAct ? (
+                  <button
+                    type="button"
+                    data-testid="studio-action-cta"
+                    onClick={onAct}
+                    disabled={actBusy}
+                    className="uvai-btn uvai-btn-primary mt-4 disabled:opacity-40"
+                  >
+                    {actBusy ? 'Running tools…' : 'Act on this run'}
+                  </button>
+                ) : null}
+              </li>
             ) : (
               <>
                 {reviewActions.map((action, i) => {
@@ -239,12 +258,23 @@ export default function StudioIdeOutput({
                         <span className="uvai-metric-icon mt-0.5 shrink-0">
                           <ArrowIcon />
                         </span>
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
                             {card.statusLabel}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
+                          {onAct ? (
+                            <button
+                              type="button"
+                              data-testid="studio-action-cta"
+                              onClick={onAct}
+                              disabled={actBusy}
+                              className="uvai-btn uvai-btn-primary mt-3 disabled:opacity-40"
+                            >
+                              {actBusy ? 'Running tools…' : card.ctaLabel}
+                            </button>
+                          ) : null}
                         </div>
                       </div>
                     </li>
