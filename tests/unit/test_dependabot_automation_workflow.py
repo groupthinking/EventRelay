@@ -1,9 +1,5 @@
 from __future__ import annotations
 
-import json
-import re
-import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -25,6 +21,31 @@ def _load_workflow() -> dict:
 def _load_dependabot_config() -> dict:
     assert DEPENDABOT_CONFIG_PATH.exists(), "Dependabot config should exist"
     return yaml.safe_load(DEPENDABOT_CONFIG_PATH.read_text())
+
+
+@pytest.mark.parametrize(
+    ("directory", "ecosystem"),
+    [
+        ("/", "pip"),
+        ("/src/youtube_extension/backend", "pip"),
+        ("/sdk/python", "pip"),
+        ("/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0", "uv"),
+    ],
+)
+def test_dependabot_tracks_python_packages_weekly(
+    directory: str, ecosystem: str
+) -> None:
+    updates = [
+        update
+        for update in _load_dependabot_config()["updates"]
+        if update["directory"] == directory
+        and update["package-ecosystem"] in {"pip", "uv"}
+    ]
+
+    assert len(updates) == 1, f"Expected exactly one entry for {directory}"
+    assert updates[0]["package-ecosystem"] == ecosystem
+    assert updates[0]["schedule"]["interval"] == "weekly"
+    assert updates[0]["open-pull-requests-limit"] == 10
 
 
 def test_dependabot_workflow_uses_safe_triggers_and_permissions() -> None:
