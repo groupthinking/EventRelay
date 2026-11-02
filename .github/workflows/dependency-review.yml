@@ -171,6 +171,9 @@ jobs:
           # the public-domain-equivalent Unlicense identifier. Both are direct runtime
           # dependencies and are allowed explicitly here rather than excluded from review.
           # FSL-1.1-MIT is not a valid SPDX id for allow-licenses — exclude @sentry/* via purls.
+          # The unscoped `sentry` package is Sentry's CLI (FSL-1.1-Apache-2.0), pulled in
+          # transitively by @sentry/bundler-plugins under @sentry/nextjs; allow it by purl
+          # alongside @sentry/cli rather than adding the FSL license globally.
           # caniuse-lite ships MIT code but a CC-BY-4.0 dataset; the scanner reports the data
           # license, which is not code we redistribute. It updates on nearly every browserslist
           # refresh, so allow it by purl rather than adding CC-BY-4.0 to the global allow-licenses.
@@ -201,6 +204,7 @@ jobs:
             pkg:npm/@sentry/cli-win32-x64,
             pkg:npm/@sentry/bundler-plugin-core,
             pkg:npm/@sentry/babel-plugin-component-annotate,
+            pkg:npm/sentry,
             pkg:npm/@img/sharp-libvips-darwin-arm64,
             pkg:npm/@img/sharp-libvips-darwin-x64,
             pkg:npm/@img/sharp-libvips-linux-arm,
