@@ -35,10 +35,10 @@ describe('UVAI is one product surface', () => {
     expect(styles).toContain('--uvai-bg: #f2f5f9;');
     expect(styles).not.toMatch(/\.template-studio-shell\s+\.uvai-card\s*\{/);
     expect(styles).toMatch(
-      /\.template-studio-shell \.uvai-chat-user\s*\{[^}]*border: 1px solid var\(--uvai-border\)/s,
+      /\.template-studio-shell \.uvai-chat-user\s*\{[^}]*border: 1px solid var\(--uvai-border\)/,
     );
     expect(styles).toMatch(
-      /\.template-studio-shell \.uvai-chat-assistant\s*\{[^}]*border: 1px solid var\(--uvai-border\)/s,
+      /\.template-studio-shell \.uvai-chat-assistant\s*\{[^}]*border: 1px solid var\(--uvai-border\)/,
     );
     expect(output).toContain('className="uvai-card p-4"');
   });
