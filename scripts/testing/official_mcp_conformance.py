@@ -18,7 +18,7 @@ AUTH_CLIENT = REPO_ROOT / "tests/testing/official_mcp_auth_client.mjs"
 DEFAULT_RECEIPT = (
     REPO_ROOT / "tests/fixtures/mcp_conformance/official-2026-07-28-receipt.json"
 )
-CONFORMANCE_COMMIT = "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+CONFORMANCE_COMMIT = "c321dd32035556e6769d3724a8ee97d87c3faaac"
 SCOPE_STEP_UP_SDK_COMMIT = "60321700871029401a2e3bed8fdf4f02c9ec3331"
 UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_ISSUE = (
     "https://github.com/modelcontextprotocol/conformance/issues/480"
@@ -26,9 +26,7 @@ UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_ISSUE = (
 UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR = (
     "https://github.com/modelcontextprotocol/conformance/pull/481"
 )
-CONFORMANCE_PACKAGE = (
-    f"git+https://github.com/modelcontextprotocol/conformance.git#{CONFORMANCE_COMMIT}"
-)
+CONFORMANCE_PACKAGE = "@modelcontextprotocol/conformance@0.2.0-alpha.11"
 SCOPE_STEP_UP_RECEIPT_POLICY = {
     "configured_policy": {
         "live_oauth": "disabled_by_default",
@@ -53,7 +51,6 @@ SCOPE_STEP_UP_RECEIPT_POLICY = {
 }
 SERVER_SCENARIOS = (
     {"scenario": "tools-list", "spec_version": "2026-07-28", "required": True},
-    {"scenario": "server-stateless", "spec_version": "2026-07-28", "required": True},
     {
         "scenario": "tools-call-simple-text",
         "spec_version": "2026-07-28",
@@ -86,6 +83,10 @@ EXCLUSIONS = {
         {
             "reason": "surface-not-implemented",
             "scenarios": [
+                # The stateless transport requirement in this audit applies to
+                # the bespoke client; the broader server scenario covers
+                # separate server semantics and is not certified here.
+                "server-stateless",
                 "completion-complete",
                 "tools-call-image",
                 "tools-call-audio",

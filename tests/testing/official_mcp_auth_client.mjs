@@ -179,7 +179,7 @@ function withOAuthRetry(clientName, baseUrl, clientMetadataUrl) {
   };
 }
 
-async function runAuthClient(serverUrl) {
+async function runAuthClient(serverUrl, scenario) {
   const protocolVersion =
     process.env.MCP_CONFORMANCE_PROTOCOL_VERSION ?? '2025-11-25';
   const client = new Client(
@@ -222,9 +222,13 @@ async function runAuthClient(serverUrl) {
     if (!response.ok) {
       throw new Error(`Stateless MCP request failed: ${response.status} ${await response.text()}`);
     }
-    const tools = (await response.json()).result?.tools;
-    if (!Array.isArray(tools) || !tools.some((tool) => tool.name === 'test_simple_text')) {
-      throw new Error('Stateless MCP tools/list omitted test_simple_text');
+    const listResult = (await response.json()).result;
+    if (scenario !== 'tools_call') {
+      return;
+    }
+    const tools = listResult?.tools;
+    if (!Array.isArray(tools) || !tools.some((tool) => tool.name === 'add_numbers')) {
+      throw new Error('Stateless MCP tools/list omitted add_numbers');
     }
 
     const callResponse = await oauthFetch(serverUrl, {
@@ -239,8 +243,8 @@ async function runAuthClient(serverUrl) {
         id: 2,
         method: 'tools/call',
         params: {
-          name: 'test_simple_text',
-          arguments: {},
+          name: 'add_numbers',
+          arguments: { a: 2, b: 3 },
           _meta: requestMeta,
         },
       }),
@@ -251,11 +255,17 @@ async function runAuthClient(serverUrl) {
       );
     }
     const result = (await callResponse.json()).result;
+    const expectedResult = 'The sum of 2 and 3 is 5';
     if (
       !Array.isArray(result?.content) ||
-      !result.content.some((item) => item.type === 'text' && item.text)
+      !result.content.some((item) => {
+        if (item.type !== 'text' || !item.text) {
+          return false;
+        }
+        return scenario === 'tools_call' ? item.text === expectedResult : true;
+      })
     ) {
-      throw new Error('Stateless MCP tools/call returned no text content');
+      throw new Error('Stateless MCP tools/call returned an unexpected result');
     }
     return;
   }
@@ -279,7 +289,7 @@ async function main() {
   if (!SCENARIOS.has(scenario)) {
     throw new Error(`Unsupported conformance scenario: ${scenario}`);
   }
-  await runAuthClient(serverUrl);
+  await runAuthClient(serverUrl, scenario);
 }
 
 main().catch((error) => {

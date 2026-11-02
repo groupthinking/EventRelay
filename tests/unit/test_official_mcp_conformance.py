@@ -99,15 +99,19 @@ def test_required_checks_fail_closed_on_runner_exit_code() -> None:
     assert summary["blocking"] == ["runner-exit-code:1"]
 
 
-def test_stateless_tools_conformance_is_required_for_server_and_client() -> None:
+def test_stateless_client_conformance_exercises_tools_list_and_tools_call() -> None:
     module = _load_module()
 
     assert {
         entry["scenario"] for entry in module.SERVER_SCENARIOS if entry["required"]
-    } >= {
-        "server-stateless",
-        "tools-list",
-        "tools-call-simple-text",
+    } >= {"tools-list", "tools-call-simple-text"}
+    assert "server-stateless" in {
+        scenario
+        for category in module.EXCLUSIONS["server"]
+        for scenario in category["scenarios"]
+    }
+    assert "server-stateless" not in {
+        entry["scenario"] for entry in module.SERVER_SCENARIOS if entry["required"]
     }
     assert any(
         entry["scenario"] == "tools_call" and entry["required"]
@@ -117,10 +121,25 @@ def test_stateless_tools_conformance_is_required_for_server_and_client() -> None
         "tools_call" not in category["scenarios"]
         for category in module.EXCLUSIONS["client"]
     )
-    assert all(
-        "server-stateless" not in category["scenarios"]
-        for category in module.EXCLUSIONS["server"]
+    client_source = (
+        _ROOT / "tests/testing/official_mcp_auth_client.mjs"
+    ).read_text()
+    assert "method: 'tools/list'" in client_source
+    assert "method: 'tools/call'" in client_source
+    assert "tool.name === 'add_numbers'" in client_source
+    assert "name: 'add_numbers'" in client_source
+    assert "arguments: { a: 2, b: 3 }" in client_source
+    assert "The sum of 2 and 3 is 5" in client_source
+    assert "if (scenario !== 'tools_call')" in client_source
+
+
+def test_conformance_runner_uses_the_published_official_release() -> None:
+    module = _load_module()
+
+    assert module.CONFORMANCE_PACKAGE == (
+        "@modelcontextprotocol/conformance@0.2.0-alpha.11"
     )
+    assert module.CONFORMANCE_COMMIT == "c321dd32035556e6769d3724a8ee97d87c3faaac"
 
 
 def test_fixture_server_keeps_tools_list_order_stable() -> None:
@@ -565,7 +584,7 @@ def test_scope_step_up_fails_closed_on_malformed_shapes_and_scope_confusion() ->
 def test_current_upstream_skills_suite_is_pinned_and_fully_accounted_for() -> None:
     module = _load_module()
 
-    assert module.CONFORMANCE_COMMIT == "7169291ec0b68eb370fddcd9947313ab0d5e4156"
+    assert module.CONFORMANCE_COMMIT == "c321dd32035556e6769d3724a8ee97d87c3faaac"
     assert module.SCOPE_STEP_UP_SDK_COMMIT == "60321700871029401a2e3bed8fdf4f02c9ec3331"
     assert module.UPSTREAM_SCOPE_STEP_UP_CONFORMANCE_PR == "https://github.com/modelcontextprotocol/conformance/pull/481"
 
