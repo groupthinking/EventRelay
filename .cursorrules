@@ -6,7 +6,7 @@ Deployed on Vercel (frontend) and Cloud Run/Railway (backend).
 AI pipeline: SSE streaming, CloudEvents, Ray Serve, MCP tools.
 
 ## Critical paths — always flag issues here
-- apps/web/src/app/api/pipeline/stream/route.ts — SSE streaming (source of #139 hang)
+- apps/web/src/app/api/video/pack/route.ts + apps/web/src/lib/video-pack.ts — Video Pack pipeline (the legacy /api/pipeline SSE routes were retired in #2322)
 - src/uvai/unified_ai_sdk/ — must be real implementations, not stubs
 - src/mcp/ — MCP tool definitions and registry
 

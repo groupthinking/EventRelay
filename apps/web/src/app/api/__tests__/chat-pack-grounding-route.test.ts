@@ -214,4 +214,45 @@ describe('POST /api/chat pack grounding (#2122)', () => {
     expect(response.status).toBe(400);
     expect(body.code).toBe('pack_binding_invalid');
   });
+  it.each([
+    { query: 'Plan a build from this Video Pack', planIntent: undefined },
+    { query: 'Use these interview answers', planIntent: true },
+  ])('keeps a valid step grounded when planning is requested: $query', async ({ query, planIntent }) => {
+    const pack = buildIdentityPack('auJzb1D-fag');
+    pack.transcript = {
+      language: 'en',
+      full_text: 'Connect the fixture power cable. Later calibrate the unrelated sensor.',
+      segments: [
+        { idx: 0, start_s: 0, end_s: 10, text: 'Connect the fixture power cable.' },
+        { idx: 1, start_s: 120, end_s: 130, text: 'Later calibrate the unrelated sensor.' },
+      ],
+    };
+    pack.requirements = [
+      { id: 'REQ-01', title: 'Connect the fixture', detail: 'Connect the fixture power cable.', start_s: 0, end_s: 10 },
+      { id: 'REQ-02', title: 'Calibrate the sensor', detail: 'Later calibrate the unrelated sensor.', start_s: 120, end_s: 130 },
+    ];
+    const runbook = compileRunbook({ pack });
+    const step = runbookStepToChatContext(runbook.steps[0], runbook.steps.length);
+    vi.spyOn(store, 'getPackRecordWithMeta').mockResolvedValue({
+      outcome: 'hit', record: { state: 'ready', pack }, store: { backend: 'memory', ok: true },
+    });
+    const response = await POST(new Request('http://localhost/api/chat', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        query, video_id: pack.video_id, pack_id: pack.id, step, planIntent,
+        planInterview: { useCase: 'Whole-pack project', trigger: 'Manual', tools: ['Git'], constraints: 'Preserve evidence', successSignal: 'Tests pass' },
+      }),
+    }));
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.provider).toBe('vercel-ai-gateway');
+    expect(body.answer).toBe('grounded reply');
+    expect(body).not.toHaveProperty('requiresInterview');
+    expect(generateText).toHaveBeenCalledTimes(1);
+    const instructions = (generateText.mock.calls[0][0] as { instructions: string }).instructions;
+    expect(instructions).toContain('Step 1 of 2: Connect the fixture');
+    expect(instructions).toContain('Connect the fixture power cable.');
+    expect(instructions).not.toContain('Later calibrate the unrelated sensor.');
+  });
+
 });

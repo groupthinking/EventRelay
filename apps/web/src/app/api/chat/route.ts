@@ -15,6 +15,8 @@ import {
   parseChatStepContext,
   resolveChatPackGrounding,
 } from '@/lib/chat-pack-grounding';
+import { isVideoPackPlanRequest, resolveVideoPackPlanResponse } from '@/lib/video-pack-plan';
+import type { VideoPackV0Json } from '@/lib/video-pack';
 type ChatHistoryMessage = { role: 'user' | 'assistant'; content: string };
 
 const rawBackendUrl = process.env.BACKEND_URL || '';
@@ -84,6 +86,7 @@ export async function POST(request: Request) {
     routing = resolvePaidTierRouting(isPro);
 
     let packSystemPrompt: string | undefined;
+    let groundedPack: VideoPackV0Json | undefined;
     const packBinding = parseChatPackBinding(body);
     const stepContext = parseChatStepContext(body.step);
     if (stepContext.status === 'invalid') {
@@ -128,6 +131,7 @@ export async function POST(request: Request) {
         );
       }
       packSystemPrompt = grounded.systemPrompt;
+      groundedPack = grounded.pack;
     }
 
     if (!isPro) {
@@ -157,6 +161,25 @@ export async function POST(request: Request) {
       ? body.history.filter(isValidChatHistoryMessage)
       : [];
     const query = body.query || body.message || '';
+
+    const planQuery = typeof query === 'string' ? query : String(query);
+    // Step requests keep their server-resolved evidence window even when the
+    // message contains planning keywords or a previous interview payload.
+    if (stepContext.status !== 'ok' && (isVideoPackPlanRequest(planQuery) || body.planIntent === true)) {
+      if (!groundedPack) {
+        return NextResponse.json(
+          { answer: 'A ready, identity-matched Video Pack is required before planning from a video.', code: 'pack_required' },
+          { status: 400 },
+        );
+      }
+      const planResponse = resolveVideoPackPlanResponse({
+        query: planQuery,
+        planIntent: body.planIntent,
+        planInterview: body.planInterview,
+        pack: groundedPack,
+      });
+      if (planResponse) return NextResponse.json(planResponse);
+    }
 
     if (isPro) {
       const leadScore = await scoreLeadWithJev({ query, history });
