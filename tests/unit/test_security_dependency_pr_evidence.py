@@ -8,12 +8,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/pr-checks.yml"
 
 class SecurityEvidenceTest(unittest.TestCase):
-    def validate(self, title, paths, body, labels=None, changed_files=None):
+    def validate(
+        self, title, paths, body, labels=None, changed_files=None, include_changed_files=True
+    ):
         text = WORKFLOW.read_text()
         script = text.split("          script: |\n", 1)[1]
         script = "\n".join(line[12:] for line in script.splitlines())
-        payload = json.dumps({"title": title, "body": body, "labels": labels or [], "number": 1,
-                              "changed_files": len(paths) if changed_files is None else changed_files})
+        pull_request = {"title": title, "body": body, "labels": labels or [], "number": 1}
+        if include_changed_files:
+            pull_request["changed_files"] = (
+                len(paths) if changed_files is None else changed_files
+            )
+        payload = json.dumps(pull_request)
         files = json.dumps([{"filename": path} for path in paths])
         harness = """
 const context = {payload: {pull_request: PR}, repo: {owner:'test',repo:'test'}};
@@ -60,6 +66,11 @@ listComments:'comments', updateComment:async()=>{},createComment:async()=>{}
         self.assertIn("failed", self.validate(
             "fix: security update", paths,
             "Closes #1. Large security change.", changed_files=3000))
+
+    def test_missing_file_count_requires_security_evidence(self):
+        self.assertIn("failed", self.validate(
+            "fix: security update", ["docs/visible-file.md"],
+            "Closes #1. Large security change.", include_changed_files=False))
 
 if __name__ == "__main__":
     unittest.main()
