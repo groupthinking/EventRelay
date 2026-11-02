@@ -24,7 +24,7 @@ concrete reason, verified against the actual repository tree.
 | `deploy.yml` | **DELETE** | References a non-existent `deployments/` tree (manifests/terraform); actual infra is `infrastructure/`. The validate job hard-`exit 1`s on missing manifests. Generic multi-cloud (AWS+Azure+Slack) scaffold that duplicates `deploy-cloud-run.yml`. |
 | `e2e-tests.yml` | **FIX** | Resolve the PR's Vercel preview deployment via the GitHub Deployments API before E2E runs, and skip the PR-comment step for forked `pull_request` runs where `GITHUB_TOKEN` is read-only (`Resource not accessible by integration`). Same-repo PRs still get comments. |
 | `emergency-stop.yml` | KEEP | Manual operational kill-switch with typed confirmation. |
-| `eventrelay-ci-investigator.md` / `.lock.yml` | **FIX** | Require a dedicated `CODEX_API_KEY` credential in pre-agent steps so Codex-specific runs fail fast with an explicit key-missing error instead of ambiguous fallback behavior. |
+| Codex gh-aw workflows (`canonical-pr-remediator`, `focused-coverage-controller`, `repo-assist` `.md` / `.lock.yml`) | **FIX** | Require a dedicated `CODEX_API_KEY` credential in `pre-agent-steps` so Codex-specific runs fail fast with an explicit key-missing error instead of ambiguous fallback behavior. Originally applied to `eventrelay-ci-investigator` (since removed); every `engine: codex` workflow now carries the same preflight, and lock files are recompiled with the pinned gh-aw. |
 | `issue-triage.yml` | KEEP | Keyword auto-labeling + triage comment on new issues. |
 | `mcp-optimization.yml` | **DELETE** | Entire workflow targets `mcp-servers/mcp-profiling/` (requirements.txt, investigator_client.py, profiling_server.py) which does not exist — every run fails. |
 | `phase-goal-tracker.yml` | KEEP | Tracks markdown checklists on phase issues, keeps a single status comment updated, and auto-closes the issue when all checklist goals are complete. |
@@ -63,13 +63,13 @@ valid. Referenced paths were checked against the working tree:
   installation tokens; the workflow now calls the REST assignees endpoint.
 
 ## Agent completion enforcement
-## Agent completion enforcement
-
 
 The agent-lock trust policy and both agent-completion Checks were removed as unsatisfiable; the governance workflow was later removed, and binding is no longer enforced by an automated check. See `MERGE_POLICY.md`.
-## Repository governance workflows
+
 ## Repository governance workflows
 
+| File | Verdict | Reason |
+|------|---------|--------|
 | `repository-reconciliation.yml` | **ADD** | Scheduled (13:17 UTC daily) non-destructive reconciliation report: identifies ready PRs missing a canonical issue, issues with competing implementation PRs (references validated via Issues API), and stale unattached branches. Excludes draft PRs and fork-branch name collisions. Upserts a single issue titled "[automation] Repository drift report". |
 ## Multi-agent pipeline alignment (Phase 1)
 
