@@ -177,7 +177,13 @@ def _range_intervals(
         match = _CARET_VERSION.match(clause)
         assert match is not None, f"unsupported Node engine clause: {clause!r}"
         lower = tuple(int(piece or 0) for piece in match.groups())
-        intervals.append((lower, (lower[0] + 1, 0, 0)))
+        if lower[0]:
+            upper = (lower[0] + 1, 0, 0)
+        elif lower[1]:
+            upper = (0, lower[1] + 1, 0)
+        else:
+            upper = (0, 0, lower[2] + 1)
+        intervals.append((lower, upper))
     return intervals
 
 
@@ -199,7 +205,9 @@ def _range_is_subset(candidate: str, supported: str) -> bool:
 
 
 def _version_satisfies(version: str, supported: str) -> bool:
-    """Return whether an exact version belongs to a guarded caret/minimum range."""
+    """Check the stable exact/caret/minimum ranges used by guarded packages."""
+    if _EXACT_VERSION.fullmatch(supported):
+        return version == supported
     match = _EXACT_VERSION.match(version)
     assert match is not None, f"unsupported exact version: {version!r}"
     candidate = tuple(int(piece) for piece in match.groups())
@@ -342,6 +350,41 @@ def test_declared_node_range_fits_ci_dependency_support(
         f"({dependency}) supports only {locked!r}. Matching only Node 22 floors "
         "would miss unsupported versions in later branches."
     )
+
+
+@pytest.mark.parametrize("consumer", ["", "apps/web"])
+def test_direct_dependencies_resolve_versions_declared_by_their_consumer(
+    consumer: str,
+) -> None:
+    """A hoisted update must not leave a stale workspace copy shadowing it."""
+    manifest = _load(REPO_ROOT / consumer / "package.json")
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    for section in ("dependencies", "devDependencies", "optionalDependencies"):
+        for dependency, declared in (manifest.get(section) or {}).items():
+            path, metadata = _nearest_locked_dependency(packages, consumer, dependency)
+            resolved = metadata.get("version")
+            assert resolved and _version_satisfies(resolved, declared), (
+                f"{consumer or 'root'} declares {dependency}@{declared}, "
+                f"but resolves {path}@{resolved}"
+            )
+
+
+@pytest.mark.parametrize(
+    ("version", "declared", "expected"),
+    [
+        ("4.0.117", "4.0.160", False),
+        ("4.0.160", "4.0.160", True),
+        ("0.222.0", "^0.300.0", False),
+        ("0.300.1", "^0.300.0", True),
+        ("0.301.0", "^0.300.0", False),
+        ("0.0.4", "^0.0.4", True),
+        ("0.0.5", "^0.0.4", False),
+    ],
+)
+def test_declared_package_range_validation(
+    version: str, declared: str, expected: bool
+) -> None:
+    assert _version_satisfies(version, declared) is expected
 
 
 def test_jsdom_resolves_its_supported_undici_major() -> None:
