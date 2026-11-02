@@ -120,7 +120,7 @@ def _unchanged_requirements_resolution(
     ).stdout
     try:
         lines = [
-            line.partition("#")[0].strip()
+            re.sub(r"(^|\s+)#.*$", "", line).strip()
             for line in content.decode("utf-8").splitlines()
         ]
     except UnicodeDecodeError:
@@ -134,6 +134,9 @@ def _unchanged_requirements_resolution(
     ):
         reject("source is not self-contained bare unpinned requirements")
 
+    # Deliberately support numeric release segments only. Epochs, pre/post/dev
+    # releases and local labels need explicit parsing before this proof can
+    # accept them; arbitrary strings must not be called version-only changes.
     packages: dict[str, list[dict]] = {}
     for change in changes:
         name, version = change.get("name"), change.get("version")
@@ -142,7 +145,7 @@ def _unchanged_requirements_resolution(
             or not isinstance(name, str)
             or not re.fullmatch(package_name, name)
             or not isinstance(version, str)
-            or not re.fullmatch(r"[0-9][0-9A-Za-z.!+_-]*", version)
+            or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", version)
             or change.get("scope") not in {"runtime", "development"}
             or change.get("change_type") not in {"added", "removed"}
         ):
