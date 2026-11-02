@@ -54,9 +54,12 @@ export default function ApiDocsPage() {
           <h1 className="mt-2 font-heading text-4xl font-black">API Reference</h1>
           <p className="mt-3 max-w-2xl text-ink/60">
             UVAI exposes a small, REST-style surface for transcription, event
-            extraction, pipeline execution, and search. All endpoints accept
-            and return JSON unless noted. Streaming endpoints use Server-Sent
-            Events.
+            extraction, and search. All endpoints accept and return JSON unless noted.
+          </p>
+          <p className="mt-3 max-w-2xl text-sm text-ink/50">
+            The legacy <code>/api/pipeline</code> and <code>/api/pipeline/stream</code>
+            routes are retired. <code>GET</code> and <code>POST /api/video</code> remain
+            for compatibility but are deprecated; use <code>POST /api/video/pack</code>.
           </p>
         </header>
 
