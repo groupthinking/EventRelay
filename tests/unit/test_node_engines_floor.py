@@ -402,6 +402,19 @@ def test_v0_cli_config_resolves_patched_zod() -> None:
     )
 
 
+def test_web_fetch_runtime_owns_undici_dependency() -> None:
+    """Workspace-only image installs must include the app's direct fetch import."""
+    manifest = _load(REPO_ROOT / "apps/web/package.json")
+    declared = (manifest.get("dependencies") or {}).get("undici")
+    assert declared, "web runtime imports Undici and must own its production dependency"
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    path, metadata = _nearest_locked_dependency(packages, "apps/web", "undici")
+    assert _version_satisfies(metadata["version"], declared), (
+        f"web declares Undici {declared}, but resolves {path}@{metadata['version']}"
+    )
+    assert not metadata.get("dev"), "runtime Undici must survive production installs"
+
+
 def test_jsdom_resolves_its_supported_undici_major() -> None:
     """The nearest Undici package jsdom loads must satisfy its declared range."""
     packages = _load(PACKAGE_LOCK).get("packages") or {}
