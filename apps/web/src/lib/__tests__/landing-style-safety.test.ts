@@ -13,7 +13,7 @@ describe('landing style safety', () => {
   it('keeps one clear heading for the YouTube URL to Studio workflow', () => {
     const source = readSource('app/page.tsx');
     expect(source.match(/<h1\b/g)).toHaveLength(1);
-    expect(source).toContain('Your videos know what to do next.');
+    expect(source).toContain('Turn YouTube into bound tasks.');
   });
 
   it('promises review of proposed work instead of approval', () => {
