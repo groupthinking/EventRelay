@@ -33,17 +33,35 @@ h1, h2, h3, .font-display { font-family: var(--font-body), sans-serif; font-weig
 .template-send:disabled { background: #e5e5e5; color: #737373; cursor: not-allowed; }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-ink); outline-offset: 3px; }
 .template-studio { background: white; }
-.template-studio-shell { height: calc(100dvh - 65px); min-height: 520px; flex: initial; }
+.template-studio-shell {
+  --uvai-bg: #f2f5f9;
+  --uvai-surface: #ffffff;
+  --uvai-surface-warm: #f8fafc;
+  --uvai-border: #e2e8f0;
+  --uvai-ink: #0f172a;
+  --uvai-ink-soft: #475569;
+  height: calc(100dvh - 65px);
+  min-height: 520px;
+  flex: initial;
+}
 .template-studio-shell .uvai-toolbar { padding: 14px 20px; box-shadow: none; }
-.template-studio-shell .uvai-card { border-radius: 0; box-shadow: none; border: 0; }
-.template-studio-panes > aside { background: #f9f9f9; }
-.template-studio-panes > main { background: white; }
+.template-studio-panes { gap: 8px; padding: 8px; background: var(--uvai-bg); }
+.template-studio-panes > aside,
+.template-studio-panes > main { background: var(--uvai-surface); }
 .template-studio-panes .uvai-pane-header { background: transparent; padding: 18px; }
-.template-studio-panes > aside:first-child { border-right: 1px solid var(--uvai-border); }
-.template-studio-panes > aside:last-child { border-left: 1px solid var(--uvai-border); }
 .template-studio-panes .uvai-splitter { width: 4px; }
-.template-studio-shell .uvai-chat-user { background: #f4f4f4; color: #171717; border-radius: 20px; padding: 12px 16px; }
-.template-studio-shell .uvai-chat-assistant { border: 0; box-shadow: none; padding: 12px 0; }
+.template-studio-shell .uvai-chat-user {
+  background: var(--uvai-surface-warm);
+  border: 1px solid var(--uvai-border);
+  border-radius: var(--card-radius);
+  color: var(--uvai-ink);
+  padding: 12px 16px;
+}
+.template-studio-shell .uvai-chat-assistant {
+  border: 1px solid var(--uvai-border);
+  border-radius: var(--card-radius);
+  padding: 12px 16px;
+}
 .template-chat-welcome { min-height: 320px; height: 100%; }
 .template-chat-welcome .template-mark { width: 44px; height: 44px; border-radius: 14px; margin-bottom: 12px; }
 .template-pane-tabs { display: none; }
@@ -56,7 +74,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-ink); outl
   .template-pane-tabs button[aria-pressed='true'] { background: #171717; color: white; }
   .template-studio-shell { height: auto; min-height: calc(100dvh - 65px); }
   .template-studio-panes { min-height: 520px; }
-  .template-studio-panes > aside, .template-studio-panes > main { width: 100%; min-width: 0; border: 0; }
+  .template-studio-panes > aside, .template-studio-panes > main { width: 100%; min-width: 0; }
   .template-studio-panes > .uvai-splitter { display: none; }
   .template-studio-shell [data-testid='studio-ide-video-pane'],
   .template-studio-shell [data-testid='studio-ide-chat-pane'],
