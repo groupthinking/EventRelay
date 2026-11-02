@@ -9,6 +9,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
+from urllib.parse import parse_qsl, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 from scripts.ci.submit_uv_lock_snapshot import uv_manifest
@@ -151,15 +152,57 @@ def _validate_changes(
             raise ValueError("uv dependency diff does not match lockfile versions and scopes")
 
 
+MAX_COMPARE_PAGES = 1000
+
+
 def _next_page_url(headers) -> str | None:
     link_header = headers.get("Link")
-    if not isinstance(link_header, str) or not link_header:
+    if link_header is None or link_header == "":
         return None
-    for part in link_header.split(","):
-        match = re.search(r"<([^>]+)>;\s*rel=\"next\"", part)
-        if match:
-            return match.group(1)
-    return None
+    if not isinstance(link_header, str):
+        raise ValueError("Invalid dependency pagination Link header")
+    next_urls = []
+    for part in re.split(r",\s*(?=<)", link_header):
+        match = re.fullmatch(
+            r"\s*<([^<>]+)>\s*((?:;\s*[A-Za-z][\w-]*\s*=\s*"
+            r'(?:"[^"]*"|[^;\s,"]+)\s*)*)',
+            part,
+        )
+        if not match:
+            raise ValueError("Malformed dependency pagination Link header")
+        parameters = re.findall(
+            r';\s*([A-Za-z][\w-]*)\s*=\s*(?:"([^"]*)"|([^;\s,"]+))',
+            match.group(2),
+        )
+        relations = [
+            quoted or bare for name, quoted, bare in parameters if name.lower() == "rel"
+        ]
+        if len(relations) > 1:
+            raise ValueError("Ambiguous dependency pagination relation")
+        if relations and "next" in relations[0].lower().split():
+            next_urls.append(match.group(1))
+    if len(next_urls) > 1:
+        raise ValueError("Ambiguous dependency pagination next page")
+    return next_urls[0] if next_urls else None
+
+
+def _pagination_identity(
+    page_url: str, comparison_url: str, allowed_paths: set[str]
+) -> tuple:
+    page, comparison = urlsplit(page_url), urlsplit(comparison_url)
+    if (
+        page.scheme != comparison.scheme
+        or page.netloc.lower() != comparison.netloc.lower()
+        or page.path not in allowed_paths
+        or page.fragment
+    ):
+        raise ValueError("Dependency pagination URL leaves the trusted comparison")
+    return (
+        page.scheme,
+        page.netloc.lower(),
+        comparison.path,
+        tuple(sorted(parse_qsl(page.query, keep_blank_values=True))),
+    )
 
 
 def record_dependency_review(
@@ -187,17 +230,36 @@ def record_dependency_review(
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
+    allowed_paths = {urlsplit(url).path}
+    repository_id = environment.get("GITHUB_REPOSITORY_ID")
+    if repository_id is not None:
+        if not re.fullmatch(r"[0-9]+", repository_id):
+            raise ValueError("Invalid GitHub repository ID for dependency pagination")
+        # GitHub's Link URLs can use the stable repository-ID route.
+        canonical_url = (
+            f"{api_root}/repositories/{repository_id}/dependency-graph/"
+            f"compare/{base}...{head}"
+        )
+        allowed_paths.add(urlsplit(canonical_url).path)
     page_url: str | None = request.full_url
-    raw_pages: list[bytes] = []
+    first_page: bytes | None = None
+    visited: set[tuple] = set()
     changes: list[dict] = []
     while page_url:
+        identity = _pagination_identity(page_url, url, allowed_paths)
+        if identity in visited or len(visited) >= MAX_COMPARE_PAGES:
+            raise ValueError(
+                "Dependency pagination repeats a page or exceeds its limit"
+            )
+        visited.add(identity)
         page_request = Request(
             page_url,
             headers=request.headers,
         )
         with opener(page_request, timeout=90) as response:
             page_raw = response.read()
-            raw_pages.append(page_raw)
+            if first_page is None:
+                first_page = page_raw
             snapshot_warning = response.headers.get(
                 "x-github-dependency-graph-snapshot-warnings"
             )
@@ -214,12 +276,9 @@ def record_dependency_review(
                     "Dependency diff API did not return a complete change list"
                 )
             changes.extend(page_changes)
-            page_url = _next_page_url(response.headers)
-    raw_diff = (
-        raw_pages[0]
-        if len(raw_pages) == 1
-        else json.dumps(changes).encode()
-    )
+            next_url = _next_page_url(response.headers)
+            page_url = urljoin(page_url, next_url) if next_url else None
+    raw_diff = first_page if len(visited) == 1 else json.dumps(changes).encode()
     _validate_changes(
         changes,
         base,
