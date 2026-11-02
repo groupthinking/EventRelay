@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import tomllib
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from urllib.parse import parse_qsl, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
@@ -69,20 +69,135 @@ def _uv_lock_components(sha: str, manifest: str) -> set[tuple[str, str, str]]:
     }
 
 
+def _unchanged_requirements_resolution(
+    manifest: str, changes: list[dict], base: str, head: str
+) -> dict:
+    """Prove unchanged, self-contained source; retain the resolver's entire delta.
+
+    An unlocked pip scan can choose a newer transitive release at the same
+    source commit. This proof does not establish repeatable Python resolution
+    or waive the dependency-review action's vulnerability/license verdict.
+    """
+
+    def reject(reason: str) -> None:
+        raise ValueError(
+            "Dependency graph includes an unverified change in an unchanged manifest: "
+            f"{manifest!r} ({reason})"
+        )
+
+    path = PurePosixPath(manifest)
+    if (
+        path.is_absolute()
+        or path.as_posix() != manifest
+        or ".." in path.parts
+        or any(ord(character) < 32 for character in manifest)
+        or not re.fullmatch(r"requirements[A-Za-z0-9_.-]*\.(txt|in)", path.name)
+    ):
+        reject("not a supported requirements path")
+
+    entries = []
+    for sha in (base, head):
+        result = subprocess.run(
+            ["git", "--literal-pathspecs", "ls-tree", "-z", sha, "--", manifest],
+            capture_output=True,
+        )
+        entries_on_side = [entry for entry in result.stdout.split(b"\0") if entry]
+        if result.returncode or len(entries_on_side) != 1:
+            reject("source is missing or unreadable")
+        fields = entries_on_side[0].split(b"\t", 1)[0].split()
+        if (
+            len(fields) != 3
+            or fields[0] not in {b"100644", b"100755"}
+            or fields[1] != b"blob"
+        ):
+            reject("source is not a regular Git file")
+        entries.append(fields)
+    if entries[0] != entries[1]:
+        reject("base and head source differ")
+    blob_sha = entries[0][2].decode("ascii")
+    content = subprocess.run(
+        ["git", "cat-file", "blob", blob_sha], check=True, capture_output=True
+    ).stdout
+    try:
+        lines = [
+            line.partition("#")[0].strip()
+            for line in content.decode("utf-8").splitlines()
+        ]
+    except UnicodeDecodeError:
+        reject("source is not UTF-8")
+    declarations = [line for line in lines if line]
+    package_name = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
+    # Includes, constraints, options, extras, markers, pinned ranges and local/
+    # remote references need their own provenance. Never silently exempt them.
+    if not declarations or not all(
+        re.fullmatch(package_name, line) for line in declarations
+    ):
+        reject("source is not self-contained bare unpinned requirements")
+
+    packages: dict[str, list[dict]] = {}
+    for change in changes:
+        name, version = change.get("name"), change.get("version")
+        if (
+            change.get("ecosystem") != "pip"
+            or not isinstance(name, str)
+            or not re.fullmatch(package_name, name)
+            or not isinstance(version, str)
+            or not re.fullmatch(r"[0-9][0-9A-Za-z.!+_-]*", version)
+            or change.get("scope") not in {"runtime", "development"}
+            or change.get("change_type") not in {"added", "removed"}
+        ):
+            reject("invalid pip resolution row")
+        packages.setdefault(name, []).append(change)
+    for rows in packages.values():
+        if (
+            len(rows) != 2
+            or {row["change_type"] for row in rows} != {"added", "removed"}
+            or len({row["version"] for row in rows}) != 2
+            or len({row["scope"] for row in rows}) != 1
+        ):
+            reject("not a paired version-only resolution change")
+
+    return {
+        "manifest": manifest,
+        "classification": "unchanged_unlocked_requirements_resolution",
+        "base_blob_sha": blob_sha,
+        "head_blob_sha": blob_sha,
+        "content_sha256": hashlib.sha256(content).hexdigest(),
+        "declared_packages": declarations,
+        "changes": changes,
+        "limitation": (
+            "The manifest is not a source change; its unlocked resolver delta is "
+            "retained in full. This does not prove repeatable Python resolution "
+            "or waive any vulnerability/license finding or the review outcome."
+        ),
+    }
+
+
 def _validate_changes(
     changes: list[dict], base: str, head: str, changed_files: set[str]
-) -> None:
+) -> list[dict]:
+    unchanged: dict[str, list[dict]] = {}
+    for change in changes:
+        manifest = change.get("manifest")
+        if isinstance(manifest, str) and manifest not in changed_files:
+            unchanged.setdefault(manifest, []).append(change)
+    resolutions = [
+        _unchanged_requirements_resolution(manifest, rows, base, head)
+        for manifest, rows in sorted(unchanged.items())
+    ]
     npm_locks: dict[tuple[str, str], set[tuple[str, str, str]]] = {}
     observed_npm: dict[str, dict[str, set[tuple[str, str, str]]]] = {}
     uv_locks: dict[tuple[str, str], set[tuple[str, str, str]]] = {}
     observed_uv: dict[str, dict[str, set[tuple[str, str, str]]]] = {}
     for change in changes:
         manifest = change.get("manifest")
-        if not isinstance(manifest, str) or manifest not in changed_files:
+        if not isinstance(manifest, str):
             raise ValueError(
                 "Dependency graph includes a change in an unchanged manifest: "
                 f"{manifest!r}"
             )
+        if manifest in unchanged:
+            continue
         if manifest == "uv.lock":
             name, version, scope, kind = (
                 change.get("name"), change.get("version"),
@@ -150,6 +265,8 @@ def _validate_changes(
         }
         if observed_uv.get(manifest, {"added": set(), "removed": set()}) != expected:
             raise ValueError("uv dependency diff does not match lockfile versions and scopes")
+
+    return resolutions
 
 
 MAX_COMPARE_PAGES = 1000
@@ -290,7 +407,7 @@ def record_dependency_review(
             next_url = _next_page_url(response.headers)
             page_url = urljoin(page_url, next_url) if next_url else None
     raw_diff = first_page if len(visited) == 1 else json.dumps(changes).encode()
-    _validate_changes(
+    resolutions = _validate_changes(
         changes,
         base,
         head,
@@ -298,7 +415,7 @@ def record_dependency_review(
     )
 
     evidence = {
-        "schema_version": 2,
+        "schema_version": 3,
         "base_sha": base,
         "head_sha": head,
         "run_id": environment["GITHUB_RUN_ID"],
@@ -308,6 +425,7 @@ def record_dependency_review(
         "dependency_diff_count": len(changes),
         "dependency_diff_sha256": hashlib.sha256(raw_diff).hexdigest(),
         "dependency_diff_file": "dependency-diff.json",
+        "unchanged_requirements_resolutions": resolutions,
     }
     # Finish every environment lookup and hash before the first write, and
     # replace each file atomically, so an evidence-assembly failure cannot leave
