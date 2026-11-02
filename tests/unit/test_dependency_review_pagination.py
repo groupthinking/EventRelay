@@ -247,3 +247,85 @@ def test_different_repository_id_is_rejected_before_request(tmp_path):
         )
     assert requested == [URL]
     assert not (tmp_path / "evidence").exists()
+
+
+@pytest.mark.parametrize("first_page_alias", ["?page=1", "?page=01"])
+@pytest.mark.parametrize("numeric_route", [False, True])
+def test_explicit_first_page_alias_is_rejected_before_request(
+    tmp_path, first_page_alias, numeric_route
+):
+    environment = {**ENV, "GITHUB_REPOSITORY_ID": "12345"}
+    route = (
+        URL.replace("repos/groupthinking/EventRelay", "repositories/12345")
+        if numeric_route
+        else URL
+    )
+    requested = []
+
+    def opener(request, timeout):
+        requested.append(request.full_url)
+        assert len(requested) == 1, "The first page must not be requested twice"
+        return Response(
+            [{"manifest": "requirements.txt", "name": "alpha"}],
+            {"Link": f'<{route}{first_page_alias}>; rel="next"'},
+        )
+
+    with pytest.raises(ValueError, match="pagination"):
+        record_dependency_review(
+            environment,
+            tmp_path / "evidence",
+            opener=opener,
+            changed_files={"requirements.txt"},
+        )
+    assert requested == [URL]
+    assert not (tmp_path / "evidence").exists()
+
+
+def test_duplicate_page_parameter_is_rejected_before_request(tmp_path):
+    requested = []
+
+    def opener(request, timeout):
+        requested.append(request.full_url)
+        return Response([], {"Link": '<?page=2&page=3>; rel="next"'})
+
+    with pytest.raises(ValueError, match="pagination"):
+        record_dependency_review(
+            ENV, tmp_path / "evidence", opener=opener, changed_files=set()
+        )
+    assert requested == [URL]
+    assert not (tmp_path / "evidence").exists()
+
+
+def test_missing_run_metadata_writes_no_partial_evidence(tmp_path):
+    environment = {key: value for key, value in ENV.items() if key != "GITHUB_RUN_ID"}
+    with pytest.raises(KeyError):
+        record_dependency_review(
+            environment,
+            tmp_path / "evidence",
+            opener=lambda *args, **kwargs: Response([]),
+            changed_files=set(),
+        )
+    assert not (tmp_path / "evidence").exists()
+
+
+def test_multi_page_evidence_leaves_no_temporary_files(tmp_path):
+    pages = iter(
+        [
+            Response(
+                [{"manifest": "requirements.txt", "name": "alpha"}],
+                {"Link": '<?page=2>; rel="next"'},
+            ),
+            Response([{"manifest": "requirements.txt", "name": "beta"}]),
+        ]
+    )
+    dest = tmp_path / "evidence"
+    record_dependency_review(
+        ENV,
+        dest,
+        opener=lambda *args, **kwargs: next(pages),
+        changed_files={"requirements.txt"},
+    )
+    assert sorted(path.name for path in dest.iterdir()) == [
+        "dependency-diff.json",
+        "review.json",
+    ]

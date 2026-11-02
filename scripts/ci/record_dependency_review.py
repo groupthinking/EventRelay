@@ -197,11 +197,22 @@ def _pagination_identity(
         or page.fragment
     ):
         raise ValueError("Dependency pagination URL leaves the trusted comparison")
+    query = parse_qsl(page.query, keep_blank_values=True)
+    page_numbers = [value for name, value in query if name == "page"]
+    if len(page_numbers) > 1:
+        raise ValueError("Ambiguous dependency pagination page parameter")
+    # An omitted page is GitHub's first page, so ``?page=1`` (or ``?page=01``)
+    # must not be treated as a new page after the unpaginated initial request.
+    page_number = page_numbers[0] if page_numbers else "1"
+    if re.fullmatch(r"[0-9]+", page_number):
+        page_number = str(int(page_number))
+    query = [(name, value) for name, value in query if name != "page"]
+    query.append(("page", page_number))
     return (
         page.scheme,
         page.netloc.lower(),
         comparison.path,
-        tuple(sorted(parse_qsl(page.query, keep_blank_values=True))),
+        tuple(sorted(query)),
     )
 
 
@@ -286,8 +297,6 @@ def record_dependency_review(
         changed_files if changed_files is not None else _changed_files(base, head),
     )
 
-    destination.mkdir(parents=True, exist_ok=True)
-    (destination / "dependency-diff.json").write_bytes(raw_diff)
     evidence = {
         "schema_version": 2,
         "base_sha": base,
@@ -300,8 +309,24 @@ def record_dependency_review(
         "dependency_diff_sha256": hashlib.sha256(raw_diff).hexdigest(),
         "dependency_diff_file": "dependency-diff.json",
     }
-    (destination / "review.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    # Finish every environment lookup and hash before the first write, and
+    # replace each file atomically, so an evidence-assembly failure cannot leave
+    # a diff without its review record (the upload step runs after failures).
+    destination.mkdir(parents=True, exist_ok=True)
+    _write_atomically(destination / "dependency-diff.json", raw_diff)
+    _write_atomically(
+        destination / "review.json", (json.dumps(evidence, indent=2) + "\n").encode()
+    )
     return evidence
+
+
+def _write_atomically(path: Path, content: bytes) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        temporary.write_bytes(content)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
