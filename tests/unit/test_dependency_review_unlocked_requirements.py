@@ -188,6 +188,8 @@ def test_unchanged_unlocked_pip_resolution_keeps_all_rows_and_review_verdict(
         "--index-url https://example.invalid\n",
         "torch; python_version > '3.10'\n",
         "# empty\n",
+        "torch#not-a-comment\n",
+        "torch#bad # later comment\n",
     ],
 )
 def test_unverifiable_requirement_forms_fail_closed(comparison, tmp_path, content):
@@ -277,3 +279,35 @@ def test_resolution_drift_cannot_hide_real_graph_mismatch(
     with pytest.raises(ValueError):
         record(comparison, tmp_path / "evidence", rows)
     assert not (tmp_path / "evidence").exists()
+
+
+@pytest.mark.parametrize("version", ["4..2", "1!+_-", "4.2rc1", "1!4.2", "4.2+linux"])
+def test_only_explicit_numeric_release_versions_are_supported(
+    comparison, tmp_path, version
+):
+    rows = [dict(row) for row in comparison[4] + PIP_ROWS]
+    rows[-2]["version"] = version
+    with pytest.raises(ValueError, match="invalid pip resolution row"):
+        record(comparison, tmp_path / "evidence", rows)
+    assert not (tmp_path / "evidence").exists()
+
+
+def test_only_whitespace_delimited_requirement_comments_are_removed(
+    comparison, tmp_path
+):
+    repo, manifest, git, env, npm_rows = comparison
+    content = "# full-line comment\ntorch # inline comment\nrequests\t# tab comment\n"
+    for side in ("BASE_SHA", "HEAD_SHA"):
+        git("checkout", "--detach", env[side])
+        manifest.write_text(content)
+        git("add", ".")
+        git("commit", "-qm", "recognized comments")
+        env[side] = git("rev-parse", "HEAD")
+    result, _ = record(
+        comparison,
+        tmp_path / "evidence",
+        npm_rows + PIP_ROWS,
+        changed_files={"package-lock.json"},
+    )
+    (proof,) = result["unchanged_requirements_resolutions"]
+    assert proof["declared_packages"] == ["torch", "requests"]
