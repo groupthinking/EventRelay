@@ -55,5 +55,11 @@ listComments:'comments', updateComment:async()=>{},createComment:async()=>{}
             "fix: security update", ["docs/visible-file.md"],
             "Closes #1. Large security change.", changed_files=3001))
 
+    def test_file_listing_at_github_limit_requires_security_evidence(self):
+        paths = [f"docs/file-{index}.md" for index in range(3000)]
+        self.assertIn("failed", self.validate(
+            "fix: security update", paths,
+            "Closes #1. Large security change.", changed_files=3000))
+
 if __name__ == "__main__":
     unittest.main()
