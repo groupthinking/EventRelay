@@ -99,6 +99,30 @@ def test_required_checks_fail_closed_on_runner_exit_code() -> None:
     assert summary["blocking"] == ["runner-exit-code:1"]
 
 
+def test_stateless_tools_conformance_is_required_for_server_and_client() -> None:
+    module = _load_module()
+
+    assert {
+        entry["scenario"] for entry in module.SERVER_SCENARIOS if entry["required"]
+    } >= {
+        "server-stateless",
+        "tools-list",
+        "tools-call-simple-text",
+    }
+    assert any(
+        entry["scenario"] == "tools_call" and entry["required"]
+        for entry in module.CLIENT_SCENARIOS
+    )
+    assert all(
+        "tools_call" not in category["scenarios"]
+        for category in module.EXCLUSIONS["client"]
+    )
+    assert all(
+        "server-stateless" not in category["scenarios"]
+        for category in module.EXCLUSIONS["server"]
+    )
+
+
 def test_fixture_server_keeps_tools_list_order_stable() -> None:
     port = _free_port()
     proc = _start_fixture_server(port)

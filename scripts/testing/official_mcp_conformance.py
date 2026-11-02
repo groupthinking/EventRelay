@@ -53,6 +53,7 @@ SCOPE_STEP_UP_RECEIPT_POLICY = {
 }
 SERVER_SCENARIOS = (
     {"scenario": "tools-list", "spec_version": "2026-07-28", "required": True},
+    {"scenario": "server-stateless", "spec_version": "2026-07-28", "required": True},
     {
         "scenario": "tools-call-simple-text",
         "spec_version": "2026-07-28",
@@ -62,6 +63,7 @@ SERVER_SCENARIOS = (
     {"scenario": "server-initialize", "spec_version": "2025-11-25", "required": True},
 )
 CLIENT_SCENARIOS = (
+    {"scenario": "tools_call", "spec_version": "2026-07-28", "required": True},
     {"scenario": "auth/metadata-var2", "spec_version": "2026-07-28", "required": True},
     {
         "scenario": "auth/token-endpoint-auth-basic",
@@ -84,7 +86,6 @@ EXCLUSIONS = {
         {
             "reason": "surface-not-implemented",
             "scenarios": [
-                "server-stateless",
                 "completion-complete",
                 "tools-call-image",
                 "tools-call-audio",
@@ -147,7 +148,6 @@ EXCLUSIONS = {
         {
             "reason": "surface-not-certified-in-this-baseline",
             "scenarios": [
-                "tools_call",
                 "request-metadata",
                 "auth/metadata-default",
                 "auth/metadata-var1",

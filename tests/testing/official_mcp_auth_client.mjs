@@ -10,6 +10,7 @@ import {
 import { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-utils.js';
 
 const SCENARIOS = new Set([
+  'tools_call',
   'auth/metadata-var2',
   'auth/token-endpoint-auth-basic',
   'auth/token-endpoint-auth-post',
@@ -196,6 +197,14 @@ async function runAuthClient(serverUrl) {
   // it through Client.connect() sends a second initialize request after OAuth
   // and the official server correctly rejects that stale lifecycle.
   if (protocolVersion === '2026-07-28') {
+    const requestMeta = {
+      'io.modelcontextprotocol/protocolVersion': protocolVersion,
+      'io.modelcontextprotocol/clientCapabilities': {},
+      'io.modelcontextprotocol/clientInfo': {
+        name: 'eventrelay-conformance-client',
+        version: '1.0.0',
+      },
+    };
     const response = await oauthFetch(serverUrl, {
       method: 'POST',
       headers: {
@@ -207,20 +216,46 @@ async function runAuthClient(serverUrl) {
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/list',
-        params: {
-          _meta: {
-            'io.modelcontextprotocol/protocolVersion': protocolVersion,
-            'io.modelcontextprotocol/clientCapabilities': {},
-            'io.modelcontextprotocol/clientInfo': {
-              name: 'eventrelay-conformance-client',
-              version: '1.0.0',
-            },
-          },
-        },
+        params: { _meta: requestMeta },
       }),
     });
     if (!response.ok) {
       throw new Error(`Stateless MCP request failed: ${response.status} ${await response.text()}`);
+    }
+    const tools = (await response.json()).result?.tools;
+    if (!Array.isArray(tools) || !tools.some((tool) => tool.name === 'test_simple_text')) {
+      throw new Error('Stateless MCP tools/list omitted test_simple_text');
+    }
+
+    const callResponse = await oauthFetch(serverUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+        'MCP-Protocol-Version': protocolVersion,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'test_simple_text',
+          arguments: {},
+          _meta: requestMeta,
+        },
+      }),
+    });
+    if (!callResponse.ok) {
+      throw new Error(
+        `Stateless MCP tools/call failed: ${callResponse.status} ${await callResponse.text()}`
+      );
+    }
+    const result = (await callResponse.json()).result;
+    if (
+      !Array.isArray(result?.content) ||
+      !result.content.some((item) => item.type === 'text' && item.text)
+    ) {
+      throw new Error('Stateless MCP tools/call returned no text content');
     }
     return;
   }

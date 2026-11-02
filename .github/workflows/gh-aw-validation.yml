@@ -50,15 +50,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh extension remove aw || true
-          gh extension install github/gh-aw --pin v0.88.7
+          gh extension install github/gh-aw --pin v1.0.1
           ACTUAL_VERSION="$(gh aw version 2>&1 | awk '{print $NF}')"
-          if [ "$ACTUAL_VERSION" != "v0.88.7" ]; then
-            echo "Expected gh aw v0.88.7 but got $ACTUAL_VERSION"
+          if [ "$ACTUAL_VERSION" != "v1.0.1" ]; then
+            echo "Expected gh aw v1.0.1 but got $ACTUAL_VERSION"
             exit 1
           fi
-          PRERELEASE="$(gh api repos/github/gh-aw/releases/tags/v0.88.7 --jq '.prerelease')"
+          PRERELEASE="$(gh api repos/github/gh-aw/releases/tags/v1.0.1 --jq '.prerelease')"
           if [ "$PRERELEASE" != "false" ]; then
-            echo "v0.88.7 must remain a stable release"
+            echo "v1.0.1 must remain a stable release"
             exit 1
           fi
 
@@ -70,8 +70,8 @@ jobs:
           
           data = json.loads(Path('.github/aw/actions-lock.json').read_text())
           expected = {
-              'github/gh-aw-actions/setup-cli@v0.88.7': '5e508589e03a7757a7e05b26e834292f5445bfb6',
-              'github/gh-aw-actions/setup@v0.88.7': '5e508589e03a7757a7e05b26e834292f5445bfb6',
+              'github/gh-aw-actions/setup-cli@v1.0.1': '221ba4f4319de6b8e809d1a15528b3ae6a818aa5',
+              'github/gh-aw-actions/setup@v1.0.1': '221ba4f4319de6b8e809d1a15528b3ae6a818aa5',
           }
           entries = data.get('entries', {})
           for key, sha in expected.items():

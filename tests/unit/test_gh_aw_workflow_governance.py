@@ -88,6 +88,50 @@ def test_ci_installs_the_authoritative_python_environment() -> None:
         assert suppression not in install_script
 
 
+def test_ci_typecheck_and_lint_jobs_are_blocking() -> None:
+    workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
+    typecheck = next(
+        step
+        for step in workflow["jobs"]["build"]["steps"]
+        if "type-check" in step.get("name", "")
+    )
+    python_job = workflow["jobs"]["lint-python"]
+    python_lint = next(
+        step for step in python_job["steps"] if "ruff check" in step.get("run", "")
+    )
+    frontend_job = workflow["jobs"]["lint-frontend"]
+    frontend_lint = next(
+        step for step in frontend_job["steps"] if "npm run lint" in step.get("run", "")
+    )
+
+    assert not typecheck.get("continue-on-error", False)
+    assert not python_job.get("continue-on-error", False)
+    assert not python_lint.get("continue-on-error", False)
+    assert not frontend_job.get("continue-on-error", False)
+    assert not frontend_lint.get("continue-on-error", False)
+    assert "ruff==0.17.3" in next(
+        step["run"] for step in python_job["steps"] if "pip install" in step.get("run", "")
+    )
+    assert "src/youtube_extension/backend/" not in python_lint["run"]
+    assert "src/youtube_extension/main.py" in python_lint["run"]
+    assert "ruff check src/youtube_extension/ --select F821" in python_lint["run"]
+    assert "F821" not in python_lint["run"].splitlines()[0]
+
+
+def test_coverage_documentation_matches_the_enforced_floor() -> None:
+    workflow_readme = (ROOT / ".github/workflows/README.md").read_text()
+    coverage_workflow = _load_yaml(ROOT / ".github/workflows/coverage.yml")
+    coverage_step = next(
+        step
+        for step in coverage_workflow["jobs"]["coverage"]["steps"]
+        if step.get("name") == "Run tests with coverage"
+    )
+
+    assert "--cov-fail-under=84.2" in coverage_step["run"]
+    assert "84.2%" in workflow_readme
+    assert "--cov-fail-under=90" not in workflow_readme
+
+
 def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
     workflow_on = workflow.get("on", workflow.get(True))
@@ -262,15 +306,15 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
 
     assert workflow["name"] == "gh-aw Validation"
-    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.88.7"]
-    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v0.88.7"]
-    assert setup_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
-    assert setup_cli_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
+    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v1.0.1"]
+    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v1.0.1"]
+    assert setup_entry["sha"] == "221ba4f4319de6b8e809d1a15528b3ae6a818aa5"
+    assert setup_cli_entry["sha"] == "221ba4f4319de6b8e809d1a15528b3ae6a818aa5"
     step_scripts = [
         step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]
     ]
     combined = "\n".join(step_scripts)
-    assert "gh extension install github/gh-aw --pin v0.88.7" in combined
+    assert "gh extension install github/gh-aw --pin v1.0.1" in combined
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
