@@ -199,4 +199,45 @@ describe('StudioIdeChat plan interview chaining', () => {
     expect(document.activeElement).toBe(composer);
   });
 
+  it.each(['success', 'error'] as const)('ignores an old %s after returning to the same pack while a new request is pending', async (outcome) => {
+    let resolveOld: (value: unknown) => void = () => {};
+    let rejectOld: (reason: Error) => void = () => {};
+    let resolveCurrent: (value: unknown) => void = () => {};
+    const oldResponse = new Promise((resolve, reject) => { resolveOld = resolve; rejectOld = reject; });
+    const currentResponse = new Promise(resolve => { resolveCurrent = resolve; });
+    const network = vi.fn().mockReturnValueOnce(oldResponse).mockReturnValueOnce(currentResponse);
+    vi.stubGlobal('fetch', network);
+    const props = { videoId: 'auJzb1D-fag', packId: 'vp:v0:auJzb1D-fag' };
+    const view = render(<StudioIdeChat {...props} />);
+    fireEvent.change(screen.getByTestId('studio-ide-chat-input'), { target: { value: 'Plan a build from this Video Pack' } });
+    fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(1));
+
+    view.rerender(<StudioIdeChat {...props} stepContext={{ id: 'rb-2', step_number: 2, title: 'Check the fixture' }} />);
+    await waitFor(() => expect(screen.getByTestId('studio-ide-chat-input')).toHaveProperty('disabled', false));
+    view.rerender(<StudioIdeChat {...props} />);
+    fireEvent.change(screen.getByTestId('studio-ide-chat-input'), { target: { value: 'Current whole-pack request' } });
+    fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
+    await waitFor(() => expect(network).toHaveBeenCalledTimes(2));
+
+    await act(async () => {
+      if (outcome === 'success') {
+        resolveOld({ ok: true, status: 200, json: async () => ({ answer: 'Stale prior interview', requiresInterview: true, interviewQuestions: ['Stale prior question'] }) });
+      } else {
+        rejectOld(new Error('Stale prior failure'));
+      }
+      await oldResponse.catch(() => {});
+    });
+    expect(screen.queryAllByText(/Stale prior/)).toHaveLength(0);
+    expect(screen.getByTestId('studio-ide-chat-input')).toHaveProperty('disabled', true);
+    expect(JSON.parse(network.mock.calls[1][1].body).history).toEqual([{ role: 'user', content: 'Current whole-pack request' }]);
+
+    await act(async () => {
+      resolveCurrent({ ok: true, status: 200, json: async () => ({ answer: 'Current whole-pack reply' }) });
+      await currentResponse;
+    });
+    await screen.findByText('Current whole-pack reply');
+    expect(screen.getByTestId('studio-ide-chat-input')).toHaveProperty('disabled', false);
+  });
+
 });

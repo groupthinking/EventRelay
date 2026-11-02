@@ -188,7 +188,7 @@ export default function StudioIdeChat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const idCounter = useRef(0);
   const conversationKey = JSON.stringify([videoId, packId, stepContext?.id ?? null]);
-  const conversationKeyRef = useRef(conversationKey);
+  const requestGenerationRef = useRef(0);
 
   useEffect(() => {
     if (focusNonce) inputRef.current?.focus();
@@ -208,20 +208,22 @@ export default function StudioIdeChat({
   // Each step has its own evidence window. Do not pass another step's turns
   // into this request, or display an older response after the step changes.
   useEffect(() => {
-    conversationKeyRef.current = conversationKey;
+    // Returning to the same pack/step must not revive a prior request.
+    requestGenerationRef.current += 1;
     setMessages([]);
     setQuotaHit(false);
     setError(null);
     setSending(false);
     setPlanInterviewQuestions(null);
     setPlanInterviewDraft({});
+    return () => { requestGenerationRef.current += 1; };
   }, [conversationKey]);
 
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
     const query = draft.trim();
     if (!query || sending || disabled) return;
-    const requestKey = conversationKey;
+    const requestGeneration = ++requestGenerationRef.current;
 
     const userMsg: ChatMessage = { id: `u-${idCounter.current++}`, role: 'user', content: query };
     setMessages((prev) => [...prev, userMsg]);
@@ -253,7 +255,7 @@ export default function StudioIdeChat({
         body: JSON.stringify(body),
       });
       const data = (await res.json()) as PlanChatResponse;
-      if (conversationKeyRef.current !== requestKey) return;
+      if (requestGenerationRef.current !== requestGeneration) return;
 
       if (res.status === 402 && data.upgradeRequired) {
         setQuotaHit(true);
@@ -307,7 +309,7 @@ export default function StudioIdeChat({
         setPlanInterviewQuestions(null);
       }
     } catch (err) {
-      if (conversationKeyRef.current !== requestKey) return;
+      if (requestGenerationRef.current !== requestGeneration) return;
       const text = err instanceof Error ? err.message : 'Chat failed.';
       setError(text);
       setMessages((prev) => [
@@ -315,7 +317,7 @@ export default function StudioIdeChat({
         { id: `a-${idCounter.current++}`, role: 'assistant', content: `Error: ${text}` },
       ]);
     } finally {
-      if (conversationKeyRef.current === requestKey) setSending(false);
+      if (requestGenerationRef.current === requestGeneration) setSending(false);
     }
   };
 
