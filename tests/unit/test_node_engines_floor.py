@@ -177,9 +177,9 @@ def _range_intervals(
         match = _CARET_VERSION.match(clause)
         assert match is not None, f"unsupported Node engine clause: {clause!r}"
         lower = tuple(int(piece or 0) for piece in match.groups())
-        if lower[0]:
+        if lower[0] or match.group(2) is None:
             upper = (lower[0] + 1, 0, 0)
-        elif lower[1]:
+        elif lower[1] or match.group(3) is None:
             upper = (0, lower[1] + 1, 0)
         else:
             upper = (0, 0, lower[2] + 1)
@@ -379,12 +379,27 @@ def test_direct_dependencies_resolve_versions_declared_by_their_consumer(
         ("0.301.0", "^0.300.0", False),
         ("0.0.4", "^0.0.4", True),
         ("0.0.5", "^0.0.4", False),
+        ("0.300.1", "^0", True),
+        ("1.0.0", "^0", False),
+        ("0.0.9", "^0.0", True),
+        ("0.1.0", "^0.0", False),
     ],
 )
 def test_declared_package_range_validation(
     version: str, declared: str, expected: bool
 ) -> None:
     assert _version_satisfies(version, declared) is expected
+
+
+def test_v0_cli_config_resolves_patched_zod() -> None:
+    """Keep the newly installed v0 credential-config path off vulnerable Zod."""
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    path = "apps/web"
+    for dependency in ("v0", "@vercel/oidc", "@vercel/cli-config", "zod"):
+        path, metadata = _nearest_locked_dependency(packages, path, dependency)
+    assert _version_satisfies(metadata["version"], "^4.6.7"), (
+        f"v0's CLI config resolves vulnerable Zod at {path}@{metadata['version']}"
+    )
 
 
 def test_jsdom_resolves_its_supported_undici_major() -> None:
