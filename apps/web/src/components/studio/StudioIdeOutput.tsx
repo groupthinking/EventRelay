@@ -5,6 +5,7 @@ import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
+import StudioBoundTasks from './StudioBoundTasks';
 
 export type StudioReviewActionInput = {
   tool: string;
@@ -12,9 +13,10 @@ export type StudioReviewActionInput = {
   result?: string;
 };
 
-type OutputSection = 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
+type OutputSection = 'tasks' | 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
+  { id: 'tasks', label: 'Tasks' },
   { id: 'events', label: 'Events' },
   { id: 'lingo', label: 'Lingo' },
   { id: 'tools', label: 'Tools' },
@@ -50,7 +52,7 @@ export default function StudioIdeOutput({
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
 }) {
-  const [active, setActive] = useState<OutputSection>('events');
+  const [active, setActive] = useState<OutputSection>('tasks');
 
   const hasContent = Boolean(
     video?.videoPack ||
@@ -100,7 +102,7 @@ export default function StudioIdeOutput({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-4">
-        {!hasContent && active !== 'transcript' ? (
+        {!hasContent && active !== 'transcript' && active !== 'tasks' ? (
           <div className="uvai-empty">
             <p className="font-medium text-slate-600">
               Run a video and the extracted actions land here
@@ -109,6 +111,7 @@ export default function StudioIdeOutput({
           </div>
         ) : (
           <>
+        {active === 'tasks' && <StudioBoundTasks key={video?.id ?? 'empty'} pack={pack} />}
         {active === 'events' && (
           <ul className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
