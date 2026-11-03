@@ -5,7 +5,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation/types.js';
 
 // Follow the actual optional-runtime GenAI -> MCP dependency chain. Importing
 // a different workspace copy would conceal a vulnerable hoisted consumer.
@@ -88,6 +89,34 @@ describe('installed MCP transitive security', () => {
     for (const reference of ['../x', 'a/../b']) {
       const base = 'https://example.invalid/dir/page';
       expect(uri.resolve(base, uri.normalize(reference))).toBe(uri.resolve(base, reference));
+    }
+  });
+
+  it('accepts nested SDK object schemas with strict keyword types', () => {
+    expectTypeOf<false>().not.toMatchTypeOf<JsonSchemaType>();
+    expectTypeOf<{ type: number }>().not.toMatchTypeOf<JsonSchemaType>();
+    const schema: JsonSchemaType = {
+      type: 'object',
+      properties: {
+        payload: { anyOf: [{ type: 'null' }, { type: 'array', items: { type: 'integer' } }] },
+        mode: { enum: ['read', 'write'] },
+      },
+      required: ['payload', 'mode'],
+      additionalProperties: false,
+    };
+    const { AjvJsonSchemaValidator } = fromSdk('@modelcontextprotocol/sdk/validation/ajv') as
+      typeof import('@modelcontextprotocol/sdk/validation/ajv');
+    const validate = new AjvJsonSchemaValidator().getValidator(schema);
+    for (const payload of [null, [], [1, 2]]) {
+      expect(validate({ payload, mode: 'read' }).valid).toBe(true);
+    }
+    for (const invalid of [
+      { payload: ['1'], mode: 'read' },
+      { payload: [1], mode: 'unknown' },
+      { mode: 'read' },
+      { payload: null, mode: 'read', unexpected: true },
+    ]) {
+      expect(validate(invalid).valid).toBe(false);
     }
   });
 
