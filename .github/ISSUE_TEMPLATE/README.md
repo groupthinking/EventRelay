@@ -359,7 +359,6 @@ grafana-cli --version  # Optional, can run in Docker
 ## 📚 Additional Resources
 
 ### EventRelay Documentation
-- [Security Documentation](../../docs/SECURITY.md)
 - [Deployment Guide](../../docs/deployment/)
 - [Testing Guide](../../docs/testing/)
 
