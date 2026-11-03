@@ -70,6 +70,9 @@
       "@vercel/cli-config": {
         "zod": "4.6.7"
       }
+    },
+    "@modelcontextprotocol/sdk": {
+      "json-schema-typed": "9.0.0"
     }
   },
   "dependencies": {
