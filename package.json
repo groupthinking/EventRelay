@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "build:web": "cd apps/web && npm run build",
     "dev:web": "cd apps/web && npm run dev",
-    "install:all": "npm install"
+    "install:all": "npm install",
+    "test:mcp-security": "tsc --project tests/security/tsconfig.mcp.json && vitest run --config tests/security/vitest.mcp.config.mts"
   },
   "workspaces": [
     "apps/*"
@@ -70,13 +71,16 @@
       "@vercel/cli-config": {
         "zod": "4.6.7"
       }
+    },
+    "@modelcontextprotocol/sdk": {
+      "json-schema-typed": "9.0.0"
     }
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.129",
     "@google-cloud/text-to-speech": "^7.2.0",
     "@google/genai": "^2.31.0",
-    "@opentelemetry/core": "^2.11.0",
+    "@opentelemetry/core": "^3.0.0",
     "@types/node": "^26.6.6",
     "ai": "^7.0.156",
     "chrome-devtools-mcp": "^1.12.0",
