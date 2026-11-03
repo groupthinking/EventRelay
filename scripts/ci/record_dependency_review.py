@@ -126,12 +126,15 @@ def _unchanged_requirements_resolution(
         ["git", "cat-file", "blob", blob_sha], check=True, capture_output=True
     ).stdout
     try:
-        lines = [
-            re.sub(r"(^|\s+)#.*$", "", line).strip()
-            for line in content.decode("utf-8").splitlines()
-        ]
+        raw_lines = content.decode("utf-8").splitlines()
     except UnicodeDecodeError:
         reject("source is not UTF-8")
+    # pip joins a line ending in a backslash with the next one before it strips
+    # comments, so "torch # note \" swallows the following declaration. Do not
+    # model continuation; any such line makes the declared names unprovable.
+    if any(line.endswith("\\") for line in raw_lines):
+        reject("source uses line continuation")
+    lines = [re.sub(r"(^|\s+)#.*$", "", line).strip() for line in raw_lines]
     declarations = [line for line in lines if line]
     package_name = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
     # Includes, constraints, options, extras, markers, pinned ranges and local/

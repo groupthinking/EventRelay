@@ -197,6 +197,12 @@ def test_unchanged_unlocked_pip_resolution_keeps_all_rows_and_review_verdict(
         "# empty\n",
         "torch#not-a-comment\n",
         "torch#bad # later comment\n",
+        "torch --hash=sha256:" + "0" * 64 + "\n",
+        # pip joins continuation lines before stripping comments, so this file
+        # declares only torch even though each line looks like a bare name.
+        "torch # note \\\nnumpy\n",
+        "tor\\\nch\n",
+        "torch\\\n",
     ],
 )
 def test_unverifiable_requirement_forms_fail_closed(comparison, tmp_path, content):
