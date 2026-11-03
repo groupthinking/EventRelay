@@ -279,15 +279,6 @@ class VideoPipelineOrchestrator:
             "total_duration_ms": report["total_duration_ms"]
         })
 
-        # Deeper unclosed hygiene: explicit close of LLM router / Gemini clients (LLM fallback paths)
-        try:
-            from youtube_extension.backend.llm_router import LLMRouter
-            # If any were created in this process, best-effort new instance close does nothing harmful
-            # Real instances are closed by owners; this helps GC in long-lived launcher
-            pass
-        except Exception:
-            pass
-
         return report
 
     async def _run_dag_pipeline(self, video_url: str, options: dict) -> dict:
