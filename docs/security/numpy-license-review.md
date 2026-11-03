@@ -4,11 +4,7 @@ Reviewed on 2026-10-16. This records the license-check diagnosis for [PR #2409](
 
 ## Historical rejection
 
-[Dependency Review run 38258616716, job 114843054032](https://github.com/groupthinking/EventRelay/actions/runs/38258616716/job/114843054032) failed on 2026-10-12 while comparing base `bd0f437180b994d8916fcba22ada610bf2fbae0a` with head `1d9f72d7c40bff34aa43b8107cb817ad01e8efd5`. It reported NumPy `2.5.3` to `2.5.4` as a dependency graph change, with six incompatible-license entries across three manifests (each appears twice):
-
-- `requirements.txt`
-- `docs/knowledge_prototypes/universal-automation-service/requirements.txt`
-- `docs/knowledge_prototypes/mcp-servers/mcp-alexnet/requirements.txt`
+[Dependency Review run 38258616716, job 114843054032](https://github.com/groupthinking/EventRelay/actions/runs/38258616716/job/114843054032) failed on 2026-10-12 while comparing base `bd0f437180b994d8916fcba22ada610bf2fbae0a` with head `1d9f72d7c40bff34aa43b8107cb817ad01e8efd5`. It reported NumPy `2.5.3` to `2.5.4` as a dependency graph change, with incompatible-license entries in `requirements.txt`.
 
 The complete expression was `BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0`. Both [NumPy 2.5.3 metadata](https://pypi.org/pypi/numpy/2.5.3/json) and [NumPy 2.5.4 metadata](https://pypi.org/pypi/numpy/2.5.4/json) declare this same expression. NumPy's bundled [libdivide license](https://github.com/numpy/numpy/blob/v2.5.4/numpy/_core/include/numpy/libdivide/LICENSE.txt) contains the Zlib terms. Dropping that component or replacing the expression with NumPy's primary BSD license would lose material license information.
 
