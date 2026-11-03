@@ -9,7 +9,7 @@ import re
 import subprocess
 import tomllib
 from pathlib import Path
-from urllib.parse import unquote
+from urllib.parse import parse_qsl, unquote, urljoin, urlsplit
 from urllib.request import Request, urlopen
 
 from scripts.ci.submit_uv_lock_snapshot import uv_manifest
@@ -159,6 +159,70 @@ def _validate_changes(
             raise ValueError("uv dependency diff does not match lockfile versions and scopes")
 
 
+MAX_COMPARE_PAGES = 1000
+
+
+def _next_page_url(headers) -> str | None:
+    link_header = headers.get("Link")
+    if link_header is None or link_header == "":
+        return None
+    if not isinstance(link_header, str):
+        raise ValueError("Invalid dependency pagination Link header")
+    next_urls = []
+    for part in re.split(r",\s*(?=<)", link_header):
+        match = re.fullmatch(
+            r"\s*<([^<>]+)>\s*((?:;\s*[A-Za-z][\w-]*\s*=\s*"
+            r'(?:"[^"]*"|[^;\s,"]+)\s*)*)',
+            part,
+        )
+        if not match:
+            raise ValueError("Malformed dependency pagination Link header")
+        parameters = re.findall(
+            r';\s*([A-Za-z][\w-]*)\s*=\s*(?:"([^"]*)"|([^;\s,"]+))',
+            match.group(2),
+        )
+        relations = [
+            quoted or bare for name, quoted, bare in parameters if name.lower() == "rel"
+        ]
+        if len(relations) > 1:
+            raise ValueError("Ambiguous dependency pagination relation")
+        if relations and "next" in relations[0].lower().split():
+            next_urls.append(match.group(1))
+    if len(next_urls) > 1:
+        raise ValueError("Ambiguous dependency pagination next page")
+    return next_urls[0] if next_urls else None
+
+
+def _pagination_identity(
+    page_url: str, comparison_url: str, allowed_paths: set[str]
+) -> tuple:
+    page, comparison = urlsplit(page_url), urlsplit(comparison_url)
+    if (
+        page.scheme != comparison.scheme
+        or page.netloc.lower() != comparison.netloc.lower()
+        or page.path not in allowed_paths
+        or page.fragment
+    ):
+        raise ValueError("Dependency pagination URL leaves the trusted comparison")
+    query = parse_qsl(page.query, keep_blank_values=True)
+    page_numbers = [value for name, value in query if name == "page"]
+    if len(page_numbers) > 1:
+        raise ValueError("Ambiguous dependency pagination page parameter")
+    # An omitted page is GitHub's first page, so ``?page=1`` (or ``?page=01``)
+    # must not be treated as a new page after the unpaginated initial request.
+    page_number = page_numbers[0] if page_numbers else "1"
+    if re.fullmatch(r"[0-9]+", page_number):
+        page_number = str(int(page_number))
+    query = [(name, value) for name, value in query if name != "page"]
+    query.append(("page", page_number))
+    return (
+        page.scheme,
+        page.netloc.lower(),
+        comparison.path,
+        tuple(sorted(query)),
+    )
+
+
 def record_dependency_review(
     environment: dict[str, str],
     destination: Path,
@@ -184,21 +248,55 @@ def record_dependency_review(
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
-    with opener(request, timeout=90) as response:
-        raw_diff = response.read()
-        snapshot_warning = response.headers.get(
-            "x-github-dependency-graph-snapshot-warnings"
+    allowed_paths = {urlsplit(url).path}
+    repository_id = environment.get("GITHUB_REPOSITORY_ID")
+    if repository_id is not None:
+        if not re.fullmatch(r"[0-9]+", repository_id):
+            raise ValueError("Invalid GitHub repository ID for dependency pagination")
+        # GitHub's Link URLs can use the stable repository-ID route.
+        canonical_url = (
+            f"{api_root}/repositories/{repository_id}/dependency-graph/"
+            f"compare/{base}...{head}"
         )
-    if snapshot_warning:
-        raise ValueError(
-            "Dependency graph reported snapshot warnings; refusing to save "
-            "an incomplete comparison as review evidence"
+        allowed_paths.add(urlsplit(canonical_url).path)
+    page_url: str | None = request.full_url
+    first_page: bytes | None = None
+    visited: set[tuple] = set()
+    changes: list[dict] = []
+    while page_url:
+        identity = _pagination_identity(page_url, url, allowed_paths)
+        if identity in visited or len(visited) >= MAX_COMPARE_PAGES:
+            raise ValueError(
+                "Dependency pagination repeats a page or exceeds its limit"
+            )
+        visited.add(identity)
+        page_request = Request(
+            page_url,
+            headers=request.headers,
         )
-    changes = json.loads(raw_diff)
-    if not isinstance(changes, list) or not all(
-        isinstance(item, dict) for item in changes
-    ):
-        raise ValueError("Dependency diff API did not return a complete change list")
+        with opener(page_request, timeout=90) as response:
+            page_raw = response.read()
+            if first_page is None:
+                first_page = page_raw
+            snapshot_warning = response.headers.get(
+                "x-github-dependency-graph-snapshot-warnings"
+            )
+            if snapshot_warning:
+                raise ValueError(
+                    "Dependency graph reported snapshot warnings; refusing to save "
+                    "an incomplete comparison as review evidence"
+                )
+            page_changes = json.loads(page_raw)
+            if not isinstance(page_changes, list) or not all(
+                isinstance(item, dict) for item in page_changes
+            ):
+                raise ValueError(
+                    "Dependency diff API did not return a complete change list"
+                )
+            changes.extend(page_changes)
+            next_url = _next_page_url(response.headers)
+            page_url = urljoin(page_url, next_url) if next_url else None
+    raw_diff = first_page if len(visited) == 1 else json.dumps(changes).encode()
     _validate_changes(
         changes,
         base,
@@ -206,8 +304,6 @@ def record_dependency_review(
         changed_files if changed_files is not None else _changed_files(base, head),
     )
 
-    destination.mkdir(parents=True, exist_ok=True)
-    (destination / "dependency-diff.json").write_bytes(raw_diff)
     evidence = {
         "schema_version": 2,
         "base_sha": base,
@@ -220,8 +316,24 @@ def record_dependency_review(
         "dependency_diff_sha256": hashlib.sha256(raw_diff).hexdigest(),
         "dependency_diff_file": "dependency-diff.json",
     }
-    (destination / "review.json").write_text(json.dumps(evidence, indent=2) + "\n")
+    # Finish every environment lookup and hash before the first write, and
+    # replace each file atomically, so an evidence-assembly failure cannot leave
+    # a diff without its review record (the upload step runs after failures).
+    destination.mkdir(parents=True, exist_ok=True)
+    _write_atomically(destination / "dependency-diff.json", raw_diff)
+    _write_atomically(
+        destination / "review.json", (json.dumps(evidence, indent=2) + "\n").encode()
+    )
     return evidence
+
+
+def _write_atomically(path: Path, content: bytes) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    try:
+        temporary.write_bytes(content)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
