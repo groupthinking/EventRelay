@@ -27,16 +27,10 @@ from typing import Any, Dict, List
 import asyncpg
 import psutil
 
-# Import performance monitoring
-try:
-    from ..backend.services.performance_monitor import (
-        performance_monitor,
-        track_database_query_time,
-    )
-except ImportError:
-    performance_monitor = None
-    async def track_database_query_time(query_time_ms, query_type="general"):
-        pass
+
+async def track_database_query_time(query_time_ms, query_type="general"):
+    return None
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
