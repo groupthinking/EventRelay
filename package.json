@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "build:web": "cd apps/web && npm run build",
     "dev:web": "cd apps/web && npm run dev",
-    "install:all": "npm install"
+    "install:all": "npm install",
+    "test:mcp-security": "tsc --project tests/security/tsconfig.mcp.json && vitest run --config tests/security/vitest.mcp.config.mts"
   },
   "workspaces": [
     "apps/*"

@@ -4,13 +4,14 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { JsonSchemaType } from '@modelcontextprotocol/sdk/validation/types.js';
 
 // Follow the actual optional-runtime GenAI -> MCP dependency chain. Importing
 // a different workspace copy would conceal a vulnerable hoisted consumer.
-const fromRoot = createRequire(join(process.cwd(), '../../package.json'));
+const fromRoot = createRequire(fileURLToPath(new URL('../../package.json', import.meta.url)));
 const fromGenai = createRequire(fromRoot.resolve('@google/genai'));
 const fromSdk = createRequire(fromGenai.resolve('@modelcontextprotocol/sdk/client/index.js'));
 const { Hono } = fromSdk('hono') as typeof import('hono');
