@@ -22,15 +22,16 @@ updates:
       - dependency-name: "eslint"
         versions: [">=10"]
 
-  # Python backend dependencies.
+  # Python backend dependencies (root pyproject.toml and requirements.txt).
   - package-ecosystem: "pip"
     directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
 
+  # Python SDK dependencies.
   - package-ecosystem: "pip"
-    directory: "/src/youtube_extension/backend"
+    directory: "/sdk/python"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10

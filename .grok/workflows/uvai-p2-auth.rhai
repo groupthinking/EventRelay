@@ -20,7 +20,7 @@ let report_schema = #{
 
 phase("Audit");
 let p = "Read /Users/garvey/Dev/EventRelay/apps/web/src/lib/auth-paths.ts and OneLoopStudio.tsx. ";
-p += "public_ok if /api/pipeline/stream and /api/workflows/video-to-actions are public. ";
+p += "public_ok if /api/video/pack and /api/workflows/video-to-actions are public (retired /api/pipeline routes must not be). ";
 p += "gated_ok if /api/workflows/studio-deploy is NOT public and 401/403 sends the user to /login. ";
 p += "Do not claim local deploy 401 if NEXTAUTH_SECRET is missing. Do not add secrets. ";
 p += "pass = public_ok and gated_ok.";

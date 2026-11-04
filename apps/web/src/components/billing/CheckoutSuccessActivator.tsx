@@ -25,6 +25,7 @@ export default function CheckoutSuccessActivator() {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId }),
+      signal: AbortSignal.timeout(30_000),
     })
       .then(async (res) => {
         const data = await res.json();
