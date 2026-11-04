@@ -22,7 +22,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).toContain('Universal Video Action Intelligence');
     expect(home).toContain('Your videos know what to do next.');
     expect(home).toContain('hashed Video Pack');
-    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
+    expect(home).toContain('Studio prepares proposed work and build rails for you to review.');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
     expect(home).toContain('HomeProCheckout');
@@ -36,7 +36,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const home = readSource('app/page.tsx');
 
     expect(home).toContain('Your videos know what to do next.');
-    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
+    expect(home).toContain('Studio prepares proposed work and build rails for you to review.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('HomeTemplateShell');
     expect(home).toContain('Inspect the Video Pack');
