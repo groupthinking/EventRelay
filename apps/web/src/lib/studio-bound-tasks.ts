@@ -68,9 +68,17 @@ export function projectStudioBoundTasks(inspection: ReviewInspection): StudioBou
   for (const requirement of spec.requirements) {
     issuePathsByRequirement.set(requirement.id, new Set([requirement.id]));
   }
-  for (const limitation of [...spec.unresolved, ...spec.unsupported]) {
+  // Match on collection + ID: a requirement and an unresolved/unsupported row may
+  // legitimately share an ID, so limitation issues carry a collection-qualified path
+  // (see limitationIssuePath in grounded-build-spec.ts; kept type-only here so this
+  // module stays runnable under `node --test`).
+  const limitations = [
+    ...spec.unresolved.map((row) => ({ path: `unresolved.${row.id}`, requirementIds: row.requirementIds })),
+    ...spec.unsupported.map((row) => ({ path: `unsupported.${row.id}`, requirementIds: row.requirementIds })),
+  ];
+  for (const limitation of limitations) {
     for (const requirementId of limitation.requirementIds) {
-      issuePathsByRequirement.get(requirementId)?.add(limitation.id);
+      issuePathsByRequirement.get(requirementId)?.add(limitation.path);
     }
   }
 

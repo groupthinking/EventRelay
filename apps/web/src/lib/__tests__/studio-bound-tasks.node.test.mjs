@@ -98,10 +98,25 @@ test('binds unresolved and unsupported blockers to their affected requirement ID
   inspection.spec.unresolved = [{ id: 'reset-question', requirementIds: ['reset'], question: 'What resets?', required: true }];
   inspection.spec.unsupported = [{ id: 'count-storage', requirementIds: ['count'], capability: 'shared-database', reason: 'Needs shared storage.', required: true }];
   inspection.issues.push(
-    { code: 'unresolved-question', path: 'reset-question', message: 'What resets?', severity: 'blocking' },
-    { code: 'unsupported-capability', path: 'count-storage', message: 'Needs shared storage.', severity: 'blocking' },
+    { code: 'unresolved-question', path: 'unresolved.reset-question', message: 'What resets?', severity: 'blocking' },
+    { code: 'unsupported-capability', path: 'unsupported.count-storage', message: 'Needs shared storage.', severity: 'blocking' },
   );
   const view = projectStudioBoundTasks(inspection);
   assert.deepEqual(view.tasks[0].issues.map((issue) => issue.code), ['model-evidence', 'unsupported-capability']);
   assert.deepEqual(view.tasks[1].issues.map((issue) => issue.code), ['model-evidence', 'unresolved-question']);
+});
+
+test('matches blockers on collection plus ID when a limitation reuses a requirement ID', () => {
+  const inspection = inspectedSpec();
+  // IDs are unique only within each collection: an unresolved question may be
+  // named `count` while it affects only the `reset` requirement.
+  inspection.spec.unresolved = [{ id: 'count', requirementIds: ['reset'], question: 'What resets?', required: true }];
+  inspection.spec.unsupported = [{ id: 'reset', requirementIds: ['count'], capability: 'shared-database', reason: 'Needs shared storage.', required: true }];
+  inspection.issues.push(
+    { code: 'unresolved-question', path: 'unresolved.count', message: 'What resets?', severity: 'blocking' },
+    { code: 'unsupported-capability', path: 'unsupported.reset', message: 'Needs shared storage.', severity: 'blocking' },
+  );
+  const view = projectStudioBoundTasks(inspection);
+  assert.deepEqual(view.tasks[0].issues.map((issue) => issue.path), ['', 'unsupported.reset']);
+  assert.deepEqual(view.tasks[1].issues.map((issue) => issue.path), ['', 'unresolved.count']);
 });
