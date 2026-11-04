@@ -1,0 +1,14 @@
+{
+  "source": "https://www.youtube.com/watch?v=auJzb1D-fag",
+  "sourceHash": "2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea",
+  "receivedAt": "2026-10-09T21:28:20.594Z",
+  "cachedCreatedAt": "2026-09-26T05:35:56.684Z",
+  "audioEvidenceAccepted": 28,
+  "visualEvidenceAccepted": 0,
+  "gaps": [
+    "Visual observations cover sampled frames, not every moment.",
+    "Visual analysis unavailable; this guide uses audio evidence only."
+  ],
+  "liveReextraction": false,
+  "providerQualityVerified": false
+}
