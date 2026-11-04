@@ -660,26 +660,7 @@ class VideoPipelineOrchestrator:
     def _prepare_agent_action(self, agent_id: str) -> tuple:
         """Prepare action and payload for agent based on pipeline state"""
 
-        if agent_id == "video-ingest":
-            return "process_video_markdown", {
-                "video_url": self.pipeline_state.get("video_url"),
-                "extract_transcript": True,
-                "analyze_content": True
-            }
-
-        elif agent_id == "architect":
-            return "determine_architecture", {
-                "video_analysis": self.pipeline_state.get("video-ingest_output", {}),
-                "use_knowledge_context": True
-            }
-
-        elif agent_id == "code-gen":
-            return "generate_fullstack", {
-                "architecture": self.pipeline_state.get("architect_output", {}),
-                "video_analysis": self.pipeline_state.get("video-ingest_output", {})
-            }
-
-        elif agent_id == "build-validator":
+        if agent_id == "build-validator":
             return "get_error_patterns", {
                 "generated_code": self.pipeline_state.get("code-gen_output", {}),
                 "run_build": True

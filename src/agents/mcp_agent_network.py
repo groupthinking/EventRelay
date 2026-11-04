@@ -61,14 +61,6 @@ class MCPAgentNetwork:
             "version": "1.0",
             "created": datetime.now().isoformat(),
             "mcp_servers": {
-                "youtube-extension": {
-                    "endpoint": "http://127.0.0.1:8010",
-                    "tools": ["process_video_markdown", "get_transcript", "analyze_video"]
-                },
-                "gemini-code-gen": {
-                    "endpoint": "internal://ai_code_generator",
-                    "tools": ["generate_fullstack", "determine_architecture", "generate_files"]
-                },
                 "github-deploy": {
                     "endpoint": "mcp://github",
                     "tools": ["create_repo", "push_code", "create_pr"]
@@ -91,21 +83,21 @@ class MCPAgentNetwork:
                     "id": "video-ingest",
                     "name": "Video Ingest Agent",
                     "role": "Extract and analyze video content",
-                    "tools": ["process_video_markdown", "get_transcript", "analyze_video"],
+                    "tools": [],
                     "capabilities": ["youtube_processing", "transcript_extraction", "content_analysis"]
                 },
                 {
                     "id": "architect",
                     "name": "Architecture Agent",
                     "role": "Determine tech stack and project structure",
-                    "tools": ["determine_architecture", "get_context", "get_capabilities"],
+                    "tools": ["get_context", "get_capabilities"],
                     "capabilities": ["architecture_design", "tech_selection", "knowledge_integration"]
                 },
                 {
                     "id": "code-gen",
                     "name": "Code Generation Agent",
                     "role": "Generate application code from specifications",
-                    "tools": ["generate_fullstack", "generate_files", "get_error_patterns"],
+                    "tools": ["get_error_patterns"],
                     "capabilities": ["code_generation", "fullstack_apps", "template_application"]
                 },
                 {
@@ -208,10 +200,8 @@ class MCPAgentNetwork:
         try:
             if module_name == "skill_builder":
                 return await self._call_skill_builder(action, payload)
-            elif module_name == "knowledge_base":
+            if module_name == "knowledge_base":
                 return await self._call_knowledge_base(action, payload)
-            else:
-                return {"status": "routed", "module": module_name, "action": action}
         except Exception as e:
             return {"error": f"Internal tool error: {str(e)}"}
 
@@ -225,11 +215,8 @@ class MCPAgentNetwork:
         """Call HTTP endpoint"""
         logger.info(f"HTTP call: {endpoint}/{action}")
 
-        # Route to Vercel API
         if endpoint.startswith("https://api.vercel.com"):
             return await self._call_vercel_api(action, payload)
-
-        return {"status": "routed", "endpoint": endpoint, "action": action}
 
     def get_pipeline_agents(self) -> list[str]:
         """Get ordered list of agents for video-to-software pipeline"""
