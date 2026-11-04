@@ -29,12 +29,6 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
 
-  - package-ecosystem: "pip"
-    directory: "/src/youtube_extension/backend"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-
   # Python SDK dependencies.
   - package-ecosystem: "pip"
     directory: "/sdk/python"

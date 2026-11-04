@@ -27,7 +27,6 @@ def _load_dependabot_config() -> dict:
     ("directory", "ecosystem"),
     [
         ("/", "pip"),
-        ("/src/youtube_extension/backend", "pip"),
         ("/sdk/python", "pip"),
     ],
 )
