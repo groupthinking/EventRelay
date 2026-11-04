@@ -87,43 +87,6 @@ def test(
         raise typer.Exit(result.returncode)
 
 
-@app.command("api-cost-worker")
-def api_cost_worker():
-    """Run the dedicated durable API-cost outbox worker."""
-    typer.echo("Starting dedicated API-cost worker")
-    try:
-        from youtube_extension.backend.api_cost_worker import main as worker_main
-
-        worker_main()
-    except KeyboardInterrupt:
-        typer.echo("\nAPI-cost worker stopped")
-    except Exception as error:
-        typer.echo(f"API-cost worker failed to start: {error}", err=True)
-        raise typer.Exit(1) from error
-
-
-@app.command()
-def migrate():
-    """Run database migrations"""
-    typer.echo("🗄️ Running database migrations...")
-
-    # Import here to avoid circular imports
-    try:
-        from youtube_extension.backend.config.database import run_migrations
-
-        run_migrations()
-        typer.echo("✅ Migrations completed successfully")
-    except ImportError as e:
-        typer.echo(f"❌ Migration module not found: {e}", err=True)
-        typer.echo(
-            "💡 Make sure you're in the correct directory and dependencies are installed"
-        )
-        raise typer.Exit(1) from e
-    except Exception as e:
-        typer.echo(f"❌ Migration failed: {e}", err=True)
-        raise typer.Exit(1) from e
-
-
 @app.command()
 def lint():
     """Run code quality checks"""
@@ -241,18 +204,6 @@ async def _probe_oauth_refresh(fail_on_error: bool = False) -> tuple[str, str]:
         return ("OAuth Refresh & Auth", f"❌ Failed ({e})")
 
 
-async def _probe_health_monitoring() -> tuple[str, str]:
-    try:
-        from youtube_extension.backend.services.health_monitoring_service import (
-            HealthMonitoringService,
-        )
-
-        assert HealthMonitoringService is not None
-        return ("Health Monitoring Service", "✅ Active")
-    except Exception:
-        return ("Health Monitoring Service", "❌ Unavailable")
-
-
 @app.command()
 def doctor(
     rethrow_failover: bool = typer.Option(
@@ -268,7 +219,6 @@ def doctor(
             _probe_package_import(),
             _probe_fastapi_app(),
             _probe_oauth_refresh(fail_on_error=rethrow_failover),
-            _probe_health_monitoring(),
             return_exceptions=False,
         )
 

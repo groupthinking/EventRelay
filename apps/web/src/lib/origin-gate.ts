@@ -217,7 +217,7 @@ export async function evaluateOriginGate(input: unknown, context: OriginGateCont
     return retain({ decision: 'REJECT', code: 'GATE_REJECT_AUTHORITY_SCOPE', reason: 'Loop approval and deployment verification require independent signing keys.' });
   }
   const probe = await probeLiveDeploymentUrl(proposal.target.liveUrl);
-  if (!probe.ok) {
+  if (!probe.ok || probe.finalUrl !== new URL(proposal.target.liveUrl).href) {
     return retain({
       decision: 'HOLD',
       code: 'GATE_HOLD_DEPLOYMENT_UNREACHABLE',

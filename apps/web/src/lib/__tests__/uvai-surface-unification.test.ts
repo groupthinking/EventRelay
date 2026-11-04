@@ -72,12 +72,12 @@ describe('UVAI is one product surface', () => {
   });
 
   it('points sell-page CTAs at Home or Studio, not a second skin', () => {
-    const features = readSource('app/features/page.tsx');
+    const config = readWebFile('next.config.js');
     const pricing = readSource('app/pricing/page.tsx');
     const nav = readSource('components/Nav.tsx');
-    expect(features).toContain('redirect(');
+    expect(config).toContain("source: '/features'");
+    expect(config).toMatch(/source: '\/features'[\s\S]{0,120}destination: '\/'/);
     expect(pricing).toContain("from '@/components/Nav'");
-    expect(features).not.toContain('href="/dashboard"');
     expect(pricing).not.toContain('href="/dashboard"');
     // Orphaned landing/ components deleted per product direction (2026-10-07).
     // Nav is the single navigation surface.

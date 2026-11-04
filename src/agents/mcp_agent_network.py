@@ -61,14 +61,6 @@ class MCPAgentNetwork:
             "version": "1.0",
             "created": datetime.now().isoformat(),
             "mcp_servers": {
-                "youtube-extension": {
-                    "endpoint": "http://127.0.0.1:8010",
-                    "tools": ["process_video_markdown", "get_transcript", "analyze_video"]
-                },
-                "gemini-code-gen": {
-                    "endpoint": "internal://ai_code_generator",
-                    "tools": ["generate_fullstack", "determine_architecture", "generate_files"]
-                },
                 "github-deploy": {
                     "endpoint": "mcp://github",
                     "tools": ["create_repo", "push_code", "create_pr"]
@@ -91,21 +83,21 @@ class MCPAgentNetwork:
                     "id": "video-ingest",
                     "name": "Video Ingest Agent",
                     "role": "Extract and analyze video content",
-                    "tools": ["process_video_markdown", "get_transcript", "analyze_video"],
+                    "tools": [],
                     "capabilities": ["youtube_processing", "transcript_extraction", "content_analysis"]
                 },
                 {
                     "id": "architect",
                     "name": "Architecture Agent",
                     "role": "Determine tech stack and project structure",
-                    "tools": ["determine_architecture", "get_context", "get_capabilities"],
+                    "tools": ["get_context", "get_capabilities"],
                     "capabilities": ["architecture_design", "tech_selection", "knowledge_integration"]
                 },
                 {
                     "id": "code-gen",
                     "name": "Code Generation Agent",
                     "role": "Generate application code from specifications",
-                    "tools": ["generate_fullstack", "generate_files", "get_error_patterns"],
+                    "tools": ["get_error_patterns"],
                     "capabilities": ["code_generation", "fullstack_apps", "template_application"]
                 },
                 {
@@ -206,14 +198,10 @@ class MCPAgentNetwork:
 
         # Route to actual internal tools
         try:
-            if module_name == "ai_code_generator":
-                return await self._call_code_generator(action, payload)
-            elif module_name == "skill_builder":
+            if module_name == "skill_builder":
                 return await self._call_skill_builder(action, payload)
-            elif module_name == "knowledge_base":
+            if module_name == "knowledge_base":
                 return await self._call_knowledge_base(action, payload)
-            else:
-                return {"status": "routed", "module": module_name, "action": action}
         except Exception as e:
             return {"error": f"Internal tool error: {str(e)}"}
 
@@ -227,64 +215,12 @@ class MCPAgentNetwork:
         """Call HTTP endpoint"""
         logger.info(f"HTTP call: {endpoint}/{action}")
 
-        # Route to YouTube extension (HTTP server at 127.0.0.1:8010)
-        if endpoint.startswith("http://127.0.0.1:8010"):
-            try:
-                from .mcp_tools import get_youtube_tool
-                youtube_tool = get_youtube_tool()
-
-                # Route to specific tool method
-                if action == "process_video_markdown":
-                    return await youtube_tool.process_video_markdown(**payload)
-                elif action == "get_transcript":
-                    return await youtube_tool.get_transcript(**payload)
-                elif action == "analyze_video":
-                    return await youtube_tool.analyze_video(**payload)
-
-            except Exception as e:
-                logger.error(f"YouTube tool error: {e}")
-                return {"error": f"YouTube tool error: {str(e)}"}
-
-        # Route to Vercel API
-        elif endpoint.startswith("https://api.vercel.com"):
+        if endpoint.startswith("https://api.vercel.com"):
             return await self._call_vercel_api(action, payload)
-
-        return {"status": "routed", "endpoint": endpoint, "action": action}
 
     def get_pipeline_agents(self) -> list[str]:
         """Get ordered list of agents for video-to-software pipeline"""
         return ["video-ingest", "architect", "code-gen", "build-validator", "deployer", "knowledge-capture"]
-
-    async def _call_code_generator(self, action: str, payload: dict) -> dict:
-        """Call AI code generator (Gemini 3)"""
-        logger.info(f"Code generator call: {action}")
-
-        try:
-            # Import existing AI code generator
-            from youtube_extension.backend.ai_code_generator import AICodeGenerator
-            generator = AICodeGenerator()
-
-            # Route to specific method
-            if action == "generate_fullstack":
-                # Use existing generate_fullstack_project method
-                video_analysis = payload.get("video_analysis", {})
-                architecture = payload.get("architecture", {})
-
-                project_config = {
-                    "type": architecture.get("app_type", "web_app"),
-                    "features": architecture.get("features", []),
-                    "title": video_analysis.get("metadata", {}).get("title", "Generated App")
-                }
-
-                result = await generator.generate_fullstack_project(video_analysis, project_config)
-                return {"status": "success", **result}
-
-            else:
-                return {"status": "unknown_action", "action": action}
-
-        except Exception as e:
-            logger.error(f"AI code generator error: {e}")
-            return {"error": f"Code generator error: {str(e)}"}
 
     async def _call_skill_builder(self, action: str, payload: dict) -> dict:
         """Call skill builder and build validator"""
