@@ -92,8 +92,8 @@ export default async function HomePage() {
                 Your videos know what to do next.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it,
-                prepares proposed work and build rails for you to review in Studio.
+                Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it.
+                Studio prepares proposed work and build rails for you to review.
               </p>
               <p className="mt-3 text-sm" style={{ color: 'var(--uvai-ink-faint)' }}>
                 Transcript quality varies by source. No guaranteed production outcome.
