@@ -1,24 +1,3 @@
-"""
-UVAI Integrations Layer
-
-This module handles all external system integrations and deployment orchestration.
-Integrations are designed to be pluggable and environment-aware.
-
-Available Integrations:
-- Frontend: Web interface and user experience components
-- Deployment: Multi-platform deployment automation
-- Optimization: Performance optimization and scaling
-- Quality Assurance: Testing and validation frameworks
-- Cloud AI: Major cloud AI/ML provider integrations
-
-Architecture:
-- Pluggable integration components
-- Environment-specific configuration
-- Comprehensive monitoring and health checks
-- Automated deployment and rollback capabilities
-- Unified cloud AI service interfaces
-"""
-
 # Cloud AI integrations
 from .cloud_ai import CloudAIIntegrator
 
