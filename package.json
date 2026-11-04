@@ -82,12 +82,12 @@
     "vitest@^5.0.0": "^5.0.3"
   },
   "dependencies": {
-    "@ai-sdk/gateway": "^4.0.129",
+    "@ai-sdk/gateway": "^4.0.130",
     "@google-cloud/text-to-speech": "^7.2.0",
-    "@google/genai": "^2.31.0",
-    "@opentelemetry/core": "^2.11.0",
+    "@google/genai": "^2.32.0",
+    "@opentelemetry/core": "^3.0.0",
     "@types/node": "^26.6.6",
-    "ai": "^7.0.156",
+    "ai": "^7.0.157",
     "chrome-devtools-mcp": "^1.12.0",
     "dotenv": "^18.0.9",
     "openai": "^7.45.1",
