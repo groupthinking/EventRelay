@@ -125,6 +125,9 @@ describe('POST /api/video/generate', () => {
 
     const res = await POST(postReq(validBody, '10.0.0.10'));
     expect(res.status).toBe(200);
+    expect(generateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ aspectRatio: '16:9', duration: 5 }),
+    );
     expect(res.headers.get('content-type')).toBe('video/mp4');
     expect(res.headers.get('x-video-model')).toBe('google/veo-3.1-generate-001');
 
