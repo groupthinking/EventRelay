@@ -26,6 +26,23 @@ describe('UVAI is one product surface', () => {
     expect(home).not.toContain("redirect('/dashboard')");
   });
 
+  it('uses the light card system across Studio panes, chat, and extracted output', () => {
+    const shell = readSource('app/studio/StudioShell.tsx');
+    const styles = readSource('styles/openai-template.css');
+    const output = readSource('components/studio/StudioIdeOutput.tsx');
+
+    expect(shell).not.toMatch(/bg-surface-950|text-white/);
+    expect(styles).toContain('--uvai-bg: #f2f5f9;');
+    expect(styles).not.toMatch(/\.template-studio-shell\s+\.uvai-card\s*\{/);
+    expect(styles).toMatch(
+      /\.template-studio-shell \.uvai-chat-user\s*\{[^}]*border: 1px solid var\(--uvai-border\)/,
+    );
+    expect(styles).toMatch(
+      /\.template-studio-shell \.uvai-chat-assistant\s*\{[^}]*border: 1px solid var\(--uvai-border\)/,
+    );
+    expect(output).toContain('className="uvai-card p-4"');
+  });
+
   it('does not link the studio footer or primary nav to the retired library', () => {
     const nav = readSource('components/Nav.tsx');
     const studio = readSource('components/OneLoopStudio.tsx');
