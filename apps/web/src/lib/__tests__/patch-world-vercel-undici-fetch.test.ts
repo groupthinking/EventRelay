@@ -34,6 +34,19 @@ export function createQueue(config) {
 }
 `;
 
+const WORKFLOW_5_UTILS_FIXTURE = `const response = await fetch(undiciRequest, {
+  dispatcher: undiciDispatcher,
+});
+`;
+
+const WORKFLOW_5_HTTP_CORE_FIXTURE = `const pending = nodeAgents
+  ? nodeHttpFetch(url, { method })
+  : fetch(url, {
+      method,
+      dispatcher,
+    });
+`;
+
 const LOCAL_QUEUE_FIXTURE = `import { Agent } from 'undici';
 export async function deliver(url, httpAgent) {
   return (response = await fetch(createWorkflowUrl(url), {
@@ -83,6 +96,23 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     const { src, result } = patchSource(QUEUE_FIXTURE);
     expect(result).toBe('patched');
     expect(src).not.toMatch(/dispatcher:\s*getDispatcher/);
+  });
+
+  it('keeps Workflow 5 Request inputs on global fetch without a foreign Agent', () => {
+    const { src, result } = patchSource(WORKFLOW_5_UTILS_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).toContain('await fetch(undiciRequest, {');
+    expect(src).not.toContain('dispatcher: undiciDispatcher');
+    expect(patchSource(src)).toEqual({ src, result: 'already-patched' });
+  });
+
+  it('pairs Workflow 5 string URL fetches with their npm undici Agent', () => {
+    const { src, result } = patchSource(WORKFLOW_5_HTTP_CORE_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).toContain("import { fetch as undiciFetch } from 'undici';");
+    expect(src).toContain(': undiciFetch(url, {');
+    expect(src).toMatch(/^\s*dispatcher,\s*$/m);
+    expect(patchSource(src)).toEqual({ src, result: 'already-patched' });
   });
 
   it('pairs world-local fetch with its npm Agent and preserves dispatcher settings', () => {
@@ -163,10 +193,12 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
       'utf8',
     );
     expect(utils).toContain('await fetch(');
-    expect(httpCore).toContain('await fetch(');
+    expect(httpCore).toContain(': undiciFetch(url, {');
+    expect(httpCore).toContain("import { fetch as undiciFetch } from 'undici';");
     expect(utils).not.toContain('undiciFetch');
     expect(utils).not.toMatch(/dispatcher:\s*getDispatcher/);
-    expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
+    expect(httpCore).toMatch(/^\s*dispatcher,\s*$/m);
+    expect(utils).not.toContain('dispatcher: undiciDispatcher');
     expect(queue).not.toMatch(/dispatcher:\s*getDispatcher/);
     expect(localQueue).toContain("fetch as undiciFetch } from 'undici'");
     // world-local 4.2.x patches fetch(createWorkflowUrl(...)). Newer builds
