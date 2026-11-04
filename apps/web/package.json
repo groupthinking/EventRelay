@@ -18,7 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.130",
-    "@ai-sdk/react": "4.0.161",
+    "@ai-sdk/react": "4.0.163",
     "@flags-sdk/vercel": "^1.6.0",
     "@google/genai": "^2.32.0",
     "@google/generative-ai": "^0.24.1",
