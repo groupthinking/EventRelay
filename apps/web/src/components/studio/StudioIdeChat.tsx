@@ -2,6 +2,8 @@
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowUp, Sparkles } from 'lucide-react';
+import { formatSeconds } from '@/lib/timestamp';
+import type { ChatStepContext } from '@/lib/runbook-steps';
 import type { VideoPlanInterviewAnswers } from '@/lib/video-pack-plan';
 
 type ChatMessage = {
@@ -14,6 +16,11 @@ type StudioIdeChatProps = {
   videoId: string | null;
   packId: string | null;
   disabled?: boolean;
+  /** Active Step Runner step; sent as `step` so the server grounds the answer to its evidence window. */
+  stepContext?: ChatStepContext | null;
+  onClearStepContext?: () => void;
+  /** Bump to focus the composer (Step Runner "Troubleshoot this step"). */
+  focusNonce?: number;
 };
 
 const FREE_QUOTA_MESSAGE = 'Free plan includes 5 AI chat messages per day.';
@@ -162,7 +169,14 @@ function composeInterviewAssistantMessage(answer: string, questions: string[]): 
  *
  * Styled in the locked light card system (DESIGN_LANGUAGE.md).
  */
-export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeChatProps) {
+export default function StudioIdeChat({
+  videoId,
+  packId,
+  disabled,
+  stepContext,
+  onClearStepContext,
+  focusNonce,
+}: StudioIdeChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -171,7 +185,14 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
   const [planInterviewQuestions, setPlanInterviewQuestions] = useState<string[] | null>(null);
   const [planInterviewDraft, setPlanInterviewDraft] = useState<PlanInterviewDraft>({});
   const messagesRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const idCounter = useRef(0);
+  const conversationKey = JSON.stringify([videoId, packId, stepContext?.id ?? null]);
+  const requestGenerationRef = useRef(0);
+
+  useEffect(() => {
+    if (focusNonce) inputRef.current?.focus();
+  }, [focusNonce]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -184,19 +205,25 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
-  // Reset conversation when the pack changes.
+  // Each step has its own evidence window. Do not pass another step's turns
+  // into this request, or display an older response after the step changes.
   useEffect(() => {
+    // Returning to the same pack/step must not revive a prior request.
+    requestGenerationRef.current += 1;
     setMessages([]);
     setQuotaHit(false);
     setError(null);
+    setSending(false);
     setPlanInterviewQuestions(null);
     setPlanInterviewDraft({});
-  }, [videoId, packId]);
+    return () => { requestGenerationRef.current += 1; };
+  }, [conversationKey]);
 
   const send = async (event?: FormEvent) => {
     event?.preventDefault();
     const query = draft.trim();
     if (!query || sending || disabled) return;
+    const requestGeneration = ++requestGenerationRef.current;
 
     const userMsg: ChatMessage = { id: `u-${idCounter.current++}`, role: 'user', content: query };
     setMessages((prev) => [...prev, userMsg]);
@@ -212,7 +239,8 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       const body: Record<string, unknown> = { query, history };
       if (videoId) body.video_id = videoId;
       if (packId) body.pack_id = packId;
-      if (planInterviewQuestions) {
+      if (stepContext && (videoId || packId)) body.step = stepContext;
+      else if (planInterviewQuestions) {
         const structured = parseStructuredInterviewAnswer(query);
         const draftPayload = structured
           ? mergeInterviewDraft(planInterviewDraft, structured)
@@ -227,6 +255,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         body: JSON.stringify(body),
       });
       const data = (await res.json()) as PlanChatResponse;
+      if (requestGenerationRef.current !== requestGeneration) return;
 
       if (res.status === 402 && data.upgradeRequired) {
         setQuotaHit(true);
@@ -280,6 +309,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         setPlanInterviewQuestions(null);
       }
     } catch (err) {
+      if (requestGenerationRef.current !== requestGeneration) return;
       const text = err instanceof Error ? err.message : 'Chat failed.';
       setError(text);
       setMessages((prev) => [
@@ -287,11 +317,20 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         { id: `a-${idCounter.current++}`, role: 'assistant', content: `Error: ${text}` },
       ]);
     } finally {
-      setSending(false);
+      if (requestGenerationRef.current === requestGeneration) setSending(false);
     }
   };
 
   const canChat = Boolean(videoId) && !disabled;
+  const stepRange = stepContext?.timestamp_range ?? null;
+  const stepRangeLabel = stepRange
+    ? `${formatSeconds(stepRange[0])}–${formatSeconds(stepRange[1])}`
+    : 'no verified timestamp';
+  const placeholder = !canChat
+    ? 'Run a video first'
+    : stepContext
+      ? `Paste the error or ask about Step ${stepContext.step_number}…`
+      : 'Ask about this pack or plan a build…';
 
   return (
     <section
@@ -315,7 +354,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
                 ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
                 : 'Paste a YouTube URL above and hit Run.'}
             </p>
-            {canChat ? (
+            {canChat && !stepContext ? (
               <button
                 type="button"
                 onClick={() => setDraft('Plan a build from this Video Pack')}
@@ -355,6 +394,30 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       {error && !sending ? (
         <div className="border-t border-red-100 bg-red-50 px-4 py-1.5 text-xs text-red-700">{error}</div>
       ) : null}
+      {stepContext && canChat ? (
+        <div
+          data-testid="studio-ide-chat-step"
+          role="status"
+          className="flex items-center justify-between gap-2 border-t border-amber-200 bg-amber-50 px-4 py-1.5 text-[11px] text-amber-800"
+        >
+          <span className="truncate">
+            Grounded to Step {stepContext.step_number}
+            {stepContext.total_steps ? ` of ${stepContext.total_steps}` : ''} · {stepContext.title} ·{' '}
+            {stepRangeLabel}
+          </span>
+          {onClearStepContext ? (
+            <button
+              type="button"
+              onClick={onClearStepContext}
+              aria-label="Chat about the whole pack instead"
+              title="Chat about the whole pack instead"
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-amber-700 hover:bg-amber-100"
+            >
+              ×
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       <form
         onSubmit={send}
         data-testid="studio-ide-chat-composer"
@@ -362,9 +425,10 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
       >
         <div className="template-source-input">
           <textarea
+            ref={inputRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={canChat ? 'Ask about this pack or plan a build…' : 'Run a video first'}
+            placeholder={placeholder}
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"

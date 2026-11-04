@@ -12,6 +12,7 @@ import { aiGateway, GATEWAY_CHAT_MODEL } from '@/lib/ai-gateway';
 import { hasAiGatewayKey } from '@/lib/vercel-ai-gateway';
 import {
   parseChatPackBinding,
+  parseChatStepContext,
   resolveChatPackGrounding,
 } from '@/lib/chat-pack-grounding';
 import { isVideoPackPlanRequest, resolveVideoPackPlanResponse } from '@/lib/video-pack-plan';
@@ -87,10 +88,29 @@ export async function POST(request: Request) {
     let packSystemPrompt: string | undefined;
     let groundedPack: VideoPackV0Json | undefined;
     const packBinding = parseChatPackBinding(body);
-    if (
+    const stepContext = parseChatStepContext(body.step);
+    if (stepContext.status === 'invalid') {
+      return NextResponse.json(
+        {
+          answer: `Step context rejected: ${stepContext.message}`,
+          code: 'step_context_invalid',
+        },
+        { status: 400 },
+      );
+    }
+    const hasPackBinding =
       (typeof body.video_id === 'string' && body.video_id.trim())
-      || (typeof body.pack_id === 'string' && body.pack_id.trim())
-    ) {
+      || (typeof body.pack_id === 'string' && body.pack_id.trim());
+    if (stepContext.status === 'ok' && !hasPackBinding) {
+      return NextResponse.json(
+        {
+          answer: 'Step-scoped chat needs the hosted Video Pack it belongs to (video_id / pack_id).',
+          code: 'step_context_requires_pack',
+        },
+        { status: 400 },
+      );
+    }
+    if (hasPackBinding) {
       if (!packBinding) {
         return NextResponse.json(
           {
@@ -101,7 +121,9 @@ export async function POST(request: Request) {
           { status: 400 },
         );
       }
-      const grounded = await resolveChatPackGrounding(packBinding);
+      const grounded = await resolveChatPackGrounding(packBinding, {
+        step: stepContext.status === 'ok' ? stepContext.step : null,
+      });
       if (!grounded.ok) {
         return NextResponse.json(
           { answer: grounded.answer, code: grounded.code },
@@ -141,7 +163,9 @@ export async function POST(request: Request) {
     const query = body.query || body.message || '';
 
     const planQuery = typeof query === 'string' ? query : String(query);
-    if (isVideoPackPlanRequest(planQuery) || body.planIntent === true) {
+    // Step requests keep their server-resolved evidence window even when the
+    // message contains planning keywords or a previous interview payload.
+    if (stepContext.status !== 'ok' && (isVideoPackPlanRequest(planQuery) || body.planIntent === true)) {
       if (!groundedPack) {
         return NextResponse.json(
           { answer: 'A ready, identity-matched Video Pack is required before planning from a video.', code: 'pack_required' },
