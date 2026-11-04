@@ -2,22 +2,6 @@
   "version": "1.0",
   "created": "2025-11-26T13:03:17.327966",
   "mcp_servers": {
-    "youtube-extension": {
-      "endpoint": "http://127.0.0.1:8010",
-      "tools": [
-        "process_video_markdown",
-        "get_transcript",
-        "analyze_video"
-      ]
-    },
-    "gemini-code-gen": {
-      "endpoint": "internal://ai_code_generator",
-      "tools": [
-        "generate_fullstack",
-        "determine_architecture",
-        "generate_files"
-      ]
-    },
     "github-deploy": {
       "endpoint": "mcp://github",
       "tools": [
@@ -57,11 +41,7 @@
       "id": "video-ingest",
       "name": "Video Ingest Agent",
       "role": "Extract and analyze video content",
-      "tools": [
-        "process_video_markdown",
-        "get_transcript",
-        "analyze_video"
-      ],
+      "tools": [],
       "capabilities": [
         "youtube_processing",
         "transcript_extraction",
@@ -73,7 +53,6 @@
       "name": "Architecture Agent",
       "role": "Determine tech stack and project structure",
       "tools": [
-        "determine_architecture",
         "get_context",
         "get_capabilities"
       ],
@@ -88,8 +67,6 @@
       "name": "Code Generation Agent",
       "role": "Generate application code from specifications",
       "tools": [
-        "generate_fullstack",
-        "generate_files",
         "get_error_patterns"
       ],
       "capabilities": [
