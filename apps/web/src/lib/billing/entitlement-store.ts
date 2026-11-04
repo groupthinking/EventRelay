@@ -91,16 +91,13 @@ export async function saveEntitlement(record: EntitlementRecord): Promise<Entitl
   };
   memoryStore.set(normalized, stored);
 
-  await writeEntitlementToFile(stored);
-
   const redis = await getRedis();
   if (redis) {
-    try {
-      await redis.set(entitlementKey(normalized), stored);
-    } catch {
-      // file + memory remain durable for this host
-    }
+    await redis.set(entitlementKey(normalized), stored);
+    return stored;
   }
+
+  await writeEntitlementToFile(stored);
   return stored;
 }
 

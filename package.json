@@ -76,7 +76,7 @@
     "@ai-sdk/gateway": "^4.0.130",
     "@google-cloud/text-to-speech": "^7.2.0",
     "@google/genai": "^2.32.0",
-    "@opentelemetry/core": "^2.11.0",
+    "@opentelemetry/core": "^3.0.0",
     "@types/node": "^26.6.6",
     "ai": "^7.0.157",
     "chrome-devtools-mcp": "^1.12.0",
