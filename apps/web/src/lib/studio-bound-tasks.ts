@@ -1,4 +1,4 @@
-import type { GroundedBuildSpec, ReviewInspection, SpecIssue } from './grounded-build-spec';
+import { limitationIssuePath, type GroundedBuildSpec, type ReviewInspection, type SpecIssue } from './grounded-build-spec';
 
 export interface StudioBoundTaskCheck {
   id: string;
@@ -69,12 +69,11 @@ export function projectStudioBoundTasks(inspection: ReviewInspection): StudioBou
     issuePathsByRequirement.set(requirement.id, new Set([requirement.id]));
   }
   // Match on collection + ID: a requirement and an unresolved/unsupported row may
-  // legitimately share an ID, so limitation issues carry a collection-qualified path
-  // (see limitationIssuePath in grounded-build-spec.ts; kept type-only here so this
-  // module stays runnable under `node --test`).
+  // legitimately share an ID, so limitation issues carry a collection-qualified
+  // path built by the same helper specificationIssues uses.
   const limitations = [
-    ...spec.unresolved.map((row) => ({ path: `unresolved.${row.id}`, requirementIds: row.requirementIds })),
-    ...spec.unsupported.map((row) => ({ path: `unsupported.${row.id}`, requirementIds: row.requirementIds })),
+    ...spec.unresolved.map((row) => ({ path: limitationIssuePath('unresolved', row.id), requirementIds: row.requirementIds })),
+    ...spec.unsupported.map((row) => ({ path: limitationIssuePath('unsupported', row.id), requirementIds: row.requirementIds })),
   ];
   for (const limitation of limitations) {
     for (const requirementId of limitation.requirementIds) {
