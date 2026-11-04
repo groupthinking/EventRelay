@@ -63,10 +63,6 @@ pip install -e '.[dev,youtube]'
 PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --reload --port 8000
 ```
 
-Local readiness checks now bootstrap the parent directory for sqlite URLs
-(`DATABASE_URL` / `API_COST_DATABASE_URL`) so the default dev path
-`sqlite:///./.runtime/app.db` does not require a manual `.runtime` mkdir first.
-
 Set the web runtime's `BACKEND_URL` to the intended backend. A missing backend must produce an honest unavailable/handoff result, not a fabricated deployment receipt. Provider credentials and auth configuration stay in the environment, never in Git.
 
 ### Configuration boundaries
@@ -74,7 +70,7 @@ Set the web runtime's `BACKEND_URL` to the intended backend. A missing backend m
 | Area | Configuration / source of truth |
 | --- | --- |
 | Video Pack extraction | Vercel AI Gateway; model defined in `apps/web/src/lib/video-pack-extractor.ts` |
-| Production Video Pack storage | `KV_REST_API_*` or `UPSTASH_REDIS_REST_*` — canonical for **web and Python backend** (`er:videopack:v0:{source_hash}`). Local filesystem packs require `VIDEO_PACK_FILESYSTEM_STORE=1` (dev only). |
+| Production Video Pack storage | `KV_REST_API_*` or `UPSTASH_REDIS_REST_*` — canonical for the web app (`er:videopack:v0:{source_hash}`). Local filesystem packs require `VIDEO_PACK_FILESYSTEM_STORE=1` (dev only). |
 | Web authentication | Existing NextAuth configuration and `apps/web/src/lib/auth-paths.ts`; do not replace the auth stack as cleanup |
 | Backend-dependent workflows | `BACKEND_URL` and the backend's own auth/provider configuration |
 | Billing | Existing Stripe setup under `apps/web/src/lib/billing/`; keep server-side catalog validation |
