@@ -19,7 +19,7 @@ vi.mock('@/lib/live-deployment-probe', () => ({
   probeLiveDeploymentUrl: vi.fn(async (liveUrl: string) => ({
     ok: true,
     statusCode: 200,
-    finalUrl: liveUrl,
+    finalUrl: new URL(liveUrl).href,
   })),
 }));
 vi.mock('node:dns/promises', () => ({
@@ -176,6 +176,19 @@ describe('Origin G.A.T.E. signed server boundary', () => {
   it('holds when HTTP deployment probe fails after signed provider evidence', async () => {
     const { probeLiveDeploymentUrl } = await import('@/lib/live-deployment-probe');
     vi.mocked(probeLiveDeploymentUrl).mockResolvedValueOnce({ ok: false, error: 'http_503' });
+    expect(await evaluateOriginGate(input(), setup().context)).toMatchObject({
+      decision: 'HOLD',
+      reason_code: 'GATE_HOLD_DEPLOYMENT_UNREACHABLE',
+    });
+  });
+
+  it('holds when a successful HTTP deployment probe reports a substituted final URL', async () => {
+    const { probeLiveDeploymentUrl } = await import('@/lib/live-deployment-probe');
+    vi.mocked(probeLiveDeploymentUrl).mockResolvedValueOnce({
+      ok: true,
+      statusCode: 200,
+      finalUrl: 'https://other.example/',
+    });
     expect(await evaluateOriginGate(input(), setup().context)).toMatchObject({
       decision: 'HOLD',
       reason_code: 'GATE_HOLD_DEPLOYMENT_UNREACHABLE',
