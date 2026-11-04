@@ -98,7 +98,7 @@ npm --workspace=apps/web run type-check
 ## Testing
 
 - **pytest** — `pythonpath = src`, `testpaths = tests`, `asyncio_mode = auto`
-- Coverage target: 90 % minimum enforced via `pytest.ini` on `backend`, `enhanced_video_processor`, and `enterprise_mcp_server`
+- Coverage settings are defined in `pyproject.toml` for `youtube_extension`.
 - Default test video ID: `auJzb1D-fag` — **never** use `dQw4w9WgXcQ` (Rick Roll; causes flaky tests due to age-gating)
 - Use real `tempfile`/`shutil` temp dirs; avoid `pyfakefs`
 
