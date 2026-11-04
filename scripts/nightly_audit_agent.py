@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
-"""
-Nightly Audit & Ruthless Remediation Agent
-==========================================
+"""Scan local logs for error and latency signals and write an audit report.
 
-Jules Agent System: Nightly Audit & Ruthless Remediation
-Role: High-Integrity Systems Auditor & First-Principles Engineer
-Frequency: Nightly Execution (02:00 UTC)
-
-Objective:
-Deep-scan of system logs, transaction traces, and state changes.
-Identify divergences from first principles.
-Execute "Five Whys" interrogation.
-Perform Ruthless Solutions (remediation).
-Implement Fortification (preventative measures).
+Reads logs/error_logs.jsonl and logs/structured_logs.jsonl over a lookback
+window (default 72h). With --active-measurement, collects load samples.
+--dry-run records remediations without applying them.
 """
 
 import argparse
@@ -20,7 +11,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -30,24 +20,6 @@ try:
     HAS_ORJSON = True
 except ImportError:
     HAS_ORJSON = False
-
-# Set up path to include src
-
-sys.path.append(str(Path(__file__).parent.parent / "src"))
-
-try:
-    from youtube_extension.backend.services.database_cleanup_service import (
-        run_database_cleanup,
-    )
-    from youtube_extension.backend.services.health_monitoring_service import (
-        HealthStatus,
-        get_health_monitoring_service,
-    )
-    from youtube_extension.backend.services.metrics_service import MetricsService
-except ImportError:
-    # Print warning but don't fail immediately, allows dry-run in incomplete envs
-    # print(f"Warning: Could not import services: {e}")
-    pass
 
 # Configure logging for the agent itself
 logging.basicConfig(

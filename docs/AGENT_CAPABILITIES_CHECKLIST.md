@@ -15,9 +15,8 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
 - ✅ **Per-domain Copilot agent instructions** — `.github/agents/*.agent.md`
   (`git-ops`, `mcp`, `python-backend`, `frontend`, `testing`,
   `video-processing`, `documentation`).
-- ✅ **Host-level instructions** — root `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
-  `SKILL.md` (each read by a different agent host: Copilot/Codex, Claude,
-  Gemini CLI, generic skill loaders).
+- ✅ **Host-level instructions** — root `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`
+  (each read by a different agent host: Copilot/Codex, Claude, Gemini CLI).
 - ✅ **Application agents** — `src/agents/` (e.g.
   `mcp_ecosystem_coordinator.py`, `mcp_agent_network.py`,
   `process_video_with_mcp.py`) drive the video → event → agent pipeline.
