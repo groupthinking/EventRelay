@@ -5,7 +5,7 @@ vi.mock('@/lib/live-deployment-probe', () => ({
   probeLiveDeploymentUrl: vi.fn(async (liveUrl: string) => ({
     ok: true,
     statusCode: 200,
-    finalUrl: liveUrl,
+    finalUrl: new URL(liveUrl).href,
   })),
 }));
 import { canonicalGateJson, type GateDecision } from '@/lib/gate-transition';

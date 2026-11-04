@@ -4,7 +4,6 @@
       "youtube_extension.processors.simple_real_processor"
     ],
     "backend.main": [
-      "agents.markdown_video_processor",
       "backend.enhanced_video_processor",
       "backend.video_processor_factory",
       "backend.real_api_endpoints"
@@ -70,7 +69,6 @@
       "youtube_extension.services.api_cost_monitor"
     ],
     "start_enhanced_backend": [
-      "agents.markdown_video_processor",
       "youtube_extension.main"
     ]
   },
@@ -88,10 +86,6 @@
       "agents.enhanced_video_processor",
       "backend.main",
       "backend.video_processor_factory"
-    ],
-    "agents.markdown_video_processor": [
-      "backend.main",
-      "start_enhanced_backend"
     ],
     "backend.real_video_processor": [
       "backend.video_processor_factory"
@@ -179,7 +173,6 @@
     "factory.monitoring": "factory/monitoring.py",
     "backend.video_processor_factory": "backend/video_processor_factory.py",
     "backend.test_real_pipeline": "backend/test_real_pipeline.py",
-    "enterprise_mcp_server": "enterprise_mcp_server.py",
     "create_import_map": "create_import_map.py",
     "tools.collect_todos": "tools/collect_todos.py",
     "monitoring_dashboard": "monitoring_dashboard.py",
@@ -189,7 +182,6 @@
     "backend.real_video_processor": "backend/real_video_processor.py",
     "backend.main_v2": "backend/main_v2.py",
     "factory.__init__": "factory/__init__.py",
-    "notebooklm_processor": "notebooklm_processor.py",
     "agents.interactive_metadata_extractor": "agents/interactive_metadata_extractor.py",
     "agents.mcp_ecosystem_coordinator": "agents/mcp_ecosystem_coordinator.py",
     "factory.models": "factory/models.py",
@@ -208,7 +200,6 @@
     "intelligence_layer.__init__": "intelligence_layer/__init__.py",
     "agents.gemini_video_master_agent": "agents/gemini_video_master_agent.py",
     "scripts.fetch_candidates": "scripts/fetch_candidates.py",
-    "test_enterprise_mcp": "test_enterprise_mcp.py",
     "deploy_all": "deploy_all.py",
     "server": "server.py",
     "scripts.setup_llama_agent": "scripts/setup_llama_agent.py",
@@ -262,7 +253,6 @@
     "agents.openai_dev_task_manager": "agents/openai_dev_task_manager.py",
     "agents.a2a_framework": "agents/a2a_framework.py",
     "mcp_server": "mcp_server.py",
-    "agents.markdown_video_processor": "agents/markdown_video_processor.py",
     "chart_script": "chart_script.py",
     "backend.enhanced_video_processor": "backend/enhanced_video_processor.py",
     "scripts.vision_analyze": "scripts/vision_analyze.py",
