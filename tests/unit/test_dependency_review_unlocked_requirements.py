@@ -191,6 +191,8 @@ def test_unchanged_unlocked_pip_resolution_keeps_all_rows_and_review_verdict(
         "demo-1.0.tgz\n",
         "demo-1.0.tar.bz2\n",
         "DEMO-1.0.TAR.GZ\n",
+        "demo.ZIP\n",
+        "demo.tar\n",
         "torch\ndemo-1.0-py3-none-any.whl\n",
         "--index-url https://example.invalid\n",
         "torch; python_version > '3.10'\n",
