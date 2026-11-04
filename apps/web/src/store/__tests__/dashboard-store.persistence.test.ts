@@ -7,7 +7,6 @@ const STORAGE_KEY = 'eventrelay-dashboard-v1';
 type StoredDashboardState = {
   state: {
     videos: Video[];
-    activities: Array<{ time: string; event: string; type: 'success' | 'info' | 'error' }>;
   };
   version: number;
 };
@@ -44,7 +43,6 @@ function makeStorage() {
 function resetStore() {
   useDashboardStore.setState({
     videos: [],
-    activities: [],
     selectedVideoId: null,
     loading: false,
     searchQuery: '',
@@ -82,13 +80,11 @@ describe('dashboard-store persistence', () => {
     delete (globalThis as { localStorage?: typeof storage }).localStorage;
   });
 
-  it('persists only videos and activities to localStorage', () => {
+  it('persists only videos to localStorage', () => {
     const video = makeVideo();
-    const activity = { time: '10:15', event: 'Stored event', type: 'info' as const };
 
     useDashboardStore.setState({
       videos: [video],
-      activities: [activity],
       selectedVideoId: video.id,
       loading: true,
       searchQuery: 'ignored',
@@ -99,33 +95,31 @@ describe('dashboard-store persistence', () => {
     const stored = readStoredState(storage);
     expect(stored.state).toEqual({
       videos: [video],
-      activities: [activity],
     });
     expect(stored.version).toBe(0);
+    expect('activities' in stored.state).toBe(false);
     expect('selectedVideoId' in stored.state).toBe(false);
     expect('searchQuery' in stored.state).toBe(false);
   });
 
-  it('rehydrates persisted videos and activities while leaving volatile fields at defaults', async () => {
+  it('rehydrates persisted videos and ignores a stored activity log', async () => {
     const video = makeVideo({ id: 'video-2', progress: 100, status: 'complete' });
-    const activity = { time: '11:30', event: 'Hydrated event', type: 'success' as const };
 
     storage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         state: {
           videos: [video],
-          activities: [activity],
+          activities: [{ time: '11:30', event: 'Hydrated event', type: 'success' }],
         },
         version: 0,
-      } satisfies StoredDashboardState),
+      }),
     );
 
     await useDashboardStore.persist.rehydrate();
 
     const state = useDashboardStore.getState();
     expect(state.videos).toEqual([video]);
-    expect(state.activities).toEqual([activity]);
     expect(state.selectedVideoId).toBeNull();
     expect(state.loading).toBe(false);
     expect(state.searchQuery).toBe('');
@@ -143,7 +137,6 @@ describe('dashboard-store persistence', () => {
     storage.setItem(STORAGE_KEY, JSON.stringify({ state: { videos: [null, { id: 'bad' }], activities: 'bad', updateVideo: null }, version: 0 }));
     await useDashboardStore.persist.rehydrate();
     expect(useDashboardStore.getState().videos).toEqual([]);
-    expect(useDashboardStore.getState().activities).toEqual([]);
     expect(typeof useDashboardStore.getState().updateVideo).toBe('function');
   });
 
@@ -154,6 +147,5 @@ describe('dashboard-store persistence', () => {
 
     const state = useDashboardStore.getState();
     expect(state.videos).toEqual([]);
-    expect(state.activities).toEqual([]);
   });
 });
