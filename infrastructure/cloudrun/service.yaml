@@ -1,4 +1,0 @@
-# RETIRED: gcloud run services replace rejects this tombstone. The protected
-# workflow owns the API and dedicated worker definitions atomically.
-retired: true
-canonicalWorkflow: .github/workflows/deploy-cloud-run.yml

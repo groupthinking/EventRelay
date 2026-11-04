@@ -66,7 +66,6 @@ def test_real_npm_locks_include_all_resolved_versions() -> None:
     assert {path.as_posix() for path in locks} == {
         "package-lock.json",
         "sdk/typescript/package-lock.json",
-        "docs/knowledge_prototypes/mcp-servers/fetch-mcp/package-lock.json",
     }
     for path in locks:
         lock = json.loads(Path(path).read_text())

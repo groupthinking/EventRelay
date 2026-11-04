@@ -25,7 +25,7 @@ from typing import Any, Dict, List
 _SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(_SCRIPTS_DIR.parent))
 
-from scripts.maintenance.deduplicate_knowledge import KnowledgeDeduplicator, DEFAULT_DATABASE_PATH
+from scripts.maintenance.deduplicate_knowledge import KnowledgeDeduplicator
 
 # Set up logging
 logging.basicConfig(
@@ -41,7 +41,7 @@ DEFAULT_REPORTS_DIR = Path(__file__).resolve().parent.parent.parent / "docs" / "
 class OrchestrationScheduler:
     """Manages scheduled review runs of PRs, issues, knowledge bases, and guidance systems."""
 
-    def __init__(self, db_path: str = str(DEFAULT_DATABASE_PATH), reports_dir: str = str(DEFAULT_REPORTS_DIR)):
+    def __init__(self, db_path: str, reports_dir: str = str(DEFAULT_REPORTS_DIR)):
         self.db_path = db_path
         self.reports_dir = Path(reports_dir)
         self.reports_dir.mkdir(parents=True, exist_ok=True)
@@ -190,7 +190,7 @@ class OrchestrationScheduler:
 
 def main():
     parser = argparse.ArgumentParser(description="Automated Orchestration Scheduler")
-    parser.add_argument("--path", default=str(DEFAULT_DATABASE_PATH), help="Path to knowledge_database.json")
+    parser.add_argument("--path", required=True, help="Path to knowledge_database.json")
     parser.add_argument("--dry-run", action="store_true", help="Perform run without writing files")
     parser.add_argument("--consolidate", action="store_true", help="Consolidate highly similar knowledge terms")
     parser.add_argument("--daemon", action="store_true", help="Run in background loop")
