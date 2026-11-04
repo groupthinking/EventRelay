@@ -59,7 +59,7 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page.getByText('Universal Video Action Intelligence')).toBeVisible();
     await expect(
       page.getByRole('heading', {
-        name: /Turn a YouTube URL into a hashed Video Pack in Studio\./i,
+        name: 'Your videos know what to do next.',
       })
     ).toBeVisible();
     await expect(page.getByText(/Transcript quality varies by source/i)).toBeVisible();
