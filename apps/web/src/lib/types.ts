@@ -1,6 +1,5 @@
 /**
  * TypeScript types mirroring backend Pydantic models.
- * Keep in sync with src/youtube_extension/backend/api/v1/models.py
  */
 
 // ── Generic API response wrapper ──
