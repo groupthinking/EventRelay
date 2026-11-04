@@ -99,6 +99,7 @@ export default function ProCheckoutButton({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ annual, turnstileToken: tokenRef.current }),
+        signal: AbortSignal.timeout(30_000),
       });
       const data = (await res.json()) as { url?: string; error?: string; sessionId?: string };
       if (!res.ok) {

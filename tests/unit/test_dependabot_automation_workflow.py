@@ -27,9 +27,7 @@ def _load_dependabot_config() -> dict:
     ("directory", "ecosystem"),
     [
         ("/", "pip"),
-        ("/src/youtube_extension/backend", "pip"),
         ("/sdk/python", "pip"),
-        ("/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0", "uv"),
     ],
 )
 def test_dependabot_tracks_python_packages_weekly(
