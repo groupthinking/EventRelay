@@ -10,7 +10,8 @@ function readSource(relativePath: string) {
 }
 
 // Static-source coverage for the video-generator disabled-state accessibility
-// contract. The web suite runs in the `node` environment with no jsdom, so the
+// contract (see components/dashboard-search-accessibility.test.ts for the same
+// pattern). The web suite runs in the `node` environment with no jsdom, so the
 // button's rendered state is asserted from the source expressions that derive
 // it rather than by mounting the component.
 describe('video generator disabled-state accessibility', () => {
