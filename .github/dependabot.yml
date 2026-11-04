@@ -29,22 +29,9 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
 
-  - package-ecosystem: "pip"
-    directory: "/src/youtube_extension/backend"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-
   # Python SDK dependencies.
   - package-ecosystem: "pip"
     directory: "/sdk/python"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-
-  # MCP YouTube server dependencies (pyproject.toml and uv.lock).
-  - package-ecosystem: "uv"
-    directory: "/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
