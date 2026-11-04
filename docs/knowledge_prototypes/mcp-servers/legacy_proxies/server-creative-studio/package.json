@@ -1,8 +1,0 @@
-{
-  "name": "@modelcontextprotocol/server-creative-studio",
-  "version": "1.0.0",
-  "description": "MCP creative-studio Interface",
-  "type": "module",
-  "main": "index.js",
-  "bin": "cli.js"
-}
