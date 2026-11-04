@@ -107,14 +107,6 @@ if __name__ == "__main__":
         context="YouTube Transcript API updated to new method"
     )
 
-    # Skill 2: Import path errors
-    builder.capture_error_resolution(
-        error_type="ModuleNotFoundError",
-        error_msg="No module named 'src.youtube_extension.backend.services.youtube.adapters.api_cost_monitor'",
-        resolution="Fix relative import: use ...api_cost_monitor (three dots) for correct path",
-        context="Import from parent directory requires correct relative path"
-    )
-
     print("\n📚 Skill Database Initialized")
     print(f"Total skills: {len(builder.skills['skills'])}")
     print(f"Stats: {builder.get_stats()}")
