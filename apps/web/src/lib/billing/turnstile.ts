@@ -34,6 +34,7 @@ export async function verifyTurnstileToken(
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!res.ok) {

@@ -27,17 +27,6 @@ from typing import Any, Dict, List
 import asyncpg
 import psutil
 
-# Import performance monitoring
-try:
-    from ..backend.services.performance_monitor import (
-        performance_monitor,
-        track_database_query_time,
-    )
-except ImportError:
-    performance_monitor = None
-    async def track_database_query_time(query_time_ms, query_type="general"):
-        pass
-
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -176,11 +165,7 @@ class DatabaseOptimizer:
                     LIMIT 100
                 """
 
-                start_time = time.time()
                 rows = await conn.fetch(query)
-                query_time = (time.time() - start_time) * 1000
-
-                await track_database_query_time(query_time, "performance_analysis")
 
                 metrics = []
                 for row in rows:
@@ -265,14 +250,9 @@ class DatabaseOptimizer:
                     ORDER BY seq_tup_read DESC
                 """
 
-                start_time = time.time()
-
                 index_usage = await conn.fetch(index_usage_query)
                 unused_indexes = await conn.fetch(unused_indexes_query)
                 table_scans = await conn.fetch(table_scans_query)
-
-                query_time = (time.time() - start_time) * 1000
-                await track_database_query_time(query_time, "index_analysis")
 
                 return {
                     'index_usage': [dict(row) for row in index_usage],
