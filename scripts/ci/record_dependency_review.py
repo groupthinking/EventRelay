@@ -136,8 +136,16 @@ def _unchanged_requirements_resolution(
     package_name = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
     # Includes, constraints, options, extras, markers, pinned ranges and local/
     # remote references need their own provenance. Never silently exempt them.
+    # pip treats a line ending in an archive extension as a local file reference
+    # even without a "./" prefix (e.g. "demo-1.0-py3-none-any.whl"). Archive
+    # contents can change while this blob stays identical, so never accept them.
+    archive_suffix = re.compile(
+        r".*\.(?:whl|zip|tar|tar\.gz|tgz|tar\.bz2|tbz|tar\.xz|txz|tlz|tar\.lz|tar\.lzma)",
+        re.IGNORECASE,
+    )
     if not declarations or not all(
-        re.fullmatch(package_name, line) for line in declarations
+        re.fullmatch(package_name, line) and not archive_suffix.fullmatch(line)
+        for line in declarations
     ):
         reject("source is not self-contained bare unpinned requirements")
 
