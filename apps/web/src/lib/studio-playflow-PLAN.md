@@ -1,29 +1,26 @@
-# TASK: Restore Studio Ship this playflow after IDE shell
+# TASK: Restore remaining Studio IDE playflow after Ship this
 
 ## 1. Goal & Scope
-* **Objective:** Get UVAI Studio playflow back toward ≥9/10 by restoring a discoverable **Ship this** path and rewiring leftover B/E/G helpers the IDE shell left unused.
-* **Context:** Kill A (#1692) merged. B–G helpers exist (`studioTranscriptStage`, `studioActionCard`, `deployHoldReason` skip/unknown, export toast, player overlay). The 2026-10-07 IDE refactor deleted `studio-deploy-button` and stopped rendering Ship this, stack-check honesty, review_action cards, and transcript retry. Dogfood kill F still stands: no Ship this; seadance/cluely-class checks must not hold anonymous ship.
+* **Objective:** Keep #2437’s **Ship this** ZIP CTA, and restore the leftover dogfood rails this branch still owns: honest empty Events (never Insights), pack workbench, Act on this run, transcript-tab retry, and softened “run tools” copy.
+* **Context:** #2437 (`560f07120`) already closed #2435 with Ship this + skip/unknown stack rows + review cards + toolbar retry. This branch layers Events honesty and the flag-gated Act CTA on that landing. C (player) and D (export toast at `bottom-4`) stay. No Origin G.A.T.E., ClipToAction, fake events, or Ship checkout.
 * **Scope:**
-  * `apps/web/src/lib/studio-pipeline-status.ts` — `studioShipEnabled` / `studioShipCta` (exportability gates ship; holdReason never does)
-  * `apps/web/src/lib/official-templates.ts` — stack-check row view (skip/unknown)
-  * `apps/web/src/components/OneLoopStudio.tsx` — Ship this CTA, transcript retry, toast position, pass checks/actions
-  * `apps/web/src/components/studio/StudioIdeOutput.tsx` — stack checks + `studioActionCard`
- * *Initial check:* Extend existing helpers. Do not restore `studio-deploy-button`, origin deploy kickoff, fake events, or G.A.T.E. contract changes.
+  * `apps/web/src/components/OneLoopStudio.tsx` — Act on this run, honest empty-events + pack workbench into output; keep Ship this
+  * `apps/web/src/components/studio/StudioIdeOutput.tsx` — Events empty copy, pack workbench, transcript-tab retry on main’s stackChecks/reviewActions API
+  * Focused Vitest for the dogfood path
+ * *Initial check:* Do not restore `studio-deploy-button`. Do not replace Ship this with a second Export button.
 
 ## 2. Execution Plan
-- [x] Failing tests for Ship this enablement, skip/unknown checks, review cards, retry, toast position
-- [x] Ship this CTA enabled by `studioCanExport`, never by non-runnable stack checks
-- [x] Tools tab shows honest skip/unknown; Intent tab renders `review_action` cards
-- [x] Transcript retry control when `studioCanRetryTranscript`
-- [x] Export toast no longer uses sticky-footer `bottom-20`
-- [x] Focused Vitest
+- [x] Merge origin/main (#2437 Ship this) and keep complementary Events/Act wiring
+- [x] Honest Events empty + pack workbench; Tools skip/unknown; Intent review cards
+- [x] Soften remaining “run tools” paste-ready copy
+- [x] Verify focused Vitest after the merge
 
 ## 3. Definition of Done (Success Verification)
-* **Expected Outcome:** Anonymous Studio on a seadance/cluely pack can click **Ship this** (ZIP export). Stack checks read skip/unknown and do not disable the button. No live hostname claim. Transcript retry and review cards are visible.
-* **Verification Method:** `cd apps/web && npx vitest run src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/official-templates.test.ts src/lib/__tests__/uvai-surface-unification.test.ts src/components/__tests__/OneLoopStudio.three-panel.test.tsx src/components/studio/__tests__/StudioIdeOutput.playflow.test.tsx`
-* **Proof Artifact:** `cd apps/web && npm test -- src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/official-templates.test.ts src/lib/__tests__/uvai-surface-unification.test.ts src/components/__tests__/OneLoopStudio.three-panel.test.tsx src/components/studio/__tests__/StudioIdeOutput.playflow.test.tsx` → **5 files, 49 passed**. Related: OneLoopStudio.build-live + job-strip + linked-sop → **3 files, 16 passed**. `tsc --noEmit` and eslint on touched files passed.
+* **Expected Outcome:** On `/studio?video=…pBsT6v-ciO8` Events says no extracted events (not Insights), architecture/artifacts visible, SeaDance/Cluely Unknown, **Ship this** enabled, failed transcript has Retry, Act cards say Review this result.
+* **Verification Method:** `npm --workspace=apps/web exec vitest run src/components/__tests__/OneLoopStudio.playflow.test.tsx src/components/__tests__/StudioIdeOutput.playflow.test.tsx src/components/studio/__tests__/StudioIdeOutput.playflow.test.tsx src/components/__tests__/OneLoopStudio.three-panel.test.tsx src/components/__tests__/OneLoopStudio.build-live.test.tsx src/components/__tests__/OneLoopStudio.job-strip.test.tsx src/lib/__tests__/studio-pipeline-status.test.ts src/lib/__tests__/official-templates.test.ts src/lib/__tests__/uvai-surface-unification.test.ts`
+* **Proof Artifact:** 9 files, 62 passed after merging `origin/main` (#2437).
 
 ## 4. Post-Task Reflection
-* **What was done:** Restored a discoverable **Ship this** toolbar CTA that downloads the pack ZIP. Anonymous/unknown SeaDance/Cluely stack checks render as skip/unknown and never disable the button. Intent tab renders `review_action` cards. Transcript retry is visible on retryable failure. Export toast sits at `bottom-4` (no sticky footer). Origin deploy button was not restored.
-* **Why it was needed:** IDE shell left playflow helpers unwired; dogfood kill F was a disabled Deploy with no Ship this.
-* **How it was tested:** Focused Vitest (49 + 16), type-check, eslint. No production live claim. GitHub issue create was 403 so this cut has no new issue number.
+* **What was done:** Merged #2437’s Ship this landing and kept the remaining playflow: Events honesty, pack workbench, Act on this run (`agentWorkflowUi`), transcript-tab retry, and “act, export, or save” paste copy.
+* **Why it was needed:** #2437 restored Ship this / stack rows / review cards; empty `events[]` packs still needed an honest Events pane and the flag-gated Act CTA.
+* **How it was tested:** Focused Vitest after merge: 9 files, 62 passed.
