@@ -15,9 +15,12 @@ Usage:
 
 import logging
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 # Lazy import to avoid circular dependencies
+if TYPE_CHECKING:
+    from .agent_gap_analyzer import AgentGapAnalyzer
+
 _analyzer = None
 
 def get_analyzer() -> "AgentGapAnalyzer":

@@ -88,7 +88,6 @@ jobs:
           cache: "npm"
       - run: npm ci --legacy-peer-deps
       - name: TypeScript type-check (apps/web)
-        continue-on-error: true
         run: cd apps/web && npm run type-check
       - name: ESLint (apps/web)
         run: cd apps/web && npm run lint
@@ -123,10 +122,11 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install ruff
-      - name: Lint Python (informational)
-        continue-on-error: true
-        run: ruff check src/youtube_extension/backend/ src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
+      - run: python -m pip install ruff==0.17.3
+      - name: Lint Python
+        run: |
+          ruff check src/youtube_extension/main.py --ignore E402,F811,F401,B904,B020,E701,E722
+          ruff check src/youtube_extension/ --select F821
 
   lint-frontend:
     runs-on: ubuntu-latest
@@ -138,8 +138,7 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm ci --legacy-peer-deps
-      - name: Lint Frontend (informational)
-        continue-on-error: true
+      - name: Lint Frontend
         run: cd apps/web && npm run lint
 
   # Required for apps/web unit tests (see #1449). The Python `test` job only

@@ -10,6 +10,7 @@ import {
 import { checkResourceAllowed } from '@modelcontextprotocol/sdk/shared/auth-utils.js';
 
 const SCENARIOS = new Set([
+  'tools_call',
   'auth/metadata-var2',
   'auth/token-endpoint-auth-basic',
   'auth/token-endpoint-auth-post',
@@ -178,7 +179,7 @@ function withOAuthRetry(clientName, baseUrl, clientMetadataUrl) {
   };
 }
 
-async function runAuthClient(serverUrl) {
+async function runAuthClient(serverUrl, scenario) {
   const protocolVersion =
     process.env.MCP_CONFORMANCE_PROTOCOL_VERSION ?? '2025-11-25';
   const client = new Client(
@@ -196,6 +197,14 @@ async function runAuthClient(serverUrl) {
   // it through Client.connect() sends a second initialize request after OAuth
   // and the official server correctly rejects that stale lifecycle.
   if (protocolVersion === '2026-07-28') {
+    const requestMeta = {
+      'io.modelcontextprotocol/protocolVersion': protocolVersion,
+      'io.modelcontextprotocol/clientCapabilities': {},
+      'io.modelcontextprotocol/clientInfo': {
+        name: 'eventrelay-conformance-client',
+        version: '1.0.0',
+      },
+    };
     const response = await oauthFetch(serverUrl, {
       method: 'POST',
       headers: {
@@ -207,20 +216,56 @@ async function runAuthClient(serverUrl) {
         jsonrpc: '2.0',
         id: 1,
         method: 'tools/list',
-        params: {
-          _meta: {
-            'io.modelcontextprotocol/protocolVersion': protocolVersion,
-            'io.modelcontextprotocol/clientCapabilities': {},
-            'io.modelcontextprotocol/clientInfo': {
-              name: 'eventrelay-conformance-client',
-              version: '1.0.0',
-            },
-          },
-        },
+        params: { _meta: requestMeta },
       }),
     });
     if (!response.ok) {
       throw new Error(`Stateless MCP request failed: ${response.status} ${await response.text()}`);
+    }
+    const listResult = (await response.json()).result;
+    if (scenario !== 'tools_call') {
+      return;
+    }
+    const tools = listResult?.tools;
+    if (!Array.isArray(tools) || !tools.some((tool) => tool.name === 'add_numbers')) {
+      throw new Error('Stateless MCP tools/list omitted add_numbers');
+    }
+
+    const callResponse = await oauthFetch(serverUrl, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+        'MCP-Protocol-Version': protocolVersion,
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'add_numbers',
+          arguments: { a: 2, b: 3 },
+          _meta: requestMeta,
+        },
+      }),
+    });
+    if (!callResponse.ok) {
+      throw new Error(
+        `Stateless MCP tools/call failed: ${callResponse.status} ${await callResponse.text()}`
+      );
+    }
+    const result = (await callResponse.json()).result;
+    const expectedResult = 'The sum of 2 and 3 is 5';
+    if (
+      !Array.isArray(result?.content) ||
+      !result.content.some((item) => {
+        if (item.type !== 'text' || !item.text) {
+          return false;
+        }
+        return scenario === 'tools_call' ? item.text === expectedResult : true;
+      })
+    ) {
+      throw new Error('Stateless MCP tools/call returned an unexpected result');
     }
     return;
   }
@@ -244,7 +289,7 @@ async function main() {
   if (!SCENARIOS.has(scenario)) {
     throw new Error(`Unsupported conformance scenario: ${scenario}`);
   }
-  await runAuthClient(serverUrl);
+  await runAuthClient(serverUrl, scenario);
 }
 
 main().catch((error) => {
