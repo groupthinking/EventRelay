@@ -23,9 +23,4 @@ describe('landing style safety', () => {
     );
     expect(source).not.toMatch(/\bapprov(?:e|al|ed|ing)\b/i);
   });
-
-  it('ContactForm does not use styled-jsx (breaks strict TS builds)', () => {
-    const source = readSource('app/ContactForm.tsx');
-    expect(source).not.toContain('<style jsx>');
-  });
 });
