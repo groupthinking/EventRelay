@@ -3,6 +3,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -32,7 +33,7 @@ registerHooks({resolve(specifier, context, nextResolve) {
 }});
 const { POST } = await import('../apps/web/src/app/api/agents/actions/route.ts');
 const { resolveActionReviewJournal } = await import('../apps/web/src/lib/action-review-journal.mjs');
-const action = {tool:'create_workflow_task',input:{title:'Review target'},status:'pending'};
+const action = {tool:'create_workflow_task',input:{title:'Review target'},status:'pending',result:'Prepared for review. No tool has been executed.',isError:false};
 function request(body) { return new Request('http://localhost/api/agents/actions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)}); }
 const keys = ['RELAY_REVIEW_JOURNAL_MODE','RELAY_REVIEW_STATE_DIRECTORY','RELAY_REVIEW_SCRIPTS_DIRECTORY','RELAY_REVIEW_PYTHON_EXECUTABLE','VERCEL','AWS_LAMBDA_FUNCTION_NAME','K_SERVICE'];
 function reset() {
@@ -60,7 +61,10 @@ test('actual review route integrates durable artifact and actor-scoped replay wi
     state.identity='another@example.invalid';
     const other=await (await POST(request({transcript:'Another authenticated user'}))).json();
     assert.notEqual(other.localArtifactReceipt.taskId,body.localArtifactReceipt.taskId);
-    const artifact=JSON.parse(await readFile(join(dir,'state','artifacts',body.localArtifactReceipt.taskId+'.txt'),'utf8'));
+    const artifactBytes=await readFile(join(dir,'state','artifacts',body.localArtifactReceipt.taskId+'.txt'));
+    const artifact=JSON.parse(artifactBytes);
+    assert.equal(createHash('sha256').update(artifactBytes).digest('hex'),body.localArtifactReceipt.artifactHash);
+    assert.deepEqual(artifact.actions,body.actions);
     assert.equal(artifact.original_actions_executed,false);assert.deepEqual(artifact.actions,[action]);
   } finally { reset();await rm(dir,{recursive:true,force:true}); }
 });
