@@ -322,7 +322,15 @@ export async function executePreparedActions(
 
   const uniqueActions = dedupeAgentActions(opts.actions);
   const actions: AgentAction[] = [];
+  let taskStorageUnavailable = false;
   for (const prepared of uniqueActions) {
+    if (prepared.tool === 'create_workflow_task' && taskStorageUnavailable) {
+      actions.push(toAction(prepared.tool, prepared.input, {
+        summary: 'Task was not attempted after task storage became unavailable. Retry the same confirmed plan when storage recovers.',
+        isError: true,
+      }));
+      continue;
+    }
     const tool = getTool(prepared.tool);
     if (!tool || !isPlainObject(prepared.input)) {
       actions.push(
@@ -344,6 +352,7 @@ export async function executePreparedActions(
         isError: true,
       };
     }
+    if (prepared.tool === 'create_workflow_task' && result.isError && result.storageUnavailable === true) taskStorageUnavailable = true;
     actions.push(toAction(prepared.tool, prepared.input, result));
   }
   return actions;

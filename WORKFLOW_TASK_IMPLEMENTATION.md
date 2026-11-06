@@ -30,3 +30,56 @@ The current reviewed-action transport supplies a run ID but not verified source 
 Next acceptance exercise (requires an authorized non-production runtime/store and permitted source video): preview causes 0 task writes; confirm creates 1 task; three identical retries return the same ID with 1 record; a fresh authenticated process reads it; another owner cannot; a forced storage outage never yields fulfilled. Retain exact source URL, timestamps/content hash, run ID, build SHA and actual usage/cost or explicitly unknown values. Do not mark complete until those receipts exist.
 
 Related PR #2470 adds a local review-only journal and expressly excludes live action execution. This cut does not duplicate that journal. The two PRs touch the action route and will need integration review before either is merged.
+
+## Task-write request boundary
+
+Executing a batch containing `create_workflow_task` requires `application/json` and a serialized same-origin `Origin` header. Cross-site fetch metadata is rejected even when Origin matches. Same-site sibling domains, `null` or absent browser origins, and forwarded host headers do not establish mutation authority. A rejected request runs none of the actions in a mixed batch.
+
+Non-browser clients may omit Origin only when they send an explicit Bearer token and no Cookie header. The token must still pass the existing provider/subject session verification. Merely adding an Authorization header cannot exempt cookie-based requests. This narrow guard does not change preview, task reads, or execution batches without workflow tasks. Development proxy origins are not implicitly trusted.
+
+The origin regression suite uses real signed test sessions, the real route/executor/task-store code, and an isolated REST fixture. It verifies that a sibling-origin text/plain form writes no record, same-origin confirmation and retry return one receipt, and verified bearer-only clients remain supported. The origin guard is separate from the preview binding below and does not address the remaining storage review findings.
+
+## Server-verifiable task previews
+
+Authenticated previews containing workflow tasks now return `jobId` (a server-issued `preview_<UUID>`) and `confirmationToken`. To confirm, send `mode: "execute"`, the returned `jobId` and `confirmationToken`, and the reviewed actions. Old clients sending only an arbitrary run ID and actions now fail closed with 409. Anonymous preview is still read-only and has no executable receipt. The earlier client-supplied preview job ID is a correlation hint, not task-write authority.
+
+The receipt is a domain-separated HMAC proof of a server-created preview, binding the authenticated provider/subject owner, server run ID, and the entire ordered `{tool,input}` plan. Object key order is canonicalized; action and array order are retained. Display-only summaries are not execution authority. Plans must be pending and error-free, and receipt-shaped data is rejected. Invalid signatures, changed owners/runs/actions, malformed plans, duplicate actions, and missing signing configuration cannot authorize writes. Normal execution-time input and entitlement validation still apply.
+
+The proof has no expiry because it records immutable preview issuance rather than granting login or one-time approval. Every execution still requires current authenticated ownership and the task-write request boundary. Keeping the original proof/run ID preserves delayed and concurrent task retries without creating a second identity. Do not automatically re-preview after an uncertain write or verification failure: a new preview is a new run. Rotating NEXTAUTH_SECRET invalidates earlier proofs, while existing task records remain readable through owner-scoped GET.
+
+Limits: the proof is not verified source-video provenance, evidence that a human viewed the UI, or a one-time execution lock. Task records are idempotent; other actions in a mixed batch may repeat on retries. Receipt versioning must be reviewed if tool execution semantics change. When integrated with #2470, local review-only mode must not issue executable task receipts and must continue refusing execute requests before this hosted-task path.
+
+## Storage transport protection
+
+Task storage accepts only valid HTTPS endpoints without URL userinfo. Unsafe or malformed configuration fails with the generic storage-unavailable error before any bearer credential or command data reaches fetch. Every command uses `redirect: "error"`, including the atomic write script, mandatory readback and owner-scoped GET. No hostname allowlist or changes to the shared credential resolver are introduced; both supported environment-variable families retain the same HTTPS transport policy.
+
+Regression tests use native fetch with an isolated MockAgent dispatcher and real networking disabled. Before the fix, 307/308 redirects forwarded the POST task body across origins (native fetch strips cross-origin Authorization). Afterward, 301/302/303/307/308, same-origin redirects and HTTPS-to-HTTP redirects fail without contacting the target. HTTP configuration could separately transmit the bearer token and task data in plaintext and is now rejected before transport.
+
+## Batch behavior during a task-store outage
+
+The confirmed-action executor stops attempting additional workflow tasks after the first storage/configuration/protocol/readback failure. Each remaining task is returned as failed with an explicit "not attempted" summary and no receipt. Earlier verified task receipts are preserved. Other tool types continue in their original order, and ordinary invalid task inputs do not trip the storage-failure guard.
+
+The guard is local to one execution call. A later explicit retry of the original confirmed plan attempts storage again and reuses the same task IDs, including a SET that may have succeeded before its readback failed. Nothing is retried automatically, and "not confirmed saved" is not a claim that an uncertain write did not happen.
+
+This prevents one dead store from costing fifty consecutive ten-second task timeouts: a first atomic-write timeout now incurs one ten-second wait. It is not a global batch deadline; a slow successful atomic write followed by a readback timeout can consume approximately twenty seconds, and earlier successful tasks or non-task tools can add latency.
+
+
+## Owner capacity and initialization contract
+
+New task IDs require an explicit `WORKFLOW_TASKS_PER_OWNER_LIMIT`, a canonical positive integer no greater than JavaScript's safe-integer maximum. There is no default or unlimited mode. This is an operator-selected limit, not a new product entitlement or pricing tier.
+
+For each verified owner, `er:workflow-task-quota:v1:<SHA-256(owner)>` must be a permanent Redis string containing `v1:<count>`. Count is a canonical nonnegative safe integer. The owner value is the same JSON provider/subject identity used by the task store, not a client-supplied identity. Missing, malformed, unsupported-version, expiring or wrong-type metadata fails closed without repairing it. New owners also require trusted initialization; absence is not proof of zero existing records.
+
+**Availability impact:** deploying this gate without the limit and initialized owner counts blocks all new task creation. Existing owner-scoped reads and retries of existing task IDs continue before quota checks, even when metadata or the limit is missing, invalid, full or lowered. No task is evicted, expired or rewritten to make room. Capacity rejection returns a failed action without a receipt and does not trip the storage-outage guard, so existing retries later in the same batch still run.
+
+The atomic EVAL command checks the task ID, validates metadata, reserves one owner slot, then writes the new record with SET NX. Concurrent new IDs cannot exceed initialized capacity, and concurrent identical retries do not consume extra slots. Mandatory readback remains separate. A retry after a lost acknowledgement uses the original run and ID. The backend must support atomic multi-key EVAL for the existing task and quota key names; an unsupported command or key-slot policy fails closed as a storage outage. This has not been tested against a hosted provider.
+
+Redis scripts serialize commands but do not roll back previous writes on runtime failure. Reservation intentionally precedes the task write: a later failed write can conservatively consume a slot, but cannot leave an uncounted task. Do not automatically decrement reservations after a timeout, reset a missing counter, or infer absence from an incomplete scan. Store eviction, administrative resets, or writers that bypass this gate invalidate accounting and require reconciliation.
+
+Rollout requires a separate, authorized operator decision and migration. Freeze all task writers, including old application instances; select the explicit limit; enumerate and verify all existing permanent task records for each owner; initialize permanent versioned counts from those verified records; ensure no legacy writer can bypass accounting; then enable gated writes. A verified fresh owner may be initialized to zero only by a trusted provisioning/migration path. This patch supplies neither an initialization endpoint nor a live migration and has not modified live data. Reconciliation of conservatively reserved slots likewise requires a write freeze and verified records before changing metadata. Lowering the configured limit does not delete existing records; owners at or above it cannot create new IDs.
+
+The opt-in `WORKFLOW_TASK_REDIS_TESTS=1` test suite runs the production Lua against a disposable local Redis over a private Unix socket with TCP disabled. `WORKFLOW_TASK_REDIS_BINARY` may select an installed official Redis binary. It covers concurrent distinct writes, concurrent retries, invalid initialization, count boundaries, independent owners, lost acknowledgements and retries later in a capacity-rejected batch. The ordinary test suite does not start Redis; its REST fixtures assume initialized capacity and are not concurrency proof.
+
+## Rate limiter credential consistency
+
+The proxy rate limiter now uses the shared REST credential resolver, accepting either the complete Upstash pair or the complete KV pair with the existing Upstash precedence. A valid KV-only deployment no longer fails before the durable-task route. The existing TCP fallback, client reuse and production fail-closed behavior remain unchanged. No credentials are logged or changed.

@@ -6,9 +6,16 @@ import { executePreparedActions } from '../action-agent';
 const input = { title: 'Install pnpm', description: 'Set up the toolchain', category: 'setup', priority: 'high' };
 const records = new Map<string, string>();
 const transport = vi.fn(async (_url: unknown, init?: RequestInit) => {
-  const [op, key, value] = JSON.parse(String(init?.body));
+  const command = JSON.parse(String(init?.body));
+  const [op] = command;
+  const key = command[op === 'EVAL' ? 3 : 1];
+  const value = command[5];
   let result: unknown = null;
-  if (op === 'SET' && !records.has(key)) { records.set(key, value); result = 'OK'; }
+  // Model initialized owners with sufficient capacity; this fixture does not execute Lua.
+  if (op === 'EVAL') {
+    result = [records.has(key) ? 'existing' : 'stored'];
+    if (!records.has(key)) records.set(key, value);
+  }
   if (op === 'GET') result = records.get(key) ?? null;
   return Response.json({ result });
 }) as unknown as typeof fetch;
@@ -46,7 +53,7 @@ describe('durable workflow task contract (isolated REST fixture)', () => {
   });
   it('requires readback after a successful write acknowledgement', async () => {
     let call = 0;
-    await expect(createWorkflowTaskRecord(input, 'alice', 'run', async () => Response.json({ result: ++call === 1 ? 'OK' : null }))).rejects.toThrow('readback');
+    await expect(createWorkflowTaskRecord(input, 'alice', 'run', async () => Response.json({ result: ++call === 1 ? ['stored'] : null }))).rejects.toThrow('readback');
   });
   it('preserves the durable ID through action execution', async () => {
     const actions = await executePreparedActions({ actions: [{ tool: 'create_workflow_task', input, status: 'pending' }], ownerId: 'alice', jobId: 'run', fetchImpl: transport });
