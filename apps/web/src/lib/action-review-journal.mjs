@@ -28,7 +28,9 @@ export function resolveActionReviewJournal(env = process.env) {
       // cross-user idempotency key. Exact plans are independently actor-scoped.
       const actorHash = createHash('sha256').update(trustedIdentity).digest('hex');
       const key = createHash('sha256').update(JSON.stringify({ actorHash, actions })).digest('hex');
-      const result = await bridge.persistReview(actions, `review-v1-${key}`);
+      // v1 artifacts omitted optional preview fields. Do not rewrite immutable
+      // evidence or reuse its receipt for the exact-plan serialization.
+      const result = await bridge.persistReview(actions, `review-v2-${key}`);
       if (!result.localReceipt.complete || result.originalActionsExecuted !== false ||
           result.originalTaskComplete !== false) {
         throw new Error('The local review artifact did not verify');

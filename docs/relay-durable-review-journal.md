@@ -26,6 +26,31 @@ RELAY_REVIEW_PYTHON_EXECUTABLE=/absolute/path/to/python3
 
 No environment changes are made by this PR. Do not provide these fields through model prompts or HTTP payloads. Do not enable on Vercel, Lambda, Cloud Run, network filesystems or a directory shared with untrusted users. Plan contents are plaintext; use a dedicated permission-restricted account/directory, never put credentials in the plan, and establish a retention policy before multi-user hosting. This slice is intentionally not a hosted storage service or a public receipt lookup API.
 
+## Upgrading existing local journals
+
+The trusted route uses the `review-v2-` idempotency namespace for exact preview
+serialization, including validated optional `result` and `isError` fields. The
+previous adapter omitted those fields. Their original values cannot be recovered
+from a historical artifact or its hash, so existing records are not migrated or
+rewritten and an old receipt is never presented as proof of a repaired plan.
+
+On the first post-upgrade request for a plan, the route creates a separate v2
+local artifact. Identical requests by the same trusted identity then reuse that
+v2 task ID and receipt, including concurrent retries and fresh processes. Old v1
+task IDs, artifact bytes, receipts and append-only histories remain unchanged and
+readable. Pending v1 entries remain pending; they are not implicitly resumed.
+Even plans without optional fields get a new v2 ID so the serializer version has
+one consistent boundary. This can add one local artifact per replayed plan, not
+execute any original action.
+
+Deploy the repaired adapter and v2 route together on the single trusted host.
+Direct CLI/bridge callers own their supplied keys: resubmitting a changed contract
+under an existing key still fails closed. Such callers must deliberately select a
+fresh versioned key for a new exact-plan artifact. Never replace old bytes, relabel
+an old receipt, or generate a fresh key in response to corruption, timeout or an
+unknown execution outcome. The v2 namespace is fixed by the serialization version,
+not an error-recovery fallback.
+
 ## Execution and evidence contract
 
 The Python slice allows one fixed local artifact operation per immutable contract. It rejects model-selected paths, unknown tools, executable code and approval fields. `external_action` always blocks. SQLite holds contract hashes, durable execution intent, attempt budgets and an append-only hash-linked timeline. Writes are atomic/no-clobber, and recovery checks actual current bytes before replaying anything. A permission denial blocks rather than retries. Stale/deleted/changed artifacts invalidate receipts.
