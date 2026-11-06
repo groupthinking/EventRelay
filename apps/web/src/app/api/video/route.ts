@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 /**
- * @deprecated Legacy video register/list endpoint. No in-repo callers;
- * superseded by the Video Pack pipeline (`POST /api/video/pack`). Kept for
- * backward compatibility with external API consumers. Do not add new callers.
+ * @deprecated Legacy video analysis endpoint. Retained for external API
+ * compatibility; use the Video Pack pipeline (`POST /api/video/pack`) instead.
  */
 import { waitUntil } from '@vercel/functions';
 import { publishEvent, EventTypes } from '@/lib/cloudevents';

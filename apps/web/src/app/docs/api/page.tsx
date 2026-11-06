@@ -23,11 +23,11 @@ const ENDPOINTS: Endpoint[] = [
   { method: 'POST', path: '/api/transcribe', summary: 'Fetch a transcript for a YouTube URL.', body: '{ "url": "https://youtu.be/..." }' },
   { method: 'POST', path: '/api/extract-events', summary: 'Extract typed events from a transcript.' },
   { method: 'POST', path: '/api/chat', summary: 'Conversational query over an analyzed video.' },
-  { method: 'GET', path: '/api/video', summary: 'List recently analyzed videos. [DEPRECATED — use /api/video/pack]' },
+  { method: 'GET', path: '/api/video', summary: 'Health probe for the video API.' },
   { method: 'POST', path: '/api/video', summary: 'Register a new video for analysis. [DEPRECATED — use /api/video/pack]' },
   { method: 'GET', path: '/api/video/search', summary: 'Semantic search across stored videos.' },
-  { method: 'GET', path: '/api/dashboard', summary: 'Dashboard aggregates and recent runs.' },
-  { method: 'POST', path: '/api/dashboard', summary: 'Mutate dashboard state (pin, archive, etc.).' },
+  { method: 'GET', path: '/api/dashboard', summary: 'Backend health as status and workflow metrics.' },
+  { method: 'POST', path: '/api/dashboard', summary: 'Request a backend dashboard embed URL.' },
   { method: 'GET', path: '/api/training/status', summary: 'Current status of training/embedding jobs.' },
   { method: 'POST', path: '/api/training/trigger', summary: 'Trigger a training/embedding job.' },
   { method: 'POST', path: '/api/video/pack', summary: 'Emit a hashed Video Pack from a YouTube URL.', body: '{ "url": "https://www.youtube.com/watch?v=..." }' },
@@ -54,9 +54,13 @@ export default function ApiDocsPage() {
           <h1 className="mt-2 font-heading text-4xl font-black">API Reference</h1>
           <p className="mt-3 max-w-2xl text-ink/60">
             UVAI exposes a small, REST-style surface for transcription, event
-            extraction, pipeline execution, and search. All endpoints accept
-            and return JSON unless noted. Streaming endpoints use Server-Sent
-            Events.
+            extraction, and search. All endpoints accept and return JSON unless noted.
+          </p>
+          <p className="mt-3 max-w-2xl text-sm text-ink/50">
+            The legacy <code>/api/pipeline</code> and <code>/api/pipeline/stream</code>
+            routes are retired. <code>GET /api/video</code> is a health probe.
+            <code>POST /api/video</code> remains for compatibility but is deprecated;
+            use <code>POST /api/video/pack</code>.
           </p>
         </header>
 

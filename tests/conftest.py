@@ -27,19 +27,11 @@ from pathlib import Path
 # so enabling live reads cannot implicitly publish code or infrastructure.
 _LIVE_E2E_TESTS = frozenset(
     {
-        "testing/test_agent_network.py",
         "testing/test_api_validation.py",
-        "testing/test_enhanced_backend.py",
         "testing/test_full_mcp_pipeline.py",
-        "testing/test_full_pipeline.py",
-        "testing/test_integrated_pipeline.py",
-        "testing/test_integration.py",
-        "testing/test_live_integration.py",
         "testing/test_mcp_integration.py",
         "testing/test_mcp_tool_direct.py",
         "testing/test_multi_agent_learning.py",
-        "testing/test_production_video.py",
-        "testing/test_real_video_processing.py",
         "testing/test_skill_connector.py",
         "testing/test_tri_model_consensus.py",
         "testing/test_youtube_api.py",
@@ -48,7 +40,6 @@ _LIVE_E2E_TESTS = frozenset(
 _LIVE_DEPLOY_TESTS = frozenset(
     {
         "testing/test_full_mcp_pipeline.py",
-        "testing/test_integrated_pipeline.py",
     }
 )
 _TESTS_ROOT = Path(__file__).resolve().parent

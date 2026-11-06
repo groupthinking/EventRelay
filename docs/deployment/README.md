@@ -209,7 +209,6 @@ dig @1.1.1.1 uvai.io +short  # Cloudflare
 ## Related Documentation
 
 - [../CLAUDE.md](../CLAUDE.md) - Claude Code context and guidelines
-- [../ONBOARDING.md](../ONBOARDING.md) - Developer onboarding guide
 - [../../infrastructure/](../../infrastructure/) - Infrastructure as Code (Terraform, K8s)
 - [../../.github/workflows/](../../.github/workflows/) - CI/CD workflows
 
