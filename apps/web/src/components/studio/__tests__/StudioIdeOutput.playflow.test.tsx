@@ -49,6 +49,7 @@ describe('StudioIdeOutput playflow', () => {
         packWorkbench={<div data-testid="studio-pack-workbench">Pack workbench</div>}
       />,
     );
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-events'));
     const events = screen.getByTestId('studio-ide-output-events');
     expect(events.textContent).toMatch(/no extracted events/i);
     expect(events.textContent).not.toMatch(/INSIGHT/i);

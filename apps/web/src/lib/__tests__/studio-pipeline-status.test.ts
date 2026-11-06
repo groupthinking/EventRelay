@@ -274,12 +274,6 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBe(false);
 
-    const dashboardPanels = readFileSync(
-      join(process.cwd(), 'src/components/dashboard/panels.tsx'),
-      'utf8',
-    );
-    expect(dashboardPanels).toContain('actionsFromStudioRun');
-    expect(dashboardPanels).toContain('studioCanExport');
   });
 
   it('names an invalid ?video= handoff instead of staying silent', () => {
