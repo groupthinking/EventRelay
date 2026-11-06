@@ -1,9 +1,13 @@
+import { text } from 'node:stream/consumers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MockAgent } from 'undici';
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici';
 import { createWorkflowTaskRecord, readWorkflowTask } from '../workflow-task-store';
 
 const input = { title: 'Review source', description: 'Private task fixture', category: 'research', priority: 'high' };
 const taskId = 'a'.repeat(64);
+// Native fetch may hand the mock an async iterable rather than a string body.
+const requestText = (body: unknown) => typeof body === 'string'
+  ? Promise.resolve(body) : text(body as AsyncIterable<Uint8Array>);
 const records = new Map<string, string>();
 const transport = vi.fn(async (_url: unknown, init?: RequestInit) => {
   const command = JSON.parse(String(init?.body));
@@ -75,22 +79,34 @@ describe('workflow task storage transport boundary', () => {
     dispatcher.disableNetConnect();
     const forwarded: Array<{ method: string; body: unknown }> = [];
     let saved = '';
-    dispatcher.get('https://store.invalid').intercept({ path: '/', method: 'POST', body: value => JSON.parse(value)[0] === 'EVAL' })
-      .reply(status, options => { saved = JSON.parse(String(options.body))[5]; return ''; }, {
+    dispatcher.get('https://store.invalid').intercept({ path: '/', method: 'POST' })
+      .reply(status, async options => {
+        const command = JSON.parse(await requestText(options.body));
+        expect(command[0]).toBe('EVAL');
+        saved = command[5];
+        return '';
+      }, {
         headers: { location: 'https://redirect.invalid/collect' },
       });
     dispatcher.get('https://redirect.invalid').intercept({ path: '/collect', method: status === 307 || status === 308 ? 'POST' : 'GET' })
-      .reply(200, options => { forwarded.push({ method: options.method, body: options.body }); return JSON.stringify({ result: ['stored'] }); });
-    dispatcher.get('https://store.invalid').intercept({ path: '/', method: 'POST', body: value => JSON.parse(value)[0] === 'GET' })
-      .reply(200, () => JSON.stringify({ result: saved }));
-    const realFetch: typeof fetch = (url, init) => fetch(url, { ...init, dispatcher } as RequestInit);
+      .reply(200, async options => { forwarded.push({ method: options.method, body: options.body == null ? null : await requestText(options.body) }); return JSON.stringify({ result: ['stored'] }); });
+    dispatcher.get('https://store.invalid').intercept({ path: '/', method: 'POST' })
+      .reply(200, async options => {
+        expect(JSON.parse(await requestText(options.body))[0]).toBe('GET');
+        return JSON.stringify({ result: saved });
+      });
+    const previousDispatcher = getGlobalDispatcher();
+    // Undici 8 installs the compatibility adapter required by Node 22's native fetch.
+    // Passing its MockAgent directly as a fetch dispatcher bypasses that adapter.
+    setGlobalDispatcher(dispatcher);
     try {
       let failure: unknown;
-      try { await createWorkflowTaskRecord(input, 'alice', 'run', realFetch); } catch (error) { failure = error; }
+      try { await createWorkflowTaskRecord(input, 'alice', 'run', fetch); } catch (error) { failure = error; }
       expect(JSON.parse(saved)).toMatchObject(input);
       expect(forwarded).toEqual([]);
       expect(failure).toBeInstanceOf(Error);
     } finally {
+      setGlobalDispatcher(previousDispatcher);
       await dispatcher.close();
     }
   });
@@ -99,15 +115,27 @@ describe('workflow task storage transport boundary', () => {
     const dispatcher = new MockAgent();
     dispatcher.disableNetConnect();
     let forwarded = 0;
+    let initialRequests = 0;
     dispatcher.get('https://store.invalid').intercept({ path: '/', method: 'POST' })
-      .reply(307, '', { headers: { location: target } });
+      .reply(307, async options => {
+        expect(JSON.parse(await requestText(options.body))[0]).toBe('GET');
+        initialRequests++;
+        return '';
+      }, { headers: { location: target } });
     const destination = new URL(target);
     dispatcher.get(destination.origin).intercept({ path: destination.pathname, method: 'POST' })
       .reply(200, () => { forwarded++; return JSON.stringify({ result: null }); });
-    const realFetch: typeof fetch = (url, init) => fetch(url, { ...init, dispatcher } as RequestInit);
+    const previousDispatcher = getGlobalDispatcher();
+    // Undici 8 installs the compatibility adapter required by Node 22's native fetch.
+    // Passing its MockAgent directly as a fetch dispatcher bypasses that adapter.
+    setGlobalDispatcher(dispatcher);
     try {
-      await expect(readWorkflowTask('alice', taskId, realFetch)).rejects.toThrow();
+      await expect(readWorkflowTask('alice', taskId, fetch)).rejects.toThrow();
+      expect(initialRequests).toBe(1);
       expect(forwarded).toBe(0);
-    } finally { await dispatcher.close(); }
+    } finally {
+      setGlobalDispatcher(previousDispatcher);
+      await dispatcher.close();
+    }
   });
 });

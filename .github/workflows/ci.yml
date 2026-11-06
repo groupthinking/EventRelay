@@ -162,6 +162,7 @@ jobs:
         # Hermetic: do not inject ambient AI/billing keys (see #1230).
         env:
           ORIGIN_GATE_REDIS_TESTS: "1"
+          WORKFLOW_TASK_REDIS_TESTS: "1"
           OPENAI_API_KEY: ""
           AI_GATEWAY_API_KEY: ""
           VERCEL_AI_GATEWAY_API_KEY: ""
