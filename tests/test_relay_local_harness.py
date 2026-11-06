@@ -253,6 +253,43 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaises(ContractError):
             prepare_review_artifact("bad-review", actions)
 
+    def test_review_adapter_exact_preview_and_receipt_integrity(self):
+        summary = "Prepared for review. No tool has been executed."
+        base = {
+            "tool": "create_workflow_task",
+            "input": {"title": "Review target", "priority": "high"},
+            "status": "pending",
+            "result": summary,
+        }
+        for label, actions in (
+            ("preview", [base]),
+            ("explicit-false", [{**base, "isError": False}]),
+            ("mixed", [{**base, "isError": False}, {"tool": "save_resource", "input": {}, "status": "pending"}]),
+        ):
+            with self.subTest(label=label):
+                contract = prepare_review_artifact("preview-" + label, actions)
+                reconstructed = json.loads(contract["action"]["input"]["content"])
+                self.assertEqual(reconstructed["actions"], actions)
+                task_id = self.h.submit(contract)
+                receipt = self.h.run(task_id)
+                self.assertTrue(receipt["complete"])
+                artifact = (self.root / receipt["evidence"]["artifact"]).read_bytes()
+                stored = json.loads(artifact)
+                self.assertEqual(stored["actions"], actions)
+                self.assertEqual(receipt["evidence"]["sha256"], digest(artifact))
+                self.assertTrue(all(receipt["evidence"]["gates"].values()))
+                self.assertFalse(stored["original_actions_executed"])
+                self.assertFalse(stored["original_task_complete"])
+                self.assertFalse(receipt["external_task_complete"])
+        for invalid in (
+            {**base, "isError": True},
+            {**base, "result": 123},
+            {**base, "unexpected": "unsupported"},
+            {**base, "status": "fulfilled"},
+        ):
+            with self.assertRaises(ContractError):
+                prepare_review_artifact("invalid-preview", [invalid])
+
     def test_permission_denial_blocks_without_retry(self):
         task = self.h.submit(self.p)
         with patch.object(
