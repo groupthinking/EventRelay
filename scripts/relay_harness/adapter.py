@@ -45,8 +45,14 @@ def prepare_review_artifact(key, actions, context=None):
             raise ContractError("Failed actions are not a review plan")
         if "result" in action:
             text(action["result"], "result")
+        # Retain optional fields only when present, so the journal's exact
+        # plan matches the validated preview returned by the actions route.
         clean.append(
-            {"tool": action["tool"], "input": action["input"], "status": "pending"}
+            {
+                field: action[field]
+                for field in ("tool", "input", "status", "result", "isError")
+                if field in action
+            }
         )
     body = {
         "source": "EventRelay review-only AgentAction[]",
