@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -12,7 +13,7 @@ test('existing AgentAction review shape persists through actual Node -> Python -
   const dir = await mkdtemp(join(tmpdir(), 'relay-bridge-test-'));
   try {
     const bridge = createLocalReviewBridge({ stateDirectory: join(dir, 'state'), scriptsDirectory: resolve('scripts'), pythonExecutable });
-    const actions = [{tool:'create_workflow_task',input:{title:'Inspect target',description:'Review before changes',category:'research',priority:'high'},status:'pending'}];
+    const actions = [{tool:'create_workflow_task',input:{title:'Inspect target',description:'Review before changes',category:'research',priority:'high'},status:'pending',result:'Prepared for review. No tool has been executed.',isError:false}];
     const result = await bridge.persistReview(actions, 'node-bridge-v1');
     assert.equal(result.localReceipt.complete, true);
     assert.equal(result.originalActionsExecuted, false);
@@ -22,7 +23,9 @@ test('existing AgentAction review shape persists through actual Node -> Python -
     assert.equal(again.taskId, result.taskId);
     assert.deepEqual(again.localReceipt, result.localReceipt);
     const path = join(dir, 'state', result.localReceipt.evidence.artifact);
-    const body = JSON.parse(await readFile(path, 'utf8'));
+    const bytes = await readFile(path);
+    const body = JSON.parse(bytes);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), result.localReceipt.evidence.sha256);
     assert.deepEqual(body.actions, actions);
     assert.equal(body.original_actions_executed, false);
     await writeFile(path, 'changed');
