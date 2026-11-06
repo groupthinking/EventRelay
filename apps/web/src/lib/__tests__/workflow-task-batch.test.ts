@@ -154,4 +154,38 @@ describe('confirmed task batch storage outage', () => {
     expect(JSON.stringify(actions)).not.toContain('storageUnavailable');
     expect(actions.every(action => action.data === undefined)).toBe(true);
   });
+
+  it('bounds a sequence of slow successful writes, preserves readback receipts and permits exact-run retries', async () => {
+    let now = 1_000;
+    let operationLatency = 6_000;
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const records = new Map<string, string>();
+    const transport = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const args = JSON.parse(String(init?.body));
+      const [operation] = args;
+      const key = args[operation === 'EVAL' ? 3 : 1];
+      now += operationLatency;
+      if (operation === 'EVAL') {
+        const existed = records.has(key);
+        if (!existed) records.set(key, args[5]);
+        return Response.json({ result: [existed ? 'existing' : 'stored'] });
+      }
+      return Response.json({ result: records.get(key) ?? null });
+    });
+    const plan = [task(1), task(2), task(3), task(4)];
+    const first = await executePreparedActions({ ...options, actions: plan, fetchImpl: transport });
+    expect(first.map(action => action.status)).toEqual(['fulfilled', 'fulfilled', 'failed', 'failed']);
+    expect(first[0].data?.id).toMatch(/^[a-f0-9]{64}$/);
+    expect(first[1].data?.id).toMatch(/^[a-f0-9]{64}$/);
+    expect(first[2].data).toBeUndefined(); // EVAL may have committed, but GET missed the deadline.
+    expect(first[3].result).toMatch(/not attempted/i);
+    expect(transport).toHaveBeenCalledTimes(5); // 2 readbacks + 3 EVALs, no further I/O.
+    expect(records.size).toBe(3);
+
+    operationLatency = 0;
+    const retry = await executePreparedActions({ ...options, actions: plan, fetchImpl: transport });
+    expect(retry.every(action => action.status === 'fulfilled')).toBe(true);
+    expect(retry.slice(0, 2).map(action => action.data)).toEqual(first.slice(0, 2).map(action => action.data));
+    expect(records.size).toBe(4);
+  });
 });

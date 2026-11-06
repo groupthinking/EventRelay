@@ -48,6 +48,8 @@ export interface ToolContext {
   fetchImpl?: typeof fetch;
   /** Correlates dispatched work with the originating prompt. */
   jobId?: string;
+  /** Absolute deadline shared by confirmed task write and readback commands. */
+  storageDeadlineAt?: number;
 }
 
 export interface ActionTool {
@@ -103,7 +105,7 @@ const createWorkflowTask: ActionTool = {
   },
   async execute(input, ctx) {
     try {
-      const task = await createWorkflowTaskRecord(input, ctx.ownerId, ctx.jobId, ctx.fetchImpl);
+      const task = await createWorkflowTaskRecord(input, ctx.ownerId, ctx.jobId, ctx.fetchImpl, ctx.storageDeadlineAt);
       return { summary: `Saved task "${task.title}" (${task.id})`, data: task };
     } catch (error) {
       if (error instanceof WorkflowTaskCapacityError) return { summary: `Task was not confirmed saved. ${error.message}. Existing task retries remain available.`, isError: true };

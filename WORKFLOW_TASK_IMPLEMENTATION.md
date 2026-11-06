@@ -61,7 +61,7 @@ The confirmed-action executor stops attempting additional workflow tasks after t
 
 The guard is local to one execution call. A later explicit retry of the original confirmed plan attempts storage again and reuses the same task IDs, including a SET that may have succeeded before its readback failed. Nothing is retried automatically, and "not confirmed saved" is not a claim that an uncertain write did not happen.
 
-This prevents one dead store from costing fifty consecutive ten-second task timeouts: a first atomic-write timeout now incurs one ten-second wait. It is not a global batch deadline; a slow successful atomic write followed by a readback timeout can consume approximately twenty seconds, and earlier successful tasks or non-task tools can add latency.
+This prevents one dead store from costing fifty consecutive ten-second task timeouts: a first atomic-write timeout now incurs one ten-second wait. The follow-up patch adds a 25-second cumulative task-storage deadline across atomic writes and mandatory readbacks; it is still not a deadline for unrelated non-task tools; a slow successful atomic write followed by a readback timeout can consume approximately twenty seconds, and earlier successful tasks or non-task tools can add latency.
 
 
 ## Owner capacity and initialization contract
@@ -83,3 +83,12 @@ The opt-in `WORKFLOW_TASK_REDIS_TESTS=1` test suite runs the production Lua agai
 ## Rate limiter credential consistency
 
 The proxy rate limiter now uses the shared REST credential resolver, accepting either the complete Upstash pair or the complete KV pair with the existing Upstash precedence. A valid KV-only deployment no longer fails before the durable-task route. The existing TCP fallback, client reuse and production fail-closed behavior remain unchanged. No credentials are logged or changed.
+
+
+## November 5 follow-up — storage budget and credential-family integrity
+
+The confirmed task executor now creates a shared 25-second absolute task-storage deadline at the first workflow-task attempt in each reviewed batch. The deadline is passed through each task's atomic EVAL and mandatory GET readback; the existing per-request ceiling is ten seconds. A task attempted after the deadline is failed without contacting storage and receives no fabricated receipt. The batch stops further task writes after the first unavailable/uncertain storage result. Earlier readback-verified receipts remain intact, and retrying the same confirmed plan reuses deterministic record IDs. This is a task-storage limit only; unrelated tool actions retain their existing behavior, and a serverless global execution deadline still requires independent control.
+
+The common Redis credential resolver now accepts only complete (URL, token) pairs from the same configuration family. A complete Upstash pair takes precedence; a complete KV pair works when the Upstash pair is incomplete. Partial credentials from different families cannot be combined.
+
+CI acceptance on the follow-up commit must include focused task batch and Redis credential regressions, the full web suite, type-check, lint and build. Hosted Upstash and real-video/source provenance remain separately unverified. Deployment, owner quota initialization, and production task activation are not part of this code change.

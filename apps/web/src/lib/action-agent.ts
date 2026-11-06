@@ -323,10 +323,17 @@ export async function executePreparedActions(
   const uniqueActions = dedupeAgentActions(opts.actions);
   const actions: AgentAction[] = [];
   let taskStorageUnavailable = false;
+  let taskStorageDeadlineAt: number | undefined;
   for (const prepared of uniqueActions) {
-    if (prepared.tool === 'create_workflow_task' && taskStorageUnavailable) {
+    const isTask = prepared.tool === 'create_workflow_task';
+    if (isTask && taskStorageDeadlineAt === undefined) taskStorageDeadlineAt = Date.now() + 25_000;
+    if (isTask) ctx.storageDeadlineAt = taskStorageDeadlineAt;
+    const deadlineReached = isTask && taskStorageDeadlineAt !== undefined && Date.now() >= taskStorageDeadlineAt;
+    if (isTask && (taskStorageUnavailable || deadlineReached)) {
       actions.push(toAction(prepared.tool, prepared.input, {
-        summary: 'Task was not attempted after task storage became unavailable. Retry the same confirmed plan when storage recovers.',
+        summary: taskStorageUnavailable
+          ? 'Task was not attempted after task storage became unavailable. Retry the same confirmed plan when storage recovers.'
+          : 'Task was not attempted because the task storage batch deadline elapsed. Retry the same confirmed plan.',
         isError: true,
       }));
       continue;
