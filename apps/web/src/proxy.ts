@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getNextAuthJwtFromRequest } from '@/lib/auth-jwt';
+import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
 import {
   CANONICAL_STUDIO_PATH,
   isAiRoute,
@@ -87,7 +88,8 @@ let redisClientPromise: Promise<DistributedRedisClient | null> | null = null;
 
 /**
  * Lazily construct one distributed Redis client and reuse it across requests.
- * Upstash REST is preferred when configured. Vercel Marketplace integrations
+ * Upstash REST (UPSTASH_REDIS_REST_* or KV_REST_API_*) is preferred when
+ * configured. Vercel Marketplace integrations
  * that expose a standard `STORAGE_REDIS_URL` are supported through node-redis.
  * Both clients are memoized at module scope so warm Vercel instances reuse the
  * transport instead of reconnecting for every request.
@@ -103,13 +105,11 @@ function getRedisClient(): Promise<DistributedRedisClient | null> {
   }
 
   redisClientPromise = (async () => {
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const credentials = resolveUpstashRedisCredentials();
+    if (credentials) {
       try {
         const { Redis } = await import('@upstash/redis');
-        return new Redis({
-          url: process.env.UPSTASH_REDIS_REST_URL,
-          token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        });
+        return new Redis(credentials);
       } catch {
         // dynamic import failed; fall back to null below
         return null;
