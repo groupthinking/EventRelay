@@ -120,7 +120,7 @@ const memoryStore = new Map<string, VideoPackRecord>();
 
 let redisPromise: Promise<VideoPackRedisClient | null> | null = null;
 
-function assertDurableVideoPackStorageConfigured(): void {
+export function assertDurableVideoPackStorageConfigured(): void {
   if (process.env.NODE_ENV !== 'production') return;
   if (resolveUpstashRedisCredentials()) return;
   throw new Error(
