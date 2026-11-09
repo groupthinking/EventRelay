@@ -1,0 +1,89 @@
+{
+  "issue": "https://github.com/groupthinking/EventRelay/issues/2169",
+  "updated": "2026-11-09",
+  "migrations_dir": "apps/web/supabase/migrations",
+  "supabase_project_ref": "nsfrhirwsjqwhagtuaxx",
+  "notes": "Repository inventory only. No live database was read or changed. 'migrated' means a checked-in migration defines the table; whether it is applied to a given database must be confirmed separately.",
+  "tables": [
+    {
+      "name": "studio_chats",
+      "schema": "public",
+      "model_source": "apps/web/src/lib/studio/chat-store.ts",
+      "migration": "apps/web/supabase/migrations/20260912214530_create_private_studio_chat_ownership.sql",
+      "status": "migrated",
+      "rls": "forced",
+      "access": "service_role only"
+    },
+    {
+      "name": "shared_sessions",
+      "schema": "public",
+      "model_source": "src/youtube_extension/services/shared_sql_state.py",
+      "migration": "apps/web/supabase/migrations/20261109062000_create_service_role_shared_state_tables.sql",
+      "status": "migrated",
+      "rls": "forced",
+      "access": "service_role only"
+    },
+    {
+      "name": "shared_timeline_events",
+      "schema": "public",
+      "model_source": "src/youtube_extension/services/shared_sql_state.py",
+      "migration": "apps/web/supabase/migrations/20261109062000_create_service_role_shared_state_tables.sql",
+      "status": "migrated",
+      "rls": "forced",
+      "access": "service_role only"
+    },
+    {
+      "name": "shared_a2a_messages",
+      "schema": "public",
+      "model_source": "src/youtube_extension/services/shared_sql_state.py",
+      "migration": "apps/web/supabase/migrations/20261109062000_create_service_role_shared_state_tables.sql",
+      "status": "migrated",
+      "rls": "forced",
+      "access": "service_role only"
+    }
+  ],
+  "unmigrated_sql_sources": [
+    {
+      "source": "supabase/supabase_setup.sql",
+      "tables": [
+        "projects",
+        "chats",
+        "files",
+        "media",
+        "mcp_logs",
+        "nods_page",
+        "nods_page_section"
+      ],
+      "status": "setup_script_not_migration",
+      "rls": "enabled_not_forced",
+      "note": "Docker init script with owner/authenticated policies; not part of the migrations directory. Needs its own migrate-or-retire decision."
+    },
+    {
+      "source": "infrastructure/database/query_optimization.sql",
+      "tables": [
+        "video_processing_results",
+        "api_usage_optimized"
+      ],
+      "status": "unmanaged_sql_script",
+      "rls": "none",
+      "note": "Referenced only by infrastructure/database/index_analysis.py (index tooling); no application model and no migration."
+    },
+    {
+      "source": "src/integration/supabase_db.py (generate_schema_sql)",
+      "tables": [
+        "profiles",
+        "subscriptions"
+      ],
+      "status": "out_of_scope_template",
+      "rls": "enabled_not_forced",
+      "note": "SQL template emitted for generated apps, not EventRelay's own schema."
+    }
+  ],
+  "retired": [
+    {
+      "source": "src/youtube_extension/backend/models/ and src/youtube_extension/backend/migrations/versions/001-003",
+      "status": "absent_from_tree",
+      "note": "Named in the original audit; not present in the current repository."
+    }
+  ]
+}

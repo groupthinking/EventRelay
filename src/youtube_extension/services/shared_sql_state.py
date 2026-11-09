@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,12 +20,25 @@ from sqlalchemy import (
     select,
     update,
 )
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SHARED_STATE_PATH = _PROJECT_ROOT / ".runtime" / "shared_state.db"
+
+# The Supabase migration is the schema source of truth for non-SQLite databases.
+SHARED_STATE_MIGRATION = (
+    "apps/web/supabase/migrations/"
+    "20261109062000_create_service_role_shared_state_tables.sql"
+)
+
+logger = logging.getLogger(__name__)
+
+
+class SharedStateSchemaError(RuntimeError):
+    """Raised when a non-SQLite shared-state database lacks the migrated schema."""
 
 
 def normalize_shared_storage_url(database_url: str) -> str:
@@ -106,7 +120,40 @@ class SharedSQLStateStore:
             Column("timestamp", String(64), nullable=False),
             Column("content", Text, nullable=False),
         )
-        self.metadata.create_all(self.engine)
+        self._ensure_schema()
+
+    def _ensure_schema(self) -> None:
+        """Create tables for local SQLite; verify migrated tables everywhere else.
+
+        SQLite is the local/test default, so the tables are created on demand.
+        For PostgreSQL/Supabase the checked-in migration owns the schema (and its
+        row-level security), so this never issues DDL there: it only confirms the
+        tables and columns exist and fails loudly if the migration was not applied.
+        """
+
+        if self.engine.dialect.name == "sqlite":
+            self.metadata.create_all(self.engine)
+            return
+
+        inspector = sa_inspect(self.engine)
+        problems: list[str] = []
+        for table in self.metadata.sorted_tables:
+            if not inspector.has_table(table.name):
+                problems.append(f"missing table {table.name}")
+                continue
+            present = {column["name"] for column in inspector.get_columns(table.name)}
+            missing = [column.name for column in table.columns if column.name not in present]
+            if missing:
+                problems.append(f"{table.name} missing columns {', '.join(missing)}")
+        if problems:
+            message = (
+                "Shared state schema is not migrated on "
+                f"{self.engine.dialect.name} ({'; '.join(problems)}). "
+                f"Apply {SHARED_STATE_MIGRATION}; the service does not create "
+                "these tables outside SQLite."
+            )
+            logger.error(message)
+            raise SharedStateSchemaError(message)
 
     @staticmethod
     def _create_engine(database_url: str) -> Engine:
