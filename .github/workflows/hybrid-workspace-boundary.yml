@@ -4,6 +4,16 @@ on:
     paths:
       - 'apps/hybrid-workspace/**'
       - '.github/workflows/hybrid-workspace-boundary.yml'
+      # jsdom/playwright are resolved from apps/web; dependency moves must re-run this.
+      - 'package-lock.json'
+      - 'apps/web/package.json'
+  push:
+    branches: [main]
+    paths:
+      - 'apps/hybrid-workspace/**'
+      - '.github/workflows/hybrid-workspace-boundary.yml'
+      - 'package-lock.json'
+      - 'apps/web/package.json'
 permissions:
   contents: read
 jobs:
@@ -12,13 +22,24 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      VERIFIED_HEAD: ${{ github.event.pull_request.head.sha }}
+      VERIFIED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '24'
       - run: npm ci --ignore-scripts
       - run: node apps/hybrid-workspace/logic.test.mjs
       - run: cd apps/web && npx --no-install playwright install --with-deps chromium
       - run: node apps/hybrid-workspace/browser.test.mjs
+        env:
+          # runner context is not available in job-level env, so set it per step.
+          HYBRID_BOUNDARY_RECEIPT: ${{ runner.temp }}/hybrid-workspace-boundary-receipt.json
+      - name: Upload boundary receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: hybrid-workspace-boundary-receipt
+          path: ${{ runner.temp }}/hybrid-workspace-boundary-receipt.json
+          if-no-files-found: warn
+          retention-days: 30

@@ -34,9 +34,37 @@ student JS cannot read the parent page.
 
 ## Deterministic boundary verification
 
-From the repository root run `node apps/hybrid-workspace/logic.test.mjs`. After installing locked dependencies and Playwright Chromium run `node apps/hybrid-workspace/browser.test.mjs`.
+From the repository root, after `npm ci`:
 
-The browser test serves actual app modules on loopback, substitutes fixture adapters for CDN editor/terminal/layout APIs, and blocks external requests. It covers Embed, edited Summarize, Extract, Ask escaping, Escalate, terminal input, parent-DOM sandbox confinement, and forbidden Gateway-key access. It does not certify live Monaco compatibility or Gateway execution. The dedicated PR workflow requires no production credentials.
+```bash
+node apps/hybrid-workspace/logic.test.mjs
+(cd apps/web && npx --no-install playwright install chromium)
+node apps/hybrid-workspace/browser.test.mjs
+```
 
-Helper tests passed locally on 2026-10-08; Chromium execution was blocked because no executable existed and its download returned an invalid archive. Browser status remains NOT RUN until the runner provides success. Parent #2202 stays open pending browser evidence and remaining coverage. `/studio` remains canonical.
+`jsdom` and `playwright` are locked under `apps/web`, so both tests resolve them
+from that workspace (`createRequire` anchored at `apps/web/package.json`) rather
+than by bare root-level name. To use a system Chromium instead of Playwright's,
+set `HYBRID_CHROMIUM_PATH`.
 
+The browser test serves the actual app modules on loopback, substitutes fixture
+adapters for the CDN editor/terminal/layout APIs, and stubs every external
+request. Each case has a 10 s timeout. It covers (#2202): the preview sandbox is
+exactly `allow-scripts`; preview code cannot reach the parent DOM, storage,
+cookies, popups, downloads, top navigation, or the parent's
+`AI_GATEWAY_API_KEY`; HTML/CSS/JS edits reach the preview; embedded `</script>`
+and `</style>` cannot break out; missing assets and repeated edits; Embed,
+Summarize, Extract and free-form Ask with escaping; terminal commands; unique
+Escalate and terminal ticket IDs; and no key in `window`, storage, URL, or chat.
+It writes a JSON receipt (path from `HYBRID_BOUNDARY_RECEIPT`, default in the OS
+temp dir) tied to `VERIFIED_HEAD`; CI uploads it as the
+`hybrid-workspace-boundary-receipt` artifact. It does not certify live Monaco
+compatibility or Gateway execution, and needs no production credentials.
+
+The `Hybrid Workspace Boundary` workflow runs on PRs and pushes to `main` that
+touch this directory, the workflow, `package-lock.json`, or `apps/web/package.json`.
+
+## Status
+
+This directory stays a **prototype**. `/studio` is the main product surface; no
+redirect or integration into `/studio` has been decided.

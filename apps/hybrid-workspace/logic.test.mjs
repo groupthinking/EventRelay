@@ -1,4 +1,8 @@
-import { JSDOM } from 'jsdom';
+import { createRequire } from 'node:module';
+// jsdom is locked under apps/web (not hoisted to the repo root since #2520),
+// so resolve it from that workspace instead of by bare root-level name.
+const requireFromWeb = createRequire(new URL('../web/package.json', import.meta.url));
+const { JSDOM } = requireFromWeb('jsdom');
 globalThis.DOMParser = new JSDOM('').window.DOMParser;
 import { escapeHtml, injectVirtualAssets, shouldEscalate, summarizeFrom, parseTermCommand } from "./logic.js";
 import assert from "node:assert/strict";
@@ -27,7 +31,6 @@ assert.doesNotMatch(sum.html, /<script>alert/);
 assert.deepEqual(parseTermCommand("summarize"), { action: "summarize", text: "" });
 assert.deepEqual(parseTermCommand("ask why css"), { action: "ask", text: "why css" });
 
-console.log("hybrid-workspace logic tests passed");
 assert.equal(shouldEscalate("please file a ticket", "ask"), true);
 const reordered = `<link href='styles.css' rel='stylesheet'><script defer src='app.js'></script>`;
 const hostile = injectVirtualAssets(reordered, { "styles.css": 'a{content:"$&"}', "app.js": 'console.log("</script><img>")' });
@@ -40,3 +43,4 @@ for (const markup of ['<link data-href="styles.css">', `<link title=' href="styl
 }
 assert.equal(summarizeFrom({"index.html":{value:'<title>Edited</title><h1>New</h1>'},"lesson.md":{value:'<img onerror="x">'}}).title,'Edited');
 
+console.log("hybrid-workspace logic tests passed");
