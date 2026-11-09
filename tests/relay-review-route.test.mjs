@@ -44,7 +44,7 @@ function enable(dir) {
   process.env.RELAY_REVIEW_PYTHON_EXECUTABLE=python;
 }
 function request(body) {return new Request('http://localhost/api/agents/actions',
-  {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});}
+  {method:'POST',headers:{'content-type':'application/json',origin:'http://localhost'},body:JSON.stringify(body)});}
 
 test('combined route returns exact stored preview with verified local receipt and no confirmation token', async () => {
   reset(); const dir=await mkdtemp(join(tmpdir(),'relay-integrated-'));enable(dir);
@@ -77,6 +77,21 @@ test('combined route requires trusted identity and fails closed', async () => {
   try {
     state.identity=null;
     assert.equal((await POST(request({transcript:'A sufficiently long transcript for review'}))).status,401);
+    assert.deepEqual(state.calls,[]);
+  } finally {reset();await rm(dir,{recursive:true,force:true});}
+});
+test('combined route rejects cookie-authenticated cross-origin journal writes', async () => {
+  reset();const dir=await mkdtemp(join(tmpdir(),'relay-integrated-'));enable(dir);
+  try {
+    // Identity resolution is stubbed as for the other route tests; these
+    // headers model a credentialed simple request from another localhost port.
+    const response=await POST(new Request('http://localhost/api/agents/actions', {
+      method:'POST',
+      headers:{'content-type':'text/plain',origin:'http://localhost:4000',
+        'sec-fetch-site':'same-site',cookie:'session=authenticated'},
+      body:JSON.stringify({transcript:'A sufficiently long transcript for review'}),
+    }));
+    assert.equal(response.status,403);
     assert.deepEqual(state.calls,[]);
   } finally {reset();await rm(dir,{recursive:true,force:true});}
 });

@@ -193,6 +193,16 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  if (reviewJournal) {
+    const origin = request.headers.get('origin');
+    const bearerOnly = origin === null && !request.headers.has('cookie') &&
+      /^Bearer \S+$/.test(request.headers.get('authorization') ?? '');
+    if (request.headers.get('sec-fetch-site') === 'cross-site' ||
+        (origin !== new URL(request.url).origin && !bearerOnly)) {
+      return NextResponse.json({ success: false, error: 'Untrusted journal write origin', actions: [] }, { status: 403 });
+    }
+  }
+
   const journalIdentity = reviewJournal ? await resolveTrustedBillingEmail(request) : null;
   if (reviewJournal && !journalIdentity) {
     return NextResponse.json({ success: false, error: 'Sign in before persisting a local review plan', actions: [] }, { status: 401 });
