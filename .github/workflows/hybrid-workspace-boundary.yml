@@ -27,8 +27,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '24'
-      - run: npm ci --ignore-scripts
+          # Match ci.yml: Node 24's npm rejects the root vitest override against the lockfile.
+          node-version: '22'
+      - run: npm ci --ignore-scripts --legacy-peer-deps
       - run: node apps/hybrid-workspace/logic.test.mjs
       - run: cd apps/web && npx --no-install playwright install --with-deps chromium
       - run: node apps/hybrid-workspace/browser.test.mjs
