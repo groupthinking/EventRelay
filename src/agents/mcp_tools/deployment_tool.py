@@ -7,10 +7,21 @@ Automates repo creation, code push, and Vercel deployment
 import logging
 import os
 import subprocess
+import traceback
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
+
+# Failures a deployment step is expected to hit: the CLI is missing or the
+# filesystem refuses (OSError), or the subprocess times out / errors
+# (subprocess.SubprocessError, which includes TimeoutExpired). Anything else
+# is a bug and propagates to the single boundary in deploy_to_github_and_vercel.
+STEP_ERRORS: tuple[type[BaseException], ...] = (OSError, subprocess.SubprocessError)
+
+
+class GitHubIdentityError(RuntimeError):
+    """The GitHub owner for a created repo could not be determined."""
 
 
 class DeploymentMCPTool:
@@ -33,6 +44,29 @@ class DeploymentMCPTool:
     async def close(self):
         """Clean up resources"""
         pass
+
+    def _redact(self, text: str) -> str:
+        """Remove configured tokens from text bound for logs or results."""
+        for secret in (self.github_token, self.vercel_token):
+            if secret:
+                text = text.replace(secret, "***")
+        return text
+
+    def _log_step_failure(self, step: str, exc: BaseException) -> None:
+        """Log a failed step with its name, error class and (redacted) traceback.
+
+        The traceback is formatted and redacted here rather than passed as
+        exc_info, because subprocess exceptions embed the full command line,
+        which carries the Vercel token.
+        """
+        tb = self._redact("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+        logger.error(
+            "Deployment step failed: stage=%s error_class=%s\n%s",
+            step,
+            type(exc).__name__,
+            tb,
+            extra={"stage": step, "error_class": type(exc).__name__, "traceback": tb},
+        )
 
     async def deploy_to_github_and_vercel(
         self,
@@ -97,7 +131,7 @@ class DeploymentMCPTool:
             # Step 1: Initialize git if needed
             git_init_result = await self._initialize_git(project_dir)
             if not git_init_result["success"]:
-                results["errors"].append({"stage": "git_init", "message": git_init_result["error"]})
+                results["errors"].append(self._stage_error("git_init", git_init_result))
                 results["status"] = "failed"
                 return results
 
@@ -114,10 +148,7 @@ class DeploymentMCPTool:
                     results["github_url"] = github_result["repo_url"]
                     logger.info(f"✅ GitHub: {results['github_url']}")
                 else:
-                    results["errors"].append({
-                        "stage": "github",
-                        "message": github_result["error"]
-                    })
+                    results["errors"].append(self._stage_error("github", github_result))
             else:
                 results["errors"].append({
                     "stage": "github",
@@ -137,10 +168,7 @@ class DeploymentMCPTool:
                     results["vercel_url"] = vercel_result["deployment_url"]
                     logger.info(f"✅ Vercel: {results['vercel_url']}")
                 else:
-                    results["errors"].append({
-                        "stage": "vercel",
-                        "message": vercel_result["error"]
-                    })
+                    results["errors"].append(self._stage_error("vercel", vercel_result))
             else:
                 if not self.vercel_token:
                     results["errors"].append({
@@ -156,15 +184,21 @@ class DeploymentMCPTool:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Deployment error: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception as exc:  # exception-boundary: MCP tool entry point; the agent network needs a result dict, never a raise
+            self._log_step_failure("deploy_entrypoint", exc)
             return {
                 "status": "error",
-                "error": str(e),
+                "error": self._redact(str(exc)) or type(exc).__name__,
+                "error_class": type(exc).__name__,
                 "project_path": project_path
             }
+
+    @staticmethod
+    def _stage_error(stage: str, step_result: dict[str, Any]) -> dict[str, Any]:
+        entry = {"stage": stage, "message": step_result["error"]}
+        if step_result.get("error_class"):
+            entry["error_class"] = step_result["error_class"]
+        return entry
 
     async def _initialize_git(self, project_dir: Path) -> dict[str, Any]:
         """Initialize git repository if not already initialized"""
@@ -230,10 +264,12 @@ dist/
             logger.info("✅ Git initialized")
             return {"success": True}
 
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Git initialization timed out"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        except subprocess.TimeoutExpired as exc:
+            self._log_step_failure("git_init", exc)
+            return {"success": False, "error": "Git initialization timed out", "error_class": type(exc).__name__}
+        except STEP_ERRORS as exc:
+            self._log_step_failure("git_init", exc)
+            return {"success": False, "error": f"Git initialization failed: {type(exc).__name__}", "error_class": type(exc).__name__}
 
     async def _create_github_repo(
         self,
@@ -286,19 +322,34 @@ dist/
                         break
 
             if not repo_url:
-                # Construct URL from repo name
-                username = self._get_github_username()
-                repo_url = f"https://github.com/{github_org or username}/{repo_name}"
+                # Construct URL from repo name. The org, when given, is the owner;
+                # otherwise the authenticated user is, and if that cannot be
+                # looked up the URL is unknown - never guessed.
+                if github_org:
+                    owner = github_org
+                else:
+                    try:
+                        owner = self._get_github_username()
+                    except GitHubIdentityError as exc:
+                        self._log_step_failure("github_identity", exc)
+                        return {
+                            "success": False,
+                            "error": "GitHub owner lookup failed; repo URL could not be verified",
+                            "error_class": type(exc).__name__,
+                        }
+                repo_url = f"https://github.com/{owner}/{repo_name}"
 
             return {
                 "success": True,
                 "repo_url": repo_url
             }
 
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "GitHub repo creation timed out"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        except subprocess.TimeoutExpired as exc:
+            self._log_step_failure("github", exc)
+            return {"success": False, "error": "GitHub repo creation timed out", "error_class": type(exc).__name__}
+        except STEP_ERRORS as exc:
+            self._log_step_failure("github", exc)
+            return {"success": False, "error": f"GitHub repo creation failed: {type(exc).__name__}", "error_class": type(exc).__name__}
 
     async def _deploy_to_vercel(
         self,
@@ -357,10 +408,12 @@ dist/
                 "deployment_url": deployment_url
             }
 
-        except subprocess.TimeoutExpired:
-            return {"success": False, "error": "Vercel deployment timed out (>5min)"}
-        except Exception as e:
-            return {"success": False, "error": str(e)}
+        except subprocess.TimeoutExpired as exc:
+            self._log_step_failure("vercel", exc)
+            return {"success": False, "error": "Vercel deployment timed out (>5min)", "error_class": type(exc).__name__}
+        except STEP_ERRORS as exc:
+            self._log_step_failure("vercel", exc)
+            return {"success": False, "error": f"Vercel deployment failed: {type(exc).__name__}", "error_class": type(exc).__name__}
 
     def _get_github_username(self) -> str:
         """Get GitHub username from gh CLI"""
@@ -376,9 +429,9 @@ dist/
                 return result.stdout.strip()
         except (subprocess.TimeoutExpired, OSError) as exc:
             logger.error("GitHub identity lookup failed", extra={"stage": "github_identity", "error_class": type(exc).__name__})
-            raise RuntimeError("GitHub identity lookup failed") from exc
+            raise GitHubIdentityError("GitHub identity lookup failed") from exc
         logger.error("GitHub identity lookup failed", extra={"stage": "github_identity", "returncode": result.returncode})
-        raise RuntimeError("GitHub identity lookup failed")
+        raise GitHubIdentityError("GitHub identity lookup failed")
 
 
 # Singleton instance

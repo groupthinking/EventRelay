@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from ...shared_sql_state import SharedSQLStateStore
 from ..base_agent import AgentRequest, AgentResult, BaseAgent
 from ..registry import get as get_agent_class
@@ -75,8 +77,17 @@ class AgentOrchestrator:
                 self._shared_state = SharedSQLStateStore(
                     database_url=shared_database_url
                 )
-            except Exception as exc:
-                self.logger.warning("Shared A2A SQL state unavailable: %s", exc)
+            except (SQLAlchemyError, ImportError, OSError) as exc:
+                # Expected setup failures only: database/URL errors, a missing
+                # DB driver, or an unwritable SQLite path. Anything else is a
+                # bug and must surface instead of silently dropping shared state.
+                self.logger.warning(
+                    "Shared A2A SQL state unavailable: %s (error_class=%s)",
+                    exc,
+                    type(exc).__name__,
+                    extra={"error_class": type(exc).__name__},
+                    exc_info=True,
+                )
                 self._shared_state = None
         else:
             self._shared_state = None
@@ -152,8 +163,15 @@ class AgentOrchestrator:
                     agent = agent_class()
                 self._agents[name] = agent
                 return agent
-            except Exception as e:
-                self.logger.error(f"Failed to instantiate agent {name}: {e}")
+            except Exception as e:  # exception-boundary: third-party agent constructors can raise anything; get_agent contract is None on failure
+                self.logger.error(
+                    "Failed to instantiate agent %s: %s (error_class=%s)",
+                    name,
+                    e,
+                    type(e).__name__,
+                    extra={"agent": name, "error_class": type(e).__name__},
+                    exc_info=True,
+                )
                 return None
 
         # Fallback to registry
@@ -270,8 +288,15 @@ class AgentOrchestrator:
 
             return orchestration_result
 
-        except Exception as e:
-            self.logger.error(f"Task execution failed: {e}", exc_info=True)
+        except Exception as e:  # exception-boundary: orchestration entry point; callers expect an OrchestrationResult with success=False, never a raise
+            self.logger.error(
+                "Task execution failed: task_type=%s error_class=%s: %s",
+                task_type,
+                type(e).__name__,
+                e,
+                extra={"task_type": task_type, "error_class": type(e).__name__},
+                exc_info=True,
+            )
             return OrchestrationResult(
                 success=False,
                 errors=[f"Orchestration failed: {str(e)}"],
@@ -416,8 +441,15 @@ class AgentOrchestrator:
                     "; ".join(result.logs) or "Agent execution failed"
                 )
                 return {"error": error_msg, "output": result.output}
-        except Exception as e:
-            self.logger.error("execute_single failed for %s: %s", agent_type, e)
+        except Exception as e:  # exception-boundary: agent dispatch entry point; agent.run() is third-party code and callers expect an error dict
+            self.logger.error(
+                "execute_single failed for %s: %s (error_class=%s)",
+                agent_type,
+                e,
+                type(e).__name__,
+                extra={"agent": agent_type, "error_class": type(e).__name__},
+                exc_info=True,
+            )
             self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
@@ -504,8 +536,15 @@ class AgentOrchestrator:
         if agent and hasattr(agent, "receive_context"):
             try:
                 await agent.receive_context(content)
-            except Exception as e:
-                self.logger.warning("Agent %s failed to receive context: %s", recipient, e)
+            except Exception as e:  # exception-boundary: context delivery is best-effort; the message is already recorded and a recipient's bug must not fail the sender
+                self.logger.warning(
+                    "Agent %s failed to receive context: %s (error_class=%s)",
+                    recipient,
+                    e,
+                    type(e).__name__,
+                    extra={"agent": recipient, "error_class": type(e).__name__},
+                    exc_info=True,
+                )
 
         return msg
 
