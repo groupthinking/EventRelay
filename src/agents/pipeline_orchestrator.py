@@ -107,10 +107,10 @@ def _get_vera():
             "maturity": get_maturity_runtime(),
             "enforcer": get_enforcer(),
         }
-    except ImportError:
-        logger.info("VERA modules not available in this env (hardened local maturity still applied for pipeline agents)")
-        return None
     except Exception as e:
+        if isinstance(e, ModuleNotFoundError) and e.name == "vera":
+            logger.info("VERA modules not available in this env (hardened local maturity still applied for pipeline agents)")
+            return None
         logger.error(
             "VERA initialization failed (%s): %s — all stages will be blocked",
             type(e).__name__,

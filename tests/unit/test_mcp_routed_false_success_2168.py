@@ -231,9 +231,17 @@ async def test_vera_init_failure_blocks_every_stage():
     network.route_to_agent.assert_not_awaited()
 
 
-def test_get_vera_raises_when_installed_modules_fail_to_initialize(monkeypatch):
+@pytest.mark.parametrize(
+    "error",
+    [
+        RuntimeError("identity key unreadable"),
+        ImportError("identity key unreadable"),
+        ModuleNotFoundError("identity key unreadable", name="identity_backend"),
+    ],
+)
+def test_get_vera_raises_when_installed_modules_fail_to_initialize(monkeypatch, error):
     def boom():
-        raise RuntimeError("identity key unreadable")
+        raise error
 
     modules = {
         "vera": types.ModuleType("vera"),
