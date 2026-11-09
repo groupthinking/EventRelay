@@ -7,11 +7,11 @@ for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     await expect(page.locator('[data-template="openai-responses-starter"]')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Your videos know what to do next.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Turn YouTube into bound tasks.' })).toBeVisible();
     await expect(page.locator('.template-use-cases')).toBeVisible();
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#171717');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#C2410C');
     await page.getByLabel('YouTube URL').fill('unsupported-source');
-    await page.getByRole('button', { name: 'Run in Studio' }).click();
+    await page.getByRole('button', { name: 'Build from video in Studio' }).click();
     await expect(page.locator('#home-youtube-url-error')).toHaveText('Need a valid YouTube URL.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath(`home-${width}.png`), fullPage: true });
