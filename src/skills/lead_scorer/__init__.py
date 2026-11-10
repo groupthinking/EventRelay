@@ -1,1 +1,0 @@
-"""Lead Scorer skill module."""

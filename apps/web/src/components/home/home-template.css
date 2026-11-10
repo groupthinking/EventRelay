@@ -11,6 +11,12 @@
 .home-source-composer { margin-top: 28px; }
 .home-source-composer label { font-size: 10px; text-align: center; }
 .home-source-composer form > p { text-align: center; line-height: 1.5; }
+.template-source-input .home-build-button { width: auto; min-width: fit-content; padding: 0 14px; gap: 8px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.home-build-button:focus-visible { outline: 2px solid var(--uvai-accent); outline-offset: 4px; }
+@media (max-width: 480px) {
+  .template-source-input:has(.home-build-button) { flex-wrap: wrap; padding: 10px; }
+  .template-source-input .home-build-button { width: 100%; min-height: 40px; margin-top: 4px; }
+}
 @media (max-width: 1023px) {
   .home-template-shell { grid-template-columns: minmax(0, 1fr); min-height: auto; }
   .home-template-primary { padding: 32px 4px; }

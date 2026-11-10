@@ -50,7 +50,7 @@ date where the file count jumps.
 
 2. **Run the harness** (cheap gates, seconds):
    ```bash
-   scripts/branch-fail-test.sh --pr-json /tmp/prmap.txt
+   scripts/maintenance/branch-fail-test.sh --pr-json /tmp/prmap.txt
    ```
    Emits `docs/branch-cleanup-matrix.md` + `.csv`. Each branch is scored on:
    - **G1 PR-state** — open ⇒ KEEP · closed ⇒ CLOSE-SAFE (GitHub keeps the ref) · none ⇒ ambiguous
@@ -100,4 +100,4 @@ otherwise                                 -> REVIEW       (recent/unique — hum
 
 ## Bundled
 
-- `scripts/branch-fail-test.sh` — the portable 6-gate harness (this is the asset).
+- `scripts/maintenance/branch-fail-test.sh` — the portable 6-gate harness (this is the asset).

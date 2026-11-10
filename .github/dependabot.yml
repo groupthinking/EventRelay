@@ -1,6 +1,9 @@
 version: 2
 updates:
-  # Frontend / monorepo npm dependencies (root lockfile covers workspaces).
+  # Frontend / monorepo npm dependencies (root lockfile covers workspaces,
+  # including apps/web). Do not add a separate "/apps/web" npm entry: it opens
+  # PRs that bump apps/web/package.json without updating the root lockfile and
+  # duplicates the root entry's updates.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -12,15 +15,6 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
-
-  - package-ecosystem: "npm"
-    directory: "/apps/web"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "eslint"
-        versions: [">=10"]
 
   # Python backend dependencies (root pyproject.toml and requirements.txt).
   - package-ecosystem: "pip"
