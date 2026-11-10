@@ -35,8 +35,8 @@ export function createLocalReviewBridge(config) {
     throw new Error('Review harness directory is unavailable');
   }
   accessSync(scriptsDirectory, constants.R_OK | constants.X_OK);
-  for (const module of ['__init__.py', '__main__.py', 'adapter.py', 'core.py']) {
-    const file = join(scriptsDirectory, 'relay_harness', module);
+  for (const moduleFile of ['__init__.py', '__main__.py', 'adapter.py', 'core.py']) {
+    const file = join(scriptsDirectory, 'relay_harness', moduleFile);
     if (!statSync(file).isFile()) throw new Error('Review harness module is unavailable');
     accessSync(file, constants.R_OK);
   }
