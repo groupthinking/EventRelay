@@ -16,7 +16,7 @@ import {
   sleepMs,
   type VideoPackExtractFailureReason,
 } from '@/lib/video-pack-extract-reason';
-import { parseGroundedSpec, type GroundedSpecExtraction } from '@/lib/grounded-build-spec';
+import { parseGroundedSpec, rebaseGroundedCitations, type GroundedSpecExtraction } from '@/lib/grounded-build-spec';
 import {
   parseArchitecture,
   parseArtifacts,
@@ -523,7 +523,11 @@ interface ParsedSpecJson {
   specJsonSalvaged: boolean;
 }
 
-function parseSpecJson(raw: string, videoId: string): ParsedSpecJson {
+function parseSpecJson(
+  raw: string,
+  videoId: string,
+  shard?: Pick<VideoPackExtractSection, 'start_s' | 'end_s'>,
+): ParsedSpecJson {
   const cleaned = stripJsonCodeFence(raw);
   let parsed: unknown | undefined;
   let firstError: unknown;
@@ -580,10 +584,9 @@ function parseSpecJson(raw: string, videoId: string): ParsedSpecJson {
   const visual = asRecord(root.visual_context);
   const visualElementsRaw = Array.isArray(visual?.visual_elements) ? visual.visual_elements : [];
 
-  const grounding = parseGroundedSpec(root.grounded_spec, root, videoId, recovered);
+  const grounding = parseGroundedSpec(root.grounded_spec, root, videoId, recovered, shard);
   const spec: ExtractedVideoPackSpec = {
     ...(recovered ? { spec_json_salvaged: true } : {}),
-    ...(grounding ? { grounded_spec: grounding } : {}),
     transcript: {
       language: typeof transcript.language === 'string' ? transcript.language : null,
       full_text: asString(transcript.full_text).trim(),
@@ -673,6 +676,7 @@ function parseSpecJson(raw: string, videoId: string): ParsedSpecJson {
     chapters: parsePackChapters(root.chapters),
     action_items: parsePackActionItems(root.action_items),
   };
+  if (grounding) spec.grounded_spec = rebaseGroundedCitations(grounding, root, spec);
   return { spec, specJsonSalvaged: recovered };
 }
 
@@ -765,7 +769,7 @@ async function extractSectionSpec(
     }
 
     try {
-      return parseSpecJson(result.text, input.videoId).spec;
+      return parseSpecJson(result.text, input.videoId, section).spec;
     } catch (error) {
       lastParseError = error;
       const retryParse =
