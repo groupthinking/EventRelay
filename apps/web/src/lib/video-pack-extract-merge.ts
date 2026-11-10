@@ -1,6 +1,9 @@
 import 'server-only';
 
-import type { GroundedSpecExtraction } from '@/lib/grounded-build-spec';
+import type {
+  GroundedSpecCandidate,
+  GroundedSpecExtraction,
+} from '@/lib/grounded-build-spec';
 import {
   parseArchitecture,
   parseArtifacts,
@@ -126,16 +129,88 @@ function mergeArchitecture(
   });
 }
 
+function rebaseGroundedCitations(
+  candidate: GroundedSpecCandidate,
+  source: MergedVideoPackSectionSpec,
+  transcript: MergedVideoPackSectionSpec['transcript'],
+  visualContext: NonNullable<MergedVideoPackSectionSpec['visual_context']> | null,
+): GroundedSpecCandidate {
+  const requirements = candidate.requirements.map((requirement) => ({
+    ...requirement,
+    citations: requirement.citations.map((citation) => {
+      if (citation.kind === 'transcript') {
+        const row = source.transcript.segments[citation.index];
+        const index = row
+          ? transcript.segments.findIndex(
+              (mergedRow) =>
+                mergedRow.start_s === row.start_s &&
+                mergedRow.end_s === row.end_s &&
+                normalizeKey(mergedRow.text) === normalizeKey(row.text),
+            )
+          : -1;
+        return index >= 0 ? { ...citation, index } : citation;
+      }
+
+      const row = source.visual_context?.visual_elements[citation.index];
+      const index = row && visualContext
+        ? visualContext.visual_elements.findIndex(
+            (mergedRow) =>
+              mergedRow.timestamp === row.timestamp &&
+              normalizeKey(mergedRow.content) === normalizeKey(row.content),
+          )
+        : -1;
+      return index >= 0 ? { ...citation, index } : citation;
+    }),
+  }));
+  return { ...candidate, requirements };
+}
+
+function mergeAvailableGroundedSpecs(
+  candidates: Array<{ candidate: GroundedSpecCandidate; source: MergedVideoPackSectionSpec }>,
+  transcript: MergedVideoPackSectionSpec['transcript'],
+  visualContext: MergedVideoPackSectionSpec['visual_context'],
+): GroundedSpecCandidate {
+  const rebased = candidates.map(({ candidate, source }) =>
+    rebaseGroundedCitations(candidate, source, transcript, visualContext),
+  );
+  const first = rebased[0]!;
+  return {
+    ...first,
+    sourceStatus: rebased.every((candidate) => candidate.sourceStatus === 'full') ? 'full' : 'partial',
+    confidence: Math.min(...rebased.map((candidate) => candidate.confidence)),
+    limitations: dedupeStrings(rebased.flatMap((candidate) => candidate.limitations)),
+    screens: dedupeBy(rebased.flatMap((candidate) => candidate.screens), (screen) => screen.id),
+    state: dedupeBy(rebased.flatMap((candidate) => candidate.state), (row) => row.id),
+    requirements: dedupeBy(rebased.flatMap((candidate) => candidate.requirements), (requirement) => requirement.id || requirement.title),
+    acceptanceCriteria: dedupeBy(rebased.flatMap((candidate) => candidate.acceptanceCriteria), (criterion) => criterion.id),
+    unresolved: dedupeBy(rebased.flatMap((candidate) => candidate.unresolved), (row) => row.id),
+    unsupported: dedupeBy(rebased.flatMap((candidate) => candidate.unsupported), (row) => row.id),
+  };
+}
+
 function mergeGroundedSpec(
   specs: MergedVideoPackSectionSpec[],
+  transcript: MergedVideoPackSectionSpec['transcript'],
+  visualContext: MergedVideoPackSectionSpec['visual_context'],
 ): GroundedSpecExtraction | undefined {
-  const candidates = specs
-    .map((spec) => spec.grounded_spec)
-    .filter((value): value is GroundedSpecExtraction => value !== undefined);
+  const candidates = specs.flatMap((spec) =>
+    spec.grounded_spec ? [{ spec, value: spec.grounded_spec }] : [],
+  );
   if (candidates.length === 0) return undefined;
-  const available = candidates.filter((item) => item.status === 'available');
-  const pool = available.length > 0 ? available : candidates;
-  return pool[pool.length - 1];
+  const available = candidates.filter(
+    (item): item is { spec: MergedVideoPackSectionSpec; value: Extract<GroundedSpecExtraction, { status: 'available' }> } => item.value.status === 'available',
+  );
+  if (available.length > 0) {
+    return {
+      status: 'available',
+      spec: mergeAvailableGroundedSpecs(
+        available.map(({ spec, value }) => ({ candidate: value.spec, source: spec })),
+        transcript,
+        visualContext,
+      ),
+    };
+  }
+  return candidates[candidates.length - 1]?.value;
 }
 
 function mergeVisualContext(
@@ -210,10 +285,11 @@ export function mergeSectionVideoPackSpecs(
   );
 
   const spec_json_salvaged = specs.some((spec) => spec.spec_json_salvaged);
+  const visual_context = mergeVisualContext(specs);
 
   return {
     ...(spec_json_salvaged ? { spec_json_salvaged: true } : {}),
-    grounded_spec: mergeGroundedSpec(specs),
+    grounded_spec: mergeGroundedSpec(specs, transcript, visual_context),
     transcript,
     keyframes,
     concepts,
@@ -222,7 +298,7 @@ export function mergeSectionVideoPackSpecs(
     architecture: mergeArchitecture(specs),
     artifacts,
     stack,
-    visual_context: mergeVisualContext(specs),
+    visual_context,
     chapters,
     action_items,
   };
