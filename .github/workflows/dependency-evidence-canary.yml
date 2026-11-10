@@ -1,0 +1,27 @@
+name: Dependency comparison evidence canary
+on:
+  push:
+    branches: [codex/dependency-trace-canary-20261110]
+permissions:
+  contents: read
+jobs:
+  trace:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture real dependency API pages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 -m scripts.ci.trace_dependency_comparison
+      - name: Retain trace and diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: dependency-comparison-trace-${{ github.sha }}-${{ github.run_attempt }}
+          path: dependency-trace-evidence/
+          if-no-files-found: error
+          retention-days: 30
