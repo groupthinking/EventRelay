@@ -5705,7 +5705,7 @@ requires-dist = [
     { name = "google-cloud-tasks", marker = "extra == 'cloud'", specifier = ">=2.14.0" },
     { name = "google-cloud-videointelligence", marker = "extra == 'youtube'", specifier = ">=2.13.0" },
     { name = "google-cloud-vision", marker = "extra == 'youtube'", specifier = ">=3.7.0" },
-    { name = "google-genai", specifier = ">=2.21.0" },
+    { name = "google-genai", specifier = ">=2.21.0,<3" },
     { name = "google-generativeai", specifier = ">=0.3.0" },
     { name = "google-generativeai", marker = "extra == 'ml'", specifier = ">=0.3.0" },
     { name = "httpx", specifier = ">=0.25.0" },
