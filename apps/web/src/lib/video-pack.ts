@@ -19,6 +19,7 @@ import {
   type VideoPackStack,
 } from '@/lib/video-pack-types';
 import {
+  assertDurableVideoPackStorageConfigured,
   claimPackProcessing,
   getPackRecord,
   isProcessingStale,
@@ -33,6 +34,11 @@ import {
   type ExtractedVideoPackSpec,
 } from '@/lib/video-pack-extractor';
 import { VIDEO_PACK_VIDEO_MODEL } from '@/lib/video-pack-shard-planner';
+import {
+  admitVideoPackExtraction,
+  secondsUntilUtcReset,
+  type VideoPackAdmission,
+} from '@/lib/billing/video-pack-admission';
 
 export {
   VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
@@ -443,6 +449,74 @@ export async function persistVideoPackExtraction(identity: VideoPackV0Json): Pro
   }
 }
 
+type AdmittedVideoPack = Extract<VideoPackAdmission, { allowed: true }>;
+
+/** Machine-readable start receipt (#2214). Requester is a digest, never an email. */
+function emitStartReceipt(
+  admission: AdmittedVideoPack,
+  identity: VideoPackV0Json,
+  outcome: 'started' | 'start_failed',
+): void {
+  console.info(
+    JSON.stringify({
+      scope: 'video-pack-admission',
+      event: 'extraction_start_receipt',
+      outcome,
+      requester: admission.requester,
+      plan: admission.plan,
+      quota_day: admission.day,
+      quota: admission.quota,
+      video_id: identity.video_id,
+      source_url: identity.source_url,
+      source_hash: identity.provenance.source_hash,
+      extract_pipeline: VIDEO_PACK_EXTRACT_PIPELINE_VERSION,
+      at: new Date().toISOString(),
+    }),
+  );
+}
+
+function admissionDeniedResponse(
+  admission: Extract<VideoPackAdmission, { allowed: false }>,
+): NextResponse {
+  console.info(
+    JSON.stringify({
+      scope: 'video-pack-admission',
+      event: 'extraction_denied',
+      reason: admission.reason,
+      requester: admission.requester,
+      plan: admission.plan,
+      quota: admission.quota ?? null,
+    }),
+  );
+  if (admission.reason === 'quota_store_unavailable') {
+    return NextResponse.json(
+      { status: 'error', error: 'Video pack extraction quota is unavailable; no extraction was started.' },
+      { status: 503 },
+    );
+  }
+  const headers = { 'Retry-After': String(secondsUntilUtcReset()) };
+  if (admission.reason === 'global_quota') {
+    return NextResponse.json(
+      { status: 'error', error: 'Daily Video Pack extraction capacity is exhausted. Try again tomorrow.', reason: 'global_quota' },
+      { status: 429, headers },
+    );
+  }
+  return NextResponse.json(
+    {
+      status: 'error',
+      error:
+        admission.plan === 'pro'
+          ? 'Daily Video Pack extraction limit reached.'
+          : 'Free Video Pack extraction limit reached. Sign in or upgrade to Pro for more.',
+      reason: 'subject_quota',
+      plan: admission.plan,
+      upgradeRequired: admission.plan !== 'pro',
+      quota: admission.quota,
+    },
+    { status: admission.status, headers },
+  );
+}
+
 export async function handleIdentityPackPost(request: Request): Promise<Response> {
   let body: Record<string, unknown> | null = null;
   try {
@@ -480,6 +554,19 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
     // A new POST retries after a visible failure; GET keeps serving the error.
   }
 
+  // #2214: admission before any claim or paid work. Cache hits above stay free.
+  let admission: VideoPackAdmission;
+  try {
+    assertDurableVideoPackStorageConfigured();
+    admission = await admitVideoPackExtraction(request);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Video pack admission failed.';
+    return NextResponse.json({ status: 'error', error: message }, { status: 503 });
+  }
+  if (!admission.allowed) {
+    return admissionDeniedResponse(admission);
+  }
+
   let claimed: Awaited<ReturnType<typeof claimPackProcessing>>;
   try {
     claimed = await claimPackProcessing(
@@ -493,16 +580,22 @@ export async function handleIdentityPackPost(request: Request): Promise<Response
       { reclaimReady: reclaimReady },
     );
   } catch (error) {
+    await admission.release();
     const message = error instanceof Error ? error.message : 'Video pack claim failed.';
     return NextResponse.json({ status: 'error', error: message }, { status: 503 });
   }
   if (claimed !== 'claimed') {
+    // Another request owns this video's work; this one starts nothing paid.
+    await admission.release();
     return recordToResponse(claimed);
   }
 
   try {
     await startVideoPackExtraction(identity);
+    emitStartReceipt(admission, identity, 'started');
   } catch (error) {
+    await admission.release();
+    emitStartReceipt(admission, identity, 'start_failed');
     const message = error instanceof Error ? error.message : 'Unable to start Video Pack extraction.';
     console.error('[video-pack] durable workflow start failed:', message);
     await putPackRecord({

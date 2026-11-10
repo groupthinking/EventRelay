@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -209,4 +210,89 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(patchedLegacy || patchedUrl || nodeHttp).toBe(true);
     expect(localQueue).toMatch(/dispatcher:\s*httpAgent/);
   });
+  it('executes the installed Workflow 5 HTTP core with its own Agent', () => {
+    patchInstalledWorldVercel();
+    const worldRoot = resolveWorldVercelRoot();
+    expect(worldRoot).not.toBeNull();
+    // A native child preserves the package's own module resolution and Agent
+    // class. The server is loopback-only; global fetch must never be selected.
+    const script = String.raw`
+      import assert from 'node:assert/strict';
+      import http from 'node:http';
+      import path from 'node:path';
+      import { once } from 'node:events';
+      import { createRequire } from 'node:module';
+      import { pathToFileURL } from 'node:url';
+      const worldRoot = process.argv[1];
+      const require = createRequire(path.join(worldRoot, 'package.json'));
+      const { Agent } = require('undici');
+      const { instrumentedFetch } = await import(
+        pathToFileURL(path.join(worldRoot, 'dist/http-core.js')).href
+      );
+      let received = [];
+      let dispatched = 0;
+      let globalFetchCalls = 0;
+      globalThis.fetch = async () => {
+        globalFetchCalls++;
+        throw new Error('Workflow selected a foreign global fetch');
+      };
+      const server = http.createServer(async (request, response) => {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        received.push({
+          url: request.url, method: request.method,
+          body: Buffer.concat(chunks).toString(), headers: request.headers,
+        });
+        if (request.url === '/slow') return;
+        response.writeHead(request.url === '/failure' ? 503 : 200, {
+          'content-type': 'application/json',
+        });
+        response.end(JSON.stringify({ ok: request.url === '/ok' }));
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const origin = 'http://127.0.0.1:' + server.address().port;
+      class CountingAgent extends Agent {
+        dispatch(options, handler) {
+          assert.equal(String(options.origin), origin);
+          dispatched++;
+          return super.dispatch(options, handler);
+        }
+      }
+      const dispatcher = new CountingAgent({ connections: 1 });
+      const request = (route, extra = {}) => instrumentedFetch({
+        method: 'POST', url: origin + route,
+        headers: new Headers({ 'x-workflow-regression': 'local' }),
+        body: 'workflow transport payload', dispatcher,
+        peerService: 'workflow-loopback', injectTraceContext: false,
+        timeoutMs: 2000, ...extra,
+      });
+      try {
+        const response = await request('/ok');
+        assert.equal(response.status, 200);
+        assert.deepEqual(await response.json(), { ok: true });
+        assert.equal(received[0].method, 'POST');
+        assert.equal(received[0].body, 'workflow transport payload');
+        assert.equal(received[0].headers['x-workflow-regression'], 'local');
+        assert.match(received[0].headers['x-request-time'], /^\d+$/);
+        await assert.rejects(request('/failure'), error => error.status === 503);
+        await assert.rejects(request('/slow', { timeoutMs: 500 }),
+          error => error.code === 'TIMEOUT');
+        assert.equal(dispatched, 3);
+        assert.equal(globalFetchCalls, 0);
+        assert.deepEqual(received.map(value => value.url), ['/ok', '/failure', '/slow']);
+        console.log(JSON.stringify({ requests: received.length, dispatched, globalFetchCalls }));
+      } finally {
+        await dispatcher.destroy();
+        server.closeAllConnections();
+        await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      }
+    `;
+    const output = execFileSync(process.execPath, ['--input-type=module', '--eval', script, worldRoot!], {
+      encoding: 'utf8', timeout: 10_000,
+      env: { PATH: process.env.PATH, HOME: process.env.HOME, TMPDIR: process.env.TMPDIR, NODE_ENV: 'test' },
+    });
+    expect(JSON.parse(output.trim())).toEqual({ requests: 3, dispatched: 3, globalFetchCalls: 0 });
+  }, 15_000);
+
 });

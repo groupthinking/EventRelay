@@ -7,11 +7,11 @@ for (const width of [390, 1280]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     await expect(page.locator('[data-template="openai-responses-starter"]')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'Your videos know what to do next.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Turn YouTube into bound tasks.' })).toBeVisible();
     await expect(page.locator('.template-use-cases')).toBeVisible();
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#171717');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#C2410C');
     await page.getByLabel('YouTube URL').fill('unsupported-source');
-    await page.getByRole('button', { name: 'Run in Studio' }).click();
+    await page.getByRole('button', { name: 'Build from video in Studio' }).click();
     await expect(page.locator('#home-youtube-url-error')).toHaveText('Need a valid YouTube URL.');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath(`home-${width}.png`), fullPage: true });
@@ -27,14 +27,14 @@ for (const width of [390, 1280]) {
     await page.getByLabel('YouTube URL', { exact: true }).fill('https://www.youtube.com/watch?v=auJzb1D-fag');
     if (width < 900) {
       await expect(page.getByTestId('studio-ide-video-pane')).toBeHidden();
-      await page.getByRole('button', { name: 'Source', exact: true }).click();
+      await page.getByRole('tab', { name: 'Source', exact: true }).click();
       await expect(page.getByTestId('studio-ide-video-pane')).toBeVisible();
       await expect(page.getByTestId('studio-ide-chat-pane')).toBeHidden();
       await page.getByRole('button', { name: 'Collapse video pane' }).click();
       await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
-      await page.getByRole('button', { name: 'Deliverables', exact: true }).click();
+      await page.getByRole('tab', { name: 'Deliverables', exact: true }).click();
       await expect(page.getByTestId('studio-ide-output-pane')).toBeVisible();
-      await page.getByRole('button', { name: 'Conversation', exact: true }).click();
+      await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
       await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
     } else {
       await expect(page.getByTestId('studio-ide-video-pane')).toBeVisible();
