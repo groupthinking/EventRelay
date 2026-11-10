@@ -6,10 +6,11 @@ const id = z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const seconds = z.number().finite().min(0).max(604800);
 const videoIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{11}$/);
+const MAX_CITATION_INDEX = 10000;
 const list = <T extends z.ZodTypeAny>(schema: T) => z.array(schema).max(64);
 const capability = z.enum(['browser-ui', 'local-state', 'local-persistence', 'server', 'accounts', 'shared-database', 'payments', 'secrets', 'native', 'background', 'unknown']);
 const citationSchema = z.object({
-  kind: z.enum(['transcript', 'visual']), index: z.number().int().min(0).max(10000),
+  kind: z.enum(['transcript', 'visual']), index: z.number().int().min(0).max(MAX_CITATION_INDEX),
   videoId: videoIdSchema, startSeconds: seconds, endSeconds: seconds, quote: text.min(1),
 }).strict().refine((ref) => ref.endSeconds >= ref.startSeconds, 'Reversed citation timestamps');
 const honestySchema = z.object({
@@ -56,10 +57,14 @@ export function invalidGroundedSpec(message: string): GroundedSpecRecord & { sta
 function shapeIssues(error: z.ZodError): SpecIssue[] {
   return error.issues.slice(0, 64).map((item) => issue('invalid-shape', item.message.slice(0, 500), item.path.join('.').slice(0, 240)));
 }
-const transcriptRows = z.object({ segments: z.array(z.unknown()).max(10001) });
-const visualRows = z.object({ visual_elements: z.array(z.unknown()).max(10001) });
+const transcriptRows = z.object({ segments: z.array(z.unknown()).max(MAX_CITATION_INDEX + 1) });
+const visualRows = z.object({ visual_elements: z.array(z.unknown()).max(MAX_CITATION_INDEX + 1) });
 const transcriptRow = z.object({ idx: z.number().int().nonnegative(), start_s: seconds, end_s: seconds, text: z.string().trim().min(1).max(20000) }).refine((row) => row.end_s >= row.start_s);
 const visualRow = z.object({ timestamp: seconds, content: z.string().trim().min(1).max(20000) });
+type CitationRows = {
+  transcript: { segments: Array<Pick<z.infer<typeof transcriptRow>, 'start_s' | 'end_s' | 'text'>> };
+  visual_context: { visual_elements: Array<z.infer<typeof visualRow>> } | null;
+};
 
 function resolveCitation(ref: GroundedSpecCandidate['requirements'][number]['citations'][number], evidence: SpecEvidence) {
   if (ref.kind === 'transcript') {
@@ -74,7 +79,13 @@ function resolveCitation(ref: GroundedSpecCandidate['requirements'][number]['cit
   return { kind: ref.kind, index: ref.index, ...row.data };
 }
 
-export function parseGroundedSpec(value: unknown, evidence: SpecEvidence, videoId: string, recovered = false): GroundedSpecExtraction | undefined {
+export function parseGroundedSpec(
+  value: unknown,
+  evidence: SpecEvidence,
+  videoId: string,
+  recovered = false,
+  shard?: { start_s: number; end_s: number },
+): GroundedSpecExtraction | undefined {
   if (recovered) return invalidGroundedSpec('Recovered or truncated JSON cannot establish a complete grounded specification.');
   if (value === undefined) return undefined;
   const honesty = honestySchema.safeParse(value);
@@ -99,6 +110,9 @@ export function parseGroundedSpec(value: unknown, evidence: SpecEvidence, videoI
     for (const ref of req.citations) {
       references++;
       if (ref.videoId !== videoId || !resolveCitation(ref, evidence)) issues.push(issue('invalid-citation', 'Citation must match this video, an existing source row, its timestamps and supporting text.', req.id));
+      else if (shard && (ref.startSeconds < shard.start_s || ref.endSeconds > shard.end_s)) {
+        issues.push(issue('out-of-range-citation', 'Citation must stay within the source shard time range.', req.id));
+      }
     }
   }
   for (const row of spec.acceptanceCriteria) {
@@ -109,6 +123,38 @@ export function parseGroundedSpec(value: unknown, evidence: SpecEvidence, videoI
   }
   if (references === 0) issues.push(issue('missing-evidence', 'No source-linked application requirements are available. Do not infer an app from a title or URL.'));
   return issues.length ? { status: 'invalid', issues: issues.slice(0, 200) } : { status: 'available', spec };
+}
+
+/** Keep citations attached to the same evidence when parsing or merging changes row positions. */
+export function rebaseGroundedCitations(
+  extraction: GroundedSpecExtraction,
+  source: SpecEvidence,
+  target: CitationRows,
+): GroundedSpecExtraction {
+  if (extraction.status !== 'available') return extraction;
+  const requirements: GroundedSpecCandidate['requirements'] = [];
+  for (const requirement of extraction.spec.requirements) {
+    const citations: typeof requirement.citations = [];
+    for (const ref of requirement.citations) {
+      const row = resolveCitation(ref, source);
+      let index = -1;
+      if (row?.kind === 'transcript') {
+        index = target.transcript.segments.findIndex((entry) =>
+          entry.start_s === row.start_s && entry.end_s === row.end_s && entry.text.trim() === row.text,
+        );
+      } else if (row?.kind === 'visual' && target.visual_context) {
+        index = target.visual_context.visual_elements.findIndex((entry) =>
+          entry.timestamp === row.timestamp && entry.content.trim() === row.content,
+        );
+      }
+      if (index < 0 || index > MAX_CITATION_INDEX) {
+        return { status: 'invalid', issues: [issue('invalid-citation', 'The cited source row could not be preserved.', requirement.id)] };
+      }
+      citations.push({ ...ref, index });
+    }
+    requirements.push({ ...requirement, citations });
+  }
+  return { status: 'available', spec: { ...extraction.spec, requirements } };
 }
 
 /**

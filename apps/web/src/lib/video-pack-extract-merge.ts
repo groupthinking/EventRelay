@@ -1,8 +1,9 @@
 import 'server-only';
 
-import type {
-  GroundedSpecCandidate,
-  GroundedSpecExtraction,
+import {
+  rebaseGroundedCitations,
+  type GroundedSpecCandidate,
+  type GroundedSpecExtraction,
 } from '@/lib/grounded-build-spec';
 import {
   parseArchitecture,
@@ -70,11 +71,12 @@ function dedupeStrings(values: string[]): string[] {
   return out;
 }
 
-function dedupeBy<T>(items: T[], keyFn: (item: T) => string): T[] {
+function dedupeBy<T>(items: T[], keyFn: (item: T) => string, normalize = true): T[] {
   const seen = new Set<string>();
   const out: T[] = [];
   for (const item of items) {
-    const key = normalizeKey(keyFn(item));
+    const rawKey = keyFn(item);
+    const key = normalize ? normalizeKey(rawKey) : rawKey;
     if (!key || seen.has(key)) continue;
     seen.add(key);
     out.push(item);
@@ -84,6 +86,7 @@ function dedupeBy<T>(items: T[], keyFn: (item: T) => string): T[] {
 
 function mergeTranscript(
   specs: MergedVideoPackSectionSpec[],
+  evidenceKey: (text: string) => string,
 ): MergedVideoPackSectionSpec['transcript'] {
   const language =
     specs.map((spec) => spec.transcript.language).find((lang) => typeof lang === 'string' && lang) ??
@@ -93,7 +96,7 @@ function mergeTranscript(
     .sort((a, b) => a.start_s - b.start_s || a.idx - b.idx);
   const seenSegment = new Set<string>();
   const uniqueSegments = segments.filter((segment) => {
-    const key = `${segment.start_s}:${segment.end_s}:${normalizeKey(segment.text)}`;
+    const key = `${segment.start_s}:${segment.end_s}:${evidenceKey(segment.text)}`;
     if (seenSegment.has(key)) return false;
     seenSegment.add(key);
     return true;
@@ -129,62 +132,45 @@ function mergeArchitecture(
   });
 }
 
-function rebaseGroundedCitations(
-  candidate: GroundedSpecCandidate,
-  source: MergedVideoPackSectionSpec,
-  transcript: MergedVideoPackSectionSpec['transcript'],
-  visualContext: NonNullable<MergedVideoPackSectionSpec['visual_context']> | null,
+function namespaceGroundedSpec(
+  spec: GroundedSpecCandidate,
+  shardIndex: number,
 ): GroundedSpecCandidate {
-  const requirements = candidate.requirements.map((requirement) => ({
-    ...requirement,
-    citations: requirement.citations.map((citation) => {
-      if (citation.kind === 'transcript') {
-        const row = source.transcript.segments[citation.index];
-        const index = row
-          ? transcript.segments.findIndex(
-              (mergedRow) =>
-                mergedRow.start_s === row.start_s &&
-                mergedRow.end_s === row.end_s &&
-                normalizeKey(mergedRow.text) === normalizeKey(row.text),
-            )
-          : -1;
-        return index >= 0 ? { ...citation, index } : citation;
-      }
-
-      const row = source.visual_context?.visual_elements[citation.index];
-      const index = row && visualContext
-        ? visualContext.visual_elements.findIndex(
-            (mergedRow) =>
-              mergedRow.timestamp === row.timestamp &&
-              normalizeKey(mergedRow.content) === normalizeKey(row.content),
-          )
-        : -1;
-      return index >= 0 ? { ...citation, index } : citation;
-    }),
-  }));
-  return { ...candidate, requirements };
+  // The ordinal keeps even long IDs with the same truncated prefix distinct.
+  const shardId = (id: string, index: number) => `s${shardIndex + 1}-${index + 1}-${id}`.slice(0, 64);
+  const scopeRow = <T extends { id: string }>(row: T, index: number): T => ({
+    ...row,
+    id: shardId(row.id, index),
+  });
+  const screenIds = new Map(spec.screens.map((row, index) => [row.id, shardId(row.id, index)]));
+  const requirementIds = new Map(spec.requirements.map((row, index) => [row.id, shardId(row.id, index)]));
+  // Reserve ordinal 0 for a missing reference so it cannot bind to another shard.
+  const screenId = (id: string) => screenIds.get(id) ?? shardId(id, -1);
+  const requirementId = (id: string) => requirementIds.get(id) ?? shardId(id, -1);
+  return {
+    ...spec,
+    screens: spec.screens.map(scopeRow),
+    state: spec.state.map(scopeRow),
+    requirements: spec.requirements.map((row, index) => ({ ...scopeRow(row, index), screenId: screenId(row.screenId) })),
+    acceptanceCriteria: spec.acceptanceCriteria.map((row, index) => ({ ...scopeRow(row, index), requirementId: requirementId(row.requirementId) })),
+    unresolved: spec.unresolved.map((row, index) => ({ ...scopeRow(row, index), requirementIds: row.requirementIds.map(requirementId) })),
+    unsupported: spec.unsupported.map((row, index) => ({ ...scopeRow(row, index), requirementIds: row.requirementIds.map(requirementId) })),
+  };
 }
 
-function mergeAvailableGroundedSpecs(
-  candidates: Array<{ candidate: GroundedSpecCandidate; source: MergedVideoPackSectionSpec }>,
-  transcript: MergedVideoPackSectionSpec['transcript'],
-  visualContext: MergedVideoPackSectionSpec['visual_context'],
-): GroundedSpecCandidate {
-  const rebased = candidates.map(({ candidate, source }) =>
-    rebaseGroundedCitations(candidate, source, transcript, visualContext),
-  );
-  const first = rebased[0]!;
+function mergeAvailableGroundedSpecs(candidates: [GroundedSpecCandidate, ...GroundedSpecCandidate[]]): GroundedSpecCandidate {
+  const [first] = candidates;
   return {
     ...first,
-    sourceStatus: rebased.every((candidate) => candidate.sourceStatus === 'full') ? 'full' : 'partial',
-    confidence: Math.min(...rebased.map((candidate) => candidate.confidence)),
-    limitations: dedupeStrings(rebased.flatMap((candidate) => candidate.limitations)),
-    screens: dedupeBy(rebased.flatMap((candidate) => candidate.screens), (screen) => screen.id),
-    state: dedupeBy(rebased.flatMap((candidate) => candidate.state), (row) => row.id),
-    requirements: dedupeBy(rebased.flatMap((candidate) => candidate.requirements), (requirement) => requirement.id || requirement.title),
-    acceptanceCriteria: dedupeBy(rebased.flatMap((candidate) => candidate.acceptanceCriteria), (criterion) => criterion.id),
-    unresolved: dedupeBy(rebased.flatMap((candidate) => candidate.unresolved), (row) => row.id),
-    unsupported: dedupeBy(rebased.flatMap((candidate) => candidate.unsupported), (row) => row.id),
+    sourceStatus: candidates.every((candidate) => candidate.sourceStatus === 'full') ? 'full' : 'partial',
+    confidence: Math.min(...candidates.map((candidate) => candidate.confidence)),
+    limitations: dedupeStrings(candidates.flatMap((candidate) => candidate.limitations)),
+    screens: candidates.flatMap((candidate) => candidate.screens),
+    state: candidates.flatMap((candidate) => candidate.state),
+    requirements: candidates.flatMap((candidate) => candidate.requirements),
+    acceptanceCriteria: candidates.flatMap((candidate) => candidate.acceptanceCriteria),
+    unresolved: candidates.flatMap((candidate) => candidate.unresolved),
+    unsupported: candidates.flatMap((candidate) => candidate.unsupported),
   };
 }
 
@@ -193,34 +179,31 @@ function mergeGroundedSpec(
   transcript: MergedVideoPackSectionSpec['transcript'],
   visualContext: MergedVideoPackSectionSpec['visual_context'],
 ): GroundedSpecExtraction | undefined {
-  const candidates = specs.flatMap((spec) =>
-    spec.grounded_spec ? [{ spec, value: spec.grounded_spec }] : [],
+  const candidates = specs.flatMap((spec, index) =>
+    spec.grounded_spec ? [{ spec, value: spec.grounded_spec, index }] : [],
   );
-  if (candidates.length === 0) return undefined;
-  const available = candidates.filter(
-    (item): item is { spec: MergedVideoPackSectionSpec; value: Extract<GroundedSpecExtraction, { status: 'available' }> } => item.value.status === 'available',
-  );
-  if (available.length > 0) {
-    return {
-      status: 'available',
-      spec: mergeAvailableGroundedSpecs(
-        available.map(({ spec, value }) => ({ candidate: value.spec, source: spec })),
-        transcript,
-        visualContext,
-      ),
-    };
+  const available = candidates.filter(({ value }) => value.status === 'available');
+  const merged: GroundedSpecCandidate[] = [];
+  for (const { spec, value, index } of available) {
+    const rebased = rebaseGroundedCitations(value, spec, { transcript, visual_context: visualContext });
+    if (rebased.status !== 'available') return rebased;
+    merged.push(available.length > 1 ? namespaceGroundedSpec(rebased.spec, index) : rebased.spec);
   }
+  const [first, ...rest] = merged;
+  if (first) return { status: 'available', spec: mergeAvailableGroundedSpecs([first, ...rest]) };
   return candidates[candidates.length - 1]?.value;
 }
 
 function mergeVisualContext(
   specs: MergedVideoPackSectionSpec[],
+  evidenceKey: (text: string) => string,
 ): MergedVideoPackSectionSpec['visual_context'] {
   const contexts = specs.filter((spec) => spec.visual_context);
   if (contexts.length === 0) return null;
   const visual_elements = dedupeBy(
     contexts.flatMap((spec) => spec.visual_context?.visual_elements ?? []),
-    (element) => `${element.timestamp}:${normalizeKey(element.content)}`,
+    (element) => `${element.timestamp}:${evidenceKey(element.content)}`,
+    false,
   ).sort((a, b) => a.timestamp - b.timestamp);
   const summary = contexts
     .map((spec) => spec.visual_context?.summary?.trim() ?? '')
@@ -248,7 +231,11 @@ export function mergeSectionVideoPackSpecs(
     return specs[0];
   }
 
-  const transcript = mergeTranscript(specs);
+  // A normalized duplicate may differ from the exact quote that was validated.
+  const evidenceKey = specs.some((spec) => spec.grounded_spec?.status === 'available')
+    ? (text: string) => text.trim()
+    : normalizeKey;
+  const transcript = mergeTranscript(specs, evidenceKey);
   const keyframes = dedupeBy(
     specs.flatMap((spec) => spec.keyframes),
     (frame) => `${frame.t_s}:${normalizeKey(frame.desc ?? '')}`,
@@ -285,7 +272,7 @@ export function mergeSectionVideoPackSpecs(
   );
 
   const spec_json_salvaged = specs.some((spec) => spec.spec_json_salvaged);
-  const visual_context = mergeVisualContext(specs);
+  const visual_context = mergeVisualContext(specs, evidenceKey);
 
   return {
     ...(spec_json_salvaged ? { spec_json_salvaged: true } : {}),

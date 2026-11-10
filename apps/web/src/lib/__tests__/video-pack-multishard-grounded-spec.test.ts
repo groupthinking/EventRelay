@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { GroundedSpecCandidate } from '@/lib/grounded-build-spec';
 import { applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
 import { extractVideoPackSpec } from '@/lib/video-pack-extractor';
 import {
@@ -26,7 +27,7 @@ vi.mock('@/lib/youtube-captions', () => ({
   fetchYouTubeCaptions: vi.fn(async () => null),
 }));
 
-function sectionPayload(start_s: number, includeGroundedSpec: boolean): Record<string, unknown> {
+function sectionPayload(start_s: number, includeGroundedSpec: boolean) {
   const rows = start_s === 180 ? [REAL_AUJ_TRANSCRIPT_ROWS[0]!] : start_s === 360 ? REAL_AUJ_TRANSCRIPT_ROWS.slice(1) : [];
   const visuals = start_s === 180 ? [REAL_AUJ_VISUAL_ROWS[0]!] : start_s === 360 ? REAL_AUJ_VISUAL_ROWS.slice(1) : [];
   const requirements = start_s === 180
@@ -40,7 +41,7 @@ function sectionPayload(start_s: number, includeGroundedSpec: boolean): Record<s
       ? [{ id: 'ACT-02', type: 'prompt', title: 'Query long video context with structured prompt', description: 'Ask for key sections and evidence.', difficulty: 'easy' }, { id: 'ACT-03', type: 'prototype', title: 'Test Spatial Understanding demo app in Build tab', description: 'Review the generated bounding boxes and code.', difficulty: 'medium' }]
       : [];
 
-  const payload: Record<string, unknown> = {
+  const payload = {
     transcript: {
       language: 'en',
       full_text: rows.map((row) => row.text).join(' '),
@@ -48,8 +49,9 @@ function sectionPayload(start_s: number, includeGroundedSpec: boolean): Record<s
     },
     keyframes: [], concepts: [], requirements, code_snippets: [], architecture: null,
     artifacts: [], stack: { tools: [] },
-    visual_context: visuals.length > 0 ? { visual_elements: visuals, summary: null, frame_analysis_count: visuals.length } : null,
+    visual_context: visuals.length > 0 ? { visual_elements: visuals.map((row) => ({ ...row })), summary: null, frame_analysis_count: visuals.length } : null,
     chapters: [], action_items,
+    grounded_spec: undefined as GroundedSpecCandidate | undefined,
   };
 
   if (!includeGroundedSpec || start_s === 0) return payload;
@@ -78,20 +80,27 @@ function sectionPayload(start_s: number, includeGroundedSpec: boolean): Record<s
   return payload;
 }
 
+async function extractFixture(
+  transform: (payload: ReturnType<typeof sectionPayload>, start: number) => unknown = (payload) => payload,
+) {
+  const runVideo = vi.fn(async (call: { start_s: number; sectionPrompt: string }) => ({
+    text: JSON.stringify(transform(
+      sectionPayload(call.start_s, call.sectionPrompt.includes('Also emit grounded_spec as a partial')),
+      call.start_s,
+    )),
+    interactionId: `int-${call.start_s}`,
+  }));
+  const extracted = await extractVideoPackSpec(
+    { sourceUrl: REAL_AUJ_SOURCE_URL, videoId: REAL_AUJ_VIDEO_ID },
+    { hasDirectGoogleKey: () => true, runVideoInteraction: runVideo },
+  );
+  expect(runVideo).toHaveBeenCalledTimes(3);
+  return applyExtractedSpec(buildIdentityPack(REAL_AUJ_VIDEO_ID), extracted);
+}
+
 describe('multi-shard grounded specification preservation', () => {
   it('keeps real auJzb1D-fag requirements, citations, digest input, and proposed work through consolidation', async () => {
-    const runVideo = vi.fn(async (call: { start_s: number; sectionPrompt: string }) => ({
-      text: JSON.stringify(sectionPayload(call.start_s, call.sectionPrompt.includes('Also emit grounded_spec as a partial'))),
-      interactionId: `int-${call.start_s}`,
-    }));
-
-    const extracted = await extractVideoPackSpec(
-      { sourceUrl: REAL_AUJ_SOURCE_URL, videoId: REAL_AUJ_VIDEO_ID },
-      { hasDirectGoogleKey: () => true, runVideoInteraction: runVideo },
-    );
-    const pack = applyExtractedSpec(buildIdentityPack(REAL_AUJ_VIDEO_ID), extracted);
-
-    expect(runVideo).toHaveBeenCalledTimes(3);
+    const pack = await extractFixture();
     expect(pack.provenance.source_hash).toBe(REAL_AUJ_SOURCE_HASH);
     expect(pack).toHaveProperty('grounded_spec.status', 'available');
     expect(pack.grounded_spec).toHaveProperty('contentHash', expect.stringMatching(/^[a-f0-9]{64}$/));
@@ -104,5 +113,100 @@ describe('multi-shard grounded specification preservation', () => {
     );
     expect(pack.grounded_spec?.status === 'available' ? pack.grounded_spec.spec.acceptanceCriteria : []).toHaveLength(3);
     expect(pack.action_items).toHaveLength(3);
+  });
+
+  it('keeps colliding shard IDs distinct and rewrites every grounded reference', async () => {
+    const sharedId = 'a'.repeat(64);
+    const pack = await extractFixture((payload, start) => {
+      const spec = payload.grounded_spec;
+      if (!spec) return payload;
+      const req = spec.requirements[0]!;
+      const criterion = spec.acceptanceCriteria[0]!;
+      req.id = sharedId;
+      req.screenId = sharedId;
+      criterion.id = sharedId;
+      criterion.requirementId = sharedId;
+      criterion.then = `Expected outcome in shard ${start}`;
+      spec.screens[0] = { id: sharedId, name: `Screen in shard ${start}`, purpose: '' };
+      spec.state[0] = { ...spec.state[0]!, id: sharedId, name: `State in shard ${start}` };
+      spec.unresolved = [{ id: sharedId, requirementIds: [sharedId], question: `Question in shard ${start}`, required: start === 360 }];
+      spec.unsupported = [{ id: sharedId, requirementIds: [sharedId], capability: 'server', reason: `Limit in shard ${start}`, required: true }];
+      return payload;
+    });
+
+    expect(pack.grounded_spec?.status).toBe('available');
+    if (pack.grounded_spec?.status !== 'available') throw new Error('Grounded spec unavailable');
+    const spec = pack.grounded_spec.spec;
+    expect(spec.requirements).toHaveLength(3);
+    for (const [start, title] of [[180, REAL_AUJ_GROUNDED_SPEC.requirements[0]!.title], [360, REAL_AUJ_GROUNDED_SPEC.requirements[1]!.title]] as const) {
+      const req = spec.requirements.find((row) => row.title === title);
+      expect(req?.id).toMatch(/^[\w-]{1,64}$/);
+      expect(spec.screens.find((row) => row.id === req?.screenId)?.name).toBe(`Screen in shard ${start}`);
+      expect(spec.state.some((row) => row.name === `State in shard ${start}`)).toBe(true);
+      expect(spec.acceptanceCriteria.find((row) => row.then === `Expected outcome in shard ${start}`)?.requirementId).toBe(req?.id);
+      expect(spec.unresolved.find((row) => row.question === `Question in shard ${start}`)).toMatchObject({ requirementIds: [req?.id], required: start === 360 });
+      expect(spec.unsupported.find((row) => row.reason === `Limit in shard ${start}`)?.requirementIds).toEqual([req?.id]);
+    }
+  });
+
+  it('rebases raw transcript and visual indices when the parser filters preceding rows', async () => {
+    const pack = await extractFixture((payload, start) => {
+      if (start !== 360 || !payload.grounded_spec || !payload.visual_context) return payload;
+      for (const req of payload.grounded_spec.requirements) {
+        for (const ref of req.citations) ref.index += 2;
+      }
+      return {
+        ...payload,
+        transcript: { ...payload.transcript, segments: [null, { text: '' }, ...payload.transcript.segments] },
+        visual_context: { ...payload.visual_context, visual_elements: [null, { content: '' }, ...payload.visual_context.visual_elements] },
+      };
+    });
+    expect(pack.grounded_spec).toMatchObject({
+      status: 'available',
+      spec: { requirements: expect.arrayContaining([expect.objectContaining({
+        title: REAL_AUJ_GROUNDED_SPEC.requirements[2]!.title,
+        citations: [expect.objectContaining({ index: 2, startSeconds: 438 }), expect.objectContaining({ index: 2, startSeconds: 455 })],
+      })]) },
+    });
+  });
+
+  it('keeps exact transcript and visual evidence when same-time rows differ only in case', async () => {
+    const pack = await extractFixture((payload, start) => {
+      if (!payload.grounded_spec || !payload.visual_context) return payload;
+      const text = start === 180 ? 'Click Save' : 'Click save';
+      const content = start === 180 ? 'Save button' : 'save button';
+      Object.assign(payload.transcript.segments[0]!, { start_s: 360, end_s: 360, text });
+      Object.assign(payload.visual_context.visual_elements[0]!, { timestamp: 360, content });
+      const [transcript, visual] = payload.grounded_spec.requirements[0]!.citations;
+      Object.assign(transcript!, { startSeconds: 360, endSeconds: 360, quote: text });
+      Object.assign(visual!, { startSeconds: 360, endSeconds: 360, quote: content });
+      return payload;
+    });
+    expect(pack.grounded_spec?.status).toBe('available');
+    expect(pack.transcript.segments.map((row) => row.text)).toEqual(expect.arrayContaining(['Click Save', 'Click save']));
+    expect(pack.visual_context?.visual_elements.map((row) => row.content)).toEqual(expect.arrayContaining(['Save button', 'save button']));
+  });
+
+  it.each([
+    ['transcript before the shard', 'transcript', 179, 353],
+    ['transcript past the shard end', 'transcript', 344, 361],
+    ['visual before the shard', 'visual', 179, 179],
+    ['visual past the shard end', 'visual', 361, 361],
+  ] as const)('rejects cited %s even when it matches a response row', async (_, kind, startSeconds, endSeconds) => {
+    const pack = await extractFixture((payload, start) => {
+      if (start !== 180) return { ...payload, grounded_spec: undefined };
+      const ref = payload.grounded_spec!.requirements[0]!.citations.find((row) => row.kind === kind)!;
+      Object.assign(ref, { startSeconds, endSeconds });
+      if (kind === 'transcript') {
+        Object.assign(payload.transcript.segments[ref.index]!, { start_s: startSeconds, end_s: endSeconds });
+      } else {
+        payload.visual_context!.visual_elements[ref.index]!.timestamp = startSeconds;
+      }
+      return payload;
+    });
+    expect(pack.grounded_spec).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'out-of-range-citation' })]),
+    });
   });
 });
