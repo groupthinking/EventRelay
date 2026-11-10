@@ -181,6 +181,7 @@ class Harness:
               CREATE TABLE IF NOT EXISTS events (
                 seq INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL,
                 body TEXT NOT NULL, previous_hash TEXT NOT NULL, event_hash TEXT NOT NULL);
+              CREATE INDEX IF NOT EXISTS idx_events_task_seq ON events(task_id, seq);
               CREATE TRIGGER IF NOT EXISTS no_event_update BEFORE UPDATE ON events
                 BEGIN SELECT RAISE(ABORT, 'History is append-only'); END;
               CREATE TRIGGER IF NOT EXISTS no_event_delete BEFORE DELETE ON events
@@ -336,6 +337,25 @@ class Harness:
         finally:
             os.close(fd)
 
+    def _sync_existing_artifact(self, task_id):
+        """Make recovered, verified bytes durable before recording completion."""
+        final = self.artifacts / (task_id + ".txt")
+        fd = os.open(final, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise ContractError("Unsafe recovered artifact")
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        directory_fd = os.open(
+            self.artifacts, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        )
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+
     def run(self, task_id, *, fault=None):
         if fault not in (None, "after_intent", "after_write"):
             raise ContractError("Unknown test fault")
@@ -377,12 +397,45 @@ class Harness:
             if task["state"] in ("failed", "blocked"):
                 return self._receipt(task_id)
             if evidence:
+                if evidence["all_passed"]:
+                    try:
+                        # A crash after link() or a prior directory fsync failure
+                        # leaves matching bytes without established durability.
+                        self._sync_existing_artifact(task_id)
+                    except (OSError, ContractError) as exc:
+                        with self.db:
+                            attempts = task["attempts"]
+                            if attempts < contract["budget"]["max_attempts"]:
+                                self.db.execute(
+                                    "UPDATE tasks SET attempts=attempts+1 WHERE id=?",
+                                    (task_id,),
+                                )
+                                attempts += 1
+                                self._set(task_id, "running", "Artifact resync attempt recorded")
+                            denied = isinstance(exc, PermissionError) or (
+                                isinstance(exc, OSError)
+                                and exc.errno in (errno.EACCES, errno.EPERM, errno.EROFS)
+                            )
+                            state = (
+                                "blocked"
+                                if denied
+                                else (
+                                    "failed"
+                                    if attempts >= contract["budget"]["max_attempts"]
+                                    or isinstance(exc, ContractError)
+                                    else "retryable"
+                                )
+                            )
+                            self._set(
+                                task_id, state, "Recovered artifact sync failed: " + str(exc)
+                            )
+                        return self._receipt(task_id)
                 with self.db:
                     self._set(
                         task_id,
                         "complete" if evidence["all_passed"] else "failed",
                         (
-                            "Recovered and verified existing bytes"
+                            "Recovered, synced and verified existing bytes"
                             if evidence["all_passed"]
                             else "Existing artifact does not satisfy required gates"
                         ),
