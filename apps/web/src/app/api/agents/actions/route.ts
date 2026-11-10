@@ -201,6 +201,11 @@ export async function POST(request: Request): Promise<NextResponse> {
         (origin !== new URL(request.url).origin && !bearerOnly)) {
       return NextResponse.json({ success: false, error: 'Untrusted journal write origin', actions: [] }, { status: 403 });
     }
+    // A same-origin text/plain form is still a write when request.json()
+    // accepts JSON-shaped bytes. Require JSON for every journal mutation.
+    if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      return NextResponse.json({ success: false, error: 'Send an application/json request', actions: [] }, { status: 415 });
+    }
   }
 
   const journalIdentity = reviewJournal ? await resolveTrustedBillingEmail(request) : null;
