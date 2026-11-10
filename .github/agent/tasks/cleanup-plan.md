@@ -17,7 +17,6 @@
 - `AGENTS.md` (4.3KB) - Agent architecture docs
 - `GEMINI.md` (648B) - Gemini-specific rules
 - `CLAUDE.md` (4.2KB) - Claude-specific context
-- `SKILL.md` (12.8KB) - Large skill documentation
 - `README.md` (18KB) - Main readme
 
 ### Proposed Structure:

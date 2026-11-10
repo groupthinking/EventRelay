@@ -161,19 +161,15 @@ cloud = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/uvai/youtube-extension"
-Documentation = "https://uvai.github.io/youtube-extension/"
-Repository = "https://github.com/uvai/youtube-extension.git"
-Issues = "https://github.com/uvai/youtube-extension/issues"
-Changelog = "https://github.com/uvai/youtube-extension/blob/main/docs/changelog/v1.0.0.md"
+Homepage = "https://github.com/groupthinking/EventRelay"
+Documentation = "https://github.com/groupthinking/EventRelay"
+Repository = "https://github.com/groupthinking/EventRelay"
+Issues = "https://github.com/groupthinking/EventRelay/issues"
+Changelog = "https://github.com/groupthinking/EventRelay"
 
 [project.scripts]
 youtube-extension = "youtube_extension.cli:main"
-youtube-migrate = "youtube_extension.cli:migrate"
 youtube-test = "youtube_extension.cli:test"
-"uvai.api" = "uvai.api.server:main"
-"uvai.core" = "uvai.core.server:main"
-"youtube-worker" = "youtube_extension.backend.worker:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

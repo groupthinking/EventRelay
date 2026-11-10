@@ -49,7 +49,10 @@ jobs:
             });
             // GitHub caps the PR file listing at 3,000 files. A security-marked
             // PR with an incomplete listing must fail closed into evidence review.
-            const fileListIncomplete = changedFiles.length < pr.changed_files;
+            const fileListIncomplete =
+              !Number.isInteger(pr.changed_files) ||
+              changedFiles.length < pr.changed_files ||
+              changedFiles.length >= 3000;
             const dependencyChange = fileListIncomplete || changedFiles.some(file =>
               /(^|\/)(package(?:-lock)?\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|(?:requirements|constraints)[^/]*\.(?:txt|in)|setup\.(?:py|cfg)|Pipfile(?:\.lock)?|pylock\.toml|pyproject\.toml|poetry\.lock|uv\.lock)$/.test(file.filename)
             );
@@ -109,4 +112,3 @@ jobs:
             if (findings.some(finding => finding.startsWith('❌'))) {
               core.setFailed('PR validation failed');
             }
-

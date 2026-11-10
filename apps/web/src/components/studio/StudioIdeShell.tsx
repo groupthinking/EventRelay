@@ -12,6 +12,14 @@ type StudioIdeShellProps = {
 
 const MIN_SIDE = 240;
 const MAX_SIDE = 560;
+const MIN_CHAT = 240;
+const RESIZE_STEP = 20;
+const MOBILE_PANES = ['video', 'chat', 'output'] as const;
+type MobilePane = (typeof MOBILE_PANES)[number];
+
+function clampPaneWidth(value: number, maximum = MAX_SIDE): number {
+  return Math.min(Math.max(MIN_SIDE, maximum), Math.max(MIN_SIDE, value));
+}
 
 /**
  * Three-pane Studio IDE shell: top toolbar, then video | chat | output.
@@ -26,19 +34,59 @@ export default function StudioIdeShell({
   chatPane,
   outputPane,
 }: StudioIdeShellProps) {
-  const [mobilePane, setMobilePane] = useState<'video' | 'chat' | 'output'>('chat');
+  const [mobilePane, setMobilePane] = useState<MobilePane>('chat');
   const shellRef = useRef<HTMLDivElement>(null);
+  const panesRef = useRef<HTMLElement>(null);
   const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(340);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [sideBudget, setSideBudget] = useState<number | null>(null);
+
+  // Reserve space for the conversation and actual splitter/restore controls.
+  // Keep requested widths so a temporary narrow viewport does not erase them.
+  useEffect(() => {
+    const panes = panesRef.current;
+    if (!panes) return;
+    const controls = Array.from(panes.children).filter((child) =>
+      child.matches('.uvai-splitter, button'),
+    );
+    const measure = () => {
+      const width = panes.getBoundingClientRect().width;
+      if (!width) return;
+      const controlsWidth = controls.reduce((total, control) =>
+        total + control.getBoundingClientRect().width, 0);
+      const minimum = MIN_SIDE * (Number(!leftCollapsed) + Number(!rightCollapsed));
+      setSideBudget(Math.max(minimum, width - MIN_CHAT - controlsWidth));
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(panes);
+    controls.forEach((control) => observer.observe(control));
+    return () => observer.disconnect();
+  }, [leftCollapsed, rightCollapsed]);
+
+  const available = sideBudget ?? Number.POSITIVE_INFINITY;
+  const renderedLeftWidth = clampPaneWidth(leftWidth,
+    Math.min(MAX_SIDE, available - (rightCollapsed ? 0 : MIN_SIDE)));
+  const renderedRightWidth = clampPaneWidth(rightWidth,
+    Math.min(MAX_SIDE, available - (leftCollapsed ? 0 : renderedLeftWidth)));
+  const maxLeftWidth = Math.min(MAX_SIDE, available - (rightCollapsed ? 0 : renderedRightWidth));
+  const maxRightWidth = Math.min(MAX_SIDE, available - (leftCollapsed ? 0 : renderedLeftWidth));
+
+  const selectMobilePane = useCallback((pane: MobilePane) => {
+    setMobilePane(pane);
+    if (pane === 'video') setLeftCollapsed(false);
+    if (pane === 'output') setRightCollapsed(false);
+  }, []);
 
   useEffect(() => {
     const root = shellRef.current;
     if (!root) return;
-    root.style.setProperty('--ide-left-w', `${leftWidth}px`);
-    root.style.setProperty('--ide-right-w', `${rightWidth}px`);
-  }, [leftWidth, rightWidth]);
+    root.style.setProperty('--ide-left-w', `${renderedLeftWidth}px`);
+    root.style.setProperty('--ide-right-w', `${renderedRightWidth}px`);
+  }, [renderedLeftWidth, renderedRightWidth]);
 
   const startResize = useCallback(
     (side: 'left' | 'right', splitter: HTMLElement) => {
@@ -46,21 +94,41 @@ export default function StudioIdeShell({
         const bounds = shellRef.current?.getBoundingClientRect();
         if (!bounds) return;
         if (side === 'left') {
-          setLeftWidth(Math.min(MAX_SIDE, Math.max(MIN_SIDE, clientX - bounds.left)));
+          setLeftWidth(clampPaneWidth(clientX - bounds.left, maxLeftWidth));
         } else {
-          setRightWidth(Math.min(MAX_SIDE, Math.max(MIN_SIDE, bounds.right - clientX)));
+          setRightWidth(clampPaneWidth(bounds.right - clientX, maxRightWidth));
         }
       };
       const onUp = () => {
         window.removeEventListener('pointermove', onPointerMove);
         window.removeEventListener('pointerup', onUp);
+        splitter.dataset.dragging = 'false';
       };
       const onPointerMove = (e: PointerEvent) => onMove(e.clientX);
       window.addEventListener('pointermove', onPointerMove);
       window.addEventListener('pointerup', onUp);
       splitter.dataset.dragging = 'true';
     },
-    [],
+    [maxLeftWidth, maxRightWidth],
+  );
+
+  const onSplitterKeyDown = useCallback(
+    (side: 'left' | 'right', key: string) => {
+      const update = side === 'left' ? setLeftWidth : setRightWidth;
+      const current = side === 'left' ? renderedLeftWidth : renderedRightWidth;
+      const maximum = side === 'left' ? maxLeftWidth : maxRightWidth;
+      let next: number | null = null;
+      if (key === 'Home') next = MIN_SIDE;
+      if (key === 'End') next = maximum;
+      if (key === 'ArrowRight') next = current + (side === 'left' ? RESIZE_STEP : -RESIZE_STEP);
+      if (key === 'ArrowLeft') next = current + (side === 'left' ? -RESIZE_STEP : RESIZE_STEP);
+      if (key === 'ArrowUp') next = current + RESIZE_STEP;
+      if (key === 'ArrowDown') next = current - RESIZE_STEP;
+      if (next === null) return false;
+      update(clampPaneWidth(next, maximum));
+      return true;
+    },
+    [renderedLeftWidth, renderedRightWidth, maxLeftWidth, maxRightWidth],
   );
 
   return (
@@ -74,33 +142,35 @@ export default function StudioIdeShell({
       <div data-testid="studio-ide-toolbar" className="uvai-toolbar">
         {toolbar}
       </div>
-      <div className="template-pane-tabs" role="toolbar" aria-label="Studio views">
-        {(['video', 'chat', 'output'] as const).map((pane) => (
-          <button key={pane} type="button" id={`studio-tab-${pane}`}
-            aria-pressed={mobilePane === pane} aria-controls={`studio-panel-${pane}`}
+      <div className="template-pane-tabs" role="tablist" aria-label="Studio views">
+        {MOBILE_PANES.map((pane) => (
+          <button key={pane} type="button" role="tab" id={`studio-tab-${pane}`}
+            aria-selected={mobilePane === pane} aria-controls={`studio-panel-${pane}`}
             tabIndex={mobilePane === pane ? 0 : -1}
             onKeyDown={(event) => {
-              const panes = ['video', 'chat', 'output'] as const;
-              const index = panes.indexOf(pane);
-              const next = event.key === 'ArrowRight' ? panes[(index + 1) % 3]
-                : event.key === 'ArrowLeft' ? panes[(index + 2) % 3]
+              const index = MOBILE_PANES.indexOf(pane);
+              const next = event.key === 'ArrowRight' ? MOBILE_PANES[(index + 1) % 3]
+                : event.key === 'ArrowLeft' ? MOBILE_PANES[(index + 2) % 3]
                   : event.key === 'Home' ? 'video' : event.key === 'End' ? 'output' : null;
               if (next) {
-                event.preventDefault(); setMobilePane(next); setLeftCollapsed(false); setRightCollapsed(false);
+                event.preventDefault();
+                selectMobilePane(next);
                 document.getElementById(`studio-tab-${next}`)?.focus();
               }
             }}
-            onClick={() => { setMobilePane(pane); setLeftCollapsed(false); setRightCollapsed(false); }}
+            onClick={() => selectMobilePane(pane)}
           >{pane === 'video' ? 'Source' : pane === 'chat' ? 'Conversation' : 'Deliverables'}</button>
         ))}
       </div>
-      <div className="template-studio-panes flex min-h-0 flex-1">
+      <main ref={panesRef} aria-label="Studio workspace" className="template-studio-panes flex min-h-0 flex-1">
         {/* LEFT: video */}
         {!leftCollapsed ? (
           <aside
             id="studio-panel-video"
             data-testid="studio-ide-video-pane"
             aria-label="Video"
+            role="tabpanel"
+            aria-labelledby="studio-tab-video"
             className="uvai-card flex min-h-0 w-[var(--ide-left-w)] shrink-0 flex-col overflow-hidden"
           >
             <div className="uvai-pane-header">
@@ -108,6 +178,8 @@ export default function StudioIdeShell({
               <button
                 type="button"
                 aria-label="Collapse video pane"
+                aria-controls="studio-panel-video"
+                aria-expanded={!leftCollapsed}
                 onClick={() => { setLeftCollapsed(true); setMobilePane('chat'); }}
                 className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
@@ -122,20 +194,30 @@ export default function StudioIdeShell({
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize video pane"
+            aria-controls="studio-panel-video"
+            aria-valuemin={MIN_SIDE}
+            aria-valuemax={maxLeftWidth}
+            aria-valuenow={renderedLeftWidth}
             data-testid="studio-ide-splitter-left"
             className="uvai-splitter"
+            tabIndex={0}
             onPointerDown={(e) => {
               e.preventDefault();
               startResize('left', e.currentTarget);
+            }}
+            onKeyDown={(event) => {
+              if (onSplitterKeyDown('left', event.key)) event.preventDefault();
             }}
           />
         ) : null}
 
         {/* CENTER: chat */}
-        <main
+        <div
           id="studio-panel-chat"
           data-testid="studio-ide-chat-pane"
           aria-label="Chat"
+          role="tabpanel"
+          aria-labelledby="studio-tab-chat"
           className="uvai-card flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         >
           <div className="uvai-pane-header">
@@ -143,6 +225,8 @@ export default function StudioIdeShell({
             {leftCollapsed ? (
               <button
                 type="button"
+                aria-controls="studio-panel-video"
+                aria-expanded={!leftCollapsed}
                 onClick={() => setLeftCollapsed(false)}
                 className="uvai-btn !px-2.5 !py-1 !text-xs"
               >
@@ -151,18 +235,26 @@ export default function StudioIdeShell({
             ) : null}
           </div>
           <div className="min-h-0 flex-1">{chatPane}</div>
-        </main>
+        </div>
 
         {!rightCollapsed ? (
           <div
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize output pane"
+            aria-controls="studio-panel-output"
+            aria-valuemin={MIN_SIDE}
+            aria-valuemax={maxRightWidth}
+            aria-valuenow={renderedRightWidth}
             data-testid="studio-ide-splitter-right"
             className="uvai-splitter"
+            tabIndex={0}
             onPointerDown={(e) => {
               e.preventDefault();
               startResize('right', e.currentTarget);
+            }}
+            onKeyDown={(event) => {
+              if (onSplitterKeyDown('right', event.key)) event.preventDefault();
             }}
           />
         ) : null}
@@ -173,6 +265,8 @@ export default function StudioIdeShell({
             id="studio-panel-output"
             data-testid="studio-ide-output-pane"
             aria-label="Output"
+            role="tabpanel"
+            aria-labelledby="studio-tab-output"
             className="uvai-card flex min-h-0 w-[var(--ide-right-w)] shrink-0 flex-col overflow-hidden"
           >
             <div className="uvai-pane-header">
@@ -180,6 +274,8 @@ export default function StudioIdeShell({
               <button
                 type="button"
                 aria-label="Collapse output pane"
+                aria-controls="studio-panel-output"
+                aria-expanded={!rightCollapsed}
                 onClick={() => { setRightCollapsed(true); setMobilePane('chat'); }}
                 className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
               >
@@ -191,6 +287,8 @@ export default function StudioIdeShell({
         ) : (
           <button
             type="button"
+            aria-controls="studio-panel-output"
+            aria-expanded={!rightCollapsed}
             onClick={() => setRightCollapsed(false)}
             className="uvai-card shrink-0 px-2 text-xs font-medium text-slate-500 hover:text-slate-700"
             aria-label="Show output pane"
@@ -198,7 +296,7 @@ export default function StudioIdeShell({
             Output
           </button>
         )}
-      </div>
+      </main>
     </div>
   );
 }
