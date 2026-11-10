@@ -7,6 +7,7 @@ import { hasGeminiKey } from '@/lib/gemini-client';
 import { dedupeAgentActions, type AgentAction } from '@/lib/action-lifecycle';
 import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
+import { resolveActionReviewJournal } from '@/lib/action-review-journal.mjs';
 
 const MAX_CONFIRMED_ACTIONS = 50;
 const PRO_ACTION_TOOLS = new Set([
@@ -77,7 +78,19 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return NextResponse.json({ success: false, error: 'Request body must be a JSON object', actions: [] }, { status: 400 });
   }
+  // Local-only review is a host policy, never a client-selectable mode.
+  // Fail closed on invalid configuration before either preview or execution.
+  let reviewJournal: ReturnType<typeof resolveActionReviewJournal>;
+  try {
+    reviewJournal = resolveActionReviewJournal();
+  } catch {
+    return NextResponse.json({ success: false, error: 'Local review journal is unavailable', actions: [] }, { status: 503 });
+  }
+
   const { mode, transcript, videoTitle, jobId, actions, confirmationToken } = body;
+  if (reviewJournal && mode === 'execute') {
+    return NextResponse.json({ success: false, error: 'This host is configured for durable review only; no actions may execute', actions: [] }, { status: 409 });
+  }
   if (mode === 'execute') {
     if (
       !Array.isArray(actions) ||
@@ -180,6 +193,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  if (reviewJournal) {
+    const origin = request.headers.get('origin');
+    const bearerOnly = origin === null && !request.headers.has('cookie') &&
+      /^Bearer \S+$/.test(request.headers.get('authorization') ?? '');
+    if (request.headers.get('sec-fetch-site') === 'cross-site' ||
+        (origin !== new URL(request.url).origin && !bearerOnly)) {
+      return NextResponse.json({ success: false, error: 'Untrusted journal write origin', actions: [] }, { status: 403 });
+    }
+    // A same-origin text/plain form is still a write when request.json()
+    // accepts JSON-shaped bytes. Require JSON for every journal mutation.
+    if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      return NextResponse.json({ success: false, error: 'Send an application/json request', actions: [] }, { status: 415 });
+    }
+  }
+
+  const journalIdentity = reviewJournal ? await resolveTrustedBillingEmail(request) : null;
+  if (reviewJournal && !journalIdentity) {
+    return NextResponse.json({ success: false, error: 'Sign in before persisting a local review plan', actions: [] }, { status: 401 });
+  }
+
   try {
     const result = await runActionAgent({
       transcript,
@@ -188,8 +221,14 @@ export async function POST(request: Request): Promise<NextResponse> {
       executeTools: false,
     });
 
+    // Persistence is mandatory when local-review-only is enabled. Never
+    // return an ephemeral success or an executable confirmation token.
+    const localArtifactReceipt = reviewJournal
+      ? await reviewJournal.persist(result.actions, journalIdentity)
+      : undefined;
+
     const hasTasks = result.actions.some(action => action.tool === 'create_workflow_task');
-    const previewOwner = hasTasks ? await workflowTaskOwner(request) : null;
+    const previewOwner = !reviewJournal && hasTasks ? await workflowTaskOwner(request) : null;
     // Only server-generated plans can receive a receipt. Client run IDs remain
     // correlation hints; confirmed task identity uses the returned server ID.
     if (previewOwner && result.actions.some(action => !AVAILABLE_TOOL_NAMES.includes(action.tool))) {
@@ -202,6 +241,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       provider: result.provider,
       actions: result.actions,
       ...(confirmation ?? {}),
+      ...(localArtifactReceipt ? { localArtifactReceipt } : {}),
     });
   } catch (error) {
     console.error('Action agent error:', error);
