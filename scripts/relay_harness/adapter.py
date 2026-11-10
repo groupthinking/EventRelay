@@ -41,7 +41,7 @@ def prepare_review_artifact(key, actions, context=None):
             raise ContractError(
                 "Only known pending review-only actions can be journaled"
             )
-        if action.get("isError") not in (None, False):
+        if "isError" in action and action["isError"] is not False:
             raise ContractError("Failed actions are not a review plan")
         if "result" in action:
             text(action["result"], "result")
