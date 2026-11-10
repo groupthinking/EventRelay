@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -92,6 +92,50 @@ test('combined route rejects cookie-authenticated cross-origin journal writes', 
       body:JSON.stringify({transcript:'A sufficiently long transcript for review'}),
     }));
     assert.equal(response.status,403);
+    assert.deepEqual(state.calls,[]);
+  } finally {reset();await rm(dir,{recursive:true,force:true});}
+});
+
+test('same-origin text/plain journal form fails before model generation', async () => {
+  reset();const dir=await mkdtemp(join(tmpdir(),'relay-integrated-'));enable(dir);
+  try {
+    const response=await POST(new Request('http://localhost/api/agents/actions',{
+      method:'POST',
+      headers:{origin:'http://localhost','content-type':'text/plain',cookie:'session=authenticated'},
+      body:JSON.stringify({transcript:'A sufficiently long transcript for review'}),
+    }));
+    assert.equal(response.status,415);
+    assert.deepEqual(state.calls,[]);
+  } finally {reset();await rm(dir,{recursive:true,force:true});}
+});
+test('cookie-free bearer review request preserves trusted non-browser access', async () => {
+  reset();const dir=await mkdtemp(join(tmpdir(),'relay-integrated-'));enable(dir);
+  try {
+    const response=await POST(new Request('http://localhost/api/agents/actions',{
+      method:'POST',
+      headers:{'content-type':'application/json',authorization:'Bearer fixture-trusted-session'},
+      body:JSON.stringify({transcript:'A sufficiently long transcript for review'}),
+    }));
+    assert.equal(response.status,200);
+    assert.equal((await response.json()).localArtifactReceipt.artifactVerified,true);
+    assert.deepEqual(state.calls.map(call=>call[0]),['model']);
+  } finally {reset();await rm(dir,{recursive:true,force:true});}
+});
+test('invalid interpreter and harness configuration fail before the model call', async () => {
+  reset();const dir=await mkdtemp(join(tmpdir(),'relay-integrated-'));enable(dir);
+  try {
+    process.env.RELAY_REVIEW_PYTHON_EXECUTABLE=join(dir,'missing-interpreter');
+    assert.equal((await POST(request({transcript:'A sufficiently long transcript for review'}))).status,503);
+    assert.deepEqual(state.calls,[]);
+    process.env.RELAY_REVIEW_PYTHON_EXECUTABLE=python;
+    process.env.RELAY_REVIEW_SCRIPTS_DIRECTORY=join(dir,'missing-scripts');
+    assert.equal((await POST(request({transcript:'A sufficiently long transcript for review'}))).status,503);
+    assert.deepEqual(state.calls,[]);
+    process.env.RELAY_REVIEW_SCRIPTS_DIRECTORY=join(root,'scripts');
+    const nonDirectory=join(dir,'file-in-place-of-state');
+    await writeFile(nonDirectory,'not a directory');
+    process.env.RELAY_REVIEW_STATE_DIRECTORY=nonDirectory;
+    assert.equal((await POST(request({transcript:'A sufficiently long transcript for review'}))).status,503);
     assert.deepEqual(state.calls,[]);
   } finally {reset();await rm(dir,{recursive:true,force:true});}
 });
