@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
-from urllib.request import HTTPRedirectHandler, build_opener
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from scripts.ci.record_dependency_review import record_dependency_review
 
@@ -32,7 +32,7 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def capture(env, dest, opener):
+def capture(env, dest, opener, *, probe_page_size=None):
     dest.mkdir(parents=True, exist_ok=False)
     token = env["GITHUB_TOKEN"]
     if not token:
@@ -61,6 +61,9 @@ def capture(env, dest, opener):
             raise ValueError("Request outside exact trusted comparison")
         if len(pages) >= 40:
             raise ValueError("Canary exceeded 40 pages")
+        if not pages and probe_page_size is not None:
+            request = Request(request.full_url + f"?per_page={probe_page_size}",
+                              headers=request.headers)
         page = {"url": request.full_url, "status": None}
         pages.append(page)
         try:
@@ -113,7 +116,8 @@ def main():
     summaries = {}
     for name, (base, head) in PAIRS.items():
         receipt = capture(dict(env, BASE_SHA=base, HEAD_SHA=head),
-                          Path("dependency-trace-evidence") / name, opener)
+                          Path("dependency-trace-evidence") / name, opener,
+                          probe_page_size=100 if name == "large" else None)
         summaries[name] = (receipt["status"], len(receipt["pages"]), receipt.get("rows"))
         print(name, summaries[name])
     status, pages, _ = summaries["large"]
