@@ -5,8 +5,9 @@
  */
 import { execFile } from 'node:child_process';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
+import { accessSync, constants, lstatSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, isAbsolute } from 'node:path';
+import { join, isAbsolute, dirname } from 'node:path';
 import { promisify } from 'node:util';
 
 const executeFile = promisify(execFile);
@@ -21,6 +22,54 @@ export function createLocalReviewBridge(config) {
   for (const value of [stateDirectory, scriptsDirectory, pythonExecutable]) {
     if (typeof value !== 'string' || !isAbsolute(value)) {
       throw new Error('Trusted host paths must be absolute');
+    }
+  }
+
+  // Fail before any model invocation if the trusted host cannot run the
+  // journal or retain its state. This preflight does not execute a plan or
+  // create directories; the Python harness independently revalidates paths.
+  const interpreter = statSync(pythonExecutable);
+  if (!interpreter.isFile()) throw new Error('Review interpreter is not a file');
+  accessSync(pythonExecutable, constants.X_OK);
+  if (!statSync(scriptsDirectory).isDirectory()) {
+    throw new Error('Review harness directory is unavailable');
+  }
+  accessSync(scriptsDirectory, constants.R_OK | constants.X_OK);
+  for (const module of ['__init__.py', '__main__.py', 'adapter.py', 'core.py']) {
+    const file = join(scriptsDirectory, 'relay_harness', module);
+    if (!statSync(file).isFile()) throw new Error('Review harness module is unavailable');
+    accessSync(file, constants.R_OK);
+  }
+  let nearestExisting = stateDirectory;
+  for (;;) {
+    try {
+      const entry = lstatSync(nearestExisting);
+      if (entry.isSymbolicLink() || !entry.isDirectory()) {
+        throw new Error('Review state path is unsafe');
+      }
+      const parent = dirname(nearestExisting);
+      if (parent === nearestExisting) break;
+      nearestExisting = parent;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      const parent = dirname(nearestExisting);
+      if (parent === nearestExisting) throw error;
+      nearestExisting = parent;
+    }
+  }
+  // Existing state roots need read/write/traverse; a missing root needs a
+  // writable parent for the harness to create the private directory.
+  let writable = stateDirectory;
+  for (;;) {
+    try {
+      lstatSync(writable);
+      accessSync(writable, constants.W_OK | constants.X_OK);
+      break;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+      const parent = dirname(writable);
+      if (parent === writable) throw error;
+      writable = parent;
     }
   }
 
