@@ -60,44 +60,18 @@ npm run build
 
 ### Deploy
 
-This project includes automatic deployment to Vercel via GitHub Actions.
+The repository's GitHub Actions CI runs the web type-check (informational),
+lint, and production build steps in `.github/workflows/ci.yml`. Vercel's Git
+integration handles deployments and pull-request previews; GitHub Actions CI
+does not deploy production through the Vercel CLI. The E2E workflow discovers
+the PR preview from GitHub deployment records and requires
+`VERCEL_AUTOMATION_BYPASS_SECRET` when preview protection is enabled.
 
-#### Setup GitHub Actions Deployment
+Connect the repository to the Vercel project `garv1/v0-uvai` and confirm the
+project's root directory and production branch in Vercel settings. Do not add
+Vercel CLI deployment tokens to GitHub Actions for a second deploy path.
 
-1. **Install Vercel CLI** (if not already installed):
-   ```bash
-   npm install -g vercel
-   ```
-
-2. **Link your project to Vercel**:
-   ```bash
-   vercel link
-   ```
-   This creates `.vercel/project.json` with your project ID.
-
-3. **Get your Vercel tokens**:
-   - Go to https://vercel.com/account/tokens
-   - Create a new token
-   - Copy the token value
-
-4. **Add GitHub Secrets**:
-   Go to your GitHub repo → Settings → Secrets and variables → Actions
-
-   Add these secrets:
-   - `VERCEL_TOKEN`: Your Vercel API token
-   - `VERCEL_ORG_ID`: Found in `.vercel/project.json`
-   - `VERCEL_PROJECT_ID`: Found in `.vercel/project.json`
-
-5. **Push to GitHub**:
-   ```bash
-   git push origin main
-   ```
-
-   The GitHub Action will automatically deploy to Vercel!
-
-#### Manual Deployment
-
-Alternatively, deploy manually:
+For an explicitly authorized manual deployment:
 ```bash
 vercel --prod
 ```

@@ -5,15 +5,18 @@ import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
+import StudioBoundTasks from './StudioBoundTasks';
 
 export type StudioReviewActionInput = {
   tool: string;
+  input?: Record<string, unknown>;
   status: string;
   result?: string;
 };
 
 type OutputSection =
   | 'runbook'
+  | 'tasks'
   | 'events'
   | 'lingo'
   | 'tools'
@@ -24,6 +27,7 @@ type OutputSection =
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'runbook', label: 'Runbook' },
+  { id: 'tasks', label: 'Tasks' },
   { id: 'events', label: 'Events' },
   { id: 'lingo', label: 'Lingo' },
   { id: 'tools', label: 'Tools' },
@@ -42,6 +46,7 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
  * small icon, label, value. Documents are first-class rows.
  *
  * - Runbook: the synchronized Step Runner / RUNBOOK.md (default when the pack has one)
+ * - Tasks: bound workflow tasks (default when no runbook is available)
  * - Events: timestamped things that happened (from the event extractor)
  * - Lingo: domain verbiage / topics the video uses
  * - Tools: named tools, stack, and SOP steps
@@ -53,32 +58,39 @@ export default function StudioIdeOutput({
   video,
   specReview,
   runbook,
+  eventsEmptyMessage,
   stackChecks = [],
   reviewActions = [],
+  packWorkbench,
 }: {
   video: Video | undefined;
   specReview?: ReactNode;
   /** Step Runner pane; when present the Runbook tab opens by default. */
   runbook?: ReactNode;
+  eventsEmptyMessage?: string;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
+  packWorkbench?: ReactNode;
 }) {
   const hasRunbook = Boolean(runbook);
-  const [active, setActive] = useState<OutputSection>(() => (hasRunbook ? 'runbook' : 'events'));
+  const [active, setActive] = useState<OutputSection>(() => (hasRunbook ? 'runbook' : 'tasks'));
   const userChoseTab = useRef(false);
 
   // A pack that finishes after mount opens on its runbook unless the user already picked a tab.
   useEffect(() => {
     if (hasRunbook && !userChoseTab.current) setActive('runbook');
   }, [hasRunbook]);
+  const [reviewingAction, setReviewingAction] = useState<string | null>(null);
 
   const hasContent = Boolean(
     video?.videoPack ||
       video?.events?.length ||
       video?.insights ||
       hasRunbook ||
+      eventsEmptyMessage ||
       stackChecks.length > 0 ||
-      reviewActions.length > 0,
+      reviewActions.length > 0 ||
+      packWorkbench,
   );
 
   const pack = video?.videoPack?.pack;
@@ -124,7 +136,7 @@ export default function StudioIdeOutput({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-4">
-        {!hasContent && active !== 'transcript' ? (
+        {!hasContent && active !== 'transcript' && active !== 'tasks' ? (
           <div className="uvai-empty">
             <p className="font-medium text-slate-600">
               Run a video and the extracted actions land here
@@ -139,30 +151,39 @@ export default function StudioIdeOutput({
           </div>
         )}
 
+        {active === 'tasks' && <StudioBoundTasks key={video?.id ?? 'empty'} pack={pack} />}
         {active === 'events' && (
-          <ul className="flex flex-col gap-3" data-testid="studio-ide-output-events">
+          <div className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
-              <EmptyNote text="No events extracted from this video yet." />
+              <EmptyNote
+                text={
+                  eventsEmptyMessage ||
+                  'This run has no extracted events. Pack identity stays on this page.'
+                }
+              />
             ) : (
-              events.map((e) => (
-                <li key={e.id} className="uvai-card p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
-                      <DotIcon />
-                      {e.type}
-                    </span>
-                    {e.timestamp ? (
-                      <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+              <ul className="flex flex-col gap-3">
+                {events.map((e) => (
+                  <li key={e.id} className="uvai-card p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
+                        <DotIcon />
+                        {e.type}
+                      </span>
+                      {e.timestamp ? (
+                        <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+                      ) : null}
+                    </div>
+                    <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
+                    {e.description ? (
+                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
                     ) : null}
-                  </div>
-                  <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
-                  {e.description ? (
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
-                  ) : null}
-                </li>
-              ))
+                  </li>
+                ))}
+              </ul>
             )}
-          </ul>
+            {packWorkbench}
+          </div>
         )}
 
         {active === 'lingo' && (
@@ -259,6 +280,7 @@ export default function StudioIdeOutput({
               <>
                 {reviewActions.map((action, i) => {
                   const card = studioActionCard(action);
+                  const actionKey = `${video?.id ?? 'none'}:${action.tool}:${i}`;
                   return (
                     <li
                       key={`${action.tool}-${i}`}
@@ -275,6 +297,31 @@ export default function StudioIdeOutput({
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
+                          {card.kind === 'review' ? (
+                            <button
+                              type="button"
+                              data-testid="studio-review-act-button"
+                              onClick={() => setReviewingAction(reviewingAction === actionKey ? null : actionKey)}
+                              aria-expanded={reviewingAction === actionKey}
+                              className="uvai-btn uvai-btn-primary mt-3"
+                            >
+                              {reviewingAction === actionKey ? 'Hide proposal' : 'Review proposal'}
+                            </button>
+                          ) : null}
+                          {reviewingAction === actionKey ? (
+                            <div data-testid="studio-proposal-detail" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                              <p>Proposed tool: {action.tool}</p>
+                              <p>Status: {action.status}. No tool has been executed from this review.</p>
+                              {action.input ? (
+                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 text-slate-800">
+                                  {JSON.stringify(action.input, null, 2)}
+                                </pre>
+                              ) : (
+                                <p>Proposal arguments are unavailable for this run.</p>
+                              )}
+                              <p>{card.detail}</p>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </li>
