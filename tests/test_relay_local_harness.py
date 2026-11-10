@@ -1,4 +1,6 @@
 import copy
+import errno
+import stat
 import json
 import os
 import sqlite3
@@ -210,6 +212,79 @@ class HarnessTests(unittest.TestCase):
         self.assertTrue(self.h.run(task)["complete"])
         self.assertFalse(temp.exists())
 
+    def test_event_history_uses_task_sequence_index(self):
+        indexes = {
+            row["name"]
+            for row in self.h.db.execute("PRAGMA index_list(events)").fetchall()
+        }
+        self.assertIn("idx_events_task_seq", indexes)
+        for query in (
+            "SELECT event_hash FROM events WHERE task_id=? ORDER BY seq DESC LIMIT 1",
+            "SELECT * FROM events WHERE task_id=? ORDER BY seq",
+        ):
+            plan = self.h.db.execute("EXPLAIN QUERY PLAN " + query, ("task",)).fetchall()
+            details = " ".join(row["detail"] for row in plan)
+            self.assertIn("idx_events_task_seq", details)
+
+    def test_recovered_artifact_requires_file_and_directory_sync(self):
+        task = self.h.submit(self.p)
+        temp = self.root / "artifacts" / (task + ".tmp")
+        final = self.root / "artifacts" / (task + ".txt")
+        temp.write_text("hello evidence\n")
+        os.link(temp, final)
+        sync = os.fsync
+        seen = {"file": 0, "directory": 0}
+
+        def record(fd):
+            kind = "directory" if stat.S_ISDIR(os.fstat(fd).st_mode) else "file"
+            seen[kind] += 1
+            return sync(fd)
+
+        with patch("relay_harness.core.os.fsync", side_effect=record):
+            receipt = self.h.run(task)
+        self.assertTrue(receipt["complete"])
+        self.assertGreaterEqual(seen["file"], 1)
+        self.assertGreaterEqual(seen["directory"], 1)
+
+    def test_recovered_fsync_failure_cannot_complete_and_exhausts_retry_budget(self):
+        task = self.h.submit(self.p)
+        original_sync = os.fsync
+
+        def fail_directory(fd):
+            if stat.S_ISDIR(os.fstat(fd).st_mode):
+                raise OSError(errno.EIO, "fixture directory sync failure")
+            return original_sync(fd)
+
+        # The file links successfully, but its directory fsync fails.
+        with patch("relay_harness.core.os.fsync", side_effect=fail_directory):
+            first = self.h.run(task)
+        self.assertEqual(first["state"], "retryable")
+        self.assertFalse(first["complete"])
+        self.assertTrue((self.root / "artifacts" / (task + ".txt")).exists())
+        # Matching bytes must not become complete when recovery sync also fails.
+        with patch("relay_harness.core.os.fsync", side_effect=fail_directory):
+            second = self.h.run(task)
+        self.assertEqual(second["state"], "failed")
+        self.assertFalse(second["complete"])
+        self.assertEqual(second["attempts"], 2)
+        self.assertFalse(self.h.receipt(task)["complete"])
+
+    def test_recovery_after_directory_sync_failure_succeeds_when_resync_works(self):
+        task = self.h.submit(self.p)
+        original_sync = os.fsync
+
+        def fail_directory(fd):
+            if stat.S_ISDIR(os.fstat(fd).st_mode):
+                raise OSError(errno.EIO, "fixture directory sync failure")
+            return original_sync(fd)
+
+        with patch("relay_harness.core.os.fsync", side_effect=fail_directory):
+            self.assertEqual(self.h.run(task)["state"], "retryable")
+        recovered = self.h.run(task)
+        self.assertTrue(recovered["complete"])
+        self.assertIn("synced", recovered["reason"])
+        self.assertEqual(recovered["attempts"], 1)
+
     def test_history_append_only(self):
         task = self.h.submit(self.p)
         with self.assertRaises(sqlite3.DatabaseError):
@@ -283,6 +358,10 @@ class HarnessTests(unittest.TestCase):
                 self.assertFalse(receipt["external_task_complete"])
         for invalid in (
             {**base, "isError": True},
+            {**base, "isError": None},
+            {**base, "isError": 0},
+            {**base, "isError": 0.0},
+            {**base, "isError": "false"},
             {**base, "result": 123},
             {**base, "unexpected": "unsupported"},
             {**base, "status": "fulfilled"},
