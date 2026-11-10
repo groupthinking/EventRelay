@@ -65,6 +65,8 @@ Directory presence does not establish an active deployment or npm workspace. Roo
 | [NEXT-PHASE.md](NEXT-PHASE.md) | Bounded next cut; Origin G.A.T.E. only under root authorization |
 | [GOAL.md](GOAL.md) | Goal template for that approved cut |
 | [gate-transition-contract.md](gate-transition-contract.md) | Existing contract, tests, and limits |
+| [opportunity-alerts-beta.md](opportunity-alerts-beta.md) | Proposed opportunity alerts beta and executable recipe contract (#2368); held behind Origin G.A.T.E., authorizes nothing |
+| [runbook/linear-loop-recovery-2026-10-19.md](runbook/linear-loop-recovery-2026-10-19.md) | Linear loop recovery gate and evidence checklist for issue #2449 |
 | [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) | Historical runtime/issue map, not current health |
 | [video_to_gtm_architecture.md](video_to_gtm_architecture.md) | Historical March architecture proposal |
 | [App Builder cut record](../apps/web/src/lib/app-builder-sandbox-PLAN.md) | Recorded second-video emit smoke; not a current deployment receipt |

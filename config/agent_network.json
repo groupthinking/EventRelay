@@ -2,22 +2,6 @@
   "version": "1.0",
   "created": "2025-11-26T13:03:17.327966",
   "mcp_servers": {
-    "youtube-extension": {
-      "endpoint": "http://127.0.0.1:8010",
-      "tools": [
-        "process_video_markdown",
-        "get_transcript",
-        "analyze_video"
-      ]
-    },
-    "gemini-code-gen": {
-      "endpoint": "internal://ai_code_generator",
-      "tools": [
-        "generate_fullstack",
-        "determine_architecture",
-        "generate_files"
-      ]
-    },
     "github-deploy": {
       "endpoint": "mcp://github",
       "tools": [
@@ -50,18 +34,6 @@
         "get_capabilities",
         "get_context"
       ]
-    },
-    "gtm-skills": {
-      "endpoint": "internal://eventrelay_skills",
-      "tools": [
-        "content-generation",
-        "seo-optimizer",
-        "social-scheduler",
-        "lead-scorer",
-        "email-campaign",
-        "analytics-dashboard",
-        "ab-testing"
-      ]
     }
   },
   "agents": [
@@ -69,11 +41,7 @@
       "id": "video-ingest",
       "name": "Video Ingest Agent",
       "role": "Extract and analyze video content",
-      "tools": [
-        "process_video_markdown",
-        "get_transcript",
-        "analyze_video"
-      ],
+      "tools": [],
       "capabilities": [
         "youtube_processing",
         "transcript_extraction",
@@ -85,7 +53,6 @@
       "name": "Architecture Agent",
       "role": "Determine tech stack and project structure",
       "tools": [
-        "determine_architecture",
         "get_context",
         "get_capabilities"
       ],
@@ -100,8 +67,6 @@
       "name": "Code Generation Agent",
       "role": "Generate application code from specifications",
       "tools": [
-        "generate_fullstack",
-        "generate_files",
         "get_error_patterns"
       ],
       "capabilities": [
@@ -296,110 +261,6 @@
         "documentation",
         "runbook_update",
         "deployment_readiness"
-      ]
-    },
-    {
-      "id": "content-generation",
-      "name": "Content Generation Skill",
-      "role": "Generate blog/social posts from video transcripts",
-      "tools": [
-        "generate_fullstack"
-      ],
-      "capabilities": [
-        "content_generation",
-        "blog_posts",
-        "social_posts"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "youtube.video.published"
-      ]
-    },
-    {
-      "id": "seo-optimizer",
-      "name": "SEO Optimizer Skill",
-      "role": "Optimize video titles, descriptions, tags for search discoverability",
-      "tools": [
-        "analyze_video"
-      ],
-      "capabilities": [
-        "seo_optimization",
-        "metadata_enhancement"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "youtube.video.uploaded"
-      ]
-    },
-    {
-      "id": "social-scheduler",
-      "name": "Social Scheduler Skill",
-      "role": "Schedule cross-platform social media posts",
-      "tools": [],
-      "capabilities": [
-        "social_media",
-        "scheduling",
-        "cross_platform"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "ai.content.generated"
-      ]
-    },
-    {
-      "id": "lead-scorer",
-      "name": "Lead Scorer Skill",
-      "role": "Score leads based on engagement signals",
-      "tools": [],
-      "capabilities": [
-        "lead_scoring",
-        "engagement_analysis"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "youtube.analytics.updated"
-      ]
-    },
-    {
-      "id": "email-campaign",
-      "name": "Email Campaign Skill",
-      "role": "Generate and send email sequences based on lead scoring",
-      "tools": [],
-      "capabilities": [
-        "email_generation",
-        "campaign_management"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "crm.lead.scored"
-      ]
-    },
-    {
-      "id": "analytics-dashboard",
-      "name": "Analytics Dashboard Skill",
-      "role": "Aggregate metrics into dashboard data",
-      "tools": [],
-      "capabilities": [
-        "metrics_aggregation",
-        "dashboard_generation"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "system.cron.daily"
-      ]
-    },
-    {
-      "id": "ab-testing",
-      "name": "A/B Testing Skill",
-      "role": "Run A/B tests on thumbnails and titles",
-      "tools": [],
-      "capabilities": [
-        "ab_testing",
-        "variant_management"
-      ],
-      "skill_source": "uvai-skills",
-      "trigger_events": [
-        "youtube.video.uploaded"
       ]
     }
   ]

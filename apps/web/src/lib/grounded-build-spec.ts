@@ -111,6 +111,16 @@ export function parseGroundedSpec(value: unknown, evidence: SpecEvidence, videoI
   return issues.length ? { status: 'invalid', issues: issues.slice(0, 200) } : { status: 'available', spec };
 }
 
+/**
+ * Requirement issues keep the bare requirement ID as their path. Unresolved and
+ * unsupported rows share the same ID space only within their own collection, so
+ * their issue paths are collection-qualified (`unresolved.<id>` / `unsupported.<id>`).
+ * IDs cannot contain '.', so a qualified path never collides with a requirement ID.
+ */
+export function limitationIssuePath(collection: 'unresolved' | 'unsupported', id: string): string {
+  return `${collection}.${id}`;
+}
+
 export function specificationIssues(spec: GroundedBuildSpec): SpecIssue[] {
   const issues: SpecIssue[] = [issue('model-evidence', 'Source-linked, not independently verified. Visual observations are model descriptions, not verified captured frames.', '', 'warning')];
   if (spec.sourceStatus === 'partial') issues.push(issue('partial-source', 'Source coverage is partial.', '', 'warning'));
@@ -127,11 +137,11 @@ export function specificationIssues(spec: GroundedBuildSpec): SpecIssue[] {
   }
   for (const row of spec.unresolved) {
     const required = row.required || row.requirementIds.some((ref) => spec.requirements.some((req) => req.id === ref && req.required));
-    issues.push(issue('unresolved-question', row.question.slice(0, 500), row.id, required ? 'blocking' : 'warning'));
+    issues.push(issue('unresolved-question', row.question.slice(0, 500), limitationIssuePath('unresolved', row.id), required ? 'blocking' : 'warning'));
   }
   for (const row of spec.unsupported) {
     const required = row.required || row.requirementIds.some((ref) => spec.requirements.some((req) => req.id === ref && req.required));
-    issues.push(issue('unsupported-capability', row.reason.slice(0, 500), row.id, required ? 'blocking' : 'warning'));
+    issues.push(issue('unsupported-capability', row.reason.slice(0, 500), limitationIssuePath('unsupported', row.id), required ? 'blocking' : 'warning'));
   }
   return issues;
 }
