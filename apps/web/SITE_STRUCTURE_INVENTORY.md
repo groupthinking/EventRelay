@@ -17,12 +17,6 @@ Live at https://uvai.io (Vercel project `v0-uvai`).
 | `/docs/api` | `docs/api/page.tsx` (126 lines) | Static API reference page listing public endpoints (transcribe, extract-events, chat, agents, video metadata). |
 | `/privacy` | `privacy/page.tsx` | Static privacy policy (last updated May 25, 2026). |
 | `/terms` | `terms/page.tsx` | Static terms of service. |
-| `/dashboard` | `dashboard/page.tsx` | Legacy redirect → `/studio` (preserves query params). |
-| `/dashboard/agents` | `dashboard/agents/page.tsx` | Legacy redirect → `/studio`. |
-| `/app` | `app/page.tsx` | Legacy redirect → `/studio`. |
-| `/features` | `features/page.tsx` | Redirect → `/`. |
-| `/playground` | `playground/page.tsx` | Redirect → `/`. |
-| `/prototype` | `prototype/page.tsx` (+ `prototype/layout.tsx`) | Legacy interactive-simulation route; redirects → `/studio` ("could be mistaken for a verified workflow"). |
 
 Supporting app files:
 - `layout.tsx` — root layout: fonts (Inter, JetBrains Mono, Space Grotesk via `next/font`), metadata/SEO, `StructuredData` (JSON-LD), `AuthSessionProvider` (next-auth), Vercel Analytics + Speed Insights (prod only), global mesh/noise background divs.
@@ -145,17 +139,13 @@ All delegate to handlers in `src/lib/studio/routes.ts`. `runtime = 'nodejs'`, `f
 - `landing/` — **orphaned, zero imports** (deletion candidate): `HeroSection`, `BentoFeatures`, `WorkflowSection`, `TemplatesSection`, `DeveloperSection`, `ContactSection`, `LandingNav`, `LandingFooter`.
 
 ### Billing
-- `billing/ProCheckoutButton.tsx`, `billing/ProRenewPanel.tsx`, `billing/CheckoutSuccessActivator.tsx`, `billing/BillingStatusBanner.tsx`.
-
-### Dashboard (legacy skins — mostly redirect to Studio now)
-- `dashboard/DashboardCanvasView.tsx`, `dashboard/DashboardSplitView.tsx`, `dashboard/VideoCanvasStage.tsx`, `dashboard/panels.tsx`.
-- Top-level: `AgentDashboard.tsx`, `AgentFlowVisualizer.tsx`, `OrchestratorRail.tsx`, `AnalysisPanel.tsx`, `EventList.tsx`, `ResultsViewer.tsx`, `TranscriptViewer.tsx`, `InteractiveTranscript.tsx`, `PipelineProgress.tsx`, `TracePanel.tsx`, `ConsensusIndicator.tsx`, `PreferencesPanel.tsx`, `FeedbackWidget.tsx`, `video-generator.tsx`, `StructuredData.tsx` (JSON-LD), `AuthSessionProvider.tsx`.
+- `billing/ProCheckoutButton.tsx`, `billing/ProRenewPanel.tsx`, `billing/CheckoutSuccessActivator.tsx`.
 
 ### UI primitives (`ui/`)
-Radix-based + custom: `Button`, `Card`, `Input`, `Badge`, `alert`, `empty`, `field`, `label`, `separator`, `tabs`, `textarea`, `resizable` (react-resizable-panels wrapper), `SuggestedPrompts`, `index.ts` barrel. Styled via `components.json` (shadcn convention).
+Radix-based + custom: `Button`, `alert`, `empty`, `field`, `label`, `separator`. Styled via `components.json` (shadcn convention).
 
 ### Tests
-`components/__tests__/`: `OneLoopStudio.gate.test.tsx`, `OneLoopStudio.build-live.test.tsx`, `OneLoopStudio.job-strip.test.tsx`, `OneLoopStudio.three-panel.test.tsx`, `GroundedSpecReview.test.tsx`, `StudioAuthNavLink.test.tsx`; `home/`: `HomePasteForm.test.tsx`, `HomeProCheckout.test.tsx`; `ui/resizable.test.tsx`.
+`components/__tests__/`: `OneLoopStudio.gate.test.tsx`, `OneLoopStudio.build-live.test.tsx`, `OneLoopStudio.job-strip.test.tsx`, `OneLoopStudio.three-panel.test.tsx`, `GroundedSpecReview.test.tsx`, `StudioAuthNavLink.test.tsx`; `home/`: `HomePasteForm.test.tsx`, `HomeProCheckout.test.tsx`.
 
 ---
 
@@ -204,7 +194,7 @@ Radix-based + custom: `Button`, `Card`, `Input`, `Badge`, `alert`, `empty`, `fie
 
 **State**
 - `src/store/dashboard-store.ts` (632) — **Zustand + persist.** Videos, pack records, `processVideo` (durable run → complete only on verified evidence + quality gate), chat, selection.
-- `src/store/action-agent-store.ts`, `src/store/dashboard-types.ts`.
+- `src/store/dashboard-types.ts`.
 
 **Infra/misc**
 - `ssrf-guard.ts` — URL fetch allowlisting.

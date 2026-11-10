@@ -7,8 +7,6 @@ Provides the core API endpoints and integrates all services including cloud AI
 import logging
 import os
 import shutil
-from pathlib import Path
-from urllib.parse import unquote, urlsplit
 from urllib.parse import urlparse
 
 import uvicorn
@@ -158,46 +156,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-# API key auth middleware
-try:
-    from .backend.middleware.api_key_auth import (
-        APIKeyAuthMiddleware as APIKeyMiddleware,
-    )
-
-    app.add_middleware(APIKeyMiddleware)
-    logger.info("API key auth middleware loaded")
-except ImportError as e:
-    logger.warning(f"API key auth middleware not available: {e}")
-
-# Include Cloud AI routes
-try:
-    from .backend.cloud_ai_routes import router as cloud_ai_router
-
-    app.include_router(cloud_ai_router)
-    logger.info("Cloud AI routes loaded successfully")
-except ImportError as e:
-    logger.warning(f"Cloud AI routes not available: {e}")
-
-# Include Event Routes
-try:
-    from .backend.api.event_routes import router as event_router
-
-    app.include_router(event_router)
-    logger.info("Event routes loaded successfully")
-except ImportError as e:
-    logger.error(f"Failed to load event routes: {e}")
-
-# Include API v1 Router (production endpoints - transcript-action, health, etc.)
-_API_V1_ROUTER_LOADED = False
-try:
-    from .backend.api.v1.router import router as api_v1_router
-
-    app.include_router(api_v1_router)
-    _API_V1_ROUTER_LOADED = True
-    logger.info("API v1 router loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
-
 
 def _auth_mode() -> str:
     """Report how APIKeyAuthMiddleware will treat non-public routes (F6)."""
@@ -257,42 +215,9 @@ async def health_check():
     }
 
 
-def _bootstrap_dev_database() -> None:
-    """Create the parent directory for local sqlite database URLs."""
-    database_url = os.getenv("API_COST_DATABASE_URL") or os.getenv("DATABASE_URL") or ""
-    parsed = urlsplit(database_url)
-    if parsed.scheme != "sqlite":
-        return
-    raw_path = unquote(parsed.path)
-    if raw_path in {"", "/:memory:"}:
-        return
-    database_path = Path(raw_path) if raw_path.startswith("//") else Path(raw_path.lstrip("/"))
-    if str(database_path) in {"", "."}:
-        return
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-
-
-async def ensure_api_cost_ready() -> None:
-    """Validate the shared API-cost schema and runtime DML permissions."""
-    from .backend.services.api_cost_monitor import ensure_api_cost_database_ready
-
-    _bootstrap_dev_database()
-    await ensure_api_cost_database_ready()
-
-
 @app.get("/readyz")
 async def readiness_check():
-    """Traffic readiness includes the shared PostgreSQL substrate."""
-    if not _API_V1_ROUTER_LOADED:
-        raise HTTPException(status_code=503, detail="API v1 router is not ready")
-    try:
-        await ensure_api_cost_ready()
-    except Exception:
-        logger.exception("API cost database readiness check failed")
-        raise HTTPException(
-            status_code=503,
-            detail="API cost database is not ready",
-        ) from None
+    """Process is accepting traffic."""
     return {"status": "ready", "service": "uvai-backend"}
 
 

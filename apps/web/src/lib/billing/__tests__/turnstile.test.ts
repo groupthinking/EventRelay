@@ -14,12 +14,19 @@ afterEach(() => {
 describe('verifyTurnstileToken', () => {
   it('reports ok when Cloudflare accepts the token', async () => {
     process.env.TURNSTILE_SECRET_KEY = 'test-secret';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 })),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ success: true }), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
 
     await expect(verifyTurnstileToken('token')).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+      expect.objectContaining({
+        method: 'POST',
+        signal: expect.any(AbortSignal),
+      }),
+    );
   });
 
   it('surfaces a non-2xx siteverify status as an app-authored literal', async () => {

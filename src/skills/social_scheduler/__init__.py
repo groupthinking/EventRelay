@@ -1,1 +1,0 @@
-"""Social Scheduler skill module."""

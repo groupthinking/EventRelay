@@ -1,6 +1,9 @@
 version: 2
 updates:
-  # Frontend / monorepo npm dependencies (root lockfile covers workspaces).
+  # Frontend / monorepo npm dependencies (root lockfile covers workspaces,
+  # including apps/web). Do not add a separate "/apps/web" npm entry: it opens
+  # PRs that bump apps/web/package.json without updating the root lockfile and
+  # duplicates the root entry's updates.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -13,15 +16,6 @@ updates:
       npm-minor-patch:
         update-types: ["minor", "patch"]
 
-  - package-ecosystem: "npm"
-    directory: "/apps/web"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    ignore:
-      - dependency-name: "eslint"
-        versions: [">=10"]
-
   # Python backend dependencies (root pyproject.toml and requirements.txt).
   - package-ecosystem: "pip"
     directory: "/"
@@ -29,22 +23,9 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
 
-  - package-ecosystem: "pip"
-    directory: "/src/youtube_extension/backend"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-
   # Python SDK dependencies.
   - package-ecosystem: "pip"
     directory: "/sdk/python"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-
-  # MCP YouTube server dependencies (pyproject.toml and uv.lock).
-  - package-ecosystem: "uv"
-    directory: "/docs/knowledge_prototypes/mcp-servers/mcp_youtube-0.2.0"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
