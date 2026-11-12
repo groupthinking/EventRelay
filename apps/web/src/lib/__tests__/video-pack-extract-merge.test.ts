@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { GroundedSpecCandidate } from '@/lib/grounded-build-spec';
 import { mergeSectionVideoPackSpecs } from '@/lib/video-pack-extract-merge';
 
 const baseSection = (overrides: Record<string, unknown> = {}) => ({
@@ -47,5 +48,30 @@ describe('mergeSectionVideoPackSpecs', () => {
     expect(merged.concepts).toEqual(['alpha', 'beta']);
     expect(merged.stack.tools.map((tool) => tool.name)).toEqual(['MCP', 'Cloudflare']);
     expect(merged.requirements).toHaveLength(2);
+  });
+
+  it('fails closed with an explicit reason when merged shard specs exceed the collection cap', () => {
+    const shardSpec = (shard: number): GroundedSpecCandidate => ({
+      version: '1', outputClass: 'browser-interactive', sourceStatus: 'partial', confidence: 0.9,
+      limitations: [], app: { name: 'App', purpose: 'Purpose' },
+      screens: [{ id: 'scr', name: 'Screen', purpose: '' }], state: [],
+      requirements: Array.from({ length: 40 }, (_, i) => ({
+        id: `req-${shard}-${i}`, screenId: 'scr', title: `Requirement ${shard}.${i}`, detail: '',
+        classification: 'proposed' as const, required: false, capabilities: ['browser-ui' as const],
+        rationale: 'Proposed for the test.', citations: [],
+      })),
+      acceptanceCriteria: [], unresolved: [], unsupported: [],
+    });
+    const merged = mergeSectionVideoPackSpecs([
+      baseSection({ grounded_spec: { status: 'available', spec: shardSpec(1) } }),
+      baseSection({
+        transcript: { language: 'en', full_text: 'line two', segments: [{ idx: 0, start_s: 10, end_s: 14, text: 'line two' }] },
+        grounded_spec: { status: 'available', spec: shardSpec(2) },
+      }),
+    ]);
+    expect(merged.grounded_spec).toEqual({
+      status: 'invalid',
+      issues: [expect.objectContaining({ code: 'merged-limit-exceeded', path: 'requirements', severity: 'blocking' })],
+    });
   });
 });

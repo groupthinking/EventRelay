@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { GroundedSpecCandidate } from '@/lib/grounded-build-spec';
 import { applyExtractedSpec, buildIdentityPack } from '@/lib/video-pack';
-import { extractVideoPackSpec } from '@/lib/video-pack-extractor';
+import { extractVideoPackSpec, sectionGroundedSpecBudget } from '@/lib/video-pack-extractor';
 import {
   REAL_AUJ_GROUNDED_SPEC,
   REAL_AUJ_SOURCE_HASH,
@@ -208,5 +208,68 @@ describe('multi-shard grounded specification preservation', () => {
       status: 'invalid',
       issues: expect.arrayContaining([expect.objectContaining({ code: 'out-of-range-citation' })]),
     });
+  });
+
+  it('merges every shard in section order regardless of completion order', async () => {
+    const run = async (delayFor: (start: number) => number) => {
+      const runVideo = vi.fn(async (call: { start_s: number; sectionPrompt: string }) => {
+        await new Promise((resolve) => setTimeout(resolve, delayFor(call.start_s)));
+        return {
+          text: JSON.stringify(sectionPayload(call.start_s, call.sectionPrompt.includes('Also emit grounded_spec as a partial'))),
+          interactionId: `int-${call.start_s}`,
+        };
+      });
+      const extracted = await extractVideoPackSpec(
+        { sourceUrl: REAL_AUJ_SOURCE_URL, videoId: REAL_AUJ_VIDEO_ID },
+        { hasDirectGoogleKey: () => true, runVideoInteraction: runVideo },
+      );
+      return applyExtractedSpec(buildIdentityPack(REAL_AUJ_VIDEO_ID), extracted);
+    };
+    const inOrder = await run((start) => start / 60);
+    const reversed = await run((start) => 12 - start / 60);
+    expect(inOrder.grounded_spec?.status).toBe('available');
+    expect(reversed.grounded_spec).toEqual(inOrder.grounded_spec);
+    if (inOrder.grounded_spec?.status !== 'available') throw new Error('Grounded spec unavailable');
+    expect(inOrder.grounded_spec.spec.requirements.map((row) => row.title)).toEqual(
+      REAL_AUJ_GROUNDED_SPEC.requirements.map((row) => row.title),
+    );
+    expect(inOrder.grounded_spec.spec.sourceStatus).toBe('partial');
+  });
+
+  it('keeps valid shards and records which section was excluded when another shard is invalid', async () => {
+    const pack = await extractFixture((payload, start) => {
+      if (start !== 360 || !payload.grounded_spec) return payload;
+      payload.grounded_spec.requirements[0]!.citations[0]!.quote = 'A quote that the transcript never contained.';
+      return payload;
+    });
+    expect(pack.grounded_spec?.status).toBe('available');
+    if (pack.grounded_spec?.status !== 'available') throw new Error('Grounded spec unavailable');
+    const spec = pack.grounded_spec.spec;
+    expect(spec.requirements.map((row) => row.title)).toEqual([REAL_AUJ_GROUNDED_SPEC.requirements[0]!.title]);
+    expect(spec.sourceStatus).toBe('partial');
+    expect(spec.limitations).toContain('Grounded specification from video section 3 failed validation and is not included.');
+  });
+
+  it('gives every shard a grounded-spec budget and the full grounding rules', async () => {
+    const prompts: string[] = [];
+    const runVideo = vi.fn(async (call: { start_s: number; sectionPrompt: string }) => {
+      prompts.push(call.sectionPrompt);
+      return { text: JSON.stringify(sectionPayload(call.start_s, true)), interactionId: `int-${call.start_s}` };
+    });
+    await extractVideoPackSpec(
+      { sourceUrl: REAL_AUJ_SOURCE_URL, videoId: REAL_AUJ_VIDEO_ID },
+      { hasDirectGoogleKey: () => true, runVideoInteraction: runVideo },
+    );
+    expect(prompts).toHaveLength(3);
+    for (const prompt of prompts) {
+      expect(prompt).toContain(`at most ${sectionGroundedSpecBudget(3)} items per grounded_spec collection`);
+      expect(prompt).toMatch(/Observed requirements must cite this same video/);
+      expect(prompt).toMatch(/Inferred\/proposed choices need a rationale/);
+      expect(prompt).toMatch(/Capabilities are browser-ui, local-state, local-persistence/);
+    }
+    expect(sectionGroundedSpecBudget(1)).toBe(64);
+    expect(sectionGroundedSpecBudget(3)).toBe(21);
+    expect(sectionGroundedSpecBudget(3) * 3).toBeLessThanOrEqual(64);
+    expect(sectionGroundedSpecBudget(200)).toBe(1);
   });
 });

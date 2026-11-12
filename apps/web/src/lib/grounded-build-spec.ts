@@ -7,7 +7,9 @@ const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const seconds = z.number().finite().min(0).max(604800);
 const videoIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{11}$/);
 const MAX_CITATION_INDEX = 10000;
-const list = <T extends z.ZodTypeAny>(schema: T) => z.array(schema).max(64);
+/** Per-collection cap for grounded spec rows; consolidated multi-shard specs share it. */
+export const GROUNDED_SPEC_MAX_ITEMS = 64;
+const list = <T extends z.ZodTypeAny>(schema: T) => z.array(schema).max(GROUNDED_SPEC_MAX_ITEMS);
 const capability = z.enum(['browser-ui', 'local-state', 'local-persistence', 'server', 'accounts', 'shared-database', 'payments', 'secrets', 'native', 'background', 'unknown']);
 const citationSchema = z.object({
   kind: z.enum(['transcript', 'visual']), index: z.number().int().min(0).max(MAX_CITATION_INDEX),

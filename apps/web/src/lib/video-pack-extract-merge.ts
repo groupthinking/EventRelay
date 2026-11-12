@@ -1,6 +1,7 @@
 import 'server-only';
 
 import {
+  GROUNDED_SPEC_MAX_ITEMS,
   rebaseGroundedCitations,
   type GroundedSpecCandidate,
   type GroundedSpecExtraction,
@@ -190,8 +191,41 @@ function mergeGroundedSpec(
     merged.push(available.length > 1 ? namespaceGroundedSpec(rebased.spec, index) : rebased.spec);
   }
   const [first, ...rest] = merged;
-  if (first) return { status: 'available', spec: mergeAvailableGroundedSpecs([first, ...rest]) };
-  return candidates[candidates.length - 1]?.value;
+  if (!first) return candidates[candidates.length - 1]?.value;
+  const combined = mergeAvailableGroundedSpecs([first, ...rest]);
+  // Say which sections could not contribute instead of silently presenting a partial merge as whole.
+  const excluded = candidates
+    .filter(({ value }) => value.status === 'invalid')
+    .map(({ index }) => index + 1);
+  if (excluded.length > 0) {
+    combined.limitations = dedupeStrings([
+      ...combined.limitations,
+      `Grounded specification from video section${excluded.length > 1 ? 's' : ''} ${excluded.join(', ')} failed validation and is not included.`,
+    ]);
+    combined.sourceStatus = 'partial';
+  }
+  // Fail closed with an explicit reason rather than a later generic shape error or a silent truncation.
+  const overflow = (Object.entries({
+    limitations: combined.limitations,
+    screens: combined.screens,
+    state: combined.state,
+    requirements: combined.requirements,
+    acceptanceCriteria: combined.acceptanceCriteria,
+    unresolved: combined.unresolved,
+    unsupported: combined.unsupported,
+  }) as Array<[string, unknown[]]>).filter(([, rows]) => rows.length > GROUNDED_SPEC_MAX_ITEMS);
+  if (overflow.length > 0) {
+    return {
+      status: 'invalid',
+      issues: overflow.map(([key, rows]) => ({
+        code: 'merged-limit-exceeded',
+        path: key,
+        message: `Merged ${key} has ${rows.length} items across video sections; the limit is ${GROUNDED_SPEC_MAX_ITEMS}.`,
+        severity: 'blocking' as const,
+      })),
+    };
+  }
+  return { status: 'available', spec: combined };
 }
 
 function mergeVisualContext(
