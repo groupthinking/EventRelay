@@ -25,9 +25,12 @@ jobs:
       VERIFIED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          # Test the exact commit the receipt names, not the synthetic PR merge commit.
+          ref: ${{ env.VERIFIED_HEAD }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          # Match ci.yml: Node 24's npm rejects the root vitest override against the lockfile.
+          # Match ci.yml (Node 22 + --legacy-peer-deps).
           node-version: '22'
       - run: npm ci --ignore-scripts --legacy-peer-deps
       - run: node apps/hybrid-workspace/logic.test.mjs

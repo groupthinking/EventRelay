@@ -9,6 +9,7 @@
 //   HYBRID_CHROMIUM_PATH     optional Chromium executable (e.g. a system chromium)
 import { createRequire } from 'node:module';
 import { createServer } from 'node:http';
+import { mkdtempSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,7 +25,11 @@ const SENTINEL = 'parent-only-sentinel-2202';
 const KEY_PATTERN = new RegExp(`AI_GATEWAY_API_KEY|${FAKE_KEY}|${SENTINEL}`);
 // Key material only: chat and srcdoc may legitimately echo source code that names the variable.
 const VALUE_PATTERN = new RegExp(`${FAKE_KEY}|${SENTINEL}`);
-const receiptPath = process.env.HYBRID_BOUNDARY_RECEIPT || join(tmpdir(), 'hybrid-workspace-boundary-receipt.json');
+// Default lives in a private mkdtemp directory, never a predictable shared temp path.
+const receiptPath = process.env.HYBRID_BOUNDARY_RECEIPT
+  || join(mkdtempSync(join(tmpdir(), 'hybrid-boundary-')), 'hybrid-workspace-boundary-receipt.json');
+const REDACTED = '[REDACTED-FIXTURE-SECRET]';
+const redact = (text) => String(text).replace(new RegExp(VALUE_PATTERN.source, 'g'), REDACTED);
 
 const root = new URL('./', import.meta.url);
 const allowed = new Set(['index.html', 'app.js', 'logic.js', 'fx-adapter.js', 'styles.css']);
@@ -90,7 +95,22 @@ async function previewFrame(page, marker) {
   return handle.contentFrame();
 }
 
-const edit = (page, index, value) => page.evaluate(([i, v]) => window.fixtureEdit(i, v), [index, value]);
+// Every edit re-renders the preview (new srcdoc). Wait for that navigation to finish so
+// assertions never read the previous document, whose markers may also match.
+const edit = (page, index, value) => page.evaluate(([i, v]) => new Promise((resolve) => {
+  document.getElementById('preview').addEventListener('load', () => resolve(), { once: true });
+  window.fixtureEdit(i, v);
+}), [index, value]);
+const botCount = (page) => page.locator('#thread .msg.bot').count();
+// Run one terminal command and return the new bot reply, failing if none was added.
+async function termCommand(page, line) {
+  const before = await botCount(page);
+  await page.evaluate((l) => window.fixtureType(l + '\r'), line);
+  await page.waitForFunction((n) => document.querySelectorAll('#thread .msg.bot').length > n, before)
+    .catch(() => { throw new Error(`terminal "${line}" added no reply`); });
+  assert.equal(await botCount(page), before + 1, `terminal "${line}" did not add exactly one reply`);
+  return page.locator('#thread .msg.bot').last().innerText();
+}
 const threadText = (page) => page.locator('#thread').innerText();
 
 async function assertNoKeyAnywhere(page) {
@@ -243,13 +263,14 @@ const tests = [
 
   ['terminal commands drive actions', async ({ page }) => {
     await edit(page, IDX.html, '<title>Term Title</title><h1>T</h1>');
-    await page.evaluate(() => window.fixtureType('summarize\r'));
-    assert.match(await page.locator('#thread .msg.bot').last().innerText(), /Term Title/);
-    await page.evaluate(() => window.fixtureType('extract\r'));
-    assert.match(await page.locator('#thread .msg.bot').last().innerText(), /Extracted from/);
-    await page.evaluate(() => window.fixtureType('embed\r'));
-    assert.match(await page.locator('#thread .msg.bot').last().innerText(), /Split screen stays locked/);
-    await page.evaluate(() => window.fixtureType('ask <img src=x onerror="document.body.dataset.poison=1">\r'));
+    assert.match(await termCommand(page, 'summarize'), /Term Title/);
+    assert.match(await termCommand(page, 'extract'), /Extracted from/);
+    assert.match(await termCommand(page, 'embed'), /Split screen stays locked/);
+    const prompt = '<img src=x onerror="document.body.dataset.poison=1">';
+    const reply = await termCommand(page, `ask ${prompt}`);
+    // The Ask reply must echo the literal prompt as text, proving dispatch and escaping.
+    assert.ok(reply.includes(`You asked: ${prompt}`), `terminal Ask reply missing literal prompt: ${reply}`);
+    assert.ok((await page.locator('#thread .msg.user').last().innerText()).includes(prompt));
     assert.equal(await page.locator('#thread img').count(), 0);
     assert.equal(await page.locator('body').getAttribute('data-poison'), null);
   }],
@@ -298,15 +319,15 @@ try {
       results.push({ name, status: 'passed', ms: Date.now() - started, ...(ctx.detail ? { detail: ctx.detail } : {}) });
       console.log(`ok - ${name}`);
     } catch (e) {
-      results.push({ name, status: 'failed', ms: Date.now() - started, error: String(e?.message || e).slice(0, 2000) });
-      console.log(`not ok - ${name}\n  ${String(e?.message || e).split('\n').join('\n  ')}`);
+      results.push({ name, status: 'failed', ms: Date.now() - started, error: redact(e?.message || e).slice(0, 2000) });
+      console.log(`not ok - ${name}\n  ${redact(e?.message || e).split('\n').join('\n  ')}`);
     } finally {
       clearTimeout(timer);
       await ctx?.context.close().catch(() => {});
     }
   }
 } catch (e) {
-  fatal = String(e?.message || e).slice(0, 2000);
+  fatal = redact(e?.message || e).slice(0, 2000);
   console.error(`fatal: ${fatal}`);
 } finally {
   await browser?.close();
@@ -331,8 +352,13 @@ const receipt = {
   ...(fatal ? { fatal } : {}),
   tests: results,
 };
-const serialized = JSON.stringify(receipt, null, 2);
-if (VALUE_PATTERN.test(serialized)) throw new Error('receipt would contain fixture secret material');
+let serialized = JSON.stringify(receipt, null, 2);
+// Never publish fixture secret material, but still write a (FAILED) receipt so CI uploads it.
+if (VALUE_PATTERN.test(serialized)) {
+  receipt.status = 'FAILED';
+  receipt.redactedSecretMaterial = true;
+  serialized = redact(JSON.stringify(receipt, null, 2));
+}
 await writeFile(receiptPath, serialized + '\n');
 console.log(`receipt: ${receiptPath}`);
 console.log(JSON.stringify({ status: receipt.status, head: receipt.head, totals: receipt.totals }));
