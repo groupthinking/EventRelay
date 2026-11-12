@@ -200,6 +200,101 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     checkedAt: '2026-08-16T12:00:02.000Z',
   };
 
+  it('does not start a request when the caller has already stopped analysis', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(store().videos.find((video) => video.id === id)?.failure?.message).toContain('Server work already accepted may continue');
+  });
+
+  it('does not start the actions workflow when stopped as the pack completes', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      json: async () => {
+        controller.abort();
+        return VIDEO_PACK_BODY;
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const video = store().videos.find((item) => item.id === id)!;
+    expect(video.status).toBe('failed');
+    expect(video.videoPack).toBeUndefined();
+    expect(video.runId).toBeUndefined();
+    expect(video.failure?.message).toContain('stopped in this browser');
+  });
+
+  it('stops the local row immediately while an aborted transport is still settling', async () => {
+    const controller = new AbortController();
+    let rejectPack!: (error: Error) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((_resolve, reject) => { rejectPack = reject; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+
+    controller.abort();
+
+    expect(store().videos[0].status).toBe('failed');
+    expect(store().videos[0].failure?.message).toContain('stopped in this browser');
+    rejectPack(new TypeError('Network disconnected after stop'));
+    const id = await pending;
+    expect(store().videos.find((item) => item.id === id)?.failure?.message).not.toContain('Network disconnected');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards stop to workflow kickoff and does not poll a late accepted run', async () => {
+    const controller = new AbortController();
+    let resolveStart!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveStart = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    controller.abort();
+    expect(fetchMock.mock.calls[1]?.[1].signal?.aborted).toBe(true);
+    resolveStart(jsonResponse({ ok: true, runId: 'wrun_accepted_before_stop' }));
+    const id = await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const video = store().videos.find((item) => item.id === id)!;
+    expect(video.status).toBe('failed');
+    expect(video.runId).toBe('wrun_accepted_before_stop');
+    expect(video.failure?.message).toContain('Server work already accepted may continue');
+  });
+
+  it('does not mark a late completed poll as successful after analysis is stopped', async () => {
+    const controller = new AbortController();
+    let resolvePoll!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, runId: 'wrun_stopped' }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolvePoll = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    controller.abort();
+    expect(fetchMock.mock.calls[2]?.[1].signal?.aborted).toBe(true);
+    resolvePoll(jsonResponse({ ok: true, runId: 'wrun_stopped', runStatus: 'completed', result: {} }));
+    const id = await pending;
+
+    const video = store().videos.find((item) => item.id === id)!;
+    expect(video.status).toBe('failed');
+    expect(video.progress).toBeLessThan(100);
+    expect(video.quality).toBeUndefined();
+    expect(video.failure?.message).toContain('stopped in this browser');
+  });
+
   it('persists the run id and maps only a verified result to complete', async () => {
     const fetchMock = vi
       .fn()
