@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "codex/fix-pack-readiness-20261112": false
+    }
+  },
   "framework": "nextjs",
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",

@@ -328,16 +328,6 @@ export async function verifyPackBuildLive(input: {
       if (confirmed.ok) {
         hostVideoId = confirmed.videoId;
         ({ response, payload } = await fetchHealth(hostVideoId));
-        if (payload.health?.ok !== true) {
-          const liveUrl = packBuildLiveUrl(origin, hostVideoId);
-          if (liveUrl) {
-            return {
-              ok: true,
-              liveUrl,
-              reasonCode: payload.factory_deliver?.reason_code ?? 'FACTORY_DELIVER_READY',
-            };
-          }
-        }
       }
     }
   }
