@@ -57,7 +57,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
-    && npm install --global npm@12.2.0 \
+    && npm install --global npm@12.2.2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
