@@ -10,7 +10,7 @@
 - [x] Create design brief based on research
 - [x] Verify responsive design (mobile + desktop)
 - [x] Compare against competitor references
-  - **Evidence**: Implemented split-screen "Command Center" dashboard layout in `apps/web/src/app/dashboard/page.tsx` adhering to `docs/DESIGN_BRIEF.md` (left-side video player + metadata, right-side tabbed intelligence feed).
+  - **Evidence**: Implemented split-screen "Command Center" dashboard layout in `apps/web/src/app/dashboard/page.tsx` (left-side video player + metadata, right-side tabbed intelligence feed).
 
 ### 🔲 NOT STARTED: Phase 5 — Production Sandbox Testing
 - [ ] Run full application in production-like environment

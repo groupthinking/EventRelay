@@ -319,7 +319,6 @@ python scripts/test_secrets_access.py
 This phase is BLOCKING for production deployment. Security cannot be compromised.
 - [OAuth 2.0 Best Practices](https://tools.ietf.org/html/rfc6749)
 - [Rate Limiting Strategies](https://cloud.google.com/architecture/rate-limiting-strategies-techniques)
-- Project Security Documentation: `docs/SECURITY.md`
 - Environment Setup Guide: `docs/deployment/ENVIRONMENT_SETUP.md`
 
 ## 🔗 Next Phase

@@ -20,7 +20,8 @@ export async function GET() {
       endpoints: {
         video_pack: 'POST /api/video/pack - Emit a hashed Video Pack from a YouTube URL',
         transcribe: 'POST /api/transcribe - Extract video transcripts',
-        video: 'POST /api/video - Video analysis only',
+        video: 'POST /api/video [DEPRECATED] - Video analysis only; use /api/video/pack',
+        pipeline: 'Legacy /api/pipeline routes are retired',
         health: 'GET /api - This endpoint',
       },
     });

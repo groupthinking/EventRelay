@@ -21,7 +21,10 @@ export default function ProRenewPanel({ annual, className }: ProRenewPanelProps)
   const [error, setError] = useState<string | null>(null);
 
   const loadStatus = useCallback(() => {
-    fetch('/api/billing/status', { credentials: 'include' })
+    fetch('/api/billing/status', {
+      credentials: 'include',
+      signal: AbortSignal.timeout(30_000),
+    })
       .then((r) => r.json())
       .then((data) => setStatus(data as BillingStatus))
       .catch(() => setStatus(null));
@@ -40,6 +43,7 @@ export default function ProRenewPanel({ annual, className }: ProRenewPanelProps)
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ annual }),
         credentials: 'include',
+        signal: AbortSignal.timeout(30_000),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'renewal_failed');

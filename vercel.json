@@ -3,6 +3,11 @@
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
   "outputDirectory": "apps/web/.next",
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/github_actions/astral-sh/setup-uv-10.3.1": false
+    }
+  },
   "redirects": [
     {
       "source": "/(.*)",

@@ -8,22 +8,54 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github/workflows/pr-checks.yml"
 
 class SecurityEvidenceTest(unittest.TestCase):
-    def validate(self, title, paths, body, labels=None, changed_files=None):
+    def validate(
+        self, title, paths, body, labels=None, changed_files=None, include_changed_files=True, fork=False, author=None
+    ):
         text = WORKFLOW.read_text()
         script = text.split("          script: |\n", 1)[1]
         script = "\n".join(line[12:] for line in script.splitlines())
-        payload = json.dumps({"title": title, "body": body, "labels": labels or [], "number": 1,
-                              "changed_files": len(paths) if changed_files is None else changed_files})
+        pull_request = {"title": title, "body": body, "labels": labels or [], "number": 1}
+        if include_changed_files:
+            pull_request["changed_files"] = (
+                len(paths) if changed_files is None else changed_files
+            )
+        pull_request["head"] = {"repo": {"full_name": "other/fork" if fork else "test/test"}}
+        pull_request["user"] = {"login": author or "contributor"}
+        payload = json.dumps(pull_request)
         files = json.dumps([{"filename": path} for path in paths])
         harness = """
 const context = {payload: {pull_request: PR}, repo: {owner:'test',repo:'test'}};
-const core = {setFailed: message => {process.stdout.write(message);}};
+const core = {warning:()=>{},setFailed: message => {process.stdout.write(message);}};
 const github = {rest: {pulls: {listFiles:'files'}, issues: {
-listComments:'comments', updateComment:async()=>{},createComment:async()=>{}
-}}, paginate:async kind => kind === 'files' ? FILES : []};
+listComments:'comments', updateComment:async()=>{if(FORK)throw Error('fork write');},
+createComment:async()=>{if(FORK)throw Error('fork write');}
+}}, paginate:async kind => {
+if(kind !== 'files' && FORK)throw Error('fork comment read');
+return kind === 'files' ? FILES : [];
+}};
 (async()=>{ SCRIPT })().catch(error=>{console.error(error);process.exit(1);});
-""".replace("PR", payload).replace("FILES", files).replace("SCRIPT", script)
+""".replace("PR", payload).replace("FILES", files).replace("SCRIPT", script).replace("FORK", json.dumps(fork or author == "dependabot[bot]"))
         return subprocess.run(["node", "-e", harness], capture_output=True, text=True, check=True).stdout
+
+    def test_fork_missing_evidence_fails_without_comment_access(self):
+        self.assertIn("failed", self.validate(
+            "fix: security patch", ["package-lock.json"], "Closes #1. Patch.", fork=True))
+
+    def test_valid_fork_passes_without_comment_access(self):
+        self.assertEqual("", self.validate(
+            "docs: explain behavior", ["docs/readme.md"], "Closes #1. Document behavior.",
+            fork=True))
+
+    def test_dependabot_validation_does_not_attempt_comment_writes(self):
+        self.assertIn("failed", self.validate(
+            "fix: security patch", ["package-lock.json"], "Closes #1. Patch.",
+            author="dependabot[bot]"))
+
+    def test_no_privileged_pull_request_trigger(self):
+        import yaml
+        workflow = yaml.safe_load(WORKFLOW.read_text())
+        self.assertIn("pull_request", workflow[True])
+        self.assertNotIn("pull_request_target", workflow[True])
 
     def test_missing_and_placeholder_evidence_fail(self):
         for body in ["Closes #1. Security patch.", "## Security dependency evidence\n- Advisory: TODO\n- Package and versions: TBD\n- Validation: ...\n- Rollback: N/A"]:
@@ -54,6 +86,17 @@ listComments:'comments', updateComment:async()=>{},createComment:async()=>{}
         self.assertIn("failed", self.validate(
             "fix: security update", ["docs/visible-file.md"],
             "Closes #1. Large security change.", changed_files=3001))
+
+    def test_file_listing_at_github_limit_requires_security_evidence(self):
+        paths = [f"docs/file-{index}.md" for index in range(3000)]
+        self.assertIn("failed", self.validate(
+            "fix: security update", paths,
+            "Closes #1. Large security change.", changed_files=3000))
+
+    def test_missing_file_count_requires_security_evidence(self):
+        self.assertIn("failed", self.validate(
+            "fix: security update", ["docs/visible-file.md"],
+            "Closes #1. Large security change.", include_changed_files=False))
 
 if __name__ == "__main__":
     unittest.main()

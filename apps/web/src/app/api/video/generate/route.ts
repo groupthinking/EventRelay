@@ -11,7 +11,17 @@ export const maxDuration = 300; // 5 minutes — video generation takes time
 const RATE_LIMIT_MAX = 3;
 const RATE_LIMIT_WINDOW_SECONDS = 10 * 60;
 
-const ALLOWED_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3'];
+const ALLOWED_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3'] as const;
+
+type AllowedAspectRatio = (typeof ALLOWED_ASPECT_RATIOS)[number];
+
+function isAllowedAspectRatio(value: unknown): value is AllowedAspectRatio {
+  return (
+    typeof value === 'string' &&
+    (ALLOWED_ASPECT_RATIOS as readonly string[]).includes(value)
+  );
+}
+
 const MIN_DURATION_SECONDS = 1;
 const MAX_DURATION_SECONDS = 60;
 
@@ -97,7 +107,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'prompt must be 1000 characters or fewer.' }, { status: 400 });
   }
 
-  if (typeof aspectRatio !== 'string' || !ALLOWED_ASPECT_RATIOS.includes(aspectRatio as any)) {
+  if (!isAllowedAspectRatio(aspectRatio)) {
     return NextResponse.json(
       { error: `aspectRatio must be one of: ${ALLOWED_ASPECT_RATIOS.join(', ')}.` },
       { status: 400 }
@@ -120,7 +130,7 @@ export async function POST(request: Request) {
     const { video } = await experimental_generateVideo({
       model: aiGateway.videoModel(GATEWAY_VIDEO_MODEL),
       prompt: prompt.trim(),
-      aspectRatio: aspectRatio as any,
+      aspectRatio,
       duration,
       abortSignal: AbortSignal.timeout(290_000),
     });

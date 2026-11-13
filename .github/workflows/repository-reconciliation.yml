@@ -4,7 +4,7 @@ on:
   schedule:
     - cron: "17 13 * * *"
   workflow_dispatch:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - reopened
@@ -31,6 +31,11 @@ concurrency:
 
 jobs:
   report:
+    # Fork PRs cannot write report/comments. Scheduled/issue events still
+    # inventory every open PR, including forks.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 10  # Prevent long-running jobs
     steps:
