@@ -108,9 +108,13 @@ server-role writes, fresh-store readback and a hostile `search_path`. Run from t
 repository root with `PYTHONPATH=src python scripts/testing/verify_shared_state_postgres.py`.
 It never reads deployment database environment variables.
 
-The November 12, 2026 attempt was blocked before server startup by
+The November 12, 2026 local attempt was blocked before server startup by
 `PermissionError: [Errno 1] Operation not permitted` when creating the private
-Unix socket. These PostgreSQL acceptance cases are **NOT RUN**; the passing unit
-suite uses SQLite and mocked PostgreSQL catalogs. SQL parsing is a syntax check,
-not PostgreSQL runtime acceptance. Keep migration/production acceptance on hold
-until this script and the opt-in real-PostgreSQL test pass on an allowed runner.
+Unix socket. The same script subsequently passed all **13 cases on PostgreSQL
+16.2** in the isolated GitHub runner at source head
+`190fc17f7b38a19978094e08aaf3deac5f745c59`:
+[acceptance run](https://github.com/groupthinking/EventRelay/actions/runs/43347589645/job/131630572786).
+The runner verified no IP listener and stopped and deleted the temporary cluster.
+This establishes disposable PostgreSQL acceptance for that source, not application
+of the migration or acceptance against any production database. The separate
+environment-gated real-PostgreSQL unit test remains skipped in local unit runs.
