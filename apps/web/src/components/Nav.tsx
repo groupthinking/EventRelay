@@ -106,6 +106,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
               key={href}
               href={href}
               onClick={() => setMobileOpen(false)}
+              aria-current={isNavActive(pathname, href) ? 'page' : undefined}
               className="text-sm px-3 py-2.5 rounded-lg"
               style={{ color: isNavActive(pathname, href) ? 'var(--uvai-ink)' : 'var(--uvai-ink-soft)' }}
             >

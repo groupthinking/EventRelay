@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { GoogleGenAI } from '@google/genai';
+import { canonicalYouTubeSource, resolveYouTubeSourceId } from '@/lib/video-source-identity';
 
 /**
  * Direct Google GenAI video path (Gate 1, locked 2026-09-21).
@@ -79,9 +80,25 @@ function assertValidRange(call: ShardVideoCall): void {
       `Invalid shard range ${call.start_s}–${call.end_s}: refusing full-video fallback`,
     );
   }
-  if (!call.sourceUrl.startsWith('http')) {
-    throw new Error('Shard video call requires an http(s) sourceUrl');
+  // #2214: the provider sink accepts only the canonical YouTube watch URL,
+  // never a caller-preserved input URL, whatever the upstream path did.
+  const videoId = resolveYouTubeSourceId(call.sourceUrl);
+  if (!videoId || call.sourceUrl !== canonicalYouTubeSource(videoId)) {
+    throw new Error('Shard video call requires a canonical YouTube watch sourceUrl');
   }
+  resolveShardFps(call.fps);
+}
+
+/** Max frames/sec a shard may request; Gemini's default sampling is 1. */
+export const SHARD_VIDEO_MAX_FPS = 5;
+
+/** `undefined` → 1. Rejects NaN, ±Infinity, ≤0 and anything above the cap. */
+export function resolveShardFps(fps: number | undefined): number {
+  if (fps === undefined) return 1;
+  if (typeof fps !== 'number' || !Number.isFinite(fps) || fps <= 0 || fps > SHARD_VIDEO_MAX_FPS) {
+    throw new Error(`Invalid shard fps ${String(fps)}: must be finite, > 0 and ≤ ${SHARD_VIDEO_MAX_FPS}`);
+  }
+  return fps;
 }
 
 export function buildShardInteractionInput(
@@ -97,7 +114,7 @@ export function buildShardInteractionInput(
         type: 'static',
         start_offset: secondsToOffset(call.start_s),
         end_offset: secondsToOffset(call.end_s),
-        fps: call.fps ?? 1,
+        fps: resolveShardFps(call.fps),
       },
     },
     { type: 'text', text: `${call.systemInstruction}\n\n${call.sectionPrompt}` },

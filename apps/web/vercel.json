@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/uv/uv-27604d1789": false
+    }
+  }
+}
