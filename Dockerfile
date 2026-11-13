@@ -76,6 +76,13 @@ RUN rm -rf /usr/local/lib/python3.11/site-packages/*
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
+# pip is an install-time tool. Its wheel ships pip/_vendor/bom.cdx.json, which
+# declares the vendored pkg_resources as setuptools 70.3.0, so image scanners
+# report CVE-2025-47273 against it even on the newest pip (26.3). The served
+# app (uvicorn) never invokes pip, so drop it from the runtime image.
+# Refs #2396.
+RUN python -m pip uninstall --yes pip
+
 # Copy installed Node.js packages from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules

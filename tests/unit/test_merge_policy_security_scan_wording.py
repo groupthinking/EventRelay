@@ -111,6 +111,16 @@ class ImageGatePolicyTests(unittest.TestCase):
         self.assertLess(upgrade, install)
         self.assertNotIn("dist-upgrade", runtime)
 
+    def test_runtime_stage_drops_pip_after_copying_builder_env(self):
+        root = Path(__file__).resolve().parents[2]
+        dockerfile = (root / "Dockerfile").read_text()
+        runtime = dockerfile.split("AS runtime", 1)[1]
+        copy_bin = runtime.index("COPY --from=builder /usr/local/bin /usr/local/bin")
+        uninstall = runtime.index("RUN python -m pip uninstall --yes pip")
+        self.assertLess(copy_bin, uninstall)
+        self.assertLess(uninstall, runtime.index("USER appuser"))
+        self.assertNotIn("pip install", runtime)
+
 
 if __name__ == "__main__":
     unittest.main()
