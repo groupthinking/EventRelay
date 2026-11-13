@@ -638,16 +638,17 @@ export function studioActionCard(action: {
   detail: string;
   kind: 'review' | 'tool';
 } {
-  const isReview = action.tool === 'review_action';
+  const isReviewMarker = action.tool === 'review_action';
+  const needsReview = isReviewMarker || action.status === 'pending' || action.status === 'proposed';
   const statusLabel =
-    action.status === 'proposed'
+    action.status === 'proposed' || action.status === 'pending'
       ? 'Needs review'
       : action.status === 'completed'
         ? 'Done'
         : action.status === 'failed'
           ? 'Failed'
           : action.status;
-  const title = isReview
+  const title = isReviewMarker
     ? 'Review this result'
     : action.tool
         .split('_')
@@ -656,12 +657,12 @@ export function studioActionCard(action: {
         .join(' ');
   const detail =
     action.result?.trim() ||
-    (isReview ? 'Open the evidence on this page before you act.' : 'No detail from this tool.');
+    (isReviewMarker ? 'Open the evidence on this page before you act.' : 'No detail from this tool.');
   return {
     title,
     statusLabel,
     detail,
-    kind: isReview ? 'review' : 'tool',
+    kind: needsReview ? 'review' : 'tool',
   };
 }
 

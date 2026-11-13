@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OneLoopStudio from '@/components/OneLoopStudio';
 import { useDashboardStore, type Video } from '@/store/dashboard-store';
@@ -137,8 +137,9 @@ describe('OneLoopStudio playflow CTAs after the IDE rebuild', () => {
     expect(screen.getByTestId('studio-ide-ship').hasAttribute('disabled')).toBe(false);
     expect(screen.getByTestId('studio-ide-ship').textContent).toMatch(/ship this/i);
     expect(screen.getByTestId('studio-build-live-button').hasAttribute('disabled')).toBe(false);
-    expect(screen.getByTestId('studio-act-button').textContent).toMatch(/act on this run/i);
+    expect(screen.getByTestId('studio-act-button').textContent).toMatch(/review this run/i);
 
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-events'));
     expect(screen.getByTestId('studio-ide-output-events').textContent).toMatch(/no extracted events/i);
     expect(screen.getByTestId('studio-ide-output-events').textContent.toLowerCase()).not.toContain(
       'insights',
@@ -195,14 +196,15 @@ describe('OneLoopStudio playflow CTAs after the IDE rebuild', () => {
       selectedVideoId: dogfoodVideo.id,
     });
     render(<OneLoopStudio showAgentWorkflowUi />);
-    expect(screen.getByTestId('pack-tools').textContent).toMatch(/Vercel/);
-    expect(screen.getByTestId('pack-tools').textContent).toMatch(/Mentioned in the video/);
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-events'));
+    expect(screen.getByTestId('pack-stack-tools').textContent).toMatch(/Vercel/);
+    expect(screen.getByTestId('pack-stack-tools').textContent).toMatch(/Mentioned in the video/);
   });
 
   it('discards late Act results after switching to another stored pack', async () => {
     const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
     const pack = reviewPackFixture();
-    const rowA: Video = { ...dogfoodVideo, videoPack: {
+    const rowA: Video = { ...dogfoodVideo, runId: 'run-a', videoPack: {
       packId: pack.id, videoId: dogfoodVideo.id, sourceUrl: dogfoodVideo.url,
       sourceHash: pack.provenance.source_hash, version: pack.version,
       pack: { ...pack, video_id: dogfoodVideo.id, source_url: dogfoodVideo.url },
@@ -213,17 +215,18 @@ describe('OneLoopStudio playflow CTAs after the IDE rebuild', () => {
         pack: { ...pack, id: 'other-pack', video_id: 'auJzb1D-fag', source_url: otherUrl } },
     };
     useDashboardStore.setState({ videos: [rowA, rowB], selectedVideoId: rowA.id });
-    vi.mocked(startVideoToActions).mockResolvedValue({ ok: true, status: 200, runId: 'run-a' });
+
     let finishPoll!: (value: Awaited<ReturnType<typeof pollVideoToActions>>) => void;
     vi.mocked(pollVideoToActions).mockImplementation(() => new Promise((resolve) => { finishPoll = resolve; }));
     render(<OneLoopStudio showAgentWorkflowUi />);
     fireEvent.click(screen.getByTestId('studio-act-button'));
-    await waitFor(() => expect(pollVideoToActions).toHaveBeenCalled());
-    useDashboardStore.setState({ selectedVideoId: rowB.id });
+    await waitFor(() => expect(pollVideoToActions).toHaveBeenCalledWith('run-a', expect.any(Object)));
+    expect(startVideoToActions).not.toHaveBeenCalled();
+    act(() => useDashboardStore.setState({ selectedVideoId: rowB.id }));
     finishPoll({ ok: true, status: 200, runId: 'run-a', runStatus: 'completed',
       result: { url: rowA.url, transcriptChars: 0, actionCount: 1,
         actions: [{ tool: 'Old pack action', status: 'completed', result: 'from A' }] } });
-    await waitFor(() => expect(screen.getByTestId('studio-act-button').textContent).toMatch(/Act on this run/));
+    await waitFor(() => expect(screen.getByTestId('studio-act-button').textContent).toMatch(/Review this run/));
     expect(screen.queryByText('Old pack action')).toBeNull();
     expect(screen.queryByText('from A')).toBeNull();
   });

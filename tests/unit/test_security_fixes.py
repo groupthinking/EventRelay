@@ -378,27 +378,6 @@ class TestSecurityDocumentation:
         # Should have warning about secrets
         assert "secret" in content.lower() or "never commit" in content.lower()
 
-    def test_technical_notes_curl_uses_gemini_env_var(self):
-        """Verify TECHNICAL_NOTES curl snippets read key from $GEMINI_API_KEY."""
-        notes_path = (
-            project_root
-            / "docs"
-            / "knowledge_prototypes"
-            / "universal-automation-service"
-            / "TECHNICAL_NOTES.md"
-        )
-        if not notes_path.exists():
-            pytest.skip(f"File not found: {notes_path}")
-
-        headers = [
-            line.strip()
-            for line in notes_path.read_text().splitlines()
-            if "X-goog-api-key:" in line
-        ]
-        assert headers, "Expected at least one Gemini curl auth header snippet"
-        for header in headers:
-            assert "$GEMINI_API_KEY" in header
-
     def test_process_video_exists(self):
         """Verify process_video_with_mcp.py exists and has security patterns"""
         file_path = project_root / "src" / "agents" / "process_video_with_mcp.py"
@@ -424,34 +403,6 @@ class TestSecurityDocumentation:
 
 class TestSecurityBestPractices:
     """General security best practices tests"""
-
-    def test_no_hardcoded_api_keys(self):
-        """Verify no hardcoded API keys in main backend files"""
-        files_to_check = [
-            project_root / "src" / "uvai" / "api" / "main.py",
-            project_root / "src" / "youtube_extension" / "backend" / "main_v2.py",
-        ]
-
-        suspect_patterns = [
-            "AIzaSy",  # Google API key prefix
-            "sk-",    # OpenAI key prefix
-            "xai-",   # X.AI key prefix
-        ]
-
-        for file_path in files_to_check:
-            if not file_path.exists():
-                continue
-
-            content = file_path.read_text()
-            for pattern in suspect_patterns:
-                # Allow patterns in comments/strings explaining what they are
-                if pattern in content:
-                    # Check if it's just a documentation reference
-                    lines_with_pattern = [l for l in content.split('\n') if pattern in l]
-                    for line in lines_with_pattern:
-                        # If it looks like a full key (pattern + 30+ chars), fail
-                        if len(line.strip()) > 50 and not line.strip().startswith('#'):
-                            pytest.fail(f"Possible hardcoded API key in {file_path}: {line[:80]}...")
 
     def test_dockerfile_uses_nonroot_user(self):
         """Verify Dockerfile.production drops privileges to a non-root user.

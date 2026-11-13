@@ -50,7 +50,7 @@ If a streaming chat UI is the goal, either adopt the AI SDK's `useChat` + a back
 
 ## MCP ecosystem
 
-MCP servers exist (`mcp-servers/litert-mcp`, `mcp-servers/shared-state`, `src/youtube_extension/mcp/`) using `@modelcontextprotocol/sdk@^1.26.0`, primarily for NotebookLM video-analysis orchestration. They are **loosely coupled** — no dedicated deployment workflow, not wired into the main pipelines.
+MCP server implementations exist in `mcp-servers/litert-mcp` and `mcp-servers/shared-state`. The unused standalone NotebookLM video-analysis server under `src/youtube_extension/mcp/` has been removed. The remaining servers are **loosely coupled** — no dedicated deployment workflow, not wired into the main pipelines.
 
 ## Suggested priority order
 

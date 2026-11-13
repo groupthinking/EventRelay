@@ -7,7 +7,10 @@
     {
       "source": "/(.*)",
       "has": [
-        { "type": "host", "value": "event-relay-web.vercel.app" }
+        {
+          "type": "host",
+          "value": "event-relay-web.vercel.app"
+        }
       ],
       "destination": "https://uvai.io/$1",
       "permanent": true
@@ -15,10 +18,18 @@
     {
       "source": "/(.*)",
       "has": [
-        { "type": "host", "value": "v0-uvai.vercel.app" }
+        {
+          "type": "host",
+          "value": "v0-uvai.vercel.app"
+        }
       ],
       "destination": "https://uvai.io/$1",
       "permanent": true
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "cursor/studio-playflow-ide-ctas-1805": false
+    }
+  }
 }

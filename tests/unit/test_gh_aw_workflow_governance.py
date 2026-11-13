@@ -212,7 +212,7 @@ def test_live_smoke_modules_are_excluded_before_import(monkeypatch) -> None:
     monkeypatch.delenv("RUN_LIVE_E2E", raising=False)
     monkeypatch.delenv("RUN_LIVE_DEPLOY", raising=False)
 
-    assert len(suite_conftest._LIVE_E2E_TESTS) == 16
+    assert len(suite_conftest._LIVE_E2E_TESTS) == 8
     assert suite_conftest._LIVE_DEPLOY_TESTS < suite_conftest._LIVE_E2E_TESTS
     for relative_path in suite_conftest._LIVE_E2E_TESTS:
         assert suite_conftest.pytest_ignore_collect(

@@ -54,7 +54,7 @@ shipped code.
 
 - **Vercel Functions Remediation Verification Matrix (code-reviewer agent, 2026-06-12)**:
   - Zero `fireAndForget` in source (apps/web/src + middleware): Confirmed 0 matches via `grep -r --include="*.ts" ... "fireAndForget"`.
-  - Correct `waitUntil` + `scheduleBackground` in `apps/web/src/app/api/pipeline/stream/route.ts`: Import from `@vercel/functions`, helper defined, all post-processing (Training, Embeddings, CloudEvent, CloudEvent:Start) use it; comments updated for platform background + independent stream close. Ancillary routes (`video/route.ts`, `pipeline/route.ts`): All prior side-effect `.catch` sites wrapped in `waitUntil(...)`.
+  - Correct `waitUntil` + `scheduleBackground` in `apps/web/src/app/api/pipeline/stream/route.ts`: Import from `@vercel/functions`, helper defined, all post-processing (Training, Embeddings, CloudEvent, CloudEvent:Start) use it; comments updated for platform background + independent stream close. Ancillary routes (`video/route.ts`, `pipeline/route.ts`): All prior side-effect `.catch` sites wrapped in `waitUntil(...)`. *(Historical: `pipeline/route.ts` and `pipeline/stream/route.ts` were removed in #2322; the canonical flow is now `POST /api/video/pack` → `GET /api/video/pack?video_id=…`.)*
   - Active `middleware.ts`: Exists at `apps/web/middleware.ts`; `export async function middleware(request) { return proxy(request); }` with matcher `['/api/:path*']`; delegates to `src/proxy`.
   - Hardened `src/proxy.ts`: Dev-only comment on `memoryBuckets` ("ONLY for local dev... production MUST use Redis... explicitly fail-open with warning"); `if (!redis && process.env.NODE_ENV === 'production')` emits exact warning; `if (process.env.NODE_ENV !== 'production')` guard before `checkMemoryLimit`, else fail-open. 429 + X-RateLimit-* headers preserved.
   - Package: `"@vercel/functions": "^3.0.0"` in `apps/web/package.json`.
@@ -99,7 +99,9 @@ Live verification (post-change):
 - `eventrelay-production.up.railway.app` → **404** (legacy; do not use).
 - `POST /api/transcribe` on `uvai.io` → **200** (OpenAI path working).
 - `POST /api/pipeline` → bounded JSON; backend link may still timeout until
-  the next Vercel production redeploy picks up env changes.
+  the next Vercel production redeploy picks up env changes. *(Route retired in
+  #2322; smoke-test the Video Pack flow with
+  `scripts/deployment/production_smoke.sh` instead.)*
 
 Remaining dashboard items (optional / follow-up):
 
@@ -147,7 +149,7 @@ This section records contributions from general-purpose agent acting on remainin
 - next.config.js (apps/web/): CSP comprehensive + matches prod (includes va.vercel-scripts.com, vitals.vercel-insights, upstash, cloudrun backend); turbopack root for monorepo; redirects() covers legacy hosts (duplicates some root vercel.json); images, headers security good. No issues blocking.
 - vercel.json files: `./vercel.json` (root: legacy host redirects only) + `./apps/web/vercel.json` (framework: nextjs, install/build cmds, output .next). Potential config split: if Vercel project "Root Directory" = apps/web, root redirects may be inactive (next.config.js host redirects + dashboard should cover). Audit via Vercel dashboard or MCP recommended.
 - Layout files: apps/web/src/app/layout.tsx (conditional @vercel/analytics + speed-insights on VERCEL=1; metadata/og good); dashboard/layout.tsx (force-dynamic for searchparams safety); prototype/layout.tsx (noindex, minimal). No CSP/header or dynamic issues.
-- API routes + waitUntil (ancillary/background paths): Confirmed in video/route.ts, pipeline/route.ts, pipeline/stream/route.ts. All use *direct* waitUntil( saveTrainingExample(...) / publishEvent(...) / CloudEvents ). schedulePostProcessing (in stream) orchestrates the direct calls AFTER pipeline_status:complete events; MUST NOT block stream close/response (see finally + comments). No fireAndForget, no bare top-level .catch on these. Other post-response work (embeddings via saveEmbeddings) also direct waitUntil. Runbook + code comments updated. No edge runtimes (all 'nodejs' + explicit maxDuration). Compatible with @vercel/functions ^3.0.0. Ancillary paths (training saves, event publishing/CloudEvents) documented here and in route headers.
+- API routes + waitUntil (ancillary/background paths): Confirmed in video/route.ts, pipeline/route.ts, pipeline/stream/route.ts (the two pipeline routes were later removed in #2322). All use *direct* waitUntil( saveTrainingExample(...) / publishEvent(...) / CloudEvents ). schedulePostProcessing (in stream) orchestrates the direct calls AFTER pipeline_status:complete events; MUST NOT block stream close/response (see finally + comments). No fireAndForget, no bare top-level .catch on these. Other post-response work (embeddings via saveEmbeddings) also direct waitUntil. Runbook + code comments updated. No edge runtimes (all 'nodejs' + explicit maxDuration). Compatible with @vercel/functions ^3.0.0. Ancillary paths (training saves, event publishing/CloudEvents) documented here and in route headers.
 - Remaining patterns: Full source grep found **zero** instances of fireAndForget / fire-and-forget / custom background helpers or bare .catch on ancillary (save/publish) in apps/web/src (all targets use direct waitUntil; scheduleBackground fully removed). schedulePostProcessing is pure orchestrator for post-complete direct calls.
 - Other routes: transcribe, extract-events, training/trigger, realtime etc. have runtime/nodejs + max where needed. Non-pipeline routes have no un-wrapped side effects requiring waitUntil.
 - Workflows: CI builds web via `npm run build:web` (uploads .next); no direct vercel deploy in main CI (git integration or separate). deploy.yml k8s-focused.
@@ -155,7 +157,7 @@ This section records contributions from general-purpose agent acting on remainin
 
 **Terminal verification commands executed:**
 - Grep scans for patterns + waitUntil sites (clean adoption confirmed).
-- Specific curls: `curl -sSI https://uvai.io/` → exact CSP, HSTS, Permissions-Policy, etc. from next.config present in prod. `curl -sS https://uvai.io/api/pipeline` → healthy JSON response. Additional POST attempts exercised paths.
+- Specific curls: `curl -sSI https://uvai.io/` → exact CSP, HSTS, Permissions-Policy, etc. from next.config present in prod. `curl -sS https://uvai.io/api/pipeline` → healthy JSON response (at the time; that route was retired in #2322 and now returns 401/404 — `scripts/deployment/production_smoke.sh` checks this and exercises `POST`/`GET /api/video/pack`). Additional POST attempts exercised paths.
 - Rate limit / header burst curls (executed; prod may be in fail-open without UPSTASH per checklist).
 - Lint: `npm --prefix apps/web run lint` → clean (exit 0, no errors).
 - Build artifact check: local `apps/web/.next` present (recent build manifests); `npm run build:web` script confirmed; turbo dry attempted (workspace filter note).

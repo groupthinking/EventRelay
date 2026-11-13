@@ -5,16 +5,19 @@ import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
+import StudioBoundTasks from './StudioBoundTasks';
 
 export type StudioReviewActionInput = {
   tool: string;
+  input?: Record<string, unknown>;
   status: string;
   result?: string;
 };
 
-type OutputSection = 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
+type OutputSection = 'tasks' | 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
+  { id: 'tasks', label: 'Tasks' },
   { id: 'events', label: 'Events' },
   { id: 'lingo', label: 'Lingo' },
   { id: 'tools', label: 'Tools' },
@@ -43,22 +46,23 @@ export default function StudioIdeOutput({
   video,
   specReview,
   eventsEmptyMessage,
-  packWorkbench,
   showTranscriptRetry,
   onRetryTranscript,
   stackChecks = [],
   reviewActions = [],
+  packWorkbench,
 }: {
   video: Video | undefined;
   specReview?: ReactNode;
   eventsEmptyMessage?: string;
-  packWorkbench?: ReactNode;
   showTranscriptRetry?: boolean;
   onRetryTranscript?: () => void;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
+  packWorkbench?: ReactNode;
 }) {
-  const [active, setActive] = useState<OutputSection>('events');
+  const [active, setActive] = useState<OutputSection>('tasks');
+  const [reviewingAction, setReviewingAction] = useState<string | null>(null);
 
   const hasContent = Boolean(
     video?.videoPack ||
@@ -67,9 +71,9 @@ export default function StudioIdeOutput({
       video?.transcript?.trim() ||
       video?.failure ||
       eventsEmptyMessage ||
-      packWorkbench ||
       stackChecks.length > 0 ||
-      reviewActions.length > 0,
+      reviewActions.length > 0 ||
+      packWorkbench,
   );
 
   const pack = video?.videoPack?.pack;
@@ -112,7 +116,7 @@ export default function StudioIdeOutput({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-4">
-        {!hasContent && active !== 'transcript' ? (
+        {!hasContent && active !== 'transcript' && active !== 'tasks' ? (
           <div className="uvai-empty">
             <p className="font-medium text-slate-600">
               Run a video and the extracted actions land here
@@ -121,18 +125,16 @@ export default function StudioIdeOutput({
           </div>
         ) : (
           <>
+        {active === 'tasks' && <StudioBoundTasks key={video?.id ?? 'empty'} pack={pack} />}
         {active === 'events' && (
           <div className="flex flex-col gap-3" data-testid="studio-ide-output-events">
             {events.length === 0 ? (
-              <>
-                <EmptyNote
-                  text={
-                    eventsEmptyMessage ||
-                    'No events extracted from this video yet.'
-                  }
-                />
-                {packWorkbench}
-              </>
+              <EmptyNote
+                text={
+                  eventsEmptyMessage ||
+                  'This run has no extracted events. Pack identity stays on this page.'
+                }
+              />
             ) : (
               <ul className="flex flex-col gap-3">
                 {events.map((e) => (
@@ -154,6 +156,7 @@ export default function StudioIdeOutput({
                 ))}
               </ul>
             )}
+            {packWorkbench}
           </div>
         )}
 
@@ -251,6 +254,7 @@ export default function StudioIdeOutput({
               <>
                 {reviewActions.map((action, i) => {
                   const card = studioActionCard(action);
+                  const actionKey = `${video?.id ?? 'none'}:${action.tool}:${i}`;
                   return (
                     <li
                       key={`${action.tool}-${i}`}
@@ -267,6 +271,31 @@ export default function StudioIdeOutput({
                           </p>
                           <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
                           <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
+                          {card.kind === 'review' ? (
+                            <button
+                              type="button"
+                              data-testid="studio-review-act-button"
+                              onClick={() => setReviewingAction(reviewingAction === actionKey ? null : actionKey)}
+                              aria-expanded={reviewingAction === actionKey}
+                              className="uvai-btn uvai-btn-primary mt-3"
+                            >
+                              {reviewingAction === actionKey ? 'Hide proposal' : 'Review proposal'}
+                            </button>
+                          ) : null}
+                          {reviewingAction === actionKey ? (
+                            <div data-testid="studio-proposal-detail" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                              <p>Proposed tool: {action.tool}</p>
+                              <p>Status: {action.status}. No tool has been executed from this review.</p>
+                              {action.input ? (
+                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 text-slate-800">
+                                  {JSON.stringify(action.input, null, 2)}
+                                </pre>
+                              ) : (
+                                <p>Proposal arguments are unavailable for this run.</p>
+                              )}
+                              <p>{card.detail}</p>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </li>

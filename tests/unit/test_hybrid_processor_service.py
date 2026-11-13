@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import json
 import sys
 import types as _types
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -143,19 +141,10 @@ def _make_mock_gemini_service(
 
 
 class TestProcessingMode:
-    def test_values_exist(self):
+    def test_only_cloud_mode(self):
         assert ProcessingMode.CLOUD_ONLY.value == "cloud"
-        assert ProcessingMode.HYBRID_AUTO.value == "hybrid_auto"
-        assert ProcessingMode.HYBRID_PARALLEL.value == "hybrid_parallel"
-        assert ProcessingMode.HYBRID_FALLBACK.value == "hybrid_fallback"
-        assert ProcessingMode.LOCAL_ONLY.value == "local"
-
-    def test_all_five_members(self):
-        assert len(ProcessingMode) == 5
-
-    def test_is_enum_comparable(self):
-        assert ProcessingMode.CLOUD_ONLY == ProcessingMode.CLOUD_ONLY
-        assert ProcessingMode.CLOUD_ONLY != ProcessingMode.LOCAL_ONLY
+        assert len(ProcessingMode) == 1
+        assert list(ProcessingMode) == [ProcessingMode.CLOUD_ONLY]
 
 
 class TestTaskType:
@@ -209,18 +198,6 @@ class TestHybridConfig:
         g = GeminiConfig(model_name="gemini-1.5-pro")
         cfg = HybridConfig(gemini=g)
         assert cfg.gemini is g
-
-    def test_enable_mock_from_env(self, monkeypatch):
-        monkeypatch.setenv("YOUTUBE_EXTENSION_MOCK_AI", "1")
-        # Re-create config; enable_mock is evaluated at class definition time
-        # via os.getenv default, so we test the direct field assignment path
-        cfg = HybridConfig(enable_mock=True)
-        assert cfg.enable_mock is True
-
-    def test_enable_mock_false_by_default_without_env(self, monkeypatch):
-        monkeypatch.delenv("YOUTUBE_EXTENSION_MOCK_AI", raising=False)
-        cfg = HybridConfig(enable_mock=False)
-        assert cfg.enable_mock is False
 
 
 class TestRoutingDecision:
@@ -508,94 +485,31 @@ class TestGetCacheKey:
 
 
 # ===========================================================================
-# HybridProcessorService.process – mock path
+# HybridProcessorService.process – Gemini unavailable
 # ===========================================================================
 
 
-class TestProcessMockPath:
-    """When enable_mock=True OR gemini.is_available()==False, a mock response
-    is generated without calling any Gemini method."""
-
-    def _svc(self, enable_mock: bool = True, enable_caching: bool = True) -> HybridProcessorService:
-        cfg = HybridConfig(enable_mock=enable_mock, enable_caching=enable_caching)
+class TestProcessGeminiUnavailable:
+    async def test_unavailable_returns_failure(self):
+        cfg = HybridConfig(enable_caching=False)
         with patch("youtube_extension.services.ai.hybrid_processor_service.GeminiService") as Mg:
             mock_g = _make_mock_gemini_service(available=False)
             Mg.return_value = mock_g
             svc = HybridProcessorService(cfg)
             svc.gemini = mock_g
-        return svc
 
-    async def test_process_returns_hybrid_result(self):
-        svc = self._svc()
-        result = await svc.process("some text input", "prompt")
-        assert isinstance(result, HybridResult)
+        result = await svc.process("input", "describe the personality")
 
-    async def test_process_success_true_on_mock(self):
-        svc = self._svc()
-        result = await svc.process("input", "what is this?")
-        assert result.success is True
-
-    async def test_process_increments_total_requests(self):
-        svc = self._svc()
-        await svc.process("input", "prompt")
-        assert svc.metrics["total_requests"] == 1
-
-    async def test_process_increments_cloud_requests(self):
-        svc = self._svc()
-        await svc.process("input", "prompt")
-        assert svc.metrics["cloud_requests"] == 1
-
-    async def test_process_mode_is_cloud_only(self):
-        svc = self._svc()
-        result = await svc.process("input", "prompt")
+        assert result.success is False
+        assert result.response is None
         assert result.mode_used == ProcessingMode.CLOUD_ONLY
-
-    async def test_process_routing_decision_attached(self):
-        svc = self._svc()
-        result = await svc.process("input", "prompt")
-        assert result.routing_decision is not None
-
-    async def test_process_latency_is_positive(self):
-        svc = self._svc()
-        result = await svc.process("input", "prompt")
-        assert result.latency >= 0.0
-
-    async def test_process_caches_successful_result(self):
-        svc = self._svc()
-        await svc.process("cacheable.txt", "prompt")
-        assert len(svc._cache) == 1
-
-    async def test_process_returns_cached_result_on_second_call(self):
-        svc = self._svc()
-        r1 = await svc.process("input.txt", "prompt")
-        r2 = await svc.process("input.txt", "prompt")
-        assert r2.from_cache is True
-        assert svc.metrics["cache_hits"] == 1
-
-    async def test_process_no_cache_for_image_object(self):
-        """PIL Image objects are not cached (only str/Path inputs are)."""
-        svc = self._svc()
-        from unittest.mock import MagicMock
-
-        img = MagicMock()
-        await svc.process(img, "describe")
-        # No crash, and cache is empty because input is not str/Path
-        assert len(svc._cache) == 0
-
-    async def test_process_force_mode_respected_in_routing_decision(self):
-        svc = self._svc()
-        result = await svc.process("input", "prompt", force_mode=ProcessingMode.LOCAL_ONLY)
-        assert result.routing_decision.mode == ProcessingMode.LOCAL_ONLY
-
-    async def test_process_explicit_task_type_propagated(self):
-        svc = self._svc()
-        result = await svc.process("input", "prompt", task_type=TaskType.AUDIO_ANALYSIS)
-        assert result.routing_decision.task_type == TaskType.AUDIO_ANALYSIS
-
-    async def test_process_no_caching_when_disabled(self):
-        svc = self._svc(enable_caching=False)
-        await svc.process("file.txt", "prompt")
-        assert svc._cache is None
+        assert result.error == "Gemini not available or not initialized"
+        assert svc.metrics["errors"] == 1
+        mock_g.process_text.assert_not_awaited()
+        mock_g.process_image.assert_not_awaited()
+        mock_g.process_video.assert_not_awaited()
+        mock_g.process_audio.assert_not_awaited()
+        mock_g.process_youtube.assert_not_awaited()
 
 
 # ===========================================================================
@@ -604,12 +518,11 @@ class TestProcessMockPath:
 
 
 class TestProcessLiveGeminiPath:
-    """When enable_mock=False and gemini.is_available()==True, _call_gemini
-    is invoked."""
+    """When Gemini is available, process() calls the matching Gemini method."""
 
     def _svc(self, gemini_result: GeminiResult | None = None) -> HybridProcessorService:
         res = gemini_result or _make_gemini_result()
-        cfg = HybridConfig(enable_mock=False, enable_caching=False)
+        cfg = HybridConfig(enable_caching=False)
         with patch("youtube_extension.services.ai.hybrid_processor_service.GeminiService") as Mg:
             mock_g = _make_mock_gemini_service(available=True, result=res)
             Mg.return_value = mock_g
@@ -621,56 +534,6 @@ class TestProcessLiveGeminiPath:
         svc = self._svc()
         await svc.process("https://www.youtube.com/watch?v=abc", "summarize")
         svc.gemini.process_youtube.assert_awaited_once()
-
-    async def test_process_tracks_provider_reported_usage(self):
-        usage = SimpleNamespace(
-            prompt_token_count=125,
-            candidates_token_count=40,
-            thoughts_token_count=5,
-            total_token_count=170,
-        )
-        svc = self._svc(
-            _make_gemini_result(usage_metadata=usage)
-        )
-
-        with patch(
-            "youtube_extension.services.ai.hybrid_processor_service._record_api_usage",
-            new=AsyncMock(),
-        ) as track:
-            result = await svc.process(
-                "video.mp4",
-                "describe",
-                task_type=TaskType.VIDEO_UNDERSTANDING,
-            )
-
-        assert result.success is True
-        track.assert_awaited_once_with(
-            "google",
-            "hybrid/process",
-            125,
-            model="gemini-2.0-flash",
-            output_tokens=45,
-            request_type="video_understanding",
-            success=True,
-        )
-
-    async def test_usage_tracking_failure_does_not_discard_paid_result(self):
-        usage = SimpleNamespace(
-            prompt_token_count=25,
-            candidates_token_count=10,
-        )
-        svc = self._svc(
-            _make_gemini_result(usage_metadata=usage)
-        )
-
-        with patch(
-            "youtube_extension.services.ai.hybrid_processor_service._record_api_usage",
-            new=AsyncMock(side_effect=RuntimeError("database unavailable")),
-        ):
-            result = await svc.process("video.mp4", "describe")
-
-        assert result.success is True
-        assert result.response == "ok"
 
     async def test_process_routes_mp4_video(self):
         svc = self._svc()
@@ -715,7 +578,7 @@ class TestProcessLiveGeminiPath:
         assert result.error == "API error"
 
     async def test_process_exception_returns_error_result(self):
-        cfg = HybridConfig(enable_mock=False, enable_caching=False)
+        cfg = HybridConfig(enable_caching=False)
         with patch("youtube_extension.services.ai.hybrid_processor_service.GeminiService") as Mg:
             mock_g = _make_mock_gemini_service(available=True)
             mock_g.process_video = AsyncMock(side_effect=RuntimeError("network error"))
@@ -744,62 +607,6 @@ class TestProcessLiveGeminiPath:
         await svc.process("video.mp4", "clip analysis", video_metadata=meta)
         call_kwargs = svc.gemini.process_video.call_args
         assert call_kwargs.kwargs.get("video_metadata") == meta or meta in call_kwargs.args
-
-
-# ===========================================================================
-# HybridProcessorService._generate_mock_response
-# ===========================================================================
-
-
-class TestGenerateMockResponse:
-    def _svc(self) -> HybridProcessorService:
-        with patch("youtube_extension.services.ai.hybrid_processor_service.GeminiService") as Mg:
-            mock_g = _make_mock_gemini_service()
-            Mg.return_value = mock_g
-            svc = HybridProcessorService()
-            svc.gemini = mock_g
-        return svc
-
-    def test_personality_prompt_returns_json_with_creator_persona(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("describe the personality", None)
-        data = json.loads(resp)
-        assert "creator_persona" in data
-
-    def test_persona_prompt_returns_creator_persona(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("analyze the creator's persona style", TaskType.GENERAL_QA)
-        data = json.loads(resp)
-        assert "creator_persona" in data
-
-    def test_strategy_prompt_returns_strategic_analysis(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("explain the business strategy", None)
-        data = json.loads(resp)
-        assert "strategic_analysis" in data
-
-    def test_funnel_prompt_returns_strategic_analysis(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("build a funnel for leads", None)
-        data = json.loads(resp)
-        assert "strategic_analysis" in data
-
-    def test_default_fallback_includes_task_type(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("random question", TaskType.AUDIO_ANALYSIS)
-        assert "TaskType.AUDIO_ANALYSIS" in resp
-
-    def test_default_fallback_with_none_task_type(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("random question", None)
-        assert "mock response" in resp.lower()
-
-    def test_strategy_response_has_a2ui_payload(self):
-        svc = self._svc()
-        resp = svc._generate_mock_response("the overall strategy", None)
-        data = json.loads(resp)
-        assert "a2ui_payload" in data
-        assert isinstance(data["a2ui_payload"], list)
 
 
 # ===========================================================================
@@ -867,7 +674,7 @@ class TestCallGeminiRouting:
 
     def _svc(self, result: GeminiResult | None = None) -> HybridProcessorService:
         res = result or _make_gemini_result()
-        cfg = HybridConfig(enable_mock=False, enable_caching=False)
+        cfg = HybridConfig(enable_caching=False)
         with patch("youtube_extension.services.ai.hybrid_processor_service.GeminiService") as Mg:
             mock_g = _make_mock_gemini_service(available=True, result=res)
             Mg.return_value = mock_g

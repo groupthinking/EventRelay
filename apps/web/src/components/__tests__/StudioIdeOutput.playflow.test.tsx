@@ -41,11 +41,37 @@ describe('StudioIdeOutput playflow (B/E/F + events vs Insights)', () => {
 
     expect(screen.getByTestId('studio-ide-output-tab-events').textContent).toBe('Events');
     expect(screen.queryByRole('tab', { name: /insights/i })).toBeNull();
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-events'));
     expect(screen.getByTestId('studio-ide-output-events').textContent).toMatch(/no extracted events/i);
     expect(screen.getByTestId('studio-ide-output-events').textContent.toLowerCase()).not.toContain(
       'insights',
     );
     expect(screen.getByTestId('pack-workbench').textContent).toMatch(/architecture/i);
+  });
+
+  it('keeps Tasks selected by default before the viewer opens another section', () => {
+    render(<StudioIdeOutput video={emptyEventsVideo} />);
+
+    expect(screen.getByRole('tab', { name: 'Tasks' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Events' }).getAttribute('aria-selected')).toBe('false');
+    expect(screen.queryByTestId('studio-ide-output-events')).toBeNull();
+  });
+
+  it.each([false, true])('keeps one pack workbench visible when events are present: %s', (hasEvents) => {
+    render(
+      <StudioIdeOutput
+        video={{
+          ...emptyEventsVideo,
+          events: hasEvents ? [{ id: 'source-event', type: 'action', title: 'Source-backed event', timestamp: '00:04' }] : [],
+        }}
+        packWorkbench={<div data-testid="pack-workbench">Pack architecture and artifacts</div>}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Events' }));
+    expect(screen.getAllByTestId('pack-workbench')).toHaveLength(1);
+    expect(screen.getByTestId('studio-ide-output-events').contains(screen.getByTestId('pack-workbench'))).toBe(true);
+    if (hasEvents) expect(screen.getByText('Source-backed event')).toBeTruthy();
   });
 
   it('shows skip/unknown stack-check labels so SeaDance/Cluely do not look like a production hold', () => {
