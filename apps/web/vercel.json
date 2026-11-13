@@ -1,8 +1,0 @@
-{
-  "git": {
-    "deploymentEnabled": {
-      "codex/fix-pack-readiness-20261112": false,
-      "codex/fix-studio-cancellation-20261112": false
-    }
-  }
-}
