@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/npm_and_yarn/apps/web/workflow-5.1.0": false
+    }
+  }
+}
