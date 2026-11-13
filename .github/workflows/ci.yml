@@ -168,6 +168,8 @@ jobs:
           STRIPE_SECRET_KEY: ""
           STRIPE_WEBHOOK_SECRET: ""
         run: npm --workspace=apps/web test -- --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-vitest-report.json"
+      - name: Root MCP dependency security and type regressions
+        run: npm run test:mcp-security
       - name: Retain machine-readable test evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
