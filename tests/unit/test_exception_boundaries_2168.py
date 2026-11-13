@@ -128,6 +128,21 @@ def test_entrypoint_preserves_completed_github_handoff_on_unexpected_vercel_fail
     assert result["error_class"] == "ValueError"
 
 
+def test_expected_vercel_failure_keeps_github_receipt_but_fails_handoff(tmp_path):
+    tool = _tool(github_token="gh-token", vercel_token=SECRET)
+    with (
+        patch.object(tool, "_initialize_git", new=AsyncMock(return_value={"success": True})),
+        patch.object(tool, "_create_github_repo", new=AsyncMock(return_value={"success": True, "repo_url": "https://github.com/example/completed"})),
+        patch.object(tool, "_deploy_to_vercel", new=AsyncMock(return_value={"success": False, "error": "deployment rejected"})),
+    ):
+        result = asyncio.run(tool.deploy_to_github_and_vercel(str(tmp_path)))
+    assert result["status"] == "failed"
+    assert result["github_deployed"] is True
+    assert result["github_url"] == "https://github.com/example/completed"
+    assert result["vercel_deployed"] is False
+    assert result["errors"] == [{"stage": "vercel", "message": "deployment rejected"}]
+
+
 @pytest.mark.parametrize("step", ["git", "github", "vercel"])
 @pytest.mark.parametrize("stream", ["stderr", "stdout"])
 def test_expected_cli_failure_redacts_configured_tokens(tmp_path, step, stream):

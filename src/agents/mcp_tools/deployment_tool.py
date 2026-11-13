@@ -181,7 +181,9 @@ class DeploymentMCPTool:
                     })
 
             # Determine overall status
-            if results["github_deployed"] or results["vercel_deployed"]:
+            # A completed GitHub artifact is a partial receipt, not proof that
+            # the full handoff succeeded when another requested stage failed.
+            if not results["errors"] and (results["github_deployed"] or results["vercel_deployed"]):
                 results["status"] = "success"
             else:
                 results["status"] = "failed"
