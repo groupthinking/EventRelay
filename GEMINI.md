@@ -128,3 +128,12 @@ npm --workspace=apps/web run type-check
 - Backend-dependent actions use `BACKEND_URL` plus the backend's own configured credentials. Missing configuration is not evidence of a successful action.
 - Auth, billing, and CLI/MCP credentials belong to their existing integrations. Never print secrets or commit environment files.
 - Inspect `.gemini/settings.json` and run `/mcp` before assuming an optional tooling service is connected. See [README.md](README.md) for the current development path.
+
+## Agent staff governance
+
+Full spec: [docs/agent-staff-governance.md](docs/agent-staff-governance.md).
+
+- **Five rules:** (1) no external state change without a standing policy or task authorization; (2) one human approval gate; (3) all work committed to a tracked GitHub branch; (4) a changelog entry linked to the issue, PR, or Video Pack hash; (5) every fix leaves an SOP and a regression test or check.
+- **The one gate (Hayden):** production deploys, live database changes, billing, entitlements and spend, and credentials or access settings. CI-green merges to `main` that touch none of these fall under the standing merge policy (POL-001) and MERGE_POLICY.md.
+- **Policy loop:** spot the inconsistency, propose a rule plus its check, Hayden approves it once, then codify it and enforce it automatically.
+- **Hiring brief:** every agent role states what it owns, how it thinks, its definition of done, and what it never touches. It states its execution limits before taking work and never claims access it lacks.

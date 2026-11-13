@@ -6,6 +6,16 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-13: Agent staff governance (docs)
+
+#### Added
+
+- `docs/agent-staff-governance.md`: five rules, a single human approval gate
+  (production deploys, live DB, billing/spend, credentials/access), a standing
+  CI-green merge policy (POL-001), the inconsistency-to-policy loop, and the
+  agent hiring brief.
+- Summary section in `AGENTS.md`, `CLAUDE.md` and `GEMINI.md` pointing to it.
+
 ### 2026-05-22 — UVAI Phase 1: SEO, a11y, static assets
 
 Baseline pulse identified the following gaps between repo `main` and the live
