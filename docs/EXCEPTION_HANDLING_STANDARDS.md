@@ -28,11 +28,33 @@ A marked boundary logs the context (step/agent/task), the error class, and the t
 | `src/agents/mcp_tools/deployment_tool.py` | 4 broad handlers (entry point + git / GitHub repo / Vercel steps); owner-lookup `RuntimeError` swallowed by the GitHub step; entry point printed to stderr | Steps catch only `OSError` and `subprocess.SubprocessError` (incl. `TimeoutExpired`); owner lookup raises `GitHubIdentityError(RuntimeError)`, the only exception caught around it; every failed step logs stage, error class and a token-redacted traceback; one marked boundary at the entry point logs via `logger` and returns `status: "error"` with `error_class` | `tests/unit/test_exception_boundaries_2168.py` |
 | `src/youtube_extension/services/agents/adapters/agent_orchestrator.py` | 5 broad handlers | Shared SQL store setup catches only `SQLAlchemyError`, `ImportError` (missing driver) and `OSError` (file); anything else raises. Four marked boundaries (create agent, `execute_task`, `execute_single`, message delivery) log agent/task, error class and traceback; return values unchanged | `tests/unit/test_exception_boundaries_2168.py` |
 
-The test file's guard test pins the broad-handler count (1 and 4) and requires every one to carry the marker with a reason.
+The test file's AST guard pins the broad-handler count (1 and 4) and requires every one
+to carry the marker with a reason. It recognizes tuple catches, multiline catches,
+bare handlers and `except*` handlers; line-oriented patterns miss these forms.
 
 ## Remaining work
 
-Counts are unmarked `except:` / `except Exception` / `except BaseException` lines after this slice (`grep -rnE '^\s*except\s*(:|\(?\s*(Exception|BaseException)\b)'`), measured 2026-11-09.
+The counts below are historical line-pattern measurements from 2026-11-09 and can
+undercount tuple, multiline and `except*` handlers. Recompute broad-handler totals
+with AST nodes when assessing remaining work:
+
+```python
+import ast
+from pathlib import Path
+
+for path in Path("src").rglob("*.py"):
+    source = path.read_text()
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+        caught = [] if node.type is None else ast.walk(node.type)
+        broad = node.type is None or any(
+            isinstance(t, ast.Name) and t.id in {"Exception", "BaseException"}
+            for t in caught
+        )
+        if broad and "# exception-boundary:" not in source.splitlines()[node.lineno - 1]:
+            print(f"{path}:{node.lineno}")
+```
 
 - `src/agents/` (all modules): 125 unmarked broad handlers.
 - `src/youtube_extension/services/agents/adapters/` (other adapters): 12 unmarked broad handlers.

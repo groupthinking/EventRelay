@@ -114,3 +114,33 @@ describe('direct key resolution', () => {
     }
   });
 });
+
+describe('shard sink source + fps boundary (#2214)', () => {
+  it.each([
+    'https://attacker.example/x/youtube.com/watch?v=auJzb1D-fag',
+    'https://youtu.be/auJzb1D-fag',
+    'https://m.youtube.com/watch?v=auJzb1D-fag',
+    'https://www.youtube.com/watch?v=auJzb1D-fag&list=PL1',
+    'http://www.youtube.com/watch?v=auJzb1D-fag',
+    'https://user:pw@www.youtube.com/watch?v=auJzb1D-fag',
+    'https://www.youtube.com:443/watch?v=auJzb1D-fag',
+    'https://www.youtube.com.attacker.example/watch?v=auJzb1D-fag',
+    'javascript:alert(1)//www.youtube.com/watch?v=auJzb1D-fag',
+  ])('rejects non-canonical sourceUrl %s before any provider call', async (sourceUrl) => {
+    const client = stubClient('ok');
+    expect(() => buildShardInteractionInput({ ...CALL, sourceUrl })).toThrow(/canonical YouTube/);
+    await expect(runShardVideoInteraction({ ...CALL, sourceUrl }, { client })).rejects.toThrow(/canonical YouTube/);
+    expect(client.seen).toHaveLength(0);
+  });
+
+  it.each([Number.NaN, 0, -1, Number.POSITIVE_INFINITY, 1000])('rejects fps %s', (fps) => {
+    expect(() => buildShardInteractionInput({ ...CALL, fps })).toThrow(/Invalid shard fps/);
+  });
+
+  it('keeps fps 1 by default and passes a valid explicit fps through', () => {
+    const [video] = buildShardInteractionInput(CALL);
+    expect(video).toMatchObject({ processing: { fps: 1 } });
+    const [explicit] = buildShardInteractionInput({ ...CALL, fps: 0.5 });
+    expect(explicit).toMatchObject({ processing: { fps: 0.5 } });
+  });
+});

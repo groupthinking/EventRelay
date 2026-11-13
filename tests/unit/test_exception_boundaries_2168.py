@@ -6,10 +6,11 @@ subprocess, network or database is touched.
 
 from __future__ import annotations
 
+import ast
 import asyncio
 import importlib.util
 import logging
-import re
+import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,12 +19,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.exc import ArgumentError, OperationalError
 
-from youtube_extension.services.agents.adapters import agent_orchestrator as orch_mod
-from youtube_extension.services.agents.adapters.agent_orchestrator import (
-    AgentOrchestrator,
-    OrchestrationResult,
-)
-from youtube_extension.services.agents.base_agent import BaseAgent
+with patch.dict(os.environ):
+    os.environ.pop("DATABASE_URL", None)
+    os.environ.pop("EVENTRELAY_SHARED_STATE_DATABASE_URL", None)
+    from youtube_extension.services.agents.adapters import (
+        agent_orchestrator as orch_mod,
+    )
+    from youtube_extension.services.agents.adapters.agent_orchestrator import (
+        AgentOrchestrator,
+        OrchestrationResult,
+    )
+    from youtube_extension.services.agents.base_agent import BaseAgent
 
 REPO_ROOT = Path(__file__).parents[2]
 DEPLOY_PATH = REPO_ROOT / "src/agents/mcp_tools/deployment_tool.py"
@@ -35,6 +41,12 @@ _spec.loader.exec_module(deploy_mod)
 
 DEPLOY_LOGGER = deploy_mod.logger.name
 SECRET = "vercel-secret-token-2168"
+
+
+@pytest.fixture(autouse=True)
+def isolate_shared_state_environment(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("EVENTRELAY_SHARED_STATE_DATABASE_URL", raising=False)
 
 
 def _tool(github_token=None, vercel_token=None):
@@ -86,17 +98,51 @@ def test_github_step_subprocess_error_is_logged(tmp_path, caplog):
     assert _step_records(caplog, "github")[0].error_class == "SubprocessError"
 
 
-def test_vercel_timeout_is_logged_without_leaking_token(tmp_path, caplog):
+@pytest.mark.parametrize("secret", [SECRET, "abc\\def", "abc\ndef", "abc'\"def"])
+def test_vercel_timeout_is_logged_without_leaking_token(tmp_path, caplog, secret):
     caplog.set_level(logging.ERROR, logger=DEPLOY_LOGGER)
-    timeout = subprocess.TimeoutExpired(["vercel", "--prod", "--yes", "--token", SECRET], 300)
+    timeout = subprocess.TimeoutExpired(["vercel", "--prod", "--yes", "--token", secret], 300)
     with patch.object(deploy_mod.subprocess, "run", side_effect=timeout):
-        result = asyncio.run(_tool(vercel_token=SECRET)._deploy_to_vercel(tmp_path, "demo", None))
+        result = asyncio.run(_tool(vercel_token=secret)._deploy_to_vercel(tmp_path, "demo", None))
     assert result["success"] is False
     assert result["error_class"] == "TimeoutExpired"
     (record,) = _step_records(caplog, "vercel")
     assert "Traceback" in record.traceback
-    assert SECRET not in caplog.text
-    assert SECRET not in str(result)
+    assert secret not in caplog.text
+    assert repr(secret)[1:-1] not in caplog.text
+    assert secret not in str(result)
+
+
+def test_entrypoint_preserves_completed_github_handoff_on_unexpected_vercel_failure(tmp_path):
+    tool = _tool(github_token="gh-token", vercel_token=SECRET)
+    with (
+        patch.object(tool, "_initialize_git", new=AsyncMock(return_value={"success": True})),
+        patch.object(tool, "_create_github_repo", new=AsyncMock(return_value={"success": True, "repo_url": "https://github.com/example/completed"})),
+        patch.object(tool, "_deploy_to_vercel", new=AsyncMock(side_effect=ValueError("unexpected"))),
+    ):
+        result = asyncio.run(tool.deploy_to_github_and_vercel(str(tmp_path)))
+    assert result["status"] == "error"
+    assert result["github_deployed"] is True
+    assert result["github_url"] == "https://github.com/example/completed"
+    assert result["vercel_deployed"] is False
+    assert result["error_class"] == "ValueError"
+
+
+@pytest.mark.parametrize("step", ["git", "github", "vercel"])
+@pytest.mark.parametrize("stream", ["stderr", "stdout"])
+def test_expected_cli_failure_redacts_configured_tokens(tmp_path, step, stream):
+    tool = _tool(github_token="github-secret", vercel_token=SECRET)
+    error = f"Rejected {tool.github_token} and {tool.vercel_token}"
+    failed = SimpleNamespace(returncode=1, stderr=error if stream == "stderr" else "", stdout=error if stream == "stdout" else "")
+    calls = {
+        "git": lambda: tool._initialize_git(tmp_path),
+        "github": lambda: tool._create_github_repo(tmp_path, "demo", None),
+        "vercel": lambda: tool._deploy_to_vercel(tmp_path, "demo", None),
+    }
+    with patch.object(deploy_mod.subprocess, "run", return_value=failed):
+        result = asyncio.run(calls[step]())
+    assert result["success"] is False
+    assert SECRET not in str(result) and tool.github_token not in str(result)
 
 
 def test_owner_lookup_failure_is_caught_and_reported(tmp_path, caplog):
@@ -180,6 +226,14 @@ def test_shared_store_unexpected_failure_raises():
         AgentOrchestrator(database_url="sqlite:///unused.db")
 
 
+def test_shared_store_malformed_port_degrades_before_store_construction(caplog):
+    with patch.object(orch_mod, "SharedSQLStateStore") as store:
+        orch = AgentOrchestrator(database_url="postgresql://u:p@db:PORT/app")
+    assert orch._shared_state is None
+    store.assert_not_called()
+    assert "ArgumentError" in caplog.text
+
+
 async def test_create_agent_boundary_logs_agent_class_traceback(caplog):
     caplog.set_level(logging.ERROR, logger="agent_orchestrator")
 
@@ -245,13 +299,30 @@ async def test_message_delivery_boundary_keeps_message_and_logs(caplog):
 _MARKER = "# exception-boundary:"
 
 
+def _broad_handlers(source):
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.ExceptHandler):
+            continue
+        caught = [] if node.type is None else list(ast.walk(node.type))
+        if node.type is None or any(isinstance(t, ast.Name) and t.id in {"Exception", "BaseException"} for t in caught):
+            yield node
+
+
+@pytest.mark.parametrize("source", [
+    "try:\n pass\nexcept (ValueError, Exception):\n pass",
+    "try:\n pass\nexcept (\n ValueError,\n BaseException\n):\n pass",
+    "try:\n pass\nexcept* Exception:\n pass",
+    "try:\n pass\nexcept:\n pass",
+])
+def test_broad_handler_guard_recognizes_all_syntaxes(source):
+    assert len(list(_broad_handlers(source))) == 1
+
+
 @pytest.mark.parametrize("path,expected", [(DEPLOY_PATH, 1), (ORCH_PATH, 4)], ids=["deploy", "orchestrator"])
 def test_broad_handlers_are_counted_and_marked(path, expected):
-    broad = [
-        line
-        for line in path.read_text().splitlines()
-        if re.match(r"^\s*except\s*(:|\(?\s*(Exception|BaseException)\b)", line)
-    ]
+    source = path.read_text()
+    lines = source.splitlines()
+    broad = [lines[node.lineno - 1] for node in _broad_handlers(source)]
     assert len(broad) == expected, broad
     unmarked = [line for line in broad if _MARKER not in line]
     assert unmarked == []

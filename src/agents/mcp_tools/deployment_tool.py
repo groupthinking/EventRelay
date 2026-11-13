@@ -49,7 +49,10 @@ class DeploymentMCPTool:
         """Remove configured tokens from text bound for logs or results."""
         for secret in (self.github_token, self.vercel_token):
             if secret:
-                text = text.replace(secret, "***")
+                # Subprocess exceptions render argv with repr(), escaping e.g.
+                # backslashes and newlines before the traceback reaches here.
+                for representation in sorted({secret, repr(secret)[1:-1]}, key=len, reverse=True):
+                    text = text.replace(representation, "***")
         return text
 
     def _log_step_failure(self, step: str, exc: BaseException) -> None:
@@ -89,6 +92,7 @@ class DeploymentMCPTool:
         Returns:
             Dict with deployment URLs and status
         """
+        results: dict[str, Any] = {}
         try:
             logger.info(f"🚀 Deploying: {project_path}")
 
@@ -187,6 +191,7 @@ class DeploymentMCPTool:
         except Exception as exc:  # exception-boundary: MCP tool entry point; the agent network needs a result dict, never a raise
             self._log_step_failure("deploy_entrypoint", exc)
             return {
+                **results,
                 "status": "error",
                 "error": self._redact(str(exc)) or type(exc).__name__,
                 "error_class": type(exc).__name__,
@@ -221,7 +226,7 @@ class DeploymentMCPTool:
             )
 
             if result.returncode != 0:
-                return {"success": False, "error": result.stderr}
+                return {"success": False, "error": self._redact(result.stderr)}
 
             # Create .gitignore if doesn't exist
             gitignore = project_dir / ".gitignore"
@@ -306,7 +311,7 @@ dist/
             )
 
             if result.returncode != 0:
-                error_msg = result.stderr or result.stdout
+                error_msg = self._redact(result.stderr or result.stdout)
                 return {"success": False, "error": error_msg}
 
             # Extract repo URL from output
@@ -382,7 +387,7 @@ dist/
             )
 
             if result.returncode != 0:
-                error_msg = result.stderr or result.stdout
+                error_msg = self._redact(result.stderr or result.stdout)
                 return {"success": False, "error": error_msg}
 
             # Extract deployment URL from output

@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 
 from ...shared_sql_state import SharedSQLStateStore
 from ..base_agent import AgentRequest, AgentResult, BaseAgent
@@ -74,6 +75,12 @@ class AgentOrchestrator:
         )
         if shared_database_url:
             try:
+                try:
+                    make_url(shared_database_url)
+                except ValueError as exc:
+                    # URL parsing uses plain ValueError for malformed ports.
+                    # Store-construction ValueErrors still surface as bugs.
+                    raise ArgumentError("Invalid shared-state database URL") from exc
                 self._shared_state = SharedSQLStateStore(
                     database_url=shared_database_url
                 )
