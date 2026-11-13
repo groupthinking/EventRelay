@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/uv/uv-a223a3ed80": false
+    }
+  },
   "framework": "nextjs",
   "installCommand": "npm install --legacy-peer-deps",
   "buildCommand": "npm run build",
