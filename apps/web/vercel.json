@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/npm_and_yarn/apps/web/opentelemetry/sdk-trace-base-2.12.0": false
+    }
+  }
+}
