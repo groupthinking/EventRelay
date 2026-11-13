@@ -359,5 +359,13 @@ exclude_lines = [
 [tool.coverage.lcov]
 output = "reports/lcov.info"
 
+[tool.uv]
+# Soup Sieve 4 requires Python 3.11.5. Keep Beautiful Soup's modern selector
+# implementation on the older patch releases still admitted by requires-python.
+constraint-dependencies = [
+    "soupsieve<4; python_full_version < '3.11.5'",
+    "soupsieve==4.0; python_full_version >= '3.11.5'",
+]
+
 [tool.uv.workspace]
 members = []
