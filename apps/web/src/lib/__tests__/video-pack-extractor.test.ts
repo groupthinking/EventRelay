@@ -274,8 +274,13 @@ describe('extractVideoPackSpec', () => {
       expect(call.end_s).toBeGreaterThan(call.start_s);
       const prompt = call.sectionPrompt;
       expect(prompt).toMatch(/focus_time_range_seconds/i);
-      expect(prompt).toMatch(/Do not emit grounded_spec in sectional mode/i);
-      expect(prompt).not.toMatch(/Also emit grounded_spec/i);
+      expect(prompt).toMatch(/Also emit grounded_spec as a partial/i);
+      expect(prompt).toMatch(/citation indices are zero-based positions in this section response/i);
+      expect(prompt).toContain('Capabilities are browser-ui, local-state, local-persistence, server, accounts, shared-database, payments, secrets, native, background, unknown.');
+      expect(prompt).toContain('Use all listed fields, no extra fields. Maximum 32 items per collection');
+      expect(prompt).toContain('1..64 alphanumeric, hyphen or underscore');
+      expect(prompt).toContain('Inferred/proposed choices need a rationale');
+      expect(prompt).not.toMatch(/Do not emit grounded_spec in sectional mode/i);
       return { text: JSON.stringify(SPEC_JSON), interactionId: `int-${call.start_s}` };
     });
 

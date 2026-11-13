@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "codex/fix-multishard-grounded-spec": false
+    }
+  }
+}
