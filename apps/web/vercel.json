@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "fix/2169-reconcile-models-migrations": false
+    }
+  }
+}

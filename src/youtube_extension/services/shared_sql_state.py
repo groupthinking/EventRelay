@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,17 +15,32 @@ from sqlalchemy import (
     String,
     Table,
     Text,
+    bindparam,
     create_engine,
     insert,
     select,
+    text,
     update,
 )
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.engine import Engine, make_url
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.pool import StaticPool
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SHARED_STATE_PATH = _PROJECT_ROOT / ".runtime" / "shared_state.db"
+
+# The Supabase migration is the schema source of truth for non-SQLite databases.
+SHARED_STATE_MIGRATION = (
+    "apps/web/supabase/migrations/"
+    "20261109062000_create_service_role_shared_state_tables.sql"
+)
+
+logger = logging.getLogger(__name__)
+
+
+class SharedStateSchemaError(SQLAlchemyError):
+    """Raised when a non-SQLite shared-state database lacks the migrated schema."""
 
 
 def normalize_shared_storage_url(database_url: str) -> str:
@@ -77,7 +93,8 @@ class SharedSQLStateStore:
             database_url, sqlite_path=sqlite_path
         )
         self.engine = self._create_engine(self.database_url)
-        self.metadata = MetaData()
+        # Validate and use the same schema even with a non-public search_path.
+        self.metadata = MetaData(schema="public" if self.engine.dialect.name == "postgresql" else None)
         self.sessions = Table(
             "shared_sessions",
             self.metadata,
@@ -106,7 +123,108 @@ class SharedSQLStateStore:
             Column("timestamp", String(64), nullable=False),
             Column("content", Text, nullable=False),
         )
-        self.metadata.create_all(self.engine)
+        self._ensure_schema()
+
+    def _ensure_schema(self) -> None:
+        """Create tables for local SQLite; verify migrated tables everywhere else.
+
+        SQLite is the local/test default, so the tables are created on demand.
+        For PostgreSQL/Supabase the checked-in migration owns the schema (and its
+        row-level security), so this never issues DDL there: it only confirms the
+        tables, columns, forced RLS and role privileges match the migration.
+        """
+
+        if self.engine.dialect.name == "sqlite":
+            self.metadata.create_all(self.engine)
+            return
+
+        inspector = sa_inspect(self.engine)
+        problems: list[str] = []
+        for table in self.metadata.sorted_tables:
+            if not inspector.has_table(table.name, schema="public"):
+                problems.append(f"missing table {table.name}")
+                continue
+            present = {column["name"] for column in inspector.get_columns(table.name, schema="public")}
+            missing = [column.name for column in table.columns if column.name not in present]
+            if missing:
+                problems.append(f"{table.name} missing columns {', '.join(missing)}")
+        if not problems and self.engine.dialect.name == "postgresql":
+            problems.extend(self._postgres_security_problems())
+        if problems:
+            message = (
+                "Shared state schema is not migrated on "
+                f"{self.engine.dialect.name} ({'; '.join(problems)}). "
+                f"Apply {SHARED_STATE_MIGRATION}; the service does not create "
+                "these tables outside SQLite."
+            )
+            logger.error(message)
+            raise SharedStateSchemaError(message)
+
+    def _postgres_security_problems(self) -> list[str]:
+        """Reject legacy create_all tables that have columns but no hardening."""
+        tables = {table.name for table in self.metadata.sorted_tables}
+        sequences = {"shared_timeline_events_id_seq", "shared_a2a_messages_id_seq"}
+        query = text("""
+            SELECT c.relname, c.relkind, c.relrowsecurity, c.relforcerowsecurity,
+                   (EXISTS (
+                       SELECT 1 FROM aclexplode(coalesce(c.relacl, acldefault(
+                           CASE WHEN c.relkind = 'S' THEN 'S'::\"char\" ELSE 'r'::\"char\" END,
+                           c.relowner))) a
+                       WHERE a.grantee = 0 OR a.grantee IN (
+                           SELECT oid FROM pg_roles WHERE rolname IN ('anon', 'authenticated')
+                       )
+                   ) OR EXISTS (
+                       SELECT 1 FROM pg_roles r
+                       WHERE r.rolname IN ('anon', 'authenticated') AND (
+                           r.rolsuper OR r.rolbypassrls OR
+                           CASE WHEN c.relkind = 'S'
+                               THEN has_sequence_privilege(r.oid, c.oid, 'SELECT,USAGE,UPDATE')
+                               ELSE has_table_privilege(r.oid, c.oid, 'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER')
+                           END
+                       )
+                   )) AS untrusted_acl,
+                   (SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname = current_user)
+                       AS server_bypasses_rls,
+                   CASE WHEN c.relkind = 'S'
+                       THEN has_sequence_privilege(current_user, c.oid, 'USAGE')
+                            AND has_sequence_privilege(current_user, c.oid, 'SELECT')
+                       ELSE has_table_privilege(current_user, c.oid, 'SELECT')
+                            AND has_table_privilege(current_user, c.oid, 'INSERT')
+                            AND has_table_privilege(current_user, c.oid, 'UPDATE')
+                            AND has_table_privilege(current_user, c.oid, 'DELETE')
+                   END AS server_privileges,
+                   ARRAY(
+                       SELECT privilege_type FROM aclexplode(coalesce(c.relacl, acldefault(
+                           CASE WHEN c.relkind = 'S' THEN 'S'::\"char\" ELSE 'r'::\"char\" END,
+                           c.relowner))) a
+                       WHERE a.grantee = (SELECT oid FROM pg_roles WHERE rolname = 'service_role')
+                   ) AS service_privileges
+            FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public' AND c.relname IN :relations
+        """).bindparams(bindparam("relations", expanding=True))
+        with self.engine.connect() as connection:
+            rows = connection.execute(query, {"relations": sorted(tables | sequences)}).mappings().all()
+        states = {row["relname"]: row for row in rows}
+        problems = []
+        for name in sorted(tables | sequences):
+            state = states.get(name)
+            if state is None:
+                problems.append(f"security state missing for {name}")
+                continue
+            if name in tables and not (state["relrowsecurity"] and state["relforcerowsecurity"]):
+                problems.append(f"security: {name} must enable and force RLS")
+            if state["untrusted_acl"]:
+                problems.append(f"security: {name} grants privileges to public or client roles")
+            if state["relkind"] != ("r" if name in tables else "S"):
+                problems.append(f"security: unexpected relation type for {name}")
+            if not state["server_bypasses_rls"]:
+                problems.append(f"security: server role cannot bypass forced RLS for {name}")
+            if not state["server_privileges"]:
+                problems.append(f"security: server role lacks required privileges for {name}")
+            required = {"SELECT", "INSERT", "UPDATE", "DELETE"} if name in tables else {"USAGE", "SELECT"}
+            if not required <= set(state["service_privileges"]):
+                problems.append(f"security: {name} lacks required service_role privileges")
+        return problems
 
     @staticmethod
     def _create_engine(database_url: str) -> Engine:
