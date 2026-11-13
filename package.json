@@ -37,10 +37,12 @@
     "nth-check": "^2.0.1",
     "postcss": "^8.5.18",
     "@workflow/world-local": {
-      "undici": "^7.30.1"
+      "undici": "^7.30.1",
+      "zod": "4.6.6"
     },
     "@workflow/world-vercel": {
-      "undici": "^7.30.1"
+      "undici": "^7.30.1",
+      "zod": "4.6.6"
     },
     "esbuild": "^0.28.1",
     "uuid": "11.1.1",
@@ -79,7 +81,13 @@
     "ip-address@^10.0.0": "^10.7.4",
     "qs@^6.0.0": "^6.16.1",
     "vitest@^4.0.0": "^4.1.12",
-    "vitest@^5.0.0": "^5.0.3"
+    "vitest@^5.0.0": "^5.0.3",
+    "@workflow/cli": {
+      "zod": "4.6.6"
+    },
+    "@workflow/world": {
+      "zod": "4.6.6"
+    }
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.135",
