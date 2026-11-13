@@ -1,5 +1,6 @@
 import asyncio
 import json
+import socket
 
 import pytest
 
@@ -77,5 +78,12 @@ async def main():
     assert anthropic.__version__.startswith("2.")
 
 
-def test_anthropic_v2_app_callsites():
+def test_anthropic_v2_app_callsites(monkeypatch):
+    # Constructors must not inherit host proxy configuration or require SOCKS extras.
+    for name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
+        monkeypatch.delenv(name, raising=False)
+    def reject_network(*args, **kwargs):
+        raise AssertionError("Compatibility test attempted a real network connection")
+    monkeypatch.setattr(socket.socket, "connect", reject_network)
+    calls.clear()
     asyncio.run(main())

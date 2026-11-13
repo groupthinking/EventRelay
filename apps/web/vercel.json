@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/pip/anthropic-gte-0.105.0-and-lt-3": false
+    }
+  }
+}
