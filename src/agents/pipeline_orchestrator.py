@@ -59,8 +59,34 @@ logger = logging.getLogger(__name__)
 
 # --- VERA imports (lazy-loaded to avoid import-time side effects) ---
 
+class VeraInitError(RuntimeError):
+    """VERA modules are installed but failed to initialize."""
+
+
+# Stage results with one of these statuses are failures even without an
+# "error" key (e.g. DeploymentMCPTool returns status "failed").
+FAILED_STATUSES = frozenset({"failed", "error", "not_implemented"})
+
+
+def _stage_failure_reason(result: Any) -> str | None:
+    """Return why a routed stage result is a failure, or None if it succeeded."""
+    if not isinstance(result, dict):
+        return f"stage returned {type(result).__name__}, not a result dict"
+    if "error" in result:
+        return str(result["error"])
+    status = result.get("status")
+    if status in FAILED_STATUSES:
+        return f"stage reported status '{status}'"
+    return None
+
+
 def _get_vera():
-    """Lazy-load VERA components. Returns None for each component if VERA is unavailable."""
+    """Lazy-load VERA components.
+
+    Returns None when the VERA modules are not installed. Raises VeraInitError
+    when they are installed but fail to initialize, so the orchestrator can
+    fail closed instead of silently running without its security layer.
+    """
     try:
         from vera.identity import get_identity_service
         from vera.firewall import get_firewall
@@ -81,12 +107,17 @@ def _get_vera():
             "maturity": get_maturity_runtime(),
             "enforcer": get_enforcer(),
         }
-    except ImportError:
-        logger.info("VERA modules not available in this env (hardened local maturity still applied for pipeline agents)")
-        return None
     except Exception as e:
-        logger.error(f"VERA initialization failed: {e} — running without security layer")
-        return None
+        if isinstance(e, ModuleNotFoundError) and e.name == "vera":
+            logger.info("VERA modules not available in this env (hardened local maturity still applied for pipeline agents)")
+            return None
+        logger.error(
+            "VERA initialization failed (%s): %s — all stages will be blocked",
+            type(e).__name__,
+            e,
+            exc_info=True,
+        )
+        raise VeraInitError(f"{type(e).__name__}: {e}") from e
 
 # Local hardened maturity for pipeline agents (always-on fallback / hardening when full VERA unavailable)
 # This ensures code-gen, deployer etc. are treated as level 1+ for security intent.
@@ -176,7 +207,13 @@ class VideoPipelineOrchestrator:
         self.emitter = get_emitter()
 
         # VERA security layer (None if VERA modules unavailable)
-        self._vera = _get_vera()
+        self._vera_init_error: str | None = None
+        try:
+            self._vera = _get_vera()
+        except VeraInitError as exc:
+            # Fail closed: VERA is present but broken, so no stage may run.
+            self._vera = None
+            self._vera_init_error = str(exc)
         self._vera_credentials: dict[str, Any] = {}  # agent_id → (token, credential)
         if self._vera:
             logger.info("VERA security layer active — all agent stages will be verified")
@@ -419,6 +456,15 @@ class VideoPipelineOrchestrator:
         action, payload = self._prepare_agent_action(agent_id)
 
         # --- VERA pre-execution checks ---
+        vera_init_error = getattr(self, "_vera_init_error", None)
+        if vera_init_error:
+            blocked = PipelineResult(
+                agent_id, False, {}, (time.monotonic() - start_time) * 1000,
+                f"VERA: security layer failed to initialize ({vera_init_error}) — stage blocked (fail-closed)",
+            )
+            self._record_audit_stage(agent_id, action, blocked)
+            return blocked
+
         if self._vera:
             vera_check = self._vera_pre_check(agent_id, agent.name, action, payload)
             if vera_check is not None:
@@ -442,20 +488,25 @@ class VideoPipelineOrchestrator:
 
             duration = (time.monotonic() - start_time) * 1000
 
-            if "error" in result:
+            failure_reason = _stage_failure_reason(result)
+            if failure_reason is not None:
                 # --- VERA: record failure proof + notify enforcer ---
                 if self._vera:
+                    proof_result = dict(result) if isinstance(result, dict) else {}
+                    proof_result.setdefault("error", failure_reason)
                     self._vera_record_proof(
-                        agent_id, action, payload, result, duration,
+                        agent_id, action, payload, proof_result, duration,
                         authorized=True, success=False,
                     )
                     self._vera["enforcer"].on_enforcement_event(
                         agent_id, "stage_error",
-                        details=f"Stage {agent_id} returned error: {result.get('error', '')}",
+                        details=f"Stage {agent_id} returned error: {failure_reason}",
                     )
                     self._vera["breakers"].get_breaker(agent_id).record_failure("error")
 
-                failed = PipelineResult(agent_id, False, result, duration, result["error"])
+                failed = PipelineResult(
+                    agent_id, False, result if isinstance(result, dict) else {}, duration, failure_reason
+                )
                 self._record_audit_stage(agent_id, action, failed)
                 return failed
 
@@ -534,8 +585,12 @@ class VideoPipelineOrchestrator:
                         maturity_level=initial_level,
                     )
                     self._vera_credentials[agent_id] = (token, credential)
-                except Exception:
-                    self._vera_credentials[agent_id] = (None, None)
+                except Exception as exc:  # exception-boundary: identity check failed; fail closed (block the stage)
+                    logger.error(
+                        "VERA credential issuance failed for %s (%s) — stage blocked",
+                        agent_id, type(exc).__name__, exc_info=True,
+                    )
+                    return f"VERA: credential issuance failed ({type(exc).__name__}) — stage blocked (fail-closed)"
             else:
                 self._vera_credentials[agent_id] = (None, None)
 
@@ -548,8 +603,12 @@ class VideoPipelineOrchestrator:
                     verified = v["identity"].verify_credential(token) if token else None
                     if verified is None and not (v["identity"].is_revoked(agent_id) if hasattr(v["identity"], "is_revoked") else False):
                         maturity_level = _get_effective_maturity(agent_id)
-                except Exception:
-                    pass
+                except Exception as exc:  # exception-boundary: identity check failed; fail closed (block the stage)
+                    logger.error(
+                        "VERA credential verification failed for %s (%s) — stage blocked",
+                        agent_id, type(exc).__name__, exc_info=True,
+                    )
+                    return f"VERA: credential verification failed ({type(exc).__name__}) — stage blocked (fail-closed)"
 
         # 3. Gateway permission check (hardened: use effective level even without full VERA)
         decision = None
@@ -568,12 +627,15 @@ class VideoPipelineOrchestrator:
                     )
                     breaker.record_failure("auth_failure")
                     return f"VERA: Permission denied — {decision.reason}"
-            except Exception as exc:
-                logger.warning(
-                    "VERA gateway check failed (non-blocking) for %s: %s",
+            except Exception as exc:  # exception-boundary: gateway check failed; fail closed (block the stage)
+                logger.error(
+                    "VERA gateway check failed for %s (%s): %s — stage blocked",
                     agent_id,
+                    type(exc).__name__,
                     exc,
+                    exc_info=True,
                 )
+                return f"VERA: gateway check failed ({type(exc).__name__}) — stage blocked (fail-closed)"
         else:
             # No full VERA: log once per agent but allow (hardened local maturity already applied above)
             if not hasattr(self, "_vera_harden_logged"):
@@ -605,8 +667,15 @@ class VideoPipelineOrchestrator:
                     details=f"Blocked input for {action}: {scan.details}",
                 )
                 return f"VERA: Input blocked by firewall — {scan.threat_level.value} threat"
-        except Exception as e:
-            logger.warning(f"VERA firewall scan error (non-blocking): {e}")
+        except Exception as e:  # exception-boundary: firewall scan failed; fail closed (block the stage)
+            logger.error(
+                "VERA firewall scan failed for %s (%s): %s — stage blocked",
+                agent_id,
+                type(e).__name__,
+                e,
+                exc_info=True,
+            )
+            return f"VERA: firewall scan failed ({type(e).__name__}) — stage blocked (fail-closed)"
 
         return None  # All checks passed
 
