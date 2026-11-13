@@ -50,7 +50,11 @@ WORKDIR /app
 
 # Install runtime system dependencies (ffmpeg and nodejs v22)
 # gnupg is required for the Nodesource setup script
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `apt-get upgrade` applies Debian security updates the pinned base layer
+# predates (e.g. zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1, DSA-6613-1).
+# Refs #2396: fixable OS findings must not ride in from a stale base layer.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     gnupg \
@@ -71,6 +75,13 @@ RUN groupadd --gid 1000 appuser && \
 RUN rm -rf /usr/local/lib/python3.11/site-packages/*
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# pip is an install-time tool. Its wheel ships pip/_vendor/bom.cdx.json, which
+# declares the vendored pkg_resources as setuptools 70.3.0, so image scanners
+# report CVE-2025-47273 against it even on the newest pip (26.3). The served
+# app (uvicorn) never invokes pip, so drop it from the runtime image.
+# Refs #2396.
+RUN python -m pip uninstall --yes pip
 
 # Copy installed Node.js packages from builder
 COPY --from=builder /app/node_modules ./node_modules
