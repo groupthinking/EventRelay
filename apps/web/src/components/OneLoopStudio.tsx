@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { Download, GitPullRequest, Hammer, Play, Rocket } from 'lucide-react';
 import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
@@ -16,7 +17,7 @@ import {
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { StudioAuthNavLink } from '@/components/StudioAuthNavLink';
-import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
+import { dashboardPersistenceSucceeded, useDashboardStore, type Video } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
@@ -259,6 +260,14 @@ function StudioJobStripDestination({
   }
 }
 
+function reviewSelectionKey(video: Video | undefined): string | null {
+  if (!video?.videoPack || !video.runId || video.status !== 'complete') return null;
+  const videoId = extractYouTubeId(video.url);
+  if (!videoId || video.videoPack.videoId !== videoId ||
+      extractYouTubeId(video.videoPack.sourceUrl) !== videoId) return null;
+  return JSON.stringify([video.id, video.url, video.runId, video.videoPack.packId, video.videoPack.sourceHash]);
+}
+
 export default function OneLoopStudio({
   showAgentWorkflowUi,
 }: {
@@ -266,6 +275,7 @@ export default function OneLoopStudio({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { data: session } = useSession();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -273,7 +283,8 @@ export default function OneLoopStudio({
   const [actBusy, setActBusy] = useState(false);
   const runAbortRef = useRef<AbortController | null>(null);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
-  const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
+  const [workflowActionSelectionKey, setWorkflowActionSelectionKey] = useState<string | null>(null);
+  const reviewEpochRef = useRef(0);
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
@@ -301,8 +312,9 @@ export default function OneLoopStudio({
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
+  const selectedReviewKey = reviewSelectionKey(selected);
   const scopedWorkflowActions = showAgentWorkflowUi &&
-    workflowActionSelectionId === selectedVideoId &&
+    selectedReviewKey !== null && workflowActionSelectionKey === selectedReviewKey &&
     getYouTubeId(selected?.url || '') === getYouTubeId(workflowActions?.url || '') &&
     (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
     ? workflowActions
@@ -358,7 +370,13 @@ export default function OneLoopStudio({
 
   useEffect(() => {
     setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
+    setWorkflowActionSelectionKey(null);
+    setActBusy(false);
+    reviewEpochRef.current += 1;
+    return () => { reviewEpochRef.current += 1; };
+  }, [selectedReviewKey, showAgentWorkflowUi]);
+
+  useEffect(() => {
     setCompletedChecks([]);
     setApprovedSpecIds([]);
     setBuildLiveFailure(null);
@@ -377,12 +395,13 @@ export default function OneLoopStudio({
     return () => window.clearTimeout(timer);
   }, [exportToast]);
 
-  const holdReason = deployHoldReason(linkedSop, completedChecks, 'anonymous');
+  const viewer = session?.user ? 'signed-in' : 'anonymous';
+  const holdReason = deployHoldReason(linkedSop, completedChecks, viewer);
   const officialTemplate = pickOfficialTemplate(linkedSop);
   const stackCheckViews = stackChecks.map((item) => {
-    const status = stackCheckStatus(item, completedChecks, 'anonymous');
+    const status = stackCheckStatus(item, completedChecks, viewer);
     return {
-      ...studioStackCheckView(item, completedChecks, 'anonymous'),
+      ...studioStackCheckView(item, completedChecks, viewer),
       status,
       statusLabel: stackCheckStatusLabel(status),
     };
@@ -424,7 +443,7 @@ export default function OneLoopStudio({
     runAbortRef.current = controller;
     setBusy(true);
     setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
+    setWorkflowActionSelectionKey(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
       const matches = useDashboardStore
@@ -603,6 +622,7 @@ export default function OneLoopStudio({
   const canAct = Boolean(
     showAgentWorkflowUi &&
     selected?.status === 'complete' &&
+    selectedReviewKey &&
     selected?.runId &&
     selectedVideoUrlId &&
     (!url.trim() || typedVideoId === selectedVideoUrlId),
@@ -613,11 +633,17 @@ export default function OneLoopStudio({
       setMessage('Select the analyzed video before reviewing its actions.');
       return;
     }
-    const selectionId = selected.id;
     const runId = selected.runId;
+    const selectionKey = selectedReviewKey;
+    const epoch = ++reviewEpochRef.current;
+    const isCurrentReview = () => {
+      const state = useDashboardStore.getState();
+      const currentVideo = state.videos.find((video) => video.id === state.selectedVideoId);
+      return reviewEpochRef.current === epoch && reviewSelectionKey(currentVideo) === selectionKey;
+    };
     setActBusy(true);
     setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
+    setWorkflowActionSelectionKey(null);
     setMessage('Loading proposed actions from this run…');
     try {
       const polled = await pollVideoToActions(runId, {
@@ -625,14 +651,14 @@ export default function OneLoopStudio({
         attempts: 24,
         delayMs: 2000,
       });
-      if (useDashboardStore.getState().selectedVideoId !== selectionId) return;
+      if (!isCurrentReview()) return;
       if (polled.status === 401 || polled.status === 403) {
         router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
         return;
       }
       if (polled.runStatus === 'completed' && polled.result) {
         setWorkflowActions(polled.result);
-        setWorkflowActionSelectionId(selectionId);
+        setWorkflowActionSelectionKey(selectionKey);
         setMessage(
           `${polled.result.actionCount} proposed action(s) from this run are ready to review.`,
         );
@@ -640,11 +666,11 @@ export default function OneLoopStudio({
         setMessage(polled.error || `Act status: ${polled.runStatus || 'unknown'}.`);
       }
     } catch (err) {
-      if (useDashboardStore.getState().selectedVideoId === selectionId) {
+      if (isCurrentReview()) {
         setMessage(err instanceof Error ? err.message : 'Could not load proposed actions.');
       }
     } finally {
-      setActBusy(false);
+      if (isCurrentReview()) setActBusy(false);
     }
   };
 
@@ -862,6 +888,7 @@ export default function OneLoopStudio({
     retryable: selected?.failure?.retryable !== false,
     elapsedSeconds: elapsed,
   });
+  const retryTranscript = () => void runAnalysis(url || selected?.url || '');
   const statusText = transcriptWorking
     ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
     : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
@@ -1024,7 +1051,7 @@ export default function OneLoopStudio({
                 <button
                   type="button"
                   data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  onClick={retryTranscript}
                   className="uvai-btn"
                 >
                   Retry transcript
@@ -1106,6 +1133,8 @@ export default function OneLoopStudio({
           <StudioIdeOutput
             video={selected}
             eventsEmptyMessage={eventsEmptyMessage}
+            showTranscriptRetry={showTranscriptRetry}
+            onRetryTranscript={retryTranscript}
             stackChecks={stackCheckViews}
             reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);

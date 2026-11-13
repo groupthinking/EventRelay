@@ -9,6 +9,7 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
+vi.mock('next-auth/react', () => ({ useSession: () => ({ data: null, status: 'unauthenticated' }) }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
 vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({
@@ -60,6 +61,8 @@ describe('OneLoopStudio IDE shell', () => {
   });
 
   it('reviews only the selected video run and hides Act behind the feature flag', async () => {
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
     const fetchStatus = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => ({
       ok: true,
       status: 200,
@@ -76,7 +79,10 @@ describe('OneLoopStudio IDE shell', () => {
     }));
     vi.stubGlobal('fetch', fetchStatus);
     useDashboardStore.setState({
-      videos: [{ ...baseVideo, runId: 'run-ide' }, { ...baseVideo, id: 'other-video', title: 'Other video' }],
+      videos: [{ ...baseVideo, runId: 'run-ide', videoPack: {
+        packId: pack.id, videoId: 'auJzb1D-fag', sourceUrl: baseVideo.url,
+        sourceHash: pack.provenance.source_hash, version: pack.version, pack,
+      } }, { ...baseVideo, id: 'other-video', title: 'Other video' }],
       selectedVideoId: baseVideo.id,
     });
 
@@ -84,7 +90,7 @@ describe('OneLoopStudio IDE shell', () => {
     const button = screen.getByTestId('studio-act-button') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     fireEvent.change(screen.getByLabelText('YouTube URL'), {
-      target: { value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      target: { value: 'https://www.youtube.com/watch?v=pBsT6v-ciO8' },
     });
     expect(button.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('YouTube URL'), {
@@ -101,7 +107,7 @@ describe('OneLoopStudio IDE shell', () => {
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
     expect(screen.getByText('Draft a task')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('YouTube URL'), {
-      target: { value: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+      target: { value: 'https://www.youtube.com/watch?v=pBsT6v-ciO8' },
     });
     expect(screen.queryByText('Draft a task')).toBeNull();
     act(() => useDashboardStore.getState().selectVideo('other-video'));

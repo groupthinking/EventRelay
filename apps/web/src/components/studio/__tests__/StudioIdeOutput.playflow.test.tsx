@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { webcrypto } from 'node:crypto';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
 import type { Video } from '@/store/dashboard-types';
+import { reviewPackFixture } from '@/test/grounded-spec-fixture';
 
 const baseVideo: Video = {
   id: 'row-output',
@@ -16,9 +18,36 @@ const baseVideo: Video = {
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe('StudioIdeOutput playflow', () => {
+  it('shows source-bound tasks and their export on the default tab (synthetic fixture)', async () => {
+    vi.stubGlobal('crypto', webcrypto);
+    const pack = reviewPackFixture();
+    render(
+      <StudioIdeOutput video={{
+        ...baseVideo,
+        videoPack: {
+          version: pack.version,
+          videoId: pack.video_id,
+          packId: pack.id,
+          sourceUrl: pack.source_url,
+          sourceHash: pack.provenance.source_hash,
+          pack,
+        },
+      }} />,
+    );
+
+    expect(screen.getByRole('tab', { name: 'Tasks' }).getAttribute('aria-selected')).toBe('true');
+    expect(await screen.findByText('Mark a task complete')).toBeTruthy();
+    expect(screen.getAllByRole('link').some((link) =>
+      link.getAttribute('href') === 'https://www.youtube.com/watch?v=auJzb1D-fag&t=4s')).toBe(true);
+    const exportTasks = await screen.findByRole('button', { name: 'Export tasks' });
+    await waitFor(() => expect(exportTasks.hasAttribute('disabled')).toBe(false));
+    expect(screen.getAllByText(/not run/i).length).toBeGreaterThan(0);
+  });
+
   it('renders pack-named stack checks as skip/unknown rows that do not look like a hold', () => {
     render(
       <StudioIdeOutput

@@ -76,9 +76,10 @@ describe('UVAI is one product surface', () => {
     expect(studio).not.toMatch(/router\.push\(['"`]\/dashboard/);
   });
 
-  it('does not hold anonymous Deploy behind non-runnable stack checks', () => {
+  it('uses the actual viewer for stack-check holds on the Studio page', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
-    expect(studio).toContain("deployHoldReason(linkedSop, completedChecks, 'anonymous')");
+    expect(studio).toContain("const viewer = session?.user ? 'signed-in' : 'anonymous'");
+    expect(studio).toContain('deployHoldReason(linkedSop, completedChecks, viewer)');
     expect(studio).toContain('stackCheckStatus');
     expect(studio).toContain('stackCheckStatusLabel');
     expect(studio).toContain('studioShipCta');

@@ -46,6 +46,8 @@ export default function StudioIdeOutput({
   video,
   specReview,
   eventsEmptyMessage,
+  showTranscriptRetry,
+  onRetryTranscript,
   stackChecks = [],
   reviewActions = [],
   packWorkbench,
@@ -53,6 +55,8 @@ export default function StudioIdeOutput({
   video: Video | undefined;
   specReview?: ReactNode;
   eventsEmptyMessage?: string;
+  showTranscriptRetry?: boolean;
+  onRetryTranscript?: () => void;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
   packWorkbench?: ReactNode;
@@ -64,6 +68,8 @@ export default function StudioIdeOutput({
     video?.videoPack ||
       video?.events?.length ||
       video?.insights ||
+      video?.transcript?.trim() ||
+      video?.failure ||
       eventsEmptyMessage ||
       stackChecks.length > 0 ||
       reviewActions.length > 0 ||
@@ -364,16 +370,28 @@ export default function StudioIdeOutput({
         )}
 
         {active === 'transcript' && (
-          <div data-testid="studio-transcript-body" className="uvai-card p-4">
-            {video?.transcript?.trim() ? (
-              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
-                {video.transcript}
-              </p>
-            ) : video?.failure?.message ? (
-              <p className="text-xs text-red-700">{video.failure.message}</p>
-            ) : (
-              <p className="py-4 text-center text-xs text-slate-400">Nothing yet.</p>
-            )}
+          <div className="flex flex-col gap-3">
+            <div data-testid="studio-transcript-body" className="uvai-card p-4">
+              {video?.transcript?.trim() ? (
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+                  {video.transcript}
+                </p>
+              ) : video?.failure?.message ? (
+                <p className="text-xs text-red-700">{video.failure.message}</p>
+              ) : (
+                <p className="py-4 text-center text-xs text-slate-400">Nothing yet.</p>
+              )}
+            </div>
+            {showTranscriptRetry && onRetryTranscript ? (
+              <button
+                type="button"
+                data-testid="studio-transcript-retry"
+                onClick={onRetryTranscript}
+                className="uvai-btn uvai-btn-primary self-start"
+              >
+                Retry transcript
+              </button>
+            ) : null}
           </div>
         )}
           </>
