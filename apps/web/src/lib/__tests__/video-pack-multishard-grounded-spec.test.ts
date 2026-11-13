@@ -99,6 +99,39 @@ async function extractFixture(
 }
 
 describe('multi-shard grounded specification preservation', () => {
+  it('reports aggregate overflow without truncating 66 grounded requirements', async () => {
+    const pack = await extractFixture((payload, start) => {
+      if (start === 0) {
+        payload = sectionPayload(180, true);
+        Object.assign(payload.transcript.segments[0]!, { start_s: 10, end_s: 11 });
+        payload.visual_context!.visual_elements[0]!.timestamp = 10;
+        for (const ref of payload.grounded_spec!.requirements[0]!.citations) {
+          ref.startSeconds = 10;
+          ref.endSeconds = ref.kind === 'transcript' ? 11 : 10;
+        }
+      }
+      const spec = payload.grounded_spec!;
+      const requirement = spec.requirements[0]!;
+      const criterion = spec.acceptanceCriteria[0]!;
+      spec.requirements = Array.from({ length: 22 }, (_, index) => ({ ...requirement, id: `req-${index}` }));
+      spec.acceptanceCriteria = spec.requirements.map((row, index) => ({ ...criterion, id: `ac-${index}`, requirementId: row.id }));
+      spec.unresolved = [];
+      spec.unsupported = [];
+      return payload;
+    });
+    expect(pack.grounded_spec).toMatchObject({ status: 'invalid', issues: expect.arrayContaining([
+      expect.objectContaining({ code: 'aggregate-limit', path: 'requirements', message: expect.stringContaining('66') }),
+    ]) });
+  });
+
+  it('uses complete application metadata from a later available shard', async () => {
+    const pack = await extractFixture((payload, start) => {
+      if (payload.grounded_spec && start === 180) payload.grounded_spec.app = { name: '', purpose: '' };
+      return payload;
+    });
+    expect(pack.grounded_spec).toMatchObject({ status: 'available', spec: { app: REAL_AUJ_GROUNDED_SPEC.app } });
+  });
+
   it('keeps real auJzb1D-fag requirements, citations, digest input, and proposed work through consolidation', async () => {
     const pack = await extractFixture();
     expect(pack.provenance.source_hash).toBe(REAL_AUJ_SOURCE_HASH);

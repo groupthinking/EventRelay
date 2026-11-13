@@ -162,6 +162,7 @@ function mergeAvailableGroundedSpecs(candidates: [GroundedSpecCandidate, ...Grou
   const [first] = candidates;
   return {
     ...first,
+    app: candidates.find((candidate) => candidate.app.name && candidate.app.purpose)?.app ?? first.app,
     sourceStatus: candidates.every((candidate) => candidate.sourceStatus === 'full') ? 'full' : 'partial',
     confidence: Math.min(...candidates.map((candidate) => candidate.confidence)),
     limitations: dedupeStrings(candidates.flatMap((candidate) => candidate.limitations)),
@@ -190,7 +191,23 @@ function mergeGroundedSpec(
     merged.push(available.length > 1 ? namespaceGroundedSpec(rebased.spec, index) : rebased.spec);
   }
   const [first, ...rest] = merged;
-  if (first) return { status: 'available', spec: mergeAvailableGroundedSpecs([first, ...rest]) };
+  if (first) {
+    const spec = mergeAvailableGroundedSpecs([first, ...rest]);
+    const collections = {
+      limitations: spec.limitations, screens: spec.screens, state: spec.state,
+      requirements: spec.requirements, acceptanceCriteria: spec.acceptanceCriteria,
+      unresolved: spec.unresolved, unsupported: spec.unsupported,
+    };
+    const overflow = Object.entries(collections).filter(([, rows]) => rows.length > 64);
+    if (overflow.length) return {
+      status: 'invalid',
+      issues: overflow.map(([path, rows]) => ({
+        code: 'aggregate-limit', path, severity: 'blocking',
+        message: `Merged ${path} has ${rows.length} rows; the supported maximum is 64. Source-grounded rows were not truncated. Review a bounded extraction or a separately reviewed schema change.`,
+      })),
+    };
+    return { status: 'available', spec };
+  }
   return candidates[candidates.length - 1]?.value;
 }
 

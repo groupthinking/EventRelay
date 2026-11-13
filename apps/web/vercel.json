@@ -1,0 +1,7 @@
+{
+  "github": {
+    "enabled": {
+      "codex/fix-multishard-grounded-spec": false
+    }
+  }
+}
