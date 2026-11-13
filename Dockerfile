@@ -50,7 +50,11 @@ WORKDIR /app
 
 # Install runtime system dependencies (ffmpeg and nodejs v22)
 # gnupg is required for the Nodesource setup script
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `apt-get upgrade` applies Debian security updates the pinned base layer
+# predates (e.g. zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1, DSA-6613-1).
+# Refs #2396: fixable OS findings must not ride in from a stale base layer.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
     gnupg \

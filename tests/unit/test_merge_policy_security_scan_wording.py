@@ -100,6 +100,17 @@ class ImageGatePolicyTests(unittest.TestCase):
         self.assertIn("npm install --global npm@12.2.2", dockerfile)
         self.assertIn("rm -rf /usr/local/lib/python3.11/site-packages/*", dockerfile)
 
+    def test_runtime_stage_applies_debian_security_updates(self):
+        root = Path(__file__).resolve().parents[2]
+        dockerfile = (root / "Dockerfile").read_text()
+        runtime = dockerfile.split("AS runtime", 1)[1]
+        update = runtime.index("apt-get update")
+        upgrade = runtime.index("apt-get upgrade -y --no-install-recommends")
+        install = runtime.index("apt-get install -y --no-install-recommends")
+        self.assertLess(update, upgrade)
+        self.assertLess(upgrade, install)
+        self.assertNotIn("dist-upgrade", runtime)
+
 
 if __name__ == "__main__":
     unittest.main()
