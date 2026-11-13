@@ -492,8 +492,10 @@ class VideoPipelineOrchestrator:
             if failure_reason is not None:
                 # --- VERA: record failure proof + notify enforcer ---
                 if self._vera:
+                    proof_result = dict(result) if isinstance(result, dict) else {}
+                    proof_result.setdefault("error", failure_reason)
                     self._vera_record_proof(
-                        agent_id, action, payload, result, duration,
+                        agent_id, action, payload, proof_result, duration,
                         authorized=True, success=False,
                     )
                     self._vera["enforcer"].on_enforcement_event(

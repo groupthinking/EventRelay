@@ -101,7 +101,7 @@ async def test_pipeline_report_is_not_success_when_deploy_not_executed(monkeypat
 
     network.route_to_agent = route
     orch = _orchestrator(network=network)
-    report = await orch._run_sequential_pipeline("https://youtu.be/x", {"continue_on_error": True})
+    report = await orch._run_sequential_pipeline("https://youtu.be/auJzb1D-fag", {"continue_on_error": True})
     assert report["success"] is False
     assert report["stage_results"]["deployer"]["success"] is False
     assert "not implemented" in report["stage_results"]["deployer"]["error"]
@@ -217,6 +217,30 @@ async def test_vera_credential_issuance_exception_blocks_stage(fake_vera_firewal
     assert stage.success is False
     assert "credential issuance failed" in stage.error
     network.route_to_agent.assert_not_awaited()
+
+
+async def test_vera_cached_credential_verification_exception_blocks_stage(fake_vera_firewall_module):
+    vera = _fake_vera()
+    vera["identity"].verify_credential.side_effect = RuntimeError("verification unavailable")
+    network = _stub_network()
+    orch = _orchestrator(network=network, vera=vera)
+    orch._vera_credentials["deployer"] = ("cached-token", SimpleNamespace(token_id="jti", maturity_level=1))
+    stage = await orch._execute_agent_stage("deployer")
+    assert stage.success is False
+    assert "credential verification failed" in stage.error and "fail-closed" in stage.error
+    vera["identity"].verify_credential.assert_called_once_with("cached-token")
+    network.route_to_agent.assert_not_awaited()
+
+
+@pytest.mark.parametrize("result", [None, ["invalid"], {"status": "failed"}])
+async def test_vera_records_failure_proof_for_invalid_stage_results(fake_vera_firewall_module, result):
+    vera = _fake_vera()
+    network = _stub_network()
+    network.route_to_agent.return_value = result
+    stage = await _orchestrator(network=network, vera=vera)._execute_agent_stage("deployer")
+    assert stage.success is False
+    vera["proof_store"].append.assert_called_once_with(vera["ExecutionProof"].return_value)
+    assert vera["ExecutionProof"].call_args.kwargs["output_summary"] == f"error: {stage.error}"
 
 
 async def test_vera_init_failure_blocks_every_stage():
