@@ -44,15 +44,14 @@ describe('action tool registry', () => {
     expect(getTool('nope')).toBeUndefined();
   });
 
-  it('create_workflow_task produces real structured output (no fabrication)', async () => {
+  it('create_workflow_task fails closed without an authenticated owner', async () => {
     const tool = getTool('create_workflow_task')!;
     const res = await tool.execute(
       { title: 'Install pnpm', description: 'Set up the toolchain', category: 'setup', priority: 'high' },
       NO_BACKEND,
     );
-    expect(res.isError).toBeFalsy();
-    expect(res.summary).toContain('Install pnpm');
-    expect(res.data).toMatchObject({ title: 'Install pnpm', category: 'setup', priority: 'high' });
+    expect(res.isError).toBe(true);
+    expect(res.data).toBeUndefined();
   });
 
   it('dispatch_agent reports honestly when no backend is configured', async () => {

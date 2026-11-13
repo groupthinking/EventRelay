@@ -1,3 +1,4 @@
+import { createWorkflowTaskRecord, WorkflowTaskCapacityError, WorkflowTaskStorageError } from './workflow-task-store';
 /**
  * Executable tool registry for the Transcription-Driven Action Agent.
  *
@@ -33,16 +34,22 @@ export interface ActionToolResult {
   data?: Record<string, unknown>;
   /** True when the tool could not complete (e.g. backend unavailable). */
   isError?: boolean;
+  /** Internal execution signal; never serialized as a tool receipt. */
+  storageUnavailable?: boolean;
 }
 
 /** Runtime context handed to every tool execution. */
 export interface ToolContext {
+  /** Server-verified identity, only supplied after explicit confirmation. */
+  ownerId?: string;
   /** Resolved FastAPI base URL, or null when no backend is configured. */
   backendBaseUrl: string | null;
   /** Injectable fetch (defaults to global fetch) so tools are testable. */
   fetchImpl?: typeof fetch;
   /** Correlates dispatched work with the originating prompt. */
   jobId?: string;
+  /** Absolute deadline shared by confirmed task write and readback commands. */
+  storageDeadlineAt?: number;
 }
 
 export interface ActionTool {
@@ -96,18 +103,16 @@ const createWorkflowTask: ActionTool = {
     required: ['title', 'description', 'category', 'priority'],
     additionalProperties: false,
   },
-  async execute(input) {
-    const title = str(input, 'title');
-    return {
-      summary: `Created task "${title}"`,
-      data: {
-        title,
-        description: str(input, 'description'),
-        category: str(input, 'category'),
-        priority: str(input, 'priority'),
-        createdAt: new Date().toISOString(),
-      },
-    };
+  async execute(input, ctx) {
+    try {
+      const task = await createWorkflowTaskRecord(input, ctx.ownerId, ctx.jobId, ctx.fetchImpl, ctx.storageDeadlineAt);
+      return { summary: `Saved task "${task.title}" (${task.id})`, data: task };
+    } catch (error) {
+      if (error instanceof WorkflowTaskCapacityError) return { summary: `Task was not confirmed saved. ${error.message}. Existing task retries remain available.`, isError: true };
+      return { summary: 'Task was not confirmed saved. Sign in, supply a run ID, and retry when durable storage is available.', isError: true,
+        ...(error instanceof WorkflowTaskStorageError ? { storageUnavailable: true } : {}),
+      };
+    }
   },
 };
 
