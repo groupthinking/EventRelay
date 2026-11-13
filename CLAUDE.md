@@ -154,3 +154,12 @@ Do not add `try/except TypeError` fallbacks around these parameters — if the S
 
 - **History was rewritten**: `main` has been force-pushed (a secret-purge of committed credentials). Older branches are therefore *orphaned* — they share little real ancestry with current `main`. Consequence: `git diff main...branch` (three-dot) and `git merge-tree` are **unreliable** for those branches (a three-dot diff can read "0 files" for a branch that diverges by thousands; merge-tree reports "clean" because unrelated trees don't textually conflict). When auditing branches, trust **PR state + staleness** (age, commits-behind), not raw diffs.
 - **Branch audits**: use the `branch-cleanup` skill (`.claude/skills/branch-cleanup/`) — it runs the 6-gate fail-test harness (`scripts/maintenance/branch-fail-test.sh`) and emits a decision matrix. Never delete branches without archive-tagging first (`git tag archive/<branch>`).
+
+## Agent staff governance
+
+Full spec: [docs/agent-staff-governance.md](docs/agent-staff-governance.md).
+
+- **Five rules:** (1) no external state change without a standing policy or task authorization; (2) one human approval gate; (3) all work committed to a tracked GitHub branch; (4) a changelog entry linked to the issue, PR, or Video Pack hash; (5) every fix leaves an SOP and a regression test or check.
+- **The one gate (Hayden):** production deploys, live database changes, billing, entitlements and spend, and credentials or access settings. CI-green merges to `main` that touch none of these fall under the standing merge policy (POL-001) and MERGE_POLICY.md.
+- **Policy loop:** spot the inconsistency, propose a rule plus its check, Hayden approves it once, then codify it and enforce it automatically.
+- **Hiring brief:** every agent role states what it owns, how it thinks, its definition of done, and what it never touches. It states its execution limits before taking work and never claims access it lacks.
