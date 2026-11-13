@@ -18,16 +18,31 @@ from youtube_extension.services.shared_sql_state import (
 SHARED_TABLES = {"shared_sessions", "shared_timeline_events", "shared_a2a_messages"}
 
 
-def _fake_postgres_engine() -> MagicMock:
+def _secured_relations() -> list[dict]:
+    return [
+        {"relname": name, "relkind": "r", "relrowsecurity": True, "relforcerowsecurity": True,
+         "untrusted_acl": False, "server_bypasses_rls": True, "server_privileges": True, "service_privileges": ["SELECT", "INSERT", "UPDATE", "DELETE"]}
+        for name in SHARED_TABLES
+    ] + [
+        {"relname": name, "relkind": "S", "relrowsecurity": False, "relforcerowsecurity": False,
+         "untrusted_acl": False, "server_bypasses_rls": True, "server_privileges": True, "service_privileges": ["USAGE", "SELECT"]}
+        for name in ("shared_timeline_events_id_seq", "shared_a2a_messages_id_seq")
+    ]
+
+
+def _fake_postgres_engine(relations=None) -> MagicMock:
     engine = MagicMock()
     engine.dialect.name = "postgresql"
+    engine.connect.return_value.__enter__.return_value.execute.return_value.mappings.return_value.all.return_value = (
+        _secured_relations() if relations is None else relations
+    )
     return engine
 
 
 def _fake_inspector(columns_by_table: dict[str, list[str]]) -> MagicMock:
     inspector = MagicMock()
-    inspector.has_table.side_effect = lambda name: name in columns_by_table
-    inspector.get_columns.side_effect = lambda name: [
+    inspector.has_table.side_effect = lambda name, **kwargs: name in columns_by_table
+    inspector.get_columns.side_effect = lambda name, **kwargs: [
         {"name": column} for column in columns_by_table[name]
     ]
     return inspector
@@ -81,8 +96,9 @@ def test_postgres_never_runs_create_all_when_schema_is_migrated() -> None:
         patch.object(shared_sql_state, "sa_inspect", return_value=_fake_inspector(columns)),
         patch("sqlalchemy.MetaData.create_all") as create_all,
     ):
-        SharedSQLStateStore("postgresql+psycopg://user:pw@db.example.com/app")
+        store = SharedSQLStateStore("postgresql+psycopg://user:pw@db.example.com/app")
     create_all.assert_not_called()
+    assert all(table.schema == "public" for table in store.metadata.sorted_tables)
 
 
 def test_postgres_missing_table_raises_and_names_migration(caplog) -> None:
@@ -111,6 +127,36 @@ def test_postgres_missing_column_raises() -> None:
         pytest.raises(SharedStateSchemaError, match="shared_sessions missing columns version"),
     ):
         SharedSQLStateStore("postgresql+psycopg://user:pw@db.example.com/app")
+
+
+@pytest.mark.parametrize("weakness", ["legacy-create-all", "unforced-rls", "client-grant", "missing-service-grant", "missing-sequence", "server-without-bypass", "server-without-grants", "wrong-relation-type"])
+def test_postgres_existing_columns_do_not_bypass_required_security(weakness) -> None:
+    columns = _full_columns()
+    relations = _secured_relations()
+    if weakness == "legacy-create-all":
+        relations[0]["relrowsecurity"] = False
+        relations[0]["relforcerowsecurity"] = False
+    elif weakness == "unforced-rls":
+        relations[0]["relforcerowsecurity"] = False
+    elif weakness == "client-grant":
+        relations[0]["untrusted_acl"] = True
+    elif weakness == "missing-service-grant":
+        relations[0]["service_privileges"] = ["SELECT"]
+    elif weakness == "server-without-bypass":
+        relations[0]["server_bypasses_rls"] = False
+    elif weakness == "server-without-grants":
+        relations[0]["server_privileges"] = False
+    elif weakness == "wrong-relation-type":
+        relations[0]["relkind"] = "v"
+    else:
+        relations.pop()
+    with (
+        patch.object(SharedSQLStateStore, "_create_engine", return_value=_fake_postgres_engine(relations)),
+        patch.object(shared_sql_state, "sa_inspect", return_value=_fake_inspector(columns)),
+        pytest.raises(SharedStateSchemaError, match="security") as error,
+    ):
+        SharedSQLStateStore("postgresql+psycopg://user:pw@db.example.com/app")
+    assert SHARED_STATE_MIGRATION in str(error.value)
 
 
 @pytest.mark.skipif(

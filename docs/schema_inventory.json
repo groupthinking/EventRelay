@@ -62,11 +62,19 @@
       "source": "infrastructure/database/query_optimization.sql",
       "tables": [
         "video_processing_results",
-        "api_usage_optimized"
+        "api_usage_optimized",
+        "performance_metrics_optimized"
       ],
       "status": "unmanaged_sql_script",
       "rls": "none",
-      "note": "Referenced only by infrastructure/database/index_analysis.py (index tooling); no application model and no migration."
+      "note": "infrastructure/database/index_analysis.py inspects video_processing_results and performance_metrics_optimized; api_usage_optimized is also defined by this SQL script. No application model and no migration."
+    },
+    {
+      "source": "supabase/setup_mcp_db.js",
+      "tables": ["mcp_contexts"],
+      "status": "setup_script_not_migration",
+      "rls": "none",
+      "note": "JavaScript bootstrap attempts to create mcp_contexts; not part of the migrations directory. Needs its own migrate-or-retire decision."
     },
     {
       "source": "src/integration/supabase_db.py (generate_schema_sql)",
