@@ -85,7 +85,11 @@ export interface UseYouTubePlayerResult {
   ready: boolean;
   /** True when the IFrame API could not load/init (e.g. blocked or offline). */
   failed: boolean;
-  seekTo: (seconds: number) => void;
+  /**
+   * Seek to `seconds`. Plays by default; pass `{ autoplay: false }` to cue the
+   * frame and leave the player paused (Step Runner "Autoplay step clip" off).
+   */
+  seekTo: (seconds: number, options?: { autoplay?: boolean }) => void;
   play: () => void;
   pause: () => void;
 }
@@ -228,13 +232,20 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
     };
   }, [videoId, container, startPolling, stopPolling]);
 
-  const seekTo = useCallback((seconds: number) => {
+  const seekTo = useCallback((seconds: number, options?: { autoplay?: boolean }) => {
     const p = playerRef.current;
     if (!p) return;
+    const target = Math.max(0, seconds);
     try {
-      p.seekTo(Math.max(0, seconds), true);
-      p.playVideo();
-      setCurrentTime(Math.max(0, seconds));
+      p.seekTo(target, true);
+      // The IFrame API starts playback on seek from an unstarted/cued state;
+      // an explicit pause keeps cue-only seeks honest to the toggle.
+      if (options?.autoplay === false) {
+        p.pauseVideo();
+      } else {
+        p.playVideo();
+      }
+      setCurrentTime(target);
     } catch {
       /* noop */
     }

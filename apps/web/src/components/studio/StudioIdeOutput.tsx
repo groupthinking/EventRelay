@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
@@ -14,9 +14,19 @@ export type StudioReviewActionInput = {
   result?: string;
 };
 
-type OutputSection = 'tasks' | 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
+type OutputSection =
+  | 'runbook'
+  | 'tasks'
+  | 'events'
+  | 'lingo'
+  | 'tools'
+  | 'intent'
+  | 'signals'
+  | 'spec'
+  | 'transcript';
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
+  { id: 'runbook', label: 'Runbook' },
   { id: 'tasks', label: 'Tasks' },
   { id: 'events', label: 'Events' },
   { id: 'lingo', label: 'Lingo' },
@@ -35,6 +45,8 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
  * white cards on soft blue-gray. Card = one structured idea —
  * small icon, label, value. Documents are first-class rows.
  *
+ * - Runbook: the synchronized Step Runner / RUNBOOK.md (default when the pack has one)
+ * - Tasks: bound workflow tasks (default when no runbook is available)
  * - Events: timestamped things that happened (from the event extractor)
  * - Lingo: domain verbiage / topics the video uses
  * - Tools: named tools, stack, and SOP steps
@@ -45,6 +57,7 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
 export default function StudioIdeOutput({
   video,
   specReview,
+  runbook,
   eventsEmptyMessage,
   stackChecks = [],
   reviewActions = [],
@@ -52,18 +65,28 @@ export default function StudioIdeOutput({
 }: {
   video: Video | undefined;
   specReview?: ReactNode;
+  /** Step Runner pane; when present the Runbook tab opens by default. */
+  runbook?: ReactNode;
   eventsEmptyMessage?: string;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
   packWorkbench?: ReactNode;
 }) {
-  const [active, setActive] = useState<OutputSection>('tasks');
+  const hasRunbook = Boolean(runbook);
+  const [active, setActive] = useState<OutputSection>(() => (hasRunbook ? 'runbook' : 'tasks'));
+  const userChoseTab = useRef(false);
+
+  // A pack that finishes after mount opens on its runbook unless the user already picked a tab.
+  useEffect(() => {
+    if (hasRunbook && !userChoseTab.current) setActive('runbook');
+  }, [hasRunbook]);
   const [reviewingAction, setReviewingAction] = useState<string | null>(null);
 
   const hasContent = Boolean(
     video?.videoPack ||
       video?.events?.length ||
       video?.insights ||
+      hasRunbook ||
       eventsEmptyMessage ||
       stackChecks.length > 0 ||
       reviewActions.length > 0 ||
@@ -97,7 +120,10 @@ export default function StudioIdeOutput({
             role="tab"
             aria-selected={active === s.id}
             data-testid={`studio-ide-output-tab-${s.id}`}
-            onClick={() => setActive(s.id)}
+            onClick={() => {
+              userChoseTab.current = true;
+              setActive(s.id);
+            }}
             className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               active === s.id
                 ? 'bg-neutral-900 text-white shadow-sm'
@@ -119,6 +145,12 @@ export default function StudioIdeOutput({
           </div>
         ) : (
           <>
+        {active === 'runbook' && (
+          <div data-testid="studio-ide-output-runbook">
+            {runbook ?? <EmptyNote text="Run a video and its step-by-step runbook lands here." />}
+          </div>
+        )}
+
         {active === 'tasks' && <StudioBoundTasks key={video?.id ?? 'empty'} pack={pack} />}
         {active === 'events' && (
           <div className="flex flex-col gap-3" data-testid="studio-ide-output-events">

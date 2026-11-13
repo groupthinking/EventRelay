@@ -19,6 +19,58 @@ afterEach(() => {
 });
 
 describe('StudioIdeOutput playflow', () => {
+  it('keeps Tasks, event context, and proposal review available beside a runbook', () => {
+    render(
+      <StudioIdeOutput
+        video={baseVideo}
+        runbook={<div>Saved video runbook</div>}
+        eventsEmptyMessage="This pack has no extracted events. Its source stays available."
+        reviewActions={[
+          { tool: 'create_workflow_task', input: { title: 'Review the source' }, status: 'pending' },
+        ]}
+      />,
+    );
+    expect(screen.getByTestId('studio-ide-output-tab-runbook').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Saved video runbook')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-tasks'));
+    expect(screen.getByTestId('studio-bound-tasks').textContent).toMatch(/No tasks have been executed/);
+    expect(screen.queryByText('Saved video runbook')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-events'));
+    expect(screen.getByTestId('studio-ide-output-events').textContent).toContain('Its source stays available.');
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-intent'));
+    fireEvent.click(screen.getByTestId('studio-review-act-button'));
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toContain('"title": "Review the source"');
+    expect(screen.getByTestId('studio-proposal-detail').textContent).toContain('No tool has been executed');
+
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-runbook'));
+    expect(screen.getByText('Saved video runbook')).toBeTruthy();
+  });
+
+  it('opens Tasks when no runbook or video is available', () => {
+    render(<StudioIdeOutput video={undefined} />);
+    expect(screen.getByTestId('studio-ide-output-tab-tasks').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('studio-bound-tasks').textContent).toMatch(/Run a YouTube video/);
+  });
+
+  it('opens a newly available runbook when the viewer has not selected a tab', () => {
+    const view = render(<StudioIdeOutput video={baseVideo} />);
+    expect(screen.getByTestId('studio-ide-output-tab-tasks').getAttribute('aria-selected')).toBe('true');
+    view.rerender(<StudioIdeOutput video={baseVideo} runbook={<div>Newly available runbook</div>} />);
+    expect(screen.getByTestId('studio-ide-output-tab-runbook').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByText('Newly available runbook')).toBeTruthy();
+  });
+
+  it('keeps an explicitly selected Tasks tab when a runbook becomes available', () => {
+    const view = render(<StudioIdeOutput video={baseVideo} />);
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-tasks'));
+    view.rerender(<StudioIdeOutput video={baseVideo} runbook={<div>Newly available runbook</div>} />);
+    expect(screen.getByTestId('studio-ide-output-tab-tasks').getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByTestId('studio-bound-tasks')).toBeTruthy();
+    expect(screen.queryByText('Newly available runbook')).toBeNull();
+  });
+
   it('renders pack-named stack checks as skip/unknown rows that do not look like a hold', () => {
     render(
       <StudioIdeOutput
