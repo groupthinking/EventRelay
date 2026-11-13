@@ -36,6 +36,9 @@ export type {
   Video,
 } from '@/store/dashboard-types';
 
+export const ANALYSIS_STOPPED_MESSAGE =
+  'Analysis stopped in this browser. Server work already accepted may continue.';
+
 interface DashboardState {
   // Data
   videos: Video[];
@@ -345,11 +348,38 @@ export const useDashboardStore = create<DashboardState>()(
       pipelineMode: 'workflow',
     });
 
+    let locallyStopped = false;
+    const stopLocalAnalysis = () => {
+      if (locallyStopped) return;
+      locallyStopped = true;
+      updateVideo(id, {
+        status: 'failed',
+        title: `Analysis stopped: ${truncate(url, 38)}`,
+        failure: {
+          stage: 'analysis',
+          message: ANALYSIS_STOPPED_MESSAGE,
+          retryable: true,
+          failedAt: new Date().toISOString(),
+        },
+      });
+    };
+    signal?.addEventListener('abort', stopLocalAnalysis, { once: true });
+
     try {
-      const videoPack = await emitVideoPack(url);
+      signal?.throwIfAborted();
+      const videoPack = await emitVideoPack(url, { signal });
+      signal?.throwIfAborted();
       updateVideo(id, { videoPack, progress: 5 });
 
-      const started = await startVideoToActions({ url });
+      const started = await startVideoToActions({ url, signal });
+      // Preserve a known accepted run for later readback, even if local waiting stopped.
+      if (started.runId) {
+        updateVideo(id, {
+          runId: started.runId,
+          statusUrl: started.statusUrl || `/api/workflows/video-to-actions/${encodeURIComponent(started.runId)}`,
+        });
+      }
+      signal?.throwIfAborted();
       if (!started.ok || !started.runId) {
         throw new Error(
           `Workflow start failed: ${started.error || started.message || 'no run ID returned.'}`,
@@ -369,18 +399,7 @@ export const useDashboardStore = create<DashboardState>()(
         signal,
       });
 
-      if (signal?.aborted) {
-        updateVideo(id, {
-          status: 'failed',
-          failure: {
-            stage: 'analysis',
-            message: 'Cancelled by user.',
-            retryable: true,
-            failedAt: new Date().toISOString(),
-          },
-        });
-        return id;
-      }
+      signal?.throwIfAborted();
 
       if (terminal.runStatus !== 'completed') {
         if (terminal.runStatus === 'running' || terminal.runStatus === 'pending') {
@@ -392,8 +411,14 @@ export const useDashboardStore = create<DashboardState>()(
 
       updateVideo(id, verifiedResultPatch(id, started.runId, terminal.result, videoPack));
     } catch (error) {
+      if (signal?.aborted) {
+        stopLocalAnalysis();
+        return id;
+      }
       const message = error instanceof Error ? error.message : 'Analysis failed.';
       updateVideo(id, workflowFailurePatch(url, startedAt, message));
+    } finally {
+      signal?.removeEventListener('abort', stopLocalAnalysis);
     }
 
     return id;

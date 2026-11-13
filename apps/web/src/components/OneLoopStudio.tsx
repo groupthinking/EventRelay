@@ -16,7 +16,7 @@ import {
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { StudioAuthNavLink } from '@/components/StudioAuthNavLink';
-import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
+import { ANALYSIS_STOPPED_MESSAGE, dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
@@ -427,16 +427,20 @@ export default function OneLoopStudio({
     setWorkflowActionSelectionId(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
+      if (controller.signal.aborted || runAbortRef.current !== controller) return;
       const matches = useDashboardStore
         .getState()
         .videos.filter((v) => v.url === next || v.url.includes(handoff.videoId));
       if (matches.length === 0) return;
       selectVideo(matches[0].id);
     }, 250);
+    const stopTick = () => window.clearInterval(tick);
+    controller.signal.addEventListener('abort', stopTick, { once: true });
     try {
       const id = await processVideo(next, { signal: controller.signal });
+      if (runAbortRef.current !== controller) return;
       if (controller.signal.aborted) {
-        setMessage('Analysis cancelled.');
+        setMessage(ANALYSIS_STOPPED_MESSAGE);
         return;
       }
       selectVideo(id);
@@ -454,13 +458,15 @@ export default function OneLoopStudio({
         );
       }
     } catch (err) {
+      if (runAbortRef.current !== controller) return;
       if (controller.signal.aborted) {
-        setMessage('Analysis cancelled.');
+        setMessage(ANALYSIS_STOPPED_MESSAGE);
       } else {
         setMessage(err instanceof Error ? err.message : 'Analysis failed.');
       }
     } finally {
       window.clearInterval(tick);
+      controller.signal.removeEventListener('abort', stopTick);
       if (runAbortRef.current === controller) {
         runAbortRef.current = null;
         setBusy(false);
@@ -470,7 +476,9 @@ export default function OneLoopStudio({
 
   const cancelAnalysis = useCallback(() => {
     runAbortRef.current?.abort();
-    setMessage('Cancelling analysis…');
+    runAbortRef.current = null;
+    setBusy(false);
+    setMessage(ANALYSIS_STOPPED_MESSAGE);
   }, []);
 
   useEffect(() => {
