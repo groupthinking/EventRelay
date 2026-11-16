@@ -22,7 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { clsx } from 'clsx';
-import { useRealtimeVoice } from '@/hooks/use-realtime-voice';
+import { useRealtimeVoice, type RealtimeEventLog } from '@/hooks/use-realtime-voice';
 import {
   studioRunQuality,
   studioStatusLabel,
@@ -31,12 +31,19 @@ import {
   type StudioRunQuality,
 } from '@/lib/studio-pipeline-status';
 import { kickoffStudioDeploy, pollStudioJob } from '@/lib/studio-deploy';
-import { pollStudioDeploy, startStudioDeploy } from '@/lib/studio-workflow';
 import {
+  pollStudioDeploy,
   pollVideoToActions,
+  startStudioDeploy,
   startVideoToActions,
+  type VideoToActionsAction,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
+import {
+  buildStudioAgentGraph,
+  runStudioSelfCorrectionLoop,
+  type StudioAgentGraphState,
+} from '@/lib/studio-agent-graph';
 
 type OutcomeId = 'app' | 'sop' | 'lesson' | 'research' | 'automation' | 'content';
 type RunState = 'idle' | 'working' | 'ready';
@@ -52,6 +59,7 @@ interface GeneratedPackage {
   deliverables: string[];
   nextSteps: string[];
   evidence: string[];
+  agentGraph?: StudioAgentGraphState;
   safetyNote?: string;
   createdAt: string;
 }
@@ -207,6 +215,15 @@ function buildPackage({
   const backendReason = pipelineCheck?.backend?.reason;
   const pipelineState = pipelineStateLabel(pipelineCheck, unsafe);
 
+  const agentGraph = buildStudioAgentGraph({
+    videoId,
+    outcome,
+    runState: 'ready',
+    runQuality: pipelineCheck?.ok ? 'live' : 'fallback',
+    unsafe,
+    jobId: pipelineCheck?.jobId,
+  });
+
   return {
     title: `${copy.noun[0].toUpperCase()}${copy.noun.slice(1)} from video`,
     summary: `${sourceLabel} is packaged as a ${copy.noun}. The source is visible, the request is turned into concrete deliverables, and backend readiness is checked before handoff.`,
@@ -226,6 +243,7 @@ function buildPackage({
       pipelineEvidenceLabel(pipelineCheck),
       unsafe ? 'Safety gate applied' : 'Safety gate passed',
     ],
+    agentGraph,
     safetyNote: unsafe
       ? 'Unsafe instructions were converted into a benign planning and risk-review package.'
       : undefined,
@@ -280,6 +298,15 @@ function packageToText(pkg: GeneratedPackage) {
     '',
     'Next steps:',
     ...pkg.nextSteps.map((item) => `- ${item}`),
+    pkg.agentGraph
+      ? [
+          '',
+          'Agent graph:',
+          `- Trace ID: ${pkg.agentGraph.traceId}`,
+          `- Nodes: ${pkg.agentGraph.nodes.map((n) => `${n.label} (${n.status})`).join(' -> ')}`,
+          `- Self-correction loop: ${pkg.agentGraph.loop.passed ? 'passed' : 'needs review'} (${pkg.agentGraph.loop.iterations}/${pkg.agentGraph.loop.maxIterations} iterations)`,
+        ]
+      : [],
     pkg.safetyNote ? ['', `Safety: ${pkg.safetyNote}`] : [],
   ].flat().join('\n');
 }
@@ -416,6 +443,33 @@ export default function VideoWorkflowStudio() {
     unsafeRedirect,
   );
   const dashboardHandoffUrl = currentVideoUrlForLink(videoUrl);
+
+  const liveAgentGraph = useMemo(
+    () =>
+      generatedPackage?.agentGraph ??
+      buildStudioAgentGraph({
+        videoId,
+        outcome: selectedOutcome,
+        runState,
+        runQuality,
+        unsafe: unsafeRedirect,
+        jobId: deployJobId || lastPipelineCheck?.jobId,
+        actionCount: workflowActions?.actionCount,
+        liveUrl: deployLiveUrl,
+      }),
+    [
+      generatedPackage,
+      videoId,
+      selectedOutcome,
+      runState,
+      runQuality,
+      unsafeRedirect,
+      deployJobId,
+      lastPipelineCheck,
+      workflowActions,
+      deployLiveUrl,
+    ],
+  );
 
   const disconnectRealtime = realtime.disconnect;
 
@@ -754,6 +808,47 @@ export default function VideoWorkflowStudio() {
     setActionMessage('Preview is open with source notes, deliverables, and next steps.');
   };
 
+  const handleSelfCorrectPackage = () => {
+    const currentVideoUrl = videoUrlRef.current || videoUrl;
+    const currentPrompt = promptRef.current || prompt;
+    const currentVideoId = getYouTubeId(currentVideoUrl);
+    const basePkg =
+      generatedPackage ??
+      buildPackage({
+        videoId: currentVideoId,
+        videoUrl: currentVideoUrl,
+        outcome: selectedOutcome,
+        prompt: currentPrompt,
+        unsafe: unsafeRedirect,
+        pipelineCheck: lastPipelineCheck,
+      });
+    const baseGraph =
+      basePkg.agentGraph ??
+      buildStudioAgentGraph({
+        videoId: currentVideoId,
+        outcome: selectedOutcome,
+        runState: 'ready',
+        runQuality: lastPipelineCheck?.ok ? 'live' : 'fallback',
+        unsafe: unsafeRedirect,
+        jobId: deployJobId || lastPipelineCheck?.jobId,
+        actionCount: workflowActions?.actionCount,
+        liveUrl: deployLiveUrl,
+      });
+    const { pkg: refinedPkg, graph: updatedGraph } = runStudioSelfCorrectionLoop(
+      basePkg,
+      baseGraph,
+    );
+    setGeneratedPackage({ ...refinedPkg, agentGraph: updatedGraph });
+    if (!resultReady) {
+      setRunState('ready');
+      setRunQuality(studioRunQuality(lastPipelineCheck, unsafeRedirect, Boolean(currentVideoId)));
+    }
+    setActiveAction('preview');
+    setActionMessage(
+      `Self-correction loop converged (${updatedGraph.loop.iterations}/${updatedGraph.loop.maxIterations} iterations): verification checklist and handoff guard attached.`,
+    );
+  };
+
   return (
     <div className="min-h-screen bg-[#f6f7f9] text-slate-950">
       <audio ref={audioRef} className="hidden" autoPlay />
@@ -829,6 +924,14 @@ export default function VideoWorkflowStudio() {
                 <Layers className="h-4 w-4" aria-hidden="true" />
                 {actionsBusy ? 'Acting…' : 'Act on findings'}
               </button>
+              <button
+                type="button"
+                onClick={handleSelfCorrectPackage}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 transition hover:bg-emerald-100"
+              >
+                <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                Verify &amp; self-correct
+              </button>
               <Link
                 href={dashboardHandoffUrl}
                 className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
@@ -853,7 +956,7 @@ export default function VideoWorkflowStudio() {
               </p>
               {workflowActions && workflowActions.actions.length > 0 ? (
                 <ul className="grid gap-1.5 sm:grid-cols-2">
-                  {workflowActions.actions.slice(0, 8).map((a, i) => (
+                  {workflowActions.actions.slice(0, 8).map((a: VideoToActionsAction, i: number) => (
                     <li
                       key={`${a.tool}-${i}`}
                       className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs text-slate-700"
@@ -1236,6 +1339,52 @@ export default function VideoWorkflowStudio() {
           </section>
 
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-950">Agent execution graph</h2>
+                <p className="text-xs text-slate-500">
+                  Trace <span className="font-mono">{liveAgentGraph.traceId}</span>
+                </p>
+              </div>
+              <span
+                className={clsx(
+                  'inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                  liveAgentGraph.loop.passed
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-slate-100 text-slate-600',
+                )}
+              >
+                {liveAgentGraph.loop.iterations}/{liveAgentGraph.loop.maxIterations} iterations ·{' '}
+                {liveAgentGraph.loop.passed ? 'Verified' : 'Pending verification'}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {liveAgentGraph.nodes.map((node) => (
+                <div
+                  key={node.id}
+                  className="flex items-start justify-between gap-3 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+                >
+                  <div className="min-w-0">
+                    <div className="font-semibold text-slate-900">{node.label}</div>
+                    <div className="text-slate-500">{node.detail}</div>
+                  </div>
+                  <span
+                    className={clsx(
+                      'shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize',
+                      node.status === 'complete' && 'bg-emerald-100 text-emerald-700',
+                      node.status === 'running' && 'bg-blue-100 text-blue-700',
+                      node.status === 'error' && 'bg-rose-100 text-rose-700',
+                      node.status === 'idle' && 'bg-white text-slate-500',
+                    )}
+                  >
+                    {node.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <button
               type="button"
               aria-expanded={developerOpen}
@@ -1251,9 +1400,29 @@ export default function VideoWorkflowStudio() {
             </button>
 
             {developerOpen && (
-              <div id="developer-details-panel" className="mt-3 max-h-52 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+              <div id="developer-details-panel" className="mt-3 max-h-64 space-y-2 overflow-y-auto rounded-lg bg-slate-950 p-3 text-xs text-slate-200">
+                <div className="border-b border-white/10 pb-2">
+                  <div className="mb-1.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-emerald-300">
+                    Handoff Envelopes ({liveAgentGraph.handoffs.length})
+                  </div>
+                  <div className="space-y-1.5">
+                    {liveAgentGraph.handoffs.map((handoff) => (
+                      <div
+                        key={`${handoff.senderAgent}-${handoff.recipientAgent}`}
+                        className="rounded border border-white/10 bg-white/5 px-2 py-1.5"
+                      >
+                        <div className="font-mono text-[11px] text-blue-200">
+                          {handoff.senderAgent} -&gt; {handoff.recipientAgent}
+                        </div>
+                        <div className="text-[11px] text-slate-300">
+                          intent: {handoff.intent} · lineage: {handoff.lineage.join(' -> ')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 {realtime.events.length ? (
-                  realtime.events.map((event) => (
+                  realtime.events.map((event: RealtimeEventLog) => (
                     <div key={event.id} className="flex items-start gap-2 border-b border-white/10 pb-2 last:border-0 last:pb-0">
                       <Search className="mt-0.5 h-3.5 w-3.5 flex-none text-blue-300" aria-hidden="true" />
                       <div className="min-w-0">

@@ -31,6 +31,8 @@ except ImportError:  # pragma: no cover - legacy path
         OrchestrationResult,
     )
 
+from youtube_extension.services.agents.agent_handoff import AgentHandoffEnvelope
+
 try:
     from youtube_extension.services.agents.dto import AgentResult
 except ImportError:  # pragma: no cover - fallback to base agent module
@@ -184,6 +186,7 @@ class TranscriptActionWorkflow:
                 "orchestration_meta": {
                     "processing_time": 0.0,
                     "agents_used": [],
+                    "agent_graph": None,
                 },
             }
 
@@ -219,6 +222,7 @@ class TranscriptActionWorkflow:
             "orchestration_meta": {
                 "processing_time": orchestration["processing_time"],
                 "agents_used": orchestration["agents_used"],
+                "agent_graph": orchestration.get("agent_graph"),
             },
         }
 
@@ -576,10 +580,55 @@ class TranscriptActionWorkflow:
             results=merged_results,
             errors=transcript_result.errors + strategic_result.errors,
             total_processing_time=transcript_result.total_processing_time + strategic_result.total_processing_time,
-            agents_used=list(set(transcript_result.agents_used + strategic_result.agents_used))
+            agents_used=list(dict.fromkeys(transcript_result.agents_used + strategic_result.agents_used))
         )
 
-        return self._serialize_orchestration(final_result, metadata)
+        serialized = self._serialize_orchestration(final_result, metadata)
+        serialized["agent_graph"] = self._build_agent_graph_trace(
+            video_url, transcript, final_result
+        )
+        return serialized
+
+    @staticmethod
+    def _build_agent_graph_trace(
+        video_url: str,
+        transcript: dict[str, Any],
+        result: OrchestrationResult,
+    ) -> dict[str, Any]:
+        """Build an AgentHandoffEnvelope trace across workflow orchestration stages."""
+        env = AgentHandoffEnvelope(
+            sender_agent="transcript_extractor",
+            recipient_agent="transcript_action",
+            intent="extract_actions",
+            payload={
+                "video_url": video_url,
+                "transcript_source": transcript.get("source"),
+            },
+        )
+        env.acknowledge()
+        env = env.forward(
+            next_recipient="strategic_analysis",
+            next_intent="analyze_strategy",
+        )
+        env.acknowledge()
+        final_env = env.forward(
+            next_recipient="self_correction_evaluator",
+            next_intent="verify_outputs",
+        )
+        final_env.acknowledge()
+
+        return {
+            "graph_name": "transcript_action_graph",
+            "trace_id": final_env.trace_id,
+            "visited_nodes": [
+                "transcript_extractor",
+                *result.agents_used,
+                "self_correction_evaluator",
+            ],
+            "lineage": final_env.lineage,
+            "handoff_count": len(final_env.lineage),
+            "loop_verified": bool(result.success),
+        }
 
     @staticmethod
     def _serialize_orchestration(result: OrchestrationResult, metadata: RobustYouTubeMetadata) -> dict[str, Any]:

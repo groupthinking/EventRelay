@@ -109,6 +109,64 @@ describe('compileLinkedSop', () => {
       'Attach the checklist',
     ]);
   });
+
+  it('matches catalog aliases in process steps and guards against React English-verb false positives', () => {
+    const falsePositive = compileLinkedSop({
+      transcript: 'Watch how users react to the new pricing page.',
+      segments: [{ start: 5, duration: 3, text: 'Watch how users react to the new pricing page.' }],
+    });
+    expect(falsePositive.entities.find((e) => e.name === 'React')).toBeUndefined();
+
+    const aliasSop = compileLinkedSop({
+      transcript: 'We use NextJS with React components and TypeScript.',
+      segments: [{ start: 10, duration: 4, text: 'We use NextJS with React components and TypeScript.' }],
+      events: [
+        { timestamp: 40, label: 'Deploy NextJS', description: 'Push React UI and TypeScript build.' },
+      ],
+    });
+    expect(aliasSop.entities.map((e) => e.name)).toEqual(
+      expect.arrayContaining(['Next.js', 'React', 'TypeScript']),
+    );
+    const deployStep = aliasSop.steps.find((s) => s.title === 'Deploy NextJS');
+    expect(deployStep?.entityNames).toEqual(expect.arrayContaining(['Next.js', 'React', 'TypeScript']));
+    expect(deployStep?.tools?.map((t) => t.name)).toEqual(
+      expect.arrayContaining(['Next.js', 'React', 'TypeScript']),
+    );
+    // Non-credentialed frameworks should not trigger credential provisioning
+    expect(aliasSop.steps.some((s) => s.title.includes('environment variables and credentials'))).toBe(false);
+  });
+
+  it('generates stack-specific implied processes, separates checklist sources, and avoids over-broad deduplication', () => {
+    const sop = compileLinkedSop({
+      transcript: 'Install Chrome extension, then wire Supabase, Stripe, and Vercel with OpenAI.',
+      segments: [
+        { start: 5, duration: 4, text: 'Install Chrome extension first.' },
+        { start: 15, duration: 5, text: 'Wire Supabase, Stripe, and Vercel with OpenAI.' },
+      ],
+      events: [
+        { timestamp: 5, label: 'Install Chrome extension', description: 'Helper browser tool.' },
+      ],
+    });
+
+    const impliedTitles = sop.steps.filter((s) => s.processType === 'implied').map((s) => s.title);
+    expect(impliedTitles).toEqual(
+      expect.arrayContaining([
+        'Configure environment variables and credentials',
+        'Initialize workspace and install tool dependencies',
+        'Apply schema migrations and verify database access/security rules',
+        'Configure webhook endpoints and verify webhook signing secrets',
+        'Set production environment variables and configure preview/production branch rules',
+        'Run preflight verification and integration checks',
+      ]),
+    );
+
+    expect(sop.checklist.some((c) => c.source === 'video-sop' && c.title === 'Install Chrome extension')).toBe(true);
+    expect(
+      sop.checklist.some(
+        (c) => c.source === 'intent-required' && c.title === 'Configure webhook endpoints and verify webhook signing secrets',
+      ),
+    ).toBe(true);
+  });
 });
 
 describe('renderDeployMarkdown', () => {

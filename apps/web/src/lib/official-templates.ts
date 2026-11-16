@@ -7,7 +7,7 @@
  * production does not promote until checks pass.
  */
 
-import type { ChecklistItem, LinkedSop } from '@/lib/linked-sop';
+import { OFFICIAL_CATALOG, type ChecklistItem, type LinkedSop } from '@/lib/linked-sop';
 
 export interface OfficialTemplate {
   id: 'vercel-next' | 'shopify-cli';
@@ -40,6 +40,10 @@ export function detectedStacks(sop: LinkedSop | null | undefined): Set<string> {
   const stacks = new Set<string>();
   for (const item of sop?.checklist || []) {
     if (item.source === 'stack' && item.stack) stacks.add(item.stack);
+  }
+  for (const entity of sop?.entities || []) {
+    const entry = OFFICIAL_CATALOG.find((item) => item.name === entity.name);
+    if (entry?.stack) stacks.add(entry.stack);
   }
   return stacks;
 }

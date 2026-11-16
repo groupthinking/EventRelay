@@ -18,6 +18,17 @@ import { formatSeconds } from '@/lib/timestamp';
 
 export type EntityKind = 'tool' | 'product' | 'process' | 'platform';
 export type ProcessType = 'named' | 'implied';
+export type ToolCategory =
+  | 'ai'
+  | 'hosting'
+  | 'database'
+  | 'payments'
+  | 'automation'
+  | 'framework'
+  | 'comms'
+  | 'workspace'
+  | 'vcs'
+  | 'commerce';
 
 export interface ProcessToolLink {
   name: string;
@@ -53,7 +64,8 @@ export interface SopStep {
 
 export interface ChecklistItem {
   id: string;
-  source: 'video-sop' | 'stack';
+  source: 'video-sop' | 'intent-required' | 'stack';
+  processType?: ProcessType;
   stack?: string;
   title: string;
   href?: string;
@@ -74,6 +86,11 @@ export interface CatalogEntry {
   officialUrl: string;
   docsUrl?: string;
   stack?: string;
+  category?: ToolCategory;
+  requiresCredentials?: boolean;
+  packageName?: string;
+  /** Optional guard for ambiguous terms (e.g. 'react') to prevent English-verb false positives. */
+  contextPattern?: RegExp | ((text: string) => boolean);
 }
 
 export interface LinkedSopInput {
@@ -101,6 +118,9 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://shopify.dev',
     docsUrl: 'https://shopify.dev/docs',
     stack: 'shopify',
+    category: 'commerce',
+    requiresCredentials: true,
+    packageName: '@shopify/shopify-api',
   },
   {
     name: 'Vercel',
@@ -109,6 +129,8 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://vercel.com',
     docsUrl: 'https://vercel.com/docs/deployments',
     stack: 'vercel',
+    category: 'hosting',
+    requiresCredentials: true,
   },
   {
     name: 'Next.js',
@@ -117,6 +139,9 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://nextjs.org',
     docsUrl: 'https://nextjs.org/docs',
     stack: 'vercel',
+    category: 'framework',
+    requiresCredentials: false,
+    packageName: 'next',
   },
   {
     name: 'GitHub',
@@ -125,6 +150,8 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://github.com',
     docsUrl: 'https://docs.github.com',
     stack: 'github',
+    category: 'vcs',
+    requiresCredentials: true,
   },
   {
     name: 'Beehiiv',
@@ -132,6 +159,8 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://www.beehiiv.com',
     docsUrl: 'https://developers.beehiiv.com',
+    category: 'comms',
+    requiresCredentials: true,
   },
   {
     name: 'Notion',
@@ -139,6 +168,9 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://www.notion.com',
     docsUrl: 'https://developers.notion.com',
+    category: 'workspace',
+    requiresCredentials: true,
+    packageName: '@notionhq/client',
   },
   {
     name: 'Gmail',
@@ -146,6 +178,8 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://developers.google.com/gmail',
     docsUrl: 'https://developers.google.com/gmail/api',
+    category: 'comms',
+    requiresCredentials: true,
   },
   {
     name: 'Slack',
@@ -153,13 +187,36 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://api.slack.com',
     docsUrl: 'https://api.slack.com/docs',
+    category: 'comms',
+    requiresCredentials: true,
+    packageName: '@slack/web-api',
   },
   {
     name: 'Make',
-    aliases: ['make.com'],
+    aliases: ['make.com', 'make scenario'],
     kind: 'tool',
     officialUrl: 'https://www.make.com',
     docsUrl: 'https://www.make.com/en/help',
+    category: 'automation',
+    requiresCredentials: true,
+  },
+  {
+    name: 'n8n',
+    aliases: ['n8n'],
+    kind: 'tool',
+    officialUrl: 'https://n8n.io',
+    docsUrl: 'https://docs.n8n.io',
+    category: 'automation',
+    requiresCredentials: true,
+  },
+  {
+    name: 'Zapier',
+    aliases: ['zapier'],
+    kind: 'tool',
+    officialUrl: 'https://zapier.com',
+    docsUrl: 'https://platform.zapier.com/docs',
+    category: 'automation',
+    requiresCredentials: true,
   },
   {
     name: 'Google AI Studio',
@@ -167,6 +224,9 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://aistudio.google.com',
     docsUrl: 'https://ai.google.dev',
+    category: 'ai',
+    requiresCredentials: true,
+    packageName: '@google/genai',
   },
   {
     name: 'Gemini',
@@ -174,6 +234,29 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://ai.google.dev',
     docsUrl: 'https://ai.google.dev/gemini-api/docs',
+    category: 'ai',
+    requiresCredentials: true,
+    packageName: '@google/genai',
+  },
+  {
+    name: 'OpenAI',
+    aliases: ['openai', 'chatgpt'],
+    kind: 'product',
+    officialUrl: 'https://platform.openai.com',
+    docsUrl: 'https://platform.openai.com/docs',
+    category: 'ai',
+    requiresCredentials: true,
+    packageName: 'openai',
+  },
+  {
+    name: 'Anthropic',
+    aliases: ['anthropic', 'claude'],
+    kind: 'product',
+    officialUrl: 'https://www.anthropic.com',
+    docsUrl: 'https://docs.anthropic.com',
+    category: 'ai',
+    requiresCredentials: true,
+    packageName: '@anthropic-ai/sdk',
   },
   {
     name: 'Grok',
@@ -181,6 +264,8 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://grok.com',
     docsUrl: 'https://docs.x.ai',
+    category: 'ai',
+    requiresCredentials: true,
   },
   {
     name: 'Hugging Face',
@@ -188,6 +273,8 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://huggingface.co',
     docsUrl: 'https://huggingface.co/docs',
+    category: 'ai',
+    requiresCredentials: true,
   },
   {
     name: 'Stripe',
@@ -195,6 +282,9 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://stripe.com',
     docsUrl: 'https://docs.stripe.com',
+    category: 'payments',
+    requiresCredentials: true,
+    packageName: 'stripe',
   },
   {
     name: 'Supabase',
@@ -202,6 +292,48 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://supabase.com',
     docsUrl: 'https://supabase.com/docs',
+    category: 'database',
+    requiresCredentials: true,
+    packageName: '@supabase/supabase-js',
+  },
+  {
+    name: 'Firebase',
+    aliases: ['firebase', 'firestore'],
+    kind: 'platform',
+    officialUrl: 'https://firebase.google.com',
+    docsUrl: 'https://firebase.google.com/docs',
+    category: 'database',
+    requiresCredentials: true,
+    packageName: 'firebase',
+  },
+  {
+    name: 'Upstash',
+    aliases: ['upstash'],
+    kind: 'platform',
+    officialUrl: 'https://upstash.com',
+    docsUrl: 'https://upstash.com/docs',
+    category: 'database',
+    requiresCredentials: true,
+    packageName: '@upstash/redis',
+  },
+  {
+    name: 'Prisma',
+    aliases: ['prisma'],
+    kind: 'tool',
+    officialUrl: 'https://www.prisma.io',
+    docsUrl: 'https://www.prisma.io/docs',
+    category: 'database',
+    requiresCredentials: false,
+    packageName: 'prisma',
+  },
+  {
+    name: 'PostgreSQL',
+    aliases: ['postgresql', 'postgres'],
+    kind: 'platform',
+    officialUrl: 'https://www.postgresql.org',
+    docsUrl: 'https://www.postgresql.org/docs',
+    category: 'database',
+    requiresCredentials: true,
   },
   {
     name: 'Cloudflare',
@@ -209,6 +341,17 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://developers.cloudflare.com',
     docsUrl: 'https://developers.cloudflare.com',
+    category: 'hosting',
+    requiresCredentials: true,
+  },
+  {
+    name: 'Docker',
+    aliases: ['docker', 'dockerfile'],
+    kind: 'tool',
+    officialUrl: 'https://www.docker.com',
+    docsUrl: 'https://docs.docker.com',
+    category: 'hosting',
+    requiresCredentials: false,
   },
   {
     name: 'FastAPI',
@@ -216,13 +359,45 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'tool',
     officialUrl: 'https://fastapi.tiangolo.com',
     docsUrl: 'https://fastapi.tiangolo.com',
+    category: 'framework',
+    requiresCredentials: false,
+    packageName: 'fastapi',
+  },
+  {
+    name: 'TypeScript',
+    aliases: ['typescript'],
+    kind: 'tool',
+    officialUrl: 'https://www.typescriptlang.org',
+    docsUrl: 'https://www.typescriptlang.org/docs',
+    category: 'framework',
+    requiresCredentials: false,
+    packageName: 'typescript',
+  },
+  {
+    name: 'Tailwind CSS',
+    aliases: ['tailwind css', 'tailwindcss', 'tailwind'],
+    kind: 'tool',
+    officialUrl: 'https://tailwindcss.com',
+    docsUrl: 'https://tailwindcss.com/docs',
+    category: 'framework',
+    requiresCredentials: false,
+    packageName: 'tailwindcss',
   },
   {
     name: 'React',
-    aliases: ['react'],
+    aliases: ['react.js', 'reactjs', 'react'],
     kind: 'tool',
     officialUrl: 'https://react.dev',
     docsUrl: 'https://react.dev',
+    category: 'framework',
+    requiresCredentials: false,
+    packageName: 'react',
+    // Avoid matching the English verb "react" unless capitalized or paired with UI/React terms
+    contextPattern: (t: string) =>
+      /\bReact\b/.test(t) ||
+      /\b(react\.js|reactjs|react\s+(app|component|hook|dom|native|router|state|ui|framework|18|19)|jsx|tsx|next\.?js)\b/i.test(
+        t,
+      ),
   },
 ];
 
@@ -259,38 +434,57 @@ const STACK_CHECKS: StackCheck[] = [
   },
 ];
 
-const SOP_HINTS: Array<{ pattern: RegExp; title: string; description: string }> = [
+interface SopHint {
+  preset?: 'agent-rollout';
+  pattern: RegExp;
+  title: string;
+  description: string;
+}
+
+const AGENT_ROLLOUT_HINTS: SopHint[] = [
   {
+    preset: 'agent-rollout',
     pattern: /chief of staff/i,
     title: 'Start with a chief of staff agent',
     description: 'Let it audit the business and name the first teammates.',
   },
   {
+    preset: 'agent-rollout',
     pattern: /week (one|1)\b/i,
     title: 'Week 1 — build the initial team',
     description: 'Stand up the smallest team that can run the mission.',
   },
   {
+    preset: 'agent-rollout',
     pattern: /week (two|2)\b/i,
     title: 'Week 2 — execute without adding agents',
     description: 'Run the work. No new agents, no tinkering.',
   },
   {
+    preset: 'agent-rollout',
     pattern: /week (three|3)\b/i,
     title: 'Week 3 — hire and fire against real gaps',
     description: 'Add or remove agents only after a week of execution.',
   },
   {
+    preset: 'agent-rollout',
     pattern: /week (four|4)\b/i,
     title: 'Week 4 — automate routines',
     description: 'Add cron/routines after the team already works.',
   },
   {
+    preset: 'agent-rollout',
     pattern: /one project per|one grokbot account|one grok bot account/i,
     title: 'One project per account',
     description: 'Keep context and tokens on a single mission.',
   },
 ];
+
+const AGENT_ROLLOUT_CONTEXT_RE = /\b(chief of staff|grok\s*bot|grockbot|agent\s*team|agents)\b/i;
+
+function selectSopHints(text: string): SopHint[] {
+  return AGENT_ROLLOUT_CONTEXT_RE.test(text) ? AGENT_ROLLOUT_HINTS : [];
+}
 
 function escapeRe(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -327,12 +521,32 @@ function findHits(
   return { timestamps: [...new Set(timestamps)].slice(0, 6), quote };
 }
 
+const CATALOG_BY_NAME = new Map<string, CatalogEntry>(
+  OFFICIAL_CATALOG.map((entry) => [entry.name, entry]),
+);
+
+function matchesContextGuard(
+  text: string,
+  guard: RegExp | ((t: string) => boolean) | undefined,
+): boolean {
+  if (!guard) return true;
+  return typeof guard === 'function' ? guard(text) : guard.test(text);
+}
+
+function matchesEntityText(text: string, entityName: string): boolean {
+  const entry = CATALOG_BY_NAME.get(entityName);
+  const terms = entry ? [entry.name, ...entry.aliases] : [entityName];
+  const matched = terms.some((term) => {
+    const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(term)}([^a-z0-9]|$)`, 'i');
+    return pattern.test(text);
+  });
+  if (!matched) return false;
+  return matchesContextGuard(text, entry?.contextPattern);
+}
+
 function entityNamesIn(text: string, entities: LinkedEntity[]): string[] {
   return entities
-    .filter((entity) => {
-      const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(entity.name)}([^a-z0-9]|$)`, 'i');
-      return pattern.test(text);
-    })
+    .filter((entity) => matchesEntityText(text, entity.name))
     .map((entity) => entity.name);
 }
 
@@ -368,10 +582,9 @@ function toolsForProcess(
     });
   };
 
-  // 1. Direct name match in step title or description
+  // 1. Direct name or alias match in step title or description
   for (const entity of entities) {
-    const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(entity.name)}([^a-z0-9]|$)`, 'i');
-    if (pattern.test(text)) {
+    if (matchesEntityText(text, entity.name)) {
       addEntity(entity);
     }
   }
@@ -385,13 +598,12 @@ function toolsForProcess(
     }
   }
 
-  // 3. Segment text matching near the timestamp
+  // 3. Segment text matching near the timestamp (using name or aliases)
   if (timestamp != null && segments) {
     const nearbySegments = segments.filter((s) => Math.abs(s.start - timestamp) <= 8);
     for (const seg of nearbySegments) {
       for (const entity of entities) {
-        const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(entity.name)}([^a-z0-9]|$)`, 'i');
-        if (pattern.test(seg.text)) {
+        if (matchesEntityText(seg.text, entity.name)) {
           addEntity(entity);
         }
       }
@@ -418,67 +630,120 @@ function resolveIntentGoal(input: LinkedSopInput, namedSteps: SopStep[]): string
   return 'Achieve workflow objective and deploy solution';
 }
 
+function toToolLinks(entities: LinkedEntity[]): ProcessToolLink[] {
+  return entities.map((e) => ({
+    name: e.name,
+    kind: e.kind,
+    officialUrl: e.officialUrl,
+    docsUrl: e.docsUrl,
+  }));
+}
+
+const ENV_NAMED_RE = /\b(env(ironment)?\s*(var|variable)|api\s*keys?|secrets?|credentials?)\b/i;
+const DEPS_NAMED_RE = /\b(install\s*(dep|dependenc|package|sdk)|npm\s+install|pnpm\s+install|pip\s+install|init(ialize)?\s+workspace)\b/i;
+const VERIFY_NAMED_RE = /\b(preflight|integration\s*(test|check)|smoke\s*test|run\s*tests|typecheck)\b/i;
+const DB_NAMED_RE = /\b(migration|migrate|rls|row\s*level\s*security|firestore\.rules|security\s*rules|schema)\b/i;
+const WEBHOOK_NAMED_RE = /\b(webhook\s*(secret|endpoint|signing)|signing\s*secret)\b/i;
+const HOSTING_NAMED_RE = /\b(branch\s*rule|preview\s*deploy|production\s*env)\b/i;
+
 function synthesizeImpliedProcesses(
   input: LinkedSopInput,
   entities: LinkedEntity[],
   namedSteps: SopStep[],
 ): SopStep[] {
   const implied: SopStep[] = [];
+  const namedText = namedSteps.map((s) => `${s.title} ${s.description}`).join('\n');
   const isNamedAlready = (term: string) =>
     namedSteps.some((step) => similarTitle(step.title, term) || similarTitle(step.description, term));
 
-  // Labeled tools and platforms
-  const toolEntities = entities.filter(
-    (e) => e.kind === 'tool' || e.kind === 'product' || e.kind === 'platform',
-  );
+  const toolEntries = entities
+    .map((entity) => ({ entity, entry: CATALOG_BY_NAME.get(entity.name) }))
+    .filter(({ entity }) => entity.kind === 'tool' || entity.kind === 'product' || entity.kind === 'platform');
 
-  // 1. Environment & API Credential Configuration
-  if (toolEntities.length > 0) {
-    const credTitle = 'Configure environment variables and credentials';
-    if (!isNamedAlready('environment') && !isNamedAlready('credentials') && !isNamedAlready('api keys') && !isNamedAlready('secrets')) {
-      const toolLinks: ProcessToolLink[] = toolEntities.map((e) => ({
-        name: e.name,
-        kind: e.kind,
-        officialUrl: e.officialUrl,
-        docsUrl: e.docsUrl,
-      }));
-      implied.push({
-        id: 'sop_implied_env',
-        order: 0,
-        title: credTitle,
-        description: `Provision API keys and secrets for ${toolEntities.map((t) => t.name).slice(0, 4).join(', ')}.`,
-        entityNames: toolEntities.map((t) => t.name),
-        tools: toolLinks,
-        processType: 'implied',
-        processLabel: 'Required by intent (unstated)',
-      });
-    }
+  // 1. Environment & API Credential Configuration (only for tools that require credentials)
+  const credEntities = toolEntries
+    .filter(({ entry }) => entry?.requiresCredentials === true)
+    .map(({ entity }) => entity);
+
+  if (credEntities.length > 0 && !ENV_NAMED_RE.test(namedText)) {
+    implied.push({
+      id: 'sop_implied_env',
+      order: 0,
+      title: 'Configure environment variables and credentials',
+      description: `Provision API keys and secrets for ${credEntities.map((t) => t.name).slice(0, 4).join(', ')}.`,
+      entityNames: credEntities.map((t) => t.name),
+      tools: toToolLinks(credEntities),
+      processType: 'implied',
+      processLabel: 'Required by intent (unstated)',
+    });
   }
 
-  // 2. Local Runtime & Dependency Setup
-  if (toolEntities.length > 0) {
-    const setupTitle = 'Initialize workspace and install tool dependencies';
-    if (!isNamedAlready('install') && !isNamedAlready('dependencies') && !isNamedAlready('workspace setup')) {
-      const toolLinks: ProcessToolLink[] = toolEntities.map((e) => ({
-        name: e.name,
-        kind: e.kind,
-        officialUrl: e.officialUrl,
-        docsUrl: e.docsUrl,
-      }));
-      implied.push({
-        id: 'sop_implied_setup',
-        order: 0,
-        title: setupTitle,
-        description: 'Install SDKs and initialize dependencies required to interact with the target toolchain.',
-        entityNames: toolEntities.map((t) => t.name),
-        tools: toolLinks,
-        processType: 'implied',
-        processLabel: 'Required by intent (unstated)',
-      });
-    }
+  // 2. Local Runtime & Dependency Setup (only for tools with packages/SDKs or CLI/framework tools)
+  const depEntities = toolEntries
+    .filter(({ entity, entry }) => Boolean(entry?.packageName) || entity.kind === 'tool')
+    .map(({ entity }) => entity);
+
+  if (depEntities.length > 0 && !DEPS_NAMED_RE.test(namedText)) {
+    implied.push({
+      id: 'sop_implied_setup',
+      order: 0,
+      title: 'Initialize workspace and install tool dependencies',
+      description: 'Install SDKs and initialize dependencies required to interact with the target toolchain.',
+      entityNames: depEntities.map((t) => t.name),
+      tools: toToolLinks(depEntities),
+      processType: 'implied',
+      processLabel: 'Required by intent (unstated)',
+    });
   }
 
-  // 3. Unstated actions from analysis (when timed events exist and actions supplement them)
+  // 3. Stack-specific implied processes
+  const dbEntities = toolEntries
+    .filter(({ entry }) => entry?.category === 'database')
+    .map(({ entity }) => entity);
+  if (dbEntities.length > 0 && !DB_NAMED_RE.test(namedText)) {
+    implied.push({
+      id: 'sop_implied_db',
+      order: 0,
+      title: 'Apply schema migrations and verify database access/security rules',
+      description: `Validate schema, migrations, and access policies (such as RLS or security rules) for ${dbEntities.map((e) => e.name).join(', ')}.`,
+      entityNames: dbEntities.map((e) => e.name),
+      tools: toToolLinks(dbEntities),
+      processType: 'implied',
+      processLabel: 'Required by intent (unstated)',
+    });
+  }
+
+  const stripeEntity = entities.find((e) => e.name === 'Stripe');
+  if (stripeEntity && !WEBHOOK_NAMED_RE.test(namedText)) {
+    implied.push({
+      id: 'sop_implied_stripe',
+      order: 0,
+      title: 'Configure webhook endpoints and verify webhook signing secrets',
+      description: 'Register Stripe webhook endpoints and validate incoming signatures before enabling live payments.',
+      entityNames: [stripeEntity.name],
+      tools: toToolLinks([stripeEntity]),
+      processType: 'implied',
+      processLabel: 'Required by intent (unstated)',
+    });
+  }
+
+  const hostingEntities = toolEntries
+    .filter(({ entry }) => entry?.category === 'hosting' && entry.name !== 'Docker')
+    .map(({ entity }) => entity);
+  if (hostingEntities.length > 0 && !HOSTING_NAMED_RE.test(namedText)) {
+    implied.push({
+      id: 'sop_implied_hosting',
+      order: 0,
+      title: 'Set production environment variables and configure preview/production branch rules',
+      description: `Configure deployment environment parity and branch protection on ${hostingEntities.map((e) => e.name).join(', ')}.`,
+      entityNames: hostingEntities.map((e) => e.name),
+      tools: toToolLinks(hostingEntities),
+      processType: 'implied',
+      processLabel: 'Required by intent (unstated)',
+    });
+  }
+
+  // 4. Unstated actions from analysis (when timed events exist and actions supplement them)
   if ((input.events || []).length > 0) {
     for (const action of input.actions || []) {
       const title = (action.title || '').trim();
@@ -505,21 +770,18 @@ function synthesizeImpliedProcesses(
     }
   }
 
-  // 4. Preflight Verification & Integration Checks (when tech tools/platforms are in play)
-  if (toolEntities.length > 0) {
-    const verifyTitle = 'Run preflight verification and integration checks';
-    if (!isNamedAlready('verification') && !isNamedAlready('testing') && !isNamedAlready('checks') && !isNamedAlready('smoke test')) {
-      implied.push({
-        id: 'sop_implied_verify',
-        order: 0,
-        title: verifyTitle,
-        description: 'Validate end-to-end integration and smoke test components before promoting to production.',
-        entityNames: [],
-        tools: [],
-        processType: 'implied',
-        processLabel: 'Required by intent (unstated)',
-      });
-    }
+  // 5. Preflight Verification & Integration Checks (when tech tools/platforms are in play)
+  if (toolEntries.length > 0 && !VERIFY_NAMED_RE.test(namedText)) {
+    implied.push({
+      id: 'sop_implied_verify',
+      order: 0,
+      title: 'Run preflight verification and integration checks',
+      description: 'Validate end-to-end integration and smoke test components before promoting to production.',
+      entityNames: [],
+      tools: [],
+      processType: 'implied',
+      processLabel: 'Required by intent (unstated)',
+    });
   }
 
   return implied;
@@ -541,11 +803,14 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
       return pattern.test(text);
     });
     if (!aliasHit) continue;
+    if (!matchesContextGuard(text, entry.contextPattern)) continue;
     used.add(entry.name);
     const hits = findHits(
       text,
       segments,
-      new RegExp(`(^|[^a-z0-9])${escapeRe(aliasHit)}([^a-z0-9]|$)`, 'i'),
+      entry.contextPattern instanceof RegExp
+        ? entry.contextPattern
+        : new RegExp(`(^|[^a-z0-9])${escapeRe(aliasHit)}([^a-z0-9]|$)`, 'i'),
     );
     entities.push({
       name: entry.name,
@@ -590,7 +855,7 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     });
   }
 
-  for (const hint of SOP_HINTS) {
+  for (const hint of selectSopHints(text)) {
     const hits = findHits(text, segments, hint.pattern);
     if (hits.timestamps.length === 0 && !hint.pattern.test(text)) continue;
     if (namedSteps.some((step) => similarTitle(step.title, hint.title))) continue;
@@ -654,7 +919,8 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
 
   const checklist: ChecklistItem[] = steps.map((step) => ({
     id: `chk_${step.id}`,
-    source: 'video-sop',
+    source: step.processType === 'implied' ? 'intent-required' : 'video-sop',
+    processType: step.processType,
     title: step.title,
     timestamp: step.timestamp,
   }));

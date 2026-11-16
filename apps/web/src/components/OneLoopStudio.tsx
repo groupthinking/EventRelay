@@ -130,6 +130,7 @@ export default function OneLoopStudio() {
   const [seekSeconds, setSeekSeconds] = useState<number | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [mainTab, setMainTab] = useState<MainTab>('plan');
+  const [sopFilter, setSopFilter] = useState<'all' | 'named' | 'implied'>('all');
   const [transcriptQuery, setTranscriptQuery] = useState('');
   const [selectedArtifactFile, setSelectedArtifactFile] = useState<string>('DEPLOY.md');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -835,9 +836,18 @@ export default function OneLoopStudio() {
           {/* TAB 1: Step-by-Step Action Plan & Events */}
           {mainTab === 'plan' && (
             <div className="flex flex-col gap-6">
-              {linkedSop && (
+              {linkedSop && (() => {
+                const namedCount = linkedSop.steps.filter((s) => s.processType !== 'implied').length;
+                const impliedCount = linkedSop.steps.filter((s) => s.processType === 'implied').length;
+                const visibleSteps = linkedSop.steps.filter((step) => {
+                  if (sopFilter === 'named') return step.processType !== 'implied';
+                  if (sopFilter === 'implied') return step.processType === 'implied';
+                  return true;
+                });
+
+                return (
                 <section className="rounded-2xl border border-[#e2dbcc] bg-white p-6 shadow-xs">
-                  <div className="flex items-center justify-between pb-4 border-b border-[#eee8da]">
+                  <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-[#eee8da]">
                     <div>
                       <h2 className="font-heading text-xl font-black text-[#171716]">
                         SOP & Processes
@@ -846,10 +856,33 @@ export default function OneLoopStudio() {
                         Click any orange timestamp button to jump the video player to that step.
                       </p>
                     </div>
+                    <div className="inline-flex items-center gap-1 rounded-xl border border-[#e2dbcc] bg-[#faf8f3] p-1">
+                      {(
+                        [
+                          { id: 'all', label: `All (${linkedSop.steps.length})` },
+                          { id: 'named', label: `Named (${namedCount})` },
+                          { id: 'implied', label: `Required (${impliedCount})` },
+                        ] as const
+                      ).map((tab) => (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setSopFilter(tab.id)}
+                          className={clsx(
+                            'rounded-lg px-3 py-1 text-xs font-bold transition-colors',
+                            sopFilter === tab.id
+                              ? 'bg-[#171716] text-white'
+                              : 'text-[#57554f] hover:text-[#171716]',
+                          )}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
                   <ol className="mt-5 space-y-4">
-                    {linkedSop.steps.map((step) => (
+                    {visibleSteps.map((step) => (
                       <li
                         key={step.id}
                         className="rounded-2xl border border-[#e6e0d2] bg-[#faf8f3] p-5 transition-colors hover:border-[#c8c0b0]"
@@ -892,6 +925,11 @@ export default function OneLoopStudio() {
                             {step.description}
                           </p>
                         )}
+                        {step.quote && (
+                          <blockquote className="mt-2 border-l-2 border-[#dad3c4] pl-3 text-sm italic text-[#57554f]">
+                            &ldquo;{step.quote}&rdquo;
+                          </blockquote>
+                        )}
 
                         {step.tools && step.tools.length > 0 && (
                           <div className="mt-3.5 flex flex-wrap items-center gap-2 pt-3 border-t border-[#e8e2d4]">
@@ -916,7 +954,8 @@ export default function OneLoopStudio() {
                     ))}
                   </ol>
                 </section>
-              )}
+                );
+              })()}
 
               {/* Key Video Events */}
               <section className="rounded-2xl border border-[#e2dbcc] bg-white p-6 shadow-xs">

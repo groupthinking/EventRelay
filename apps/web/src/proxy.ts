@@ -114,6 +114,7 @@ function getRedisClient(): Promise<DistributedRedisClient | null> {
 
     if (process.env.STORAGE_REDIS_URL) {
       try {
+        // @ts-expect-error redis is an optional dependency
         const { createClient } = await import('redis');
         const client = createClient({ url: process.env.STORAGE_REDIS_URL });
         client.on('error', () => {

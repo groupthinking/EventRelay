@@ -65,4 +65,19 @@ describe('deployHoldReason', () => {
     });
     expect(deployHoldReason(sop, [])).toBeNull();
   });
+
+  it('picks an official template from entities even when stack checklist items are absent', () => {
+    const picked = pickOfficialTemplate({
+      entities: [{
+        name: 'Next.js',
+        kind: 'product',
+        officialUrl: 'https://nextjs.org',
+        docsUrl: 'https://nextjs.org/docs',
+        timestamps: [1],
+      }],
+      steps: [],
+      checklist: [],
+    });
+    expect(picked?.id).toBe('vercel-next');
+  });
 });
