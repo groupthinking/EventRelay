@@ -36,7 +36,8 @@ student JS cannot read the parent page.
 
 From the repository root run `node apps/hybrid-workspace/logic.test.mjs`. After installing locked dependencies and Playwright Chromium run `node apps/hybrid-workspace/browser.test.mjs`.
 
-The browser test serves actual app modules on loopback, substitutes fixture adapters for CDN editor/terminal/layout APIs, and blocks external requests. It covers Embed, edited Summarize, Extract, Ask escaping, Escalate, terminal input, parent-DOM sandbox confinement, and forbidden Gateway-key access. It does not certify live Monaco compatibility or Gateway execution. The dedicated PR workflow requires no production credentials.
+The browser test serves actual app modules on loopback, substitutes fixture adapters for CDN editor/terminal/layout APIs, and blocks external requests. It covers Embed, edited Summarize, Extract, Ask escaping, Escalate, terminal input, parent-DOM sandbox confinement, repeated editor edits, hostile lesson markup escaping, sandbox token restrictions, parent credential access denial, and local credential/storage/query leak checks. It does not certify live Monaco compatibility or Gateway execution. The dedicated PR workflow requires no production credentials and keeps production Gateway calls disabled.
 
-Helper tests passed locally on 2026-10-08; Chromium execution was blocked because no executable existed and its download returned an invalid archive. Browser status remains NOT RUN until the runner provides success. Parent #2202 stays open pending browser evidence and remaining coverage. `/studio` remains canonical.
+When `RECEIPT_PATH` is set, the browser test writes a machine-readable JSON receipt including `VERIFIED_HEAD` (exact PR head pin in CI). The workflow uploads that receipt as an artifact so verification can be tied to the tested commit.
 
+This directory remains a prototype-only studio pane. `/studio` remains canonical.
