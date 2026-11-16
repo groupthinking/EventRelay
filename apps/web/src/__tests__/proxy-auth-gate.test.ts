@@ -289,8 +289,10 @@ describe('login gate must fail closed (issue #1058)', () => {
   });
 
   it('uses KV_REST_API_* credentials when UPSTASH_REDIS_REST_* are unset', async () => {
+    const redisCtorArgs: Array<{ url: string; token: string }> = [];
     vi.doMock('@upstash/redis', () => ({
-      Redis: function Redis() {
+      Redis: function Redis(opts: { url: string; token: string }) {
+        redisCtorArgs.push(opts);
         return {
           incr: vi.fn(async () => 1),
           expire: vi.fn(async () => 1),
@@ -317,6 +319,9 @@ describe('login gate must fail closed (issue #1058)', () => {
 
     expect(response.status).not.toBe(503);
     expect(response.headers.get('x-ratelimit-limit')).toBe('12');
+    expect(redisCtorArgs).toEqual([
+      { url: 'https://kv.example.upstash.io', token: 'kv-token' },
+    ]);
   });
 
   it('leaves local development unchanged (no secret, no 503)', async () => {
