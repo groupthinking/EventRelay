@@ -249,3 +249,62 @@ async def test_agent_graph_pipeline_enforces_max_steps_on_cycle():
     assert "Exceeded max_steps (4)" in res["error"]
     assert len(res["visited_nodes"]) == 4
     assert res["visited_nodes"] == ["node_a", "node_b", "node_a", "node_b"]
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_pipeline_assigns_non_empty_trace_id_by_default():
+    graph = AgentGraph(name="trace_graph")
+    graph.add_agent_node("node_a", MockStepAgent("node_a", "a"))
+
+    res = await graph.execute_pipeline("node_a", {"score": 1})
+    assert res["success"] is True
+    assert isinstance(res["trace_id"], str)
+    assert len(res["trace_id"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_fork_join_preserves_agent_error_status():
+    graph = AgentGraph(name="fork_join_error_graph")
+    graph.add_agent_node("ok_worker", MockStepAgent("ok_worker", "ok"))
+    graph.add_agent_node("bad_worker", MockErrorAgent(name="bad_worker", error="worker failed"))
+
+    aggregated = await graph.execute_fork_join(
+        subagent_names=["ok_worker", "bad_worker"],
+        shared_input={"score": 10},
+    )
+
+    assert aggregated["ok_worker"]["score"] == 20
+    assert aggregated["bad_worker"]["status"] == "error"
+    assert aggregated["bad_worker"]["error"] == "worker failed"
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_self_correction_loop_halts_on_agent_error():
+    graph = AgentGraph(name="loop_error_graph")
+    graph.add_agent_node("bad_gen", MockErrorAgent(name="bad_gen", error="gen crashed"))
+
+    # Even a permissive evaluator must not turn an agent error into success.
+    loop_res: LoopResult = await graph.execute_self_correction_loop(
+        generator_name="bad_gen",
+        evaluator_fn=lambda _out: (True, None),
+        initial_input={},
+        max_iterations=3,
+    )
+
+    assert loop_res.success is False
+    assert loop_res.iterations == 1
+    assert loop_res.error == "gen crashed"
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_self_correction_loop_rejects_invalid_max_iterations():
+    graph = AgentGraph(name="loop_validation_graph")
+    graph.add_agent_node("gen", MockStepAgent("gen", "g"))
+
+    with pytest.raises(ValueError, match="max_iterations must be at least 1"):
+        await graph.execute_self_correction_loop(
+            generator_name="gen",
+            evaluator_fn=lambda _out: (True, None),
+            initial_input={},
+            max_iterations=0,
+        )
