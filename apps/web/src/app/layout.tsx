@@ -92,12 +92,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://i.ytimg.com" crossOrigin="anonymous" />
       </head>
       <body
-        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-surface-950 font-sans antialiased`}
+        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-[#f5f1e8] text-[#171716] font-sans antialiased selection:bg-[#ff5500]/20 selection:text-[#171716]`}
       >
-        {/* Global background effects */}
-        <div className="fixed inset-0 bg-mesh pointer-events-none" />
-        <div className="fixed inset-0 noise pointer-events-none" />
-
         {/* Main content */}
         <div className="relative z-10">
           {children}

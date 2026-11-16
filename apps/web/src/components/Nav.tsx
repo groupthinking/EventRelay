@@ -7,27 +7,23 @@ import { useState } from 'react';
 import { Menu, X } from 'lucide-react';
 
 interface NavProps {
-  /** Optional right-side content override (e.g., processing status badge) */
+  /** Optional right-side content override */
   rightSlot?: React.ReactNode;
-  /** Optional subtitle shown next to the logo (e.g., "Dashboard", breadcrumb JSX) */
+  /** Optional subtitle shown next to the logo */
   subtitle?: React.ReactNode;
-  /** Whether to use the sticky/fixed variant (for marketing pages) */
+  /** Whether to use the sticky/fixed variant */
   fixed?: boolean;
 }
 
-/** Primary product navigation — one analyze loop. */
 const NAV_LINKS = [
-  { href: '/', label: 'Analyze' },
+  { href: '/', label: 'Player & Studio' },
   { href: '/dashboard', label: 'Library' },
-];
-
-/** Secondary / developer surfaces — not part of the default user path. */
-const DEV_LINKS = [
-  { href: '/docs/api', label: 'API' },
+  { href: '/features', label: 'How It Works' },
+  { href: '/pricing', label: 'Pricing' },
 ];
 
 /**
- * Renders the main site navigation bar.
+ * Main navigation bar — warm editorial daylight aesthetic (inspired by Video.js v10 & LinkedIn Learning).
  */
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
@@ -36,63 +32,61 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   return (
     <nav
       className={clsx(
-        'flex flex-wrap items-center justify-between px-6 lg:px-12 py-4 border-b border-white/[0.05] z-50',
+        'flex flex-wrap items-center justify-between px-6 lg:px-10 py-3.5 border-b border-[#e4decb] z-50',
         fixed
-          ? 'fixed top-0 left-0 right-0 bg-surface-950/80 backdrop-blur-xl'
-          : 'bg-surface-950/80 backdrop-blur-xl'
+          ? 'fixed top-0 left-0 right-0 bg-[#f5f1e8]/95 backdrop-blur-md'
+          : 'bg-[#f5f1e8]/95 backdrop-blur-md'
       )}
     >
-      <div className="flex items-center gap-4">
-        <Link href="/" className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500 to-primary-600 flex items-center justify-center font-black text-base shadow-lg shadow-primary-500/25 transition-transform group-hover:scale-105">
+      <div className="flex items-center gap-6">
+        <Link href="/" className="flex items-center gap-2.5 group">
+          <div className="w-8 h-8 rounded-lg bg-[#171716] text-[#f5f1e8] flex items-center justify-center font-heading font-black text-base transition-transform group-hover:scale-105">
             U
           </div>
-          <span className="font-bold text-lg font-heading">UVAI</span>
+          <span className="font-heading font-black text-xl tracking-tight text-[#171716]">
+            UVAI<span className="text-[#ff5500]">.</span>
+          </span>
         </Link>
 
         {subtitle && (
           <>
-            <div className="h-5 w-px bg-white/[0.08]" />
-            <span className="text-white/50 font-medium text-sm">{subtitle}</span>
+            <div className="h-4 w-px bg-[#d6cfc0]" />
+            <span className="text-[#57554f] font-medium text-sm">{subtitle}</span>
           </>
         )}
 
-        <div className="hidden md:flex items-center gap-1 ml-4">
-          {NAV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={pathname === href ? 'page' : undefined}
-              className={clsx(
-                'text-sm px-3 py-2 rounded-lg transition-colors',
-                pathname === href || pathname.startsWith(`${href}/`)
-                  ? 'text-white bg-white/[0.08]'
-                  : 'text-white/55 hover:text-white hover:bg-white/[0.04]'
-              )}
-            >
-              {label}
-            </Link>
-          ))}
-          <div className="h-5 w-px bg-white/[0.08] mx-1" />
-          {DEV_LINKS.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className={clsx(
-                'hidden text-sm px-3 py-2 rounded-lg transition-colors text-white/30 hover:text-white/55 hover:bg-white/[0.03] xl:inline-flex',
-                pathname === href && 'text-white/60 bg-white/[0.04]'
-              )}
-            >
-              {label}
-            </Link>
-          ))}
+        <div className="hidden md:flex items-center gap-1 ml-2">
+          {NAV_LINKS.map(({ href, label }) => {
+            const active =
+              href === '/'
+                ? pathname === '/'
+                : pathname === href || pathname.startsWith(`${href}/`);
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? 'page' : undefined}
+                className={clsx(
+                  'text-sm font-semibold px-3.5 py-2 rounded-lg transition-colors',
+                  active
+                    ? 'text-[#171716] bg-[#e8e2d5]'
+                    : 'text-[#57554f] hover:text-[#171716] hover:bg-[#ebe5d8]'
+                )}
+              >
+                {label}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
       <div className="flex items-center gap-3">
         {rightSlot || (
-          <Link href="/" className="btn btn-primary py-2 px-5 text-sm">
-            Analyze
+          <Link
+            href="/"
+            className="rounded-xl bg-[#ff5500] px-5 py-2 text-sm font-bold text-white transition-colors hover:bg-[#e04b00]"
+          >
+            Analyze a video
           </Link>
         )}
         <button
@@ -101,7 +95,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
           aria-expanded={mobileOpen}
           aria-controls="mobile-nav"
           aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg text-white/70 hover:text-white hover:bg-white/[0.05] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-500/50"
+          className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg text-[#171716] hover:bg-[#e8e2d5] transition-colors"
         >
           {mobileOpen ? (
             <X className="h-5 w-5" aria-hidden="true" />
@@ -114,7 +108,7 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
       {mobileOpen && (
         <div
           id="mobile-nav"
-          className="md:hidden w-full mt-3 flex flex-col gap-1 border-t border-white/[0.05] pt-3"
+          className="md:hidden w-full mt-3 flex flex-col gap-1 border-t border-[#e4decb] pt-3"
         >
           {NAV_LINKS.map(({ href, label }) => (
             <Link
@@ -123,10 +117,10 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
               onClick={() => setMobileOpen(false)}
               aria-current={pathname === href ? 'page' : undefined}
               className={clsx(
-                'text-sm px-3 py-2.5 rounded-lg transition-colors',
+                'text-base font-semibold px-3.5 py-2.5 rounded-lg transition-colors',
                 pathname === href
-                  ? 'text-white/90 bg-white/[0.05]'
-                  : 'text-white/50 hover:text-white/80 hover:bg-white/[0.03]'
+                  ? 'text-[#171716] bg-[#e8e2d5]'
+                  : 'text-[#57554f] hover:text-[#171716] hover:bg-[#ebe5d8]'
               )}
             >
               {label}
