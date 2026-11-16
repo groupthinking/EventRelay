@@ -31,6 +31,8 @@ const ENV_KEYS = [
   'AUTH_ALLOW_UNAUTHENTICATED',
   'UPSTASH_REDIS_REST_URL',
   'UPSTASH_REDIS_REST_TOKEN',
+  'KV_REST_API_URL',
+  'KV_REST_API_TOKEN',
   'STORAGE_REDIS_URL',
   'UVAI_RATE_LIMIT_DISABLED',
 ] as const;
@@ -274,6 +276,37 @@ describe('login gate must fail closed (issue #1058)', () => {
       UPSTASH_REDIS_REST_URL: undefined,
       UPSTASH_REDIS_REST_TOKEN: undefined,
       STORAGE_REDIS_URL: 'redis://example.test:6379',
+    });
+
+    const response = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions', {
+        method: 'POST',
+      }),
+    );
+
+    expect(response.status).not.toBe(503);
+    expect(response.headers.get('x-ratelimit-limit')).toBe('12');
+  });
+
+  it('uses KV_REST_API_* credentials when UPSTASH_REDIS_REST_* are unset', async () => {
+    vi.doMock('@upstash/redis', () => ({
+      Redis: function Redis() {
+        return {
+          incr: vi.fn(async () => 1),
+          expire: vi.fn(async () => 1),
+        };
+      },
+    }));
+
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'production',
+      AUTH_ALLOW_UNAUTHENTICATED: '1',
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined,
+      KV_REST_API_URL: 'https://kv.example.upstash.io',
+      KV_REST_API_TOKEN: 'kv-token',
+      STORAGE_REDIS_URL: undefined,
     });
 
     const response = await proxy(
