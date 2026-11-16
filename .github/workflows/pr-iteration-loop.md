@@ -30,6 +30,9 @@ checkout:
   fetch: ["*"]
   fetch-depth: 0
 engine: copilot
+runtimes:
+  python:
+    version: "3.12"
 lsp:
   python:
     command: pyright-langserver

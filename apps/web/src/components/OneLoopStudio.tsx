@@ -27,7 +27,6 @@ import {
 } from '@/lib/action-surface';
 import {
   pollVideoToActions,
-  startVideoToActions,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
 import {
@@ -88,11 +87,6 @@ import {
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import {
-  buildSameRunActInput,
-  MIN_ACT_TRANSCRIPT_CHARS,
-  usableProvidedTranscript,
-} from '@/lib/video-to-actions-input';
-import {
   applyStudioQueryAutoStart,
   resetStudioQueryAutoStart,
   resolveStudioHandoff,
@@ -106,8 +100,7 @@ import {
   type StudioGateReceiptView,
 } from '@/lib/gate-transition';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
-import type { ExtractedEvent } from '@/lib/types';
-import type { VideoPackArchitecture, VideoPackArtifact } from '@/lib/video-pack-types';
+import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
 import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
@@ -149,58 +142,16 @@ function toSpecBranch(videoId: string, stepId: string): string {
   return `spec/${slug || 'approved'}`;
 }
 
-function mapExtractedEvents(raw: unknown[], videoId: string): ExtractedEvent[] {
-  return raw
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
-    .map((item, i) => {
-      const priority = typeof item.priority === 'string' ? item.priority : '';
-      return {
-        id: `evt_${videoId}_${i}`,
-        type: (typeof item.type === 'string' ? item.type : 'topic') as ExtractedEvent['type'],
-        title: typeof item.title === 'string' ? item.title : 'Event',
-        description: typeof item.description === 'string' ? item.description : undefined,
-        timestamp: typeof item.timestamp === 'string' ? item.timestamp : undefined,
-        confidence: priority === 'high' ? 0.95 : priority === 'medium' ? 0.75 : 0.5,
-      };
-    });
-}
-
-/** Session-gated enrich. 401/403 means anonymous — Act still proceeds. */
-async function tryExtractEvents(input: {
-  transcript: string;
-  videoTitle?: string;
-  videoUrl: string;
-  videoId: string;
-}): Promise<ExtractedEvent[] | null> {
-  const res = await fetch('/api/extract-events', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      transcript: input.transcript,
-      videoTitle: input.videoTitle,
-      videoUrl: input.videoUrl,
-    }),
-    signal: AbortSignal.timeout(45_000),
-  });
-  if (res.status === 401 || res.status === 403) return null;
-  const extraction = (await res.json().catch(() => null)) as {
-    success?: boolean;
-    data?: { events?: unknown[] };
-  } | null;
-  if (!extraction?.success || !Array.isArray(extraction.data?.events)) return null;
-  const events = mapExtractedEvents(extraction.data.events, input.videoId);
-  return events.length > 0 ? events : null;
-}
-
 function PackWorkbench({
   architecture,
   artifacts,
+  tools,
   onExport,
   canExport,
 }: {
   architecture: VideoPackArchitecture | null;
   artifacts: VideoPackArtifact[];
+  tools: VideoPackStackTool[];
   onExport: () => void;
   canExport: boolean;
 }) {
@@ -262,6 +213,19 @@ function PackWorkbench({
           ))}
         </ul>
       ) : null}
+      {tools.length > 0 ? (
+        <ul data-testid="pack-stack-tools" className="mt-4 space-y-2">
+          {tools.map((tool) => (
+            <li key={tool.name} className="uvai-doc-row">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-slate-900">{tool.name}</p>
+                {tool.kind ? <p className="text-xs text-slate-500">{tool.kind}</p> : null}
+                {tool.evidence ? <p className="text-xs text-slate-600">{tool.evidence}</p> : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </section>
   );
 }
@@ -309,8 +273,7 @@ export default function OneLoopStudio({
   const [actBusy, setActBusy] = useState(false);
   const runAbortRef = useRef<AbortController | null>(null);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
-  const [actRunId, setActRunId] = useState<string | null>(null);
-  const [usedSameRun, setUsedSameRun] = useState(false);
+  const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
@@ -338,6 +301,12 @@ export default function OneLoopStudio({
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
+  const scopedWorkflowActions = showAgentWorkflowUi &&
+    workflowActionSelectionId === selectedVideoId &&
+    getYouTubeId(selected?.url || '') === getYouTubeId(workflowActions?.url || '') &&
+    (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
+    ? workflowActions
+    : null;
   const scopedPackLiveUrl = studioPackLiveReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -388,6 +357,8 @@ export default function OneLoopStudio({
   );
 
   useEffect(() => {
+    setWorkflowActions(null);
+    setWorkflowActionSelectionId(null);
     setCompletedChecks([]);
     setApprovedSpecIds([]);
     setBuildLiveFailure(null);
@@ -453,8 +424,7 @@ export default function OneLoopStudio({
     runAbortRef.current = controller;
     setBusy(true);
     setWorkflowActions(null);
-    setActRunId(null);
-    setUsedSameRun(false);
+    setWorkflowActionSelectionId(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
       const matches = useDashboardStore
@@ -570,6 +540,15 @@ export default function OneLoopStudio({
     artifactCount: packFormation.artifacts.length,
     toolCount: packFormation.tools.length,
   });
+  const eventsEmptyMessage = studioEventsEmptyMessage({
+    busy: transcriptWorking,
+    hasCompletedRun: Boolean(selected && selected.status !== 'processing'),
+    eventCount,
+    hasTranscript: Boolean(selected?.transcript?.trim()),
+    hasArchitecture: Boolean(packFormation.architecture),
+    artifactCount: packFormation.artifacts.length,
+    toolCount: packFormation.tools.length,
+  });
   const hasPayload = studioCanExport({
     transcript: selected?.transcript,
     eventCount,
@@ -619,84 +598,51 @@ export default function OneLoopStudio({
   const canAttemptBuildLive = Boolean(
     getYouTubeId(url || selected?.url || '') && (selected || url.trim()),
   );
+  const typedVideoId = url.trim() ? getYouTubeId(url) : null;
+  const selectedVideoUrlId = getYouTubeId(selected?.url || '');
+  const canAct = Boolean(
+    showAgentWorkflowUi &&
+    selected?.status === 'complete' &&
+    selected?.runId &&
+    selectedVideoUrlId &&
+    (!url.trim() || typedVideoId === selectedVideoUrlId),
+  );
 
   const act = async () => {
-    const next = (selected?.url || url).trim();
-    if (!getYouTubeId(next)) {
-      setMessage('Analyze a video before acting.');
+    if (!canAct || !selected?.runId) {
+      setMessage('Select the analyzed video before reviewing its actions.');
       return;
     }
+    const selectionId = selected.id;
+    const runId = selected.runId;
     setActBusy(true);
     setWorkflowActions(null);
-    setActRunId(null);
-    setMessage('Acting on this run\'s transcript…');
+    setWorkflowActionSelectionId(null);
+    setMessage('Loading proposed actions from this run…');
     try {
-      let events = selected?.events;
-      const transcript = selected?.transcript?.trim() || '';
-      if (selected && transcript.length >= MIN_ACT_TRANSCRIPT_CHARS && !(events?.length)) {
-        try {
-          const enriched = await tryExtractEvents({
-            transcript,
-            videoTitle: selected.title,
-            videoUrl: next,
-            videoId: selected.id,
-          });
-          if (enriched) {
-            updateVideo(selected.id, { events: enriched });
-            events = enriched;
-          }
-        } catch {
-          // extract-events is optional; Act still uses the Analyze transcript.
-        }
-      }
-
-      const sopEvents = (linkedSop?.steps || []).map((step) => ({
-        type: 'action',
-        title: step.title,
-        description: step.description,
-      }));
-      const payload = buildSameRunActInput({
-        url: next,
-        videoTitle: selected?.title,
-        transcript: selected?.transcript,
-        events: [...(events || []), ...sopEvents],
-      });
-      setUsedSameRun(Boolean(payload.transcript || payload.events?.length));
-
-      const started = await startVideoToActions(payload);
-      if (!started.ok || !started.runId) {
-        if (started.status === 401 || started.status === 403) {
-          router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
-          return;
-        }
-        setMessage(started.error || started.message || 'Could not start Act.');
-        return;
-      }
-      setActRunId(started.runId);
-      setMessage(
-        payload.transcript
-          ? `Act ${started.runId} started on this run's transcript.`
-          : `Act ${started.runId} started.`,
-      );
-      const polled = await pollVideoToActions(started.runId, {
-        statusUrl: started.statusUrl,
+      const polled = await pollVideoToActions(runId, {
+        statusUrl: selected.statusUrl,
         attempts: 24,
         delayMs: 2000,
       });
+      if (useDashboardStore.getState().selectedVideoId !== selectionId) return;
+      if (polled.status === 401 || polled.status === 403) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
+        return;
+      }
       if (polled.runStatus === 'completed' && polled.result) {
         setWorkflowActions(polled.result);
-        const sameRun =
-          polled.result.usedProvidedTranscript ??
-          Boolean(payload.transcript || payload.events?.length);
-        setUsedSameRun(sameRun);
+        setWorkflowActionSelectionId(selectionId);
         setMessage(
-          `Act completed — ${polled.result.actionCount} tool result(s) on this page.`,
+          `${polled.result.actionCount} proposed action(s) from this run are ready to review.`,
         );
       } else {
         setMessage(polled.error || `Act status: ${polled.runStatus || 'unknown'}.`);
       }
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Act failed.');
+      if (useDashboardStore.getState().selectedVideoId === selectionId) {
+        setMessage(err instanceof Error ? err.message : 'Could not load proposed actions.');
+      }
     } finally {
       setActBusy(false);
     }
@@ -715,7 +661,7 @@ export default function OneLoopStudio({
     const actions = actionsFromStudioRun({
       insightActions,
       events: selected?.events,
-      workflowActions: workflowActions?.actions,
+      workflowActions: scopedWorkflowActions?.actions,
     });
     if (
       actions.length === 0 &&
@@ -940,7 +886,7 @@ export default function OneLoopStudio({
   const hasSummaryPane = Boolean(summaryText.trim()) && !summaryRedundant;
   const hasTranscriptPane =
     Boolean(selected?.transcript?.trim()) || transcriptWorking || showTranscriptRetry;
-  const hasActionsPane = Boolean(showAgentWorkflowUi && (actRunId || workflowActions));
+  const hasActionsPane = Boolean(scopedWorkflowActions);
   const workbenchTabs = studioWorkbenchTabs({
     hasTranscript: hasTranscriptPane,
     hasActions: hasActionsPane,
@@ -1044,6 +990,20 @@ export default function OneLoopStudio({
                 <Rocket className="h-4 w-4" aria-hidden />
                 Ship this
               </button>
+              {showAgentWorkflowUi ? (
+                <button
+                  type="button"
+                  data-testid="studio-act-button"
+                  onClick={() => void act()}
+                  disabled={actBusy || !canAct}
+                  title={canAct
+                    ? 'Review proposed actions from the selected video run.'
+                    : 'Select an analyzed video matching the URL first.'}
+                  className="uvai-btn disabled:opacity-40"
+                >
+                  {actBusy ? 'Loading…' : 'Review this run'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 data-testid="studio-build-live-button"
@@ -1145,15 +1105,28 @@ export default function OneLoopStudio({
         outputPane={
           <StudioIdeOutput
             video={selected}
+            eventsEmptyMessage={eventsEmptyMessage}
             stackChecks={stackCheckViews}
-            reviewActions={(workflowActions?.actions ?? []).map((action) => {
+            reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
               return {
                 tool: action.tool,
+                input: action.input,
                 status: action.status,
                 result: action.result ?? card.detail,
               };
             })}
+            packWorkbench={
+              promotePack ? (
+                <PackWorkbench
+                  architecture={packFormation.architecture}
+                  artifacts={packFormation.artifacts}
+                  tools={packFormation.tools}
+                  onExport={() => void exportPkg()}
+                  canExport={hasPayload}
+                />
+              ) : undefined
+            }
             specReview={
               selected?.videoPack?.pack ? (
                 <GroundedSpecReview

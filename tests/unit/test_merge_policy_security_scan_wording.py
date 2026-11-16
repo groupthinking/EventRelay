@@ -97,7 +97,7 @@ class ImageGatePolicyTests(unittest.TestCase):
         self.assertIn("urllib3>=2.8.0", constraints)
         self.assertIn('"setuptools>=80.10.2"', dockerfile)
         self.assertIn('"wheel>=0.46.2"', dockerfile)
-        self.assertIn("npm install --global npm@12.2.0", dockerfile)
+        self.assertIn("npm install --global npm@12.2.2", dockerfile)
         self.assertIn("rm -rf /usr/local/lib/python3.11/site-packages/*", dockerfile)
 
 

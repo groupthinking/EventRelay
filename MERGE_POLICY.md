@@ -137,10 +137,16 @@ an exact advisory/package/version/image scope, applicability evidence,
 compensating controls, an accountable approver, linked issue, expiry, and an
 enforced expiry check. A missing advisory or unproven exposure remains unresolved.
 
-The other security jobs also remain completion gates: `npm-audit`, `python-safety`,
-and `bandit` still tolerate findings. CodeQL check failure also depends on the
-repository's code-scanning settings. Their green conclusions do not establish
-absence of vulnerabilities.
+`npm-audit` installs the committed dependency graph with the declared npm version
+and `npm ci`, then fails on high/critical npm advisories or audit execution errors.
+It retains the JSON report even when the audit fails. A passing result covers
+that dependency graph and the advisory data available during that run; it is not
+a claim that the application has no vulnerabilities.
+
+The other security jobs remain completion gates: `python-safety` and `bandit`
+still tolerate findings. CodeQL check failure also depends on the repository's
+code-scanning settings. Their green conclusions do not establish absence of
+vulnerabilities.
 
 > **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
 > `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads

@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useState } from 'react';
-import { ArrowUp, Link2 } from 'lucide-react';
+import { ArrowRight, Link2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { submitHomePaste } from '@/lib/studio-handoff';
 
@@ -46,10 +46,11 @@ export default function HomePasteForm() {
         />
         <button
           type="submit"
-          aria-label="Run in Studio"
-          className="template-send"
+          aria-label="Build from video in Studio"
+          className="template-send home-build-button"
         >
-          <ArrowUp size={20} aria-hidden="true" />
+          <span>Build from video</span>
+          <ArrowRight size={18} aria-hidden="true" />
         </button>
       </div>
       {error ? (
@@ -58,7 +59,7 @@ export default function HomePasteForm() {
         </p>
       ) : (
         <p id="home-youtube-url-help" className="mt-2 text-left text-xs" style={{ color: 'var(--uvai-ink-faint)' }}>
-          Opens Studio and starts the Video Pack handoff. Transcript quality varies by source.
+          Opens Studio to extract a Video Pack and inspect source-linked tasks. Transcript quality varies by source.
         </p>
       )}
     </form>

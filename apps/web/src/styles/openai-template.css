@@ -37,7 +37,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-ink); outl
 .template-studio-shell .uvai-toolbar { padding: 14px 20px; box-shadow: none; }
 .template-studio-shell .uvai-card { border-radius: 0; box-shadow: none; border: 0; }
 .template-studio-panes > aside { background: #f9f9f9; }
-.template-studio-panes > main { background: white; }
+.template-studio-panes > #studio-panel-chat { background: white; }
 .template-studio-panes .uvai-pane-header { background: transparent; padding: 18px; }
 .template-studio-panes > aside:first-child { border-right: 1px solid var(--uvai-border); }
 .template-studio-panes > aside:last-child { border-left: 1px solid var(--uvai-border); }
@@ -47,16 +47,13 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-ink); outl
 .template-chat-welcome { min-height: 320px; height: 100%; }
 .template-chat-welcome .template-mark { width: 44px; height: 44px; border-radius: 14px; margin-bottom: 12px; }
 .template-pane-tabs { display: none; }
-@media (max-width: 1100px) {
-  .template-studio-panes > aside { width: 240px; }
-}
 @media (max-width: 900px) {
   .template-pane-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--uvai-border); }
   .template-pane-tabs button { flex: 1; border-radius: 8px; font-size: 12px; padding: 10px 4px; color: var(--uvai-ink-soft); }
-  .template-pane-tabs button[aria-pressed='true'] { background: #171717; color: white; }
+  .template-pane-tabs button[aria-selected='true'] { background: #171717; color: white; }
   .template-studio-shell { height: auto; min-height: calc(100dvh - 65px); }
   .template-studio-panes { min-height: 520px; }
-  .template-studio-panes > aside, .template-studio-panes > main { width: 100%; min-width: 0; border: 0; }
+  .template-studio-panes > aside, .template-studio-panes > #studio-panel-chat { width: 100%; min-width: 0; border: 0; }
   .template-studio-panes > .uvai-splitter { display: none; }
   .template-studio-shell [data-testid='studio-ide-video-pane'],
   .template-studio-shell [data-testid='studio-ide-chat-pane'],

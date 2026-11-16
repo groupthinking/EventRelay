@@ -13,9 +13,9 @@ import {
 import { customBadge } from '@/flags';
 
 export const metadata: Metadata = {
-  title: 'UVAI — YouTube URL to Studio',
+  title: 'UVAI — YouTube videos to bound tasks',
   description:
-    'Paste a YouTube URL to open a hashed Video Pack in Studio. Transcript quality varies by source.',
+    'Bind YouTube videos to source-linked tasks, expected outputs, and proposed checks in Studio. Transcript quality varies by source.',
   alternates: { canonical: '/' },
 };
 
@@ -49,10 +49,10 @@ export default async function HomePage() {
         <div className="mx-auto max-w-6xl">
           <HomeTemplateShell context={
             <div>
-              <p className="uvai-label">Source → context → next step</p>
-              <h2 className="mt-4 text-xl">A workspace for what comes next.</h2>
+              <p className="uvai-label">Video → tasks → checks</p>
+              <h2 className="mt-4 text-xl">Every action has a source.</h2>
               <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                Start with the source. Review the evidence before deciding what to build.
+                Keep the spoken action, expected output, and acceptance check together.
               </p>
               <ol className="mt-8 space-y-8">
                 <li className="home-workflow-step">
@@ -63,12 +63,12 @@ export default async function HomePage() {
                 <li className="home-workflow-step">
                   <span className="home-step-number" aria-hidden="true">02</span>
                   <div><h3 className="text-base font-medium">Inspect the Video Pack</h3>
-                    <p className="mt-2 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>Studio organizes the source into a hashed Video Pack with events, tools, and proposed work.</p></div>
+                    <p className="mt-2 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>Studio organizes the source into a hashed Video Pack. The Tasks view connects requirements to source timestamps and acceptance criteria.</p></div>
                 </li>
                 <li className="home-workflow-step">
                   <span className="home-step-number" aria-hidden="true">03</span>
-                  <div><h3 className="text-base font-medium">Review your next move</h3>
-                    <p className="mt-2 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>Ask questions and inspect build rails. Proposed work is not a verified deployment.</p></div>
+                  <div><h3 className="text-base font-medium">Inspect the checks</h3>
+                    <p className="mt-2 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>Review each expected output and export the bound tasks. Unrun checks stay unverified; proposed work is not a verified deployment.</p></div>
                 </li>
               </ol>
               <div className="mt-8 border-t pt-5 text-xs leading-relaxed" style={{ borderColor: 'var(--uvai-border)', color: 'var(--uvai-ink-soft)' }}>
@@ -89,11 +89,12 @@ export default async function HomePage() {
               )}
 
               <h1 id="home-heading" className="mt-5 max-w-2xl text-3xl sm:text-4xl" style={{ color: 'var(--uvai-ink)' }}>
-                Your videos know what to do next.
+                Turn YouTube into bound tasks.
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                Paste a YouTube URL. UVAI pulls the events, actions, and decisions out of it.
-                Studio prepares proposed work and build rails for you to review.
+                Paste a YouTube URL. UVAI connects source-linked actions, expected outputs,
+                and proposed checks in one workspace. Studio prepares proposed work and build rails for you to review.
+                Follow the timestamp and take the next step toward your build.
               </p>
               <p className="mt-3 text-sm" style={{ color: 'var(--uvai-ink-faint)' }}>
                 Transcript quality varies by source. No guaranteed production outcome.

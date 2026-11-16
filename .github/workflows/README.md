@@ -18,7 +18,7 @@ workflow; this README is the index.
 | Dependency Review | `dependency-review.yml` | push to `main`; all PRs | Seed main-branch dependency snapshots and review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
-| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
+| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate metadata/security evidence; fork and Dependabot findings use check annotations without comment writes |
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
@@ -30,7 +30,7 @@ workflow; this README is the index.
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
-| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; repository state changes | Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; same-repository PR and other repository state changes | Fork PRs remain in scheduled inventories; no fork-event writes. Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
 
 ## Key Workflows
 
