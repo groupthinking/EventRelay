@@ -204,3 +204,48 @@ def test_orchestrator_create_agent_graph():
     g = orchestrator.create_agent_graph(name="test_graph")
     assert isinstance(g, AgentGraph)
     assert g.name == "test_graph"
+
+
+class MockErrorAgent(BaseAgent):
+    """Mock agent that returns an error AgentResult."""
+
+    def __init__(self, name: str = "failing_agent", error: str = "boom"):
+        super().__init__(name=name)
+        self.error = error
+
+    async def run(self, request):
+        return AgentResult(
+            status="error",
+            output={"error": self.error},
+            logs=[self.error],
+        )
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_pipeline_halts_on_agent_error():
+    graph = AgentGraph(name="error_halt_graph")
+    graph.add_agent_node("step_fail", MockErrorAgent(name="step_fail", error="boom"))
+    graph.add_agent_node("step_after", MockStepAgent("step_after", "after"))
+    graph.add_edge("step_fail", "step_after")
+
+    res = await graph.execute_pipeline("step_fail", {"score": 0})
+    assert res["success"] is False
+    assert res["failed_node"] == "step_fail"
+    assert res["error"] == "boom"
+    assert res["visited_nodes"] == ["step_fail"]
+    assert "step_after" not in res["outputs"]
+
+
+@pytest.mark.asyncio
+async def test_agent_graph_pipeline_enforces_max_steps_on_cycle():
+    graph = AgentGraph(name="cycle_guard_graph")
+    graph.add_agent_node("node_a", MockStepAgent("node_a", "a"))
+    graph.add_agent_node("node_b", MockStepAgent("node_b", "b"))
+    graph.add_edge("node_a", "node_b")
+    graph.add_edge("node_b", "node_a")
+
+    res = await graph.execute_pipeline("node_a", {"value": 1}, max_steps=4)
+    assert res["success"] is False
+    assert "Exceeded max_steps (4)" in res["error"]
+    assert len(res["visited_nodes"]) == 4
+    assert res["visited_nodes"] == ["node_a", "node_b", "node_a", "node_b"]

@@ -103,3 +103,9 @@ ON CONFLICT (collision_id) DO NOTHING;
 INSERT INTO concept_tracker.relationships (relationship_id, source_concept, target_concept, relationship_type, confidence, verified, notes) VALUES
 ('rel:qm_uvai', 'concept:qm', 'concept:prime_agent', 'pattern_similarity', 0.920, TRUE, 'Both decouple execution from persistent orchestrator state.')
 ON CONFLICT (relationship_id) DO NOTHING;
+
+-- Record resolved mistakes and prevention rules
+INSERT INTO concept_tracker.contradictions (contradiction_id, topic, incorrect_claim, corrected_fact, prevention_rule) VALUES
+('contra:2026-11-16:benchmark-sha256-mismatch', 'verified-benchmarks contentSha256', 'Placeholder sha256 values (9f86d081..., 4b227777..., e3b0c442...) represented real SHA-256 digests of benchmark transcript content.', 'Benchmark sha256 digests must equal the SHA-256 of transcriptTextFromSegments(segments): 5da3377b... (multi-agent-ops), dfc3310b... (nextjs-stripe-launch), and b04333a1... (fastapi-rag-pipeline).', 'Always compute and assert benchmark contentSha256 directly from transcriptTextFromSegments(segments) in verified-benchmarks.test.ts.'),
+('contra:2026-11-16:agent-graph-error-and-cycle-guard', 'AgentGraph execute_pipeline failure and cycle bounds', 'execute_pipeline always returned success=True regardless of AgentResult.status and ran unbounded loops on cyclic edges or conditional routers.', 'execute_pipeline halts immediately with success=False when res.status != "ok" and enforces an explicit max_steps budget (default 32) to bound cyclic traversals.', 'Require regression tests covering non-ok AgentResult termination and max_steps cycle bounds whenever modifying AgentGraph execution paths.')
+ON CONFLICT (contradiction_id) DO NOTHING;

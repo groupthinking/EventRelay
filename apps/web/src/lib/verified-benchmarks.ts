@@ -70,7 +70,7 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
     summary:
       'Operational blueprint for standing up an autonomous agent team without context sprawl: begin with a single Chief of Staff agent in Google AI Studio + Gemini, lock scope for Week 2 execution across Slack, Notion, and Gmail, audit real operational bottlenecks in Week 3, and wire deterministic cron routines and Vercel + GitHub deployment checks in Week 4.',
     topics: ['Multi-Agent Rollout', 'Chief of Staff Pattern', 'Context Isolation', 'Deployment Checks'],
-    sha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
+    sha256: '5da3377b190bdcec18a594cc8b06fbdee9e5943516b69d81b6fa550d9267f2e7',
     acquiredAt: '2026-11-06T08:15:00.000Z',
     latencyMs: 1420,
     segments: [
@@ -164,7 +164,7 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
     summary:
       'End-to-end production architecture for a Next.js App Router application backed by Supabase row-level security and Stripe webhook signature verification, deployed via Vercel with automated GitHub Actions preflight gates.',
     topics: ['Next.js App Router', 'Stripe Webhooks', 'Supabase RLS', 'Vercel Deployment Checks'],
-    sha256: '4b227777d4dd1fc61c6f884f48641d02b4d121d3fd328cb08b5531fcacdabf8a',
+    sha256: 'dfc3310bb0bffbfaa967852150d8eb5b93a07655e623d07679ba42a8b0025b4a',
     acquiredAt: '2026-11-06T08:20:00.000Z',
     latencyMs: 1180,
     segments: [
@@ -236,7 +236,7 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
     summary:
       'Technical deep dive into grounded multimodal indexing: acquiring verified timed captions, embedding transcript segments with Hugging Face and Gemini, serving deterministic JSON schemas over FastAPI, and surfacing source citations in React.',
     topics: ['Grounded Inference', 'FastAPI Contracts', 'Timestamp Provenance', 'Citation Verification'],
-    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    sha256: 'b04333a13649337e98edad1a870bbbd97d03354468158b3d9a0dc2d1c26f42db',
     acquiredAt: '2026-11-06T08:25:00.000Z',
     latencyMs: 1310,
     segments: [

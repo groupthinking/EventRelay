@@ -68,23 +68,37 @@ class AgentGraph:
         initial_node: str,
         initial_payload: dict[str, Any],
         trace_id: str | None = None,
+        max_steps: int = 32,
     ) -> dict[str, Any]:
         """
-        Execute the graph starting from initial_node until a terminal node is reached.
+        Execute the graph starting from initial_node until a terminal node is reached,
+        an agent returns a non-ok status, or max_steps is exceeded.
         """
+        if max_steps < 1:
+            raise ValueError("max_steps must be at least 1")
+
         current_node_name = initial_node
         current_envelope = AgentHandoffEnvelope(
             trace_id=trace_id or "",
             sender_agent="graph_entrypoint",
             recipient_agent=current_node_name,
             intent="execute_node",
-            payload=initial_payload,
+            payload=dict(initial_payload),
         )
 
         outputs: dict[str, Any] = {}
         visited: list[str] = []
 
         while current_node_name in self.nodes:
+            if len(visited) >= max_steps:
+                return {
+                    "success": False,
+                    "error": f"Exceeded max_steps ({max_steps}) in pipeline execution.",
+                    "visited_nodes": visited,
+                    "outputs": outputs,
+                    "final_payload": current_envelope.payload,
+                }
+
             visited.append(current_node_name)
             agent = self.nodes[current_node_name]
             current_envelope.acknowledge()
@@ -94,6 +108,21 @@ class AgentGraph:
             node_output = res.output if isinstance(res.output, dict) else {"result": res.output}
             outputs[current_node_name] = node_output
             current_envelope.payload.update(node_output)
+
+            if res.status != "ok":
+                error_msg = (
+                    node_output.get("error")
+                    or (res.logs[-1] if res.logs else None)
+                    or f"Agent '{current_node_name}' failed with status '{res.status}'."
+                )
+                return {
+                    "success": False,
+                    "failed_node": current_node_name,
+                    "error": str(error_msg),
+                    "visited_nodes": visited,
+                    "outputs": outputs,
+                    "final_payload": current_envelope.payload,
+                }
 
             # Check dynamic router
             if current_node_name in self._conditions:

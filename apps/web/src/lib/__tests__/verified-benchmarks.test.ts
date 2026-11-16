@@ -1,6 +1,8 @@
+import { createHash } from 'crypto';
 import { describe, expect, it } from 'vitest';
 import { VERIFIED_BENCHMARKS, getBenchmarkByYoutubeId } from '../verified-benchmarks';
 import { buildScaffoldPackage } from '../action-surface';
+import { transcriptTextFromSegments } from '../analysis-evidence';
 
 describe('verified-benchmarks', () => {
   it('exposes three verified enterprise benchmarks with passing quality gates', () => {
@@ -10,6 +12,10 @@ describe('verified-benchmarks', () => {
       expect(bench.quality.state).toBe('verified');
       expect(bench.provenance.transcriptVerified).toBe(true);
       expect(bench.provenance.contentSha256).toMatch(/^[a-f0-9]{64}$/);
+      const expectedSha256 = createHash('sha256')
+        .update(transcriptTextFromSegments(bench.segments), 'utf8')
+        .digest('hex');
+      expect(bench.provenance.contentSha256).toBe(expectedSha256);
       expect(bench.segments.length).toBeGreaterThan(0);
       expect(bench.linkedSop.entities.length).toBeGreaterThan(0);
       expect(bench.linkedSop.steps.length).toBeGreaterThan(0);
