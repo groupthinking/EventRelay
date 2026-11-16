@@ -52,6 +52,49 @@ class TestAvailabilityFlags:
 
 
 class TestSpeechToTextConfig:
+    @pytest.mark.parametrize(
+        ("env_name", "field_name", "first_value", "second_value", "expected"),
+        [
+            ("GOOGLE_SPEECH_PROJECT_ID", "project_id", "first", "second", "second"),
+            ("GOOGLE_SPEECH_LOCATION", "location", "global", "us-east1", "us-east1"),
+            ("GOOGLE_SPEECH_RECOGNIZER", "recognizer_id", "first", "second", "second"),
+            ("GOOGLE_SPEECH_MODEL", "model", "first", "second", "second"),
+            (
+                "GOOGLE_SPEECH_LANGUAGE",
+                "preferred_language_code",
+                "en-US",
+                "ja-JP",
+                "ja-JP",
+            ),
+            ("GOOGLE_SPEECH_GCS_BUCKET", "gcs_bucket", "first", "second", "second"),
+            (
+                "GOOGLE_SPEECH_GCS_PREFIX",
+                "gcs_path_prefix",
+                "first",
+                "second",
+                "second",
+            ),
+            (
+                "GOOGLE_SPEECH_LONG_RUNNING_THRESHOLD",
+                "long_running_threshold_bytes",
+                "1024",
+                "2048",
+                2048,
+            ),
+            ("GOOGLE_SPEECH_BATCH_TIMEOUT", "batch_timeout_seconds", "60", "120", 120),
+        ],
+    )
+    def test_reads_environment_when_config_is_created(
+        self, monkeypatch, env_name, field_name, first_value, second_value, expected
+    ):
+        monkeypatch.setenv(env_name, first_value)
+        first_config = SpeechToTextConfig()
+        monkeypatch.setenv(env_name, second_value)
+        second_config = SpeechToTextConfig()
+
+        assert str(getattr(first_config, field_name)) == first_value
+        assert getattr(second_config, field_name) == expected
+
     def test_defaults(self, monkeypatch):
         # Clear all env vars so we get pure defaults
         for var in (
@@ -67,17 +110,8 @@ class TestSpeechToTextConfig:
         ):
             monkeypatch.delenv(var, raising=False)
 
-        # Dataclass field defaults are evaluated at class-definition time when
-        # os.getenv is called, so we must reload the module to pick up the
-        # monkeypatched env.  For this test we construct with explicit values
-        # instead to stay side-effect-free.
-        cfg = SpeechToTextConfig(
-            project_id=None,
-            location="us-central1",
-            recognizer_id="default",
-            model="latest_long",
-            preferred_language_code="en-US",
-        )
+        cfg = SpeechToTextConfig()
+        assert cfg.project_id is None
         assert cfg.location == "us-central1"
         assert cfg.recognizer_id == "default"
         assert cfg.model == "latest_long"
@@ -85,6 +119,10 @@ class TestSpeechToTextConfig:
         assert cfg.enable_automatic_punctuation is True
         assert cfg.preferred_language_code == "en-US"
         assert cfg.max_download_bytes == 200 * 1024 * 1024
+        assert cfg.long_running_threshold_bytes == 10 * 1024 * 1024
+        assert cfg.batch_timeout_seconds == 1800
+        assert cfg.gcs_bucket is None
+        assert cfg.gcs_path_prefix == "speech-transcripts"
 
     def test_recognizer_path_none_when_no_project(self):
         cfg = SpeechToTextConfig(project_id=None)
@@ -607,7 +645,7 @@ class TestTranscribeYouTubeVideoUnavailable:
             mock_response.results = []
             mock_thread.return_value = mock_response
 
-            result = await svc.transcribe_youtube_video(
+            await svc.transcribe_youtube_video(
                 "https://www.youtube.com/watch?v=test",
                 language_code="fr",  # short, no '-'
             )
