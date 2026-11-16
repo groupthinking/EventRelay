@@ -85,7 +85,7 @@ describe('pack-build-live', () => {
     );
   });
 
-  it('succeeds after sandbox confirm when health stays degraded but pack is stored', async () => {
+  it('preserves failed health after sandbox confirms a stored pack', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
@@ -115,6 +115,7 @@ describe('pack-build-live', () => {
             ok: false,
             reason_code: 'HOSTED_PACK_EXTRACT_FAILED',
           },
+          factory_deliver: { ready: false, reason_code: 'FACTORY_DELIVER_HEALTH_FAILED' },
         }),
       });
     vi.stubGlobal('fetch', fetchMock);
@@ -126,9 +127,42 @@ describe('pack-build-live', () => {
     });
 
     expect(result).toMatchObject({
-      ok: true,
-      liveUrl: `https://uvai.io/d/${XYMC_VIDEO_ID}`,
+      ok: false,
+      reasonCode: 'HOSTED_PACK_EXTRACT_FAILED',
     });
+  });
+
+  it.each([
+    {
+      name: 'missing health',
+      status: 200,
+      payload: { factory_deliver: { ready: false, reason_code: 'FACTORY_DELIVER_MISSING_HEALTH' } },
+    },
+    {
+      name: 'failed HTTP response with a healthy payload',
+      status: 503,
+      payload: { health: { ok: true, status: 200 } },
+    },
+  ])('does not report ready after a stored-pack retry with $name', async ({ status, payload }) => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        health: { ok: false, reason_code: 'HOSTED_PACK_NOT_FOUND' },
+      }))
+      .mockResolvedValueOnce(Response.json({
+        status: 'success',
+        data: { videoId: XYMC_VIDEO_ID, sourceHash: XYMC_SOURCE_HASH },
+      }))
+      .mockResolvedValueOnce(Response.json(payload, { status }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await verifyPackBuildLive({
+      videoId: XYMC_VIDEO_ID,
+      sourceHash: XYMC_SOURCE_HASH,
+      origin: 'https://uvai.io',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result).not.toHaveProperty('liveUrl');
   });
 
   it('scopes pack live receipts to the selected video', () => {
