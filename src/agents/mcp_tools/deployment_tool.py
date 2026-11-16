@@ -173,6 +173,10 @@ class DeploymentMCPTool:
                     logger.info(f"✅ Vercel: {results['vercel_url']}")
                 else:
                     results["errors"].append(self._stage_error("vercel", vercel_result))
+                    logger.error(
+                        "Deployment handoff failed",
+                        extra={"stage": "vercel", "reason": "deployment_failed"},
+                    )
             else:
                 if not self.vercel_token:
                     results["errors"].append({
@@ -183,7 +187,7 @@ class DeploymentMCPTool:
             # Determine overall status
             # A completed GitHub artifact is a partial receipt, not proof that
             # the full handoff succeeded when another requested stage failed.
-            if not results["errors"] and (results["github_deployed"] or results["vercel_deployed"]):
+            if results["github_deployed"] and results["vercel_deployed"]:
                 results["status"] = "success"
             else:
                 results["status"] = "failed"
@@ -455,4 +459,3 @@ def get_deployment_tool() -> DeploymentMCPTool:
 MCP_TOOLS = {
     "deploy_to_github_and_vercel": get_deployment_tool().deploy_to_github_and_vercel
 }
-
