@@ -168,7 +168,8 @@ function hasStubEllipsis(content: string): boolean {
   return lines.some((rawLine) => {
     const line = rawLine.trim();
     if (!line || !line.includes('...')) return false;
-    if (/^(?:\/\/|#|\*)\s*\.{3}\b/.test(line) || /^(?:\/\/|#)\s*\.{3}$/.test(line)) {
+    // Flag comment-based truncation stubs (`// ...`, `# ...`, `* ...`, `/* ... */`), including inline ones.
+    if (/(?:^|\s)(?:\/\/|#|\*)\s*\.{3}(?=\s|$|\*\/)/.test(line) || /\/\*\s*\.{3}[\s\S]*?\*\//.test(line)) {
       return true;
     }
     if (line === '...' || line === '{ ... }' || /^return\s+\.\.\.;?$/.test(line)) {
@@ -179,7 +180,7 @@ function hasStubEllipsis(content: string): boolean {
       .replace(/\.\.\.(?=[A-Za-z_$([{])/g, '')
       // Python indexing / generics (`[..., 0]`, `Tuple[int, ...]`, `Callable[..., float]`)
       .replace(/([:\[,(]\s*)\.\.\.(?=\s*[,)\]])/g, '$1')
-      // Trailing inline comments
+      // Non-stub explanatory comments (`// waiting on value...`)
       .replace(/(\/\/|#).*$/, '');
     return strippedValidSyntax.includes('...');
   });
