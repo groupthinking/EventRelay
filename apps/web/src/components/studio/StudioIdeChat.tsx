@@ -374,8 +374,8 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"
-            rows={1}
-            className="uvai-input min-w-0 flex-1 resize-y disabled:opacity-40"
+            rows={2}
+            className="uvai-input min-w-0 flex-1 resize-y py-2 leading-snug disabled:opacity-40"
           />
           <button
             type="submit"
