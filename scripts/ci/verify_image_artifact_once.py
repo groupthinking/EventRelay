@@ -13,7 +13,7 @@ with zipfile.ZipFile(archive) as z:
 rows=[r for run in sarif["runs"] for r in run.get("results",[])]
 counts={c:sum(c in json.dumps(r) for r in rows) for c in ["CVE-2026-76844","CVE-2026-85091","CVE-2025-47273","CVE-2026-6653"]}
 rules=[r for run in sarif["runs"] for r in run.get("tool",{}).get("driver",{}).get("rules",[])]
-proof={"artifact":14312702282,"zip_sha256":digest,"source":source,"image_id":identity["Id"],"rows":len(rows),"target_counts":counts,"rule_samples":rules[:2],"result_samples":rows[:2],"status":"VERIFIED"}
+proof={"artifact":14312702282,"zip_sha256":digest,"source":source,"image_id":identity["Id"],"rows":len(rows),"target_counts":counts,"fixed_versions":[{"cve":r.get("ruleId"),"message":r.get("message",{}).get("text","")} for r in rows if any(l.startswith("Fixed Version:") and l.split(":",1)[1].strip() for l in r.get("message",{}).get("text","").splitlines())],"packages":dict(collections.Counter(r.get("message",{}).get("text","").splitlines()[0] for r in rows)),"status":"VERIFIED"}
 (out/"proof.json").write_text(json.dumps(proof,indent=2))
 print(json.dumps(proof))
 assert all(counts[c]==0 for c in ["CVE-2026-76844","CVE-2026-85091","CVE-2025-47273"]),counts
