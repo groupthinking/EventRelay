@@ -73,13 +73,23 @@ describe('Horizontal Webflow + Shipper Studio navigation', () => {
     }
   });
 
-  it('omits vertical drag splitters in favor of horizontal stacked bands', () => {
+  it('omits vertical drag splitters in favor of the Webflow split workbench grid', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={<span>Controls</span>} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
+    render(
+      <StudioIdeShell
+        toolbar={<span>Controls</span>}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+        detailsRail={<p>Rail metadata</p>}
+      />,
+    );
     expect(screen.queryByTestId('studio-ide-splitter-left')).toBeNull();
     expect(screen.queryByTestId('studio-ide-splitter-right')).toBeNull();
     expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-details-rail')).toBeTruthy();
+    expect(screen.getByRole('main').dataset.detailsRail).toBe('true');
   });
 });
