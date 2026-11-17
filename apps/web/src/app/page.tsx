@@ -49,12 +49,19 @@ export default async function HomePage() {
         <div className="mx-auto max-w-6xl">
           <HomeTemplateShell context={
             <div>
-              <p className="uvai-label">Video → tasks → checks</p>
-              <h2 className="mt-4 text-xl">Every action has a source.</h2>
-              <p className="mt-3 text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                Keep the spoken action, expected output, and acceptance check together.
-              </p>
-              <ol className="mt-8 space-y-8">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between lg:gap-8">
+                <div>
+                  <p className="uvai-label">Video → tasks → checks</p>
+                  <h2 className="mt-2 text-xl">Every action has a source.</h2>
+                  <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+                    Keep the spoken action, expected output, and acceptance check together.
+                  </p>
+                </div>
+                <p className="text-xs leading-relaxed lg:text-right" style={{ color: 'var(--uvai-ink-faint)' }}>
+                  Your source stays the reference. Missing evidence should remain an open question.
+                </p>
+              </div>
+              <ol className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <li className="home-workflow-step">
                   <span className="home-step-number" aria-hidden="true">01</span>
                   <div><h3 className="text-base font-medium">Bring a YouTube URL</h3>
@@ -71,9 +78,6 @@ export default async function HomePage() {
                     <p className="mt-2 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>Review each expected output and export the bound tasks. Unrun checks stay unverified; proposed work is not a verified deployment.</p></div>
                 </li>
               </ol>
-              <div className="mt-8 border-t pt-5 text-xs leading-relaxed" style={{ borderColor: 'var(--uvai-border)', color: 'var(--uvai-ink-soft)' }}>
-                Your source stays the reference. Missing evidence should remain an open question.
-              </div>
             </div>
           }>
             <div className="template-welcome">

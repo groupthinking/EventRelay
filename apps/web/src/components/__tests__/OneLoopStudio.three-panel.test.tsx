@@ -42,15 +42,15 @@ afterEach(() => {
 });
 
 describe('OneLoopStudio IDE shell', () => {
-  it('renders the IDE shell with toolbar and three panes when idle', () => {
+  it('renders the IDE shell with toolbar and horizontal sections when idle', () => {
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
     expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-toolbar')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
-    expect(screen.getByTestId('studio-ide-splitter-left')).toBeTruthy();
-    expect(screen.getByTestId('studio-ide-splitter-right')).toBeTruthy();
+    expect(screen.queryByTestId('studio-ide-splitter-left')).toBeNull();
+    expect(screen.queryByTestId('studio-ide-splitter-right')).toBeNull();
     // Toolbar carries the run + pack actions.
     expect(screen.getByTestId('studio-ide-run')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-ship')).toBeTruthy();

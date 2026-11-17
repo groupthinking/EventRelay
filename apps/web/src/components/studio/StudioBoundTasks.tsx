@@ -143,7 +143,7 @@ export default function StudioBoundTasks({ pack }: { pack?: Pack }) {
         </div>
       )}
       {view.tasks.length === 0 ? <p className="uvai-card text-sm text-[var(--uvai-ink-soft)]">This specification contains no tasks.</p> : (
-        <ol className="space-y-4" aria-label="Source-linked tasks">
+        <ol className="grid grid-cols-1 gap-4 lg:grid-cols-2" aria-label="Source-linked tasks">
           {view.tasks.map((task, index) => <TaskRow key={task.id} task={task} index={index} />)}
         </ol>
       )}

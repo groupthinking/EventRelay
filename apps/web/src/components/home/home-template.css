@@ -1,12 +1,12 @@
-/* Webflow University course-overview split layout: #080808 primary canvas + #111111 syllabus rail. */
-.home-template-shell { display: grid; grid-template-columns: minmax(0, 7fr) minmax(18rem, 3fr); min-height: 600px; background: var(--uvai-bg); border: 1px solid var(--uvai-border-strong); border-radius: 12px; overflow: hidden; }
-.home-template-primary { min-width: 0; padding: clamp(24px, 4vw, 56px); display: flex; flex-direction: column; justify-content: center; align-items: center; }
+/* Webflow University horizontal stacked layout: #080808 primary hero stage + horizontal 3-up workflow band below. */
+.home-template-shell { display: grid; grid-template-columns: minmax(0, 1fr); background: var(--uvai-bg); border: 1px solid var(--uvai-border-strong); border-radius: 12px; overflow: hidden; }
+.home-template-primary { min-width: 0; padding: clamp(28px, 4.5vw, 56px); display: flex; flex-direction: column; justify-content: center; align-items: center; }
 .home-template-primary h1 { font-family: var(--font-body); font-weight: 500; letter-spacing: -0.045em; line-height: 1.12; color: var(--uvai-ink); }
-.home-template-context { min-width: 0; border-left: 1px solid var(--uvai-border-strong); background: var(--uvai-surface); padding: 28px; }
+.home-template-context { min-width: 0; border-top: 1px solid var(--uvai-border-strong); background: var(--uvai-surface); padding: clamp(24px, 3.5vw, 36px); }
 .home-template-context h2, .home-template-context h3 { font-family: var(--font-body); font-weight: 500; color: var(--uvai-ink); }
 .home-template-context h3 { font-size: 13px; }
 .home-context-toggle { display: none; }
-.home-workflow-step { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); gap: 0.75rem; background: var(--uvai-bg); border: 1px solid var(--uvai-border-strong); padding: 14px 12px; border-radius: 8px; }
+.home-workflow-step { display: grid; grid-template-columns: 1.75rem minmax(0, 1fr); gap: 0.75rem; background: var(--uvai-bg); border: 1px solid var(--uvai-border-strong); padding: 16px 14px; border-radius: 8px; }
 .home-step-number { color: var(--uvai-accent); font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding-top: 3px; }
 .home-source-composer { margin-top: 28px; }
 .home-source-composer label { font-size: 10px; text-align: center; }
@@ -18,9 +18,9 @@
   .template-source-input .home-build-button { width: 100%; min-height: 40px; margin-top: 4px; }
 }
 @media (max-width: 1023px) {
-  .home-template-shell { grid-template-columns: minmax(0, 1fr); min-height: auto; border: 0; border-radius: 0; }
+  .home-template-shell { grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; }
   .home-template-primary { padding: 32px 4px; }
-  .home-template-context { display: none; border-left: 0; border: 1px solid var(--uvai-border-strong); border-radius: 10px; margin-top: 16px; padding: 24px; }
+  .home-template-context { display: none; border-top: 0; border: 1px solid var(--uvai-border-strong); border-radius: 10px; margin-top: 16px; padding: 24px; }
   .home-template-context.is-open { display: block; }
   .home-context-toggle { display: inline-flex; margin-top: 24px; }
 }
