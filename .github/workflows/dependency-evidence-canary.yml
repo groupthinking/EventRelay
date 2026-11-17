@@ -6,6 +6,7 @@ permissions:
   contents: read
 jobs:
   trace:
+    if: "github.event.head_commit.message != 'test: verify merged image artifact'"
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
@@ -25,5 +26,28 @@ jobs:
         with:
           name: dependency-comparison-trace-${{ github.sha }}-${{ github.run_attempt }}
           path: dependency-trace-evidence/
+          if-no-files-found: error
+          retention-days: 30
+  image-artifact-proof:
+    if: "github.event.head_commit.message == 'test: verify merged image artifact'"
+    permissions:
+      contents: read
+      actions: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Independently validate exact merged image archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/ci/verify_image_artifact_once.py
+      - name: Retain archive and proof
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: merged-image-artifact-proof
+          path: image-artifact-proof/
           if-no-files-found: error
           retention-days: 30
