@@ -14,6 +14,22 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Status for a route the network knows about but cannot execute. It always
+# carries an "error" key so every caller that checks `"error" in result`
+# (e.g. VideoPipelineOrchestrator._execute_agent_stage) treats it as failure.
+NOT_IMPLEMENTED = "not_implemented"
+
+
+def not_implemented_result(route: str, action: str, reason: str) -> dict[str, Any]:
+    """Explicit failure for a tool route that was not executed."""
+    return {
+        "status": NOT_IMPLEMENTED,
+        "executed": False,
+        "route": route,
+        "action": action,
+        "error": f"{route} {action}: not implemented ({reason}); nothing was executed",
+    }
+
 # Agent Network Configuration
 AGENT_NETWORK_CONFIG = Path(__file__).parent.parent.parent / "config" / "agent_network.json"
 
@@ -204,12 +220,22 @@ class MCPAgentNetwork:
                 return await self._call_knowledge_base(action, payload)
         except Exception as e:
             return {"error": f"Internal tool error: {str(e)}"}
+        return not_implemented_result(endpoint, action, f"no internal module handler for '{module_name}'")
 
     async def _call_mcp(self, endpoint: str, action: str, payload: dict) -> dict:
         """Call MCP server via stdio/protocol"""
         server_name = endpoint.replace("mcp://", "")
-        logger.info(f"MCP call: {server_name}.{action}")
-        return {"status": "routed", "server": server_name, "action": action}
+        # No MCP client/transport is wired into this network. Previously this
+        # returned {"status": "routed"} without doing anything, so the
+        # pipeline's deploy step (create_repo via mcp://github) reported
+        # success without deploying. Report the truth instead.
+        logger.error(
+            "MCP route not implemented: %s.%s was not executed",
+            server_name,
+            action,
+            extra={"route": endpoint, "action": action, "status": NOT_IMPLEMENTED},
+        )
+        return not_implemented_result(endpoint, action, "no MCP client transport is configured")
 
     async def _call_http(self, endpoint: str, action: str, payload: dict) -> dict:
         """Call HTTP endpoint"""
@@ -217,6 +243,7 @@ class MCPAgentNetwork:
 
         if endpoint.startswith("https://api.vercel.com"):
             return await self._call_vercel_api(action, payload)
+        return not_implemented_result(endpoint, action, "no HTTP handler for this endpoint")
 
     def get_pipeline_agents(self) -> list[str]:
         """Get ordered list of agents for video-to-software pipeline"""
@@ -242,7 +269,7 @@ class MCPAgentNetwork:
             elif action == "suggest_fix":
                 return await build_validator.suggest_fix(**payload)
             else:
-                return {"status": "pending_implementation", "action": action}
+                return not_implemented_result("internal://skill_builder", action, "no skill builder handler")
 
         except Exception as e:
             logger.error(f"Build validator error: {e}")
@@ -302,7 +329,7 @@ class MCPAgentNetwork:
                 return {"status": "success", "stats": stats}
 
             else:
-                return {"status": "unknown_action", "action": action}
+                return not_implemented_result("internal://knowledge_base", action, "no knowledge base handler")
 
         except Exception as e:
             logger.error(f"Knowledge base error: {e}")
@@ -326,8 +353,7 @@ class MCPAgentNetwork:
                 return await deployment_tool.deploy_to_github_and_vercel(**payload)
 
             else:
-                # TODO: Implement other deployment features
-                return {"status": "pending_implementation", "action": action}
+                return not_implemented_result("https://api.vercel.com", action, "no deployment handler")
 
         except Exception as e:
             logger.error(f"Deployment error: {e}")
