@@ -115,13 +115,13 @@ const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 function gateDecisionChipClass(decision: GateDecision): string {
   switch (decision) {
     case 'PASS':
-      return 'border-emerald-300 bg-emerald-50 text-emerald-700';
+      return 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300';
     case 'HOLD':
-      return 'border-amber-300 bg-amber-50 text-amber-700';
+      return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
     case 'REJECT':
-      return 'border-red-300 bg-red-50 text-red-700';
+      return 'border-red-500/40 bg-red-500/15 text-red-300';
     case 'ESCALATE':
-      return 'border-violet-300 bg-violet-50 text-violet-700';
+      return 'border-violet-500/40 bg-violet-500/15 text-violet-300';
     default: {
       const _exhaustive: never = decision;
       return _exhaustive;
@@ -161,7 +161,7 @@ function PackWorkbench({
       className="uvai-card p-4 lg:col-span-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#4d94ff]">
           From this pack
         </h2>
         <button
@@ -178,20 +178,20 @@ function PackWorkbench({
         <div data-testid="pack-architecture" className="mt-4">
           <h3 className="uvai-section-label">Architecture</h3>
           {architecture.summary ? (
-            <p className="mt-2 text-sm text-slate-600">{architecture.summary}</p>
+            <p className="mt-2 text-sm text-[var(--uvai-ink-soft)]">{architecture.summary}</p>
           ) : null}
           {architecture.stages.length > 0 ? (
-            <ol className="mt-2 space-y-1 text-sm text-slate-700">
+            <ol className="mt-2 space-y-1 text-sm text-[var(--uvai-ink-soft)]">
               {architecture.stages.map((stage) => (
                 <li key={stage.id}>
-                  <span className="font-medium text-slate-900">{stage.name}</span>
+                  <span className="font-medium text-[var(--uvai-ink)]">{stage.name}</span>
                   {stage.description ? ` — ${stage.description}` : ''}
                 </li>
               ))}
             </ol>
           ) : null}
           {architecture.mermaid ? (
-            <pre className="mt-2 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-5 text-slate-200">
+            <pre className="mt-2 overflow-auto rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--uvai-ink)]">
               {architecture.mermaid}
             </pre>
           ) : null}
@@ -205,9 +205,9 @@ function PackWorkbench({
               className="uvai-doc-row"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12px] font-semibold text-blue-700">{artifact.path_hint}</div>
-                <div className="mt-0.5 truncate text-sm text-slate-700">{artifact.purpose}</div>
-                <div className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{artifact.interface}</div>
+                <div className="truncate font-mono text-[12px] font-semibold text-[#4d94ff]">{artifact.path_hint}</div>
+                <div className="mt-0.5 truncate text-sm text-[var(--uvai-ink-soft)]">{artifact.purpose}</div>
+                <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--uvai-ink-faint)]">{artifact.interface}</div>
               </div>
             </li>
           ))}
@@ -218,9 +218,9 @@ function PackWorkbench({
           {tools.map((tool) => (
             <li key={tool.name} className="uvai-doc-row">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">{tool.name}</p>
-                {tool.kind ? <p className="text-xs text-slate-500">{tool.kind}</p> : null}
-                {tool.evidence ? <p className="text-xs text-slate-600">{tool.evidence}</p> : null}
+                <p className="text-sm font-medium text-[var(--uvai-ink)]">{tool.name}</p>
+                {tool.kind ? <p className="text-xs text-[var(--uvai-ink-faint)]">{tool.kind}</p> : null}
+                {tool.evidence ? <p className="text-xs text-[var(--uvai-ink-soft)]">{tool.evidence}</p> : null}
               </div>
             </li>
           ))}
@@ -238,7 +238,7 @@ function StudioJobStripDestination({
   switch (destination.kind) {
     case 'video':
       return (
-        <span data-testid="studio-job-video-id" className="text-slate-500">
+        <span data-testid="studio-job-video-id" className="text-[var(--uvai-ink-faint)]">
           {destination.label}
         </span>
       );
@@ -247,7 +247,7 @@ function StudioJobStripDestination({
         <Link
           href={destination.href}
           data-testid="studio-job-self-link"
-          className="text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
+          className="text-[var(--uvai-ink-faint)] underline decoration-[var(--uvai-border-strong)] underline-offset-2 hover:text-[var(--uvai-ink)]"
         >
           {destination.label}
         </Link>
@@ -903,7 +903,7 @@ export default function OneLoopStudio({
     : 0;
 
   return (
-    <div className="template-studio flex min-h-screen flex-col text-slate-900">
+    <div className="template-studio flex min-h-screen flex-col text-[var(--uvai-ink)]">
       <Nav rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
@@ -980,7 +980,7 @@ export default function OneLoopStudio({
                 ) : null}
               </div>
             ) : null}
-            <div className="flex items-center gap-1.5 sm:border-l sm:border-slate-200 sm:pl-2" role="toolbar" aria-label="Pack actions">
+            <div className="flex items-center gap-1.5 sm:border-l sm:border-[var(--uvai-border-strong)] sm:pl-2" role="toolbar" aria-label="Pack actions">
               <button
                 type="button"
                 onClick={() => void exportPkg()}
@@ -1021,7 +1021,7 @@ export default function OneLoopStudio({
                       ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                       : 'Paste a YouTube URL and run analysis first.'
                 }
-                className="uvai-btn text-slate-600 disabled:opacity-40"
+                className="uvai-btn text-[var(--uvai-ink-soft)] disabled:opacity-40"
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
@@ -1030,7 +1030,7 @@ export default function OneLoopStudio({
               {statusText}
             </p>
             {showTranscriptRetry ? (
-              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 text-xs text-red-800">
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-200">
                 <span className="min-w-0 flex-1 truncate">
                   {selected?.failure?.message || 'Extraction stopped before finishing.'}
                 </span>
@@ -1038,7 +1038,7 @@ export default function OneLoopStudio({
                   type="button"
                   data-testid="studio-transcript-retry"
                   onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn shrink-0 !border-red-300 !bg-white !px-3 !py-1 !text-xs font-medium text-red-800 hover:!bg-red-50"
+                  className="uvai-btn shrink-0 !border-red-500/40 !bg-red-500/15 !px-3 !py-1 !text-xs font-medium text-red-100 hover:!bg-red-500/25"
                 >
                   Retry transcript
                 </button>
@@ -1048,7 +1048,7 @@ export default function OneLoopStudio({
         }
         videoPane={
           <div className="flex flex-col gap-3">
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-sm">
+            <div className="relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
               {videoId ? (
                 <>
                   <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
@@ -1062,9 +1062,9 @@ export default function OneLoopStudio({
                   {playerOverlay ? (
                     <div
                       data-testid="studio-player-overlay"
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 px-6 text-center"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center"
                     >
-                      <p className="text-sm text-slate-700">{playerOverlay}</p>
+                      <p className="text-sm text-[var(--uvai-ink-soft)]">{playerOverlay}</p>
                       {playerPhase === 'error' ? (
                         <div className="flex flex-wrap items-center justify-center gap-2">
                           <button
@@ -1089,7 +1089,7 @@ export default function OneLoopStudio({
                   ) : null}
                 </>
               ) : (
-                <div className="flex aspect-video items-center justify-center bg-slate-100 px-6 text-center text-sm text-slate-500">
+                <div className="flex aspect-video items-center justify-center bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
                   Paste a link above. The video plays here while we pull the transcript.
                 </div>
               )}
@@ -1098,33 +1098,33 @@ export default function OneLoopStudio({
               <div className="uvai-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="uvai-section-label">Extracted pack</p>
-                  <span className="font-mono text-[11px] font-semibold text-amber-700">
+                  <span className="font-mono text-[11px] font-semibold text-[#4d94ff]">
                     {selected.videoPack.sourceHash.slice(0, 12)}…
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
                   {selected.videoPack.pack.action_items?.length ? (
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
                       {selected.videoPack.pack.action_items.length} actions
                     </span>
                   ) : null}
                   {selected.videoPack.pack.stack?.tools?.length ? (
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
                       {selected.videoPack.pack.stack.tools.length} tools
                     </span>
                   ) : null}
                   {selected.videoPack.pack.code_snippets?.length ? (
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
                       {selected.videoPack.pack.code_snippets.length} code files
                     </span>
                   ) : null}
                   {transcriptWordCount > 0 ? (
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
                       {transcriptWordCount.toLocaleString()} words
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-1.5 truncate text-xs text-slate-400">{selected.videoPack.sourceUrl}</p>
+                <p className="mt-1.5 truncate text-xs text-[var(--uvai-ink-faint)]">{selected.videoPack.sourceUrl}</p>
               </div>
             ) : null}
           </div>
@@ -1190,8 +1190,8 @@ export default function OneLoopStudio({
           className={clsx(
             'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
             exportToast.tone === 'success'
-              ? 'border-amber-300 bg-amber-50 text-amber-800'
-              : 'border-red-300 bg-red-50 text-red-800',
+              ? 'border-[#146ef5]/50 bg-[#111a2e]/95 text-[#e8f0ff]'
+              : 'border-red-500/45 bg-[#241012]/95 text-red-200',
           )}
         >
           {exportToast.text}
@@ -1202,32 +1202,32 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-pack-build-live-result"
           role="status"
-          className="border-t border-amber-200 bg-amber-50/80"
+          className="border-t border-[#146ef5]/35 bg-[#146ef5]/10"
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
             <div className="flex flex-wrap items-start gap-2">
               <span
                 data-testid="studio-pack-build-live-state"
-                className="inline-flex rounded-full border border-amber-300 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700"
+                className="inline-flex rounded-full border border-[#146ef5]/45 bg-[#146ef5]/20 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4d94ff]"
               >
                 Ready
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">
+                <p className="text-sm font-medium text-[var(--uvai-ink)]">
                   {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
                 </p>
-                <p className="mt-1 text-sm text-slate-600">
+                <p className="mt-1 text-sm text-[var(--uvai-ink-soft)]">
                   YouTube video id{' '}
                   <span
                     data-testid="studio-pack-build-live-video-id"
-                    className="font-mono text-amber-700"
+                    className="font-mono text-[#4d94ff]"
                   >
                     {scopedPackBuildLiveSuccess.youtubeVideoId}
                   </span>
                 </p>
                 <p
                   data-testid="studio-pack-build-live-reason-code"
-                  className="mt-1 font-mono text-[11px] text-slate-400"
+                  className="mt-1 font-mono text-[11px] text-[var(--uvai-ink-faint)]"
                 >
                   {scopedPackBuildLiveSuccess.reasonCode}
                 </p>
@@ -1257,14 +1257,14 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-build-live-failure"
           role="alert"
-          className="border-t border-red-200 bg-red-50/80"
+          className="border-t border-red-500/35 bg-red-500/10"
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
             <div>
-              <p className="text-sm font-medium text-red-800">{buildLiveFailure.title}</p>
-              <p className="mt-1 text-sm text-red-700/85">{buildLiveFailure.message}</p>
+              <p className="text-sm font-medium text-red-200">{buildLiveFailure.title}</p>
+              <p className="mt-1 text-sm text-red-200/85">{buildLiveFailure.message}</p>
               {buildLiveFailure.reasonCode ? (
-                <p className="mt-1 font-mono text-[11px] text-red-600/60">
+                <p className="mt-1 font-mono text-[11px] text-red-300/70">
                   {buildLiveFailure.reasonCode}
                 </p>
               ) : null}

@@ -78,6 +78,7 @@ export default function StudioIdeOutput({
   const visualContext = pack?.visual_context;
   const keyframes = pack?.keyframes ?? [];
   const codeSnippets = pack?.code_snippets ?? [];
+  const chapters = pack?.chapters ?? [];
   const linkedSop = video?.insights?.linkedSop;
 
   const toolNames: string[] = stackTools
@@ -86,11 +87,11 @@ export default function StudioIdeOutput({
     .filter((t, i, arr) => arr.indexOf(t) === i);
 
   return (
-    <div data-testid="studio-ide-output" className="flex h-full min-h-0 flex-col bg-white">
+    <div data-testid="studio-ide-output" className="flex h-full min-h-0 flex-col bg-[var(--uvai-bg)]">
       <div
         role="tablist"
         aria-label="Output sections"
-        className="flex flex-wrap shrink-0 gap-1.5 border-b border-slate-100 bg-slate-50/70 px-3 py-2.5"
+        className="flex flex-wrap shrink-0 gap-1.5 border-b border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] px-3 py-2.5"
       >
         {SECTIONS.map((s) => (
           <button
@@ -99,10 +100,10 @@ export default function StudioIdeOutput({
             aria-selected={active === s.id}
             data-testid={`studio-ide-output-tab-${s.id}`}
             onClick={() => setActive(s.id)}
-            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
               active === s.id
-                ? 'bg-neutral-900 text-white shadow-sm'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                ? 'bg-[#146ef5] text-white'
+                : 'bg-transparent text-[var(--uvai-ink-soft)] hover:bg-[var(--uvai-surface-warm)] hover:text-[var(--uvai-ink)]'
             }`}
           >
             {s.label}
@@ -110,13 +111,13 @@ export default function StudioIdeOutput({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--uvai-bg)] p-4">
         {!hasContent && active !== 'transcript' && active !== 'tasks' ? (
           <div className="uvai-empty">
-            <p className="font-medium text-slate-600">
+            <p className="font-medium text-[var(--uvai-ink)]">
               Run a video and the extracted actions land here
             </p>
-            <p className="text-xs">Events, lingo, tools, intent, signals — as structured cards.</p>
+            <p className="text-xs text-[var(--uvai-ink-soft)]">Events, lingo, tools, intent, signals — as structured cards.</p>
           </div>
         ) : (
           <>
@@ -135,17 +136,17 @@ export default function StudioIdeOutput({
                 {events.map((e) => (
                   <li key={e.id} className="uvai-card p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral-100 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-neutral-700">
+                      <span className="inline-flex items-center gap-1.5 rounded bg-[#146ef5]/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#4d94ff]">
                         <DotIcon />
                         {e.type}
                       </span>
                       {e.timestamp ? (
-                        <span className="font-mono text-[11px] text-slate-400">{e.timestamp}</span>
+                        <span className="font-mono text-[11px] text-[var(--uvai-ink-faint)]">{e.timestamp}</span>
                       ) : null}
                     </div>
-                    <p className="mt-2 text-sm font-semibold text-slate-900">{e.title}</p>
+                    <p className="mt-2 text-sm font-semibold text-[var(--uvai-ink)]">{e.title}</p>
                     {e.description ? (
-                      <p className="mt-1 text-xs leading-relaxed text-slate-500">{e.description}</p>
+                      <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{e.description}</p>
                     ) : null}
                   </li>
                 ))}
@@ -166,7 +167,7 @@ export default function StudioIdeOutput({
                   {topics.map((t, i) => (
                     <span
                       key={`${t}-${i}`}
-                      className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700"
+                      className="rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] px-3 py-1 text-xs font-medium text-[var(--uvai-ink)]"
                     >
                       {t}
                     </span>
@@ -179,10 +180,35 @@ export default function StudioIdeOutput({
 
         {active === 'tools' && (
           <div data-testid="studio-ide-output-tools" className="flex flex-col gap-3">
-            {toolNames.length === 0 && !linkedSop?.steps.length && stackChecks.length === 0 && codeSnippets.length === 0 ? (
+            {toolNames.length === 0 && !linkedSop?.steps.length && stackChecks.length === 0 && codeSnippets.length === 0 && chapters.length === 0 ? (
               <EmptyNote text="No tools or code snippets extracted yet." />
             ) : (
               <>
+                {chapters.length > 0 ? (
+                  <div className="uvai-card p-4" data-testid="studio-pack-chapters">
+                    <p className="uvai-section-label mb-3">Chapters</p>
+                    <ol className="flex flex-col gap-2">
+                      {chapters.map((chapter, index) => (
+                        <li key={`${chapter.topic}-${index}`} className="uvai-doc-row">
+                          <span className="uvai-doc-icon">{String(index + 1).padStart(2, '0')}</span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="truncate text-sm font-medium text-[var(--uvai-ink)]">{chapter.topic}</p>
+                              <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                                {chapter.start}s–{chapter.end}s
+                              </span>
+                            </div>
+                            {chapter.key_points?.length ? (
+                              <p className="mt-0.5 truncate text-xs text-[var(--uvai-ink-soft)]">
+                                {chapter.key_points[0]}
+                              </p>
+                            ) : null}
+                          </div>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                ) : null}
                 {toolNames.length > 0 ? (
                   <div className="uvai-card p-4">
                     <p className="uvai-section-label mb-3">Named tools</p>
@@ -192,7 +218,7 @@ export default function StudioIdeOutput({
                           <div className="uvai-metric-icon">
                             <WrenchIcon />
                           </div>
-                          <p className="font-mono text-xs font-semibold text-slate-800">{t}</p>
+                          <p className="font-mono text-xs font-semibold text-[var(--uvai-ink)]">{t}</p>
                         </li>
                       ))}
                     </ul>
@@ -203,12 +229,12 @@ export default function StudioIdeOutput({
                     <p className="uvai-section-label mb-3">Extracted code & signatures</p>
                     <div className="flex flex-col gap-3">
                       {codeSnippets.map((snippet, index) => (
-                        <div key={`${snippet.path_hint ?? 'snippet'}-${index}`} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
-                          <div className="flex items-center justify-between border-b border-slate-800 bg-slate-800/80 px-3 py-1.5 font-mono text-[11px] text-slate-300">
+                        <div key={`${snippet.path_hint ?? 'snippet'}-${index}`} className="overflow-hidden rounded-md border border-[var(--uvai-border-strong)] bg-[#0a0a0a]">
+                          <div className="flex items-center justify-between border-b border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-3 py-1.5 font-mono text-[11px] text-[var(--uvai-ink-soft)]">
                             <span>{snippet.path_hint || `snippet-${index + 1}`}</span>
-                            {snippet.lang ? <span className="uppercase text-slate-400">{snippet.lang}</span> : null}
+                            {snippet.lang ? <span className="uppercase text-[#4d94ff]">{snippet.lang}</span> : null}
                           </div>
-                          <pre className="max-h-64 overflow-auto p-3 font-mono text-xs leading-relaxed text-slate-100">
+                          <pre className="max-h-64 overflow-auto p-3 font-mono text-xs leading-relaxed text-[#e5e5e5]">
                             {snippet.content}
                           </pre>
                         </div>
@@ -230,8 +256,8 @@ export default function StudioIdeOutput({
                             {check.status === 'done' ? '✓' : check.status === 'pending' ? '•' : '?'}
                           </span>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-800">{check.title}</p>
-                            <p className="text-xs text-slate-400">{check.statusLabel}</p>
+                            <p className="truncate text-sm font-medium text-[var(--uvai-ink)]">{check.title}</p>
+                            <p className="text-xs text-[var(--uvai-ink-faint)]">{check.statusLabel}</p>
                           </div>
                         </li>
                       ))}
@@ -246,8 +272,8 @@ export default function StudioIdeOutput({
                         <li key={s.id ?? i} className="uvai-doc-row">
                           <span className="uvai-doc-icon">{String(i + 1).padStart(2, '0')}</span>
                           <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-800">{s.title}</p>
-                            <p className="text-xs text-slate-400">Step {i + 1}</p>
+                            <p className="truncate text-sm font-medium text-[var(--uvai-ink)]">{s.title}</p>
+                            <p className="text-xs text-[var(--uvai-ink-faint)]">Step {i + 1}</p>
                           </div>
                         </li>
                       ))}
@@ -272,18 +298,18 @@ export default function StudioIdeOutput({
                     <li
                       key={`${action.tool}-${i}`}
                       data-testid="studio-review-action-card"
-                      className="uvai-card border-l-4 !border-l-amber-500 p-4"
+                      className="uvai-card border-l-4 !border-l-[#146ef5] p-4"
                     >
                       <div className="flex items-start gap-3">
                         <span className="uvai-metric-icon mt-0.5 shrink-0">
                           <ArrowIcon />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4d94ff]">
                             {card.statusLabel}
                           </p>
-                          <p className="mt-1 text-sm font-semibold text-slate-900">{card.title}</p>
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">{card.detail}</p>
+                          <p className="mt-1 text-sm font-semibold text-[var(--uvai-ink)]">{card.title}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{card.detail}</p>
                           {card.kind === 'review' ? (
                             <button
                               type="button"
@@ -296,11 +322,11 @@ export default function StudioIdeOutput({
                             </button>
                           ) : null}
                           {reviewingAction === actionKey ? (
-                            <div data-testid="studio-proposal-detail" className="mt-3 rounded-lg bg-amber-50 p-3 text-xs text-amber-900">
+                            <div data-testid="studio-proposal-detail" className="mt-3 rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] p-3 text-xs text-[var(--uvai-ink-soft)]">
                               <p>Proposed tool: {action.tool}</p>
                               <p>Status: {action.status}. No tool has been executed from this review.</p>
                               {action.input ? (
-                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-white p-2 text-slate-800">
+                                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--uvai-border)] bg-[var(--uvai-bg)] p-2 text-[var(--uvai-ink)]">
                                   {JSON.stringify(action.input, null, 2)}
                                 </pre>
                               ) : (
@@ -315,15 +341,15 @@ export default function StudioIdeOutput({
                   );
                 })}
                 {actionItems.map((a, i) => (
-                  <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-neutral-900 p-4">
+                  <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-[#146ef5] p-4">
                     <div className="flex items-start gap-3">
                       <span className="uvai-metric-icon mt-0.5 shrink-0">
                         <ArrowIcon />
                       </span>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-slate-900">{a.title}</p>
+                        <p className="text-sm font-semibold text-[var(--uvai-ink)]">{a.title}</p>
                         {a.description ? (
-                          <p className="mt-1 text-xs leading-relaxed text-slate-500">{a.description}</p>
+                          <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{a.description}</p>
                         ) : null}
                       </div>
                     </div>
@@ -343,7 +369,7 @@ export default function StudioIdeOutput({
                 {visualContext?.summary ? (
                   <div className="uvai-card p-4">
                     <p className="uvai-section-label mb-2">Visual summary</p>
-                    <p className="text-xs leading-relaxed text-slate-600">{visualContext.summary}</p>
+                    <p className="text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{visualContext.summary}</p>
                   </div>
                 ) : null}
                 {keyframes.length > 0 ? (
@@ -359,12 +385,12 @@ export default function StudioIdeOutput({
                             loading="lazy"
                           />
                         ) : (
-                          <div className="flex aspect-video items-center justify-center bg-slate-100 text-[11px] font-medium text-slate-400">
+                          <div className="flex aspect-video items-center justify-center bg-[var(--uvai-surface-warm)] text-[11px] font-medium text-[var(--uvai-ink-faint)]">
                             {k.t_s != null ? `${k.t_s}s` : `Frame ${i + 1}`}
                           </div>
                         )}
                         {k.desc ? (
-                          <figcaption className="border-t border-slate-100 px-3 py-2 text-[11px] leading-snug text-slate-500">
+                          <figcaption className="border-t border-[var(--uvai-border)] px-3 py-2 text-[11px] leading-snug text-[var(--uvai-ink-soft)]">
                             {k.desc}
                           </figcaption>
                         ) : null}
@@ -385,13 +411,13 @@ export default function StudioIdeOutput({
         {active === 'transcript' && (
           <div data-testid="studio-transcript-body" className="uvai-card p-4">
             {video?.transcript?.trim() ? (
-              <p className="whitespace-pre-wrap text-xs leading-relaxed text-slate-600">
+              <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
                 {video.transcript}
               </p>
             ) : video?.failure?.message ? (
-              <p className="text-xs text-red-700">{video.failure.message}</p>
+              <p className="text-xs text-red-400">{video.failure.message}</p>
             ) : (
-              <p className="py-4 text-center text-xs text-slate-400">Nothing yet.</p>
+              <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">Nothing yet.</p>
             )}
           </div>
         )}
@@ -405,7 +431,7 @@ export default function StudioIdeOutput({
 function EmptyNote({ text }: { text: string }) {
   return (
     <div className="uvai-card p-8 text-center">
-      <p className="text-xs text-slate-400">{text}</p>
+      <p className="text-xs text-[var(--uvai-ink-faint)]">{text}</p>
     </div>
   );
 }

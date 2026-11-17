@@ -189,7 +189,7 @@ export default function StudioIdeShell({
                 aria-controls="studio-panel-video"
                 aria-expanded={!leftCollapsed}
                 onClick={() => { setLeftCollapsed(true); setMobilePane('chat'); }}
-                className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded px-1.5 py-0.5 text-[var(--uvai-ink-faint)] hover:bg-[var(--uvai-surface-warm)] hover:text-[var(--uvai-ink)]"
               >
                 ‹
               </button>
@@ -285,7 +285,7 @@ export default function StudioIdeShell({
                 aria-controls="studio-panel-output"
                 aria-expanded={!rightCollapsed}
                 onClick={() => { setRightCollapsed(true); setMobilePane('chat'); }}
-                className="rounded-md px-1.5 py-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                className="rounded px-1.5 py-0.5 text-[var(--uvai-ink-faint)] hover:bg-[var(--uvai-surface-warm)] hover:text-[var(--uvai-ink)]"
               >
                 ›
               </button>
@@ -298,7 +298,7 @@ export default function StudioIdeShell({
             aria-controls="studio-panel-output"
             aria-expanded={!rightCollapsed}
             onClick={() => setRightCollapsed(false)}
-            className="uvai-card shrink-0 px-2 text-xs font-medium text-slate-500 hover:text-slate-700"
+            className="uvai-card shrink-0 px-2 text-xs font-medium text-[var(--uvai-ink-soft)] hover:text-[var(--uvai-ink)]"
             aria-label="Show output pane"
           >
             Output

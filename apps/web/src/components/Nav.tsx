@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Menu, X, Film } from 'lucide-react';
+import { Menu, Moon, Sun, X, Film } from 'lucide-react';
 
 interface NavProps {
   rightSlot?: React.ReactNode;
@@ -29,6 +29,15 @@ function isNavActive(pathname: string, href: string): boolean {
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [lightMode, setLightMode] = useState(false);
+
+  const toggleTheme = () => {
+    const next = !lightMode;
+    setLightMode(next);
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = next ? 'light' : 'dark';
+    }
+  };
 
   return (
     <nav
@@ -81,6 +90,20 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+          title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors"
+          style={{
+            borderColor: 'var(--uvai-border-strong)',
+            background: 'var(--uvai-surface-warm)',
+            color: 'var(--uvai-ink-soft)',
+          }}
+        >
+          {lightMode ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
+        </button>
         {rightSlot || (
           <Link href="/#get-pro" className="uvai-btn uvai-btn-primary py-2 px-5 text-sm">
             Get Pro
