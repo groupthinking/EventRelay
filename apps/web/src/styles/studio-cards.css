@@ -28,10 +28,10 @@
   --card-success: var(--uvai-success);
   --card-warning: var(--uvai-warn);
   --card-danger: var(--uvai-danger);
-  --card-shadow: 0 1px 2px rgba(28, 27, 26, 0.04);
-  --card-shadow-lg: 0 2px 8px rgba(28, 27, 26, 0.06);
-  --card-radius: 12px;
-  --card-radius-sm: 8px;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --card-shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.36);
+  --card-radius: 8px;
+  --card-radius-sm: 6px;
 }
 
 .uvai-cards {
@@ -66,10 +66,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border-radius: 10px;
-  border: 1px solid var(--card-border);
-  background: var(--card-surface);
-  color: var(--card-text-body);
+  border-radius: 6px;
+  border: 1px solid var(--uvai-border-strong, var(--card-border));
+  background: var(--card-surface-muted);
+  color: var(--card-text);
   font-size: 13px;
   font-weight: 500;
   padding: 7px 14px;
@@ -79,8 +79,8 @@
     box-shadow 150ms ease;
 }
 .uvai-btn:hover:not(:disabled) {
-  background: var(--card-surface-muted);
-  border-color: #cbd5e1;
+  background: var(--uvai-border, var(--card-surface-muted));
+  border-color: var(--card-accent);
 }
 .uvai-btn:disabled {
   opacity: 0.45;
@@ -97,19 +97,19 @@
   border-color: var(--card-accent-hover);
 }
 .uvai-btn-danger {
-  color: var(--card-danger);
-  border-color: #fecaca;
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.35);
 }
 .uvai-btn-danger:hover:not(:disabled) {
-  background: #fef2f2;
-  border-color: #fca5a5;
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(248, 113, 113, 0.6);
 }
 
 /* ---- Inputs ---- */
 .uvai-input {
-  border-radius: 10px;
-  border: 1px solid var(--card-border);
-  background: var(--card-surface);
+  border-radius: 6px;
+  border: 1px solid var(--uvai-border-strong, var(--card-border));
+  background: var(--card-surface-muted);
   color: var(--card-text);
   font-size: 14px;
   padding: 8px 12px;
@@ -123,7 +123,7 @@
 }
 .uvai-input:focus {
   border-color: var(--card-accent);
-  box-shadow: 0 0 0 3px rgba(194, 65, 12, 0.12);
+  box-shadow: 0 0 0 3px rgba(20, 110, 245, 0.22);
 }
 
 /* ---- Document row: file-type icon + title + subtitle ---- */
@@ -140,7 +140,7 @@
     box-shadow 150ms ease;
 }
 .uvai-doc-row:hover {
-  border-color: #cbd5e1;
+  border-color: var(--card-accent);
   box-shadow: var(--card-shadow);
 }
 .uvai-doc-icon {
@@ -150,8 +150,8 @@
   width: 34px;
   height: 34px;
   flex-shrink: 0;
-  border-radius: 8px;
-  background: #eff6ff;
+  border-radius: 6px;
+  background: var(--card-accent-soft);
   color: var(--card-link);
   font-size: 11px;
   font-weight: 700;
@@ -171,16 +171,16 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: 6px;
   background: var(--card-accent-soft);
   color: var(--card-accent);
   margin-bottom: 8px;
 }
 
-/* ---- Chat bubbles (light) ---- */
+/* ---- Chat bubbles ---- */
 .uvai-chat-user {
   align-self: flex-end;
-  border-radius: 14px 14px 4px 14px;
+  border-radius: 10px 10px 4px 10px;
   background: var(--card-accent);
   color: #ffffff;
   padding: 8px 12px;
@@ -189,7 +189,7 @@
 }
 .uvai-chat-assistant {
   align-self: flex-start;
-  border-radius: 14px 14px 14px 4px;
+  border-radius: 10px 10px 10px 4px;
   background: var(--card-surface);
   border: 1px solid var(--card-border);
   color: var(--card-text-body);
@@ -217,7 +217,7 @@
 }
 .uvai-chip[aria-pressed='true'] {
   border-color: var(--card-link);
-  background: #eff6ff;
+  background: var(--card-accent-soft);
   color: var(--card-link);
   font-weight: 600;
 }
@@ -257,8 +257,7 @@
   justify-content: space-between;
   padding: 10px 16px;
   border-bottom: 1px solid var(--card-border-soft);
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(8px);
+  background: var(--card-surface);
 }
 .uvai-toolbar {
   display: flex;
@@ -268,7 +267,6 @@
   padding: 10px 16px;
   background: var(--card-surface);
   border-bottom: 1px solid var(--card-border);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 .uvai-splitter {
   width: 4px;

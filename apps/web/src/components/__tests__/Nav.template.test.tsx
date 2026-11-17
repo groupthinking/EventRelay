@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({
 
 afterEach(() => {
   cleanup();
+  delete document.documentElement.dataset.theme;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -38,5 +39,32 @@ describe('Nav template routing semantics', () => {
     usePathnameMock.mockReturnValue('/');
     render(<Nav />);
     expect(screen.getAllByRole('link', { name: 'Home' })[0]?.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('toggles document theme between dark default and light mode', () => {
+    usePathnameMock.mockReturnValue('/');
+    render(<Nav />);
+
+    const toLight = screen.getByRole('button', { name: 'Switch to light mode' });
+    fireEvent.click(toLight);
+    expect(document.documentElement.dataset.theme).toBe('light');
+
+    const toDark = screen.getByRole('button', { name: 'Switch to dark mode' });
+    fireEvent.click(toDark);
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  it('keeps light-mode state when Nav remounts on another route', () => {
+    usePathnameMock.mockReturnValue('/');
+    const first = render(<Nav />);
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to light mode' }));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    first.unmount();
+
+    usePathnameMock.mockReturnValue('/studio');
+    render(<Nav />);
+    const toggle = screen.getByRole('button', { name: 'Switch to dark mode' });
+    fireEvent.click(toggle);
+    expect(document.documentElement.dataset.theme).toBe('dark');
   });
 });

@@ -121,4 +121,33 @@ describe('StudioIdeOutput playflow', () => {
     expect(snippets.textContent).toContain('robotics/cornhole_pipeline.py');
     expect(snippets.textContent).toContain('def throw_bag');
   });
+
+  it('renders extracted video chapters as a numbered syllabus in the Tools tab', () => {
+    const pack = reviewPackFixture();
+    pack.chapters = [
+      { start: 0, end: 30, topic: 'Camera setup and calibration', key_points: ['Mount overhead camera'] },
+      { start: 30, end: 75, topic: 'Stance trajectory estimation', key_points: ['Track release angle'] },
+    ];
+    render(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-tools'));
+    const chapters = screen.getByTestId('studio-pack-chapters');
+    expect(chapters.textContent).toContain('01');
+    expect(chapters.textContent).toContain('Camera setup and calibration');
+    expect(chapters.textContent).toContain('02');
+    expect(chapters.textContent).toContain('Stance trajectory estimation');
+  });
 });

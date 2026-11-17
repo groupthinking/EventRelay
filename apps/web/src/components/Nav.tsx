@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
-import { Menu, X, Film } from 'lucide-react';
+import { useState, useSyncExternalStore } from 'react';
+import { Menu, Moon, Sun, X, Film } from 'lucide-react';
 
 interface NavProps {
   rightSlot?: React.ReactNode;
@@ -22,13 +22,41 @@ function isNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+const themeListeners = new Set<() => void>();
+
+function subscribeTheme(callback: () => void) {
+  themeListeners.add(callback);
+  return () => {
+    themeListeners.delete(callback);
+  };
+}
+
+function getThemeSnapshot(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light';
+}
+
+function getServerThemeSnapshot(): boolean {
+  return false;
+}
+
 /**
- * Minimal top bar. Warm paper, quiet type, one accent CTA.
- * Muse design language: nothing shouts, everything breathes.
+ * Minimal top bar. Obsidian default with Webflow-style light/dark toggle.
  */
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const lightMode = useSyncExternalStore(
+    subscribeTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot,
+  );
+
+  const toggleTheme = () => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.theme = lightMode ? 'dark' : 'light';
+      themeListeners.forEach((listener) => listener());
+    }
+  };
 
   return (
     <nav
@@ -81,6 +109,20 @@ export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={toggleTheme}
+          aria-label={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+          title={lightMode ? 'Switch to dark mode' : 'Switch to light mode'}
+          className="inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors"
+          style={{
+            borderColor: 'var(--uvai-border-strong)',
+            background: 'var(--uvai-surface-warm)',
+            color: 'var(--uvai-ink-soft)',
+          }}
+        >
+          {lightMode ? <Moon className="h-4 w-4" aria-hidden="true" /> : <Sun className="h-4 w-4" aria-hidden="true" />}
+        </button>
         {rightSlot || (
           <Link href="/#get-pro" className="uvai-btn uvai-btn-primary py-2 px-5 text-sm">
             Get Pro

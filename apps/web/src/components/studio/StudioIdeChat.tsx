@@ -297,7 +297,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
     <section
       aria-label="Pack chat"
       data-testid="studio-ide-chat"
-      className="flex h-full min-h-0 flex-col bg-white"
+      className="flex h-full min-h-0 flex-col bg-[var(--uvai-bg)]"
     >
       <div
         ref={messagesRef}
@@ -307,10 +307,10 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         {messages.length === 0 ? (
           <div className="uvai-empty template-chat-welcome">
             <div className="template-mark" aria-hidden="true"><Sparkles size={24} /></div>
-            <p className="text-sm font-semibold text-slate-700">
+            <p className="text-sm font-semibold text-[var(--uvai-ink)]">
               {canChat ? 'Ask about this pack or plan a build' : 'Run a video to start chatting'}
             </p>
-            <p className="max-w-[30ch] text-xs text-slate-500">
+            <p className="max-w-[30ch] text-xs text-[var(--uvai-ink-soft)]">
               {canChat
                 ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
                 : 'Paste a YouTube URL above and hit Run.'}
@@ -320,7 +320,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
                 type="button"
                 onClick={() => setDraft('Plan a build from this Video Pack')}
                 data-testid="studio-ide-chat-plan-prompt"
-                className="text-xs font-semibold text-blue-700 underline"
+                className="text-xs font-semibold text-[var(--uvai-accent-ink)] underline hover:text-[var(--uvai-ink)]"
               >
                 Plan a build from this video
               </button>
@@ -338,13 +338,13 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
               </div>
             ))}
             {sending ? (
-              <div className="uvai-chat-assistant text-slate-400">Thinking…</div>
+              <div className="uvai-chat-assistant text-[var(--uvai-ink-faint)]">Thinking…</div>
             ) : null}
           </div>
         )}
       </div>
       {quotaHit ? (
-        <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+        <div className="border-t border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] px-4 py-2.5 text-xs text-[var(--uvai-warn-ink)]">
           Daily free limit reached.{' '}
           <a href="/pricing" className="font-semibold underline">
             Upgrade to Pro
@@ -353,7 +353,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         </div>
       ) : null}
       {error && !sending ? (
-        <div className="border-t border-red-100 bg-red-50 px-4 py-1.5 text-xs text-red-700">{error}</div>
+        <div className="border-t border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-4 py-1.5 text-xs text-[var(--uvai-danger-ink)]">{error}</div>
       ) : null}
       <form
         onSubmit={send}
