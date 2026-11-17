@@ -132,7 +132,7 @@ export default function StudioIdeOutput({
                 }
               />
             ) : (
-              <ul className="flex flex-col gap-3">
+              <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 {events.map((e) => (
                   <li key={e.id} className="uvai-card p-4">
                     <div className="flex items-center justify-between gap-2">
@@ -179,49 +179,56 @@ export default function StudioIdeOutput({
         )}
 
         {active === 'tools' && (
-          <div data-testid="studio-ide-output-tools" className="flex flex-col gap-3">
+          <div data-testid="studio-ide-output-tools" className="flex flex-col gap-4">
             {toolNames.length === 0 && !linkedSop?.steps.length && stackChecks.length === 0 && codeSnippets.length === 0 && chapters.length === 0 ? (
               <EmptyNote text="No tools or code snippets extracted yet." />
             ) : (
               <>
-                {chapters.length > 0 ? (
-                  <div className="uvai-card p-4" data-testid="studio-pack-chapters">
-                    <p className="uvai-section-label mb-3">Chapters</p>
-                    <ol className="flex flex-col gap-2">
-                      {chapters.map((chapter, index) => (
-                        <li key={`${chapter.topic}-${index}`} className="uvai-doc-row">
-                          <span className="uvai-doc-icon">{String(index + 1).padStart(2, '0')}</span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="truncate text-sm font-medium text-[var(--uvai-ink)]">{chapter.topic}</p>
-                              <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
-                                {chapter.start}s–{chapter.end}s
-                              </span>
-                            </div>
-                            {chapter.key_points?.length ? (
-                              <p className="mt-0.5 truncate text-xs text-[var(--uvai-ink-soft)]">
-                                {chapter.key_points[0]}
-                              </p>
-                            ) : null}
-                          </div>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : null}
-                {toolNames.length > 0 ? (
-                  <div className="uvai-card p-4">
-                    <p className="uvai-section-label mb-3">Named tools</p>
-                    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                      {toolNames.map((t, i) => (
-                        <li key={`${t}-${i}`} className="uvai-metric">
-                          <div className="uvai-metric-icon">
-                            <WrenchIcon />
-                          </div>
-                          <p className="font-mono text-xs font-semibold text-[var(--uvai-ink)]">{t}</p>
-                        </li>
-                      ))}
-                    </ul>
+                {(chapters.length > 0 || toolNames.length > 0) ? (
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+                    {chapters.length > 0 ? (
+                      <div
+                        className={`uvai-card p-4 ${toolNames.length > 0 ? 'lg:col-span-7' : 'lg:col-span-12'}`}
+                        data-testid="studio-pack-chapters"
+                      >
+                        <p className="uvai-section-label mb-3">Chapters</p>
+                        <ol className="flex flex-col gap-2">
+                          {chapters.map((chapter, index) => (
+                            <li key={`${chapter.topic}-${index}`} className="uvai-doc-row">
+                              <span className="uvai-doc-icon">{String(index + 1).padStart(2, '0')}</span>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-sm font-medium text-[var(--uvai-ink)]">{chapter.topic}</p>
+                                  <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                                    {chapter.start}s–{chapter.end}s
+                                  </span>
+                                </div>
+                                {chapter.key_points?.length ? (
+                                  <p className="mt-0.5 text-xs text-[var(--uvai-ink-soft)]">
+                                    {chapter.key_points[0]}
+                                  </p>
+                                ) : null}
+                              </div>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    ) : null}
+                    {toolNames.length > 0 ? (
+                      <div className={`uvai-card p-4 ${chapters.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'}`}>
+                        <p className="uvai-section-label mb-3">Named tools</p>
+                        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                          {toolNames.map((t, i) => (
+                            <li key={`${t}-${i}`} className="uvai-metric">
+                              <div className="uvai-metric-icon">
+                                <WrenchIcon />
+                              </div>
+                              <p className="font-mono text-xs font-semibold text-[var(--uvai-ink)]">{t}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
                 {codeSnippets.length > 0 ? (
@@ -373,7 +380,7 @@ export default function StudioIdeOutput({
                   </div>
                 ) : null}
                 {keyframes.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {keyframes.map((k, i) => (
                       <figure key={k.t_s ?? i} className="uvai-card overflow-hidden">
                         {k.image_path ? (

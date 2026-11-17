@@ -1047,8 +1047,8 @@ export default function OneLoopStudio({
           </>
         }
         videoPane={
-          <div className="flex flex-col gap-3">
-            <div className="relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
+            <div className="relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm lg:col-span-8">
               {videoId ? (
                 <>
                   <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
@@ -1094,39 +1094,100 @@ export default function OneLoopStudio({
                 </div>
               )}
             </div>
-            {selected?.videoPack ? (
-              <div className="uvai-card p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="uvai-section-label">Extracted pack</p>
-                  <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
-                    {selected.videoPack.sourceHash.slice(0, 12)}…
-                  </span>
+            <div className="flex flex-col gap-3 lg:col-span-4">
+              {selected?.videoPack ? (
+                <div className="uvai-card p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="uvai-section-label">Extracted pack</p>
+                    <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                      {selected.videoPack.sourceHash.slice(0, 12)}…
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
+                    {selected.videoPack.pack.action_items?.length ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {selected.videoPack.pack.action_items.length} actions
+                      </span>
+                    ) : null}
+                    {selected.videoPack.pack.stack?.tools?.length ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {selected.videoPack.pack.stack.tools.length} tools
+                      </span>
+                    ) : null}
+                    {selected.videoPack.pack.code_snippets?.length ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {selected.videoPack.pack.code_snippets.length} code files
+                      </span>
+                    ) : null}
+                    {transcriptWordCount > 0 ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {transcriptWordCount.toLocaleString()} words
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 truncate text-xs text-[var(--uvai-ink-faint)]">{selected.videoPack.sourceUrl}</p>
+                  {selected.videoPack.pack.chapters?.length ? (
+                    <div className="mt-4 border-t border-[var(--uvai-border)] pt-3">
+                      <p className="uvai-section-label mb-2">Quick jump</p>
+                      <ol className="flex flex-col gap-1.5">
+                        {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
+                          const canSeekPack = videoId === selected.videoPack?.pack.video_id;
+                          return (
+                            <li key={`${chapter.topic}-${index}`}>
+                              <button
+                                type="button"
+                                data-testid={`studio-quick-jump-${index}`}
+                                disabled={!canSeekPack}
+                                title={
+                                  canSeekPack
+                                    ? `Seek to ${chapter.start}s`
+                                    : 'Run analysis or switch URL back to this pack to seek.'
+                                }
+                                onClick={() => {
+                                  if (canSeekPack) seekTo(chapter.start);
+                                }}
+                                className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                                    {String(index + 1).padStart(2, '0')}
+                                  </span>
+                                  <span className="truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
+                                </span>
+                                <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                                  {chapter.start}s
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  ) : null}
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
-                  {selected.videoPack.pack.action_items?.length ? (
-                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                      {selected.videoPack.pack.action_items.length} actions
-                    </span>
-                  ) : null}
-                  {selected.videoPack.pack.stack?.tools?.length ? (
-                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                      {selected.videoPack.pack.stack.tools.length} tools
-                    </span>
-                  ) : null}
-                  {selected.videoPack.pack.code_snippets?.length ? (
-                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                      {selected.videoPack.pack.code_snippets.length} code files
-                    </span>
-                  ) : null}
-                  {transcriptWordCount > 0 ? (
-                    <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                      {transcriptWordCount.toLocaleString()} words
-                    </span>
-                  ) : null}
+              ) : (
+                <div className="uvai-card p-4">
+                  <p className="uvai-section-label">Workspace outline</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--uvai-ink)]">
+                    Video-in, deliverables-out workflow
+                  </p>
+                  <ul className="mt-3 space-y-2 text-xs text-[var(--uvai-ink-soft)]">
+                    <li className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">01</span>
+                      <span>Bound tasks linked to spoken timestamps</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">02</span>
+                      <span>Numbered chapters, named tools & code files</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">03</span>
+                      <span>Interactive agent chat, Build live & Ship export</span>
+                    </li>
+                  </ul>
                 </div>
-                <p className="mt-1.5 truncate text-xs text-[var(--uvai-ink-faint)]">{selected.videoPack.sourceUrl}</p>
-              </div>
-            ) : null}
+              )}
+            </div>
           </div>
         }
         chatPane={

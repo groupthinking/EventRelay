@@ -57,7 +57,7 @@ h1, h2, h3, .font-display { font-family: var(--font-body), sans-serif; font-weig
 .template-nav .uvai-btn { border-radius: 6px; }
 .template-mark { width: 52px; height: 52px; display: grid; place-items: center; border-radius: 10px; background: var(--uvai-accent); color: #ffffff; margin-bottom: 24px; }
 .template-welcome { display: flex; flex-direction: column; align-items: center; text-align: center; width: 100%; }
-.template-use-cases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 28px; width: 100%; max-width: 600px; text-align: left; }
+.template-use-cases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 28px; width: 100%; max-width: 780px; text-align: left; }
 .template-use-cases > div { background: var(--uvai-surface); border: 1px solid var(--uvai-border-strong); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
 .template-use-cases strong { font-size: 12px; font-weight: 500; color: var(--uvai-ink); }
 .template-use-cases span { color: var(--uvai-ink-soft); font-size: 11px; line-height: 1.5; }
@@ -71,29 +71,20 @@ h1, h2, h3, .font-display { font-family: var(--font-body), sans-serif; font-weig
 .template-send:disabled { background: var(--uvai-border-strong); color: var(--uvai-ink-faint); cursor: not-allowed; }
 a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-accent); outline-offset: 3px; }
 .template-studio { background: var(--uvai-bg); }
-.template-studio-shell { height: calc(100dvh - 65px); min-height: 520px; flex: initial; }
+.template-studio-shell { min-height: calc(100dvh - 65px); flex: 1; }
 .template-studio-shell .uvai-toolbar { padding: 12px 18px; box-shadow: none; background: var(--uvai-surface); }
 .template-studio-shell .uvai-card { border-radius: 8px; box-shadow: none; border: 1px solid var(--uvai-border); background: var(--uvai-surface); }
-.template-studio-panes > aside { background: var(--uvai-surface); border-radius: 0; border-top: 0; border-bottom: 0; }
-.template-studio-panes > #studio-panel-chat { background: var(--uvai-bg); border: 0; border-radius: 0; }
-.template-studio-panes .uvai-pane-header { background: transparent; padding: 14px 18px; }
-.template-studio-panes > aside:first-child { border-right: 1px solid var(--uvai-border-strong); border-left: 0; }
-.template-studio-panes > aside:last-child { border-left: 1px solid var(--uvai-border-strong); border-right: 0; }
-.template-studio-panes .uvai-splitter { width: 4px; background: transparent; }
-.template-studio-panes .uvai-splitter:hover { background: var(--uvai-accent); }
+.template-studio-bands .uvai-pane-header { background: transparent; padding: 12px 18px; }
 .template-studio-shell .uvai-chat-user { background: var(--uvai-accent); color: #ffffff; border-radius: 8px; padding: 10px 14px; }
 .template-studio-shell .uvai-chat-assistant { background: var(--uvai-surface); border: 1px solid var(--uvai-border-strong); color: var(--uvai-ink-soft); border-radius: 8px; box-shadow: none; padding: 10px 14px; }
-.template-chat-welcome { min-height: 320px; height: 100%; }
-.template-chat-welcome .template-mark { width: 44px; height: 44px; border-radius: 8px; margin-bottom: 12px; }
+.template-chat-welcome { padding: 0; }
 .template-pane-tabs { display: none; }
 @media (max-width: 900px) {
   .template-pane-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--uvai-border-strong); background: var(--uvai-surface); }
   .template-pane-tabs button { flex: 1; border-radius: 6px; font-size: 12px; padding: 9px 4px; color: var(--uvai-ink-soft); background: transparent; }
   .template-pane-tabs button[aria-selected='true'] { background: var(--uvai-accent); color: #ffffff; }
   .template-studio-shell { height: auto; min-height: calc(100dvh - 65px); }
-  .template-studio-panes { min-height: 520px; }
-  .template-studio-panes > aside, .template-studio-panes > #studio-panel-chat { width: 100%; min-width: 0; border: 0; }
-  .template-studio-panes > .uvai-splitter { display: none; }
+  .template-studio-bands { padding: 12px; }
   .template-studio-shell [data-testid='studio-ide-video-pane'],
   .template-studio-shell [data-testid='studio-ide-chat-pane'],
   .template-studio-shell [data-testid='studio-ide-output-pane'] { display: none; }
