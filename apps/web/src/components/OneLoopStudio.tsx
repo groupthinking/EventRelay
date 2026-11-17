@@ -921,14 +921,16 @@ export default function OneLoopStudio({
                 autoComplete="off"
                 className="uvai-input min-w-0 flex-1 font-mono disabled:opacity-40"
               />
-              <button
-                type="button"
-                onClick={() => setUrl(FIXTURE)}
-                disabled={busy}
-                className="uvai-btn !px-2.5 disabled:opacity-40"
-              >
-                Sample
-              </button>
+              {!url.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setUrl(FIXTURE)}
+                  disabled={busy}
+                  className="uvai-btn !px-2.5 disabled:opacity-40"
+                >
+                  Sample
+                </button>
+              ) : null}
               {busy ? (
                 <button
                   type="button"
@@ -942,7 +944,7 @@ export default function OneLoopStudio({
                 <button
                   type="submit"
                   data-testid="studio-ide-run"
-                  className="uvai-btn uvai-btn-primary"
+                  className={clsx('uvai-btn', !hasPayload && 'uvai-btn-primary')}
                 >
                   Run
                 </button>
@@ -978,14 +980,17 @@ export default function OneLoopStudio({
                 ) : null}
               </div>
             ) : null}
-            <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
+            <div className="flex items-center gap-1.5 sm:border-l sm:border-slate-200 sm:pl-2" role="toolbar" aria-label="Pack actions">
               <button
                 type="button"
                 onClick={() => void exportPkg()}
                 disabled={!shipCta.enabled}
                 data-testid="studio-ide-ship"
                 title={shipCta.hint}
-                className="uvai-btn uvai-btn-primary inline-flex items-center gap-1.5 disabled:opacity-40"
+                className={clsx(
+                  'uvai-btn inline-flex items-center gap-1.5 disabled:opacity-40',
+                  shipCta.enabled && hasPayload && 'uvai-btn-primary',
+                )}
               >
                 <Rocket className="h-4 w-4" aria-hidden />
                 Ship this
@@ -1016,24 +1021,29 @@ export default function OneLoopStudio({
                       ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                       : 'Paste a YouTube URL and run analysis first.'
                 }
-                className="uvai-btn disabled:opacity-40"
+                className="uvai-btn text-slate-600 disabled:opacity-40"
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
-              {showTranscriptRetry ? (
-                <button
-                  type="button"
-                  data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn"
-                >
-                  Retry transcript
-                </button>
-              ) : null}
             </div>
             <p className="w-full font-mono text-[11px]" style={{ color: 'var(--uvai-ink-faint)' }} role="status" data-testid="studio-ide-status">
               {statusText}
             </p>
+            {showTranscriptRetry ? (
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50/70 px-3 py-2 text-xs text-red-800">
+                <span className="min-w-0 flex-1 truncate">
+                  {selected?.failure?.message || 'Extraction stopped before finishing.'}
+                </span>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="uvai-btn shrink-0 !border-red-300 !bg-white !px-3 !py-1 !text-xs font-medium text-red-800 hover:!bg-red-50"
+                >
+                  Retry transcript
+                </button>
+              </div>
+            ) : null}
           </>
         }
         videoPane={
@@ -1086,11 +1096,35 @@ export default function OneLoopStudio({
             </div>
             {selected?.videoPack ? (
               <div className="uvai-card p-3">
-                <p className="uvai-section-label">Video pack</p>
-                <p className="mt-1.5 font-mono text-[11px] text-slate-500">
-                  <span className="font-semibold text-amber-700">{selected.videoPack.sourceHash.slice(0, 12)}…</span>
-                </p>
-                <p className="mt-0.5 truncate text-xs text-slate-400">{selected.videoPack.sourceUrl}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="uvai-section-label">Extracted pack</p>
+                  <span className="font-mono text-[11px] font-semibold text-amber-700">
+                    {selected.videoPack.sourceHash.slice(0, 12)}…
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-slate-600">
+                  {selected.videoPack.pack.action_items?.length ? (
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                      {selected.videoPack.pack.action_items.length} actions
+                    </span>
+                  ) : null}
+                  {selected.videoPack.pack.stack?.tools?.length ? (
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                      {selected.videoPack.pack.stack.tools.length} tools
+                    </span>
+                  ) : null}
+                  {selected.videoPack.pack.code_snippets?.length ? (
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                      {selected.videoPack.pack.code_snippets.length} code files
+                    </span>
+                  ) : null}
+                  {transcriptWordCount > 0 ? (
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 font-medium">
+                      {transcriptWordCount.toLocaleString()} words
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-1.5 truncate text-xs text-slate-400">{selected.videoPack.sourceUrl}</p>
               </div>
             ) : null}
           </div>

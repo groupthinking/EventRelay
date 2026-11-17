@@ -12,7 +12,8 @@ export function StudioAuthNavLink() {
   if (status === 'loading') {
     return (
       <span
-        className="rounded-full border border-white/10 px-4 py-1.5 text-sm text-white/40"
+        className="rounded-full border px-4 py-1.5 text-sm"
+        style={{ borderColor: 'var(--uvai-border)', color: 'var(--uvai-ink-faint)' }}
         aria-hidden
       >
         …
@@ -24,7 +25,7 @@ export function StudioAuthNavLink() {
     const label = session.user.email ?? session.user.name ?? 'Signed in';
     return (
       <div className="flex max-w-xs items-center gap-2">
-        <span className="truncate text-sm text-white/75" title={label}>
+        <span className="truncate text-sm font-medium" style={{ color: 'var(--uvai-ink-soft)' }} title={label}>
           {label}
         </span>
         <button
@@ -32,7 +33,7 @@ export function StudioAuthNavLink() {
           onClick={() => {
             void signOut({ callbackUrl: CANONICAL_STUDIO_PATH });
           }}
-          className="shrink-0 rounded-full border border-white/15 px-3 py-1.5 text-sm text-white/80 hover:bg-white/5"
+          className="uvai-btn shrink-0 rounded-full !px-3 !py-1.5 text-sm"
         >
           Sign out
         </button>
@@ -43,7 +44,7 @@ export function StudioAuthNavLink() {
   return (
     <Link
       href={signInHref}
-      className="rounded-full border border-white/15 px-4 py-1.5 text-sm text-white/80 hover:bg-white/5"
+      className="uvai-btn uvai-btn-primary rounded-full !px-4 !py-1.5 text-sm"
     >
       Sign in
     </Link>

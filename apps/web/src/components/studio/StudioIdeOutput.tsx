@@ -77,6 +77,7 @@ export default function StudioIdeOutput({
   const stackTools = pack?.stack?.tools ?? [];
   const visualContext = pack?.visual_context;
   const keyframes = pack?.keyframes ?? [];
+  const codeSnippets = pack?.code_snippets ?? [];
   const linkedSop = video?.insights?.linkedSop;
 
   const toolNames: string[] = stackTools
@@ -89,7 +90,7 @@ export default function StudioIdeOutput({
       <div
         role="tablist"
         aria-label="Output sections"
-        className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-100 bg-slate-50/60 px-3 py-2"
+        className="flex flex-wrap shrink-0 gap-1.5 border-b border-slate-100 bg-slate-50/70 px-3 py-2.5"
       >
         {SECTIONS.map((s) => (
           <button
@@ -178,8 +179,8 @@ export default function StudioIdeOutput({
 
         {active === 'tools' && (
           <div data-testid="studio-ide-output-tools" className="flex flex-col gap-3">
-            {toolNames.length === 0 && !linkedSop?.steps.length && stackChecks.length === 0 ? (
-              <EmptyNote text="No tools named in this video yet." />
+            {toolNames.length === 0 && !linkedSop?.steps.length && stackChecks.length === 0 && codeSnippets.length === 0 ? (
+              <EmptyNote text="No tools or code snippets extracted yet." />
             ) : (
               <>
                 {toolNames.length > 0 ? (
@@ -195,6 +196,24 @@ export default function StudioIdeOutput({
                         </li>
                       ))}
                     </ul>
+                  </div>
+                ) : null}
+                {codeSnippets.length > 0 ? (
+                  <div className="uvai-card p-4" data-testid="studio-pack-code-snippets">
+                    <p className="uvai-section-label mb-3">Extracted code & signatures</p>
+                    <div className="flex flex-col gap-3">
+                      {codeSnippets.map((snippet, index) => (
+                        <div key={`${snippet.path_hint ?? 'snippet'}-${index}`} className="overflow-hidden rounded-lg border border-slate-200 bg-slate-900">
+                          <div className="flex items-center justify-between border-b border-slate-800 bg-slate-800/80 px-3 py-1.5 font-mono text-[11px] text-slate-300">
+                            <span>{snippet.path_hint || `snippet-${index + 1}`}</span>
+                            {snippet.lang ? <span className="uppercase text-slate-400">{snippet.lang}</span> : null}
+                          </div>
+                          <pre className="max-h-64 overflow-auto p-3 font-mono text-xs leading-relaxed text-slate-100">
+                            {snippet.content}
+                          </pre>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
                 {stackChecks.length > 0 ? (
