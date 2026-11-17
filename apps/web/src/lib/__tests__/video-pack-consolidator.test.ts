@@ -220,6 +220,31 @@ describe('consolidateShardExtract', () => {
     expect(local.app.ok).toBe(1);
   });
 
+  it('allows valid JS spread/rest, Python Ellipsis indexing/types, and quoted status strings', async () => {
+    const result = await consolidateShardExtract({
+      videoId: VIDEO_ID,
+      specs: [
+        section({
+          code_snippets: [
+            {
+              path_hint: 'src/spread.ts',
+              lang: 'ts',
+              content:
+                'export function merge(...args: string[]) {\n  const note = "Calibrating...";\n  return { ...{ ok: true }, args, note };\n}',
+            },
+            {
+              path_hint: 'robotics/cornhole_pipeline.py',
+              lang: 'py',
+              content:
+                'def slice_pose(frame: tuple[int, ...], arr):\n    return arr[..., :3]\n',
+            },
+          ],
+        }),
+      ],
+    });
+    expect(result.app).toEqual({ ok: 1, failures: [] });
+  });
+
   it.each([
     ['placeholder', 'export const zoo = placeholder;', 'placeholder'],
     ['ascii ellipsis', 'export function rest() { return ... }', 'ellipsis'],

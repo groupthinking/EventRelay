@@ -37,6 +37,7 @@ export default function StudioIdeShell({
   const [mobilePane, setMobilePane] = useState<MobilePane>('chat');
   const shellRef = useRef<HTMLDivElement>(null);
   const panesRef = useRef<HTMLElement>(null);
+  const seededWideDefaultsRef = useRef(false);
   const [leftWidth, setLeftWidth] = useState(280);
   const [rightWidth, setRightWidth] = useState(340);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
@@ -54,6 +55,13 @@ export default function StudioIdeShell({
     const measure = () => {
       const width = panes.getBoundingClientRect().width;
       if (!width) return;
+      if (!seededWideDefaultsRef.current) {
+        seededWideDefaultsRef.current = true;
+        if (width >= 1200) {
+          setLeftWidth(340);
+          setRightWidth(520);
+        }
+      }
       const controlsWidth = controls.reduce((total, control) =>
         total + control.getBoundingClientRect().width, 0);
       const minimum = MIN_SIDE * (Number(!leftCollapsed) + Number(!rightCollapsed));

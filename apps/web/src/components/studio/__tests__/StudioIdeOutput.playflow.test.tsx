@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
 import type { Video } from '@/store/dashboard-types';
+import { reviewPackFixture } from '@/test/grounded-spec-fixture';
 
 const baseVideo: Video = {
   id: 'row-output',
@@ -89,5 +90,35 @@ describe('StudioIdeOutput playflow', () => {
     expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/create_workflow_task/);
     expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/"title": "Draft a task from the video"/);
     expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/No tool has been executed/i);
+  });
+
+  it('renders extracted code snippets cleanly in the Tools tab', () => {
+    const pack = reviewPackFixture();
+    pack.code_snippets = [
+      {
+        path_hint: 'robotics/cornhole_pipeline.py',
+        lang: 'python',
+        content: 'def throw_bag(obs: np.ndarray) -> np.ndarray:\n    return obs[..., :3]',
+      },
+    ];
+    render(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        }}
+      />,
+    );
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-tools'));
+    const snippets = screen.getByTestId('studio-pack-code-snippets');
+    expect(snippets.textContent).toContain('robotics/cornhole_pipeline.py');
+    expect(snippets.textContent).toContain('def throw_bag');
   });
 });

@@ -1,5 +1,6 @@
 import { decodeGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import type {
+  VideoPackCodeSnippet,
   VideoPackKeyframe,
   VideoPackRequirement,
   VideoPackTranscriptSegment,
@@ -29,6 +30,7 @@ export interface EmittedVideoPack {
   visual_context?: VideoPackVisualContext | null;
   keyframes?: VideoPackKeyframe[];
   requirements?: VideoPackRequirement[];
+  code_snippets?: VideoPackCodeSnippet[];
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   stack?: VideoPackStack;
@@ -110,6 +112,20 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   const visualContext = data?.visual_context;
   const keyframes = Array.isArray(data?.keyframes) ? data.keyframes : undefined;
   const requirements = Array.isArray(data?.requirements) ? data.requirements : undefined;
+  const codeSnippets = Array.isArray(data?.code_snippets)
+    ? (data.code_snippets as unknown[]).flatMap((item): VideoPackCodeSnippet[] => {
+        const snippet = asRecord(item);
+        const content = typeof snippet?.content === 'string' ? snippet.content : '';
+        if (!content.trim()) return [];
+        return [
+          {
+            path_hint: typeof snippet?.path_hint === 'string' ? snippet.path_hint : null,
+            lang: typeof snippet?.lang === 'string' ? snippet.lang : null,
+            content,
+          },
+        ];
+      })
+    : undefined;
   const grounding = data ? decodeGroundedSpec(data) : undefined;
 
   return {
@@ -139,6 +155,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(visualContext ? { visual_context: visualContext as VideoPackVisualContext } : {}),
       ...(keyframes ? { keyframes: keyframes as VideoPackKeyframe[] } : {}),
       ...(requirements ? { requirements: requirements as VideoPackRequirement[] } : {}),
+      ...(codeSnippets && codeSnippets.length > 0 ? { code_snippets: codeSnippets } : {}),
       ...(formation.architecture ? { architecture: formation.architecture } : {}),
       ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),

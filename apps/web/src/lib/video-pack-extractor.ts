@@ -858,9 +858,15 @@ async function enrichSpecWithTranscriptTeam(
 
 /**
  * Identity check stays before caption backfill. The consolidator then merges
- * shard specs with transcript evidence and fails closed on app 0/1. Jev's
- * post-check decision is not a success bit; sandbox build stays off.
+ * shard specs with transcript evidence and checks whether snippets form a
+ * runnable sandbox app (`sandboxBuild: false`). Video Pack extraction preserves
+ * valid transcript, chapters, events, tools, and grounded spec even when
+ * illustrative snippets are signature-only or non-JS (e.g., Python robotics).
  */
+function hasExplicitPlaceholderStub(content: string): boolean {
+  return /\bplaceholder\b/i.test(content) || /rest of code here/i.test(content);
+}
+
 async function finishConsolidatedSpec(
   specs: ExtractedVideoPackSpec[],
   metadata: YouTubeMetadata | null,
@@ -889,14 +895,21 @@ async function finishConsolidatedSpec(
     durationSeconds: metadata?.durationSeconds ?? null,
     sandboxBuild: false,
   });
+  const codeSnippets =
+    consolidated.app.ok === 0
+      ? consolidated.tree.code_snippets.filter(
+          (snippet) => !hasExplicitPlaceholderStub(snippet.content),
+        )
+      : consolidated.tree.code_snippets;
   if (consolidated.app.ok === 0) {
-    throw new VideoPackExtractError(
-      `Consolidated app failed 0/1: ${consolidated.app.failures.join('; ')}`,
+    console.warn(
+      `[video-pack-extract] keeping extracted pack for ${videoId} with non-runnable code snippets (app 0/1): ${consolidated.app.failures.join('; ')}`,
     );
   }
   return {
     ...withEvidence,
     ...consolidated.tree,
+    code_snippets: codeSnippets,
     transcript: withEvidence.transcript,
     chapters: withEvidence.chapters,
     action_items: withEvidence.action_items,

@@ -112,44 +112,32 @@ export default async function HomePage() {
 
           </HomeTemplateShell>
 
-          <section id="get-pro" aria-labelledby="workflow-pro-heading" className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-center">
-            <div className="px-2 sm:px-6">
-              <p className="uvai-label">Workflow Pro</p>
-              <h2 id="workflow-pro-heading" className="font-display mt-3 text-3xl" style={{ color: 'var(--uvai-ink)' }}>
-                Get Pro through the existing checkout.
-              </h2>
-              <p className="mt-3 max-w-lg text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                Start with a source in Studio. When you need Workflow Pro, choose a billing cadence.
-                Stripe confirms the amount and renewal terms before payment.
-              </p>
-            </div>
-            <HomeProCheckout />
-          </section>
-
-          {/* Offers */}
-          <section aria-labelledby="offer-summary-heading" className="mt-12">
-            <div className="uvai-card px-8 py-10 sm:px-10">
-              <p className="uvai-label">Options</p>
-              <h2 id="offer-summary-heading" className="font-display mt-3 text-3xl" style={{ color: 'var(--uvai-ink)' }}>
-                Start in Studio, then choose the right level of support.
-              </h2>
-              <p className="mt-3 max-w-lg text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                Workflow Pro is the available self-serve checkout. Ship and Maintain remain
-                request-based options.
-              </p>
-
-              <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <section id="get-pro" aria-labelledby="workflow-pro-heading" className="mt-10 grid grid-cols-1 gap-8 rounded-2xl border p-6 sm:p-8 lg:grid-cols-12 lg:items-center" style={{ borderColor: 'var(--uvai-border)', background: 'var(--uvai-surface)' }}>
+            <div className="space-y-6 lg:col-span-6">
+              <div>
+                <p className="uvai-label">Plans & Checkout</p>
+                <h2 id="workflow-pro-heading" className="font-display mt-3 text-3xl" style={{ color: 'var(--uvai-ink)' }}>
+                  Get Pro through the existing checkout.
+                </h2>
+                <p className="mt-3 max-w-lg text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
+                  Start in Studio, then choose the right level of support. Workflow Pro unlocks exports via Stripe; Ship and Maintain remain request-based options.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Plan options">
                 {OFFERS.map((offer) => (
                   <article
                     key={offer.name}
-                    className="rounded-xl px-6 py-6"
+                    className="rounded-xl px-4 py-4"
                     style={{ border: '1px solid var(--uvai-border)', background: 'var(--uvai-surface-warm)' }}
                   >
                     <p className="uvai-label">{offer.name}</p>
-                    <p className="mt-2 text-lg font-semibold" style={{ color: 'var(--uvai-ink)' }}>{offer.price}</p>
+                    <p className="mt-1.5 text-base font-semibold" style={{ color: 'var(--uvai-ink)' }}>{offer.price}</p>
                   </article>
                 ))}
               </div>
+            </div>
+            <div className="lg:col-span-6">
+              <HomeProCheckout />
             </div>
           </section>
         </div>

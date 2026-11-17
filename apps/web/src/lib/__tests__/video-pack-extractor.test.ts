@@ -853,7 +853,7 @@ describe('extractVideoPackSpec', () => {
     expect(runVideo).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed when consolidated code contains a placeholder', async () => {
+  it('preserves extracted pack data while stripping explicit placeholder code snippets', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
       text: JSON.stringify({
@@ -864,27 +864,25 @@ describe('extractVideoPackSpec', () => {
             lang: 'ts',
             content: 'export const zoo = placeholder;',
           },
+          {
+            path_hint: 'robotics/cornhole_pipeline.py',
+            lang: 'py',
+            content: 'def run_policy(obs): ...\npose = frames[..., :3]',
+          },
         ],
       }),
       interactionId: 'int-test',
     }));
 
-    await expect(
-      extractVideoPackSpec(
-        { sourceUrl: SOURCE_URL, videoId: CANON },
-        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
-      ),
-    ).rejects.toThrow(/Consolidated app failed 0\/1/);
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+    );
     expect(runVideo).toHaveBeenCalled();
-    try {
-      await extractVideoPackSpec(
-        { sourceUrl: SOURCE_URL, videoId: CANON },
-        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
-      );
-    } catch (error) {
-      expect(error).toBeInstanceOf(VideoPackExtractError);
-      expect(isTransientVideoPackExtractError(error)).toBe(false);
-    }
+    expect(spec.concepts).toContain('zoo');
+    expect(spec.code_snippets.map((snippet) => snippet.path_hint)).toEqual([
+      'robotics/cornhole_pipeline.py',
+    ]);
   });
 
   it('keeps the extract when the Jev post-check is stop', async () => {

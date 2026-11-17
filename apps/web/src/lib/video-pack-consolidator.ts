@@ -155,12 +155,42 @@ function specifiersIn(content: string): string[] {
   return found.map((item) => item.specifier);
 }
 
+function hasStubEllipsis(content: string): boolean {
+  if (content.includes('…') || /\bellipsis\b/i.test(content)) {
+    return true;
+  }
+  // Allow valid JS/TS rest/spread (`...args`, `{ ...state }`), Python slicing/typing
+  // (`arr[..., 0]`, `tuple[int, ...]`, `Callable[..., T]`), and quoted display text
+  // (`"Calibrating..."`) while still flagging stub placeholders like `return ...`,
+  // `// ...`, `# ...`, or standalone `...` lines.
+  const withoutStrings = content.replace(/(["'`])(?:\\.|(?!\1)[^\\\r\n])*\1/g, '""');
+  const lines = withoutStrings.split(/\r?\n/);
+  return lines.some((rawLine) => {
+    const line = rawLine.trim();
+    if (!line || !line.includes('...')) return false;
+    if (/^(?:\/\/|#|\*)\s*\.{3}\b/.test(line) || /^(?:\/\/|#)\s*\.{3}$/.test(line)) {
+      return true;
+    }
+    if (line === '...' || line === '{ ... }' || /^return\s+\.\.\.;?$/.test(line)) {
+      return true;
+    }
+    const strippedValidSyntax = line
+      // JS/TS spread / rest parameters (`...args`, `...{ ok: true }`, `...[items]`, `...(expr)`)
+      .replace(/\.\.\.(?=[A-Za-z_$([{])/g, '')
+      // Python indexing / generics (`[..., 0]`, `Tuple[int, ...]`, `Callable[..., float]`)
+      .replace(/([:\[,(]\s*)\.\.\.(?=\s*[,)\]])/g, '$1')
+      // Trailing inline comments
+      .replace(/(\/\/|#).*$/, '');
+    return strippedValidSyntax.includes('...');
+  });
+}
+
 function textFailures(pathHint: string, content: string): string[] {
   const failures: string[] = [];
   if (/\bplaceholder\b/i.test(content)) {
     failures.push(`${pathHint}: contains placeholder`);
   }
-  if (content.includes('...') || content.includes('…') || /\bellipsis\b/i.test(content)) {
+  if (hasStubEllipsis(content)) {
     failures.push(`${pathHint}: contains ellipsis`);
   }
   if (/rest of code here/i.test(content)) {
