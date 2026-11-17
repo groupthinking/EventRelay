@@ -65,7 +65,7 @@ for (const width of [390, 900]) {
 }
 
 for (const width of [901, 1000, 1100, 1280, 1440]) {
-  test(`Studio renders full-width horizontal bands cleanly at ${width}px`, async ({ page }) => {
+  test(`Studio renders the split workbench (Source + Chat left, Deliverables right) at ${width}px`, async ({ page }) => {
     await openStudio(page, width);
     await expect(page.getByRole('main')).toHaveCount(1);
     await expect(page.getByRole('main')).toBeVisible();
@@ -73,10 +73,13 @@ for (const width of [901, 1000, 1100, 1280, 1440]) {
     const chatBox = await page.getByTestId('studio-ide-chat-pane').boundingBox();
     const outputBox = await page.getByTestId('studio-ide-output-pane').boundingBox();
     expect(videoBox && chatBox && outputBox).toBeTruthy();
-    expect(videoBox!.width).toBeGreaterThanOrEqual(Math.min(width - 64, 1280));
-    expect(outputBox!.width).toBeGreaterThanOrEqual(Math.min(width - 64, 1280));
+    // Deliverables sits side-by-side to the right of Source, near the top of the 900px viewport.
+    expect(outputBox!.x).toBeGreaterThan(videoBox!.x);
+    expect(outputBox!.y).toBeLessThanOrEqual(150);
+    // Source video is height-capped and stacked above Chat in the left column.
+    expect(videoBox!.height).toBeLessThanOrEqual(300);
+    expect(videoBox!.x).toBeLessThanOrEqual(chatBox!.x + 2);
     expect(videoBox!.y).toBeLessThan(chatBox!.y);
-    expect(chatBox!.y).toBeLessThan(outputBox!.y);
     await expectNoOverflow(page);
   });
 }
