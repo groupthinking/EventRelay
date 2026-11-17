@@ -1,20 +1,8 @@
 #!/usr/bin/env python3
-"""
-Gemini-Only Hybrid Processor Service
-====================================
-
-The previous implementation combined a local FastVLM backend with Gemini.
-FastVLM support has been removed, so this module now provides a simplified
-service that keeps the same public surface area while delegating all work to
-Gemini. The routing engine and result structures remain to avoid breaking
-imports elsewhere in the codebase.
-"""
 
 from __future__ import annotations
 
-import json
 import logging
-import os
 import time
 from dataclasses import dataclass
 from enum import Enum
@@ -26,21 +14,8 @@ from PIL import Image
 from .gemini_service import GeminiConfig, GeminiResult, GeminiService
 
 
-async def _record_api_usage(*args: Any, **kwargs: Any) -> Any:
-    """Load cost tracking only when provider usage is actually available."""
-    from youtube_extension.backend.services.api_cost_monitor import track_api_call
-
-    return await track_api_call(*args, **kwargs)
-
-
 class ProcessingMode(Enum):
-    """Processing mode roadmap retained for compatibility."""
-
     CLOUD_ONLY = "cloud"
-    HYBRID_AUTO = "hybrid_auto"
-    HYBRID_PARALLEL = "hybrid_parallel"
-    HYBRID_FALLBACK = "hybrid_fallback"
-    LOCAL_ONLY = "local"
 
 
 class TaskType(Enum):
@@ -72,7 +47,6 @@ class HybridConfig:
     enable_caching: bool = True
     cache_ttl: int = 3600
     enable_metrics: bool = True
-    enable_mock: bool = os.getenv("YOUTUBE_EXTENSION_MOCK_AI", "0").lower() in {"1", "true", "yes"}
     model_routing: dict[TaskType, str] = None
 
     def __post_init__(self) -> None:
@@ -250,27 +224,22 @@ class HybridProcessorService:
                 task_type=task_type or TaskType.GENERAL_QA,
             )
 
-            if self.config.enable_mock or not self.gemini.is_available():
-                self.logger.info("Using mock response for Gemini processing")
-                mock_text = self._generate_mock_response(prompt, task_type)
-                cloud_result = GeminiResult(
-                    success=True,
-                    response=mock_text,
-                    latency=0.1,
-                    model_name="mock-model",
-                    backend="mock"
-                )
-            else:
-                cloud_result = await self._call_gemini(
-                    input_data,
-                    prompt,
-                    routing_decision.task_type,
-                    **kwargs,
+            if not self.gemini.is_available():
+                self.metrics["errors"] += 1
+                return HybridResult(
+                    success=False,
+                    response=None,
+                    latency=time.time() - start_time,
+                    mode_used=ProcessingMode.CLOUD_ONLY,
+                    routing_decision=routing_decision,
+                    error="Gemini not available or not initialized",
                 )
 
-            await self._track_gemini_usage(
-                cloud_result,
+            cloud_result = await self._call_gemini(
+                input_data,
+                prompt,
                 routing_decision.task_type,
+                **kwargs,
             )
 
             hybrid_result = HybridResult(
@@ -300,46 +269,6 @@ class HybridProcessorService:
                 latency=time.time() - start_time,
                 mode_used=ProcessingMode.CLOUD_ONLY,
                 error=str(exc),
-            )
-
-    async def _track_gemini_usage(
-        self,
-        result: GeminiResult,
-        task_type: TaskType,
-    ) -> None:
-        """Persist provider-reported usage without delaying a paid result."""
-        if not result.success or result.backend not in {"api", "vertex", "gemini"}:
-            return
-
-        usage = result.usage_metadata
-        if usage is None:
-            self.logger.warning(
-                "Gemini response omitted usage metadata; cost record skipped"
-            )
-            return
-
-        input_tokens = int(getattr(usage, "prompt_token_count", 0) or 0)
-        output_tokens = int(getattr(usage, "candidates_token_count", 0) or 0)
-        output_tokens += int(getattr(usage, "thoughts_token_count", 0) or 0)
-        if input_tokens <= 0 and output_tokens <= 0:
-            self.logger.warning(
-                "Gemini usage metadata contained no billable token counts"
-            )
-            return
-
-        try:
-            await _record_api_usage(
-                "google",
-                "hybrid/process",
-                input_tokens,
-                model=result.model_name,
-                output_tokens=output_tokens,
-                request_type=task_type.value,
-                success=True,
-            )
-        except Exception:
-            self.logger.exception(
-                "Gemini usage tracking failed after provider completion"
             )
 
     async def _call_gemini(
@@ -401,59 +330,6 @@ class HybridProcessorService:
     def _update_metrics(self, latency: float) -> None:
         self.metrics["cloud_requests"] += 1
         self.metrics["total_latency"] += latency
-
-    def _generate_mock_response(self, prompt: str, task_type: TaskType | None) -> str:
-        """Generate structured mock responses for testing."""
-        prompt_lower = prompt.lower()
-        self.logger.info(f"Generating mock response for prompt snippet: {prompt_lower[:50]}...")
-
-        # Check for personality/persona
-        if "personality" in prompt_lower or "persona" in prompt_lower:
-            self.logger.info("Matched Personality mock branch")
-            return json.dumps({
-                "creator_persona": {
-                    "type": "Educational Authority",
-                    "style": "Technical and deep-dive",
-                    "authority_score": 0.95
-                },
-                "video_intent": {
-                    "primary": "Skill development",
-                    "secondary": "Strategic planning",
-                    "likely_user_goal": "Master agent orchestration"
-                },
-                "community_sentiment": {
-                    "vibe": "High engagement, technical curiosity",
-                    "common_themes": ["grounding", "MCP", "swarms"],
-                    "intent_alignment": "high"
-                }
-            })
-
-        # Check for strategy/funnel/strategic
-        if "strategy" in prompt_lower or "strat" in prompt_lower or "funnel" in prompt_lower:
-            self.logger.info("Matched Strategy mock branch")
-            return json.dumps({
-                "strategic_analysis": {
-                    "core_principle": "Atomic Intelligent Workflows",
-                    "user_intent_analysis": "User seeking scalable AI patterns",
-                    "action_optimization": {
-                        "the_better_way": "Use MCP-based swarms for parallel task execution",
-                        "gain": "3x throughput reduction"
-                    }
-                },
-                "a2ui_payload": [
-                    {
-                        "type": "beginRendering",
-                        "surfaceId": "strategic-funnel"
-                    },
-                    {
-                        "type": "surfaceUpdate",
-                        "component": "Heading",
-                        "props": {"text": "Strategic Action Funnel"}
-                    }
-                ]
-            })
-
-        return "This is a mock response from the Gemini Hybrid Service. (Task: " + str(task_type) + ")"
 
     def get_metrics(self) -> dict[str, Any]:
         total_requests = self.metrics["total_requests"]

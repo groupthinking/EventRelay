@@ -37,6 +37,15 @@ describe('source review validation and content identity (synthetic)', () => {
     raw.grounded_spec.unresolved.push({ id: 'behavior', requirementIds: ['toggle'], question: 'Which state transition is required?', required: false });
     expect(inspect(reviewPackFixture(raw)).issues).toContainEqual(expect.objectContaining({ code: 'unresolved-question', severity: 'blocking' }));
   });
+  it('qualifies unresolved and unsupported issue paths by collection so they cannot collide with requirement IDs', () => {
+    const raw = browserSpecFixture();
+    const requirementId = raw.grounded_spec.requirements[0]!.id;
+    raw.grounded_spec.unresolved.push({ id: requirementId, requirementIds: [requirementId], question: 'Which state transition is required?', required: true });
+    raw.grounded_spec.unsupported.push({ id: requirementId, requirementIds: [requirementId], capability: 'secrets', reason: 'Requires server-side credentials.', required: true });
+    const paths = inspect(reviewPackFixture(raw)).issues.map((i) => `${i.code}:${i.path}`);
+    expect(paths).toContain(`unresolved-question:unresolved.${requirementId}`);
+    expect(paths).toContain(`unsupported-capability:unsupported.${requirementId}`);
+  });
   it('keeps required backend and secret capabilities blocked, never substitutes local state', () => {
     const raw = browserSpecFixture();
     raw.grounded_spec.requirements[0]!.capabilities = ['server', 'secrets'];

@@ -291,17 +291,6 @@ async function captureAppLaunch() {
 }
 
 async function captureSkillsInstallGate(cookie) {
-  const { spawnSync } = await import('node:child_process');
-  const myxteamDir = resolve(process.cwd(), '../../../../MyXstack/myxteam');
-  const test = spawnSync(
-    'pnpm',
-    ['exec', 'vitest', 'run', 'src/gateway/server-methods/skills-premium-gate.test.ts'],
-    { cwd: myxteamDir, encoding: 'utf8' },
-  );
-  log('marketplace-gate.log', `skills.install gate tests exit=${test.status}`);
-  if (test.stdout) log('marketplace-gate.log', test.stdout.trim().split('\n').slice(-6).join('\n'));
-  if (test.status !== 0) throw new Error('skills-premium-gate tests failed');
-
   let status = { plan: 'unknown', status: 'unknown', renewalEligible: false };
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {

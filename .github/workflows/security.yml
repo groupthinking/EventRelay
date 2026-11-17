@@ -38,22 +38,30 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm install --legacy-peer-deps
-      - run: npm audit --audit-level=high
-        continue-on-error: true
-      - name: Upload audit report
-        if: always()
-        run: npm audit --json > npm-audit-report.json || true
+      - name: Use the declared npm version
+        run: npm install --global npm@10.8.0
+      - name: Install the locked dependency graph
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Audit locked npm dependencies
+        run: |
+          set +e
+          npm audit --audit-level=high --json > npm-audit-report.json
+          audit_exit=$?
+          set -e
+          cat npm-audit-report.json
+          exit "$audit_exit"
       - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: npm-audit-report
           path: npm-audit-report.json
+          if-no-files-found: error
 
   python-safety:
     runs-on: ubuntu-latest

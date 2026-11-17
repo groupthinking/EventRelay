@@ -1,1 +1,0 @@
-"""Email Campaign skill module."""

@@ -8,7 +8,7 @@ import os
 import tempfile
 import time
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -44,18 +44,40 @@ logger = logging.getLogger(__name__)
 class SpeechToTextConfig:
     """Configuration for Google Speech-to-Text V2."""
 
-    project_id: str | None = os.getenv("GOOGLE_SPEECH_PROJECT_ID")
-    location: str = os.getenv("GOOGLE_SPEECH_LOCATION", "us-central1")
-    recognizer_id: str = os.getenv("GOOGLE_SPEECH_RECOGNIZER", "default")
-    model: str = os.getenv("GOOGLE_SPEECH_MODEL", "latest_long")
+    project_id: str | None = field(
+        default_factory=lambda: os.getenv("GOOGLE_SPEECH_PROJECT_ID")
+    )
+    location: str = field(
+        default_factory=lambda: os.getenv("GOOGLE_SPEECH_LOCATION", "us-central1")
+    )
+    recognizer_id: str = field(
+        default_factory=lambda: os.getenv("GOOGLE_SPEECH_RECOGNIZER", "default")
+    )
+    model: str = field(
+        default_factory=lambda: os.getenv("GOOGLE_SPEECH_MODEL", "latest_long")
+    )
     enable_word_time_offsets: bool = True
     enable_automatic_punctuation: bool = True
-    preferred_language_code: str = os.getenv("GOOGLE_SPEECH_LANGUAGE", "en-US")
+    preferred_language_code: str = field(
+        default_factory=lambda: os.getenv("GOOGLE_SPEECH_LANGUAGE", "en-US")
+    )
     max_download_bytes: int = 200 * 1024 * 1024  # 200MB safety guard
-    long_running_threshold_bytes: int = int(os.getenv("GOOGLE_SPEECH_LONG_RUNNING_THRESHOLD", str(10 * 1024 * 1024)))
-    batch_timeout_seconds: int = int(os.getenv("GOOGLE_SPEECH_BATCH_TIMEOUT", "1800"))
-    gcs_bucket: str | None = os.getenv("GOOGLE_SPEECH_GCS_BUCKET")
-    gcs_path_prefix: str = os.getenv("GOOGLE_SPEECH_GCS_PREFIX", "speech-transcripts")
+    long_running_threshold_bytes: int = field(
+        default_factory=lambda: int(
+            os.getenv("GOOGLE_SPEECH_LONG_RUNNING_THRESHOLD", str(10 * 1024 * 1024))
+        )
+    )
+    batch_timeout_seconds: int = field(
+        default_factory=lambda: int(os.getenv("GOOGLE_SPEECH_BATCH_TIMEOUT", "1800"))
+    )
+    gcs_bucket: str | None = field(
+        default_factory=lambda: os.getenv("GOOGLE_SPEECH_GCS_BUCKET")
+    )
+    gcs_path_prefix: str = field(
+        default_factory=lambda: os.getenv(
+            "GOOGLE_SPEECH_GCS_PREFIX", "speech-transcripts"
+        )
+    )
 
     @property
     def recognizer_path(self) -> str | None:

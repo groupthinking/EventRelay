@@ -38,6 +38,7 @@ export type WorkflowRunStatus =
 
 export interface VideoToActionsAction {
   tool: string;
+  input?: Record<string, unknown>;
   status: string;
   result?: string;
 }

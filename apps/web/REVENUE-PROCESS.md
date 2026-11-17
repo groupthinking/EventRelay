@@ -94,7 +94,7 @@ cd apps/web
 SCRATCH=/path/to/scratch node scripts/run-revenue-spine.mjs
 ```
 
-Truncates scratch logs, runs checkout → signed `checkout.session.completed` webhook → activate → status → pro chat → renew **twice**. MyXstack gate: `myxteam/skills/premium-gate.ts` checks `/api/billing/status`.
+Truncates scratch logs, runs checkout → signed `checkout.session.completed` webhook → activate → status → pro chat → renew **twice**, then records `/api/billing/status`.
 
 ## Non-goals (this repo slice)
 

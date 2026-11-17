@@ -288,6 +288,42 @@ describe('login gate must fail closed (issue #1058)', () => {
     expect(response.headers.get('x-ratelimit-limit')).toBe('12');
   });
 
+  it('uses KV_REST_API_* credentials when UPSTASH_REDIS_REST_* are unset', async () => {
+    const redisCtorArgs: Array<{ url: string; token: string }> = [];
+    vi.doMock('@upstash/redis', () => ({
+      Redis: function Redis(opts: { url: string; token: string }) {
+        redisCtorArgs.push(opts);
+        return {
+          incr: vi.fn(async () => 1),
+          expire: vi.fn(async () => 1),
+        };
+      },
+    }));
+
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'production',
+      AUTH_ALLOW_UNAUTHENTICATED: '1',
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined,
+      KV_REST_API_URL: 'https://kv.example.upstash.io',
+      KV_REST_API_TOKEN: 'kv-token',
+      STORAGE_REDIS_URL: undefined,
+    });
+
+    const response = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions', {
+        method: 'POST',
+      }),
+    );
+
+    expect(response.status).not.toBe(503);
+    expect(response.headers.get('x-ratelimit-limit')).toBe('12');
+    expect(redisCtorArgs).toEqual([
+      { url: 'https://kv.example.upstash.io', token: 'kv-token' },
+    ]);
+  });
+
   it('leaves local development unchanged (no secret, no 503)', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: undefined,

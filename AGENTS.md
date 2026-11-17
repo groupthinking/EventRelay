@@ -105,3 +105,12 @@ PYTHONPATH=src python3 scripts/nightly_audit_agent.py --dry-run
 ## Security dependency maintenance
 
 For an advisory-driven dependency update, follow [docs/security-dependency-maintenance.md](docs/security-dependency-maintenance.md). Reuse the canonical issue/PR, preserve direct versus transitive dependencies, and include the Security dependency evidence block. Before an authorized merge, re-fetch the exact head, applicable checks, reviews, unresolved threads, and mergeability; use expected-head protection and record the resulting merge commit. A recipe or green historical run is not current verification. This procedure grants no deployment or spending authority.
+
+## Agent staff governance
+
+Full spec: [docs/agent-staff-governance.md](docs/agent-staff-governance.md).
+
+- **Five rules:** (1) no external state change without a standing policy or task authorization; (2) one human approval gate; (3) all work committed to a tracked GitHub branch; (4) a changelog entry linked to the issue, PR, or Video Pack hash; (5) every fix leaves an SOP and a regression test or check.
+- **The one gate (Hayden):** production deploys, live database changes, billing, entitlements and spend, and credentials or access settings. CI-green merges to `main` that touch none of these fall under the standing merge policy (POL-001) and MERGE_POLICY.md.
+- **Policy loop:** spot the inconsistency, propose a rule plus its check, Hayden approves it once, then codify it and enforce it automatically.
+- **Hiring brief:** every agent role states what it owns, how it thinks, its definition of done, and what it never touches. It states its execution limits before taking work and never claims access it lacks.
