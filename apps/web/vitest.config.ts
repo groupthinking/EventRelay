@@ -36,6 +36,8 @@ export default defineConfig({
       VERCEL_AI_GATEWAY_API_KEY: '',
       VERCEL_AI_GATEWAY_API: '',
       VERCEL_API_KEY: '',
+      // Prevent ambient local-only configuration from changing unrelated tests.
+      RELAY_REVIEW_JOURNAL_MODE: '',
     },
   },
   resolve: {

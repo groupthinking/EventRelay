@@ -156,12 +156,15 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm ci --legacy-peer-deps
+      - name: Read-only workflow task quota audit regressions
+        run: node --test apps/web/scripts/__tests__/audit-workflow-task-capacity.test.mjs
       - name: Install Redis for Video Pack and Origin G.A.T.E. integration tests
         run: sudo apt-get update && sudo apt-get install -y redis-server
       - name: Unit tests (apps/web)
         # Hermetic: do not inject ambient AI/billing keys (see #1230).
         env:
           ORIGIN_GATE_REDIS_TESTS: "1"
+          WORKFLOW_TASK_REDIS_TESTS: "1"
           OPENAI_API_KEY: ""
           AI_GATEWAY_API_KEY: ""
           VERCEL_AI_GATEWAY_API_KEY: ""

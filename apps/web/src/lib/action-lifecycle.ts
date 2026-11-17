@@ -33,6 +33,8 @@ export interface AgentAction {
   status: 'pending' | 'fulfilled' | 'failed';
   /** Human-readable result summary once executed. */
   result?: string;
+  /** Durable tool receipt, when available. */
+  data?: Record<string, unknown>;
   /** Whether the underlying tool reported an error. */
   isError?: boolean;
 }

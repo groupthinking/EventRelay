@@ -1,3 +1,5 @@
+import { workflowTaskOwner, readWorkflowTask } from '@/lib/workflow-task-store';
+import { issueWorkflowTaskPreview, verifyWorkflowTaskPreview } from '@/lib/workflow-task-preview';
 import { NextResponse } from 'next/server';
 import { executePreparedActions, runActionAgent } from '@/lib/action-agent';
 import { AVAILABLE_TOOL_NAMES } from '@/lib/action-agent';
@@ -5,6 +7,7 @@ import { hasGeminiKey } from '@/lib/gemini-client';
 import { dedupeAgentActions, type AgentAction } from '@/lib/action-lifecycle';
 import { resolveTrustedBillingEmail } from '@/lib/billing/billing-context';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
+import { resolveActionReviewJournal } from '@/lib/action-review-journal.mjs';
 
 const MAX_CONFIRMED_ACTIONS = 50;
 const PRO_ACTION_TOOLS = new Set([
@@ -31,7 +34,17 @@ function isPreparedAction(value: unknown): value is AgentAction {
  * Advertises the executable tools the action agent can invoke, so the UI can
  * render affordances without hardcoding the list.
  */
-export async function GET(): Promise<NextResponse> {
+export async function GET(request?: Request): Promise<NextResponse> {
+  const taskId = request && new URL(request.url).searchParams.get('taskId');
+  if (taskId && request) {
+    const owner = await workflowTaskOwner(request);
+    if (!owner) return NextResponse.json({ error: 'Sign in to read tasks' }, { status: 401 });
+    if (!/^[a-f0-9]{64}$/.test(taskId)) return NextResponse.json({ error: 'Invalid task ID' }, { status: 400 });
+    try {
+      const task = await readWorkflowTask(owner, taskId);
+      return NextResponse.json(task ? { task } : { error: 'Task not found' }, { status: task ? 200 : 404 });
+    } catch { return NextResponse.json({ error: 'Task storage unavailable' }, { status: 503 }); }
+  }
   const hasKey = !!(process.env.OPENAI_API_KEY || hasGeminiKey());
   return NextResponse.json({ available: hasKey, tools: AVAILABLE_TOOL_NAMES });
 }
@@ -51,6 +64,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     videoTitle?: unknown;
     jobId?: unknown;
     actions?: unknown;
+    confirmationToken?: unknown;
   };
   try {
     body = await request.json();
@@ -61,7 +75,22 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
-  const { mode, transcript, videoTitle, jobId, actions } = body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    return NextResponse.json({ success: false, error: 'Request body must be a JSON object', actions: [] }, { status: 400 });
+  }
+  // Local-only review is a host policy, never a client-selectable mode.
+  // Fail closed on invalid configuration before either preview or execution.
+  let reviewJournal: ReturnType<typeof resolveActionReviewJournal>;
+  try {
+    reviewJournal = resolveActionReviewJournal();
+  } catch {
+    return NextResponse.json({ success: false, error: 'Local review journal is unavailable', actions: [] }, { status: 503 });
+  }
+
+  const { mode, transcript, videoTitle, jobId, actions, confirmationToken } = body;
+  if (reviewJournal && mode === 'execute') {
+    return NextResponse.json({ success: false, error: 'This host is configured for durable review only; no actions may execute', actions: [] }, { status: 409 });
+  }
   if (mode === 'execute') {
     if (
       !Array.isArray(actions) ||
@@ -79,7 +108,12 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
-    const reviewedActions = dedupeAgentActions(actions as AgentAction[]);
+    let reviewedActions: AgentAction[];
+    try {
+      reviewedActions = dedupeAgentActions(actions as AgentAction[]);
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid reviewed action inputs', actions: [] }, { status: 400 });
+    }
     if (reviewedActions.length !== actions.length) {
       return NextResponse.json(
         {
@@ -89,6 +123,29 @@ export async function POST(request: Request): Promise<NextResponse> {
         },
         { status: 400 },
       );
+    }
+
+    let ownerId: string | undefined;
+    if (reviewedActions.some(action => action.tool === 'create_workflow_task')) {
+      const origin = request.headers.get('origin');
+      // Cookies are ambient authority, including on same-site sibling origins.
+      // A non-browser bearer request may omit Origin only without cookies;
+      // workflowTaskOwner must still verify its token before any write.
+      const bearerOnly = origin === null && !request.headers.has('cookie') &&
+        /^Bearer \S+$/.test(request.headers.get('authorization') ?? '');
+      if (request.headers.get('sec-fetch-site') === 'cross-site' ||
+          (origin !== new URL(request.url).origin && !bearerOnly)) {
+        return NextResponse.json({ success: false, error: 'Untrusted task write origin', actions: [] }, { status: 403 });
+      }
+      if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+        return NextResponse.json({ success: false, error: 'Send an application/json request', actions: [] }, { status: 415 });
+      }
+      ownerId = (await workflowTaskOwner(request)) ?? undefined;
+      if (!ownerId) return NextResponse.json({ success: false, error: 'Sign in to save tasks', actions: [] }, { status: 401 });
+      if (typeof jobId !== 'string' || !jobId.trim() || jobId.length > 200) return NextResponse.json({ success: false, error: 'A run ID is required', actions: [] }, { status: 400 });
+      if (!verifyWorkflowTaskPreview(confirmationToken, ownerId, jobId, reviewedActions)) {
+        return NextResponse.json({ success: false, error: 'A matching authenticated preview receipt is required', actions: [] }, { status: 409 });
+      }
     }
 
     if (reviewedActions.some((action) => PRO_ACTION_TOOLS.has(action.tool))) {
@@ -109,6 +166,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     try {
       const fulfilled = await executePreparedActions({
         actions: reviewedActions,
+        ownerId,
         jobId: typeof jobId === 'string' ? jobId : undefined,
       });
       return NextResponse.json({ success: true, provider: 'confirmed-plan', actions: fulfilled });
@@ -135,6 +193,26 @@ export async function POST(request: Request): Promise<NextResponse> {
     );
   }
 
+  if (reviewJournal) {
+    const origin = request.headers.get('origin');
+    const bearerOnly = origin === null && !request.headers.has('cookie') &&
+      /^Bearer \S+$/.test(request.headers.get('authorization') ?? '');
+    if (request.headers.get('sec-fetch-site') === 'cross-site' ||
+        (origin !== new URL(request.url).origin && !bearerOnly)) {
+      return NextResponse.json({ success: false, error: 'Untrusted journal write origin', actions: [] }, { status: 403 });
+    }
+    // A same-origin text/plain form is still a write when request.json()
+    // accepts JSON-shaped bytes. Require JSON for every journal mutation.
+    if (request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+      return NextResponse.json({ success: false, error: 'Send an application/json request', actions: [] }, { status: 415 });
+    }
+  }
+
+  const journalIdentity = reviewJournal ? await resolveTrustedBillingEmail(request) : null;
+  if (reviewJournal && !journalIdentity) {
+    return NextResponse.json({ success: false, error: 'Sign in before persisting a local review plan', actions: [] }, { status: 401 });
+  }
+
   try {
     const result = await runActionAgent({
       transcript,
@@ -143,10 +221,27 @@ export async function POST(request: Request): Promise<NextResponse> {
       executeTools: false,
     });
 
+    // Persistence is mandatory when local-review-only is enabled. Never
+    // return an ephemeral success or an executable confirmation token.
+    const localArtifactReceipt = reviewJournal
+      ? await reviewJournal.persist(result.actions, journalIdentity)
+      : undefined;
+
+    const hasTasks = result.actions.some(action => action.tool === 'create_workflow_task');
+    const previewOwner = !reviewJournal && hasTasks ? await workflowTaskOwner(request) : null;
+    // Only server-generated plans can receive a receipt. Client run IDs remain
+    // correlation hints; confirmed task identity uses the returned server ID.
+    if (previewOwner && result.actions.some(action => !AVAILABLE_TOOL_NAMES.includes(action.tool))) {
+      throw new Error('Unknown preview tool');
+    }
+    const confirmation = previewOwner ? issueWorkflowTaskPreview(previewOwner, result.actions) : null;
+
     return NextResponse.json({
       success: true,
       provider: result.provider,
       actions: result.actions,
+      ...(confirmation ?? {}),
+      ...(localArtifactReceipt ? { localArtifactReceipt } : {}),
     });
   } catch (error) {
     console.error('Action agent error:', error);

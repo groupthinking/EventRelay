@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/lib/workflow-task-store', () => ({ workflowTaskOwner: vi.fn(async () => 'user-1'), readWorkflowTask: vi.fn() }));
 
 vi.mock('@/lib/action-agent', () => ({
   AVAILABLE_TOOL_NAMES: ['create_workflow_task', 'dispatch_agent'],
@@ -13,9 +15,11 @@ vi.mock('@/lib/billing/entitlement-store', () => ({
   isProSubscriber: vi.fn(async () => false),
 }));
 
-import { POST } from '@/app/api/agents/actions/route';
+import { workflowTaskOwner, readWorkflowTask } from '@/lib/workflow-task-store';
+import { GET, POST } from '@/app/api/agents/actions/route';
 import { executePreparedActions, runActionAgent } from '@/lib/action-agent';
 import { isProSubscriber } from '@/lib/billing/entitlement-store';
+import { issueWorkflowTaskPreview } from '@/lib/workflow-task-preview';
 
 const mockedRunActionAgent = vi.mocked(runActionAgent);
 const mockedExecutePreparedActions = vi.mocked(executePreparedActions);
@@ -24,7 +28,7 @@ const mockedIsProSubscriber = vi.mocked(isProSubscriber);
 function request(body: unknown): Request {
   return new Request('http://localhost/api/agents/actions', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', origin: 'http://localhost' },
     body: JSON.stringify(body),
   });
 }
@@ -32,8 +36,11 @@ function request(body: unknown): Request {
 describe('POST /api/agents/actions review gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubEnv('NEXTAUTH_SECRET', 'isolated-route-preview-secret');
+    vi.mocked(workflowTaskOwner).mockResolvedValue('user-1');
     mockedIsProSubscriber.mockResolvedValue(false);
   });
+  afterEach(() => vi.unstubAllEnvs());
 
   it('prepares a review-only plan by default', async () => {
     const action = {
@@ -63,14 +70,16 @@ describe('POST /api/agents/actions review gate', () => {
     };
     mockedExecutePreparedActions.mockResolvedValue([{ ...prepared, status: 'fulfilled' }]);
 
-    const response = await POST(request({ mode: 'execute', actions: [prepared], jobId: 'job_1' }));
+    const confirmation = issueWorkflowTaskPreview('user-1', [prepared]);
+    const response = await POST(request({ mode: 'execute', actions: [prepared], ...confirmation }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.provider).toBe('confirmed-plan');
     expect(mockedExecutePreparedActions).toHaveBeenCalledWith({
       actions: [prepared],
-      jobId: 'job_1',
+      jobId: confirmation.jobId,
+      ownerId: 'user-1',
     });
     expect(mockedRunActionAgent).not.toHaveBeenCalled();
   });
@@ -111,4 +120,55 @@ describe('POST /api/agents/actions review gate', () => {
     expect((await POST(request({ mode: 'execute', actions: [] }))).status).toBe(400);
     expect((await POST(request({ mode: 'surprise' }))).status).toBe(400);
   });
+  it('rejects unauthenticated task writes even with a supplied owner', async () => {
+    vi.mocked(workflowTaskOwner).mockResolvedValue(null);
+    const response = await POST(request({ mode: 'execute', ownerId: 'spoof', jobId: 'run', actions: [{ tool: 'create_workflow_task', input: {} }] }));
+    expect(response.status).toBe(401);
+    expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
+  });
+
+  it('requires a stable run ID for task execution', async () => {
+    const response = await POST(request({ mode: 'execute', actions: [{ tool: 'create_workflow_task', input: {} }] }));
+    expect(response.status).toBe(400);
+    expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
+  });
+
+  it('rejects the entire mixed action batch before execution for an untrusted task-write origin', async () => {
+    mockedIsProSubscriber.mockResolvedValue(true);
+    const candidate = request({ mode: 'execute', jobId: 'run', actions: [
+      { tool: 'dispatch_agent', input: { agentType: 'researcher', instruction: 'Review source' } },
+      { tool: 'create_workflow_task', input: {} },
+    ] });
+    candidate.headers.set('origin', 'https://attacker.example');
+    expect((await POST(candidate)).status).toBe(403);
+    expect(workflowTaskOwner).not.toHaveBeenCalled();
+    expect(mockedExecutePreparedActions).not.toHaveBeenCalled();
+  });
+
+  it('does not change preview or non-task execution authentication policy', async () => {
+    const preview = request({ transcript: 'A sufficiently long verified transcript.' });
+    preview.headers.delete('origin');
+    mockedRunActionAgent.mockResolvedValue({ provider: 'gemini', actions: [] });
+    expect((await POST(preview)).status).toBe(200);
+
+    const action = { tool: 'dispatch_agent', input: { agentType: 'researcher', instruction: 'Review source' }, status: 'pending' as const };
+    const candidate = request({ mode: 'execute', actions: [action] });
+    candidate.headers.delete('origin');
+    mockedIsProSubscriber.mockResolvedValue(true);
+    mockedExecutePreparedActions.mockResolvedValue([{ ...action, status: 'fulfilled' }]);
+    expect((await POST(candidate)).status).toBe(200);
+    expect(mockedExecutePreparedActions).toHaveBeenCalledOnce();
+    expect(workflowTaskOwner).not.toHaveBeenCalled();
+  });
+
+  it('reads only the current session owner namespace', async () => {
+    const id = 'a'.repeat(64);
+    vi.mocked(readWorkflowTask).mockResolvedValue(null);
+    const response = await GET(new Request(`http://localhost/api/agents/actions?taskId=${id}&ownerId=other`));
+    expect(response.status).toBe(404);
+    expect(readWorkflowTask).toHaveBeenCalledWith('user-1', id);
+    vi.mocked(workflowTaskOwner).mockResolvedValue(null);
+    expect((await GET(new Request(`http://localhost/api/agents/actions?taskId=${id}`))).status).toBe(401);
+  });
+
 });

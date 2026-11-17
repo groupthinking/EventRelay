@@ -14,10 +14,12 @@ export type UpstashRestCredentials = {
 };
 
 export function resolveUpstashRedisCredentials(): UpstashRestCredentials | null {
-  const url =
-    process.env.UPSTASH_REDIS_REST_URL?.trim() || process.env.KV_REST_API_URL?.trim();
-  const token =
-    process.env.UPSTASH_REDIS_REST_TOKEN?.trim() || process.env.KV_REST_API_TOKEN?.trim();
-  if (url && token) return { url, token };
+  // Never combine a URL from one credential family with another family's token.
+  const upstashUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  if (upstashUrl && upstashToken) return { url: upstashUrl, token: upstashToken };
+  const kvUrl = process.env.KV_REST_API_URL?.trim();
+  const kvToken = process.env.KV_REST_API_TOKEN?.trim();
+  if (kvUrl && kvToken) return { url: kvUrl, token: kvToken };
   return null;
 }

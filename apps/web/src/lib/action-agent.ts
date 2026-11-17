@@ -96,6 +96,7 @@ function toAction(
     input,
     status: status ?? (result.isError ? 'failed' : 'fulfilled'),
     result: result.summary,
+    ...(tool === 'create_workflow_task' && result.data ? { data: result.data } : {}),
     isError: result.isError,
   };
 }
@@ -302,6 +303,7 @@ export async function runActionAgent(opts: RunActionAgentOptions): Promise<RunAc
 }
 
 export interface ExecutePreparedActionsOptions {
+  ownerId?: string;
   actions: AgentAction[];
   jobId?: string;
   fetchImpl?: typeof fetch;
@@ -315,11 +317,27 @@ export async function executePreparedActions(
     backendBaseUrl: resolveBackendBaseUrl(),
     fetchImpl: opts.fetchImpl,
     jobId: opts.jobId,
+    ownerId: opts.ownerId,
   };
 
   const uniqueActions = dedupeAgentActions(opts.actions);
   const actions: AgentAction[] = [];
+  let taskStorageUnavailable = false;
+  let taskStorageDeadlineAt: number | undefined;
   for (const prepared of uniqueActions) {
+    const isTask = prepared.tool === 'create_workflow_task';
+    if (isTask && taskStorageDeadlineAt === undefined) taskStorageDeadlineAt = Date.now() + 25_000;
+    if (isTask) ctx.storageDeadlineAt = taskStorageDeadlineAt;
+    const deadlineReached = isTask && taskStorageDeadlineAt !== undefined && Date.now() >= taskStorageDeadlineAt;
+    if (isTask && (taskStorageUnavailable || deadlineReached)) {
+      actions.push(toAction(prepared.tool, prepared.input, {
+        summary: taskStorageUnavailable
+          ? 'Task was not attempted after task storage became unavailable. Retry the same confirmed plan when storage recovers.'
+          : 'Task was not attempted because the task storage batch deadline elapsed. Retry the same confirmed plan.',
+        isError: true,
+      }));
+      continue;
+    }
     const tool = getTool(prepared.tool);
     if (!tool || !isPlainObject(prepared.input)) {
       actions.push(
@@ -341,6 +359,7 @@ export async function executePreparedActions(
         isError: true,
       };
     }
+    if (prepared.tool === 'create_workflow_task' && result.isError && result.storageUnavailable === true) taskStorageUnavailable = true;
     actions.push(toAction(prepared.tool, prepared.input, result));
   }
   return actions;
