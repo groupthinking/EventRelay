@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { Menu, Moon, Sun, X, Film } from 'lucide-react';
 
 interface NavProps {
@@ -22,20 +22,39 @@ function isNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+const themeListeners = new Set<() => void>();
+
+function subscribeTheme(callback: () => void) {
+  themeListeners.add(callback);
+  return () => {
+    themeListeners.delete(callback);
+  };
+}
+
+function getThemeSnapshot(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.dataset.theme === 'light';
+}
+
+function getServerThemeSnapshot(): boolean {
+  return false;
+}
+
 /**
- * Minimal top bar. Warm paper, quiet type, one accent CTA.
- * Muse design language: nothing shouts, everything breathes.
+ * Minimal top bar. Obsidian default with Webflow-style light/dark toggle.
  */
 export default function Nav({ rightSlot, subtitle, fixed = false }: NavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [lightMode, setLightMode] = useState(false);
+  const lightMode = useSyncExternalStore(
+    subscribeTheme,
+    getThemeSnapshot,
+    getServerThemeSnapshot,
+  );
 
   const toggleTheme = () => {
-    const next = !lightMode;
-    setLightMode(next);
     if (typeof document !== 'undefined') {
-      document.documentElement.dataset.theme = next ? 'light' : 'dark';
+      document.documentElement.dataset.theme = lightMode ? 'dark' : 'light';
+      themeListeners.forEach((listener) => listener());
     }
   };
 

@@ -77,7 +77,7 @@ export default function StudioBoundTasks({ pack }: { pack?: Pack }) {
         </p>
         <p className="mt-3 text-xs text-[var(--uvai-ink-faint)]">No tasks have been executed or independently checked by this view.</p>
         {view.issues.length > 0 && (
-          <ul className="mt-4 space-y-2 text-xs text-amber-300" aria-label="Source issues">
+          <ul className="mt-4 space-y-2 text-xs text-[var(--uvai-warn-ink)]" aria-label="Source issues">
             {view.issues.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}
           </ul>
         )}
@@ -114,7 +114,7 @@ export default function StudioBoundTasks({ pack }: { pack?: Pack }) {
         <p className="text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
           Source-linked proposals. Actions have not run, outputs have not been generated, and independent checks have not been performed by this view.
         </p>
-        {exportError && <p role="alert" className="text-xs text-red-400">{exportError}</p>}
+        {exportError && <p role="alert" className="text-xs text-[var(--uvai-danger-ink)]">{exportError}</p>}
         <details className="text-xs text-[var(--uvai-ink-faint)]">
           <summary className="cursor-pointer py-1 hover:text-[var(--uvai-ink-soft)]">Source identity</summary>
           <dl className="mt-2 space-y-2 break-all font-mono text-[11px]">
@@ -135,7 +135,7 @@ export default function StudioBoundTasks({ pack }: { pack?: Pack }) {
         )}
       </header>
       {blockingIssues.length > 0 && (
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 p-4 text-xs text-amber-200">
+        <div className="rounded-lg border border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] p-4 text-xs text-[var(--uvai-warn-ink)]">
           <p className="font-semibold">Resolve before execution</p>
           <ul className="mt-2 list-disc space-y-1 pl-4">
             {blockingIssues.map((issue, index) => <li key={`${issue.code}-${index}`}>{issue.message}</li>)}
@@ -165,12 +165,12 @@ function TaskRow({ task, index }: { task: StudioBoundTask; index: number }) {
       <div className="space-y-4 p-4">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-ink-faint)]">Source</p>
-          {task.citations.length === 0 ? <p className="mt-2 text-xs text-amber-300">No direct source citation. This task needs review.</p> : (
+          {task.citations.length === 0 ? <p className="mt-2 text-xs text-[var(--uvai-warn-ink)]">No direct source citation. This task needs review.</p> : (
             <ul className="mt-2 space-y-3">
               {task.citations.map((citation, index) => (
                 <li key={`${citation.kind}-${citation.index}-${index}`}>
                   <a href={citation.sourceUrl} target="_blank" rel="noopener noreferrer"
-                    className="font-mono text-xs text-[#4d94ff] underline underline-offset-4 hover:text-[var(--uvai-ink)] focus-visible:outline-2 focus-visible:outline-offset-2">
+                    className="font-mono text-xs text-[var(--uvai-accent-ink)] underline underline-offset-4 hover:text-[var(--uvai-ink)] focus-visible:outline-2 focus-visible:outline-offset-2">
                     {timestamp(citation.startSeconds)}–{timestamp(citation.endSeconds)} · {citation.kind === 'transcript' ? 'Spoken source' : 'Visual observation'} ↗
                   </a>
                   <blockquote className="mt-2 border-l-2 border-[var(--uvai-border-strong)] pl-3 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{citation.quote}</blockquote>
@@ -181,11 +181,11 @@ function TaskRow({ task, index }: { task: StudioBoundTask; index: number }) {
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-ink-faint)]">Expected output & checks</p>
-          {task.checks.length === 0 ? <p className="mt-2 text-xs text-amber-300">No acceptance criteria supplied. Define a check before execution.</p> : (
+          {task.checks.length === 0 ? <p className="mt-2 text-xs text-[var(--uvai-warn-ink)]">No acceptance criteria supplied. Define a check before execution.</p> : (
             <ul className="mt-2 space-y-3">
               {task.checks.map((check) => (
                 <li key={check.id} className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] p-3 text-xs">
-                  <div className="flex justify-between gap-2"><span className="font-mono text-[var(--uvai-ink-faint)]">{check.id}</span><span className="font-medium text-amber-300">Not run</span></div>
+                  <div className="flex justify-between gap-2"><span className="font-mono text-[var(--uvai-ink-faint)]">{check.id}</span><span className="font-medium text-[var(--uvai-warn-ink)]">Not run</span></div>
                   <dl className="mt-2 space-y-1 leading-relaxed text-[var(--uvai-ink-soft)]">
                     <div><dt className="inline font-medium text-[var(--uvai-ink)]">Given </dt><dd className="inline">{check.given}</dd></div>
                     <div><dt className="inline font-medium text-[var(--uvai-ink)]">When </dt><dd className="inline">{check.when}</dd></div>

@@ -20,7 +20,7 @@ export default function HomeProCheckout() {
       data-testid="home-pro-checkout"
       className="m-2 rounded-xl border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] p-6 text-left sm:m-4 sm:p-8"
     >
-      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#4d94ff]">Get Pro</p>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--uvai-accent-ink)]">Get Pro</p>
       <p
         data-testid="home-workflow-pro-selected-price"
         className="mt-3 font-heading text-3xl font-bold tracking-tight text-[var(--uvai-ink)] md:text-4xl"

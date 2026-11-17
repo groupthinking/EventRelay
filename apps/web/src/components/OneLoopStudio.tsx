@@ -115,13 +115,13 @@ const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 function gateDecisionChipClass(decision: GateDecision): string {
   switch (decision) {
     case 'PASS':
-      return 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300';
+      return 'border-[var(--uvai-success-border)] bg-[var(--uvai-success-bg)] text-[var(--uvai-success-ink)]';
     case 'HOLD':
-      return 'border-amber-500/40 bg-amber-500/15 text-amber-300';
+      return 'border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] text-[var(--uvai-warn-ink)]';
     case 'REJECT':
-      return 'border-red-500/40 bg-red-500/15 text-red-300';
+      return 'border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] text-[var(--uvai-danger-ink)]';
     case 'ESCALATE':
-      return 'border-violet-500/40 bg-violet-500/15 text-violet-300';
+      return 'border-[var(--uvai-violet-border)] bg-[var(--uvai-violet-bg)] text-[var(--uvai-violet-ink)]';
     default: {
       const _exhaustive: never = decision;
       return _exhaustive;
@@ -161,7 +161,7 @@ function PackWorkbench({
       className="uvai-card p-4 lg:col-span-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[#4d94ff]">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--uvai-accent-ink)]">
           From this pack
         </h2>
         <button
@@ -205,7 +205,7 @@ function PackWorkbench({
               className="uvai-doc-row"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12px] font-semibold text-[#4d94ff]">{artifact.path_hint}</div>
+                <div className="truncate font-mono text-[12px] font-semibold text-[var(--uvai-accent-ink)]">{artifact.path_hint}</div>
                 <div className="mt-0.5 truncate text-sm text-[var(--uvai-ink-soft)]">{artifact.purpose}</div>
                 <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--uvai-ink-faint)]">{artifact.interface}</div>
               </div>
@@ -1030,7 +1030,7 @@ export default function OneLoopStudio({
               {statusText}
             </p>
             {showTranscriptRetry ? (
-              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-red-500/35 bg-red-500/10 px-3 py-2 text-xs text-red-200">
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-3 py-2 text-xs text-[var(--uvai-danger-ink)]">
                 <span className="min-w-0 flex-1 truncate">
                   {selected?.failure?.message || 'Extraction stopped before finishing.'}
                 </span>
@@ -1038,7 +1038,7 @@ export default function OneLoopStudio({
                   type="button"
                   data-testid="studio-transcript-retry"
                   onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn shrink-0 !border-red-500/40 !bg-red-500/15 !px-3 !py-1 !text-xs font-medium text-red-100 hover:!bg-red-500/25"
+                  className="uvai-btn shrink-0 !border-[var(--uvai-danger-border)] !bg-[var(--uvai-surface)] !px-3 !py-1 !text-xs font-medium !text-[var(--uvai-danger-ink)] hover:!opacity-90"
                 >
                   Retry transcript
                 </button>
@@ -1098,7 +1098,7 @@ export default function OneLoopStudio({
               <div className="uvai-card p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="uvai-section-label">Extracted pack</p>
-                  <span className="font-mono text-[11px] font-semibold text-[#4d94ff]">
+                  <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
                     {selected.videoPack.sourceHash.slice(0, 12)}…
                   </span>
                 </div>
@@ -1202,13 +1202,13 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-pack-build-live-result"
           role="status"
-          className="border-t border-[#146ef5]/35 bg-[#146ef5]/10"
+          className="border-t border-[#146ef5]/35 bg-[var(--uvai-accent-soft)]"
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
             <div className="flex flex-wrap items-start gap-2">
               <span
                 data-testid="studio-pack-build-live-state"
-                className="inline-flex rounded-full border border-[#146ef5]/45 bg-[#146ef5]/20 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[#4d94ff]"
+                className="inline-flex rounded-full border border-[#146ef5]/45 bg-[var(--uvai-accent-soft)] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--uvai-accent-ink)]"
               >
                 Ready
               </span>
@@ -1220,7 +1220,7 @@ export default function OneLoopStudio({
                   YouTube video id{' '}
                   <span
                     data-testid="studio-pack-build-live-video-id"
-                    className="font-mono text-[#4d94ff]"
+                    className="font-mono text-[var(--uvai-accent-ink)]"
                   >
                     {scopedPackBuildLiveSuccess.youtubeVideoId}
                   </span>
@@ -1257,14 +1257,14 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-build-live-failure"
           role="alert"
-          className="border-t border-red-500/35 bg-red-500/10"
+          className="border-t border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)]"
         >
           <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
             <div>
-              <p className="text-sm font-medium text-red-200">{buildLiveFailure.title}</p>
-              <p className="mt-1 text-sm text-red-200/85">{buildLiveFailure.message}</p>
+              <p className="text-sm font-medium text-[var(--uvai-danger-ink)]">{buildLiveFailure.title}</p>
+              <p className="mt-1 text-sm text-[var(--uvai-ink-soft)]">{buildLiveFailure.message}</p>
               {buildLiveFailure.reasonCode ? (
-                <p className="mt-1 font-mono text-[11px] text-red-300/70">
+                <p className="mt-1 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
                   {buildLiveFailure.reasonCode}
                 </p>
               ) : null}

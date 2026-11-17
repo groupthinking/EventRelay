@@ -53,4 +53,18 @@ describe('Nav template routing semantics', () => {
     fireEvent.click(toDark);
     expect(document.documentElement.dataset.theme).toBe('dark');
   });
+
+  it('keeps light-mode state when Nav remounts on another route', () => {
+    usePathnameMock.mockReturnValue('/');
+    const first = render(<Nav />);
+    fireEvent.click(screen.getByRole('button', { name: 'Switch to light mode' }));
+    expect(document.documentElement.dataset.theme).toBe('light');
+    first.unmount();
+
+    usePathnameMock.mockReturnValue('/studio');
+    render(<Nav />);
+    const toggle = screen.getByRole('button', { name: 'Switch to dark mode' });
+    fireEvent.click(toggle);
+    expect(document.documentElement.dataset.theme).toBe('dark');
+  });
 });

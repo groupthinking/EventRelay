@@ -40,7 +40,7 @@ function Requirement({ requirement, onSeek }: { requirement: GroundedBuildSpec['
       {requirement.rationale ? <p>Rationale: {requirement.rationale}</p> : null}
       {requirement.citations.length ? (
         <details>
-          <summary className="cursor-pointer rounded-sm font-medium text-[#4d94ff] focus-visible:outline-2 focus-visible:outline-offset-4">Supporting source</summary>
+          <summary className="cursor-pointer rounded-sm font-medium text-[var(--uvai-accent-ink)] focus-visible:outline-2 focus-visible:outline-offset-4">Supporting source</summary>
           <ul className="flex flex-col gap-3 py-3">
             {requirement.citations.map((ref, index) => (
               <li key={index} className="flex flex-col gap-2">
@@ -48,7 +48,7 @@ function Requirement({ requirement, onSeek }: { requirement: GroundedBuildSpec['
                 <blockquote className="text-pretty">{ref.quote}</blockquote>
                 <div className="flex flex-wrap items-center gap-3">
                   {onSeek ? <Button type="button" variant="secondary" onClick={() => onSeek(ref.startSeconds)}>Seek to {formatSeconds(ref.startSeconds)}</Button> : null}
-                  <a className="rounded-sm text-[#4d94ff] underline underline-offset-4 focus-visible:outline-2" href={`https://www.youtube.com/watch?v=${ref.videoId}&t=${Math.floor(ref.startSeconds)}s`} target="_blank" rel="noopener noreferrer">Open source at {formatSeconds(ref.startSeconds)}</a>
+                  <a className="rounded-sm text-[var(--uvai-accent-ink)] underline underline-offset-4 focus-visible:outline-2" href={`https://www.youtube.com/watch?v=${ref.videoId}&t=${Math.floor(ref.startSeconds)}s`} target="_blank" rel="noopener noreferrer">Open source at {formatSeconds(ref.startSeconds)}</a>
                 </div>
               </li>
             ))}

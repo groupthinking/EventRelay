@@ -320,7 +320,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
                 type="button"
                 onClick={() => setDraft('Plan a build from this Video Pack')}
                 data-testid="studio-ide-chat-plan-prompt"
-                className="text-xs font-semibold text-[#4d94ff] underline hover:text-[var(--uvai-ink)]"
+                className="text-xs font-semibold text-[var(--uvai-accent-ink)] underline hover:text-[var(--uvai-ink)]"
               >
                 Plan a build from this video
               </button>
@@ -344,7 +344,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         )}
       </div>
       {quotaHit ? (
-        <div className="border-t border-amber-500/35 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-200">
+        <div className="border-t border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] px-4 py-2.5 text-xs text-[var(--uvai-warn-ink)]">
           Daily free limit reached.{' '}
           <a href="/pricing" className="font-semibold underline">
             Upgrade to Pro
@@ -353,7 +353,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         </div>
       ) : null}
       {error && !sending ? (
-        <div className="border-t border-red-500/35 bg-red-500/10 px-4 py-1.5 text-xs text-red-300">{error}</div>
+        <div className="border-t border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-4 py-1.5 text-xs text-[var(--uvai-danger-ink)]">{error}</div>
       ) : null}
       <form
         onSubmit={send}

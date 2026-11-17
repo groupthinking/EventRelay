@@ -136,7 +136,7 @@ export default function StudioIdeOutput({
                 {events.map((e) => (
                   <li key={e.id} className="uvai-card p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-1.5 rounded bg-[#146ef5]/15 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[#4d94ff]">
+                      <span className="inline-flex items-center gap-1.5 rounded bg-[var(--uvai-accent-soft)] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-accent-ink)]">
                         <DotIcon />
                         {e.type}
                       </span>
@@ -232,7 +232,7 @@ export default function StudioIdeOutput({
                         <div key={`${snippet.path_hint ?? 'snippet'}-${index}`} className="overflow-hidden rounded-md border border-[var(--uvai-border-strong)] bg-[#0a0a0a]">
                           <div className="flex items-center justify-between border-b border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-3 py-1.5 font-mono text-[11px] text-[var(--uvai-ink-soft)]">
                             <span>{snippet.path_hint || `snippet-${index + 1}`}</span>
-                            {snippet.lang ? <span className="uppercase text-[#4d94ff]">{snippet.lang}</span> : null}
+                            {snippet.lang ? <span className="uppercase text-[var(--uvai-accent-ink)]">{snippet.lang}</span> : null}
                           </div>
                           <pre className="max-h-64 overflow-auto p-3 font-mono text-xs leading-relaxed text-[#e5e5e5]">
                             {snippet.content}
@@ -305,7 +305,7 @@ export default function StudioIdeOutput({
                           <ArrowIcon />
                         </span>
                         <div className="min-w-0">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#4d94ff]">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-accent-ink)]">
                             {card.statusLabel}
                           </p>
                           <p className="mt-1 text-sm font-semibold text-[var(--uvai-ink)]">{card.title}</p>
@@ -415,7 +415,7 @@ export default function StudioIdeOutput({
                 {video.transcript}
               </p>
             ) : video?.failure?.message ? (
-              <p className="text-xs text-red-400">{video.failure.message}</p>
+              <p className="text-xs text-[var(--uvai-danger-ink)]">{video.failure.message}</p>
             ) : (
               <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">Nothing yet.</p>
             )}
