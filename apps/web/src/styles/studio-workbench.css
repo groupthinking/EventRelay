@@ -412,6 +412,8 @@
   .uvai-cards.template-studio-shell .template-pane-tabs {
     position: sticky;
     bottom: 0;
+    order: 2;
+    margin-top: auto;
     z-index: 40;
     gap: 4px;
     padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
