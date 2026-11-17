@@ -39,7 +39,7 @@ export default function StudioIdeShell({
       data-mobile-pane={mobilePane}
       className="uvai-cards template-studio-shell flex flex-1 flex-col"
     >
-      <div data-testid="studio-ide-toolbar" className="uvai-toolbar">
+      <div data-testid="studio-ide-toolbar" className="uvai-toolbar sticky top-0 z-30">
         <div className="mx-auto flex w-full max-w-[1360px] flex-wrap items-center gap-2">
           {toolbar}
         </div>
@@ -104,7 +104,6 @@ export default function StudioIdeShell({
                 aria-expanded={false}
                 onClick={() => setOutputCollapsed(false)}
                 className="uvai-btn !px-3 !py-1.5 !text-xs"
-                aria-label="Show output pane"
               >
                 Show deliverables
               </button>
@@ -160,7 +159,7 @@ export default function StudioIdeShell({
                   aria-controls="studio-panel-video"
                   aria-expanded={!videoCollapsed}
                   onClick={() => setVideoCollapsed(false)}
-                  className="uvai-btn !px-2.5 !py-1 !text-xs md:hidden"
+                  className="uvai-btn !px-2.5 !py-1 !text-xs min-[901px]:!hidden"
                 >
                   Show video
                 </button>

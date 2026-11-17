@@ -57,7 +57,7 @@ export default async function HomePage() {
                     Keep the spoken action, expected output, and acceptance check together.
                   </p>
                 </div>
-                <p className="text-xs leading-relaxed lg:text-right" style={{ color: 'var(--uvai-ink-faint)' }}>
+                <p className="text-xs leading-relaxed lg:text-right" style={{ color: 'var(--uvai-ink-soft)' }}>
                   Your source stays the reference. Missing evidence should remain an open question.
                 </p>
               </div>

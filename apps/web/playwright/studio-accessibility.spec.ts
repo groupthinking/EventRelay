@@ -90,7 +90,7 @@ test('Studio collapse/restore controls and responsive breakpoint switching stay 
 
   await page.getByRole('button', { name: 'Collapse output pane' }).click();
   await expect(page.getByTestId('studio-ide-output-pane')).toBeHidden();
-  await page.getByRole('button', { name: 'Show output pane' }).click();
+  await page.getByRole('button', { name: 'Show deliverables' }).click();
   await expect(page.getByTestId('studio-ide-output-pane')).toBeVisible();
 
   for (const width of [900, 390, 1280]) {

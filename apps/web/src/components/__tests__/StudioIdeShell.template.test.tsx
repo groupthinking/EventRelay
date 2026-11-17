@@ -52,7 +52,7 @@ describe('Horizontal Webflow + Shipper Studio navigation', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Collapse output pane' }));
     expect(screen.queryByTestId('studio-ide-output-pane')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Show output pane' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show deliverables' }));
     expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
   });
 
