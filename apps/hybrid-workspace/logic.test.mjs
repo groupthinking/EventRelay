@@ -1,4 +1,6 @@
-import { JSDOM } from 'jsdom';
+import { createRequire } from 'node:module';
+const requireFromWeb = createRequire(new URL('../web/package.json', import.meta.url));
+const { JSDOM } = requireFromWeb('jsdom');
 globalThis.DOMParser = new JSDOM('').window.DOMParser;
 import { escapeHtml, injectVirtualAssets, shouldEscalate, summarizeFrom, parseTermCommand } from "./logic.js";
 import assert from "node:assert/strict";
@@ -39,4 +41,3 @@ for (const markup of ['<link data-href="styles.css">', `<link title=' href="styl
   assert.equal(injectVirtualAssets(markup, {"styles.css":"bad", "app.js":"bad"}), markup);
 }
 assert.equal(summarizeFrom({"index.html":{value:'<title>Edited</title><h1>New</h1>'},"lesson.md":{value:'<img onerror="x">'}}).title,'Edited');
-
