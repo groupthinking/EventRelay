@@ -10,6 +10,7 @@
    Used by the Studio workbench and the landing page.
    ============================================================ */
 
+:root,
 .uvai-cards {
   --card-bg: var(--uvai-bg);
   --card-surface: var(--uvai-surface);
@@ -31,8 +32,16 @@
   --card-shadow-lg: 0 2px 8px rgba(28, 27, 26, 0.06);
   --card-radius: 12px;
   --card-radius-sm: 8px;
+}
+
+.uvai-cards {
   background: var(--card-bg);
   color: var(--card-text);
+}
+
+[data-testid='studio-ide-video-pane'] iframe {
+  width: 100%;
+  height: 100%;
 }
 
 /* ---- Base card ---- */
