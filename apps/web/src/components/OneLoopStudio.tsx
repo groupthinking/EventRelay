@@ -1130,25 +1130,37 @@ export default function OneLoopStudio({
                     <div className="mt-4 border-t border-[var(--uvai-border)] pt-3">
                       <p className="uvai-section-label mb-2">Quick jump</p>
                       <ol className="flex flex-col gap-1.5">
-                        {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => (
-                          <li key={`${chapter.topic}-${index}`}>
-                            <button
-                              type="button"
-                              onClick={() => seekTo(chapter.start)}
-                              className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)]"
-                            >
-                              <span className="flex min-w-0 items-center gap-2">
-                                <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
-                                  {String(index + 1).padStart(2, '0')}
+                        {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
+                          const canSeekPack = videoId === selected.videoPack?.pack.video_id;
+                          return (
+                            <li key={`${chapter.topic}-${index}`}>
+                              <button
+                                type="button"
+                                data-testid={`studio-quick-jump-${index}`}
+                                disabled={!canSeekPack}
+                                title={
+                                  canSeekPack
+                                    ? `Seek to ${chapter.start}s`
+                                    : 'Run analysis or switch URL back to this pack to seek.'
+                                }
+                                onClick={() => {
+                                  if (canSeekPack) seekTo(chapter.start);
+                                }}
+                                className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                                    {String(index + 1).padStart(2, '0')}
+                                  </span>
+                                  <span className="truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
                                 </span>
-                                <span className="truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
-                              </span>
-                              <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
-                                {chapter.start}s
-                              </span>
-                            </button>
-                          </li>
-                        ))}
+                                <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                                  {chapter.start}s
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
                       </ol>
                     </div>
                   ) : null}

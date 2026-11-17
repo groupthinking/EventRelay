@@ -11,12 +11,13 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
 vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
+const seekToMock = vi.fn();
 vi.mock('@/lib/use-youtube-player', () => ({
   useYouTubePlayer: () => ({
     containerRef: { current: null },
     ready: false,
     failed: false,
-    seekTo: vi.fn(),
+    seekTo: seekToMock,
   }),
 }));
 
@@ -31,6 +32,7 @@ const baseVideo: Video = {
 
 beforeEach(() => {
   vi.stubGlobal('React', React);
+  seekToMock.mockReset();
   vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => undefined);
   useDashboardStore.setState({ videos: [baseVideo], selectedVideoId: baseVideo.id });
 });
@@ -199,5 +201,43 @@ describe('OneLoopStudio IDE shell', () => {
     // Run is async; the cancel button appears once busy flips true.
     fireEvent.click(screen.getByTestId('studio-ide-run'));
     expect(await screen.findByTestId('studio-ide-cancel')).toBeTruthy();
+  });
+
+  it('disables Quick jump chapters when the URL input changes to another video', async () => {
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
+    pack.chapters = [
+      { start: 12, end: 40, topic: 'Calibration', key_points: ['Mount camera'] },
+    ];
+    useDashboardStore.setState({
+      videos: [
+        {
+          ...baseVideo,
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        },
+      ],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    const jumpBtn = screen.getByTestId('studio-quick-jump-0') as HTMLButtonElement;
+    expect(jumpBtn.disabled).toBe(false);
+    fireEvent.click(jumpBtn);
+    expect(seekToMock).toHaveBeenCalledWith(12);
+
+    seekToMock.mockReset();
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://www.youtube.com/watch?v=9PICEmtfpWU' },
+    });
+    expect(jumpBtn.disabled).toBe(true);
+    fireEvent.click(jumpBtn);
+    expect(seekToMock).not.toHaveBeenCalled();
   });
 });
