@@ -408,6 +408,7 @@ export async function startVideoToActions(input: {
   events?: Array<{ type?: string; title: string; description?: string }>;
   signal?: AbortSignal;
 }): Promise<VideoToActionsStart> {
+  const timeout = AbortSignal.timeout(30_000);
   const response = await fetch('/api/workflows/video-to-actions', {
     method: 'POST',
     credentials: 'same-origin',
@@ -418,7 +419,7 @@ export async function startVideoToActions(input: {
       ...(input.transcript ? { transcript: input.transcript } : {}),
       ...(input.events && input.events.length > 0 ? { events: input.events } : {}),
     }),
-    signal: input.signal ?? AbortSignal.timeout(30_000),
+    signal: input.signal ? AbortSignal.any([input.signal, timeout]) : timeout,
   });
 
   const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
