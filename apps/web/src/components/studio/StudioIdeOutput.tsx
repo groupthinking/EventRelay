@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
@@ -14,7 +14,16 @@ export type StudioReviewActionInput = {
   result?: string;
 };
 
-type OutputSection = 'tasks' | 'events' | 'lingo' | 'tools' | 'intent' | 'signals' | 'spec' | 'transcript';
+export type OutputSection =
+  | 'tasks'
+  | 'events'
+  | 'lingo'
+  | 'tools'
+  | 'intent'
+  | 'signals'
+  | 'spec'
+  | 'transcript'
+  | 'preview';
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'tasks', label: 'Tasks' },
@@ -25,6 +34,7 @@ const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'signals', label: 'Signals' },
   { id: 'spec', label: 'Spec' },
   { id: 'transcript', label: 'Transcript' },
+  { id: 'preview', label: 'Preview' },
 ];
 
 /**
@@ -49,6 +59,11 @@ export default function StudioIdeOutput({
   stackChecks = [],
   reviewActions = [],
   packWorkbench,
+  previewVideoId,
+  previewReady = false,
+  onBuildLive,
+  buildBusy = false,
+  focusPreviewSignal,
 }: {
   video: Video | undefined;
   specReview?: ReactNode;
@@ -56,9 +71,34 @@ export default function StudioIdeOutput({
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
   packWorkbench?: ReactNode;
+  previewVideoId?: string | null;
+  previewReady?: boolean;
+  onBuildLive?: () => void;
+  buildBusy?: boolean;
+  focusPreviewSignal?: number | string | null;
 }) {
   const [active, setActive] = useState<OutputSection>('tasks');
   const [reviewingAction, setReviewingAction] = useState<string | null>(null);
+  const prevPreviewReadyRef = useRef(Boolean(previewReady));
+
+  useEffect(() => {
+    if (previewReady && !prevPreviewReadyRef.current) {
+      setActive('preview');
+    }
+    prevPreviewReadyRef.current = Boolean(previewReady);
+  }, [previewReady]);
+
+  useEffect(() => {
+    if (focusPreviewSignal) {
+      setActive('preview');
+    }
+  }, [focusPreviewSignal]);
+
+  const resolvedVideoId =
+    previewVideoId?.trim() ||
+    video?.videoPack?.videoId?.trim() ||
+    video?.videoPack?.pack?.video_id?.trim() ||
+    '';
 
   const hasContent = Boolean(
     video?.videoPack ||
@@ -67,7 +107,8 @@ export default function StudioIdeOutput({
       eventsEmptyMessage ||
       stackChecks.length > 0 ||
       reviewActions.length > 0 ||
-      packWorkbench,
+      packWorkbench ||
+      previewReady,
   );
 
   const pack = video?.videoPack?.pack;
@@ -112,7 +153,7 @@ export default function StudioIdeOutput({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--uvai-bg)] p-4">
-        {!hasContent && active !== 'transcript' && active !== 'tasks' ? (
+        {!hasContent && active !== 'transcript' && active !== 'tasks' && active !== 'preview' ? (
           <div className="uvai-empty">
             <p className="font-medium text-[var(--uvai-ink)]">
               Run a video and the extracted actions land here
@@ -192,19 +233,19 @@ export default function StudioIdeOutput({
                         data-testid="studio-pack-chapters"
                       >
                         <p className="uvai-section-label mb-3">Chapters</p>
-                        <ol className="flex flex-col gap-2">
+                        <ol className="cc_toc flex flex-col gap-2">
                           {chapters.map((chapter, index) => (
-                            <li key={`${chapter.topic}-${index}`} className="uvai-doc-row">
-                              <span className="uvai-doc-icon">{String(index + 1).padStart(2, '0')}</span>
+                            <li key={`${chapter.topic}-${index}`} className="cc_toc-row uvai-doc-row">
+                              <span className="cc_toc-num uvai-doc-icon">{String(index + 1).padStart(2, '0')}</span>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-start justify-between gap-2">
-                                  <p className="text-sm font-medium text-[var(--uvai-ink)]">{chapter.topic}</p>
-                                  <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                                  <p className="cc_toc-title text-sm font-medium text-[var(--uvai-ink)]">{chapter.topic}</p>
+                                  <span className="cc_toc-time shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
                                     {chapter.start}s–{chapter.end}s
                                   </span>
                                 </div>
                                 {chapter.key_points?.length ? (
-                                  <p className="mt-0.5 text-xs text-[var(--uvai-ink-soft)]">
+                                  <p className="cc_toc-point mt-0.5 text-xs text-[var(--uvai-ink-soft)]">
                                     {chapter.key_points[0]}
                                   </p>
                                 ) : null}
@@ -425,6 +466,72 @@ export default function StudioIdeOutput({
               <p className="text-xs text-[var(--uvai-danger-ink)]">{video.failure.message}</p>
             ) : (
               <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">Nothing yet.</p>
+            )}
+          </div>
+        )}
+
+        {active === 'preview' && (
+          <div data-testid="studio-ide-output-preview" className="flex h-full min-h-[420px] flex-col gap-3">
+            {previewReady && resolvedVideoId ? (
+              <>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface)] px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex rounded-full border border-[#1E9A80]/45 bg-[#1E9A80]/15 px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-wide text-[#1E9A80]">
+                      Ready
+                    </span>
+                    <span className="font-mono text-xs text-[var(--uvai-ink-soft)]">
+                      /d/{resolvedVideoId}
+                    </span>
+                  </div>
+                  <a
+                    href={'/d/' + encodeURIComponent(resolvedVideoId)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="studio-ide-preview-open-tab"
+                    className="uvai-btn !px-2.5 !py-1 !text-xs"
+                  >
+                    Open in new tab
+                  </a>
+                </div>
+                <iframe
+                  src={'/d/' + encodeURIComponent(resolvedVideoId)}
+                  title="Live sandbox preview"
+                  className="w-full h-full min-h-[420px] rounded border border-[var(--uvai-border)] bg-white"
+                />
+              </>
+            ) : (
+              <div className="uvai-card flex flex-col items-start gap-3 p-6">
+                <p className="uvai-section-label">Live sandbox preview</p>
+                <p className="text-sm font-medium text-[var(--uvai-ink)]">
+                  {resolvedVideoId
+                    ? `Compile the stored Video Pack for ${resolvedVideoId} to preview /d/${resolvedVideoId} inline.`
+                    : 'Run a YouTube video and click Build live to preview the compiled sandbox here.'}
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  {onBuildLive ? (
+                    <button
+                      type="button"
+                      data-testid="studio-ide-preview-build-cta"
+                      disabled={buildBusy || !resolvedVideoId}
+                      onClick={() => onBuildLive()}
+                      className="uvai-btn uvai-btn-primary"
+                    >
+                      {buildBusy ? 'Building…' : 'Build live'}
+                    </button>
+                  ) : null}
+                  {resolvedVideoId ? (
+                    <a
+                      href={'/d/' + encodeURIComponent(resolvedVideoId)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      data-testid="studio-ide-preview-open-tab"
+                      className="uvai-btn"
+                    >
+                      Open /d/{resolvedVideoId} in new tab
+                    </a>
+                  ) : null}
+                </div>
+              </div>
             )}
           </div>
         )}

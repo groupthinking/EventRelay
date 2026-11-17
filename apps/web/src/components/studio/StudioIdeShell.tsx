@@ -2,26 +2,30 @@
 
 import { ReactNode, useCallback, useState } from 'react';
 import '@/styles/studio-cards.css';
+import '@/styles/studio-workbench.css';
 
 type StudioIdeShellProps = {
   toolbar: ReactNode;
   videoPane: ReactNode;
   chatPane: ReactNode;
   outputPane: ReactNode;
+  detailsRail?: ReactNode;
 };
 
 const MOBILE_PANES = ['video', 'chat', 'output'] as const;
 type MobilePane = (typeof MOBILE_PANES)[number];
 
 /**
- * Horizontal Webflow + Shipper Studio shell: sticky full-width toolbar, then stacked
- * horizontal bands (Source hero stage, inline Agent Prompt/Chat bar, and full-width Deliverables).
+ * Webflow-obsidian Studio workbench shell: compact sticky toolbar, 2-column zero-scroll
+ * split grid on desktop (Source + Chat on left, full-height Deliverables on right), and
+ * sticky bottom dock tablist on mobile.
  */
 export default function StudioIdeShell({
   toolbar,
   videoPane,
   chatPane,
   outputPane,
+  detailsRail,
 }: StudioIdeShellProps) {
   const [mobilePane, setMobilePane] = useState<MobilePane>('chat');
   const [videoCollapsed, setVideoCollapsed] = useState(false);
@@ -37,11 +41,39 @@ export default function StudioIdeShell({
     <div
       data-testid="studio-ide-shell"
       data-mobile-pane={mobilePane}
+      data-video-collapsed={videoCollapsed ? 'true' : undefined}
+      data-output-collapsed={outputCollapsed ? 'true' : undefined}
       className="uvai-cards template-studio-shell flex flex-1 flex-col"
     >
       <div data-testid="studio-ide-toolbar" className="uvai-toolbar sticky top-0 z-30">
         <div className="mx-auto flex w-full max-w-[1360px] flex-wrap items-center gap-2">
           {toolbar}
+          {(videoCollapsed || outputCollapsed) && (
+            <div className="hidden flex-wrap items-center gap-2 min-[901px]:flex">
+              {videoCollapsed ? (
+                <button
+                  type="button"
+                  aria-controls="studio-panel-video"
+                  aria-expanded={false}
+                  onClick={() => setVideoCollapsed(false)}
+                  className="uvai-btn !px-3 !py-1 !text-xs"
+                >
+                  Show video
+                </button>
+              ) : null}
+              {outputCollapsed ? (
+                <button
+                  type="button"
+                  aria-controls="studio-panel-output"
+                  aria-expanded={false}
+                  onClick={() => setOutputCollapsed(false)}
+                  className="uvai-btn !px-3 !py-1 !text-xs"
+                >
+                  Show deliverables
+                </button>
+              ) : null}
+            </div>
+          )}
         </div>
       </div>
 
@@ -82,36 +114,12 @@ export default function StudioIdeShell({
 
       <main
         aria-label="Studio workspace"
+        data-video-collapsed={videoCollapsed ? 'true' : undefined}
+        data-output-collapsed={outputCollapsed ? 'true' : undefined}
+        data-details-rail={detailsRail ? 'true' : undefined}
         className="template-studio-bands mx-auto flex w-full max-w-[1360px] flex-1 flex-col gap-5 px-4 py-5 sm:px-6"
       >
-        {(videoCollapsed || outputCollapsed) && (
-          <div className="hidden flex-wrap items-center gap-2 min-[901px]:flex">
-            {videoCollapsed ? (
-              <button
-                type="button"
-                aria-controls="studio-panel-video"
-                aria-expanded={false}
-                onClick={() => setVideoCollapsed(false)}
-                className="uvai-btn !px-3 !py-1.5 !text-xs"
-              >
-                Show video
-              </button>
-            ) : null}
-            {outputCollapsed ? (
-              <button
-                type="button"
-                aria-controls="studio-panel-output"
-                aria-expanded={false}
-                onClick={() => setOutputCollapsed(false)}
-                className="uvai-btn !px-3 !py-1.5 !text-xs"
-              >
-                Show deliverables
-              </button>
-            ) : null}
-          </div>
-        )}
-
-        {/* BAND 1: horizontal media + pack details stage */}
+        {/* PANE 1: compact source video + extraction checklist */}
         {!videoCollapsed ? (
           <section
             id="studio-panel-video"
@@ -137,11 +145,11 @@ export default function StudioIdeShell({
                 ▴
               </button>
             </div>
-            <div className="p-4 sm:p-5">{videoPane}</div>
+            <div className="studio-pane-body studio-pane-body--video p-4 sm:p-5">{videoPane}</div>
           </section>
         ) : null}
 
-        {/* BAND 2: compact horizontal Shipper prompt & conversation bar */}
+        {/* PANE 2: grounded pack conversation & plan interview */}
         <section
           id="studio-panel-chat"
           data-testid="studio-ide-chat-pane"
@@ -166,10 +174,10 @@ export default function StudioIdeShell({
               ) : null}
             </div>
           </div>
-          <div>{chatPane}</div>
+          <div className="studio-pane-body flex-1 min-h-0">{chatPane}</div>
         </section>
 
-        {/* BAND 3: full-width horizontal Deliverables */}
+        {/* PANE 3: full-height Deliverables + Live Preview */}
         {!outputCollapsed ? (
           <section
             id="studio-panel-output"
@@ -195,8 +203,18 @@ export default function StudioIdeShell({
                 ▴
               </button>
             </div>
-            <div className="flex-1">{outputPane}</div>
+            <div className="studio-pane-body flex-1 min-h-0">{outputPane}</div>
           </section>
+        ) : null}
+
+        {detailsRail ? (
+          <aside
+            data-testid="studio-ide-details-rail"
+            aria-label="Workspace details"
+            className="template-details-rail"
+          >
+            {detailsRail}
+          </aside>
         ) : null}
       </main>
     </div>

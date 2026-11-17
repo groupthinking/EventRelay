@@ -16,16 +16,30 @@ const LAST_UPDATED = 'May 25, 2026';
 
 export default function PrivacyPage() {
   return (
-    <div className="min-h-screen bg-void text-ink">
+    <div className="min-h-screen bg-[var(--uvai-bg)] text-[var(--uvai-ink)]">
       <Nav />
-      <main className="mx-auto max-w-3xl px-6 py-20">
-        <header className="mb-12">
-          <p className="text-xs uppercase tracking-[0.2em] text-ink/40">Legal</p>
-          <h1 className="mt-2 font-heading text-4xl font-black">Privacy Policy</h1>
-          <p className="mt-3 text-sm text-ink/50">Last updated: {LAST_UPDATED}</p>
+      <main className="mx-auto max-w-3xl px-6 py-16">
+        <header className="mb-10 border-b border-[var(--uvai-border-strong)] pb-8">
+          <nav aria-label="Breadcrumb" className="text-xs text-[var(--uvai-ink-faint)]">
+            <ol className="flex items-center gap-2">
+              <li>
+                <Link className="hover:text-[var(--uvai-ink)] hover:underline" href="/">
+                  Home
+                </Link>
+              </li>
+              <li aria-hidden="true">/</li>
+              <li>Legal</li>
+              <li aria-hidden="true">/</li>
+              <li aria-current="page" className="text-[var(--uvai-ink-soft)]">
+                Privacy Policy
+              </li>
+            </ol>
+          </nav>
+          <h1 className="mt-4 text-4xl font-medium tracking-tight">Privacy Policy</h1>
+          <p className="mt-3 text-sm text-[var(--uvai-ink-soft)]">Last updated: {LAST_UPDATED}</p>
         </header>
 
-        <div className="prose prose-invert space-y-8 text-ink/80">
+        <div className="space-y-6 text-[var(--uvai-ink-soft)] leading-7 [&_section]:rounded-xl [&_section]:border [&_section]:border-[var(--uvai-border)] [&_section]:bg-[var(--uvai-surface)] [&_section]:p-6">
           <section>
             <p>
               UVAI is an open-source video intelligence product operated by the
@@ -37,20 +51,20 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-2xl font-bold text-ink">What we process</h2>
+            <h2 className="text-xl font-medium tracking-tight text-[var(--uvai-ink)] mb-3">What we process</h2>
             <ul className="list-disc space-y-2 pl-6">
               <li>
-                <strong>YouTube URLs you submit.</strong> We resolve metadata
+                <strong className="text-[var(--uvai-ink)]">YouTube URLs you submit.</strong> We resolve metadata
                 and transcripts via the public YouTube APIs and our
                 transcription pipeline.
               </li>
               <li>
-                <strong>Derived artifacts.</strong> Transcripts, extracted
+                <strong className="text-[var(--uvai-ink)]">Derived artifacts.</strong> Transcripts, extracted
                 events, embeddings, and agent traces produced while running
                 your request.
               </li>
               <li>
-                <strong>Operational telemetry.</strong> Anonymous performance
+                <strong className="text-[var(--uvai-ink)]">Operational telemetry.</strong> Anonymous performance
                 and error data via Vercel Analytics and Speed Insights. We do
                 not sell this data.
               </li>
@@ -58,7 +72,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-2xl font-bold text-ink">What we do not do</h2>
+            <h2 className="text-xl font-medium tracking-tight text-[var(--uvai-ink)] mb-3">What we do not do</h2>
             <ul className="list-disc space-y-2 pl-6">
               <li>We do not sell personal data.</li>
               <li>We do not train foundation models on your inputs.</li>
@@ -70,7 +84,7 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-2xl font-bold text-ink">Third-party processors</h2>
+            <h2 className="text-xl font-medium tracking-tight text-[var(--uvai-ink)] mb-3">Third-party processors</h2>
             <p>
               UVAI routes inference through Gemini, OpenAI, Anthropic, or Grok
               depending on the task. Your input may be transmitted to one of
@@ -80,11 +94,11 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-2xl font-bold text-ink">Your rights</h2>
+            <h2 className="text-xl font-medium tracking-tight text-[var(--uvai-ink)] mb-3">Your rights</h2>
             <p>
               You can request deletion of artifacts associated with your
               account by emailing{' '}
-              <a className="text-amber-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+              <a className="text-[var(--uvai-accent-ink,var(--uvai-accent))] underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
               . Because UVAI is open source under MIT, you can also self-host
@@ -93,14 +107,14 @@ export default function PrivacyPage() {
           </section>
 
           <section>
-            <h2 className="font-heading text-2xl font-bold text-ink">Contact</h2>
+            <h2 className="text-xl font-medium tracking-tight text-[var(--uvai-ink)] mb-3">Contact</h2>
             <p>
               Questions about this policy:{' '}
-              <a className="text-amber-400 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
+              <a className="text-[var(--uvai-accent-ink,var(--uvai-accent))] underline-offset-4 hover:underline" href={`mailto:${CONTACT_EMAIL}`}>
                 {CONTACT_EMAIL}
               </a>
               . See also our{' '}
-              <Link className="text-amber-400 hover:underline" href="/terms">
+              <Link className="text-[var(--uvai-accent-ink,var(--uvai-accent))] underline-offset-4 hover:underline" href="/terms">
                 Terms of Service
               </Link>
               .

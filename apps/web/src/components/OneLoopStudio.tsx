@@ -283,6 +283,7 @@ export default function OneLoopStudio({
   const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
   const [openingPrs, setOpeningPrs] = useState(false);
   const [playerEpoch, setPlayerEpoch] = useState(0);
+  const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
   );
@@ -792,6 +793,7 @@ export default function OneLoopStudio({
         setPackLiveReceiptVideoId(attemptRecordId);
         setPackLiveReceiptYoutubeId(packVideoId);
         setPackLiveReceiptReasonCode(built.reasonCode);
+        setPreviewFocusEpoch((epoch) => epoch + 1);
         setMessage(packBuildLiveOutcomeMessage(built));
         return;
       }
@@ -1047,8 +1049,8 @@ export default function OneLoopStudio({
           </>
         }
         videoPane={
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:items-start">
-            <div className="relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm lg:col-span-8">
+          <div className="studio-source-stack flex flex-col gap-3">
+            <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
               {videoId ? (
                 <>
                   <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
@@ -1094,16 +1096,67 @@ export default function OneLoopStudio({
                 </div>
               )}
             </div>
-            <div className="flex flex-col gap-3 lg:col-span-4">
+            <ol
+              data-testid="studio-extraction-steps"
+              aria-label="Extraction progress"
+              className="studio-steps"
+            >
+              {(
+                [
+                  { id: 'pack', label: 'Pack' },
+                  { id: 'captions', label: 'Captions' },
+                  { id: 'transcript', label: 'Transcript' },
+                  { id: 'events', label: 'Events' },
+                  { id: 'ready', label: 'Ready' },
+                ] as const
+              ).map((step, idx) => {
+                const activeIdx =
+                  transcriptStage.id === 'ready'
+                    ? 4
+                    : transcriptStage.id === 'events'
+                      ? 3
+                      : transcriptStage.id === 'transcript'
+                        ? 2
+                        : transcriptStage.id === 'captions'
+                          ? 1
+                          : 0;
+                const isDone =
+                  !transcriptWorking &&
+                  selected?.status !== 'failed' &&
+                  Boolean(selected?.videoPack || selected?.transcript?.trim());
+                const isFailed = selected?.status === 'failed';
+                const stepState = isDone
+                  ? 'done'
+                  : isFailed
+                    ? idx < activeIdx
+                      ? 'done'
+                      : idx === activeIdx
+                        ? 'failed'
+                        : 'idle'
+                    : transcriptWorking
+                      ? idx < activeIdx
+                        ? 'done'
+                        : idx === activeIdx
+                          ? 'active'
+                          : 'idle'
+                      : 'idle';
+                return (
+                  <li key={step.id} data-state={stepState} data-step={step.id}>
+                    {step.label}
+                  </li>
+                );
+              })}
+            </ol>
+            <div className="flex flex-col gap-3">
               {selected?.videoPack ? (
-                <div className="uvai-card p-4">
-                  <div className="flex items-center justify-between gap-2">
+                <div className="uvai-card studio-pack-card p-4">
+                  <div className="studio-pack-card__head flex items-center justify-between gap-2">
                     <p className="uvai-section-label">Extracted pack</p>
                     <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
                       {selected.videoPack.sourceHash.slice(0, 12)}…
                     </span>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
+                  <div className="studio-pack-card__chips mt-3 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
                     {selected.videoPack.pack.action_items?.length ? (
                       <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
                         {selected.videoPack.pack.action_items.length} actions
@@ -1125,9 +1178,11 @@ export default function OneLoopStudio({
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-2 truncate text-xs text-[var(--uvai-ink-faint)]">{selected.videoPack.sourceUrl}</p>
+                  <p className="studio-pack-card__url mt-2 truncate text-xs text-[var(--uvai-ink-faint)]">
+                    {selected.videoPack.sourceUrl}
+                  </p>
                   {selected.videoPack.pack.chapters?.length ? (
-                    <div className="mt-4 border-t border-[var(--uvai-border)] pt-3">
+                    <div className="studio-pack-card__jump mt-4 border-t border-[var(--uvai-border)] pt-3">
                       <p className="uvai-section-label mb-2">Quick jump</p>
                       <ol className="flex flex-col gap-1.5">
                         {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
@@ -1166,7 +1221,7 @@ export default function OneLoopStudio({
                   ) : null}
                 </div>
               ) : (
-                <div className="uvai-card p-4">
+                <div className="uvai-card studio-outline-card p-4">
                   <p className="uvai-section-label">Workspace outline</p>
                   <p className="mt-2 text-sm font-medium text-[var(--uvai-ink)]">
                     Video-in, deliverables-out workflow
@@ -1202,6 +1257,16 @@ export default function OneLoopStudio({
             video={selected}
             eventsEmptyMessage={eventsEmptyMessage}
             stackChecks={stackCheckViews}
+            previewVideoId={
+              scopedPackBuildLiveSuccess?.youtubeVideoId ??
+              selected?.videoPack?.videoId ??
+              videoId ??
+              null
+            }
+            previewReady={Boolean(scopedPackBuildLiveSuccess)}
+            onBuildLive={() => void buildLive()}
+            buildBusy={buildBusy}
+            focusPreviewSignal={previewFocusEpoch}
             reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
               return {
@@ -1265,47 +1330,45 @@ export default function OneLoopStudio({
           role="status"
           className="border-t border-[#146ef5]/35 bg-[var(--uvai-accent-soft)]"
         >
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap items-start gap-2">
+          <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-2 px-4 py-1.5 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <span
                 data-testid="studio-pack-build-live-state"
                 className="inline-flex rounded-full border border-[#146ef5]/45 bg-[var(--uvai-accent-soft)] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--uvai-accent-ink)]"
               >
                 Ready
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[var(--uvai-ink)]">
-                  {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
-                </p>
-                <p className="mt-1 text-sm text-[var(--uvai-ink-soft)]">
-                  YouTube video id{' '}
-                  <span
-                    data-testid="studio-pack-build-live-video-id"
-                    className="font-mono text-[var(--uvai-accent-ink)]"
-                  >
-                    {scopedPackBuildLiveSuccess.youtubeVideoId}
-                  </span>
-                </p>
-                <p
-                  data-testid="studio-pack-build-live-reason-code"
-                  className="mt-1 font-mono text-[11px] text-[var(--uvai-ink-faint)]"
+              <span className="font-medium text-[var(--uvai-ink)]">
+                {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
+              </span>
+              <span className="text-[var(--uvai-ink-soft)]">
+                YouTube video id{' '}
+                <span
+                  data-testid="studio-pack-build-live-video-id"
+                  className="font-mono text-[var(--uvai-accent-ink)]"
                 >
-                  {scopedPackBuildLiveSuccess.reasonCode}
-                </p>
-              </div>
+                  {scopedPackBuildLiveSuccess.youtubeVideoId}
+                </span>
+              </span>
+              <span
+                data-testid="studio-pack-build-live-reason-code"
+                className="font-mono text-[11px] text-[var(--uvai-ink-faint)]"
+              >
+                {scopedPackBuildLiveSuccess.reasonCode}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 data-testid="studio-pack-build-live-artifact-link"
                 href={scopedPackBuildLiveSuccess.artifactPath}
-                className="uvai-btn uvai-btn-primary inline-flex w-fit items-center justify-center"
+                className="uvai-btn uvai-btn-primary inline-flex w-fit items-center justify-center !py-1 !text-xs"
               >
                 Open {scopedPackBuildLiveSuccess.artifactPath}
               </Link>
               <Link
                 data-testid="studio-pack-build-live-pro-cta"
                 href="/#get-pro"
-                className="uvai-btn inline-flex w-fit items-center justify-center"
+                className="uvai-btn inline-flex w-fit items-center justify-center !py-1 !text-xs"
               >
                 Unlock Workflow Pro
               </Link>
@@ -1320,14 +1383,14 @@ export default function OneLoopStudio({
           role="alert"
           className="border-t border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)]"
         >
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
-            <div>
-              <p className="text-sm font-medium text-[var(--uvai-danger-ink)]">{buildLiveFailure.title}</p>
-              <p className="mt-1 text-sm text-[var(--uvai-ink-soft)]">{buildLiveFailure.message}</p>
+          <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-2 px-4 py-1.5 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-medium text-[var(--uvai-danger-ink)]">{buildLiveFailure.title}</span>
+              <span className="text-[var(--uvai-ink-soft)]">{buildLiveFailure.message}</span>
               {buildLiveFailure.reasonCode ? (
-                <p className="mt-1 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                <span className="font-mono text-[11px] text-[var(--uvai-ink-faint)]">
                   {buildLiveFailure.reasonCode}
-                </p>
+                </span>
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1339,7 +1402,7 @@ export default function OneLoopStudio({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="studio-build-live-recovery-open-hosted"
-                    className="uvai-btn"
+                    className="uvai-btn !py-1 !text-xs"
                   >
                     {action.label}
                   </a>
@@ -1349,7 +1412,7 @@ export default function OneLoopStudio({
                     type="button"
                     data-testid={`studio-build-live-recovery-${action.id}`}
                     onClick={() => runBuildLiveRecovery(action)}
-                    className="uvai-btn"
+                    className="uvai-btn !py-1 !text-xs"
                   >
                     {action.label}
                   </button>

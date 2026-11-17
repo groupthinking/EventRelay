@@ -13,6 +13,7 @@ vi.mock('next/navigation', () => ({
 afterEach(() => {
   cleanup();
   delete document.documentElement.dataset.theme;
+  delete document.documentElement.dataset.contrast;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -66,5 +67,21 @@ describe('Nav template routing semantics', () => {
     const toggle = screen.getByRole('button', { name: 'Switch to dark mode' });
     fireEvent.click(toggle);
     expect(document.documentElement.dataset.theme).toBe('dark');
+  });
+
+  it('toggles data-contrast between high and normal without touching theme', () => {
+    usePathnameMock.mockReturnValue('/');
+    render(<Nav />);
+
+    const contrast = screen.getByRole('button', { name: 'High Contrast' });
+    expect(contrast.getAttribute('aria-pressed')).toBe('false');
+    fireEvent.click(contrast);
+    expect(document.documentElement.dataset.contrast).toBe('high');
+    expect(contrast.getAttribute('aria-pressed')).toBe('true');
+    expect(document.documentElement.dataset.theme).toBeUndefined();
+
+    fireEvent.click(contrast);
+    expect(document.documentElement.dataset.contrast).toBe('normal');
+    expect(contrast.getAttribute('aria-pressed')).toBe('false');
   });
 });
