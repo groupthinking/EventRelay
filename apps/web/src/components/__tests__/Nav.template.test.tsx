@@ -84,4 +84,22 @@ describe('Nav template routing semantics', () => {
     expect(document.documentElement.dataset.contrast).toBe('normal');
     expect(contrast.getAttribute('aria-pressed')).toBe('false');
   });
+
+  it('supports Webflow floating rail defaultCollapsed with visible brand mark and ⌘/ toggle', () => {
+    usePathnameMock.mockReturnValue('/studio');
+    render(<Nav variant="rail" defaultCollapsed />);
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    expect(nav.dataset.collapsed).toBe('true');
+    expect(screen.getByRole('link', { name: 'UVAI Home' }).getAttribute('href')).toBe('/');
+
+    const expand = screen.getByRole('button', { name: 'Expand sidebar' });
+    expect(expand.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(expand);
+    expect(nav.dataset.collapsed).toBe('false');
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' }).getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.keyDown(window, { key: '/', metaKey: true });
+    expect(nav.dataset.collapsed).toBe('true');
+  });
 });

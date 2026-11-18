@@ -30,7 +30,13 @@ export default function HomePasteForm() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="home-composer-surface mx-auto w-full max-w-2xl" data-mode={mode}>
+    <form
+      onSubmit={onSubmit}
+      toolname="extract_youtube_video_pack"
+      tooldescription="Open UVAI Studio and extract a structured Video Pack, transcript, chapters, and agent workflow from a YouTube URL"
+      className="home-composer-surface mx-auto w-full max-w-2xl"
+      data-mode={mode}
+    >
       <div className="home-composer-modes" role="group" aria-label="Focus">
         {MODES.map((item) => (
           <button

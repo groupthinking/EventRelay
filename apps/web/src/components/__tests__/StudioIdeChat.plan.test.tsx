@@ -121,4 +121,13 @@ describe('StudioIdeChat plan interview chaining', () => {
     expect(secondBody.planIntent).toBe(true);
     expect(secondBody.planInterview).toEqual({ useCase: 'Build a safety checklist from the video' });
   });
+
+  it('shows active extraction status instead of idle prompt while a video run is in progress', () => {
+    render(<StudioIdeChat videoId="6TrjBFW6EKg" packId={null} disabled />);
+    expect(screen.getByText('Extracting Video Pack…')).toBeTruthy();
+    expect(screen.queryByText('Run a video to start chatting')).toBeNull();
+    const input = screen.getByTestId('studio-ide-chat-input') as HTMLTextAreaElement;
+    expect(input.placeholder).toBe('Extracting video pack…');
+    expect(input.disabled).toBe(true);
+  });
 });

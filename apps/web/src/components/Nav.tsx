@@ -25,6 +25,8 @@ interface NavProps {
   fixed?: boolean;
   /** 'topbar' (default) or the Webflow floating 'rail'. */
   variant?: 'topbar' | 'rail';
+  /** Collapse the floating rail to its 56px icon dock initially. */
+  defaultCollapsed?: boolean;
 }
 
 const NAV_LINKS = [
@@ -138,8 +140,9 @@ function RailNav({
   pathname,
   rightSlot,
   subtitle,
-}: Pick<NavProps, 'rightSlot' | 'subtitle'> & { pathname: string }) {
-  const [collapsed, setCollapsed] = useState(false);
+  defaultCollapsed = false,
+}: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
+  const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -159,11 +162,11 @@ function RailNav({
       aria-label="Primary"
     >
       <div className="uvai-rail-header">
-        <Link href="/" className="uvai-rail-brand">
+        <Link href="/" className="uvai-rail-brand" aria-label="UVAI Home">
           <span className="uvai-rail-brand-mark">
             <Film size={18} aria-hidden="true" />
           </span>
-          <span className="text-lg">UVAI</span>
+          <span className="uvai-rail-brand-text text-lg">UVAI</span>
         </Link>
         <button
           type="button"
@@ -215,12 +218,25 @@ function RailNav({
  * Top bar (default) or Webflow floating rail. Obsidian default with a Webflow-style
  * theme bar (light/dark + high contrast).
  */
-export default function Nav({ rightSlot, subtitle, fixed = false, variant = 'topbar' }: NavProps) {
+export default function Nav({
+  rightSlot,
+  subtitle,
+  fixed = false,
+  variant = 'topbar',
+  defaultCollapsed = false,
+}: NavProps) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (variant === 'rail') {
-    return <RailNav pathname={pathname} rightSlot={rightSlot} subtitle={subtitle} />;
+    return (
+      <RailNav
+        pathname={pathname}
+        rightSlot={rightSlot}
+        subtitle={subtitle}
+        defaultCollapsed={defaultCollapsed}
+      />
+    );
   }
 
   return (

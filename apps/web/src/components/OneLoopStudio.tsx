@@ -109,6 +109,10 @@ import {
   chaptersFromPack,
   sopStepsFromPack,
 } from '@/lib/emit-app-builder-sandbox';
+import {
+  registerStudioWebMcpTools,
+  type StudioWebMcpPackSnapshot,
+} from '@/lib/webmcp-studio-tools';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -912,14 +916,74 @@ export default function OneLoopStudio({
     ? selected.transcript.trim().split(/\s+/).length
     : 0;
 
+  const webMcpSnapshot: StudioWebMcpPackSnapshot = useMemo(
+    () => ({
+      videoId: selected?.videoPack?.videoId ?? (videoId || null),
+      packId: selected?.videoPack?.packId ?? null,
+      sourceUrl: selected?.videoPack?.sourceUrl ?? (url.trim() || null),
+      sourceHash: selected?.videoPack?.sourceHash ?? null,
+      busy: transcriptWorking,
+      transcriptWordCount,
+      chapterCount: shellChapters.length,
+      actionCount: selected?.videoPack?.pack.action_items?.length ?? 0,
+      toolCount: packFormation.tools.length,
+      artifactCount: packFormation.artifacts.length,
+    }),
+    [
+      selected?.videoPack,
+      videoId,
+      url,
+      transcriptWorking,
+      transcriptWordCount,
+      shellChapters.length,
+      packFormation.tools.length,
+      packFormation.artifacts.length,
+    ],
+  );
+  const webMcpSnapshotRef = useRef<StudioWebMcpPackSnapshot>(webMcpSnapshot);
+  const webMcpRunRef = useRef(runAnalysis);
+
+  useEffect(() => {
+    webMcpSnapshotRef.current = webMcpSnapshot;
+  }, [webMcpSnapshot]);
+
+  useEffect(() => {
+    webMcpRunRef.current = runAnalysis;
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void registerStudioWebMcpTools(
+      {
+        getSnapshot: () => webMcpSnapshotRef.current,
+        onLoadUrl: (watchUrl, runImmediately) => {
+          setUrl(watchUrl);
+          if (runImmediately) {
+            void webMcpRunRef.current(watchUrl);
+          }
+        },
+      },
+      { signal: controller.signal },
+    );
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
   return (
     <div className="template-studio flex min-h-screen flex-col text-[var(--uvai-ink)]">
-      <Nav rightSlot={<StudioAuthNavLink />} />
+      <Nav variant="rail" defaultCollapsed rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
         toolbar={
           <>
-            <form onSubmit={analyze} className="flex min-w-0 flex-1 items-center gap-2" data-testid="studio-ide-url-form">
+            <form
+              onSubmit={analyze}
+              toolname="run_studio_video_analysis"
+              tooldescription="Extract transcript, numbered chapters, events, and runnable deliverables from a YouTube video URL in UVAI Studio"
+              className="flex min-w-0 flex-1 items-center gap-2"
+              data-testid="studio-ide-url-form"
+            >
               <label className="sr-only" htmlFor="youtube-url">
                 YouTube URL
               </label>
@@ -1104,57 +1168,72 @@ export default function OneLoopStudio({
                 </div>
               )}
             </div>
-            <ol
-              data-testid="studio-extraction-steps"
-              aria-label="Extraction progress"
-              className="studio-steps"
-            >
-              {(
-                [
-                  { id: 'pack', label: 'Pack' },
-                  { id: 'captions', label: 'Captions' },
-                  { id: 'transcript', label: 'Transcript' },
-                  { id: 'events', label: 'Events' },
-                  { id: 'ready', label: 'Ready' },
-                ] as const
-              ).map((step, idx) => {
-                const activeIdx =
-                  transcriptStage.id === 'ready'
-                    ? 4
-                    : transcriptStage.id === 'events'
-                      ? 3
-                      : transcriptStage.id === 'transcript'
-                        ? 2
-                        : transcriptStage.id === 'captions'
-                          ? 1
-                          : 0;
-                const isDone =
-                  !transcriptWorking &&
-                  selected?.status !== 'failed' &&
-                  Boolean(selected?.videoPack || selected?.transcript?.trim());
-                const isFailed = selected?.status === 'failed';
-                const stepState = isDone
-                  ? 'done'
-                  : isFailed
-                    ? idx < activeIdx
-                      ? 'done'
-                      : idx === activeIdx
-                        ? 'failed'
-                        : 'idle'
-                    : transcriptWorking
+            <div className="studio-steps-bar flex items-center justify-between gap-2">
+              <ol
+                data-testid="studio-extraction-steps"
+                aria-label="Extraction progress"
+                className="studio-steps min-w-0 flex-1"
+              >
+                {(
+                  [
+                    { id: 'pack', label: 'Pack' },
+                    { id: 'captions', label: 'Captions' },
+                    { id: 'transcript', label: 'Transcript' },
+                    { id: 'events', label: 'Events' },
+                    { id: 'ready', label: 'Ready' },
+                  ] as const
+                ).map((step, idx) => {
+                  const activeIdx =
+                    transcriptStage.id === 'ready'
+                      ? 4
+                      : transcriptStage.id === 'events'
+                        ? 3
+                        : transcriptStage.id === 'transcript'
+                          ? 2
+                          : transcriptStage.id === 'captions'
+                            ? 1
+                            : 0;
+                  const isDone =
+                    !transcriptWorking &&
+                    selected?.status !== 'failed' &&
+                    Boolean(selected?.videoPack || selected?.transcript?.trim());
+                  const isFailed = selected?.status === 'failed';
+                  const stepState = isDone
+                    ? 'done'
+                    : isFailed
                       ? idx < activeIdx
                         ? 'done'
                         : idx === activeIdx
-                          ? 'active'
+                          ? 'failed'
                           : 'idle'
-                      : 'idle';
-                return (
-                  <li key={step.id} data-state={stepState} data-step={step.id}>
-                    {step.label}
-                  </li>
-                );
-              })}
-            </ol>
+                      : transcriptWorking
+                        ? idx < activeIdx
+                          ? 'done'
+                          : idx === activeIdx
+                            ? 'active'
+                            : 'idle'
+                        : 'idle';
+                  return (
+                    <li key={step.id} data-state={stepState} data-step={step.id}>
+                      {step.label}
+                    </li>
+                  );
+                })}
+              </ol>
+              {videoId ? (
+                <a
+                  href={`https://www.youtube.com/watch?v=${videoId}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Trouble with this video? Watch it directly on YouTube"
+                  title="Trouble with this video? Watch it directly on YouTube"
+                  data-testid="studio-watch-on-youtube"
+                  className="shrink-0 text-[11px] font-medium text-[var(--uvai-ink-soft)] underline-offset-2 hover:text-[var(--uvai-ink)] hover:underline"
+                >
+                  YouTube ↗
+                </a>
+              ) : null}
+            </div>
             <div className="flex flex-col gap-3">
               {selected?.videoPack ? (
                 <div className="uvai-card studio-pack-card p-4">
@@ -1255,9 +1334,9 @@ export default function OneLoopStudio({
         }
         chatPane={
           <StudioIdeChat
-            videoId={selected?.videoPack?.videoId ?? videoId ?? null}
+            videoId={selected?.videoPack?.videoId ?? (videoId || null)}
             packId={selected?.videoPack?.packId ?? null}
-            disabled={busy}
+            disabled={transcriptWorking}
           />
         }
         outputPane={
