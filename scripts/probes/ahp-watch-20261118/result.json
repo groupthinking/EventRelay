@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-18",
+  "node": "24.22.3",
+  "sdk": "1.1.0",
+  "spec_source": "a501ea480fde1adc2675243039cb6195085f4b96",
+  "supported_versions": [
+    "1.0.0",
+    "0.9.0"
+  ],
+  "command": "node --test probe.test.mjs",
+  "exit_code": 0,
+  "tests": 3,
+  "passed": 3,
+  "failed": 0,
+  "skipped": 0,
+  "scope": "Fixture only, InMemoryTransport plus SDK reducers; no real host, network, mobile, provider call or production integration.",
+  "clean_reinstall": "NOT RUN: execution environment disconnected"
+}
