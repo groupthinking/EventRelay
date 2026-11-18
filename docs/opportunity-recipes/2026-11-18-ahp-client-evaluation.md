@@ -35,3 +35,11 @@ ESTIMATE:10minutes to reproduce the fixture;1–2days to scope a guarded adapter
 
 Rollback: remove only this isolated probe directory/branch when appropriate; no production setting or dependency has been changed. No PR was opened, no merge requested and no deployment performed.
 Owner: Codex. Next trigger: an actual authorized AHP host and documented product need. Closure: independent two-client real-host session/reconnect trace, rejection/approval isolation and compatibility test evidence. Until then suppress an adoption/opportunity alert based only on these fixtures.
+
+
+## Executed socket continuation — November 18
+This adds evidence beyond the earlier in-memory-only checkpoint. `socket.test.mjs` uses Node TCP bound only to127.0.0.1 and the published SDK1.1.0 with a minimal synthetic JSON-RPC counterpart. Two client connections negotiate1.0.0, receive a shared action, then one disconnects. A third connection requests replay after serverSeq1. The test requires exactly one replayed action and asserts updated mirror state **before resubscription**, so a replacement snapshot cannot hide failed replay. A rejected third action preserves both mirrors.
+
+Executed `node --test probe.test.mjs socket.test.mjs`:4passed,0failed,0skipped,exit0. Three TCP connections, one replayed action, one rejected action. Provider calls0; no real token, external host, application task or paid service. The server-side behavior remains synthetic; this is a real socket/SDK exchange, not production-host, browser/mobile, authorization-enforcement or persistence acceptance. The installed SDK and earlier recipe prerequisites remain unchanged.
+
+The isolated manifest's `npm test` now includes both test files. `socket-result.json` retains this observed result. No root package, product architecture, workflow, PR, merge or deployment changed. Earlier dated limits stay preserved; only the statement that no socket was exercised is superseded by this bounded local experiment.

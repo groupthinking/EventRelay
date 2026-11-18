@@ -1,0 +1,17 @@
+{
+  "date": "2026-11-18",
+  "sdk": "1.1.0",
+  "protocol": "1.0.0",
+  "command": "node --test probe.test.mjs socket.test.mjs",
+  "exit_code": 0,
+  "passed": 4,
+  "failed": 0,
+  "skipped": 0,
+  "transport": "TCP127.0.0.1",
+  "connections": 3,
+  "replayed_actions": 1,
+  "replay_asserted_before_resubscribe": true,
+  "rejected_actions": 1,
+  "provider_calls": 0,
+  "scope": "Synthetic local host, real SDK clients and socket; no mobile, real host, authentication enforcement, durable storage or production acceptance."
+}

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test probe.test.mjs"
+    "test": "node --test probe.test.mjs socket.test.mjs"
   },
   "dependencies": {
     "@microsoft/agent-host-protocol": "1.1.0"
