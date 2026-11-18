@@ -118,6 +118,11 @@ jobs:
           docker build -t eventrelay:test -f Dockerfile .
           docker image inspect eventrelay:test > image-identity.json
           git rev-parse HEAD > image-source-commit.txt
+      - name: Verify media processing in the scanned runtime image
+        run: |
+          docker run --rm --network none \
+            -v "$PWD/tests/smoke/runtime_media.py:/tmp/runtime_media.py:ro" \
+            eventrelay:test python /tmp/runtime_media.py --runtime
       # Bootstrap #2425 ships dependency repairs separately from the final
       # zero-HIGH/CRITICAL gate. Findings remain unresolved in #2396; success
       # here proves scan completion, not an accepted baseline or a clean image.
@@ -133,6 +138,20 @@ jobs:
           severity: 'CRITICAL,HIGH'
           limit-severities-for-sarif: true
           trivyignores: '.github/trivy-no-exceptions.txt'
+      - name: Reject the removed libxml2 finding
+        run: |
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+          runs = json.loads(Path("trivy-results.sarif").read_text())["runs"]
+          if not runs or any(run["tool"]["driver"]["name"].lower() != "trivy" for run in runs):
+              raise SystemExit("Missing or unexpected scanner")
+          results = [result for run in runs for result in run["results"]]
+          hits = sum(result["ruleId"] == "CVE-2026-6653" for result in results)
+          print(f"CVE-2026-6653: {hits} of {len(results)} HIGH/CRITICAL results")
+          if hits:
+              raise SystemExit("Runtime libxml2 security regression")
+          PYTHON
       - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
         if: always() && hashFiles('trivy-results.sarif') != ''
