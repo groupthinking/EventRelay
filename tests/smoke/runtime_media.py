@@ -2,6 +2,7 @@
 
 import argparse
 import array
+import hashlib
 import json
 import os
 import subprocess
@@ -24,7 +25,7 @@ def probe(path):
     )
 
 
-def check(runtime):
+def check(runtime, keep_video=None):
     if runtime:
         if os.getuid() == 0:
             raise RuntimeError("Expected the production image's unprivileged user")
@@ -108,6 +109,10 @@ def check(runtime):
                     raise RuntimeError("Application OpenCV frame extraction failed")
             finally:
                 capture.release()
+        if keep_video is not None:
+            clip = video.read_bytes()
+            keep_video.write_bytes(clip)
+            print(f"Verified clip SHA-256: {hashlib.sha256(clip).hexdigest()}")
         print(
             f"PASS: H.264/AAC encode + probe, 10 decoded frames, {len(pcm)} mono PCM samples"
         )
@@ -116,4 +121,6 @@ def check(runtime):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime", action="store_true")
-    check(parser.parse_args().runtime)
+    parser.add_argument("--keep-video", type=Path)
+    args = parser.parse_args()
+    check(args.runtime, args.keep_video)

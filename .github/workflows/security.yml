@@ -48,6 +48,8 @@ jobs:
         run: npm install --global npm@10.8.0
       - name: Install the locked dependency graph
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify installed glob consumers
+        run: node --test tests/smoke/glob-runtime.test.cjs
       - name: Audit locked npm dependencies
         run: |
           set +e
@@ -120,9 +122,18 @@ jobs:
           git rev-parse HEAD > image-source-commit.txt
       - name: Verify media processing in the scanned runtime image
         run: |
-          docker run --rm --network none \
+          container="media-smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+          docker run --name "$container" --network none \
             -v "$PWD/tests/smoke/runtime_media.py:/tmp/runtime_media.py:ro" \
-            eventrelay:test python /tmp/runtime_media.py --runtime
+            eventrelay:test python /tmp/runtime_media.py --runtime --keep-video /tmp/verified-clip.mp4
+          docker cp "$container:/tmp/verified-clip.mp4" verified-clip.mp4
+      - name: Retain the actual tested video
+        uses: actions/upload-artifact@v7
+        with:
+          name: runtime-media-video
+          path: verified-clip.mp4
+          if-no-files-found: error
       # Bootstrap #2425 ships dependency repairs separately from the final
       # zero-HIGH/CRITICAL gate. Findings remain unresolved in #2396; success
       # here proves scan completion, not an accepted baseline or a clean image.
