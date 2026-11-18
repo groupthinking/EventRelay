@@ -299,6 +299,10 @@
   .uvai-rail-shell,
   .uvai-rail-shell[data-collapsed='true'] {
     position: relative;
+    top: auto;
+    right: auto;
+    bottom: auto;
+    left: auto;
     width: auto;
     max-width: 100%;
     margin: 0;

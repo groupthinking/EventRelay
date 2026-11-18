@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   auditDocumentAeoAndWebMcp,
@@ -103,5 +106,15 @@ describe('webmcp-studio-tools', () => {
     expect(audit.totalRegisteredToolCount).toBe(4);
     expect(audit.lighthouseOver40ToolsWarning).toBe(false);
     expect(audit.score).toBe(100);
+  });
+
+  it('gives declarative WebMCP forms named youtubeUrl inputs for browser schema generation', () => {
+    const srcRoot = join(dirname(fileURLToPath(import.meta.url)), '../..');
+    const homePaste = readFileSync(join(srcRoot, 'components/home/HomePasteForm.tsx'), 'utf8');
+    const studio = readFileSync(join(srcRoot, 'components/OneLoopStudio.tsx'), 'utf8');
+    expect(homePaste).toContain('toolname="extract_youtube_video_pack"');
+    expect(homePaste).toContain('name="youtubeUrl"');
+    expect(studio).toContain('toolname="run_studio_video_analysis"');
+    expect(studio).toContain('name="youtubeUrl"');
   });
 });

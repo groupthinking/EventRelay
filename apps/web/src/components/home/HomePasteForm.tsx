@@ -57,6 +57,7 @@ export default function HomePasteForm() {
         <Link2 size={18} aria-hidden="true" className="template-source-icon" />
         <input
           id="home-youtube-url"
+          name="youtubeUrl"
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="https://www.youtube.com/watch?v=auJzb1D-fag"

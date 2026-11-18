@@ -137,6 +137,14 @@ function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
 }
 
+function safeYouTubeWatchHref(rawId: string): string | null {
+  const match = /^[A-Za-z0-9_-]{6,20}$/.exec(rawId);
+  if (!match) return null;
+  const watchUrl = new URL('https://www.youtube.com/watch');
+  watchUrl.searchParams.set('v', match[0]);
+  return watchUrl.toString();
+}
+
 function toSpecBranch(videoId: string, stepId: string): string {
   const slug = `${videoId || 'video'}-${stepId}`
     .toLowerCase()
@@ -535,6 +543,7 @@ export default function OneLoopStudio({
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+  const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
   const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
@@ -989,6 +998,7 @@ export default function OneLoopStudio({
               </label>
               <input
                 id="youtube-url"
+                name="youtubeUrl"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={FIXTURE}
@@ -1149,14 +1159,16 @@ export default function OneLoopStudio({
                           >
                             Retry player
                           </button>
-                          <a
-                            href={`https://www.youtube.com/watch?v=${videoId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="uvai-btn"
-                          >
-                            Open on YouTube
-                          </a>
+                          {watchHref ? (
+                            <a
+                              href={watchHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="uvai-btn"
+                            >
+                              Open on YouTube
+                            </a>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
@@ -1220,9 +1232,9 @@ export default function OneLoopStudio({
                   );
                 })}
               </ol>
-              {videoId ? (
+              {watchHref ? (
                 <a
-                  href={`https://www.youtube.com/watch?v=${videoId}`}
+                  href={watchHref}
                   target="_blank"
                   rel="noreferrer"
                   aria-label="Trouble with this video? Watch it directly on YouTube"
