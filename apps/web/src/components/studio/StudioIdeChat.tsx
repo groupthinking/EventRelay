@@ -292,6 +292,7 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
   };
 
   const canChat = Boolean(videoId) && !disabled;
+  const isExtracting = Boolean(videoId) && Boolean(disabled);
 
   return (
     <section
@@ -312,12 +313,18 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
               </div>
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-[var(--uvai-ink)]">
-                  {canChat ? 'Ask about this pack or plan a build' : 'Run a video to start chatting'}
+                  {canChat
+                    ? 'Ask about this pack or plan a build'
+                    : isExtracting
+                      ? 'Extracting Video Pack…'
+                      : 'Run a video to start chatting'}
                 </p>
                 <p className="text-xs text-[var(--uvai-ink-soft)]">
                   {canChat
                     ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
-                    : 'Paste a YouTube URL above and hit Run.'}
+                    : isExtracting
+                      ? 'Building transcript, chapters, events, and runnable specs. Chat unlocks automatically when ready.'
+                      : 'Paste a YouTube URL above and hit Run.'}
                 </p>
               </div>
             </div>
@@ -370,7 +377,13 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={canChat ? 'Ask about this pack or plan a build…' : 'Run a video first'}
+            placeholder={
+              canChat
+                ? 'Ask about this pack or plan a build…'
+                : isExtracting
+                  ? 'Extracting video pack…'
+                  : 'Run a video first'
+            }
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"

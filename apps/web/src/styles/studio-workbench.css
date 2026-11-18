@@ -291,14 +291,18 @@
     width: min(100%, 373px);
     margin-inline: auto;
   }
+  .uvai-cards.template-studio-shell .studio-steps-bar {
+    height: 26px;
+    border-top: 1px solid var(--uvai-border);
+    padding-right: 8px;
+  }
   .uvai-cards.template-studio-shell .studio-steps {
     flex-wrap: nowrap;
     overflow: hidden;
     gap: 4px;
-    padding: 0 10px;
-    height: 26px;
+    padding: 0 8px 0 10px;
+    height: 25px;
     align-items: center;
-    border-top: 1px solid var(--uvai-border);
   }
   .uvai-cards.template-studio-shell .studio-steps li {
     padding: 0 6px;
@@ -425,6 +429,11 @@
     min-height: 44px;
   }
 
+  .uvai-cards.template-studio-shell .studio-steps-bar {
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    border-top: 1px solid var(--uvai-border);
+  }
   .uvai-cards.template-studio-shell .studio-steps {
     gap: 4px;
   }
