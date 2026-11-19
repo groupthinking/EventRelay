@@ -14,7 +14,6 @@ import {
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
-import HomeProCheckout from '@/components/home/HomeProCheckout';
 import HomeTemplateShell from '@/components/home/HomeTemplateShell';
 import '@/components/home/home-template.css';
 import '@/styles/home-shipper.css';
@@ -141,7 +140,7 @@ const AGENT_FLOW = ['Video', 'Video Pack', 'Tasks', 'Checks', 'Review'] as const
 /**
  * Shipper/Higgsfield pre-login visual showcase hierarchy in UVAI obsidian:
  * 3-card preview strip -> hero bento (emerald/cobalt stage composer + 3x2 badged process tiles)
- * -> compact workflow band -> #get-pro -> footer.
+ * -> compact workflow band -> compact plans CTA strip -> footer.
  */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
@@ -150,8 +149,8 @@ export default async function HomePage() {
     <main className="min-h-screen overflow-x-clip" style={{ background: 'var(--uvai-bg)' }}>
       <Nav />
 
-      <section aria-labelledby="home-heading" className="template-home home-shipper px-4 sm:px-6 lg:px-10 pb-14 pt-3 sm:pt-4">
-        <div className="mx-auto max-w-[1400px]">
+      <section aria-labelledby="home-heading" className="template-home home-shipper px-4 sm:px-6 lg:px-10 pb-12 pt-4 sm:pt-6">
+        <div className="mx-auto max-w-[1440px]">
           <div className="template-use-cases" aria-label="Supported source examples">
             {SHOWCASE.map(({ Icon, title, note, eyebrow, pill, stageHeadline, stageAccent, tone }) => (
               <div key={title} className="home-showcase-card" data-tone={tone}>
@@ -259,32 +258,41 @@ export default async function HomePage() {
             </div>
           </HomeTemplateShell>
 
-          <section id="get-pro" aria-labelledby="workflow-pro-heading" className="mt-10 grid grid-cols-1 gap-8 rounded-2xl border p-6 sm:p-8 lg:grid-cols-12 lg:items-center" style={{ borderColor: 'var(--uvai-border)', background: 'var(--uvai-surface)' }}>
-            <div className="space-y-6 lg:col-span-6">
-              <div>
-                <p className="uvai-label">Plans &amp; Checkout</p>
-                <h2 id="workflow-pro-heading" className="font-display mt-3 text-3xl" style={{ color: 'var(--uvai-ink)' }}>
-                  Get Pro through the existing checkout.
-                </h2>
-                <p className="mt-3 max-w-lg text-sm leading-relaxed" style={{ color: 'var(--uvai-ink-soft)' }}>
-                  Start in Studio, then choose the right level of support. Workflow Pro unlocks exports via Stripe; Ship and Maintain remain request-based options.
-                </p>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3" aria-label="Plan options">
+          <section
+            id="get-pro"
+            aria-labelledby="workflow-pro-heading"
+            className="mt-6 flex flex-col gap-5 rounded-xl border px-5 py-5 sm:px-6 lg:flex-row lg:items-center lg:justify-between"
+            style={{ borderColor: 'var(--uvai-border-strong)', background: 'var(--uvai-surface)' }}
+          >
+            <div className="min-w-0 space-y-1.5">
+              <p className="uvai-label">Plans &amp; Pro Access</p>
+              <h2 id="workflow-pro-heading" className="font-display text-xl sm:text-2xl" style={{ color: 'var(--uvai-ink)' }}>
+                Start in Studio, upgrade when you need external dispatch.
+              </h2>
+              <div className="flex flex-wrap items-center gap-2 pt-1" aria-label="Plan options">
                 {OFFERS.map((offer) => (
-                  <article
+                  <span
                     key={offer.name}
-                    className="rounded-xl px-4 py-4"
-                    style={{ border: '1px solid var(--uvai-border)', background: 'var(--uvai-surface-warm)' }}
+                    className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs"
+                    style={{
+                      border: '1px solid var(--uvai-border-strong)',
+                      background: 'var(--uvai-surface-warm)',
+                      color: 'var(--uvai-ink-soft)',
+                    }}
                   >
-                    <p className="uvai-label">{offer.name}</p>
-                    <p className="mt-1.5 text-base font-semibold" style={{ color: 'var(--uvai-ink)' }}>{offer.price}</p>
-                  </article>
+                    <strong style={{ color: 'var(--uvai-ink)' }}>{offer.name}</strong>
+                    <span>{offer.price}</span>
+                  </span>
                 ))}
               </div>
             </div>
-            <div className="lg:col-span-6">
-              <HomeProCheckout />
+            <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+              <Link href="/studio" className="uvai-btn uvai-btn-secondary whitespace-nowrap px-4 py-2 text-sm">
+                Open Studio
+              </Link>
+              <Link href="/pricing" className="uvai-btn uvai-btn-primary whitespace-nowrap px-5 py-2 text-sm">
+                Get Pro &amp; Compare Plans →
+              </Link>
             </div>
           </section>
         </div>

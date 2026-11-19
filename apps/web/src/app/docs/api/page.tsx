@@ -95,7 +95,7 @@ export default function ApiDocsPage() {
   return (
     <div className="min-h-screen bg-[var(--uvai-bg)] text-[var(--uvai-ink)]">
       <Nav variant="rail" defaultCollapsed={false} />
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+      <main className="w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] px-4 py-3">
           <nav aria-label="Breadcrumb" className="text-xs text-[var(--uvai-ink-faint)]">
             <ol className="flex items-center gap-2">

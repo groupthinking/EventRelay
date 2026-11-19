@@ -235,7 +235,7 @@ function RailNav({
 
       <div ref={ctaRef} className="uvai-rail-cta">
         {rightSlot || (
-          <Link href="/#get-pro" className="uvai-btn uvai-btn-primary w-full py-2 px-5 text-sm">
+          <Link href="/pricing" className="uvai-btn uvai-btn-primary w-full py-2 px-5 text-sm">
             Get Pro
           </Link>
         )}
@@ -256,7 +256,7 @@ function RailNav({
           </button>
         ) : (
           <Link
-            href="/#get-pro"
+            href="/pricing"
             aria-label="Get Pro"
             title="Get Pro"
             className="uvai-rail-collapsed-cta"
@@ -350,7 +350,7 @@ export default function Nav({
       <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <ThemeBar compact />
         {rightSlot || (
-          <Link href="/#get-pro" className="uvai-btn uvai-btn-primary whitespace-nowrap !py-2 !px-3.5 sm:!px-4 lg:!px-5 text-xs sm:text-sm">
+          <Link href="/pricing" className="uvai-btn uvai-btn-primary whitespace-nowrap !py-2 !px-3.5 sm:!px-4 lg:!px-5 text-xs sm:text-sm">
             Get Pro
           </Link>
         )}

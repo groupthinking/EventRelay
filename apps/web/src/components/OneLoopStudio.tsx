@@ -1291,7 +1291,7 @@ export default function OneLoopStudio() {
               </Link>
               <Link
                 data-testid="studio-pack-build-live-pro-cta"
-                href="/#get-pro"
+                href="/pricing"
                 className="uvai-btn inline-flex w-fit items-center justify-center !py-1 !text-xs"
               >
                 Unlock Workflow Pro
