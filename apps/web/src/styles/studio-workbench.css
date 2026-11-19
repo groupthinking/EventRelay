@@ -630,6 +630,38 @@
 /* ============================================================
    <= 679px: single pane + sticky bottom dock tablist
    ============================================================ */
+/* Exact Studio refinement overrides. */
+.template-studio-bands {
+  display: inline;
+}
+
+#studio-panel-output {
+  font-family: system-ui;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+#studio-panel-output > .studio-pane-body:nth-of-type(2) > div.flex > div.flex.flex-nowrap:first-of-type {
+  align-items: stretch;
+}
+
+#studio-ide-output-panel-tasks > div.flex.flex-col > section.flex.flex-col > div.uvai-card.p-6 {
+  font-family: inherit;
+}
+
+#studio-panel-chat > .uvai-pane-header {
+  font-family: system-ui;
+}
+
+#studio-panel-video > .uvai-pane-header,
+#studio-panel-video .studio-steps-bar {
+  display: none;
+}
+
+#studio-ide-output-panel-tasks {
+  font-size: 72px;
+}
+
 @media (max-width: 679px) {
   .uvai-cards.template-studio-shell {
     max-width: 100%;

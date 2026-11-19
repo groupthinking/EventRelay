@@ -81,13 +81,6 @@ function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
 }
 
-function safeYouTubeWatchHref(rawId: string): string | null {
-  const match = /^[A-Za-z0-9_-]{6,20}$/.exec(rawId);
-  if (!match) return null;
-  const watchUrl = new URL('https://www.youtube.com/watch');
-  watchUrl.searchParams.set('v', match[0]);
-  return watchUrl.toString();
-}
 
 function formatSavedVideoLabel(video: Video): string {
   const raw = video.title?.trim() ?? '';
@@ -479,7 +472,6 @@ export default function OneLoopStudio({
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
-  const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
   const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
@@ -883,9 +875,6 @@ export default function OneLoopStudio({
                 Export
               </button>
             </div>
-            <p className="w-full min-w-0 font-mono text-[11px] leading-snug text-[var(--uvai-ink-faint)]" role="status" data-testid="studio-ide-status">
-              {statusText}
-            </p>
             {showTranscriptRetry && !transcriptWorking && selected?.status === 'failed' ? (
               <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-3 py-2 text-xs text-[var(--uvai-danger-ink)]">
                 <span className="min-w-0 flex-1 truncate">
@@ -1009,72 +998,6 @@ export default function OneLoopStudio({
                   </button>
                 </div>
               )}
-            </div>
-            <div className="studio-steps-bar flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-3 py-1.5">
-              <ol
-                data-testid="studio-extraction-steps"
-                aria-label="Extraction progress"
-                className="studio-steps min-w-0 max-w-full flex-1 flex-wrap"
-              >
-                {(
-                  [
-                    { id: 'pack', label: 'Pack' },
-                    { id: 'captions', label: 'Captions' },
-                    { id: 'transcript', label: 'Transcript' },
-                    { id: 'events', label: 'Events' },
-                    { id: 'ready', label: 'Ready' },
-                  ] as const
-                ).map((step, idx) => {
-                  const activeIdx =
-                    transcriptStage.id === 'ready'
-                      ? 4
-                      : transcriptStage.id === 'events'
-                        ? 3
-                        : transcriptStage.id === 'transcript'
-                          ? 2
-                          : transcriptStage.id === 'captions'
-                            ? 1
-                            : 0;
-                  const isDone =
-                    !transcriptWorking &&
-                    selected?.status !== 'failed' &&
-                    Boolean(selected?.videoPack || selected?.transcript?.trim());
-                  const isFailed = !transcriptWorking && selected?.status === 'failed';
-                  const stepState = isDone
-                    ? 'done'
-                    : isFailed
-                      ? idx < activeIdx
-                        ? 'done'
-                        : idx === activeIdx
-                          ? 'failed'
-                          : 'idle'
-                      : transcriptWorking
-                        ? idx < activeIdx
-                          ? 'done'
-                          : idx === activeIdx
-                            ? 'active'
-                            : 'idle'
-                        : 'idle';
-                  return (
-                    <li key={step.id} data-state={stepState} data-step={step.id}>
-                      {step.label}
-                    </li>
-                  );
-                })}
-              </ol>
-              {watchHref ? (
-                <a
-                  href={watchHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Trouble with this video? Watch it directly on YouTube"
-                  title="Trouble with this video? Watch it directly on YouTube"
-                  data-testid="studio-watch-on-youtube"
-                  className="shrink-0 text-[11px] font-medium text-[var(--uvai-ink-soft)] underline-offset-2 hover:text-[var(--uvai-ink)] hover:underline"
-                >
-                  YouTube ↗
-                </a>
-              ) : null}
             </div>
             <div className="flex min-w-0 flex-col gap-3">
               {selected?.videoPack ? (
