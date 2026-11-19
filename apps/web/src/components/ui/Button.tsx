@@ -41,37 +41,25 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 
     const variants = {
       primary: clsx(
-        'bg-gradient-to-r from-primary-500 via-primary-600 to-primary-500 bg-[length:200%_100%]',
-        'text-white shadow-lg shadow-primary-500/30',
-        'hover:shadow-xl hover:shadow-primary-500/40 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0',
-        'hover:bg-[position:100%_0]',
-        'active:translate-y-0 active:shadow-lg'
+        'border border-[var(--uvai-accent)] bg-[var(--uvai-accent)] text-white',
+        'hover:opacity-90'
       ),
       secondary: clsx(
-        'bg-white/[0.04] border border-white/[0.1]',
-        'text-white/90',
-        'hover:bg-white/[0.08] hover:border-white/[0.2] hover:text-white',
-        'active:bg-white/[0.05]'
+        'border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)]',
+        'text-[var(--uvai-ink)]',
+        'hover:bg-[var(--uvai-bg)]'
       ),
       ghost: clsx(
-        'bg-transparent',
-        'text-white/70',
-        'hover:bg-white/[0.06] hover:text-white',
-        'active:bg-white/[0.08]'
+        'bg-transparent text-[var(--uvai-ink-soft)]',
+        'hover:bg-[var(--uvai-surface)] hover:text-[var(--uvai-ink)]'
       ),
       danger: clsx(
-        'bg-gradient-to-r from-red-500 via-red-600 to-red-500 bg-[length:200%_100%]',
-        'text-white shadow-lg shadow-red-500/30',
-        'hover:shadow-xl hover:shadow-red-500/40 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0',
-        'hover:bg-[position:100%_0]',
-        'active:translate-y-0'
+        'border border-red-700 bg-red-700 text-white',
+        'hover:bg-red-800'
       ),
       success: clsx(
-        'bg-gradient-to-r from-green-500 via-green-600 to-green-500 bg-[length:200%_100%]',
-        'text-white shadow-lg shadow-green-500/30',
-        'hover:shadow-xl hover:shadow-green-500/40 hover:-translate-y-0.5 motion-reduce:hover:translate-y-0',
-        'hover:bg-[position:100%_0]',
-        'active:translate-y-0'
+        'border border-green-800 bg-green-800 text-white',
+        'hover:bg-green-900'
       ),
     };
 

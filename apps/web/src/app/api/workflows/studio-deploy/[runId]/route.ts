@@ -5,7 +5,15 @@ import {
   workflowReturnErrorMessage,
 } from '@/lib/studio-workflow';
 import { withWorldVercelFetch } from '@/lib/world-vercel-fetch';
-import type { StudioDeployResult } from '@/workflows/studio-deploy';
+type StudioDeployResult = {
+  url: string;
+  kind?: string;
+  jobId?: string;
+  jobStatus?: string;
+  live_url?: string | null;
+  github_repo?: string | null;
+  message?: string;
+};
 
 export const runtime = 'nodejs';
 

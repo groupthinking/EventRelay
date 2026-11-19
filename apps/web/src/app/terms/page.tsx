@@ -7,7 +7,7 @@ import { CONTACT_EMAIL } from '@/lib/constants';
 export const metadata: Metadata = {
   title: 'Terms of Service',
   description:
-    'Terms governing use of the UVAI hosted product. EventRelay is MIT-licensed and may be self-hosted at any time.',
+    'Terms governing use of the UVAI hosted product. The source is MIT-licensed and may be self-hosted at any time.',
   alternates: { canonical: '/terms' },
   robots: { index: true, follow: true },
 };
@@ -43,7 +43,7 @@ export default function TermsPage() {
           <section>
             <p>
               By using the hosted UVAI product you agree to these terms. The
-              underlying EventRelay code is open source under the MIT license;
+              underlying source is open source under the MIT license;
               these terms apply specifically to the hosted product served from
               this domain.
             </p>

@@ -11,7 +11,7 @@ Live at https://uvai.io (Vercel project `v0-uvai`).
 | Path | File | What it renders / purpose |
 |---|---|---|
 | `/` | `page.tsx` (140 lines) | Landing page: Nav + Footer + `HomePasteForm` (YouTube URL → `/studio?video=`) + `HomeProCheckout` (Stripe Pro upsell) + offers list. Light card system. Uses `studio-cards.css`. |
-| `/studio` | `studio/page.tsx` → `studio/StudioShell.tsx` → `components/OneLoopStudio.tsx` | **The product.** Three-pane IDE workbench: video pane, pack-grounded chat, action-extraction output (Events/Lingo/Tools/Intent/Signals/Spec/Transcript tabs). Toolbar: Run/Cancel, stored packs, Export, Build live. Suspense wrapper; reads `agentWorkflowUi` feature flag. |
+| `/studio` | `studio/page.tsx` → `studio/StudioShell.tsx` → `components/OneLoopStudio.tsx` | **The product.** Three-pane IDE workbench: video pane, pack-grounded chat, action-extraction output (Events/Lingo/Tools/Intent/Signals/Spec/Transcript tabs). Toolbar: Run/Cancel, stored packs, Export, Build live. Suspense wrapper. |
 | `/pricing` | `pricing/page.tsx` (223 lines) | Pricing page: Core vs Pro capability lists, Core/Pro/Enterprise comparison table, `ProCheckoutButton`, `ProRenewPanel`, `CheckoutSuccessActivator`. Locked prices: Pro $39/mo or $390/yr, Maintain $199/mo, Ship per-job quote. |
 | `/login` | `login/page.tsx` + `GoogleSignInButton` | Google OAuth sign-in (NextAuth). Accepts `callbackUrl`, sanitized via `safeCallbackPath`. Dark card UI. |
 | `/docs/api` | `docs/api/page.tsx` (126 lines) | Static API reference page listing public endpoints (transcribe, extract-events, chat, agents, video metadata). |
@@ -28,7 +28,7 @@ Supporting app files:
 - `layout.test.tsx` — layout test.
 
 ### Entry / boot chain
-`src/app/layout.tsx` → `AuthSessionProvider` (next-auth `SessionProvider`) → page. `src/proxy.ts` (Next.js 16 proxy, formerly middleware) runs first: rate limiting (60 req/min general, 12/min AI) + login gating (enforces session on non-public `/api/*` when `NEXTAUTH_SECRET` is set; fails closed 503 in prod if misconfigured; `x-eventrelay-internal` header bypasses for server-to-server). Path policy lives in `src/lib/auth-paths.ts`. Feature flags via `@flags-sdk/vercel` in `src/flags.ts` (`custom-badge`, `agentWorkflowUi`).
+`src/app/layout.tsx` → `AuthSessionProvider` (next-auth `SessionProvider`) → page. `src/proxy.ts` (Next.js 16 proxy, formerly middleware) runs first: rate limiting (60 req/min general, 12/min AI) + login gating (enforces session on non-public `/api/*` when `NEXTAUTH_SECRET` is set; fails closed 503 in prod if misconfigured; `x-eventrelay-internal` header bypasses for server-to-server). Path policy lives in `src/lib/auth-paths.ts`. Feature flags via `@flags-sdk/vercel` in `src/flags.ts` (`custom-badge`).
 
 ---
 
@@ -41,32 +41,16 @@ Supporting app files:
 | GET | `/api/video/pack/frames/:videoId/:t` | Keyframe image for a pack at timestamp `t`. |
 | POST, GET | `/api/video/assemble` | Assemble app-builder output from a pack (`lib/assemble-app-builder-route`). |
 | POST, GET | `/api/video/sandbox` | Sandboxed app-builder execution (`lib/app-builder-sandbox-route`). |
-| POST | `/api/video/generate` | Video generation w/ Upstash durable rate limiting. |
-| GET | `/api/video/search` | Search video packs. |
-| POST, GET | `/api/video` | **Deprecated** legacy register/list endpoint. No in-repo callers; kept for external consumers. |
 
 ### Workflow (durable runs via Workflow DevKit)
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/workflows/video-to-actions` | Start durable video→transcript→actions run; returns `runId`. |
 | GET | `/api/workflows/video-to-actions/:runId` | Poll run status + result. |
-| POST | `/api/workflows/studio-deploy` | Start Studio deploy run (G.A.T.E.-gated). |
-| GET | `/api/workflows/studio-deploy/:runId` | Poll deploy run status. |
+| POST | `/api/workflows/studio-deploy` | G.A.T.E. preflight. Returns 409 and does not start a run. |
+| GET | `/api/workflows/studio-deploy/:runId` | Read a historical deploy run, if one exists. |
 
-### Studio chat (agentic, pack-grounded)
-All delegate to handlers in `src/lib/studio/routes.ts`. `runtime = 'nodejs'`, `force-dynamic`.
-| Method | Path | Purpose |
-|---|---|---|
-| GET, POST | `/api/studio/chats` | List chats / create chat. |
-| GET, POST, DELETE* | `/api/studio/chats/:chatId` | Chat CRUD (`*`verify; route.ts exists). |
-| GET, POST | `/api/studio/chats/:chatId/messages` | List / send messages. |
-| POST | `/api/studio/chats/:chatId/resolve` | Resolve a pending message. |
-| POST | `/api/studio/chats/:chatId/resume` | Resume a stopped chat. |
-| POST | `/api/studio/chats/:chatId/stop` | Stop generation. |
-| GET, POST | `/api/studio/chats/:chatId/files` | Chat file attachments. |
-| GET | `/api/studio/chats/:chatId/files/download` | Download attachment. |
-
-### Chat (legacy/simple)
+### Chat (product)
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/chat` | Conversational query over an analyzed video. Pack-grounded (`chat-pack-grounding`), Pro entitlement + free daily quota enforcement, routes to AI Gateway/Grok. |
@@ -75,13 +59,11 @@ All delegate to handlers in `src/lib/studio/routes.ts`. `runtime = 'nodejs'`, `f
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/transcribe` | Multi-strategy transcript: YouTube captions (backend) → Gemini fallback → OpenAI w/ web search → Whisper STT. |
-| POST | `/api/extract-events` | Extract typed events from a transcript. |
 
 ### G.A.T.E. (Origin hardgate — non-bypassable)
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/gate/transitions` | Evaluate a state transition → exactly one of `PASS \| HOLD \| REJECT \| ESCALATE`. Owner + origin checks. |
-| POST | `/api/gate/probe-live` | Probe a deployment's live URL; feeds gate evidence. |
 
 ### Billing (Stripe — locked prices)
 | Method | Path | Purpose |
@@ -97,27 +79,15 @@ All delegate to handlers in `src/lib/studio/routes.ts`. `runtime = 'nodejs'`, `f
 |---|---|---|
 | POST | `/api/workspace/export` | Zip workspace files for download. **Pro-gated** (`requireProFeatureAccess`); anonymous users get 402 → Stripe checkout. Path-traversal-safe filename normalization. |
 
-### Agents (legacy FastAPI backend proxy)
-| Method | Path | Purpose |
-|---|---|---|
-| GET, POST | `/api/agents/actions` | Advertises executable tools for the action agent. |
-| GET, POST | `/api/agents/dispatch` | Availability probe for the external agent backend. |
-| GET | `/api/agents/status` | Poll agent execution status (proxies FastAPI). |
-
 ### Misc
 | Method | Path | Purpose |
 |---|---|---|
-| GET, HEAD | `/api` | Health check / service descriptor. |
+| GET, HEAD | `/api` | Health check / service descriptor (`name: UVAI API`). |
 | GET | `/api/docs` | API docs data. |
-| POST, PUT | `/api/search` | Cross-video full-text/semantic search (Upstash Search). |
 | GET | `/api/jobs/:jobId` | Proxy backend async video job status. |
-| GET, POST | `/api/realtime/session` | OpenAI realtime session bootstrap (upstream errors sanitized server-side). |
-| GET | `/api/training/status` | Fine-tuning dataset status (examples collected, threshold progress). |
-| POST | `/api/training/trigger` | Trigger Gemini fine-tuning on Vertex AI (`check` mode default). |
-| GET, PUT | `/api/v1/preferences` | User preferences. |
-| GET | `/api/v1/refinery/dataset` | Refinery dataset access. |
-| POST, GET, DELETE* | `/api/v1/video/assemble`, `/api/v1/video/pack`, `/api/v1/video/sandbox` | Compatibility aliases for canonical `/api/video/*` routes (AUDIT-005). |
 | — | `/api/auth/[...nextauth]` | NextAuth handler (Google OAuth). |
+
+Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, `/api/video/search`, `/api/studio/chats/*`, `/api/extract-events`, `/api/gate/probe-live`, `/api/search`, `/api/realtime/session`, `/api/training/*`, `/api/agents/*`, `/api/v1/preferences`, `/api/v1/refinery/dataset`, and the `/api/v1/video/*` aliases. Those paths stay in `src/lib/auth-paths.ts` so the proxy still requires a session.
 
 ---
 
@@ -142,10 +112,10 @@ All delegate to handlers in `src/lib/studio/routes.ts`. `runtime = 'nodejs'`, `f
 - `billing/ProCheckoutButton.tsx`, `billing/ProRenewPanel.tsx`, `billing/CheckoutSuccessActivator.tsx`.
 
 ### UI primitives (`ui/`)
-Radix-based + custom: `Button`, `alert`, `empty`, `field`, `label`, `separator`. Styled via `components.json` (shadcn convention).
+`Button` and `alert`, styled with the light studio tokens.
 
 ### Tests
-`components/__tests__/`: `OneLoopStudio.gate.test.tsx`, `OneLoopStudio.build-live.test.tsx`, `OneLoopStudio.job-strip.test.tsx`, `OneLoopStudio.three-panel.test.tsx`, `GroundedSpecReview.test.tsx`, `StudioAuthNavLink.test.tsx`; `home/`: `HomePasteForm.test.tsx`, `HomeProCheckout.test.tsx`.
+`components/__tests__/`: `OneLoopStudio.build-live.test.tsx`, `OneLoopStudio.job-strip.test.tsx`, `OneLoopStudio.three-panel.test.tsx`, `OneLoopStudio.cancellation.test.tsx`, `GroundedSpecReview.test.tsx`, `StudioAuthNavLink.test.tsx`; `home/`: `HomePasteForm.test.tsx`, `HomeProCheckout.test.tsx`. `OneLoopStudio.gate.test.tsx` was removed in #2360.
 
 ---
 
@@ -154,7 +124,7 @@ Radix-based + custom: `Button`, `alert`, `empty`, `field`, `label`, `separator`.
 96 test files under `lib/__tests__` + `lib/studio/__tests__`. Major modules:
 
 **Studio pipeline**
-- `studio-workflow.ts` (550) — client helpers: `startVideoToActions`/`pollVideoToActions`, `startStudioDeploy`/`pollStudioDeploy`, live-URL probe.
+- `studio-workflow.ts` — client helpers: `startVideoToActions`/`pollVideoToActions`, `startStudioDeploy`/`pollStudioDeploy`.
 - `studio-pipeline-status.ts` (666) — status labels, run-quality, deploy hints/receipts, export filenames, transcript stage text — most UI copy for Studio states.
 - `studio-workbench-panes.ts` — pane ids, tab definitions, outline↔pane mapping, dedupe helpers.
 - `studio-handoff.ts` — URL param handoff (`?video=`) → Studio auto-start; pack auto-select.

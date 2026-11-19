@@ -1,7 +1,6 @@
 import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import StudioShell from './StudioShell';
-import { agentWorkflowUi } from '@/flags';
 
 export const metadata: Metadata = {
   title: 'Studio',
@@ -9,12 +8,10 @@ export const metadata: Metadata = {
   alternates: { canonical: '/studio' },
 };
 
-export default async function StudioPage() {
-  const showAgentWorkflowUi = await agentWorkflowUi();
-
+export default function StudioPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[var(--uvai-bg)]" />}>
-      <StudioShell showAgentWorkflowUi={showAgentWorkflowUi} />
+      <StudioShell />
     </Suspense>
   );
 }

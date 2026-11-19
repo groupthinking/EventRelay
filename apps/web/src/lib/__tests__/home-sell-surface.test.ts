@@ -160,7 +160,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(nav).toContain('href="/#get-pro"');
     expect(nav).toContain("href: '/pricing'");
     expect(pricing).toContain('ProCheckoutButton');
-    expect(pricing).toContain('turnstile');
+    expect(pricing).toContain('Turnstile');
     expect(config).not.toMatch(/source: '\/pricing'/);
   });
 
