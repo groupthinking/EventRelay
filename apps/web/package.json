@@ -37,7 +37,7 @@
     "@supabase/supabase-js": "^2.119.0",
     "@upstash/redis": "^1.41.0",
     "@upstash/search": "^0.1.7",
-    "@v0-sdk/react": "3.0.13",
+    "@v0-sdk/react": "4.0.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.2",
     "@vercel/functions": "^3.10.6",

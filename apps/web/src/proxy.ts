@@ -9,6 +9,8 @@ import {
   safeCallbackPath,
   shouldSkipRateLimit,
 } from '@/lib/auth-paths';
+import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
+import { createUpstashRedisClient } from '@/lib/billing/upstash-client';
 
 /**
  * Frontend proxy (Next.js 16): rate limiting + login gating.
@@ -103,17 +105,8 @@ function getRedisClient(): Promise<DistributedRedisClient | null> {
   }
 
   redisClientPromise = (async () => {
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-      try {
-        const { Redis } = await import('@upstash/redis');
-        return new Redis({
-          url: process.env.UPSTASH_REDIS_REST_URL,
-          token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        });
-      } catch {
-        // dynamic import failed; fall back to null below
-        return null;
-      }
+    if (resolveUpstashRedisCredentials()) {
+      return createUpstashRedisClient();
     }
 
     if (process.env.STORAGE_REDIS_URL) {

@@ -162,6 +162,72 @@ describe('emitVideoPack', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it('does not POST when analysis was already stopped', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(emitVideoPack(SOURCE_URL, { signal: controller.signal })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('aborts an active pack POST and does not start polling', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = emitVideoPack(SOURCE_URL, { signal: controller.signal });
+    const stopped = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+
+    controller.abort();
+
+    expect(fetchMock.mock.calls[0]?.[1].signal?.aborted).toBe(true);
+    await stopped;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops during the polling delay without waiting for the next request', async () => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 202,
+      json: async () => ({ status: 'processing', data: VALID.data }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = emitVideoPack(SOURCE_URL, { signal: controller.signal, pollIntervalMs: 30_000 });
+    const stopped = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    controller.abort();
+
+    await stopped;
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('does not accept a late ready response after an active poll is stopped', async () => {
+    const controller = new AbortController();
+    let resolvePoll!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ status: 202, json: async () => ({ status: 'processing', data: VALID.data }) })
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolvePoll = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = emitVideoPack(SOURCE_URL, { signal: controller.signal, pollIntervalMs: 0 });
+    const stopped = expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    controller.abort();
+    expect(fetchMock.mock.calls[1]?.[1].signal?.aborted).toBe(true);
+    resolvePoll({ status: 200, json: async () => VALID } as Response);
+
+    await stopped;
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces a 200 error envelope from POST', async () => {

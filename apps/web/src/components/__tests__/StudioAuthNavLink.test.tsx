@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { cleanup, render, screen } from '@testing-library/react';
 import { SessionProvider } from 'next-auth/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -45,5 +48,11 @@ describe('StudioAuthNavLink', () => {
     expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull();
     expect(screen.getByText('garveyht@gmail.com')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeTruthy();
+  });
+
+  it('defines --card-accent on :root so primary nav buttons stay visible outside .uvai-cards', () => {
+    const here = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(here, '../../styles/studio-cards.css'), 'utf8');
+    expect(css).toMatch(/:root,\s*\n?\.uvai-cards\s*\{[\s\S]*--card-accent:\s*var\(--uvai-accent\)/);
   });
 });

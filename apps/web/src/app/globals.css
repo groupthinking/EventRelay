@@ -8,22 +8,22 @@
    ============================================ */
 
 :root {
-  /* Warm paper surfaces */
-  --uvai-bg: #FAF9F7;
-  --uvai-surface: #FFFFFF;
-  --uvai-surface-warm: #F5F3F0;
-  --uvai-border: #E8E5E0;
-  --uvai-border-strong: #D8D3CC;
+  /* Webflow obsidian surfaces (fallback; openai-template.css layers on top) */
+  --uvai-bg: #080808;
+  --uvai-surface: #111111;
+  --uvai-surface-warm: #181818;
+  --uvai-border: #2a2a2a;
+  --uvai-border-strong: #363636;
 
-  /* Warm ink */
-  --uvai-ink: #1C1B1A;
-  --uvai-ink-soft: #6B675F;
-  --uvai-ink-faint: #A8A29A;
+  /* Ink */
+  --uvai-ink: #ffffff;
+  --uvai-ink-soft: #ababab;
+  --uvai-ink-faint: #787878;
 
-  /* One accent, restrained */
-  --uvai-accent: #C2410C;
-  --uvai-accent-hover: #A83708;
-  --uvai-accent-soft: #FFF3EB;
+  /* One accent */
+  --uvai-accent: #146ef5;
+  --uvai-accent-hover: #0d5bd9;
+  --uvai-accent-soft: rgba(20, 110, 245, 0.14);
 
   /* Quiet semantics */
   --uvai-success: #2F7D4F;

@@ -40,23 +40,41 @@ const ENDPOINTS: Endpoint[] = [
 ];
 
 const METHOD_COLOR: Record<Endpoint['method'], string> = {
-  GET: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
-  POST: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+  GET: 'border-[var(--uvai-success-border,var(--uvai-border-strong))] bg-[var(--uvai-success-bg,transparent)] text-[var(--uvai-success-ink,var(--uvai-ink))]',
+  POST: 'border-[var(--uvai-accent)] bg-[var(--uvai-accent-soft)] text-[var(--uvai-accent-ink,var(--uvai-accent))]',
 };
+
+const LINK_CLASS =
+  'text-[var(--uvai-accent-ink,var(--uvai-accent))] underline-offset-4 hover:underline';
+const CODE_CLASS = 'text-[var(--uvai-accent-ink,var(--uvai-accent))]';
 
 export default function ApiDocsPage() {
   return (
-    <div className="min-h-screen bg-void text-ink">
+    <div className="min-h-screen bg-[var(--uvai-bg)] text-[var(--uvai-ink)]">
       <Nav />
-      <main className="mx-auto max-w-4xl px-6 py-20">
-        <header className="mb-12">
-          <p className="text-xs uppercase tracking-[0.2em] text-ink/40">Reference</p>
-          <h1 className="mt-2 font-heading text-4xl font-black">API Reference</h1>
-          <p className="mt-3 max-w-2xl text-ink/60">
+      <main className="mx-auto max-w-4xl px-6 py-16">
+        <header className="mb-10 border-b border-[var(--uvai-border-strong)] pb-8">
+          <nav aria-label="Breadcrumb" className="text-xs text-[var(--uvai-ink-faint)]">
+            <ol className="flex items-center gap-2">
+              <li>
+                <Link className="hover:text-[var(--uvai-ink)] hover:underline" href="/">
+                  Home
+                </Link>
+              </li>
+              <li aria-hidden="true">/</li>
+              <li>Docs</li>
+              <li aria-hidden="true">/</li>
+              <li aria-current="page" className="text-[var(--uvai-ink-soft)]">
+                API Reference
+              </li>
+            </ol>
+          </nav>
+          <h1 className="mt-4 text-4xl font-medium tracking-tight">API Reference</h1>
+          <p className="mt-3 max-w-2xl text-[var(--uvai-ink-soft)]">
             UVAI exposes a small, REST-style surface for transcription, event
             extraction, and search. All endpoints accept and return JSON unless noted.
           </p>
-          <p className="mt-3 max-w-2xl text-sm text-ink/50">
+          <p className="mt-3 max-w-2xl text-sm text-[var(--uvai-ink-faint)]">
             The legacy <code>/api/pipeline</code> and <code>/api/pipeline/stream</code>
             routes are retired. <code>GET /api/video</code> is a health probe.
             <code>POST /api/video</code> remains for compatibility but is deprecated;
@@ -64,16 +82,16 @@ export default function ApiDocsPage() {
           </p>
         </header>
 
-        <section className="mb-10 rounded-xl border border-white/5 bg-white/[0.02] p-6">
-          <h2 className="font-heading text-lg font-bold text-ink">Base URL</h2>
-          <code className="mt-2 block text-sm text-amber-300">https://uvai.io</code>
-          <p className="mt-3 text-sm text-ink/60">
+        <section className="mb-10 rounded-xl border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] p-6">
+          <h2 className="text-lg font-medium text-[var(--uvai-ink)]">Base URL</h2>
+          <code className={`mt-2 block text-sm ${CODE_CLASS}`}>https://uvai.io</code>
+          <p className="mt-3 text-sm text-[var(--uvai-ink-soft)]">
             Want to run it yourself? UVAI is MIT-licensed.{' '}
             <a
               href="https://github.com/groupthinking/EventRelay"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-amber-400 hover:underline"
+              className={LINK_CLASS}
             >
               See the EventRelay repo
             </a>{' '}
@@ -82,8 +100,8 @@ export default function ApiDocsPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="font-heading text-2xl font-bold text-ink">Endpoints</h2>
-          <ul className="divide-y divide-white/5 rounded-xl border border-white/5">
+          <h2 className="text-2xl font-medium tracking-tight text-[var(--uvai-ink)]">Endpoints</h2>
+          <ul className="divide-y divide-[var(--uvai-border)] rounded-xl border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)]">
             {ENDPOINTS.map((e) => (
               <li key={`${e.method}-${e.path}`} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-start sm:gap-4">
                 <span
@@ -92,10 +110,10 @@ export default function ApiDocsPage() {
                   {e.method}
                 </span>
                 <div className="flex-1">
-                  <code className="font-mono text-sm text-ink">{e.path}</code>
-                  <p className="mt-1 text-sm text-ink/60">{e.summary}</p>
+                  <code className="font-mono text-sm text-[var(--uvai-ink)]">{e.path}</code>
+                  <p className="mt-1 text-sm text-[var(--uvai-ink-soft)]">{e.summary}</p>
                   {e.body ? (
-                    <pre className="mt-2 overflow-x-auto rounded-md border border-white/5 bg-black/40 p-3 text-xs text-ink/70">
+                    <pre className="mt-2 overflow-x-auto rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] p-3 text-xs text-[var(--uvai-ink-soft)]">
                       <code>{e.body}</code>
                     </pre>
                   ) : null}
@@ -106,19 +124,19 @@ export default function ApiDocsPage() {
         </section>
 
         <section className="mt-12">
-          <h2 className="font-heading text-2xl font-bold text-ink">Try it</h2>
-          <p className="mt-2 text-ink/60">
+          <h2 className="text-2xl font-medium tracking-tight text-[var(--uvai-ink)]">Try it</h2>
+          <p className="mt-2 text-[var(--uvai-ink-soft)]">
             The{' '}
-            <Link href="/studio" className="text-amber-400 hover:underline">
+            <Link href="/studio" className={LINK_CLASS}>
               studio
             </Link>{' '}
             runs the end-to-end YouTube workflow against a real URL: hashed Video
-            Pack via <code className="text-amber-300">/api/video/pack</code>, then{' '}
-            <code className="text-amber-300">/api/workflows/video-to-actions</code>.
+            Pack via <code className={CODE_CLASS}>/api/video/pack</code>, then{' '}
+            <code className={CODE_CLASS}>/api/workflows/video-to-actions</code>.
           </p>
-          <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-ink/60">
+          <ol className="mt-4 list-decimal space-y-1 pl-5 text-sm text-[var(--uvai-ink-soft)]">
             <li>Paste a YouTube URL on Home.</li>
-            <li>Home redirects to <code className="text-amber-300">/studio?video=...</code>.</li>
+            <li>Home redirects to <code className={CODE_CLASS}>/studio?video=...</code>.</li>
             <li>Studio auto-starts analysis once for that handoff URL.</li>
             <li>Transcript and events flow into actions and output publishing.</li>
           </ol>

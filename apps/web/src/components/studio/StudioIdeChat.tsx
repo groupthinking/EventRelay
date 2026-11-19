@@ -292,35 +292,48 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
   };
 
   const canChat = Boolean(videoId) && !disabled;
+  const isExtracting = Boolean(videoId) && Boolean(disabled);
 
   return (
     <section
       aria-label="Pack chat"
       data-testid="studio-ide-chat"
-      className="flex h-full min-h-0 flex-col bg-white"
+      className="flex flex-col bg-[var(--uvai-bg)]"
     >
       <div
         ref={messagesRef}
         data-testid="studio-ide-chat-messages"
-        className="min-h-0 flex-1 overflow-y-auto px-4 py-4"
+        className={messages.length > 0 || sending ? 'max-h-[380px] overflow-y-auto px-4 py-4' : 'px-4 pt-3 pb-1'}
       >
-        {messages.length === 0 ? (
-          <div className="uvai-empty template-chat-welcome">
-            <div className="template-mark" aria-hidden="true"><Sparkles size={24} /></div>
-            <p className="text-sm font-semibold text-slate-700">
-              {canChat ? 'Ask about this pack or plan a build' : 'Run a video to start chatting'}
-            </p>
-            <p className="max-w-[30ch] text-xs text-slate-500">
-              {canChat
-                ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
-                : 'Paste a YouTube URL above and hit Run.'}
-            </p>
+        {messages.length === 0 && !sending ? (
+          <div className="template-chat-welcome flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[var(--uvai-accent)] text-white" aria-hidden="true">
+                <Sparkles size={16} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-[var(--uvai-ink)]">
+                  {canChat
+                    ? 'Ask about this pack or plan a build'
+                    : isExtracting
+                      ? 'Extracting Video Pack…'
+                      : 'Run a video to start chatting'}
+                </p>
+                <p className="text-xs text-[var(--uvai-ink-soft)]">
+                  {canChat
+                    ? 'Grounded in the pack — events, lingo, tools, intent. No invented answers.'
+                    : isExtracting
+                      ? 'Building transcript, chapters, events, and runnable specs. Chat unlocks automatically when ready.'
+                      : 'Paste a YouTube URL above and hit Run.'}
+                </p>
+              </div>
+            </div>
             {canChat ? (
               <button
                 type="button"
                 onClick={() => setDraft('Plan a build from this Video Pack')}
                 data-testid="studio-ide-chat-plan-prompt"
-                className="text-xs font-semibold text-blue-700 underline"
+                className="uvai-btn shrink-0 !border-[var(--uvai-accent)] !text-[var(--uvai-accent-ink)] !text-xs font-semibold hover:!bg-[var(--uvai-accent-soft)]"
               >
                 Plan a build from this video
               </button>
@@ -338,13 +351,13 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
               </div>
             ))}
             {sending ? (
-              <div className="uvai-chat-assistant text-slate-400">Thinking…</div>
+              <div className="uvai-chat-assistant text-[var(--uvai-ink-faint)]">Thinking…</div>
             ) : null}
           </div>
         )}
       </div>
       {quotaHit ? (
-        <div className="border-t border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+        <div className="border-t border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] px-4 py-2.5 text-xs text-[var(--uvai-warn-ink)]">
           Daily free limit reached.{' '}
           <a href="/pricing" className="font-semibold underline">
             Upgrade to Pro
@@ -353,23 +366,29 @@ export default function StudioIdeChat({ videoId, packId, disabled }: StudioIdeCh
         </div>
       ) : null}
       {error && !sending ? (
-        <div className="border-t border-red-100 bg-red-50 px-4 py-1.5 text-xs text-red-700">{error}</div>
+        <div className="border-t border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-4 py-1.5 text-xs text-[var(--uvai-danger-ink)]">{error}</div>
       ) : null}
       <form
         onSubmit={send}
         data-testid="studio-ide-chat-composer"
-        className="template-chat-composer p-4"
+        className="template-chat-composer px-4 py-3"
       >
         <div className="template-source-input">
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={canChat ? 'Ask about this pack or plan a build…' : 'Run a video first'}
+            placeholder={
+              canChat
+                ? 'Ask about this pack or plan a build…'
+                : isExtracting
+                  ? 'Extracting video pack…'
+                  : 'Run a video first'
+            }
             disabled={!canChat || sending}
             aria-label="Chat message"
             data-testid="studio-ide-chat-input"
-            rows={3}
-            className="uvai-input min-w-0 flex-1 resize-y disabled:opacity-40"
+            rows={2}
+            className="uvai-input min-w-0 flex-1 resize-y py-2 leading-snug disabled:opacity-40"
           />
           <button
             type="submit"

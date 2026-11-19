@@ -16,7 +16,7 @@ import {
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { StudioAuthNavLink } from '@/components/StudioAuthNavLink';
-import { dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
+import { ANALYSIS_STOPPED_MESSAGE, dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
 import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
@@ -109,19 +109,23 @@ import {
   chaptersFromPack,
   sopStepsFromPack,
 } from '@/lib/emit-app-builder-sandbox';
+import {
+  registerStudioWebMcpTools,
+  type StudioWebMcpPackSnapshot,
+} from '@/lib/webmcp-studio-tools';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
 function gateDecisionChipClass(decision: GateDecision): string {
   switch (decision) {
     case 'PASS':
-      return 'border-emerald-300 bg-emerald-50 text-emerald-700';
+      return 'border-[var(--uvai-success-border)] bg-[var(--uvai-success-bg)] text-[var(--uvai-success-ink)]';
     case 'HOLD':
-      return 'border-amber-300 bg-amber-50 text-amber-700';
+      return 'border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] text-[var(--uvai-warn-ink)]';
     case 'REJECT':
-      return 'border-red-300 bg-red-50 text-red-700';
+      return 'border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] text-[var(--uvai-danger-ink)]';
     case 'ESCALATE':
-      return 'border-violet-300 bg-violet-50 text-violet-700';
+      return 'border-[var(--uvai-violet-border)] bg-[var(--uvai-violet-bg)] text-[var(--uvai-violet-ink)]';
     default: {
       const _exhaustive: never = decision;
       return _exhaustive;
@@ -131,6 +135,14 @@ function gateDecisionChipClass(decision: GateDecision): string {
 
 function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
+}
+
+function safeYouTubeWatchHref(rawId: string): string | null {
+  const match = /^[A-Za-z0-9_-]{6,20}$/.exec(rawId);
+  if (!match) return null;
+  const watchUrl = new URL('https://www.youtube.com/watch');
+  watchUrl.searchParams.set('v', match[0]);
+  return watchUrl.toString();
 }
 
 function toSpecBranch(videoId: string, stepId: string): string {
@@ -161,7 +173,7 @@ function PackWorkbench({
       className="uvai-card p-4 lg:col-span-2"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700">
+        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--uvai-accent-ink)]">
           From this pack
         </h2>
         <button
@@ -178,20 +190,20 @@ function PackWorkbench({
         <div data-testid="pack-architecture" className="mt-4">
           <h3 className="uvai-section-label">Architecture</h3>
           {architecture.summary ? (
-            <p className="mt-2 text-sm text-slate-600">{architecture.summary}</p>
+            <p className="mt-2 text-sm text-[var(--uvai-ink-soft)]">{architecture.summary}</p>
           ) : null}
           {architecture.stages.length > 0 ? (
-            <ol className="mt-2 space-y-1 text-sm text-slate-700">
+            <ol className="mt-2 space-y-1 text-sm text-[var(--uvai-ink-soft)]">
               {architecture.stages.map((stage) => (
                 <li key={stage.id}>
-                  <span className="font-medium text-slate-900">{stage.name}</span>
+                  <span className="font-medium text-[var(--uvai-ink)]">{stage.name}</span>
                   {stage.description ? ` — ${stage.description}` : ''}
                 </li>
               ))}
             </ol>
           ) : null}
           {architecture.mermaid ? (
-            <pre className="mt-2 overflow-auto rounded-lg bg-slate-900 p-3 font-mono text-[11px] leading-5 text-slate-200">
+            <pre className="mt-2 overflow-auto rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--uvai-ink)]">
               {architecture.mermaid}
             </pre>
           ) : null}
@@ -205,9 +217,9 @@ function PackWorkbench({
               className="uvai-doc-row"
             >
               <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12px] font-semibold text-blue-700">{artifact.path_hint}</div>
-                <div className="mt-0.5 truncate text-sm text-slate-700">{artifact.purpose}</div>
-                <div className="mt-0.5 truncate font-mono text-[11px] text-slate-400">{artifact.interface}</div>
+                <div className="truncate font-mono text-[12px] font-semibold text-[var(--uvai-accent-ink)]">{artifact.path_hint}</div>
+                <div className="mt-0.5 truncate text-sm text-[var(--uvai-ink-soft)]">{artifact.purpose}</div>
+                <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--uvai-ink-faint)]">{artifact.interface}</div>
               </div>
             </li>
           ))}
@@ -218,9 +230,9 @@ function PackWorkbench({
           {tools.map((tool) => (
             <li key={tool.name} className="uvai-doc-row">
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">{tool.name}</p>
-                {tool.kind ? <p className="text-xs text-slate-500">{tool.kind}</p> : null}
-                {tool.evidence ? <p className="text-xs text-slate-600">{tool.evidence}</p> : null}
+                <p className="text-sm font-medium text-[var(--uvai-ink)]">{tool.name}</p>
+                {tool.kind ? <p className="text-xs text-[var(--uvai-ink-faint)]">{tool.kind}</p> : null}
+                {tool.evidence ? <p className="text-xs text-[var(--uvai-ink-soft)]">{tool.evidence}</p> : null}
               </div>
             </li>
           ))}
@@ -238,7 +250,7 @@ function StudioJobStripDestination({
   switch (destination.kind) {
     case 'video':
       return (
-        <span data-testid="studio-job-video-id" className="text-slate-500">
+        <span data-testid="studio-job-video-id" className="text-[var(--uvai-ink-faint)]">
           {destination.label}
         </span>
       );
@@ -247,7 +259,7 @@ function StudioJobStripDestination({
         <Link
           href={destination.href}
           data-testid="studio-job-self-link"
-          className="text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-700"
+          className="text-[var(--uvai-ink-faint)] underline decoration-[var(--uvai-border-strong)] underline-offset-2 hover:text-[var(--uvai-ink)]"
         >
           {destination.label}
         </Link>
@@ -283,6 +295,7 @@ export default function OneLoopStudio({
   const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
   const [openingPrs, setOpeningPrs] = useState(false);
   const [playerEpoch, setPlayerEpoch] = useState(0);
+  const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
   );
@@ -427,16 +440,20 @@ export default function OneLoopStudio({
     setWorkflowActionSelectionId(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
+      if (controller.signal.aborted || runAbortRef.current !== controller) return;
       const matches = useDashboardStore
         .getState()
         .videos.filter((v) => v.url === next || v.url.includes(handoff.videoId));
       if (matches.length === 0) return;
       selectVideo(matches[0].id);
     }, 250);
+    const stopTick = () => window.clearInterval(tick);
+    controller.signal.addEventListener('abort', stopTick, { once: true });
     try {
       const id = await processVideo(next, { signal: controller.signal });
+      if (runAbortRef.current !== controller) return;
       if (controller.signal.aborted) {
-        setMessage('Analysis cancelled.');
+        setMessage(ANALYSIS_STOPPED_MESSAGE);
         return;
       }
       selectVideo(id);
@@ -454,13 +471,15 @@ export default function OneLoopStudio({
         );
       }
     } catch (err) {
+      if (runAbortRef.current !== controller) return;
       if (controller.signal.aborted) {
-        setMessage('Analysis cancelled.');
+        setMessage(ANALYSIS_STOPPED_MESSAGE);
       } else {
         setMessage(err instanceof Error ? err.message : 'Analysis failed.');
       }
     } finally {
       window.clearInterval(tick);
+      controller.signal.removeEventListener('abort', stopTick);
       if (runAbortRef.current === controller) {
         runAbortRef.current = null;
         setBusy(false);
@@ -470,7 +489,9 @@ export default function OneLoopStudio({
 
   const cancelAnalysis = useCallback(() => {
     runAbortRef.current?.abort();
-    setMessage('Cancelling analysis…');
+    runAbortRef.current = null;
+    setBusy(false);
+    setMessage(ANALYSIS_STOPPED_MESSAGE);
   }, []);
 
   useEffect(() => {
@@ -522,6 +543,7 @@ export default function OneLoopStudio({
   }, [transcriptWorking]);
 
   const videoId = useMemo(() => getYouTubeId(url || selected?.url || ''), [url, selected?.url]);
+  const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
   const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
@@ -792,6 +814,7 @@ export default function OneLoopStudio({
         setPackLiveReceiptVideoId(attemptRecordId);
         setPackLiveReceiptYoutubeId(packVideoId);
         setPackLiveReceiptReasonCode(built.reasonCode);
+        setPreviewFocusEpoch((epoch) => epoch + 1);
         setMessage(packBuildLiveOutcomeMessage(built));
         return;
       }
@@ -902,33 +925,96 @@ export default function OneLoopStudio({
     ? selected.transcript.trim().split(/\s+/).length
     : 0;
 
+  const webMcpSnapshot: StudioWebMcpPackSnapshot = useMemo(
+    () => ({
+      videoId: selected?.videoPack?.videoId ?? (videoId || null),
+      packId: selected?.videoPack?.packId ?? null,
+      sourceUrl: selected?.videoPack?.sourceUrl ?? (url.trim() || null),
+      sourceHash: selected?.videoPack?.sourceHash ?? null,
+      busy: transcriptWorking,
+      transcriptWordCount,
+      chapterCount: shellChapters.length,
+      actionCount: selected?.videoPack?.pack.action_items?.length ?? 0,
+      toolCount: packFormation.tools.length,
+      artifactCount: packFormation.artifacts.length,
+    }),
+    [
+      selected?.videoPack,
+      videoId,
+      url,
+      transcriptWorking,
+      transcriptWordCount,
+      shellChapters.length,
+      packFormation.tools.length,
+      packFormation.artifacts.length,
+    ],
+  );
+  const webMcpSnapshotRef = useRef<StudioWebMcpPackSnapshot>(webMcpSnapshot);
+  const webMcpRunRef = useRef(runAnalysis);
+
+  useEffect(() => {
+    webMcpSnapshotRef.current = webMcpSnapshot;
+  }, [webMcpSnapshot]);
+
+  useEffect(() => {
+    webMcpRunRef.current = runAnalysis;
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void registerStudioWebMcpTools(
+      {
+        getSnapshot: () => webMcpSnapshotRef.current,
+        onLoadUrl: (watchUrl, runImmediately) => {
+          setUrl(watchUrl);
+          if (runImmediately) {
+            void webMcpRunRef.current(watchUrl);
+          }
+        },
+      },
+      { signal: controller.signal },
+    );
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
   return (
-    <div className="template-studio flex min-h-screen flex-col text-slate-900">
-      <Nav rightSlot={<StudioAuthNavLink />} />
+    <div className="template-studio flex min-h-screen flex-col text-[var(--uvai-ink)]">
+      <Nav variant="rail" defaultCollapsed rightSlot={<StudioAuthNavLink />} />
 
       <StudioIdeShell
         toolbar={
           <>
-            <form onSubmit={analyze} className="flex min-w-0 flex-1 items-center gap-2" data-testid="studio-ide-url-form">
+            <form
+              onSubmit={analyze}
+              toolname="run_studio_video_analysis"
+              tooldescription="Extract transcript, numbered chapters, events, and runnable deliverables from a YouTube video URL in UVAI Studio"
+              className="flex min-w-0 flex-1 items-center gap-2"
+              data-testid="studio-ide-url-form"
+            >
               <label className="sr-only" htmlFor="youtube-url">
                 YouTube URL
               </label>
               <input
                 id="youtube-url"
+                name="youtubeUrl"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder={FIXTURE}
                 autoComplete="off"
                 className="uvai-input min-w-0 flex-1 font-mono disabled:opacity-40"
               />
-              <button
-                type="button"
-                onClick={() => setUrl(FIXTURE)}
-                disabled={busy}
-                className="uvai-btn !px-2.5 disabled:opacity-40"
-              >
-                Sample
-              </button>
+              {!url.trim() ? (
+                <button
+                  type="button"
+                  onClick={() => setUrl(FIXTURE)}
+                  disabled={busy}
+                  className="uvai-btn !px-2.5 disabled:opacity-40"
+                >
+                  Sample
+                </button>
+              ) : null}
               {busy ? (
                 <button
                   type="button"
@@ -942,7 +1028,7 @@ export default function OneLoopStudio({
                 <button
                   type="submit"
                   data-testid="studio-ide-run"
-                  className="uvai-btn uvai-btn-primary"
+                  className={clsx('uvai-btn', !hasPayload && 'uvai-btn-primary')}
                 >
                   Run
                 </button>
@@ -978,14 +1064,17 @@ export default function OneLoopStudio({
                 ) : null}
               </div>
             ) : null}
-            <div className="flex items-center gap-1.5" role="toolbar" aria-label="Pack actions">
+            <div className="flex items-center gap-1.5 sm:border-l sm:border-[var(--uvai-border-strong)] sm:pl-2" role="toolbar" aria-label="Pack actions">
               <button
                 type="button"
                 onClick={() => void exportPkg()}
                 disabled={!shipCta.enabled}
                 data-testid="studio-ide-ship"
                 title={shipCta.hint}
-                className="uvai-btn uvai-btn-primary inline-flex items-center gap-1.5 disabled:opacity-40"
+                className={clsx(
+                  'uvai-btn inline-flex items-center gap-1.5 disabled:opacity-40',
+                  shipCta.enabled && hasPayload && 'uvai-btn-primary',
+                )}
               >
                 <Rocket className="h-4 w-4" aria-hidden />
                 Ship this
@@ -1016,29 +1105,34 @@ export default function OneLoopStudio({
                       ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
                       : 'Paste a YouTube URL and run analysis first.'
                 }
-                className="uvai-btn disabled:opacity-40"
+                className="uvai-btn text-[var(--uvai-ink-soft)] disabled:opacity-40"
               >
                 {buildBusy ? 'Building…' : 'Build live'}
               </button>
-              {showTranscriptRetry ? (
-                <button
-                  type="button"
-                  data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn"
-                >
-                  Retry transcript
-                </button>
-              ) : null}
             </div>
             <p className="w-full font-mono text-[11px]" style={{ color: 'var(--uvai-ink-faint)' }} role="status" data-testid="studio-ide-status">
               {statusText}
             </p>
+            {showTranscriptRetry ? (
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-3 py-2 text-xs text-[var(--uvai-danger-ink)]">
+                <span className="min-w-0 flex-1 truncate">
+                  {selected?.failure?.message || 'Extraction stopped before finishing.'}
+                </span>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="uvai-btn shrink-0 !border-[var(--uvai-danger-border)] !bg-[var(--uvai-surface)] !px-3 !py-1 !text-xs font-medium !text-[var(--uvai-danger-ink)] hover:!opacity-90"
+                >
+                  Retry transcript
+                </button>
+              </div>
+            ) : null}
           </>
         }
         videoPane={
-          <div className="flex flex-col gap-3">
-            <div className="relative overflow-hidden rounded-xl border border-slate-200 bg-slate-900 shadow-sm">
+          <div className="studio-source-stack flex flex-col gap-3">
+            <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
               {videoId ? (
                 <>
                   <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
@@ -1052,9 +1146,9 @@ export default function OneLoopStudio({
                   {playerOverlay ? (
                     <div
                       data-testid="studio-player-overlay"
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50 px-6 text-center"
+                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center"
                     >
-                      <p className="text-sm text-slate-700">{playerOverlay}</p>
+                      <p className="text-sm text-[var(--uvai-ink-soft)]">{playerOverlay}</p>
                       {playerPhase === 'error' ? (
                         <div className="flex flex-wrap items-center justify-center gap-2">
                           <button
@@ -1065,41 +1159,196 @@ export default function OneLoopStudio({
                           >
                             Retry player
                           </button>
-                          <a
-                            href={`https://www.youtube.com/watch?v=${videoId}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="uvai-btn"
-                          >
-                            Open on YouTube
-                          </a>
+                          {watchHref ? (
+                            <a
+                              href={watchHref}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="uvai-btn"
+                            >
+                              Open on YouTube
+                            </a>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>
                   ) : null}
                 </>
               ) : (
-                <div className="flex aspect-video items-center justify-center bg-slate-100 px-6 text-center text-sm text-slate-500">
+                <div className="flex aspect-video items-center justify-center bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
                   Paste a link above. The video plays here while we pull the transcript.
                 </div>
               )}
             </div>
-            {selected?.videoPack ? (
-              <div className="uvai-card p-3">
-                <p className="uvai-section-label">Video pack</p>
-                <p className="mt-1.5 font-mono text-[11px] text-slate-500">
-                  <span className="font-semibold text-amber-700">{selected.videoPack.sourceHash.slice(0, 12)}…</span>
-                </p>
-                <p className="mt-0.5 truncate text-xs text-slate-400">{selected.videoPack.sourceUrl}</p>
-              </div>
-            ) : null}
+            <div className="studio-steps-bar flex items-center justify-between gap-2">
+              <ol
+                data-testid="studio-extraction-steps"
+                aria-label="Extraction progress"
+                className="studio-steps min-w-0 flex-1"
+              >
+                {(
+                  [
+                    { id: 'pack', label: 'Pack' },
+                    { id: 'captions', label: 'Captions' },
+                    { id: 'transcript', label: 'Transcript' },
+                    { id: 'events', label: 'Events' },
+                    { id: 'ready', label: 'Ready' },
+                  ] as const
+                ).map((step, idx) => {
+                  const activeIdx =
+                    transcriptStage.id === 'ready'
+                      ? 4
+                      : transcriptStage.id === 'events'
+                        ? 3
+                        : transcriptStage.id === 'transcript'
+                          ? 2
+                          : transcriptStage.id === 'captions'
+                            ? 1
+                            : 0;
+                  const isDone =
+                    !transcriptWorking &&
+                    selected?.status !== 'failed' &&
+                    Boolean(selected?.videoPack || selected?.transcript?.trim());
+                  const isFailed = selected?.status === 'failed';
+                  const stepState = isDone
+                    ? 'done'
+                    : isFailed
+                      ? idx < activeIdx
+                        ? 'done'
+                        : idx === activeIdx
+                          ? 'failed'
+                          : 'idle'
+                      : transcriptWorking
+                        ? idx < activeIdx
+                          ? 'done'
+                          : idx === activeIdx
+                            ? 'active'
+                            : 'idle'
+                        : 'idle';
+                  return (
+                    <li key={step.id} data-state={stepState} data-step={step.id}>
+                      {step.label}
+                    </li>
+                  );
+                })}
+              </ol>
+              {watchHref ? (
+                <a
+                  href={watchHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Trouble with this video? Watch it directly on YouTube"
+                  title="Trouble with this video? Watch it directly on YouTube"
+                  data-testid="studio-watch-on-youtube"
+                  className="shrink-0 text-[11px] font-medium text-[var(--uvai-ink-soft)] underline-offset-2 hover:text-[var(--uvai-ink)] hover:underline"
+                >
+                  YouTube ↗
+                </a>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-3">
+              {selected?.videoPack ? (
+                <div className="uvai-card studio-pack-card p-4">
+                  <div className="studio-pack-card__head flex items-center justify-between gap-2">
+                    <p className="uvai-section-label">Extracted pack</p>
+                    <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                      {selected.videoPack.sourceHash.slice(0, 12)}…
+                    </span>
+                  </div>
+                  <div className="studio-pack-card__chips mt-3 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
+                    {selected.videoPack.pack.action_items?.length ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {selected.videoPack.pack.action_items.length} actions
+                      </span>
+                    ) : null}
+                    {selected.videoPack.pack.stack?.tools?.length ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {selected.videoPack.pack.stack.tools.length} tools
+                      </span>
+                    ) : null}
+                    {selected.videoPack.pack.code_snippets?.length ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {selected.videoPack.pack.code_snippets.length} code files
+                      </span>
+                    ) : null}
+                    {transcriptWordCount > 0 ? (
+                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {transcriptWordCount.toLocaleString()} words
+                      </span>
+                    ) : null}
+                  </div>
+                  <p className="studio-pack-card__url mt-2 truncate text-xs text-[var(--uvai-ink-faint)]">
+                    {selected.videoPack.sourceUrl}
+                  </p>
+                  {selected.videoPack.pack.chapters?.length ? (
+                    <div className="studio-pack-card__jump mt-4 border-t border-[var(--uvai-border)] pt-3">
+                      <p className="uvai-section-label mb-2">Quick jump</p>
+                      <ol className="flex flex-col gap-1.5">
+                        {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
+                          const canSeekPack = videoId === selected.videoPack?.pack.video_id;
+                          return (
+                            <li key={`${chapter.topic}-${index}`}>
+                              <button
+                                type="button"
+                                data-testid={`studio-quick-jump-${index}`}
+                                disabled={!canSeekPack}
+                                title={
+                                  canSeekPack
+                                    ? `Seek to ${chapter.start}s`
+                                    : 'Run analysis or switch URL back to this pack to seek.'
+                                }
+                                onClick={() => {
+                                  if (canSeekPack) seekTo(chapter.start);
+                                }}
+                                className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                <span className="flex min-w-0 items-center gap-2">
+                                  <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                                    {String(index + 1).padStart(2, '0')}
+                                  </span>
+                                  <span className="truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
+                                </span>
+                                <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                                  {chapter.start}s
+                                </span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="uvai-card studio-outline-card p-4">
+                  <p className="uvai-section-label">Workspace outline</p>
+                  <p className="mt-2 text-sm font-medium text-[var(--uvai-ink)]">
+                    Video-in, deliverables-out workflow
+                  </p>
+                  <ul className="mt-3 space-y-2 text-xs text-[var(--uvai-ink-soft)]">
+                    <li className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">01</span>
+                      <span>Bound tasks linked to spoken timestamps</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">02</span>
+                      <span>Numbered chapters, named tools & code files</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">03</span>
+                      <span>Interactive agent chat, Build live & Ship export</span>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
         }
         chatPane={
           <StudioIdeChat
-            videoId={selected?.videoPack?.videoId ?? videoId ?? null}
+            videoId={selected?.videoPack?.videoId ?? (videoId || null)}
             packId={selected?.videoPack?.packId ?? null}
-            disabled={busy}
+            disabled={transcriptWorking}
           />
         }
         outputPane={
@@ -1107,6 +1356,16 @@ export default function OneLoopStudio({
             video={selected}
             eventsEmptyMessage={eventsEmptyMessage}
             stackChecks={stackCheckViews}
+            previewVideoId={
+              scopedPackBuildLiveSuccess?.youtubeVideoId ??
+              selected?.videoPack?.videoId ??
+              videoId ??
+              null
+            }
+            previewReady={Boolean(scopedPackBuildLiveSuccess)}
+            onBuildLive={() => void buildLive()}
+            buildBusy={buildBusy}
+            focusPreviewSignal={previewFocusEpoch}
             reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
               return {
@@ -1156,8 +1415,8 @@ export default function OneLoopStudio({
           className={clsx(
             'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
             exportToast.tone === 'success'
-              ? 'border-amber-300 bg-amber-50 text-amber-800'
-              : 'border-red-300 bg-red-50 text-red-800',
+              ? 'border-[#146ef5]/50 bg-[#111a2e]/95 text-[#e8f0ff]'
+              : 'border-red-500/45 bg-[#241012]/95 text-red-200',
           )}
         >
           {exportToast.text}
@@ -1168,49 +1427,47 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-pack-build-live-result"
           role="status"
-          className="border-t border-amber-200 bg-amber-50/80"
+          className="border-t border-[#146ef5]/35 bg-[var(--uvai-accent-soft)]"
         >
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
-            <div className="flex flex-wrap items-start gap-2">
+          <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-2 px-4 py-1.5 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <span
                 data-testid="studio-pack-build-live-state"
-                className="inline-flex rounded-full border border-amber-300 bg-white px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-700"
+                className="inline-flex rounded-full border border-[#146ef5]/45 bg-[var(--uvai-accent-soft)] px-2 py-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--uvai-accent-ink)]"
               >
                 Ready
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-slate-900">
-                  {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
-                </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  YouTube video id{' '}
-                  <span
-                    data-testid="studio-pack-build-live-video-id"
-                    className="font-mono text-amber-700"
-                  >
-                    {scopedPackBuildLiveSuccess.youtubeVideoId}
-                  </span>
-                </p>
-                <p
-                  data-testid="studio-pack-build-live-reason-code"
-                  className="mt-1 font-mono text-[11px] text-slate-400"
+              <span className="font-medium text-[var(--uvai-ink)]">
+                {scopedPackBuildLiveSuccess.jobTitle} · {scopedPackBuildLiveSuccess.subtitle}
+              </span>
+              <span className="text-[var(--uvai-ink-soft)]">
+                YouTube video id{' '}
+                <span
+                  data-testid="studio-pack-build-live-video-id"
+                  className="font-mono text-[var(--uvai-accent-ink)]"
                 >
-                  {scopedPackBuildLiveSuccess.reasonCode}
-                </p>
-              </div>
+                  {scopedPackBuildLiveSuccess.youtubeVideoId}
+                </span>
+              </span>
+              <span
+                data-testid="studio-pack-build-live-reason-code"
+                className="font-mono text-[11px] text-[var(--uvai-ink-faint)]"
+              >
+                {scopedPackBuildLiveSuccess.reasonCode}
+              </span>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Link
                 data-testid="studio-pack-build-live-artifact-link"
                 href={scopedPackBuildLiveSuccess.artifactPath}
-                className="uvai-btn uvai-btn-primary inline-flex w-fit items-center justify-center"
+                className="uvai-btn uvai-btn-primary inline-flex w-fit items-center justify-center !py-1 !text-xs"
               >
                 Open {scopedPackBuildLiveSuccess.artifactPath}
               </Link>
               <Link
                 data-testid="studio-pack-build-live-pro-cta"
                 href="/#get-pro"
-                className="uvai-btn inline-flex w-fit items-center justify-center"
+                className="uvai-btn inline-flex w-fit items-center justify-center !py-1 !text-xs"
               >
                 Unlock Workflow Pro
               </Link>
@@ -1223,16 +1480,16 @@ export default function OneLoopStudio({
         <div
           data-testid="studio-build-live-failure"
           role="alert"
-          className="border-t border-red-200 bg-red-50/80"
+          className="border-t border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)]"
         >
-          <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6">
-            <div>
-              <p className="text-sm font-medium text-red-800">{buildLiveFailure.title}</p>
-              <p className="mt-1 text-sm text-red-700/85">{buildLiveFailure.message}</p>
+          <div className="mx-auto flex max-w-[1360px] flex-wrap items-center justify-between gap-2 px-4 py-1.5 sm:px-6">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-medium text-[var(--uvai-danger-ink)]">{buildLiveFailure.title}</span>
+              <span className="text-[var(--uvai-ink-soft)]">{buildLiveFailure.message}</span>
               {buildLiveFailure.reasonCode ? (
-                <p className="mt-1 font-mono text-[11px] text-red-600/60">
+                <span className="font-mono text-[11px] text-[var(--uvai-ink-faint)]">
                   {buildLiveFailure.reasonCode}
-                </p>
+                </span>
               ) : null}
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1244,7 +1501,7 @@ export default function OneLoopStudio({
                     target="_blank"
                     rel="noopener noreferrer"
                     data-testid="studio-build-live-recovery-open-hosted"
-                    className="uvai-btn"
+                    className="uvai-btn !py-1 !text-xs"
                   >
                     {action.label}
                   </a>
@@ -1254,7 +1511,7 @@ export default function OneLoopStudio({
                     type="button"
                     data-testid={`studio-build-live-recovery-${action.id}`}
                     onClick={() => runBuildLiveRecovery(action)}
-                    className="uvai-btn"
+                    className="uvai-btn !py-1 !text-xs"
                   >
                     {action.label}
                   </button>

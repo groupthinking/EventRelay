@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { compileLinkedSop } from '@/lib/linked-sop';
 import {
   deployHoldReason,
+  OFFICIAL_TEMPLATES,
   officialTemplateFiles,
   pickOfficialTemplate,
   stackCheckItems,
@@ -56,6 +57,114 @@ describe('official templates', () => {
     });
     expect(pickOfficialTemplate(sop)).toBeNull();
     expect(officialTemplateFiles('talk', sop)['src/index.ts']).toBeUndefined();
+  });
+
+  it('exports the complete OFFICIAL_TEMPLATES catalog with verified GitHub repos and docs URLs', () => {
+    expect(OFFICIAL_TEMPLATES.map((t) => t.id)).toEqual([
+      'vercel-next',
+      'shopify-cli',
+      'webflow-devlink',
+      'google-gemini-live',
+      'openai-responses',
+      'nvidia-genai',
+      'groq-appgen',
+    ]);
+    for (const template of OFFICIAL_TEMPLATES) {
+      expect(template.stack.length).toBeGreaterThan(0);
+      expect(template.name.length).toBeGreaterThan(0);
+      expect(template.clone.length).toBeGreaterThan(0);
+      expect(template.repo).toMatch(/^https:\/\/github\.com\//);
+      expect(template.docsUrl).toMatch(/^https:\/\//);
+    }
+  });
+
+  it.each([
+    {
+      label: 'Webflow',
+      toolName: 'Webflow DevLink',
+      expectedId: 'webflow-devlink',
+      expectedStack: 'webflow',
+      expectedRepo: 'https://github.com/webflow/devlink-examples',
+      expectedDocs: 'https://developers.webflow.com',
+    },
+    {
+      label: 'Gemini',
+      toolName: 'Gemini',
+      expectedId: 'google-gemini-live',
+      expectedStack: 'gemini',
+      expectedRepo: 'https://github.com/google-gemini/live-api-web-console',
+      expectedDocs: 'https://ai.google.dev/gemini-api/docs/live',
+    },
+    {
+      label: 'Google AI Studio',
+      toolName: 'Google AI Studio',
+      expectedId: 'google-gemini-live',
+      expectedStack: 'gemini',
+      expectedRepo: 'https://github.com/google-gemini/live-api-web-console',
+      expectedDocs: 'https://ai.google.dev/gemini-api/docs/live',
+    },
+    {
+      label: 'OpenAI / ChatGPT',
+      toolName: 'ChatGPT',
+      expectedId: 'openai-responses',
+      expectedStack: 'openai',
+      expectedRepo: 'https://github.com/openai/openai-responses-starter-app',
+      expectedDocs: 'https://platform.openai.com/docs',
+    },
+    {
+      label: 'NVIDIA',
+      toolName: 'NVIDIA NIM',
+      expectedId: 'nvidia-genai',
+      expectedStack: 'nvidia',
+      expectedRepo: 'https://github.com/NVIDIA/GenerativeAIExamples',
+      expectedDocs: 'https://docs.nvidia.com/nim',
+    },
+    {
+      label: 'Groq',
+      toolName: 'GroqCloud',
+      expectedId: 'groq-appgen',
+      expectedStack: 'groq',
+      expectedRepo: 'https://github.com/groq/groq-appgen',
+      expectedDocs: 'https://console.groq.com/docs',
+    },
+  ])(
+    'picks $expectedId and emits TEMPLATE.md when $label ($toolName) is in pack.stack.tools',
+    ({ toolName, expectedId, expectedStack, expectedRepo, expectedDocs }) => {
+      const sop = compileLinkedSop({
+        transcript: `Build the workflow with ${toolName}.`,
+        segments: [{ start: 2, duration: 3, text: `Build the workflow with ${toolName}.` }],
+        packTools: [{ name: toolName }],
+      });
+      const picked = pickOfficialTemplate(sop);
+      expect(picked?.id).toBe(expectedId);
+      expect(picked?.stack).toBe(expectedStack);
+      expect(picked?.repo).toBe(expectedRepo);
+      expect(picked?.docsUrl).toBe(expectedDocs);
+
+      const files = officialTemplateFiles('starter-demo', sop);
+      expect(files['src/index.ts']).toBeUndefined();
+      expect(files['SHOPIFY.md']).toBeUndefined();
+      expect(files['TEMPLATE.md']).toContain('starter-demo');
+      expect(files['TEMPLATE.md']).toContain(picked!.clone);
+      expect(files['TEMPLATE.md']).toContain(expectedRepo);
+      expect(files['TEMPLATE.md']).toContain(expectedDocs);
+    },
+  );
+
+  it('preserves priority order so Vercel and Shopify take precedence over non-runnable starter stacks', () => {
+    const vercelAndGemini = compileLinkedSop({
+      transcript: 'Deploy Gemini Live on Vercel.',
+      segments: [{ start: 1, duration: 2, text: 'Deploy Gemini Live on Vercel.' }],
+      packTools: [{ name: 'Gemini' }, { name: 'Vercel' }],
+    });
+    expect(pickOfficialTemplate(vercelAndGemini)?.id).toBe('vercel-next');
+
+    const shopifyAndOpenAI = compileLinkedSop({
+      transcript: 'Run Shopify CLI with OpenAI.',
+      segments: [{ start: 1, duration: 2, text: 'Run Shopify CLI with OpenAI.' }],
+      packTools: [{ name: 'OpenAI' }, { name: 'Shopify CLI' }],
+    });
+    expect(pickOfficialTemplate(shopifyAndOpenAI)?.id).toBe('shopify-cli');
   });
 });
 
@@ -138,5 +247,34 @@ describe('deployHoldReason', () => {
       segments: [{ start: 0, duration: 2, text: 'The host talks about bagels.' }],
     });
     expect(deployHoldReason(sop, [])).toBeNull();
+  });
+
+  it('keeps deployHoldReason null for non-runnable starter stacks (webflow, gemini, openai, nvidia, groq)', () => {
+    const sop = compileLinkedSop({
+      transcript: 'Combine Webflow, Gemini, OpenAI, NVIDIA NIM, and Groq.',
+      segments: [
+        {
+          start: 0,
+          duration: 5,
+          text: 'Combine Webflow, Gemini, OpenAI, NVIDIA NIM, and Groq.',
+        },
+      ],
+      packTools: [
+        { name: 'Webflow' },
+        { name: 'Gemini' },
+        { name: 'OpenAI' },
+        { name: 'NVIDIA' },
+        { name: 'Groq' },
+      ],
+    });
+    const stack = stackCheckItems(sop);
+    expect(stack).toHaveLength(5);
+    expect(deployHoldReason(sop, [], 'anonymous')).toBeNull();
+    expect(deployHoldReason(sop, [], 'signed-in')).toBeNull();
+    for (const item of stack) {
+      expect(stackCheckStatus(item, [], 'anonymous')).toBe('unknown');
+      expect(stackCheckStatus(item, [], 'signed-in')).toBe('unknown');
+      expect(studioStackCheckView(item, [], 'signed-in').holdsShip).toBe(false);
+    }
   });
 });
