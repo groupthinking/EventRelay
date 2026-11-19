@@ -792,7 +792,9 @@ export default function OneLoopStudio({
         },
       },
       { signal: controller.signal },
-    );
+    ).catch((error: unknown) => {
+      console.error('WebMCP tool registration failed:', error);
+    });
     return () => {
       controller.abort();
     };

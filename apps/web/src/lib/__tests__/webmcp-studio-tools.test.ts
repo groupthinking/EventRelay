@@ -5,12 +5,147 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import {
   auditDocumentAeoAndWebMcp,
+  getDocumentModelContext,
   registerStudioWebMcpTools,
   WEBFLOW_MCP_CURRICULUM_VIDEOS,
+  type StudioWebMcpHandlers,
   type WebMcpToolDefinition,
 } from '@/lib/webmcp-studio-tools';
 
 describe('webmcp-studio-tools', () => {
+  const handlers: StudioWebMcpHandlers = {
+    getSnapshot: vi.fn(),
+    onLoadUrl: vi.fn(),
+  };
+
+  it.each(['permissionsPolicy', 'featurePolicy'])(
+    'skips modelContext access and registration when %s denies tools',
+    async (policyProperty) => {
+      const allowsFeature = vi.fn(() => false);
+      const getModelContext = vi.fn(() => {
+        throw new DOMException('Tools are blocked by permissions policy.', 'NotAllowedError');
+      });
+      const doc = document.implementation.createHTMLDocument();
+      Object.defineProperty(doc, policyProperty, { value: { allowsFeature } });
+      Object.defineProperty(doc, 'modelContext', { get: getModelContext });
+
+      expect(getDocumentModelContext(doc)).toBeNull();
+      expect(auditDocumentAeoAndWebMcp(doc).imperativeApiAvailable).toBe(false);
+      await expect(registerStudioWebMcpTools(handlers, { doc })).resolves.toEqual({
+        registered: [],
+        supported: false,
+      });
+      expect(allowsFeature).toHaveBeenCalledWith('tools');
+      expect(getModelContext).not.toHaveBeenCalled();
+    },
+  );
+
+  it('prefers permissionsPolicy over the legacy featurePolicy API', () => {
+    const registerTool = vi.fn();
+    const doc = {
+      permissionsPolicy: { allowsFeature: vi.fn(() => true) },
+      featurePolicy: { allowsFeature: vi.fn(() => false) },
+      modelContext: { registerTool },
+    } as unknown as Document;
+
+    expect(getDocumentModelContext(doc)).toEqual({ registerTool });
+  });
+
+  it.each(['NotAllowedError', 'SecurityError'])(
+    'treats a %s from the modelContext getter as unsupported',
+    async (name) => {
+      const doc = document.implementation.createHTMLDocument();
+      Object.defineProperty(doc, 'modelContext', {
+        get: () => {
+          throw new DOMException('Tools access denied.', name);
+        },
+      });
+
+      expect(getDocumentModelContext(doc)).toBeNull();
+      expect(auditDocumentAeoAndWebMcp(doc).imperativeApiAvailable).toBe(false);
+      await expect(registerStudioWebMcpTools(handlers, { doc })).resolves.toEqual({
+        registered: [],
+        supported: false,
+      });
+    },
+  );
+
+  it('returns unsupported without probing unknown policies when WebMCP is unavailable', async () => {
+    const doc = document.implementation.createHTMLDocument();
+    const allowsFeature = vi.fn();
+    Object.defineProperty(doc, 'featurePolicy', { value: { allowsFeature } });
+
+    await expect(registerStudioWebMcpTools(handlers, { doc })).resolves.toEqual({
+      registered: [],
+      supported: false,
+    });
+    expect(allowsFeature).not.toHaveBeenCalled();
+  });
+
+  it.each(['throw', 'reject'])(
+    'handles registration permission failures when registerTool uses %s',
+    async (failureMode) => {
+      const error = new DOMException('Tools access denied.', 'NotAllowedError');
+      const registerTool = vi.fn(() => {
+        if (failureMode === 'throw') throw error;
+        return Promise.reject(error);
+      });
+      const doc = { modelContext: { registerTool } } as unknown as Document;
+
+      await expect(registerStudioWebMcpTools(handlers, { doc })).resolves.toEqual({
+        registered: [],
+        supported: false,
+      });
+      expect(registerTool).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('stops registration if permission is denied after a tool has registered', async () => {
+    const registerTool = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValue(new DOMException('Tools access denied.', 'SecurityError'));
+    const doc = { modelContext: { registerTool } } as unknown as Document;
+
+    await expect(registerStudioWebMcpTools(handlers, { doc })).resolves.toEqual({
+      registered: ['get_active_video_pack'],
+      supported: false,
+    });
+    expect(registerTool).toHaveBeenCalledTimes(2);
+  });
+
+  it('handles an in-flight registration aborted by effect cleanup', async () => {
+    const controller = new AbortController();
+    const registerTool = vi.fn(() => {
+      controller.abort();
+      return Promise.reject(controller.signal.reason);
+    });
+    const doc = { modelContext: { registerTool } } as unknown as Document;
+
+    await expect(registerStudioWebMcpTools(handlers, { doc, signal: controller.signal }))
+      .resolves.toEqual({ registered: [], supported: true });
+    expect(registerTool).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not register tools when the signal is already aborted', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const registerTool = vi.fn();
+    const doc = { modelContext: { registerTool } } as unknown as Document;
+
+    await expect(registerStudioWebMcpTools(handlers, { doc, signal: controller.signal }))
+      .resolves.toEqual({ registered: [], supported: true });
+    expect(registerTool).not.toHaveBeenCalled();
+  });
+
+  it('does not hide unexpected registration errors', async () => {
+    const error = new TypeError('Invalid tool definition');
+    const doc = {
+      modelContext: { registerTool: vi.fn().mockRejectedValue(error) },
+    } as unknown as Document;
+
+    await expect(registerStudioWebMcpTools(handlers, { doc })).rejects.toBe(error);
+  });
+
   it('includes the Webflow MCP curriculum video entry for 6TrjBFW6EKg', () => {
     const webflow = WEBFLOW_MCP_CURRICULUM_VIDEOS.find((v) => v.videoId === '6TrjBFW6EKg');
     expect(webflow).toBeDefined();
