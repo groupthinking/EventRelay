@@ -87,7 +87,7 @@ Supporting app files:
 | GET | `/api/jobs/:jobId` | Proxy backend async video job status. |
 | — | `/api/auth/[...nextauth]` | NextAuth handler (Google OAuth). |
 
-Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, `/api/video/search`, `/api/studio/chats/*`, `/api/extract-events`, `/api/gate/probe-live`, `/api/search`, `/api/realtime/session`, `/api/training/*`, `/api/agents/*`, `/api/v1/preferences`, `/api/v1/refinery/dataset`, and the `/api/v1/video/*` aliases. Those paths stay in `src/lib/auth-paths.ts` so the proxy still requires a session.
+Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, `/api/video/search`, `/api/studio/chats/*`, `/api/extract-events`, `/api/gate/probe-live`, `/api/search`, `/api/realtime/session`, `/api/training/*`, `/api/agents/dispatch`, `/api/agents/status`, `/api/v1/preferences`, `/api/v1/refinery/dataset`, and the `/api/v1/video/*` aliases. Those paths stay in `src/lib/auth-paths.ts` so the proxy still requires a session. `/api/agents/actions` stays: the durable review journal imports that route.
 
 ---
 

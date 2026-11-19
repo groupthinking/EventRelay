@@ -10,7 +10,7 @@ versioning aims for [SemVer](https://semver.org/).
 
 #### Removed
 
-- Unwired HTTP surfaces with no in-repo caller: legacy `/api/video`, dashboard embed, search, video search, video generate, extract-events, agent dispatch/status/actions, realtime session, training, refinery dataset, studio chat routes, and `/api/v1/video/*` aliases.
+- Unwired HTTP surfaces with no in-repo caller: legacy `/api/video`, dashboard embed, search, video search, video generate, extract-events, agent dispatch/status, realtime session, training, refinery dataset, studio chat routes, and `/api/v1/video/*` aliases. `/api/agents/actions` stays; the durable review journal imports it.
 - Shared in-memory preferences route (`let sessionPreferences`) and its unused client.
 - Studio deploy durable workflow. `POST /api/workflows/studio-deploy` stays a 409 G.A.T.E. refusal and does not start a run.
 - Unused `agentWorkflowUi` flag, discarded Studio computations, GitHub PR server action with no button, unused field/empty/label/separator primitives, styled-jsx types, and two unreferenced public PNGs.
