@@ -5,6 +5,8 @@ import { ArrowRight, Link2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { submitHomePaste } from '@/lib/studio-handoff';
 
+const MODES = ['Video Pack', 'Templates & Tools', 'MCP & Prompts'] as const;
+
 /**
  * Sell-page paste field. Does not load the workbench bundle.
  * Validates a YouTube URL, kicks pack emit, then router.push('/studio?video=').
@@ -13,6 +15,7 @@ export default function HomePasteForm() {
   const router = useRouter();
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
+  const [mode, setMode] = useState<(typeof MODES)[number]>(MODES[0]);
   const helpId = error ? 'home-youtube-url-error' : 'home-youtube-url-help';
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -27,7 +30,26 @@ export default function HomePasteForm() {
   };
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto w-full max-w-2xl">
+    <form
+      onSubmit={onSubmit}
+      toolname="extract_youtube_video_pack"
+      tooldescription="Open UVAI Studio and extract a structured Video Pack, transcript, chapters, and agent workflow from a YouTube URL"
+      className="home-composer-surface mx-auto w-full max-w-2xl"
+      data-mode={mode}
+    >
+      <div className="home-composer-modes" role="group" aria-label="Focus">
+        {MODES.map((item) => (
+          <button
+            key={item}
+            type="button"
+            className="home-composer-mode"
+            aria-pressed={mode === item}
+            onClick={() => setMode(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
       <label htmlFor="home-youtube-url" className="uvai-label mb-2 block text-left">
         YouTube URL
       </label>
@@ -35,6 +57,7 @@ export default function HomePasteForm() {
         <Link2 size={18} aria-hidden="true" className="template-source-icon" />
         <input
           id="home-youtube-url"
+          name="youtubeUrl"
           value={value}
           onChange={(event) => setValue(event.target.value)}
           placeholder="https://www.youtube.com/watch?v=auJzb1D-fag"

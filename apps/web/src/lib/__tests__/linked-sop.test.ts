@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyPackStackChecks,
   compileLinkedSop,
+  OFFICIAL_CATALOG,
   renderDeployMarkdown,
   stackChecksFromPackTools,
   type LinkedSop,
@@ -163,6 +164,39 @@ describe('stackChecksFromPackTools', () => {
     expect(next.checklist.some((item) => item.source === 'stack' && /cloudflare|x402/i.test(item.title))).toBe(
       true,
     );
+  });
+
+  it('emits standard chk_tool_* items with official docs URLs for Webflow, Gemini, OpenAI, NVIDIA, Groq, and Grok', () => {
+    expect(OFFICIAL_CATALOG.find((e) => e.name === 'Google AI Studio')?.stack).toBe('gemini');
+    expect(OFFICIAL_CATALOG.find((e) => e.name === 'Gemini')?.stack).toBe('gemini');
+    expect(OFFICIAL_CATALOG.find((e) => e.name === 'Grok')?.stack).toBe('grok');
+
+    const checks = stackChecksFromPackTools([
+      { name: 'Webflow MCP' },
+      { name: 'Google AI Studio' },
+      { name: 'ChatGPT' },
+      { name: 'NVIDIA NIM' },
+      { name: 'GroqCloud' },
+      { name: 'Grok' },
+    ]);
+    expect(checks).toHaveLength(6);
+    expect(checks.every((item) => item.id.startsWith('chk_tool_'))).toBe(true);
+    expect(checks.map((item) => item.stack)).toEqual([
+      'webflow',
+      'gemini',
+      'openai',
+      'nvidia',
+      'groq',
+      'grok',
+    ]);
+    expect(checks.map((item) => item.href)).toEqual([
+      'https://developers.webflow.com',
+      'https://ai.google.dev',
+      'https://platform.openai.com/docs',
+      'https://docs.nvidia.com/nim',
+      'https://console.groq.com/docs',
+      'https://docs.x.ai',
+    ]);
   });
 });
 
