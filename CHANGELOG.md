@@ -6,6 +6,26 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-19: WebMCP preview permissions ([#2746](https://github.com/groupthinking/EventRelay/pull/2746))
+
+#### Fixed
+
+- Skip optional WebMCP tool registration when the browser's permissions policy
+  denies `tools`, and handle permission failures without unhandled rejections.
+- Handle in-flight registration cancellation during Studio effect cleanup while
+  preserving diagnostics for unexpected failures. Security headers are unchanged.
+
+#### Regression SOP
+
+- Run `npm --workspace=apps/web run test -- src/lib/__tests__/webmcp-studio-tools.test.ts`
+  for changes to WebMCP initialization (16 tests cover registration, denied or
+  unavailable APIs, audits, and cancellation).
+- Run the web app type check and ESLint on the changed TypeScript files.
+- Check `/studio` normally and with `Permissions-Policy: tools=()` enforced by a
+  local verification proxy. Confirm the sidebar toggles after hydration and no
+  uncaught errors appear. Preserve restrictions rather than enabling tools in
+  embedded previews; forward development WebSocket traffic through the proxy.
+
 ### 2026-11-13: Agent staff governance (docs)
 
 #### Added
