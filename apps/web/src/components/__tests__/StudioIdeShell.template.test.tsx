@@ -1,40 +1,75 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
-describe('Horizontal Webflow + Shipper Studio navigation', () => {
+describe('Horizontal Webflow + Antigravity Studio navigation', () => {
   it('switches source/chat/output without losing a conversation draft', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={<span>Run controls</span>} videoPane={<p>Source evidence</p>}
-      chatPane={<input aria-label="Draft" defaultValue="" />} outputPane={<p>Deliverables</p>} />);
-    fireEvent.change(screen.getByLabelText('Draft'), { target: { value: 'Which step is unclear?' } });
+    render(
+      <StudioIdeShell
+        toolbar={<span>Run controls</span>}
+        videoPane={<p>Source evidence</p>}
+        chatPane={<input aria-label="Draft" defaultValue="" />}
+        outputPane={<p>Deliverables</p>}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Draft'), {
+      target: { value: 'Which step is unclear?' },
+    });
     fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
     expect(screen.getByRole('tab', { name: 'Source' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
     fireEvent.click(screen.getByRole('tab', { name: 'Conversation' }));
-    expect((screen.getByLabelText('Draft') as HTMLInputElement).value).toBe('Which step is unclear?');
+    expect((screen.getByLabelText('Draft') as HTMLInputElement).value).toBe(
+      'Which step is unclear?',
+    );
   });
 
   it('returns to Conversation after either selected mobile band collapses', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
-    for (const [view, collapse] of [['Source', 'Collapse video pane'], ['Deliverables', 'Collapse output pane']]) {
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
+    for (const [view, collapse] of [
+      ['Source', 'Collapse video pane'],
+      ['Deliverables', 'Collapse output pane'],
+    ]) {
       fireEvent.click(screen.getByRole('tab', { name: view }));
       fireEvent.click(screen.getByRole('button', { name: collapse }));
       expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('chat');
-      expect(screen.getByRole('tab', { name: 'Conversation' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Conversation' }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
     }
   });
 
   it('supports arrow and Home/End keys within the view toolbar', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Conversation' }), { key: 'ArrowRight' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Deliverables' }));
@@ -44,7 +79,14 @@ describe('Horizontal Webflow + Shipper Studio navigation', () => {
 
   it('restores collapsed bands through restore controls and mobile view tabs', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Collapse video pane' }));
     expect(screen.queryByTestId('studio-ide-video-pane')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
@@ -58,7 +100,14 @@ describe('Horizontal Webflow + Shipper Studio navigation', () => {
 
   it('keeps one main landmark containing the selected horizontal sections', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
 
     const main = screen.getByRole('main');
     expect(screen.getAllByRole('main')).toHaveLength(1);
@@ -73,7 +122,7 @@ describe('Horizontal Webflow + Shipper Studio navigation', () => {
     }
   });
 
-  it('omits vertical drag splitters in favor of the Webflow split workbench grid', () => {
+  it('omits vertical drag splitters in favor of the split workbench grid', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -91,5 +140,40 @@ describe('Horizontal Webflow + Shipper Studio navigation', () => {
     expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-details-rail')).toBeTruthy();
     expect(screen.getByRole('main').dataset.detailsRail).toBe('true');
+  });
+
+  it('supports controlled mobilePane and onMobilePaneChange callbacks', () => {
+    vi.stubGlobal('React', React);
+    const onMobilePaneChange = vi.fn();
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+        mobilePane="video"
+        onMobilePaneChange={onMobilePaneChange}
+      />,
+    );
+    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
+    fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
+    expect(onMobilePaneChange).toHaveBeenCalledWith('output');
+  });
+
+  it('places Conversation full-height left and splits side-by-side down to 680px', () => {
+    const shellSource = readFileSync(
+      join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'),
+      'utf8',
+    );
+    const cssSource = readFileSync(
+      join(process.cwd(), 'src/styles/studio-workbench.css'),
+      'utf8',
+    );
+    expect(shellSource).toContain('min-[680px]:flex');
+    expect(shellSource).toContain('min-[680px]:!hidden');
+    expect(shellSource).not.toContain('min-[901px]');
+    expect(cssSource).toContain('@media (min-width: 680px)');
+    expect(cssSource).toContain('@media (max-width: 679px)');
+    expect(cssSource).toContain('minmax(290px, 0.9fr)');
   });
 });

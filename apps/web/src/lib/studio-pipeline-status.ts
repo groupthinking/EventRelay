@@ -156,7 +156,7 @@ export function studioWorkbenchEmptyView(input: {
     return {
       title: 'Analysis in progress',
       description:
-        'Waiting on transcript and pack storage. Ship this and Build live unlock when the run finishes.',
+        'Waiting on transcript and pack storage. Export and Live Preview unlock when the run finishes.',
       primaryAction: null,
     };
   }
@@ -181,7 +181,7 @@ export function studioWorkbenchEmptyView(input: {
   return {
     title: 'Video Pack not stored',
     description:
-      'Transcript is here but no pack was persisted for Build live. Re-run analysis to store a Video Pack.',
+      'Transcript is here but no pack was persisted for Live Preview. Re-run analysis to store a Video Pack.',
     primaryAction: 'run',
   };
 }
@@ -197,7 +197,7 @@ export function studioEventsEmptyMessage(input: {
 }): string {
   if (input.eventCount > 0) return '';
   if (input.busy) return 'Extracting events…';
-  if (!input.hasCompletedRun) return 'Events show up after Run.';
+  if (!input.hasCompletedRun) return 'Events appear after you analyze a video.';
   const packReady =
     input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
   if (packReady) {
@@ -241,7 +241,7 @@ export function studioCanExport(input: {
 }
 
 /**
- * Anonymous Ship this is pack-exportability only. Stack-check hold copy
+ * Anonymous Export is pack-exportability only. Stack-check hold copy
  * (SeaDance/Cluely-class unknown, signed-out vendor skip) never disables it.
  */
 export function studioShipEnabled(input: {
@@ -255,14 +255,14 @@ export function studioShipEnabled(input: {
 export function studioShipCta(input: {
   canExport: boolean;
   holdReason?: string | null;
-}): { label: 'Ship this'; enabled: boolean; hint: string } {
+}): { label: 'Export'; enabled: boolean; hint: string } {
   const enabled = studioShipEnabled(input);
   return {
-    label: 'Ship this',
+    label: 'Export',
     enabled,
     hint: enabled
-      ? 'Download the Video Pack ZIP. Named tools that UVAI cannot run are skip/unknown — they do not block ship.'
-      : 'Run analysis first so there is a pack to ship.',
+      ? 'Download the Video Pack ZIP. Named tools that UVAI cannot run are skip/unknown — they do not block export.'
+      : 'Run analysis first so there is a pack to export.',
   };
 }
 

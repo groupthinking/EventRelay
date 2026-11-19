@@ -1,8 +1,13 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Nav from '@/components/Nav';
+
+const here = dirname(fileURLToPath(import.meta.url));
 
 const usePathnameMock = vi.fn();
 
@@ -101,5 +106,45 @@ describe('Nav template routing semantics', () => {
 
     fireEvent.keyDown(window, { key: '/', metaKey: true });
     expect(nav.dataset.collapsed).toBe('true');
+  });
+
+  it('keeps primary topbar links visible down to 600px and mobile drawer below 600px', () => {
+    usePathnameMock.mockReturnValue('/');
+    render(<Nav />);
+
+    const homeLink = screen.getByRole('link', { name: 'Home' });
+    const linksWrap = homeLink.parentElement;
+    expect(linksWrap?.className).toContain('min-[600px]:flex');
+    expect(linksWrap?.className).not.toContain('md:flex');
+    expect(homeLink.className).toContain('whitespace-nowrap');
+
+    const menuButton = screen.getByRole('button', { name: 'Open navigation menu' });
+    expect(menuButton.className).toContain('min-[600px]:hidden');
+  });
+
+  it('keeps an accessible Sign in / account trigger in collapsed rail footer and expands to reveal rightSlot', () => {
+    usePathnameMock.mockReturnValue('/studio');
+    render(<Nav variant="rail" defaultCollapsed rightSlot={<a href="/login">Sign in</a>} />);
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    expect(nav.dataset.collapsed).toBe('true');
+
+    const collapsedAccount = screen.getByRole('button', { name: 'Sign in or account' });
+    expect(collapsedAccount.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(collapsedAccount);
+
+    expect(nav.dataset.collapsed).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Sign in or account' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Sign in' }).getAttribute('href')).toBe('/login');
+  });
+
+  it('defines topbar height token and keeps rail labels and CTA accessible across breakpoints', () => {
+    const css = readFileSync(join(here, '../../styles/theme-tokens.css'), 'utf8');
+    expect(css).toContain('--uvai-topbar-h: 64px;');
+    expect(css).toContain('--uvai-topbar-h: 56px;');
+    expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-collapsed-cta');
+    expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-brand-text');
+    expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-links .uvai-rail-label');
+    expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-cta');
   });
 });

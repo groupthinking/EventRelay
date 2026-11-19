@@ -78,7 +78,8 @@ describe('OneLoopStudio Build live honesty (B3b)', () => {
     });
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-build-live-failure')).toBeTruthy();
@@ -117,7 +118,8 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
     });
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
@@ -169,14 +171,15 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
     });
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
     });
     expect(screen.getByTestId('studio-pack-build-live-video-id').textContent).toBe(youtubeId);
 
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-build-live-failure')).toBeTruthy();

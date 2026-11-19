@@ -74,10 +74,12 @@ describe('OneLoopStudio IDE status and transcript', () => {
 
     render(<OneLoopStudio showAgentWorkflowUi={false} />);
 
-    expect(screen.getByTestId('studio-build-live-button').getAttribute('title')).toBe(
+    expect(screen.getByRole('combobox', { name: 'Saved videos' })).toBeTruthy();
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    expect(screen.getByTestId('studio-ide-preview-verify').getAttribute('title')).toBe(
       'Compile the stored Video Pack for auJzb1D-fag.',
     );
-    expect(screen.getByTestId('studio-build-live-button').getAttribute('title')).not.toContain('/d/');
+    expect(screen.getByTestId('studio-ide-ship').getAttribute('title')).not.toContain('/d/');
   });
 
   it('shows the extract error instead of the idle transcript after a failed pack', () => {

@@ -19,7 +19,7 @@ import type {
   SearchResult,
   Video,
 } from '@/store/dashboard-types';
-import { formatSeconds } from '@/lib/timestamp';
+import { extractYouTubeId, formatSeconds } from '@/lib/timestamp';
 import { emitVideoPack, type VideoPackCitation } from '@/lib/emit-video-pack';
 import {
   pollVideoToActions,
@@ -65,9 +65,24 @@ interface DashboardState {
   setSearchQuery: (query: string) => void;
 }
 
-/** Trim a URL for display in titles/activity. */
+/** Trim a string for display in titles/activity. */
 function truncate(value: string, max: number): string {
   return value.length > max ? value.substring(0, max - 3) + '…' : value;
+}
+
+function fallbackVideoTitle(url: string): string {
+  const videoId = extractYouTubeId(url);
+  return videoId ? `YouTube · ${videoId}` : 'YouTube video';
+}
+
+function isPlaceholderVideoTitle(title: string): boolean {
+  const trimmed = title.trim();
+  return (
+    trimmed.length === 0 ||
+    /^analyzing:\s*/i.test(trimmed) ||
+    /^analysis\s+(?:blocked|stopped)\b/i.test(trimmed) ||
+    /^https?:\/\//i.test(trimmed)
+  );
 }
 
 function formatVerifiedTranscript(segments: TranscriptSegment[]): string | undefined {
@@ -114,6 +129,7 @@ function normalizeDashboardActions(value: unknown): Action[] {
 
 function verifiedResultPatch(
   id: string,
+  url: string,
   runId: string,
   result: VideoToActionsResult | undefined,
   pack?: VideoPackCitation,
@@ -181,7 +197,7 @@ function verifiedResultPatch(
     status: 'complete',
     progress: 100,
     pipelineMode: 'workflow',
-    title: truncate(analysis.title || 'Verified video analysis', 60),
+    title: truncate(analysis.title?.trim() || fallbackVideoTitle(url), 60),
     processedAt: new Date().toISOString(),
     duration: `${provenance.segmentCount} segments`,
     transcript,
@@ -216,7 +232,7 @@ function workflowFailurePatch(url: string, startedAt: string, message: string): 
   return {
     status: 'failed',
     progress: 100,
-    title: `Analysis blocked: ${truncate(url, 38)}`,
+    title: `Analysis blocked · ${fallbackVideoTitle(url)}`,
     processedAt: failedAt,
     failure: {
       stage,
@@ -292,6 +308,26 @@ function isStoredVideo(value: unknown): value is Video {
     && typeof row.progress === 'number' && Number.isFinite(row.progress)
     && ['processing', 'complete', 'failed'].includes(String(row.status));
 }
+
+function normalizePersistedVideo(video: Video): Video {
+  const cleanTitle = isPlaceholderVideoTitle(video.title)
+    ? fallbackVideoTitle(video.url)
+    : video.title;
+  if (video.status !== 'processing') {
+    return cleanTitle === video.title ? video : { ...video, title: cleanTitle };
+  }
+  return {
+    ...video,
+    title: cleanTitle,
+    status: 'failed',
+    failure: video.failure ?? {
+      stage: 'analysis',
+      message: 'Previous extraction did not finish before the page reloaded.',
+      retryable: true,
+      failedAt: new Date().toISOString(),
+    },
+  };
+}
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
@@ -341,7 +377,7 @@ export const useDashboardStore = create<DashboardState>()(
 
     addVideo({
       id,
-      title: `Analyzing: ${truncate(url, 50)}`,
+      title: fallbackVideoTitle(url),
       url,
       status: 'processing',
       progress: 0,
@@ -354,7 +390,7 @@ export const useDashboardStore = create<DashboardState>()(
       locallyStopped = true;
       updateVideo(id, {
         status: 'failed',
-        title: `Analysis stopped: ${truncate(url, 38)}`,
+        title: fallbackVideoTitle(url),
         failure: {
           stage: 'analysis',
           message: ANALYSIS_STOPPED_MESSAGE,
@@ -409,7 +445,7 @@ export const useDashboardStore = create<DashboardState>()(
         throw new Error(terminal.error || terminal.message || `Workflow ${terminal.runStatus || 'failed'}.`);
       }
 
-      updateVideo(id, verifiedResultPatch(id, started.runId, terminal.result, videoPack));
+      updateVideo(id, verifiedResultPatch(id, url, started.runId, terminal.result, videoPack));
     } catch (error) {
       if (signal?.aborted) {
         stopLocalAnalysis();
@@ -435,7 +471,9 @@ export const useDashboardStore = create<DashboardState>()(
         const saved = persisted as Record<string, unknown>;
         return {
           ...current,
-          videos: Array.isArray(saved.videos) ? saved.videos.filter(isStoredVideo) : current.videos,
+          videos: Array.isArray(saved.videos)
+            ? saved.videos.filter(isStoredVideo).map(normalizePersistedVideo)
+            : current.videos,
         };
       },
       skipHydration: true,

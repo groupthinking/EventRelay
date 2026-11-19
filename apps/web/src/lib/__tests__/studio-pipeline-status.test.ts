@@ -216,7 +216,7 @@ describe('studio-pipeline-status', () => {
         artifactCount: 0,
         toolCount: 0,
       }),
-    ).toBe('Events show up after Run.');
+    ).toBe('Events appear after you analyze a video.');
 
     const emptyWithPack = studioEventsEmptyMessage({
       busy: false,
@@ -368,7 +368,7 @@ describe('studio-pipeline-status', () => {
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
-  it('enables Ship this from pack exportability and ignores stack-check hold copy', () => {
+  it('enables Export from pack exportability and ignores stack-check hold copy', () => {
     expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
     expect(
       studioShipEnabled({
@@ -378,7 +378,7 @@ describe('studio-pipeline-status', () => {
     ).toBe(true);
     expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
     const cta = studioShipCta({ canExport: true, holdReason: 'Production is held until 4 stack check(s) pass.' });
-    expect(cta.label).toBe('Ship this');
+    expect(cta.label).toBe('Export');
     expect(cta.enabled).toBe(true);
     expect(cta.hint.toLowerCase()).toMatch(/skip|unknown/);
     expect(studioShipCta({ canExport: false }).enabled).toBe(false);
@@ -386,7 +386,7 @@ describe('studio-pipeline-status', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
-    expect(studio).toContain('Ship this');
+    expect(studio).toContain('Export');
     expect(studio).not.toContain('studio-deploy-button');
     expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
   });
@@ -568,8 +568,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioActionCard');
     expect(output).toContain('studioActionCard');
     expect(output).toContain('data-testid="studio-review-action-card"');
-    // IDE: actions surface in the output pane Intent tab.
-    expect(output).toContain("{ id: 'intent', label: 'Intent' }");
+    // IDE: actions surface in the Tasks & Tools tab.
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
   });
 
   it('returns a toast for export success and failure including filename', () => {
@@ -675,8 +675,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioEventsEmptyMessage');
     expect(studio).toContain('studioQueryFromSearchParams');
     expect(studio).toContain('studioCanExport');
-    // IDE: events live in the output pane Events tab.
-    expect(output).toContain("{ id: 'events', label: 'Events' }");
+    // IDE: events live in the Tasks & Tools tab.
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
   });
 
@@ -689,8 +689,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toMatch(/Retry transcript/);
     expect(studio).toContain('showTranscriptRetry');
 
-    // API events[] vs UI label: Events tab, never INSIGHTs.
-    expect(output).toContain("{ id: 'events', label: 'Events' }");
+    // API events[] vs UI: consolidated into Tasks & Tools, never INSIGHTs.
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
     expect(output).not.toMatch(/label:\s*['"]INSIGHT/i);
     expect(output).not.toMatch(/label:\s*['"]Insights['"]/);
     expect(output).toContain('eventsEmptyMessage');
