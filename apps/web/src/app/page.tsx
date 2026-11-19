@@ -72,10 +72,10 @@ export default async function HomePage() {
   const showCustomBadge = await customBadge();
 
   return (
-    <main className="min-h-screen" style={{ background: 'var(--uvai-bg)' }}>
+    <main className="min-h-screen overflow-x-clip" style={{ background: 'var(--uvai-bg)' }}>
       <Nav />
 
-      <section aria-labelledby="home-heading" className="template-home home-shipper px-4 sm:px-6 lg:px-10 pb-16 pt-4">
+      <section aria-labelledby="home-heading" className="template-home home-shipper px-4 sm:px-6 lg:px-10 pb-14 pt-3 sm:pt-4">
         <div className="mx-auto max-w-[1400px]">
           <div className="template-use-cases" aria-label="Supported source examples">
             {SHOWCASE.map(({ Icon, title, note }) => (

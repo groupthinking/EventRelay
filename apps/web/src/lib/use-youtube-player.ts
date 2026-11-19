@@ -44,7 +44,37 @@ declare global {
 }
 
 const YT_SRC = 'https://www.youtube.com/iframe_api';
+const YT_API_STALL_TIMEOUT_MS = 3500;
 let apiPromise: Promise<YTNamespace> | null = null;
+
+function buildFallbackEmbedUrl(
+  videoId: string,
+  options?: { autoplay?: boolean; start?: number },
+): string {
+  const base = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1`;
+  const extra: string[] = [];
+  if (options?.autoplay) extra.push('autoplay=1');
+  if (options?.start && options.start > 0) extra.push(`start=${Math.floor(options.start)}`);
+  return extra.length > 0 ? `${base}&${extra.join('&')}` : base;
+}
+
+function mountFallbackIframe(
+  target: HTMLDivElement,
+  videoId: string,
+  options?: { autoplay?: boolean; start?: number },
+): HTMLIFrameElement {
+  const iframe = document.createElement('iframe');
+  iframe.src = buildFallbackEmbedUrl(videoId, options);
+  iframe.title = 'YouTube source player';
+  iframe.className = 'h-full w-full border-0';
+  iframe.allow =
+    'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+  iframe.allowFullscreen = true;
+  iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+  iframe.setAttribute('data-testid', 'studio-player-fallback-iframe');
+  target.replaceChildren(iframe);
+  return iframe;
+}
 
 /** Load the IFrame API exactly once and resolve when `window.YT` is ready. */
 function loadYouTubeApi(): Promise<YTNamespace> {
@@ -54,18 +84,34 @@ function loadYouTubeApi(): Promise<YTNamespace> {
   if (window.YT?.Player) return Promise.resolve(window.YT);
   if (apiPromise) return apiPromise;
 
-  apiPromise = new Promise<YTNamespace>((resolve) => {
+  apiPromise = new Promise<YTNamespace>((resolve, reject) => {
     const existing = window.onYouTubeIframeAPIReady;
     window.onYouTubeIframeAPIReady = () => {
       existing?.();
-      if (window.YT) resolve(window.YT);
+      if (window.YT?.Player) resolve(window.YT);
     };
-    if (!document.querySelector(`script[src="${YT_SRC}"]`)) {
-      const tag = document.createElement('script');
-      tag.src = YT_SRC;
-      tag.async = true;
-      document.head.appendChild(tag);
+    const existingScript = document.querySelector(
+      `script[src="${YT_SRC}"]`,
+    ) as HTMLScriptElement | null;
+    if (existingScript) {
+      existingScript.addEventListener(
+        'error',
+        () => {
+          apiPromise = null;
+          reject(new Error('Failed to load YouTube IFrame API'));
+        },
+        { once: true },
+      );
+      return;
     }
+    const tag = document.createElement('script');
+    tag.src = YT_SRC;
+    tag.async = true;
+    tag.onerror = () => {
+      apiPromise = null;
+      reject(new Error('Failed to load YouTube IFrame API'));
+    };
+    document.head.appendChild(tag);
   });
   return apiPromise;
 }
@@ -106,6 +152,8 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
     setContainer(node);
   }, []);
   const playerRef = useRef<YTPlayer | null>(null);
+  const fallbackIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const videoIdRef = useRef<string | null>(videoId);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const readyRef = useRef(false);
 
@@ -114,6 +162,10 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
   const [isPlaying, setIsPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    videoIdRef.current = videoId;
+  }, [videoId]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -138,81 +190,104 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
   useEffect(() => {
     let cancelled = false;
 
-    // A failed player swaps the API container for a plain iframe. React then
-    // clears this callback ref; keep the failure state intact so the fallback
-    // cannot flicker back into an endless loading state.
-    if (!videoId || !container) return;
+    if (!videoId) {
+      readyRef.current = false;
+      fallbackIframeRef.current = null;
+      setReady(false);
+      setFailed(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
+      return;
+    }
+
+    if (!container) return;
 
     readyRef.current = false;
+    fallbackIframeRef.current = null;
     setReady(false);
     setFailed(false);
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
 
-    // If the API never initializes (blocked script, offline, CSP), surface a
-    // failure after a grace period so the UI can fall back to a plain embed.
-    const failTimer = setTimeout(() => {
-      if (!cancelled && !readyRef.current) setFailed(true);
-    }, 8000);
+    // Mount YT.Player on a child host so YouTube's DOM node swap never detaches React's container.
+    const playerHost = document.createElement('div');
+    playerHost.className = 'h-full w-full';
+    container.replaceChildren(playerHost);
+
+    const activateFallback = () => {
+      if (cancelled || readyRef.current) return;
+      clearTimeout(failTimer);
+      stopPolling();
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        /* noop */
+      }
+      playerRef.current = null;
+      fallbackIframeRef.current = mountFallbackIframe(container, videoId);
+      setReady(false);
+      setIsPlaying(false);
+      setFailed(true);
+    };
+
+    // If the JS API stalls (blocked script, CSP, offline), mount a direct nocookie iframe after 3.5s.
+    const failTimer = setTimeout(activateFallback, YT_API_STALL_TIMEOUT_MS);
 
     loadYouTubeApi()
       .then((YT) => {
-        if (cancelled || !container) return;
-        playerRef.current = new YT.Player(container, {
-          videoId,
-          playerVars: {
-            rel: 0,
-            modestbranding: 1,
-            playsinline: 1,
-          },
-          events: {
-            onReady: (e) => {
-              if (cancelled) return;
-              clearTimeout(failTimer);
-              readyRef.current = true;
-              setReady(true);
-              setFailed(false);
-              try {
-                setDuration(e.target.getDuration() || 0);
-              } catch {
-                /* noop */
-              }
+        if (cancelled) return;
+        try {
+          playerRef.current = new YT.Player(playerHost, {
+            videoId,
+            playerVars: {
+              rel: 0,
+              modestbranding: 1,
+              playsinline: 1,
             },
-            onStateChange: (e) => {
-              if (cancelled) return;
-              const state = e.data;
-              const playing = state === YT.PlayerState.PLAYING;
-              setIsPlaying(playing);
-              if (playing) startPolling();
-              else stopPolling();
-              if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.PAUSED) {
+            events: {
+              onReady: (e) => {
+                if (cancelled) return;
+                clearTimeout(failTimer);
+                readyRef.current = true;
+                fallbackIframeRef.current = null;
+                setReady(true);
+                setFailed(false);
                 try {
                   setDuration(e.target.getDuration() || 0);
-                  setCurrentTime(e.target.getCurrentTime() || 0);
                 } catch {
                   /* noop */
                 }
-              }
+              },
+              onStateChange: (e) => {
+                if (cancelled) return;
+                const state = e.data;
+                const playing = state === YT.PlayerState.PLAYING;
+                setIsPlaying(playing);
+                if (playing) startPolling();
+                else stopPolling();
+                if (state === YT.PlayerState.PLAYING || state === YT.PlayerState.PAUSED) {
+                  try {
+                    setDuration(e.target.getDuration() || 0);
+                    setCurrentTime(e.target.getCurrentTime() || 0);
+                  } catch {
+                    /* noop */
+                  }
+                }
+              },
+              onError: () => {
+                readyRef.current = false;
+                activateFallback();
+              },
             },
-            onError: () => {
-              if (cancelled) return;
-              clearTimeout(failTimer);
-              readyRef.current = false;
-              setReady(false);
-              setIsPlaying(false);
-              stopPolling();
-              setFailed(true);
-            },
-          },
-        });
+          });
+        } catch {
+          activateFallback();
+        }
       })
       .catch(() => {
-        if (!cancelled) {
-          clearTimeout(failTimer);
-          setReady(false);
-          setFailed(true);
-        }
+        activateFallback();
       });
 
     return () => {
@@ -225,18 +300,29 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
         /* noop */
       }
       playerRef.current = null;
+      fallbackIframeRef.current = null;
+      container.replaceChildren();
     };
   }, [videoId, container, startPolling, stopPolling]);
 
   const seekTo = useCallback((seconds: number) => {
+    const target = Math.max(0, seconds);
     const p = playerRef.current;
-    if (!p) return;
-    try {
-      p.seekTo(Math.max(0, seconds), true);
-      p.playVideo();
-      setCurrentTime(Math.max(0, seconds));
-    } catch {
-      /* noop */
+    if (p) {
+      try {
+        p.seekTo(target, true);
+        p.playVideo();
+        setCurrentTime(target);
+      } catch {
+        /* noop */
+      }
+      return;
+    }
+    const iframe = fallbackIframeRef.current;
+    const vid = videoIdRef.current;
+    if (iframe && vid) {
+      iframe.src = buildFallbackEmbedUrl(vid, { autoplay: true, start: target });
+      setCurrentTime(target);
     }
   }, []);
 

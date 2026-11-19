@@ -2,9 +2,9 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Download, GitPullRequest, Hammer, Play, Rocket } from 'lucide-react';
-import { formatSeconds, parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
+import { useSearchParams } from 'next/navigation';
+import { Download, Play } from 'lucide-react';
+import { parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
   deployHoldReason,
@@ -16,19 +16,15 @@ import {
 import { clsx } from 'clsx';
 import Nav from '@/components/Nav';
 import { StudioAuthNavLink } from '@/components/StudioAuthNavLink';
-import { ANALYSIS_STOPPED_MESSAGE, dashboardPersistenceSucceeded, useDashboardStore } from '@/store/dashboard-store';
+import { ANALYSIS_STOPPED_MESSAGE, dashboardPersistenceSucceeded, useDashboardStore, type Video } from '@/store/dashboard-store';
 import GroundedSpecReview from '@/components/GroundedSpecReview';
-import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
   actionsFromStudioRun,
   buildStudioShipPackage,
   downloadScaffoldPackage,
   safeProjectName,
 } from '@/lib/action-surface';
-import {
-  pollVideoToActions,
-  type VideoToActionsResult,
-} from '@/lib/studio-workflow';
+import { type VideoToActionsResult } from '@/lib/studio-workflow';
 import {
   packBuildLiveFailureDetails,
   packBuildLiveOutcomeMessage,
@@ -39,34 +35,13 @@ import {
   type PackBuildLiveFailureDetails,
 } from '@/lib/pack-build-live-client';
 import {
-  Empty,
-  EmptyContent,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from '@/components/ui/empty';
-import { identityPackJson } from '@/lib/emit-video-pack';
-import {
-  studioDedupeSopStepsAgainstEvents,
-  studioOutlineSectionToPane,
-  studioPaneToOutlineSection,
-  studioResolveActivePane,
-  studioSummaryIsRedundant,
-  studioTranscriptSummaryLabel,
-  studioWorkbenchTabs,
-  type StudioPaneId,
-} from '@/lib/studio-workbench-panes';
-import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportToastMessage,
-  studioFormationSupplementalEntities,
   studioInvalidHandoffMessage,
-  studioJobStripDestination,
   studioPackCitation,
   studioPackFormation,
   studioPackIdentity,
@@ -82,7 +57,6 @@ import {
   studioTranscriptBody,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
-  studioVerifiedLiveUrl,
   studioWorkbenchEmptyView,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
@@ -92,46 +66,16 @@ import {
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
-import {
-  evaluateStudioDeployTransition,
-  studioDeployAttemptTransitionId,
-  studioGateReceiptView,
-  type GateDecision,
-  type StudioGateReceiptView,
-} from '@/lib/gate-transition';
-import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
-import { openGitHubPrsForApprovedSpecs } from '@/app/studio/actions';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
-import {
-  chaptersFromPack,
-  sopStepsFromPack,
-} from '@/lib/emit-app-builder-sandbox';
 import {
   registerStudioWebMcpTools,
   type StudioWebMcpPackSnapshot,
 } from '@/lib/webmcp-studio-tools';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
-
-function gateDecisionChipClass(decision: GateDecision): string {
-  switch (decision) {
-    case 'PASS':
-      return 'border-[var(--uvai-success-border)] bg-[var(--uvai-success-bg)] text-[var(--uvai-success-ink)]';
-    case 'HOLD':
-      return 'border-[var(--uvai-warn-border)] bg-[var(--uvai-warn-bg)] text-[var(--uvai-warn-ink)]';
-    case 'REJECT':
-      return 'border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] text-[var(--uvai-danger-ink)]';
-    case 'ESCALATE':
-      return 'border-[var(--uvai-violet-border)] bg-[var(--uvai-violet-bg)] text-[var(--uvai-violet-ink)]';
-    default: {
-      const _exhaustive: never = decision;
-      return _exhaustive;
-    }
-  }
-}
 
 function getYouTubeId(url: string) {
   return extractYouTubeId(url) || '';
@@ -145,13 +89,23 @@ function safeYouTubeWatchHref(rawId: string): string | null {
   return watchUrl.toString();
 }
 
-function toSpecBranch(videoId: string, stepId: string): string {
-  const slug = `${videoId || 'video'}-${stepId}`
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 48);
-  return `spec/${slug || 'approved'}`;
+function formatSavedVideoLabel(video: Video): string {
+  const raw = video.title?.trim() ?? '';
+  const vid = getYouTubeId(video.videoPack?.sourceUrl || video.url || '');
+  const fallback = vid ? `YouTube · ${vid}` : 'Saved video';
+  if (
+    !raw ||
+    /^analyzing:\s*/i.test(raw) ||
+    /^analysis\s+(?:blocked|stopped)\b/i.test(raw) ||
+    /^https?:\/\//i.test(raw)
+  ) {
+    return fallback;
+  }
+  return raw;
+}
+
+function countLabel(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
 function PackWorkbench({
@@ -242,47 +196,17 @@ function PackWorkbench({
   );
 }
 
-function StudioJobStripDestination({
-  destination,
-}: {
-  destination: ReturnType<typeof studioJobStripDestination>;
-}) {
-  switch (destination.kind) {
-    case 'video':
-      return (
-        <span data-testid="studio-job-video-id" className="text-[var(--uvai-ink-faint)]">
-          {destination.label}
-        </span>
-      );
-    case 'studio':
-      return (
-        <Link
-          href={destination.href}
-          data-testid="studio-job-self-link"
-          className="text-[var(--uvai-ink-faint)] underline decoration-[var(--uvai-border-strong)] underline-offset-2 hover:text-[var(--uvai-ink)]"
-        >
-          {destination.label}
-        </Link>
-      );
-    default: {
-      const _exhaustive: never = destination;
-      return _exhaustive;
-    }
-  }
-}
-
 export default function OneLoopStudio({
   showAgentWorkflowUi,
 }: {
   showAgentWorkflowUi: boolean;
 }) {
-  const router = useRouter();
+  void showAgentWorkflowUi;
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [message, setMessage] = useState('Paste a YouTube URL. Transcript and events land here.');
-  const [actBusy, setActBusy] = useState(false);
+  const [message, setMessage] = useState('');
   const runAbortRef = useRef<AbortController | null>(null);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
   const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
@@ -292,9 +216,8 @@ export default function OneLoopStudio({
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
-  const [approvedSpecIds, setApprovedSpecIds] = useState<string[]>([]);
-  const [openingPrs, setOpeningPrs] = useState(false);
   const [playerEpoch, setPlayerEpoch] = useState(0);
+  const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
@@ -304,27 +227,26 @@ export default function OneLoopStudio({
   );
   const autoStartedKey = useRef<string | null>(null);
   const autoSelectedPackRef = useRef(false);
-  const [requestedPane, setRequestedPane] = useState<StudioPaneId | null>(null);
-  const [transcriptExpanded, setTranscriptExpanded] = useState(false);
+  const skipMessageResetForIdRef = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const updateVideo = useDashboardStore((s) => s.updateVideo);
-  const removeVideo = useDashboardStore((s) => s.removeVideo);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
-  const scopedWorkflowActions = showAgentWorkflowUi &&
+  const scopedWorkflowActions =
     workflowActionSelectionId === selectedVideoId &&
     getYouTubeId(selected?.url || '') === getYouTubeId(workflowActions?.url || '') &&
     (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
-    ? workflowActions
-    : null;
+      ? workflowActions
+      : null;
   const scopedPackLiveUrl = studioPackLiveReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
     liveUrl: packLiveReceiptUrl,
   });
+  void scopedPackLiveUrl;
   const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -364,24 +286,23 @@ export default function OneLoopStudio({
     );
   }, [selected, packFormation.tools]);
   const stackChecks = packFormation.checks;
-  const supplementalEntities = studioFormationSupplementalEntities(
-    packFormation.tools,
-    linkedSop?.entities,
-  );
 
   useEffect(() => {
     setWorkflowActions(null);
     setWorkflowActionSelectionId(null);
     setCompletedChecks([]);
-    setApprovedSpecIds([]);
     setBuildLiveFailure(null);
     setPackLiveReceiptUrl(null);
     setPackLiveReceiptVideoId(null);
     setPackLiveReceiptYoutubeId(null);
     setPackLiveReceiptReasonCode(null);
-    // A new row opens on the default Video pane with the transcript collapsed.
-    setRequestedPane(null);
-    setTranscriptExpanded(false);
+    setExportToast(null);
+    setPreferDirectEmbed(false);
+    if (skipMessageResetForIdRef.current === selectedVideoId) {
+      skipMessageResetForIdRef.current = null;
+    } else if (!runAbortRef.current) {
+      setMessage('');
+    }
   }, [selectedVideoId]);
 
   useEffect(() => {
@@ -405,25 +326,27 @@ export default function OneLoopStudio({
     useDashboardStore.persist.rehydrate();
   }, []);
 
-  // A stored pack must drive the header + transcript without a Stored packs
-  // combobox click (#2244). Once, after rehydration, point the selection at the
-  // newest row that already has pack identity — unless a selection or a
-  // `?video=` handoff already owns the row. This is display-only: it selects an
-  // existing row and never starts extraction.
+  // A stored completed pack drives the header + transcript without requiring a
+  // Saved videos combobox click (#2244). Failed or orphaned runs are never
+  // auto-selected on load so /studio always starts calm and clean.
   useEffect(() => {
     if (autoSelectedPackRef.current) return;
     if (selectedVideoId || studioQueryFromSearchParams(searchParams)) {
       autoSelectedPackRef.current = true;
       return;
     }
-    const targetId = studioResolveAutoSelectedPackId({ selectedVideoId, videos });
+    const completeVideos = videos.filter((video) => video.status === 'complete');
+    const targetId = studioResolveAutoSelectedPackId({
+      selectedVideoId,
+      videos: completeVideos,
+    });
     if (targetId) {
       autoSelectedPackRef.current = true;
       selectVideo(targetId);
     }
   }, [selectedVideoId, videos, searchParams, selectVideo]);
 
-  const runAnalysis = async (raw: string) => {
+  const runAnalysis = useCallback(async (raw: string) => {
     const handoff = resolveStudioHandoff(raw);
     if (!handoff) {
       setMessage('Need a valid YouTube URL.');
@@ -431,19 +354,31 @@ export default function OneLoopStudio({
     }
     const next = handoff.watchUrl;
     setUrl(next);
-    // Cancel any in-flight run before starting a new one.
+    // Cancel any in-flight run and clear prior errors before starting a new one.
     runAbortRef.current?.abort();
     const controller = new AbortController();
     runAbortRef.current = controller;
+    const priorIds = new Set(useDashboardStore.getState().videos.map((v) => v.id));
     setBusy(true);
+    setExportToast(null);
+    setBuildLiveFailure(null);
+    setPackLiveReceiptUrl(null);
+    setPackLiveReceiptVideoId(null);
+    setPackLiveReceiptYoutubeId(null);
+    setPackLiveReceiptReasonCode(null);
     setWorkflowActions(null);
     setWorkflowActionSelectionId(null);
+    selectVideo(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
       if (controller.signal.aborted || runAbortRef.current !== controller) return;
       const matches = useDashboardStore
         .getState()
-        .videos.filter((v) => v.url === next || v.url.includes(handoff.videoId));
+        .videos.filter(
+          (v) =>
+            !priorIds.has(v.id) &&
+            (v.url === next || v.url.includes(handoff.videoId)),
+        );
       if (matches.length === 0) return;
       selectVideo(matches[0].id);
     }, 250);
@@ -456,6 +391,7 @@ export default function OneLoopStudio({
         setMessage(ANALYSIS_STOPPED_MESSAGE);
         return;
       }
+      skipMessageResetForIdRef.current = id;
       selectVideo(id);
       const video = useDashboardStore.getState().videos.find((v) => v.id === id);
       const ready =
@@ -485,7 +421,7 @@ export default function OneLoopStudio({
         setBusy(false);
       }
     }
-  };
+  }, [processVideo, selectVideo]);
 
   const cancelAnalysis = useCallback(() => {
     runAbortRef.current?.abort();
@@ -528,7 +464,7 @@ export default function OneLoopStudio({
     void runAnalysis(url);
   };
 
-  const transcriptWorking = busy || selected?.status === 'processing';
+  const transcriptWorking = busy;
 
   useEffect(() => {
     if (!transcriptWorking) {
@@ -548,6 +484,10 @@ export default function OneLoopStudio({
   // not properties of an object that also carries refs (react-hooks/refs).
   const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
     useYouTubePlayer(videoId);
+
+  useEffect(() => {
+    setPreferDirectEmbed(false);
+  }, [videoId, playerEpoch]);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
@@ -596,83 +536,23 @@ export default function OneLoopStudio({
     failed: selected?.status === 'failed',
     failureMessage: selected?.failure?.message,
   });
-  const resultReadyShell = Boolean(selected?.videoPack?.pack);
+  void workbenchEmpty;
+  void studioTranscriptBody;
   const shellPack = selected?.videoPack?.pack;
-  const shellChapters = useMemo(
-    () => (shellPack ? chaptersFromPack(shellPack.chapters) : []),
-    [shellPack],
+  const canSeekActiveVideo = Boolean(
+    videoId && (!shellPack?.video_id || videoId === shellPack.video_id),
   );
-  const shellSopSteps = useMemo(() => {
-    if (!shellPack) return [];
-    const transcript = shellPack.transcript
-      ? {
-          full_text: shellPack.transcript.full_text,
-          language: 'language' in shellPack.transcript ? shellPack.transcript.language : null,
-          segments: shellPack.transcript.segments,
-        }
-      : null;
-    return sopStepsFromPack({ requirements: shellPack.requirements, transcript });
-  }, [shellPack]);
-  const selectShellPane = useCallback((sectionId: string) => {
-    const pane = studioOutlineSectionToPane(sectionId);
-    if (pane) setRequestedPane(pane);
-  }, []);
-  const canAttemptBuildLive = Boolean(
-    getYouTubeId(url || selected?.url || '') && (selected || url.trim()),
+  const handleAnalyzeUrl = useCallback(
+    (submittedUrl: string) => {
+      void runAnalysis(submittedUrl);
+    },
+    [runAnalysis],
   );
-  const typedVideoId = url.trim() ? getYouTubeId(url) : null;
-  const selectedVideoUrlId = getYouTubeId(selected?.url || '');
-  const canAct = Boolean(
-    showAgentWorkflowUi &&
-    selected?.status === 'complete' &&
-    selected?.runId &&
-    selectedVideoUrlId &&
-    (!url.trim() || typedVideoId === selectedVideoUrlId),
-  );
-
-  const act = async () => {
-    if (!canAct || !selected?.runId) {
-      setMessage('Select the analyzed video before reviewing its actions.');
-      return;
-    }
-    const selectionId = selected.id;
-    const runId = selected.runId;
-    setActBusy(true);
-    setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
-    setMessage('Loading proposed actions from this run…');
-    try {
-      const polled = await pollVideoToActions(runId, {
-        statusUrl: selected.statusUrl,
-        attempts: 24,
-        delayMs: 2000,
-      });
-      if (useDashboardStore.getState().selectedVideoId !== selectionId) return;
-      if (polled.status === 401 || polled.status === 403) {
-        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
-        return;
-      }
-      if (polled.runStatus === 'completed' && polled.result) {
-        setWorkflowActions(polled.result);
-        setWorkflowActionSelectionId(selectionId);
-        setMessage(
-          `${polled.result.actionCount} proposed action(s) from this run are ready to review.`,
-        );
-      } else {
-        setMessage(polled.error || `Act status: ${polled.runStatus || 'unknown'}.`);
-      }
-    } catch (err) {
-      if (useDashboardStore.getState().selectedVideoId === selectionId) {
-        setMessage(err instanceof Error ? err.message : 'Could not load proposed actions.');
-      }
-    } finally {
-      setActBusy(false);
-    }
-  };
 
   const exportPkg = async () => {
+    const projectLabel = selected ? formatSavedVideoLabel(selected) : 'uvai-project';
     const filename = studioExportFilename(
-      safeProjectName(selected?.title || 'uvai-project'),
+      safeProjectName(projectLabel),
     );
     const insightActions = (selected?.insights?.actions || []).flatMap((action) => {
       if (typeof action === 'string') {
@@ -699,7 +579,7 @@ export default function OneLoopStudio({
     }
     try {
       const pkg = buildStudioShipPackage({
-        projectName: selected?.title || 'uvai-project',
+        projectName: projectLabel,
         actions,
         projectScaffold: selected?.insights?.project_scaffold,
         linkedSop: linkedSop || undefined,
@@ -840,35 +720,6 @@ export default function OneLoopStudio({
     }
   };
 
-  const openApprovedSpecsPrs = async () => {
-    if (!linkedSop || linkedSop.steps.length === 0) {
-      setMessage('Analyze a video with SOP steps before opening GitHub pull requests.');
-      return;
-    }
-    const sourceVideoId = getYouTubeId(selected?.url || url || '');
-    const specs = linkedSop.steps.map((step) => ({
-      id: step.id,
-      title: step.title,
-      body: [step.description || '', step.quote ? `\nQuote: ${step.quote}` : ''].join('').trim(),
-      head: toSpecBranch(sourceVideoId, step.id),
-      base: 'main',
-      approved: approvedSpecIds.includes(step.id),
-    }));
-    setOpeningPrs(true);
-    try {
-      const result = await openGitHubPrsForApprovedSpecs(specs);
-      if (!result.ok) {
-        setMessage(result.error || 'Could not open GitHub pull requests for approved specs.');
-        return;
-      }
-      setMessage(`Opened or updated ${result.pullRequests.length} GitHub pull request(s) for approved specs.`);
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not open GitHub pull requests.');
-    } finally {
-      setOpeningPrs(false);
-    }
-  };
-
   const packIdentity = studioPackIdentity(selected?.videoPack);
   const transcriptStage = studioTranscriptStage({
     busy: transcriptWorking,
@@ -877,7 +728,7 @@ export default function OneLoopStudio({
     hasPack: Boolean(selected?.videoPack),
     hasPackIdentity: Boolean(packIdentity),
     hasTranscript: Boolean(selected?.transcript?.trim()),
-    hasFailed: selected?.status === 'failed',
+    hasFailed: !transcriptWorking && selected?.status === 'failed',
   });
   const showTranscriptRetry = studioCanRetryTranscript({
     busy: transcriptWorking,
@@ -889,38 +740,6 @@ export default function OneLoopStudio({
     ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
     : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
 
-  // ── Single-pane workbench model (layout only) ──────────────────────────────
-  // In the Result Ready shell we show one main pane at a time (Cursor-style),
-  // not the whole pack stacked into one enormous scroll. The classic (no-pack)
-  // path keeps stacking, so `paneVisible` is a no-op there.
-  const inWorkbench = resultReadyShell && Boolean(selected?.videoPack);
-  const dedupedSopSteps = studioDedupeSopStepsAgainstEvents(
-    selected?.events ?? [],
-    linkedSop?.steps ?? [],
-  );
-  const hasWorkflowPane = Boolean(
-    linkedSop && (linkedSop.entities.length > 0 || linkedSop.steps.length > 0 || packFormation.tools.length > 0),
-  );
-  const summaryText = selected?.insights?.summary ?? '';
-  const summaryRedundant = studioSummaryIsRedundant(summaryText, [
-    ...(selected?.events ?? []).map((event) => event.title),
-    ...dedupedSopSteps.map((step) => step.title),
-  ]);
-  const hasSummaryPane = Boolean(summaryText.trim()) && !summaryRedundant;
-  const hasTranscriptPane =
-    Boolean(selected?.transcript?.trim()) || transcriptWorking || showTranscriptRetry;
-  const hasActionsPane = Boolean(scopedWorkflowActions);
-  const workbenchTabs = studioWorkbenchTabs({
-    hasTranscript: hasTranscriptPane,
-    hasActions: hasActionsPane,
-    hasEvents: eventCount > 0,
-    hasWorkflow: hasWorkflowPane,
-    hasSpec: Boolean(selected?.videoPack?.pack),
-    hasSummary: hasSummaryPane,
-    hasPack: Boolean(selected?.videoPack),
-  });
-  const activePane = studioResolveActivePane(requestedPane, workbenchTabs);
-  const paneVisible = (pane: StudioPaneId) => !inWorkbench || activePane === pane;
   const transcriptWordCount = selected?.transcript
     ? selected.transcript.trim().split(/\s+/).length
     : 0;
@@ -933,18 +752,18 @@ export default function OneLoopStudio({
       sourceHash: selected?.videoPack?.sourceHash ?? null,
       busy: transcriptWorking,
       transcriptWordCount,
-      chapterCount: shellChapters.length,
+      chapterCount: shellPack?.chapters?.length ?? 0,
       actionCount: selected?.videoPack?.pack.action_items?.length ?? 0,
       toolCount: packFormation.tools.length,
       artifactCount: packFormation.artifacts.length,
     }),
     [
       selected?.videoPack,
+      shellPack?.chapters?.length,
       videoId,
       url,
       transcriptWorking,
       transcriptWordCount,
-      shellChapters.length,
       packFormation.tools.length,
       packFormation.artifacts.length,
     ],
@@ -1000,68 +819,50 @@ export default function OneLoopStudio({
                 id="youtube-url"
                 name="youtubeUrl"
                 value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder={FIXTURE}
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  if (!busy && message) setMessage('');
+                }}
+                placeholder="Paste a YouTube link…"
                 autoComplete="off"
                 className="uvai-input min-w-0 flex-1 font-mono disabled:opacity-40"
               />
-              {!url.trim() ? (
-                <button
-                  type="button"
-                  onClick={() => setUrl(FIXTURE)}
-                  disabled={busy}
-                  className="uvai-btn !px-2.5 disabled:opacity-40"
-                >
-                  Sample
-                </button>
-              ) : null}
               {busy ? (
                 <button
                   type="button"
                   onClick={cancelAnalysis}
                   data-testid="studio-ide-cancel"
-                  className="uvai-btn uvai-btn-danger !font-semibold"
+                  className="uvai-btn uvai-btn-danger shrink-0 !font-semibold"
                 >
-                  Cancel
+                  Stop
                 </button>
               ) : (
                 <button
                   type="submit"
                   data-testid="studio-ide-run"
-                  className={clsx('uvai-btn', !hasPayload && 'uvai-btn-primary')}
+                  className={clsx('uvai-btn shrink-0', !hasPayload && 'uvai-btn-primary')}
                 >
-                  Run
+                  Analyze
                 </button>
               )}
             </form>
             {videos.some((video) => video.videoPack) ? (
-              <div className="flex items-center gap-1.5" data-testid="studio-ide-packs">
+              <div className="flex min-w-0 items-center gap-1.5" data-testid="studio-ide-packs">
                 <select
                   id="stored-pack"
                   value={selected?.videoPack ? selected.id : ''}
                   disabled={busy}
                   onChange={(event) => selectVideo(event.target.value || null)}
-                  aria-label="Stored packs"
-                  className="uvai-input max-w-44 truncate !py-1.5 !text-xs disabled:opacity-40"
+                  aria-label="Saved videos"
+                  className="uvai-input min-w-0 max-w-48 truncate !py-1.5 !text-xs disabled:opacity-40"
                 >
-                  <option value="">Stored packs</option>
+                  <option value="">Saved videos</option>
                   {videos.filter((video) => video.videoPack).map((video) => (
-                    <option key={video.id} value={video.id}>{video.title}</option>
+                    <option key={video.id} value={video.id}>
+                      {formatSavedVideoLabel(video)}
+                    </option>
                   ))}
                 </select>
-                {selected?.videoPack ? (
-                  <button
-                    type="button"
-                    onClick={() => removeVideo(selected.id)}
-                    disabled={busy}
-                    aria-label="Delete this pack"
-                    title="Delete this pack"
-                    data-testid="studio-ide-delete-pack"
-                    className="uvai-btn uvai-btn-danger !px-2.5 !py-1.5 disabled:opacity-40"
-                  >
-                    ✕
-                  </button>
-                ) : null}
               </div>
             ) : null}
             <div className="flex items-center gap-1.5 sm:border-l sm:border-[var(--uvai-border-strong)] sm:pl-2" role="toolbar" aria-label="Pack actions">
@@ -1072,48 +873,18 @@ export default function OneLoopStudio({
                 data-testid="studio-ide-ship"
                 title={shipCta.hint}
                 className={clsx(
-                  'uvai-btn inline-flex items-center gap-1.5 disabled:opacity-40',
+                  'uvai-btn inline-flex shrink-0 items-center gap-1.5 disabled:opacity-40',
                   shipCta.enabled && hasPayload && 'uvai-btn-primary',
                 )}
               >
-                <Rocket className="h-4 w-4" aria-hidden />
-                Ship this
-              </button>
-              {showAgentWorkflowUi ? (
-                <button
-                  type="button"
-                  data-testid="studio-act-button"
-                  onClick={() => void act()}
-                  disabled={actBusy || !canAct}
-                  title={canAct
-                    ? 'Review proposed actions from the selected video run.'
-                    : 'Select an analyzed video matching the URL first.'}
-                  className="uvai-btn disabled:opacity-40"
-                >
-                  {actBusy ? 'Loading…' : 'Review this run'}
-                </button>
-              ) : null}
-              <button
-                type="button"
-                data-testid="studio-build-live-button"
-                onClick={() => void buildLive()}
-                disabled={buildBusy || !canAttemptBuildLive}
-                title={
-                  selected?.videoPack
-                    ? `Compile the stored Video Pack for ${selected.videoPack.videoId}.`
-                    : canAttemptBuildLive
-                      ? 'Verify pack health and open the hosted app, or get recovery steps if the pack is missing.'
-                      : 'Paste a YouTube URL and run analysis first.'
-                }
-                className="uvai-btn text-[var(--uvai-ink-soft)] disabled:opacity-40"
-              >
-                {buildBusy ? 'Building…' : 'Build live'}
+                <Download className="h-4 w-4" aria-hidden />
+                Export
               </button>
             </div>
-            <p className="w-full font-mono text-[11px]" style={{ color: 'var(--uvai-ink-faint)' }} role="status" data-testid="studio-ide-status">
+            <p className="w-full min-w-0 font-mono text-[11px] leading-snug text-[var(--uvai-ink-faint)]" role="status" data-testid="studio-ide-status">
               {statusText}
             </p>
-            {showTranscriptRetry ? (
+            {showTranscriptRetry && !transcriptWorking && selected?.status === 'failed' ? (
               <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-3 py-2 text-xs text-[var(--uvai-danger-ink)]">
                 <span className="min-w-0 flex-1 truncate">
                   {selected?.failure?.message || 'Extraction stopped before finishing.'}
@@ -1127,64 +898,121 @@ export default function OneLoopStudio({
                   Retry transcript
                 </button>
               </div>
+            ) : showTranscriptRetry && transcriptWorking ? (
+              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] px-3 py-1.5 text-xs text-[var(--uvai-ink-soft)]">
+                <span className="min-w-0 flex-1 truncate">
+                  Still extracting — this video is taking longer than usual.
+                </span>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-retry"
+                  onClick={() => void runAnalysis(url || selected?.url || '')}
+                  className="uvai-btn shrink-0 !px-3 !py-1 !text-xs font-medium"
+                >
+                  Retry transcript
+                </button>
+              </div>
             ) : null}
           </>
         }
         videoPane={
-          <div className="studio-source-stack flex flex-col gap-3">
+          <div className="studio-source-stack flex min-w-0 flex-col gap-3">
             <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
               {videoId ? (
-                <>
-                  <div key={`${videoId}-${playerEpoch}`} className="aspect-video w-full">
-                    <div
-                      ref={containerRef}
-                      className="h-full w-full"
-                      data-testid="studio-player"
-                      title="YouTube source"
+                <div
+                  key={`${videoId}-${playerEpoch}`}
+                  className="relative mx-auto aspect-video max-h-[200px] w-full max-w-[356px] overflow-hidden bg-neutral-950"
+                >
+                  {preferDirectEmbed ? (
+                    <iframe
+                      src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
+                      title="YouTube source player"
+                      className="h-full w-full border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                      referrerPolicy="strict-origin-when-cross-origin"
+                      data-testid="studio-player-fallback-iframe"
                     />
-                  </div>
-                  {playerOverlay ? (
-                    <div
-                      data-testid="studio-player-overlay"
-                      className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center"
-                    >
-                      <p className="text-sm text-[var(--uvai-ink-soft)]">{playerOverlay}</p>
-                      {playerPhase === 'error' ? (
-                        <div className="flex flex-wrap items-center justify-center gap-2">
+                  ) : (
+                    <>
+                      {!playerReady && !playerFailed ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`}
+                          alt={selected ? `${formatSavedVideoLabel(selected)} preview` : 'YouTube video preview'}
+                          data-testid="studio-player-poster"
+                          width={480}
+                          height={360}
+                          fetchPriority="high"
+                          decoding="async"
+                          onError={(event) => {
+                            event.currentTarget.style.display = 'none';
+                          }}
+                          className="absolute inset-0 h-full w-full object-cover"
+                        />
+                      ) : null}
+                      <div
+                        ref={containerRef}
+                        className="relative z-10 h-full w-full"
+                        data-testid="studio-player"
+                        title="YouTube source"
+                      />
+                      {playerOverlay && playerPhase === 'loading' ? (
+                        <button
+                          type="button"
+                          data-testid="studio-player-overlay"
+                          onClick={() => setPreferDirectEmbed(true)}
+                          aria-label="Play video"
+                          className="group absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/30 px-4 text-center transition-colors hover:bg-black/20"
+                        >
+                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#146ef5] text-white shadow-md transition-transform group-hover:scale-105">
+                            <Play className="ml-0.5 h-5 w-5 fill-current" aria-hidden />
+                          </span>
+                          <span className="rounded-full bg-black/65 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                            {playerOverlay}
+                          </span>
+                        </button>
+                      ) : playerOverlay && playerPhase === 'error' ? (
+                        <div
+                          data-testid="studio-player-overlay"
+                          className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex flex-wrap items-center justify-end gap-1.5"
+                        >
                           <button
                             type="button"
                             data-testid="studio-player-retry"
-                            onClick={() => setPlayerEpoch((epoch) => epoch + 1)}
-                            className="uvai-btn uvai-btn-primary"
+                            onClick={() => {
+                              setPreferDirectEmbed(false);
+                              setPlayerEpoch((epoch) => epoch + 1);
+                            }}
+                            className="uvai-btn pointer-events-auto !bg-black/75 !px-2.5 !py-1 !text-[11px] text-white backdrop-blur-sm"
                           >
                             Retry player
                           </button>
-                          {watchHref ? (
-                            <a
-                              href={watchHref}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="uvai-btn"
-                            >
-                              Open on YouTube
-                            </a>
-                          ) : null}
                         </div>
                       ) : null}
-                    </div>
-                  ) : null}
-                </>
+                    </>
+                  )}
+                </div>
               ) : (
-                <div className="flex aspect-video items-center justify-center bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
-                  Paste a link above. The video plays here while we pull the transcript.
+                <div className="flex aspect-video max-h-[200px] w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
+                  <p>Paste a YouTube link above or in chat to load the video.</p>
+                  <button
+                    type="button"
+                    data-testid="studio-try-sample"
+                    onClick={() => setUrl(FIXTURE)}
+                    disabled={busy}
+                    className="uvai-chip !px-3 !py-1 !text-xs font-medium text-[var(--uvai-ink)] hover:border-[var(--uvai-accent)] disabled:opacity-40"
+                  >
+                    Try sample
+                  </button>
                 </div>
               )}
             </div>
-            <div className="studio-steps-bar flex items-center justify-between gap-2">
+            <div className="studio-steps-bar flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-3 py-1.5">
               <ol
                 data-testid="studio-extraction-steps"
                 aria-label="Extraction progress"
-                className="studio-steps min-w-0 flex-1"
+                className="studio-steps min-w-0 max-w-full flex-1 flex-wrap"
               >
                 {(
                   [
@@ -1209,7 +1037,7 @@ export default function OneLoopStudio({
                     !transcriptWorking &&
                     selected?.status !== 'failed' &&
                     Boolean(selected?.videoPack || selected?.transcript?.trim());
-                  const isFailed = selected?.status === 'failed';
+                  const isFailed = !transcriptWorking && selected?.status === 'failed';
                   const stepState = isDone
                     ? 'done'
                     : isFailed
@@ -1246,48 +1074,61 @@ export default function OneLoopStudio({
                 </a>
               ) : null}
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="flex min-w-0 flex-col gap-3">
               {selected?.videoPack ? (
-                <div className="uvai-card studio-pack-card p-4">
-                  <div className="studio-pack-card__head flex items-center justify-between gap-2">
+                <div className="uvai-card studio-pack-card min-w-0 max-w-full overflow-hidden p-3">
+                  <div className="studio-pack-card__head flex min-w-0 flex-wrap items-center justify-between gap-2">
                     <p className="uvai-section-label">Extracted pack</p>
-                    <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                    <span className="min-w-0 max-w-full truncate font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
                       {selected.videoPack.sourceHash.slice(0, 12)}…
                     </span>
                   </div>
-                  <div className="studio-pack-card__chips mt-3 flex flex-wrap gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
+                  <div className="studio-pack-card__chips mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
                     {selected.videoPack.pack.action_items?.length ? (
-                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {selected.videoPack.pack.action_items.length} actions
+                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {countLabel(selected.videoPack.pack.action_items.length, 'action')}
                       </span>
                     ) : null}
                     {selected.videoPack.pack.stack?.tools?.length ? (
-                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {selected.videoPack.pack.stack.tools.length} tools
+                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {countLabel(selected.videoPack.pack.stack.tools.length, 'tool')}
                       </span>
                     ) : null}
                     {selected.videoPack.pack.code_snippets?.length ? (
-                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {selected.videoPack.pack.code_snippets.length} code files
+                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {countLabel(selected.videoPack.pack.code_snippets.length, 'code file')}
                       </span>
                     ) : null}
                     {transcriptWordCount > 0 ? (
-                      <span className="rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {transcriptWordCount.toLocaleString()} words
+                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                        {countLabel(transcriptWordCount, 'word')}
+                      </span>
+                    ) : null}
+                    {selected.status === 'complete' && !transcriptWorking ? (
+                      <span className="max-w-full truncate rounded-full border border-[#1E9A80]/45 bg-[#1E9A80]/15 px-2 py-0.5 font-semibold text-[#1E9A80]">
+                        Ready
+                      </span>
+                    ) : transcriptWorking ? (
+                      <span className="max-w-full truncate rounded-full border border-[var(--uvai-accent)]/45 bg-[var(--uvai-accent-soft)] px-2 py-0.5 font-semibold text-[var(--uvai-accent-ink)]">
+                        Working
+                      </span>
+                    ) : selected.status === 'failed' ? (
+                      <span className="max-w-full truncate rounded-full border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-2 py-0.5 font-semibold text-[var(--uvai-danger-ink)]">
+                        Needs retry
                       </span>
                     ) : null}
                   </div>
-                  <p className="studio-pack-card__url mt-2 truncate text-xs text-[var(--uvai-ink-faint)]">
+                  <p className="studio-pack-card__url mt-2 min-w-0 max-w-full truncate text-xs text-[var(--uvai-ink-faint)]">
                     {selected.videoPack.sourceUrl}
                   </p>
                   {selected.videoPack.pack.chapters?.length ? (
-                    <div className="studio-pack-card__jump mt-4 border-t border-[var(--uvai-border)] pt-3">
+                    <div className="studio-pack-card__jump mt-3 min-w-0 max-w-full border-t border-[var(--uvai-border)] pt-2.5">
                       <p className="uvai-section-label mb-2">Quick jump</p>
-                      <ol className="flex flex-col gap-1.5">
+                      <ol className="flex min-w-0 flex-col gap-1.5">
                         {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
                           const canSeekPack = videoId === selected.videoPack?.pack.video_id;
                           return (
-                            <li key={`${chapter.topic}-${index}`}>
+                            <li key={`${chapter.topic}-${index}`} className="min-w-0 max-w-full">
                               <button
                                 type="button"
                                 data-testid={`studio-quick-jump-${index}`}
@@ -1300,13 +1141,13 @@ export default function OneLoopStudio({
                                 onClick={() => {
                                   if (canSeekPack) seekTo(chapter.start);
                                 }}
-                                className="flex w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
+                                className="flex w-full min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
                               >
-                                <span className="flex min-w-0 items-center gap-2">
-                                  <span className="font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                                <span className="flex min-w-0 flex-1 items-center gap-2">
+                                  <span className="shrink-0 font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
                                     {String(index + 1).padStart(2, '0')}
                                   </span>
-                                  <span className="truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
+                                  <span className="min-w-0 truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
                                 </span>
                                 <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
                                   {chapter.start}s
@@ -1336,7 +1177,7 @@ export default function OneLoopStudio({
                     </li>
                     <li className="flex items-center gap-2">
                       <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">03</span>
-                      <span>Interactive agent chat, Build live & Ship export</span>
+                      <span>Interactive chat, Live Preview & Pack Export</span>
                     </li>
                   </ul>
                 </div>
@@ -1349,6 +1190,12 @@ export default function OneLoopStudio({
             videoId={selected?.videoPack?.videoId ?? (videoId || null)}
             packId={selected?.videoPack?.packId ?? null}
             disabled={transcriptWorking}
+            isWorking={transcriptWorking}
+            statusText={statusText}
+            activeStage={transcriptStage.label}
+            videoTitle={selected ? formatSavedVideoLabel(selected) : null}
+            onSubmitUrl={handleAnalyzeUrl}
+            onSeek={canSeekActiveVideo ? seekTo : undefined}
           />
         }
         outputPane={
@@ -1366,6 +1213,8 @@ export default function OneLoopStudio({
             onBuildLive={() => void buildLive()}
             buildBusy={buildBusy}
             focusPreviewSignal={previewFocusEpoch}
+            initialSection="tasks"
+            onSeek={canSeekActiveVideo ? seekTo : undefined}
             reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
               const card = studioActionCard(action);
               return {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   BookOpen,
   Clapperboard,
@@ -14,7 +14,9 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  Sparkles,
   Sun,
+  User,
   X,
 } from 'lucide-react';
 import '@/styles/theme-tokens.css';
@@ -143,6 +145,7 @@ function RailNav({
   defaultCollapsed = false,
 }: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const ctaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -154,6 +157,15 @@ function RailNav({
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
+
+  const expandToAccount = () => {
+    setCollapsed(false);
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        ctaRef.current?.querySelector<HTMLElement>('a, button')?.focus();
+      });
+    }
+  };
 
   return (
     <nav
@@ -180,7 +192,7 @@ function RailNav({
       </div>
 
       {subtitle && !collapsed && (
-        <span className="px-4 pt-3 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>{subtitle}</span>
+        <span className="uvai-rail-subtitle px-4 pt-3 text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>{subtitle}</span>
       )}
 
       <div className="uvai-rail-links">
@@ -201,13 +213,39 @@ function RailNav({
         })}
       </div>
 
-      <div className="uvai-rail-cta">
+      <div ref={ctaRef} className="uvai-rail-cta">
         {rightSlot || (
           <Link href="/#get-pro" className="uvai-btn uvai-btn-primary w-full py-2 px-5 text-sm">
             Get Pro
           </Link>
         )}
       </div>
+
+      {collapsed && (
+        rightSlot ? (
+          <button
+            type="button"
+            onClick={expandToAccount}
+            aria-label="Sign in or account"
+            aria-expanded={false}
+            title="Sign in / Account"
+            className="uvai-rail-collapsed-cta"
+          >
+            <User className="h-4 w-4" aria-hidden="true" />
+            <span className="uvai-rail-label">Sign in</span>
+          </button>
+        ) : (
+          <Link
+            href="/#get-pro"
+            aria-label="Get Pro"
+            title="Get Pro"
+            className="uvai-rail-collapsed-cta"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            <span className="uvai-rail-label">Get Pro</span>
+          </Link>
+        )
+      )}
 
       <ThemeBar compact={false} />
     </nav>
@@ -241,7 +279,7 @@ export default function Nav({
 
   return (
     <nav
-      className="template-nav flex flex-wrap items-center justify-between px-4 sm:px-6 lg:px-10 py-3 z-50"
+      className="template-nav flex flex-wrap items-center justify-between gap-2 px-3 min-[600px]:px-5 lg:px-10 py-2 min-[901px]:py-3 z-50"
       style={{
         borderBottom: '1px solid var(--uvai-border)',
         background: 'var(--uvai-bg)',
@@ -251,8 +289,8 @@ export default function Nav({
         right: fixed ? 0 : undefined,
       }}
     >
-      <div className="flex items-center gap-6">
-        <Link href="/" className="flex items-center gap-2.5">
+      <div className="flex min-w-0 items-center gap-3 md:gap-5">
+        <Link href="/" className="flex shrink-0 items-center gap-2">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-sm"
             style={{ background: 'var(--uvai-accent)' }}
@@ -265,10 +303,10 @@ export default function Nav({
         </Link>
 
         {subtitle && (
-          <span className="text-sm" style={{ color: 'var(--uvai-ink-soft)' }}>{subtitle}</span>
+          <span className="hidden lg:inline text-sm whitespace-nowrap" style={{ color: 'var(--uvai-ink-soft)' }}>{subtitle}</span>
         )}
 
-        <div className="hidden md:flex items-center gap-1">
+        <div className="hidden min-[600px]:flex items-center gap-0.5 sm:gap-1">
           {NAV_LINKS.map(({ href, label }) => {
             const active = isNavActive(pathname, href);
             return (
@@ -276,7 +314,7 @@ export default function Nav({
                 key={href}
                 href={href}
                 aria-current={active ? 'page' : undefined}
-                className="text-sm px-3 py-2 rounded-lg transition-colors"
+                className="whitespace-nowrap text-xs sm:text-sm px-2 sm:px-2.5 lg:px-3 py-1.5 sm:py-2 rounded-lg transition-colors"
                 style={{
                   color: active ? 'var(--uvai-ink)' : 'var(--uvai-ink-soft)',
                   background: active ? 'var(--uvai-surface-warm)' : 'transparent',
@@ -289,10 +327,10 @@ export default function Nav({
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <ThemeBar compact />
         {rightSlot || (
-          <Link href="/#get-pro" className="uvai-btn uvai-btn-primary py-2 px-5 text-sm">
+          <Link href="/#get-pro" className="uvai-btn uvai-btn-primary whitespace-nowrap !py-2 !px-3.5 sm:!px-4 lg:!px-5 text-xs sm:text-sm">
             Get Pro
           </Link>
         )}
@@ -302,7 +340,7 @@ export default function Nav({
           aria-expanded={mobileOpen}
           aria-controls="mobile-nav"
           aria-label={mobileOpen ? 'Close navigation menu' : 'Open navigation menu'}
-          className="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-lg"
+          className="min-[600px]:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg"
           style={{ color: 'var(--uvai-ink-soft)' }}
         >
           {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -310,7 +348,7 @@ export default function Nav({
       </div>
 
       {mobileOpen && (
-        <div id="mobile-nav" className="md:hidden w-full mt-3 flex flex-col gap-1 pt-3" style={{ borderTop: '1px solid var(--uvai-border)' }}>
+        <div id="mobile-nav" className="min-[600px]:hidden w-full mt-2 flex flex-col gap-1 pt-2" style={{ borderTop: '1px solid var(--uvai-border)' }}>
           {NAV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
