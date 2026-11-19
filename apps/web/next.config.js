@@ -24,7 +24,7 @@ const contentSecurityPolicy = [
   "base-uri 'self'",
   "object-src 'none'",
   "frame-ancestors 'none'",
-  "form-action 'self' https://accounts.google.com",
+  "form-action 'self'",
   "img-src 'self' data: blob: https://uvai.io https://api.uvai.io https://img.youtube.com https://i.ytimg.com https://*.ytimg.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",

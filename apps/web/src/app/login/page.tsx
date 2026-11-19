@@ -54,7 +54,7 @@ export default async function LoginPage({
         <div className="mt-8 space-y-3">
           <GoogleSignInButton callbackUrl={callbackUrl} />
           <Link
-            href={callbackUrl}
+            href="/studio"
             className="uvai-btn uvai-btn-secondary w-full justify-center"
           >
             Continue directly to Studio →

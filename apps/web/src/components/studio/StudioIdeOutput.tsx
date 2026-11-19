@@ -7,6 +7,7 @@ import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
+import { downloadMarkdownFile } from '@/lib/download-file';
 import StudioBoundTasks from './StudioBoundTasks';
 
 export type StudioReviewActionInput = {
@@ -217,15 +218,7 @@ export default function StudioIdeOutput({
       '- [ ] Verify stack checks and `/d/` preview in Desktop and Mobile frames',
       '- [ ] Complete Accessibility & Core Web Vitals QA before publishing',
     ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${(resolvedVideoId || 'uvai-pack').replace(/[^a-zA-Z0-9_-]/g, '')}.md`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    downloadMarkdownFile(`${resolvedVideoId || 'uvai-pack'}.md`, lines.join('\n'));
   };
 
   return (

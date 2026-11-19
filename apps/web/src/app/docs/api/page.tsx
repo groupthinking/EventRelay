@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
+import DownloadMarkdownButton from '@/components/docs/DownloadMarkdownButton';
 
 export const metadata: Metadata = {
   title: 'API Reference',
@@ -99,8 +100,6 @@ ${LAUNCH_CHECKLIST.map((s) => `### ${s.phase}\n${s.items.map((i) => `- [ ] ${i}`
 `;
 
 export default function ApiDocsPage() {
-  const markdownHref = `data:text/markdown;charset=utf-8,${encodeURIComponent(DOCS_MARKDOWN)}`;
-
   return (
     <div className="min-h-screen bg-[var(--uvai-bg)] text-[var(--uvai-ink)]">
       <Nav variant="rail" defaultCollapsed={false} />
@@ -125,14 +124,12 @@ export default function ApiDocsPage() {
             <span className="hidden font-mono text-[11px] text-[var(--uvai-ink-faint)] sm:inline">
               Ready for Claude, Cursor, or ChatGPT
             </span>
-            <a
-              href={markdownHref}
-              download="uvai-build-and-launch-checklist.md"
+            <DownloadMarkdownButton
+              filename="uvai-build-and-launch-checklist.md"
+              content={DOCS_MARKDOWN}
+              label="Download .md"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-bg)] px-3 py-1.5 font-mono text-xs font-semibold text-[var(--uvai-ink)] transition hover:border-[var(--uvai-accent)]"
-            >
-              <span>Download .md</span>
-              <span aria-hidden="true">↓</span>
-            </a>
+            />
           </div>
         </div>
 
