@@ -1,7 +1,0 @@
-{
-  "git": {
-    "deploymentEnabled": {
-      "fix/2168-narrow-except-deploy-agents": false
-    }
-  }
-}
