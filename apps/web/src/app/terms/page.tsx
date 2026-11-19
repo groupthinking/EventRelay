@@ -17,7 +17,7 @@ const LAST_UPDATED = 'May 25, 2026';
 export default function TermsPage() {
   return (
     <div className="min-h-screen bg-[var(--uvai-bg)] text-[var(--uvai-ink)]">
-      <Nav />
+      <Nav variant="rail" defaultCollapsed={false} />
       <main className="mx-auto max-w-3xl px-6 py-16">
         <header className="mb-10 border-b border-[var(--uvai-border-strong)] pb-8">
           <nav aria-label="Breadcrumb" className="text-xs text-[var(--uvai-ink-faint)]">

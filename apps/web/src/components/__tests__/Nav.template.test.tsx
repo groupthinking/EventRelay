@@ -142,9 +142,18 @@ describe('Nav template routing semantics', () => {
     const css = readFileSync(join(here, '../../styles/theme-tokens.css'), 'utf8');
     expect(css).toContain('--uvai-topbar-h: 64px;');
     expect(css).toContain('--uvai-topbar-h: 56px;');
+    expect(css).toContain('@media (min-width: 600px)');
+    expect(css).toContain('@media (min-width: 600px) and (max-width: 960px)');
     expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-collapsed-cta');
     expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-brand-text');
     expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-links .uvai-rail-label');
     expect(css).toContain('.uvai-rail-shell[data-collapsed=\'true\'] .uvai-rail-cta');
+  });
+
+  it('mounts the Webflow/MDN rail sidebar on operational and documentation routes', () => {
+    for (const page of ['../../app/docs/api/page.tsx', '../../app/pricing/page.tsx', '../../app/privacy/page.tsx', '../../app/terms/page.tsx']) {
+      const src = readFileSync(join(here, page), 'utf8');
+      expect(src).toContain('<Nav variant="rail"');
+    }
   });
 });

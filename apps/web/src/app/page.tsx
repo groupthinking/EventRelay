@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import {
   Bot,
   Film,
@@ -46,27 +47,101 @@ const OFFERS = [
 ] as const;
 
 const SHOWCASE = [
-  { Icon: FileText, title: 'Software tutorial', note: 'Inspect steps and prerequisites' },
-  { Icon: Layers, title: 'Product walkthrough', note: 'Review features and interactions' },
-  { Icon: Workflow, title: 'Process recording', note: 'Explore proposed work' },
+  {
+    Icon: FileText,
+    title: 'Software tutorial',
+    note: 'Inspect steps and prerequisites',
+    eyebrow: '01 · VIDEO PACK',
+    pill: 'Timed Captions',
+    stageHeadline: 'Extract Tasks.',
+    stageAccent: 'Instantly.',
+    tone: 'emerald',
+  },
+  {
+    Icon: Layers,
+    title: 'Product walkthrough',
+    note: 'Review features and interactions',
+    eyebrow: '02 · STACK MAP',
+    pill: 'Next.js · Shopify',
+    stageHeadline: 'Wired to Real',
+    stageAccent: 'Starter Kits.',
+    tone: 'violet',
+  },
+  {
+    Icon: Workflow,
+    title: 'Process recording',
+    note: 'Explore proposed work',
+    eyebrow: '03 · LIVE SANDBOX',
+    pill: '/d/ Preview',
+    stageHeadline: 'Every Check',
+    stageAccent: 'Source-Linked.',
+    tone: 'cobalt',
+  },
 ] as const;
 
 const PROCESS_TILES = [
-  { n: '1', Icon: Film, title: 'Videos', note: 'Timestamps and keyframes stay attached to each task.', chips: ['timestamps', 'keyframes'] },
-  { n: '2', Icon: LayoutTemplate, title: 'Templates', note: 'Starter scaffolds to build from.', chips: ['Next.js', 'Shopify CLI'] },
-  { n: '3', Icon: Wrench, title: 'Tools & Code', note: 'Detected stack plus proposed checks.', chips: ['stack', 'checks'] },
-  { n: '4', Icon: Plug, title: 'MCPs & Harnesses', note: 'Tool servers wired into the build.', chips: ['langextract', 'vercel', 'git-workflow'] },
-  { n: '5', Icon: ScrollText, title: 'Prompts & Specs', note: 'A spec and planner for each task.', chips: ['G.A.T.E. spec', '5-field planner'] },
-  { n: '6', Icon: Bot, title: 'Agent Ops', note: 'Post-build workflow tracks, not guarantees.', chips: ['Build', 'Fix', 'Maintain', 'Run', 'Grow', 'Monetize'] },
+  {
+    n: '1',
+    Icon: Film,
+    title: 'Videos',
+    note: 'Timestamps and keyframes stay attached to each task.',
+    chips: ['timestamps', 'keyframes'],
+    badge: 'CORE',
+    tone: 'emerald',
+  },
+  {
+    n: '2',
+    Icon: LayoutTemplate,
+    title: 'Templates',
+    note: 'Starter scaffolds to build from.',
+    chips: ['Next.js', 'Shopify CLI'],
+    badge: 'STARTERS',
+    tone: 'cobalt',
+  },
+  {
+    n: '3',
+    Icon: Wrench,
+    title: 'Tools & Code',
+    note: 'Detected stack plus proposed checks.',
+    chips: ['stack', 'checks'],
+    badge: 'TRENDING',
+    tone: 'hot',
+  },
+  {
+    n: '4',
+    Icon: Plug,
+    title: 'MCPs & Harnesses',
+    note: 'Tool servers wired into the build.',
+    chips: ['langextract', 'vercel', 'git-workflow'],
+    badge: 'NEW',
+    tone: 'emerald',
+  },
+  {
+    n: '5',
+    Icon: ScrollText,
+    title: 'Prompts & Specs',
+    note: 'A spec and planner for each task.',
+    chips: ['G.A.T.E. spec', '5-field planner'],
+    badge: 'G.A.T.E.',
+    tone: 'cobalt',
+  },
+  {
+    n: '6',
+    Icon: Bot,
+    title: 'Agent Ops',
+    note: 'Post-build workflow tracks, not guarantees.',
+    chips: ['Build', 'Fix', 'Maintain', 'Run', 'Grow', 'Monetize'],
+    badge: 'AI OPS',
+    tone: 'hot',
+  },
 ] as const;
 
 const AGENT_FLOW = ['Video', 'Video Pack', 'Tasks', 'Checks', 'Review'] as const;
 
 /**
- * Shipper-style pre-login hierarchy in UVAI obsidian:
- * showcase strip -> hero bento (featured composer card + 3x2 process tiles)
+ * Shipper/Higgsfield pre-login visual showcase hierarchy in UVAI obsidian:
+ * 3-card preview strip -> hero bento (emerald/cobalt stage composer + 3x2 badged process tiles)
  * -> compact workflow band -> #get-pro -> footer.
- * Source intake stays primary; workflow context is separate from plan selection.
  */
 export default async function HomePage() {
   const showCustomBadge = await customBadge();
@@ -78,11 +153,22 @@ export default async function HomePage() {
       <section aria-labelledby="home-heading" className="template-home home-shipper px-4 sm:px-6 lg:px-10 pb-14 pt-3 sm:pt-4">
         <div className="mx-auto max-w-[1400px]">
           <div className="template-use-cases" aria-label="Supported source examples">
-            {SHOWCASE.map(({ Icon, title, note }) => (
-              <div key={title}>
-                <Icon size={16} aria-hidden="true" />
-                <strong>{title}</strong>
-                <span>{note}</span>
+            {SHOWCASE.map(({ Icon, title, note, eyebrow, pill, stageHeadline, stageAccent, tone }) => (
+              <div key={title} className="home-showcase-card" data-tone={tone}>
+                <div className="home-showcase-stage" aria-hidden="true">
+                  <div className="home-showcase-top">
+                    <span className="home-showcase-eyebrow">{eyebrow}</span>
+                    <span className="home-showcase-pill">{pill}</span>
+                  </div>
+                  <p className="home-showcase-display">
+                    {stageHeadline} <em>{stageAccent}</em>
+                  </p>
+                </div>
+                <div className="home-showcase-meta">
+                  <Icon size={16} aria-hidden="true" />
+                  <strong>{title}</strong>
+                  <span>{note}</span>
+                </div>
               </div>
             ))}
           </div>
@@ -120,10 +206,19 @@ export default async function HomePage() {
           }>
             <div className="home-bento">
               <article className="home-featured-card">
-                <p className="uvai-label home-featured-label">
-                  <Film size={14} aria-hidden="true" />
-                  Universal Video Action Intelligence
-                </p>
+                <div className="home-featured-top">
+                  <p className="uvai-label home-featured-label">
+                    <Film size={14} aria-hidden="true" />
+                    Universal Video Action Intelligence
+                  </p>
+                  <Link
+                    href="/studio"
+                    className="home-tile-badge hover:opacity-90"
+                    data-tone="emerald"
+                  >
+                    NEW · WEBMCP · OPEN STUDIO →
+                  </Link>
+                </div>
                 {showCustomBadge && (
                   <p className="home-flag-badge">New: configurable with Vercel Flags</p>
                 )}
@@ -142,11 +237,14 @@ export default async function HomePage() {
               </article>
 
               <ul className="home-process-tiles" aria-label="UVAI process">
-                {PROCESS_TILES.map(({ n, Icon, title, note, chips }) => (
-                  <li key={title} className="home-process-tile">
+                {PROCESS_TILES.map(({ n, Icon, title, note, chips, badge, tone }) => (
+                  <li key={title} className="home-process-tile" data-tone={tone}>
                     <div className="home-tile-head">
                       <span className="home-tile-icon" aria-hidden="true"><Icon size={16} /></span>
-                      <span className="home-tile-index" aria-hidden="true">{n}</span>
+                      <div className="home-tile-meta">
+                        <span className="home-tile-badge" data-tone={tone}>{badge}</span>
+                        <span className="home-tile-index" aria-hidden="true">{n}</span>
+                      </div>
                     </div>
                     <h3>{title}</h3>
                     <p>{note}</p>
