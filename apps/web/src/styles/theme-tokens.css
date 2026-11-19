@@ -294,8 +294,8 @@ nav.template-nav {
   position: absolute;
 }
 
-/* Reserve space for the floating rail on wide screens (>= 901px matches studio-workbench). */
-@media (min-width: 901px) {
+/* Reserve space for the floating vertical rail down to >= 600px (half-screen & desktop). */
+@media (min-width: 600px) {
   body:has(.uvai-rail-shell) {
     padding-left: calc(var(--uvai-rail-width) + var(--uvai-rail-inset) * 2);
   }
@@ -330,6 +330,73 @@ nav.template-nav {
   }
 }
 
+/* Half-screen (600px–960px): keep persistent 48px vertical left icon rail, expand cleanly as overlay. */
+@media (min-width: 600px) and (max-width: 960px) {
+  :root {
+    --uvai-rail-inset: 8px;
+    --uvai-rail-width-collapsed: 48px;
+  }
+
+  body:has(.uvai-rail-shell) {
+    padding-left: calc(var(--uvai-rail-width-collapsed) + var(--uvai-rail-inset) * 2);
+  }
+
+  .uvai-rail-shell {
+    z-index: 60;
+  }
+
+  .uvai-rail-shell[data-collapsed='false'][data-user-toggled='true'] {
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+  }
+
+  /* Compact before hydration/first mount when defaultCollapsed={false} on doc/pricing routes */
+  .uvai-rail-shell[data-user-toggled='false'] {
+    width: var(--uvai-rail-width-collapsed);
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-rail-header {
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 0;
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-rail-label,
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-rail-brand-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-rail-link {
+    justify-content: center;
+    padding: 8px 0;
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-rail-cta {
+    display: none;
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-theme-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-theme-cell {
+    border-right: 0;
+    border-bottom: 1px solid var(--uvai-border);
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-theme-cell:last-child {
+    border-bottom: 0;
+  }
+}
+
 @media (max-width: 900px) {
   :root {
     --uvai-topbar-h: 56px;
@@ -352,7 +419,10 @@ nav.template-nav {
     white-space: nowrap;
     border: 0;
   }
+}
 
+/* Mobile (<= 599px): flatten rail into compact single-row top bar */
+@media (max-width: 599px) {
   .uvai-rail-shell,
   .uvai-rail-shell[data-collapsed='true'] {
     position: relative;
@@ -371,8 +441,8 @@ nav.template-nav {
     flex-wrap: nowrap;
     align-items: center;
     justify-content: flex-start;
-    gap: 10px;
-    padding: 8px 16px;
+    gap: 6px;
+    padding: 8px 10px;
     overflow: hidden;
     max-height: none;
   }
@@ -418,14 +488,17 @@ nav.template-nav {
     display: none;
   }
 
+  .uvai-rail-shell .uvai-rail-links .uvai-rail-label,
   .uvai-rail-shell[data-collapsed='true'] .uvai-rail-links .uvai-rail-label {
-    position: static;
-    width: auto;
-    height: auto;
-    margin: 0;
-    overflow: visible;
-    clip: auto;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
     white-space: nowrap;
+    border: 0;
   }
 
   .uvai-rail-shell .uvai-rail-link,
@@ -435,6 +508,10 @@ nav.template-nav {
     gap: 6px;
     font-size: 13px;
     flex-shrink: 0;
+  }
+
+  .uvai-rail-shell .uvai-rail-link svg {
+    display: block;
   }
 
   .uvai-rail-shell .uvai-rail-collapsed-cta,
@@ -490,37 +567,6 @@ nav.template-nav {
 
   .uvai-rail-shell .uvai-theme-hint {
     display: none;
-  }
-}
-
-@media (max-width: 659px) {
-  .uvai-rail-shell .uvai-rail-link svg {
-    display: none;
-  }
-}
-
-@media (max-width: 599px) {
-  .uvai-rail-shell,
-  .uvai-rail-shell[data-collapsed='true'] {
-    gap: 6px;
-    padding: 8px 10px;
-  }
-
-  .uvai-rail-shell .uvai-rail-link svg {
-    display: block;
-  }
-
-  .uvai-rail-shell .uvai-rail-links .uvai-rail-label,
-  .uvai-rail-shell[data-collapsed='true'] .uvai-rail-links .uvai-rail-label {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
   }
 }
 

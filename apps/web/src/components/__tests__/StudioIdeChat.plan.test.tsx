@@ -197,6 +197,8 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
 
     const input = screen.getByTestId('studio-ide-chat-input') as HTMLTextAreaElement;
     expect(input.disabled).toBe(false);
+    expect(input.id).toBe('studio-chat-input');
+    expect(input.name).toBe('studioChatMessage');
 
     fireEvent.change(input, { target: { value: 'https://youtu.be/auJzb1D-fag' } });
     fireEvent.keyDown(input, { key: 'Enter', shiftKey: true });
@@ -206,5 +208,22 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
     expect(onSubmitUrl).toHaveBeenCalledWith('https://www.youtube.com/watch?v=auJzb1D-fag');
     expect(network).not.toHaveBeenCalled();
     expect(input.value).toBe('');
+  });
+
+  it('sanitizes videoId before building external timestamp fallback links', async () => {
+    const network = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ answer: 'Check 1:05 for setup.' }),
+    });
+    vi.stubGlobal('fetch', network);
+
+    render(<StudioIdeChat videoId={'" onclick="alert(1)'} packId="vp:v0:test" />);
+    fireEvent.change(screen.getByTestId('studio-ide-chat-input'), { target: { value: 'Where is setup?' } });
+    fireEvent.submit(screen.getByTestId('studio-ide-chat-composer'));
+
+    const chip = await screen.findByTestId('chat-timestamp-chip');
+    expect(chip.tagName).toBe('SPAN');
+    expect(chip.getAttribute('href')).toBeNull();
   });
 });

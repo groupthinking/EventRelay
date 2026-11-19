@@ -65,6 +65,7 @@ describe('StudioIdeOutput playflow', () => {
       'Code & Spec',
       'Transcript',
     ]);
+    expect(screen.getByTestId('studio-download-md')).toBeTruthy();
     expect(screen.queryByRole('tab', { name: 'Lingo' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Signals' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Intent' })).toBeNull();

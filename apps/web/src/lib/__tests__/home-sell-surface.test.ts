@@ -170,5 +170,16 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(docs).toContain('end-to-end YouTube workflow');
     expect(docs).toContain('/api/video/pack');
     expect(docs).toContain('/api/workflows/video-to-actions');
+    expect(docs).toContain('Build &amp; Launch Checklist');
+    expect(docs).toContain('Download .md');
+    expect(docs).toContain('On this page');
+  });
+
+  it('renders Shipper visual showcase stages and badged capability tiles on Home', () => {
+    const home = readSource('app/page.tsx');
+    expect(home).toContain('home-showcase-stage');
+    expect(home).toContain('home-showcase-display');
+    expect(home).toContain('home-tile-badge');
+    expect(home).toContain('NEW · WEBMCP');
   });
 });

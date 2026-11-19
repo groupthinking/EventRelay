@@ -145,12 +145,25 @@ function RailNav({
   defaultCollapsed = false,
 }: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [userToggled, setUserToggled] = useState(false);
   const ctaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (
+      typeof window !== 'undefined' &&
+      !defaultCollapsed &&
+      window.innerWidth >= 600 &&
+      window.innerWidth <= 960
+    ) {
+      setCollapsed(true);
+    }
+  }, [defaultCollapsed]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key === '/') {
         event.preventDefault();
+        setUserToggled(true);
         setCollapsed((value) => !value);
       }
     };
@@ -158,7 +171,13 @@ function RailNav({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  const toggleCollapsed = () => {
+    setUserToggled(true);
+    setCollapsed((value) => !value);
+  };
+
   const expandToAccount = () => {
+    setUserToggled(true);
     setCollapsed(false);
     if (typeof requestAnimationFrame === 'function') {
       requestAnimationFrame(() => {
@@ -171,6 +190,7 @@ function RailNav({
     <nav
       className="uvai-rail-shell template-nav"
       data-collapsed={collapsed ? 'true' : 'false'}
+      data-user-toggled={userToggled ? 'true' : 'false'}
       aria-label="Primary"
     >
       <div className="uvai-rail-header">
@@ -182,7 +202,7 @@ function RailNav({
         </Link>
         <button
           type="button"
-          onClick={() => setCollapsed((value) => !value)}
+          onClick={toggleCollapsed}
           aria-expanded={!collapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           className="uvai-rail-toggle"

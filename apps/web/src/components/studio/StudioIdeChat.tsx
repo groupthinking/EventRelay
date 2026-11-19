@@ -309,6 +309,8 @@ function renderLineWithTimestampChips(
     }
 
     const chipKey = `${keyPrefix}-ts-${chipIndex++}`;
+    const safeVideoId =
+      videoId && /^[A-Za-z0-9_-]{6,20}$/.test(videoId) ? encodeURIComponent(videoId) : null;
     if (onSeek) {
       nodes.push(
         <button
@@ -323,11 +325,11 @@ function renderLineWithTimestampChips(
           <span>{parsed.label}</span>
         </button>,
       );
-    } else if (videoId) {
+    } else if (safeVideoId) {
       nodes.push(
         <a
           key={chipKey}
-          href={`https://www.youtube.com/watch?v=${videoId}&t=${Math.floor(parsed.seconds)}s`}
+          href={`https://www.youtube.com/watch?v=${safeVideoId}&t=${Math.floor(parsed.seconds)}s`}
           target="_blank"
           rel="noreferrer"
           data-testid="chat-timestamp-chip"
@@ -846,6 +848,8 @@ export default function StudioIdeChat({
       >
         <div className="studio-chat-composer-box">
           <textarea
+            id="studio-chat-input"
+            name="studioChatMessage"
             ref={inputRef}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}

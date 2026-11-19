@@ -49,7 +49,7 @@ export default function PricingPage() {
 
   return (
     <main className="min-h-screen" style={{ background: 'var(--uvai-bg)', color: 'var(--uvai-ink)' }}>
-      <Nav />
+      <Nav variant="rail" defaultCollapsed={false} />
 
       <p id="billing-surface-markers" className="sr-only" aria-hidden>
         billing:ProCheckoutButton,ProRenewPanel,CheckoutSuccessActivator,turnstile

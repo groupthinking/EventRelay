@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Copy, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import { studioActionCard } from '@/lib/studio-pipeline-status';
@@ -188,54 +188,107 @@ export default function StudioIdeOutput({
     }
   };
 
+  const downloadMarkdownPack = () => {
+    const title = video?.title || resolvedVideoId || 'uvai-video-pack';
+    const lines: string[] = [
+      `# ${title}`,
+      '',
+      `- Source URL: ${video?.url || (resolvedVideoId ? `https://www.youtube.com/watch?v=${resolvedVideoId}` : 'Not loaded')}`,
+      `- Pack ID: ${pack?.id || 'pending'}`,
+      '',
+      '## Chapters',
+      ...(chapters.length > 0
+        ? chapters.map(
+            (c, i) => `- ${String(i + 1).padStart(2, '0')} (${formatSeconds(c.start)}): ${c.topic}`,
+          )
+        : ['- No extracted chapters yet.']),
+      '',
+      '## Tasks & Stack',
+      ...(actionItems.length > 0
+        ? actionItems.map((item, i) => `- [ ] ${i + 1}. ${item}`)
+        : events.length > 0
+          ? events.map((ev) => `- [ ] ${ev.title} (${ev.timestamp || '0:00'})`)
+          : ['- Run analysis on a YouTube URL to populate bound tasks.']),
+      ...(toolNames.length > 0 ? ['', `Stack Tools: ${toolNames.join(', ')}`] : []),
+      '',
+      '## Build & Launch Checklist',
+      '- [ ] Verify responsive breakpoints (`720x900` half-screen and `1440x900` desktop)',
+      '- [ ] Confirm WebMCP structured data, canonical link, and dark/light/high-contrast tokens',
+      '- [ ] Verify stack checks and `/d/` preview in Desktop and Mobile frames',
+      '- [ ] Complete Accessibility & Core Web Vitals QA before publishing',
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${(resolvedVideoId || 'uvai-pack').replace(/[^a-zA-Z0-9_-]/g, '')}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div data-testid="studio-ide-output" className="flex h-full min-h-0 flex-col bg-[var(--uvai-bg)]">
-      <div
-        role="tablist"
-        aria-label="Output sections"
-        data-testid="studio-ide-output-tablist"
-        className="flex flex-nowrap shrink-0 items-center gap-0.5 overflow-x-auto border-b border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] px-2 py-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-      >
-        {SECTIONS.map((s) => {
-          const isSelected = active === s.id;
-          return (
-            <button
-              key={s.id}
-              type="button"
-              role="tab"
-              id={`studio-ide-output-tab-${s.id}`}
-              aria-selected={isSelected}
-              aria-controls={`studio-ide-output-panel-${s.id}`}
-              data-testid={`studio-ide-output-tab-${s.id}`}
-              onClick={() => selectSection(s.id)}
-              onKeyDown={(event) => {
-                const idx = SECTIONS.findIndex((item) => item.id === s.id);
-                const next =
-                  event.key === 'ArrowRight'
-                    ? SECTIONS[(idx + 1) % SECTIONS.length]
-                    : event.key === 'ArrowLeft'
-                      ? SECTIONS[(idx + SECTIONS.length - 1) % SECTIONS.length]
-                      : event.key === 'Home'
-                        ? SECTIONS[0]
-                        : event.key === 'End'
-                          ? SECTIONS[SECTIONS.length - 1]
-                          : null;
-                if (next) {
-                  event.preventDefault();
-                  selectSection(next.id);
-                  document.getElementById(`studio-ide-output-tab-${next.id}`)?.focus();
-                }
-              }}
-              className={`shrink-0 whitespace-nowrap rounded-md px-2 py-1 text-[11px] font-medium transition-colors sm:px-2.5 sm:text-xs ${
-                isSelected
-                  ? 'bg-[#146ef5] text-white'
-                  : 'bg-transparent text-[var(--uvai-ink-soft)] hover:bg-[var(--uvai-surface-warm)] hover:text-[var(--uvai-ink)]'
-              }`}
-            >
-              {s.label}
-            </button>
-          );
-        })}
+      <div className="flex shrink-0 items-center justify-between gap-1 border-b border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] px-1.5 py-1 sm:px-2 sm:py-1.5">
+        <div
+          role="tablist"
+          aria-label="Output sections"
+          data-testid="studio-ide-output-tablist"
+          className="flex min-w-0 flex-1 flex-nowrap items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        >
+          {SECTIONS.map((s) => {
+            const isSelected = active === s.id;
+            return (
+              <button
+                key={s.id}
+                type="button"
+                role="tab"
+                id={`studio-ide-output-tab-${s.id}`}
+                aria-selected={isSelected}
+                aria-controls={`studio-ide-output-panel-${s.id}`}
+                data-testid={`studio-ide-output-tab-${s.id}`}
+                onClick={() => selectSection(s.id)}
+                onKeyDown={(event) => {
+                  const idx = SECTIONS.findIndex((item) => item.id === s.id);
+                  const next =
+                    event.key === 'ArrowRight'
+                      ? SECTIONS[(idx + 1) % SECTIONS.length]
+                      : event.key === 'ArrowLeft'
+                        ? SECTIONS[(idx + SECTIONS.length - 1) % SECTIONS.length]
+                        : event.key === 'Home'
+                          ? SECTIONS[0]
+                          : event.key === 'End'
+                            ? SECTIONS[SECTIONS.length - 1]
+                            : null;
+                  if (next) {
+                    event.preventDefault();
+                    selectSection(next.id);
+                    document.getElementById(`studio-ide-output-tab-${next.id}`)?.focus();
+                  }
+                }}
+                className={`shrink-0 whitespace-nowrap rounded-md px-1.5 py-1 text-[10.5px] font-medium transition-colors sm:px-2 sm:text-[11px] lg:px-2.5 lg:text-xs ${
+                  isSelected
+                    ? 'bg-[#146ef5] text-white'
+                    : 'bg-transparent text-[var(--uvai-ink-soft)] hover:bg-[var(--uvai-surface-warm)] hover:text-[var(--uvai-ink)]'
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={downloadMarkdownPack}
+          data-testid="studio-download-md"
+          title="Download Markdown spec & launch checklist for Claude, Cursor, or ChatGPT"
+          aria-label="Download Markdown pack"
+          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-bg)] px-1.5 py-1 font-mono text-[10px] font-semibold text-[var(--uvai-ink-soft)] transition hover:border-[var(--uvai-accent)] hover:text-[var(--uvai-ink)]"
+        >
+          <Download size={11} aria-hidden="true" />
+          <span>.md</span>
+        </button>
       </div>
 
       <div

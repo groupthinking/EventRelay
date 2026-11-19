@@ -15,6 +15,11 @@
    utilities regardless of stylesheet order.
    ============================================================ */
 
+/* Zero out globals.css `.uvai-card` 1.5rem padding on Studio split panes so inner headers & tabs span edge-to-edge. */
+.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card {
+  padding: 0;
+}
+
 /* ---- Webflow `.cc_toc` numbered syllabus (Chapters) — all widths ---- */
 .cc_toc {
   list-style: none;
@@ -456,6 +461,7 @@
     flex: 1 1 auto;
     min-height: 0;
     min-width: 0;
+    padding: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -591,8 +597,22 @@
     min-width: 0;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] [role='tablist'] {
-    padding: 6px 8px;
+    padding: 0;
     gap: 2px;
+  }
+}
+
+/* Half-screen (680px–960px) alongside persistent 48px vertical left sidebar:
+   give Deliverables/Video slightly more width so all 4 tabs + .md fit without clipping. */
+@media (min-width: 680px) and (max-width: 960px) {
+  .uvai-cards.template-studio-shell .template-studio-bands {
+    grid-template-columns: minmax(244px, 0.82fr) minmax(0, 1.18fr);
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] [role='tab'] {
+    padding: 4px 5px;
+    font-size: 10.5px;
   }
 }
 
