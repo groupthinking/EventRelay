@@ -1,11 +1,11 @@
 # SQL model and migration truth (AUDIT-007 / #2169)
 
-## Current repository evidence — 2026-11-16
+## Current repository evidence
 
 The legacy Alembic inventory from earlier audit notes is not the active schema source in this tree. Current SQL ownership is split into:
 
-- Supabase SQL migration(s) for production `apps/web` tables.
-- Runtime SQLAlchemy `create_all` tables for internal shared orchestration state.
+- Supabase SQL migrations under `apps/web/supabase/migrations/` for `apps/web` tables.
+- Runtime SQLAlchemy `MetaData.create_all` tables declared in `src/youtube_extension/services/shared_sql_state.py`, which `AgentOrchestrator` initializes when `DATABASE_URL` or `EVENTRELAY_SHARED_STATE_DATABASE_URL` is configured (including production Terraform environments supplying `DATABASE_URL`).
 
 There is no `alembic.ini` file in the current repository root, and there is no `src/youtube_extension/backend/migrations/` directory in this tree.
 
@@ -37,27 +37,52 @@ There is no `alembic.ini` file in the current repository root, and there is no `
       "status": "reconciled"
     }
   ],
-  "non_production_domains": [
+  "runtime_managed_domains": [
     {
       "service": "internal runtime shared SQL state",
       "table": "shared_sessions",
       "owner_file": "src/youtube_extension/services/shared_sql_state.py",
+      "columns": [
+        "session_id",
+        "payload",
+        "version",
+        "created_at",
+        "updated_at"
+      ],
       "migration_strategy": "runtime_create_all",
-      "status": "allowed_non_migrated"
+      "production_applicability": "production_reachable_via_database_url_unresolved_migration",
+      "status": "runtime_create_all_unmigrated"
     },
     {
       "service": "internal runtime shared SQL state",
       "table": "shared_timeline_events",
       "owner_file": "src/youtube_extension/services/shared_sql_state.py",
+      "columns": [
+        "id",
+        "session_id",
+        "timestamp",
+        "summary",
+        "content"
+      ],
       "migration_strategy": "runtime_create_all",
-      "status": "allowed_non_migrated"
+      "production_applicability": "production_reachable_via_database_url_unresolved_migration",
+      "status": "runtime_create_all_unmigrated"
     },
     {
       "service": "internal runtime shared SQL state",
       "table": "shared_a2a_messages",
       "owner_file": "src/youtube_extension/services/shared_sql_state.py",
+      "columns": [
+        "id",
+        "sender",
+        "recipient",
+        "conversation_id",
+        "timestamp",
+        "content"
+      ],
       "migration_strategy": "runtime_create_all",
-      "status": "allowed_non_migrated"
+      "production_applicability": "production_reachable_via_database_url_unresolved_migration",
+      "status": "runtime_create_all_unmigrated"
     }
   ],
   "alembic_status": {
@@ -70,22 +95,26 @@ There is no `alembic.ini` file in the current repository root, and there is no `
 
 ## RLS and tenant strategy
 
-`studio_chats` uses explicit SQL-side hardening in the migration file:
+`studio_chats` uses explicit SQL-side hardening in the migration chain:
 
 - `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
 - `ALTER TABLE ... FORCE ROW LEVEL SECURITY`
 - `REVOKE ALL ... FROM public, anon, authenticated`
-- `GRANT ... TO service_role`
+- `GRANT SELECT, INSERT, UPDATE, DELETE ... TO service_role`
 
 Tenant boundary is application-owned `owner_subject` filtering plus uniqueness on `(owner_subject, request_id)`. All read/write paths in `apps/web/src/lib/studio/chat-store.ts` scope queries by `owner_subject`.
 
+## Production applicability of `SharedSQLStateStore`
+
+`infrastructure/terraform/environments/production/main.tf` injects `DATABASE_URL` without an environment exclusion on `AgentOrchestrator`, so `shared_sessions`, `shared_timeline_events`, and `shared_a2a_messages` are production-reachable runtime `create_all` tables rather than strictly non-production tables. Until either versioned SQL migrations or an explicit non-production boundary is implemented, these tables remain tracked under `runtime_managed_domains` with status `runtime_create_all_unmigrated`.
+
 ## Drift guard
 
-`tests/unit/test_migration_truth_matrix.py` is the schema-drift guard for this issue. It fails when any of the following occurs:
+`tests/unit/test_migration_truth_matrix.py` enforces parity across code, ordered migrations, and this matrix:
 
-- `MIGRATION_TRUTH.md` lacks the required matrix block.
-- `studio_chats` is not mapped to a migration file.
-- `studio_chats` column set drifts between migration SQL, app model contract, and documented mapping.
-- Shared runtime SQL tables are not explicitly classified as non-production runtime `create_all`.
+- Discovers all production `CREATE TABLE` / `ALTER TABLE` statements across ordered `apps/web/supabase/migrations/*.sql` files independently of the matrix.
+- Verifies `studio_chats` parity across the ordered migration chain, `rowSchema` in `chat-store.ts`, SELECT `columns` projection, and `MIGRATION_TRUTH.md`.
+- Validates live SQL-level RLS (`ENABLE` + `FORCE`), `REVOKE ALL` from `public`/`anon`/`authenticated`, `GRANT SELECT, INSERT, UPDATE, DELETE` to `service_role`, `(owner_subject, request_id)` uniqueness, and `owner_subject` filtering.
+- Parses `src/youtube_extension/services/shared_sql_state.py` via AST to verify every `Table(...)`, column list, and `.create_all(...)` invocation matches `runtime_managed_domains` accurately.
 
 Historical claim retained for audit: a previous file revision asserted three committed revisions (`001`–`003`) and a `test_migration_truth.py` count guard. That claim is not valid for the inspected current tree.
