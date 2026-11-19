@@ -58,8 +58,43 @@
     radial-gradient(90% 90% at 90% 85%, rgba(30, 154, 128, 0.2), transparent 65%),
     #0a0f18;
 }
-[data-theme='light'] .home-showcase-card .home-showcase-stage {
-  background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+[data-theme='light'] .home-showcase-card[data-tone='emerald'] .home-showcase-stage {
+  background:
+    radial-gradient(110% 100% at 15% 15%, rgba(16, 185, 129, 0.16), transparent 65%),
+    radial-gradient(90% 90% at 90% 90%, rgba(20, 110, 245, 0.1), transparent 65%),
+    #f3faf7;
+}
+[data-theme='light'] .home-showcase-card[data-tone='violet'] .home-showcase-stage {
+  background:
+    radial-gradient(110% 100% at 20% 20%, rgba(217, 70, 239, 0.12), transparent 65%),
+    radial-gradient(90% 90% at 90% 85%, rgba(99, 102, 241, 0.12), transparent 65%),
+    #faf5ff;
+}
+[data-theme='light'] .home-showcase-card[data-tone='cobalt'] .home-showcase-stage {
+  background:
+    radial-gradient(110% 100% at 15% 20%, rgba(20, 110, 245, 0.14), transparent 65%),
+    radial-gradient(90% 90% at 90% 85%, rgba(16, 185, 129, 0.1), transparent 65%),
+    #f2f7ff;
+}
+[data-theme='light'] .home-showcase-eyebrow {
+  color: var(--uvai-ink-soft);
+}
+[data-theme='light'] .home-showcase-pill {
+  border-color: var(--uvai-border-strong);
+  background: rgba(255, 255, 255, 0.85);
+  color: var(--uvai-ink);
+}
+[data-theme='light'] .home-showcase-display {
+  color: var(--uvai-ink);
+}
+[data-theme='light'] .home-showcase-display em {
+  color: #047857;
+}
+[data-theme='light'] .home-showcase-card[data-tone='violet'] .home-showcase-display em {
+  color: #a21caf;
+}
+[data-theme='light'] .home-showcase-card[data-tone='cobalt'] .home-showcase-display em {
+  color: #1d4ed8;
 }
 .home-showcase-top {
   display: flex;

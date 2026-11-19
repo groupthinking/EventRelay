@@ -22,7 +22,7 @@ export default function Footer({ variant = 'compact' }: FooterProps) {
   if (variant === 'compact') {
     return (
       <footer style={{ borderTop: '1px solid var(--uvai-border)' }} className="py-6">
-        <div className="max-w-6xl mx-auto px-6 flex items-center justify-between text-xs" style={{ color: 'var(--uvai-ink-faint)' }}>
+        <div className="w-full max-w-[1440px] px-4 sm:px-6 lg:px-8 flex items-center justify-between text-xs" style={{ color: 'var(--uvai-ink-faint)' }}>
           <span>UVAI video intelligence</span>
           <div className="flex items-center gap-5">
             <Link href="/studio" className="transition py-2 px-1 hover:opacity-70">Studio</Link>
