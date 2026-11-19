@@ -888,7 +888,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         },
       },
       { signal: controller.signal },
-    );
+    ).catch((error: unknown) => {
+      console.error('WebMCP tool registration failed:', error);
+    });
     return () => {
       controller.abort();
     };
