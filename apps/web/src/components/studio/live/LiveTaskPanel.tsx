@@ -140,6 +140,12 @@ export default function LiveTaskPanel({
   const [backend, setBackend] = useState<boolean | null>(null);
   const seqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const logRef = useRef<HTMLOListElement | null>(null);
+
+  useEffect(() => {
+    const log = logRef.current;
+    if (log && lines.length) log.scrollTop = log.scrollHeight;
+  }, [lines.length]);
   const webMcp = useWebMcpPresent();
   const visible = useProgressiveCount(tasks.length, { stepMs: 110 });
   const baseById = useMemo(() => new Map(baseTasks.map((task) => [task.id, task])), [baseTasks]);
@@ -403,7 +409,7 @@ export default function LiveTaskPanel({
               ? `Dispatch ${chosen.length} task${chosen.length === 1 ? '' : 's'}`
               : 'Dispatch tasks'}
         </button>
-        <ol className="live-run-log" role="log" aria-live="polite" aria-label="Agent run log" data-testid="live-run-log">
+        <ol ref={logRef} className="live-run-log" role="log" aria-live="polite" aria-label="Agent run log" data-testid="live-run-log">
           {lines.length === 0 ? (
             <li className="live-run-log__idle">$ select tasks, then dispatch — status lines stream here</li>
           ) : (
