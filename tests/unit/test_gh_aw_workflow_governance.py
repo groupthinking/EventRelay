@@ -305,3 +305,32 @@ def test_pr_iteration_push_rule_requires_workflow_owned_labels() -> None:
 
     assert "required-title-prefix" not in workflow_source
     assert "required-labels: [automation, ai-agent]" in workflow_source
+
+
+def test_pr_iteration_activation_shell_uses_trusted_base_checkout() -> None:
+    workflow = _load_yaml(ROOT / ".github/workflows/pr-iteration-loop.lock.yml")
+    steps = workflow["jobs"]["activation"]["steps"]
+    checkout_index, checkout = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    checkout_ref = checkout["with"]["ref"]
+
+    assert checkout["with"]["persist-credentials"] is False
+    assert "github.event.pull_request.base.sha" in checkout_ref
+    assert "github.sha" in checkout_ref
+
+    guarded_shell_steps = {
+        "Save agent config folders for base branch restoration",
+        "Log runtime features",
+        "Validate prompt placeholders",
+        "Print prompt",
+    }
+    shell_indexes = [
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") in guarded_shell_steps and "run" in step
+    ]
+    assert len(shell_indexes) == 4
+    assert all(checkout_index < index for index in shell_indexes)
