@@ -8,6 +8,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ### 2026-11-19: Nightly audit cleanup (apps/web)
 
+Tracked by #2756.
+
 #### Removed
 
 - Unwired HTTP surfaces with no in-repo caller: legacy `/api/video`, dashboard embed, search, video search, video generate, extract-events, agent dispatch/status, realtime session, training, refinery dataset, studio chat routes, and `/api/v1/video/*` aliases. `/api/agents/actions` stays; the durable review journal imports it.
