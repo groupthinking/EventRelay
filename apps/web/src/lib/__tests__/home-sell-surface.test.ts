@@ -127,7 +127,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const config = readWebFile('next.config.js');
     expect(config).toContain("source: '/features'");
     expect(config).toContain("source: '/playground'");
-    expect(config).toMatch(/source: '\/features'[\s\S]*destination: '\/'/);
+    expect(config).toMatch(/source: '\/features'[\s\S]*destination: '\/(\?shell=classic)?'/);
     expect(config).toMatch(/source: '\/playground'[\s\S]*destination: '\/'/);
     expect(config).toContain("source: '/dashboard'");
     expect(config).toContain("destination: '/studio'");
