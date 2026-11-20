@@ -30,14 +30,14 @@ def test_grok_project_config_is_mcp_stubs_with_env_vars() -> None:
     servers = parsed["mcp_servers"]
 
     assert set(servers) == {"github", "vercel"}
-    assert servers["github"]["command"] == "npx"
-    assert servers["github"]["args"] == ["-y", "@github/github-mcp-server"]
-    assert servers["github"]["env"]["GITHUB_TOKEN"] == "${GITHUB_TOKEN}"
+    assert "command" not in servers["github"]
+    assert servers["github"]["url"] == "https://api.githubcopilot.com/mcp/"
+    assert servers["github"]["headers"]["Authorization"] == "Bearer ${GITHUB_TOKEN}"
     assert servers["vercel"]["url"] == "https://mcp.vercel.com"
     assert servers["vercel"]["headers"]["Authorization"] == "Bearer ${VERCEL_TOKEN}"
     assert servers["vercel"]["env"]["VERCEL_TOKEN"] == "${VERCEL_TOKEN}"
     assert servers["vercel"]["env"]["VERCEL_TEAM_ID"] == "${VERCEL_TEAM_ID}"
-    assert "grok mcp add -s project github" in raw
+    assert "grok mcp add --transport http -s project github" in raw
     assert "grok mcp add --transport http -s project vercel" in raw
     assert _SECRETISH.search(raw) is None
 

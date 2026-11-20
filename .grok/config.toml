@@ -10,8 +10,12 @@
 # Never commit GITHUB_TOKEN, VERCEL_TOKEN, or VERCEL_TEAM_ID values.
 #
 # Enable (or re-write) these stubs from the EventRelay checkout:
-#   grok mcp add -s project github -- npx -y @github/github-mcp-server
+#   grok mcp add --transport http -s project github https://api.githubcopilot.com/mcp/ \
+#     --header "Authorization: Bearer ${GITHUB_TOKEN}"
 #   grok mcp add --transport http -s project vercel https://mcp.vercel.com
+#
+# GitHub's official MCP is remote HTTP (or Docker ghcr.io/github/github-mcp-server).
+# Do not use npx @github/github-mcp-server — that package is not on npm.
 #
 # Then export tokens in the same shell that launches Grok:
 #   export GITHUB_TOKEN=...
@@ -22,9 +26,8 @@
 #   grok inspect --cwd <EventRelay>
 
 [mcp_servers.github]
-command = "npx"
-args = ["-y", "@github/github-mcp-server"]
-env = { GITHUB_TOKEN = "${GITHUB_TOKEN}" }
+url = "https://api.githubcopilot.com/mcp/"
+headers = { Authorization = "Bearer ${GITHUB_TOKEN}" }
 
 [mcp_servers.vercel]
 url = "https://mcp.vercel.com"

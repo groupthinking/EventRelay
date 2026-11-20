@@ -10,9 +10,11 @@ versioning aims for [SemVer](https://semver.org/).
 
 #### Added
 
-- `.grok/config.toml`: project-scoped GitHub and Vercel MCP stubs that expand
-  `GITHUB_TOKEN` / `VERCEL_TOKEN` (optional `VERCEL_TEAM_ID`) at load time.
-  Enable with `grok mcp add ... -s project`. No secrets in git. (#2760)
+- `.grok/config.toml`: project-scoped GitHub and Vercel MCP stubs. GitHub uses
+  the official remote `https://api.githubcopilot.com/mcp/` with
+  `Authorization: Bearer ${GITHUB_TOKEN}`. Vercel uses `https://mcp.vercel.com`
+  with `${VERCEL_TOKEN}` (optional `${VERCEL_TEAM_ID}`). Enable with
+  `grok mcp add ... -s project`. No secrets in git. (#2760)
 
 #### Changed
 
