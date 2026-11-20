@@ -10,7 +10,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
-vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 const seekToMock = vi.fn();
 const playerStateMock = vi.fn(() => ({
   containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
@@ -62,7 +61,7 @@ afterEach(() => {
 
 describe('OneLoopStudio IDE shell', () => {
   it('renders the streamlined IDE shell with Analyze, Export, and no duplicate toolbar bloat', () => {
-    render(<OneLoopStudio showAgentWorkflowUi />);
+    render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-toolbar')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
@@ -80,7 +79,7 @@ describe('OneLoopStudio IDE shell', () => {
 
   it('offers Try sample inside the empty video frame and loads the fixture URL', () => {
     useDashboardStore.setState({ videos: [], selectedVideoId: null });
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     const sampleBtn = screen.getByTestId('studio-try-sample');
     fireEvent.click(sampleBtn);
     expect((screen.getByLabelText('YouTube URL') as HTMLInputElement).value).toBe(
@@ -92,7 +91,7 @@ describe('OneLoopStudio IDE shell', () => {
   });
 
   it('shows immediate poster backdrop while loading and direct nocookie embed on click or failure', () => {
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     const poster = screen.getByTestId('studio-player-poster');
     expect(poster.getAttribute('src')).toBe('https://i.ytimg.com/vi/auJzb1D-fag/hqdefault.jpg');
     fireEvent.click(screen.getByTestId('studio-player-overlay'));
@@ -111,7 +110,7 @@ describe('OneLoopStudio IDE shell', () => {
       play: vi.fn(),
       pause: vi.fn(),
     }));
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     expect(screen.queryByTestId('studio-player-poster')).toBeNull();
     expect(screen.getByTestId('studio-player-retry')).toBeTruthy();
   });
@@ -156,7 +155,7 @@ describe('OneLoopStudio IDE shell', () => {
 
     // Only failed pack in store: must NOT auto-select or display error/working banner on boot.
     useDashboardStore.setState({ videos: [failedPackVideo], selectedVideoId: null });
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     expect(useDashboardStore.getState().selectedVideoId).toBeNull();
     expect(screen.queryByTestId('studio-transcript-retry')).toBeNull();
     expect(screen.getByTestId('studio-ide-status').textContent).not.toMatch(/^Working/);
@@ -214,7 +213,7 @@ describe('OneLoopStudio IDE shell', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     const videoPane = screen.getByTestId('studio-ide-video-pane');
     expect(videoPane.textContent).toContain('1 action');
     expect(videoPane.textContent).toContain('1 tool');
@@ -243,7 +242,7 @@ describe('OneLoopStudio IDE shell', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-ide-chat')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-chat-input')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-chat-send')).toBeTruthy();
@@ -269,12 +268,12 @@ describe('OneLoopStudio IDE shell', () => {
       ],
       selectedVideoId: baseVideo.id,
     });
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-transcript-retry')).toBeTruthy();
   });
 
   it('shows a Stop button while a run is in flight', async () => {
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     const input = screen.getByLabelText('YouTube URL');
     fireEvent.change(input, { target: { value: 'https://www.youtube.com/watch?v=auJzb1D-fag' } });
     fireEvent.click(screen.getByTestId('studio-ide-run'));
@@ -305,7 +304,7 @@ describe('OneLoopStudio IDE shell', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     const jumpBtn = screen.getByTestId('studio-quick-jump-0') as HTMLButtonElement;
     expect(jumpBtn.disabled).toBe(false);
     fireEvent.click(jumpBtn);

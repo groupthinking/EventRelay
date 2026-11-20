@@ -16,10 +16,3 @@ export const liveStudio = flag<boolean>({
   adapter: vercelAdapter(),
   description: 'Serve the short home on-ramp and the live Studio workspace (chapters, transcript, editable tasks, dispatch)',
 });
-
-export const agentWorkflowUi = flag<boolean>({
-  key: 'agent-workflow-ui',
-  defaultValue: false,
-  adapter: vercelAdapter(),
-  description: 'Show the durable agent workflow controls and verified tool results in UVAI Studio',
-});

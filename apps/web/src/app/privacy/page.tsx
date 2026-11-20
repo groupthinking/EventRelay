@@ -7,7 +7,7 @@ import { CONTACT_EMAIL } from '@/lib/constants';
 export const metadata: Metadata = {
   title: 'Privacy Policy',
   description:
-    'How UVAI (EventRelay) collects, processes, and protects data when you analyze YouTube videos and use our AI pipelines.',
+    'How UVAI collects, processes, and protects data when you analyze YouTube videos and use our AI pipelines.',
   alternates: { canonical: '/privacy' },
   robots: { index: true, follow: true },
 };
@@ -42,8 +42,8 @@ export default function PrivacyPage() {
         <div className="space-y-6 text-[var(--uvai-ink-soft)] leading-7 [&_section]:rounded-xl [&_section]:border [&_section]:border-[var(--uvai-border)] [&_section]:bg-[var(--uvai-surface)] [&_section]:p-6">
           <section>
             <p>
-              UVAI is an open-source video intelligence product operated by the
-              EventRelay project. This page describes, in plain language, what
+              UVAI is an open-source video intelligence product. This page describes,
+              in plain language, what
               data we touch when you use the hosted UVAI product. It is not
               legal advice, and it will be replaced with a formal policy before
               we collect data from organizations under contract.

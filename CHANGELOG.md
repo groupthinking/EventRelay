@@ -6,6 +6,29 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-19: Nightly audit cleanup (apps/web)
+
+Tracked by #2756.
+
+#### Removed
+
+- Unwired HTTP surfaces with no in-repo caller: legacy `/api/video`, dashboard embed, search, video search, video generate, extract-events, agent dispatch/status, realtime session, training, refinery dataset, studio chat routes, and `/api/v1/video/*` aliases. `/api/agents/actions` stays; the durable review journal imports it.
+- Shared in-memory preferences route (`let sessionPreferences`) and its unused client.
+- Studio deploy durable workflow. `POST /api/workflows/studio-deploy` stays a 409 G.A.T.E. refusal and does not start a run.
+- Unused `agentWorkflowUi` flag, discarded Studio computations, GitHub PR server action with no button, unused field/empty/label/separator primitives, styled-jsx types, and two unreferenced public PNGs.
+
+#### Changed
+
+- Public privacy, terms, API docs, and `GET /api` name the product UVAI.
+- Renew panel, spec-review button, and alert use the light studio tokens.
+- Studio chat `POST /api/chat` uses `AbortSignal.timeout(30_000)`.
+- `test:gate` no longer lists the deleted `OneLoopStudio.gate.test.tsx`.
+- Pricing no longer carries the hidden billing-marker paragraphs. Checkout still names Turnstile in visible copy.
+- Pack admission fixtures no longer use the banned video id.
+- The home smoke spec matches the current heading.
+
+`apps/hybrid-workspace` is unchanged. Auth-path entries for the removed URLs stay, so those paths remain session-gated. `apps/backend/requirements.txt` pins the pydantic 2.14.3 and pydantic-core 2.50.4 versions already resolved for that file on main.
+
 ### 2026-11-13: Agent staff governance (docs)
 
 #### Added

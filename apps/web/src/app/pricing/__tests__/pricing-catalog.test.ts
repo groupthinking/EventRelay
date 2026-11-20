@@ -24,7 +24,7 @@ describe('pricing catalog copy', () => {
     expect(pricingPage).toContain('WORKFLOW_PRO_PRODUCT_NAME');
     expect(pricingPage).toContain('workflowProPriceLabel');
     expect(pricingPage).toContain('ProCheckoutButton');
-    expect(pricingPage).toContain('turnstile');
+    expect(pricingPage).toContain('Turnstile');
   });
 
   it('does not advertise EventRelay Pro or the stale $19/$180 catalog', () => {

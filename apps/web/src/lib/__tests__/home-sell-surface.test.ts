@@ -152,7 +152,8 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(nav).not.toContain('href="/#get-pro"');
     expect(nav).toContain("href: '/pricing'");
     expect(pricing).toContain('ProCheckoutButton');
-    expect(pricing).toContain('turnstile');
+    expect(pricing).toContain('Turnstile');
+    expect(pricing).not.toContain('billing-surface-markers');
     expect(shipperCss).not.toContain('linear-gradient(135deg, #0f172a');
     expect(studioCss).not.toContain('max-width: 1360px');
     expect(config).not.toMatch(/source: '\/pricing'/);
