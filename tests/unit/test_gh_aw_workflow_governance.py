@@ -262,15 +262,15 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
 
     assert workflow["name"] == "gh-aw Validation"
-    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.88.7"]
-    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v0.88.7"]
-    assert setup_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
-    assert setup_cli_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
+    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v1.2.2"]
+    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v1.2.2"]
+    assert setup_entry["sha"] == "53d0749e19424a918acd82b4d140264ce48f2f14"
+    assert setup_cli_entry["sha"] == "53d0749e19424a918acd82b4d140264ce48f2f14"
     step_scripts = [
         step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]
     ]
     combined = "\n".join(step_scripts)
-    assert "gh extension install github/gh-aw --pin v0.88.7" in combined
+    assert "gh extension install github/gh-aw --pin v1.2.2" in combined
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
@@ -300,7 +300,8 @@ def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
     )
 
 
-def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
+def test_pr_iteration_push_rule_requires_workflow_owned_labels() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert "required-title-prefix" not in workflow_source
+    assert "required-labels: [automation, ai-agent]" in workflow_source
