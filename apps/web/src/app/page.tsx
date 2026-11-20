@@ -143,9 +143,13 @@ const AGENT_FLOW = ['Video', 'Video Pack', 'Tasks', 'Checks', 'Review'] as const
  * 3-card preview strip -> hero bento (emerald/cobalt stage composer + 3x2 badged process tiles)
  * -> compact workflow band -> compact plans CTA strip -> footer.
  */
-export default async function HomePage() {
-  const [showCustomBadge, liveStudioEnabled] = await Promise.all([customBadge(), liveStudio()]);
-  if (liveStudioEnabled) return <LiveOnRamp />;
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [showCustomBadge, liveStudioEnabled, params] = await Promise.all([customBadge(), liveStudio(), searchParams]);
+  if (liveStudioEnabled && params.shell !== 'classic') return <LiveOnRamp />;
 
   return (
     <main className="min-h-screen overflow-x-clip" style={{ background: 'var(--uvai-bg)' }}>

@@ -12,7 +12,7 @@ export default function LiveOnRamp() {
       <section aria-labelledby="home-heading" className="live-onramp-hero">
         <p className="live-onramp-kicker">
           <span className="live-onramp-dot" aria-hidden="true" />
-          Live Studio
+          Live Studio · Universal Video Action Intelligence
         </p>
         <h1 id="home-heading" className="live-onramp-title">
           Paste a video. <em>Watch it turn into work.</em>

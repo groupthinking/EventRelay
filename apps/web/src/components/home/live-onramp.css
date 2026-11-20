@@ -20,6 +20,7 @@
 }
 
 .live-onramp-kicker {
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
   gap: 8px;
