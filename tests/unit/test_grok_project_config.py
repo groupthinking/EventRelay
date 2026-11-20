@@ -39,6 +39,10 @@ def test_grok_project_config_is_mcp_stubs_with_env_vars() -> None:
     assert servers["vercel"]["env"]["VERCEL_TEAM_ID"] == "${VERCEL_TEAM_ID}"
     assert "grok mcp add --transport http -s project github" in raw
     assert "grok mcp add --transport http -s project vercel" in raw
+    assert "--header 'Authorization: Bearer ${GITHUB_TOKEN}'" in raw
+    assert '--header "Authorization: Bearer ${GITHUB_TOKEN}"' not in raw
+    assert "writes the literal secret" in raw
+    assert "Do not pass a double-quoted Authorization header" in raw
     assert _SECRETISH.search(raw) is None
 
 

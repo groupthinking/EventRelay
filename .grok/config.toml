@@ -9,15 +9,22 @@
 # Secrets stay in the environment. Grok expands ${VAR} at load time.
 # Never commit GITHUB_TOKEN, VERCEL_TOKEN, or VERCEL_TEAM_ID values.
 #
-# Enable (or re-write) these stubs from the EventRelay checkout:
+# These stubs are already committed. Prefer leaving them as-is and exporting
+# tokens only in the shell that launches Grok — not before `grok mcp add`.
+# Do not pass a double-quoted Authorization header that interpolates
+# GITHUB_TOKEN. The shell expands it, and Grok writes the literal secret
+# into this tracked file.
+#
+# If you must re-write a stub, keep the placeholder literal with single quotes
+# (bash does not expand inside single quotes):
 #   grok mcp add --transport http -s project github https://api.githubcopilot.com/mcp/ \
-#     --header "Authorization: Bearer ${GITHUB_TOKEN}"
+#     --header 'Authorization: Bearer ${GITHUB_TOKEN}'
 #   grok mcp add --transport http -s project vercel https://mcp.vercel.com
 #
 # GitHub's official MCP is remote HTTP (or Docker ghcr.io/github/github-mcp-server).
 # Do not use npx @github/github-mcp-server — that package is not on npm.
 #
-# Then export tokens in the same shell that launches Grok:
+# Export tokens in the same shell that launches Grok:
 #   export GITHUB_TOKEN=...
 #   export VERCEL_TOKEN=...
 #   export VERCEL_TEAM_ID=...   # optional; starts with team_
