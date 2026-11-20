@@ -1,6 +1,6 @@
 import { vercelAdapter } from '@flags-sdk/vercel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentWorkflowUi, customBadge } from '@/flags';
+import { customBadge } from '@/flags';
 
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -13,7 +13,6 @@ afterEach(() => {
 
 describe.each([
   { key: customBadge.key, featureFlag: customBadge },
-  { key: agentWorkflowUi.key, featureFlag: agentWorkflowUi },
 ])('$key', ({ featureFlag }) => {
   function evaluateFlag() {
     return featureFlag.run({

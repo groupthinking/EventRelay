@@ -10,7 +10,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
-vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({
   useYouTubePlayer: () => ({ containerRef: { current: null }, ready: false, failed: false, seekTo: vi.fn() }),
 }));
@@ -43,7 +42,7 @@ describe('OneLoopStudio analysis cancellation', () => {
   it('releases the run controls immediately and explains the server boundary', async () => {
     const processVideo = vi.fn((_url: string, _opts?: { signal?: AbortSignal }) => new Promise<string>(() => {}));
     useDashboardStore.setState({ processVideo });
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: video.url } });
     fireEvent.click(screen.getByTestId('studio-ide-run'));
     expect(await screen.findByTestId('studio-ide-cancel')).toBeTruthy();
@@ -60,7 +59,7 @@ describe('OneLoopStudio analysis cancellation', () => {
     const finishes: Array<(id: string) => void> = [];
     const processVideo = vi.fn(() => new Promise<string>((resolve) => { finishes.push(resolve); }));
     useDashboardStore.setState({ processVideo });
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: video.url } });
     fireEvent.click(screen.getByTestId('studio-ide-run'));
     fireEvent.click(await screen.findByTestId('studio-ide-cancel'));
@@ -82,7 +81,7 @@ describe('OneLoopStudio analysis cancellation', () => {
     vi.useFakeTimers();
     const processVideo = vi.fn(() => new Promise<string>(() => {}));
     useDashboardStore.setState({ processVideo });
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     fireEvent.change(screen.getByLabelText('YouTube URL'), { target: { value: video.url } });
     fireEvent.click(screen.getByTestId('studio-ide-run'));
     fireEvent.click(screen.getByTestId('studio-ide-cancel'));

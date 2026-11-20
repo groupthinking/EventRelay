@@ -51,13 +51,6 @@ export default function PricingPage() {
     <div className="min-h-screen" style={{ background: 'var(--uvai-bg)', color: 'var(--uvai-ink)' }}>
       <Nav variant="rail" defaultCollapsed={false} />
 
-      <p id="billing-surface-markers" className="sr-only" aria-hidden>
-        billing:ProCheckoutButton,ProRenewPanel,CheckoutSuccessActivator,turnstile
-      </p>
-      <p id="billing-turnstile-config" className="sr-only" aria-hidden>
-        turnstile:challenges.cloudflare.com/turnstile/v0
-      </p>
-
       <main className="w-full max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
         <div className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] px-4 py-3">
           <nav aria-label="Breadcrumb" className="text-xs text-[var(--uvai-ink-faint)]">

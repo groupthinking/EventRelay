@@ -486,26 +486,9 @@ describe('studio-pipeline-status', () => {
     // The Studio no longer contains a deploy call site.
     expect(studio).not.toContain('const deploy = async');
     expect(studio).not.toContain('studio-deploy-button');
-    const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
-    expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
-    expect(workflow).toMatch(/isAbortTimeout|retryable/);
-    expect(workflow).not.toMatch(/studioDeployReadyTranscriptHold\(\s*\)/);
-    expect(workflow).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
-    expect(workflow).not.toMatch(/transcript\s*\n\s*\? STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    expect(workflow).toMatch(/KICKOFF_RETRIES|kickoffRetries|for \(let i = 0; i < .*KICKOFF/);
-    const kickoffRetryMatch = workflow.match(/const KICKOFF_RETRIES\s*=\s*(\d+)/);
-    expect(kickoffRetryMatch).not.toBeNull();
-    expect(Number(kickoffRetryMatch?.[1])).toBeLessThanOrEqual(1);
-    const retryLoop = workflow.slice(workflow.indexOf('KICKOFF_RETRIES'));
-    const afterRetries = retryLoop.slice(0, retryLoop.indexOf('if (kicked.kind === \'live\''));
-    expect(afterRetries).toMatch(/kind:\s*['"]handoff['"]/);
-    expect(afterRetries).not.toMatch(/throw new FatalError\(kicked\.message/);
-    expect(workflow).toMatch(/catch/);
-    expect(workflow).toMatch(/import \{[^}]*sleep[^}]*\} from ['"]workflow['"]/);
-    expect(workflow).toMatch(/await sleep\(['"]10s['"]\)/);
-    expect(workflow).toMatch(/decideStudioDeployPoll/);
-    expect(workflow).not.toMatch(/setTimeout/);
-    expect(workflow).not.toMatch(/AbortSignal\.timeout/);
+    const preflight = readFileSync(join(process.cwd(), 'src/app/api/workflows/studio-deploy/route.ts'), 'utf8');
+    expect(preflight).toContain('status: 409');
+    expect(preflight).not.toMatch(/\bstart\(/);
     const asyncJob = readFileSync(join(process.cwd(), 'src/lib/pipeline-async-job.ts'), 'utf8');
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
@@ -652,11 +635,11 @@ describe('studio-pipeline-status', () => {
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     // IDE: empty state lives in the video pane; the shell replaces the workbench.
     expect(shell).toContain('data-testid="studio-ide-video-pane"');
-    expect(studio).toContain('studioWorkbenchEmptyView');
+    expect(studio).not.toContain('studioWorkbenchEmptyView');
     expect(studio).toContain('data-testid="studio-build-live-failure"');
     expect(studio).not.toContain('/d/{videoId}');
     expect(studio).not.toContain("{'{videoId}'}");
-    expect(studio).toContain('studioTranscriptBody');
+    expect(studio).not.toContain('studioTranscriptBody');
     expect(
       studioWorkbenchEmptyView({
         busy: false,

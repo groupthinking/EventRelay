@@ -50,15 +50,15 @@ npx workflow inspect runs
 
 `turbo.json` build outputs include `apps/web/src/app/.well-known/workflow/**` so cache hits keep workflow registration.
 
-## Product C — Studio deploy durable
+## Product C — Studio deploy preflight
 
 | Piece | Path |
 |-------|------|
-| Workflow | `apps/web/src/workflows/studio-deploy.ts` |
-| Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` (FastAPI `/api/v1/videos/process` + `/api/v1/jobs/:id`, no self-HTTP) |
-| Start | `POST /api/workflows/studio-deploy` `{ "url", projectType?, outcome? }` → `{ runId, statusUrl }` |
-| Status | `GET /api/workflows/studio-deploy/:runId` → `{ runStatus, result? }` |
-| Studio UI | Deploy in `OneLoopStudio` (canonical studio). **401 → /login**. |
+| Workflow | Removed. `POST` does not start a durable run. |
+| Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` remains for other jobs. It is not started by Studio deploy. |
+| Start | `POST /api/workflows/studio-deploy` returns **409** after G.A.T.E. No `runId` is created. |
+| Status | `GET /api/workflows/studio-deploy/:runId` can still read a historical workflow run. |
+| Studio UI | No deploy button. The route is the refusal. |
 
 Auth: this route stays **session-gated**. Studio now has a Sign in link. Never use `dQw4w9WgXcQ` as a fixture — use `auJzb1D-fag`.
 

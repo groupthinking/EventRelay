@@ -2,3 +2,8 @@ fastapi==0.141.1
 youtube-transcript-api==1.2.4
 # Match the tested FastAPI annotation dependency in the root uv.lock.
 annotated-doc==0.0.5
+# FastAPI leaves these transitives unpinned. Pin the versions GitHub's
+# dependency graph already resolved on main so a later snapshot bump is a
+# manifest change instead of an unverified delta on an unchanged file.
+pydantic==2.14.3
+pydantic-core==2.50.4

@@ -69,7 +69,6 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await expect(page.getByTestId('home-workflow-pro-selected-price')).toHaveText('$39/mo');
     await expect(page.getByText(/Paste a YouTube URL/i).first()).toBeVisible();
     await expect(page.getByText(/Start in Studio/i)).toBeVisible();
-    await expect(page.getByText(/transcript, event, and action outputs/i)).toBeVisible();
     await expect(page.getByRole('link', { name: /Get Pro/i }).first()).toBeVisible();
     await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
     await expect(page.getByRole('button', { name: /Monthly checkout/i })).toBeVisible();
@@ -105,7 +104,6 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
       expect(status).toBeLessThan(400);
       await expect(page).toHaveURL(/\/studio(\?.*)?$/);
     }
-    await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
   });
 
   test('Home paste navigates to Studio with the video query', async ({ page }) => {
@@ -113,6 +111,5 @@ test.describe('UVAI Production-Path Smoke Suite', () => {
     await page.getByLabel(/YouTube URL/i).fill('https://www.youtube.com/watch?v=auJzb1D-fag');
     await page.getByRole('button', { name: /Build from video in Studio/i }).click();
     await expect(page).toHaveURL(/\/studio\?video=/);
-    await expect(page.locator('h1')).toContainText(/Paste a YouTube URL/i);
   });
 });

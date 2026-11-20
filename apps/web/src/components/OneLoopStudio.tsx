@@ -30,7 +30,6 @@ import {
   packBuildLiveOutcomeMessage,
   resolvePackBuildLiveVideoId,
   studioPackBuildLiveSuccessReceiptForSelection,
-  studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
   type PackBuildLiveFailureDetails,
 } from '@/lib/pack-build-live-client';
@@ -54,10 +53,8 @@ import {
   studioShipCta,
   studioStatusLabel,
   studioStatusMessage,
-  studioTranscriptBody,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
-  studioWorkbenchEmptyView,
 } from '@/lib/studio-pipeline-status';
 import { useYouTubePlayer } from '@/lib/use-youtube-player';
 import {
@@ -196,12 +193,7 @@ function PackWorkbench({
   );
 }
 
-export default function OneLoopStudio({
-  showAgentWorkflowUi,
-}: {
-  showAgentWorkflowUi: boolean;
-}) {
-  void showAgentWorkflowUi;
+export default function OneLoopStudio() {
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -241,12 +233,6 @@ export default function OneLoopStudio({
     (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
       ? workflowActions
       : null;
-  const scopedPackLiveUrl = studioPackLiveReceiptForSelection({
-    selectedVideoId,
-    receiptVideoId: packLiveReceiptVideoId,
-    liveUrl: packLiveReceiptUrl,
-  });
-  void scopedPackLiveUrl;
   const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -528,16 +514,6 @@ export default function OneLoopStudio({
     Boolean(videoId || selected),
     { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
   );
-  const workbenchEmpty = studioWorkbenchEmptyView({
-    busy: transcriptWorking,
-    hasSelection: Boolean(selected),
-    hasVideoPack: Boolean(selected?.videoPack),
-    analysisReady: quality === 'live',
-    failed: selected?.status === 'failed',
-    failureMessage: selected?.failure?.message,
-  });
-  void workbenchEmpty;
-  void studioTranscriptBody;
   const shellPack = selected?.videoPack?.pack;
   const canSeekActiveVideo = Boolean(
     videoId && (!shellPack?.video_id || videoId === shellPack.video_id),

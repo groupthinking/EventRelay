@@ -92,12 +92,11 @@ Add this URL to your AI assistant's context files (`.cursorrules`,
 
 ## 6. Video generation
 
-The `/api/video/generate` endpoint requires:
-- `AI_GATEWAY_API_KEY` set with access to Google Veo 3.1
-- A function `maxDuration` of 300s for the video route (declared in‑code in
-  `apps/web/src/app/api/video/generate/route.ts` via `export const maxDuration = 300`).
-  Fluid Compute is recommended for these long‑running functions. Note: the
-  Vercel project's Root Directory is `apps/web`, so any deploy‑level overrides
-  belong in `apps/web/vercel.json`, not the repository‑root `vercel.json`.
+`POST /api/video/generate` was removed. It had no in-repo caller, and its rate
+limiter failed open when Upstash credentials were missing. Video Pack
+extraction stays at `POST /api/video/pack` and uses Gemini through
+`AI_GATEWAY_API_KEY`.
 
-Model: `google/veo-3.1-generate-001`
+The Vercel project's Root Directory is `apps/web`, so any deploy-level
+overrides belong in `apps/web/vercel.json`, not the repository-root
+`vercel.json`.
