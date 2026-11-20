@@ -3,7 +3,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Download, Play } from 'lucide-react';
+import { Copy, Download, FileJson, Play, Sparkles } from 'lucide-react';
 import { parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import {
@@ -74,6 +74,15 @@ import {
   registerStudioWebMcpTools,
   type StudioWebMcpPackSnapshot,
 } from '@/lib/webmcp-studio-tools';
+import LiveStudioWorkspace from '@/components/studio/live/LiveStudioWorkspace';
+import { identityPackJson } from '@/lib/emit-video-pack';
+import {
+  SAMPLE_CAPTURED_AT,
+  SAMPLE_LABEL,
+  SAMPLE_WATCH_URL,
+  loadSamplePack,
+  replaySamplePack,
+} from '@/lib/sample-pack';
 
 const FIXTURE = 'https://www.youtube.com/watch?v=auJzb1D-fag';
 
@@ -196,11 +205,16 @@ function PackWorkbench({
   );
 }
 
+export type StudioLayout = 'live' | 'classic';
+
 export default function OneLoopStudio({
   showAgentWorkflowUi,
+  layout = 'classic',
 }: {
   showAgentWorkflowUi: boolean;
+  layout?: StudioLayout;
 }) {
+  const isLive = layout === 'live';
   void showAgentWorkflowUi;
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
@@ -208,6 +222,9 @@ export default function OneLoopStudio({
   const [elapsed, setElapsed] = useState(0);
   const [message, setMessage] = useState('');
   const runAbortRef = useRef<AbortController | null>(null);
+  const sampleAbortRef = useRef<AbortController | null>(null);
+  const sampleStartedRef = useRef(false);
+  const [sampleRunning, setSampleRunning] = useState(false);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
   const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
@@ -230,6 +247,8 @@ export default function OneLoopStudio({
   const skipMessageResetForIdRef = useRef<string | null>(null);
 
   const processVideo = useDashboardStore((s) => s.processVideo);
+  const addVideo = useDashboardStore((s) => s.addVideo);
+  const removeVideo = useDashboardStore((s) => s.removeVideo);
   const selectVideo = useDashboardStore((s) => s.selectVideo);
   const updateVideo = useDashboardStore((s) => s.updateVideo);
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
@@ -331,7 +350,11 @@ export default function OneLoopStudio({
   // auto-selected on load so /studio always starts calm and clean.
   useEffect(() => {
     if (autoSelectedPackRef.current) return;
-    if (selectedVideoId || studioQueryFromSearchParams(searchParams)) {
+    if (
+      selectedVideoId ||
+      studioQueryFromSearchParams(searchParams) ||
+      (isLive && searchParams.get('sample') === '1')
+    ) {
       autoSelectedPackRef.current = true;
       return;
     }
@@ -344,7 +367,7 @@ export default function OneLoopStudio({
       autoSelectedPackRef.current = true;
       selectVideo(targetId);
     }
-  }, [selectedVideoId, videos, searchParams, selectVideo]);
+  }, [selectedVideoId, videos, searchParams, selectVideo, isLive]);
 
   const runAnalysis = useCallback(async (raw: string) => {
     const handoff = resolveStudioHandoff(raw);
@@ -356,6 +379,7 @@ export default function OneLoopStudio({
     setUrl(next);
     // Cancel any in-flight run and clear prior errors before starting a new one.
     runAbortRef.current?.abort();
+    sampleAbortRef.current?.abort();
     const controller = new AbortController();
     runAbortRef.current = controller;
     const priorIds = new Set(useDashboardStore.getState().videos.map((v) => v.id));
@@ -426,9 +450,102 @@ export default function OneLoopStudio({
   const cancelAnalysis = useCallback(() => {
     runAbortRef.current?.abort();
     runAbortRef.current = null;
+    sampleAbortRef.current?.abort();
     setBusy(false);
     setMessage(ANALYSIS_STOPPED_MESSAGE);
   }, []);
+
+  const runSample = useCallback(async () => {
+    runAbortRef.current?.abort();
+    runAbortRef.current = null;
+    setBusy(false);
+    sampleAbortRef.current?.abort();
+    const controller = new AbortController();
+    sampleAbortRef.current = controller;
+    for (const video of useDashboardStore.getState().videos) {
+      if (video.sample) removeVideo(video.id);
+    }
+    const citation = loadSamplePack();
+    const id = crypto.randomUUID();
+    addVideo({
+      id,
+      title: `Sample · ${citation.videoId}`,
+      url: SAMPLE_WATCH_URL,
+      status: 'processing',
+      progress: 0,
+      sample: { label: SAMPLE_LABEL, capturedAt: SAMPLE_CAPTURED_AT },
+    });
+    skipMessageResetForIdRef.current = id;
+    selectVideo(id);
+    setUrl(SAMPLE_WATCH_URL);
+    setExportToast(null);
+    setBuildLiveFailure(null);
+    setSampleRunning(true);
+    setMessage('Replaying the cached sample pack stage by stage…');
+    try {
+      await replaySamplePack({
+        recordId: id,
+        citation,
+        signal: controller.signal,
+        apply: (patch) => updateVideo(id, patch),
+      });
+      if (sampleAbortRef.current === controller) {
+        setMessage('Sample ready. Select tasks to dispatch, or paste your own URL for a fresh extraction.');
+      }
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        console.error('[studio] sample replay failed', error);
+      }
+      updateVideo(id, {
+        status: 'failed',
+        failure: {
+          stage: 'analysis',
+          message: controller.signal.aborted ? ANALYSIS_STOPPED_MESSAGE : 'Sample replay failed.',
+          retryable: true,
+          failedAt: new Date().toISOString(),
+        },
+      });
+    } finally {
+      if (sampleAbortRef.current === controller) {
+        sampleAbortRef.current = null;
+        setSampleRunning(false);
+      }
+    }
+  }, [addVideo, removeVideo, selectVideo, updateVideo]);
+
+  useEffect(() => {
+    if (!isLive || sampleStartedRef.current || searchParams.get('sample') !== '1') return;
+    sampleStartedRef.current = true;
+    // Next tick: the mount-time rehydrate effect must settle first, or it would
+    // normalize the freshly persisted in-progress sample record to failed.
+    window.setTimeout(() => void runSample(), 0);
+  }, [isLive, searchParams, runSample]);
+
+  const copyPackJson = async () => {
+    if (!selected?.videoPack) return;
+    try {
+      await navigator.clipboard.writeText(identityPackJson(selected.videoPack));
+      setExportToast({
+        tone: 'success',
+        text: `Copied Video Pack JSON · ${selected.videoPack.packId} · sha ${selected.videoPack.sourceHash.slice(0, 12)}`,
+      });
+    } catch (error) {
+      console.warn('[studio] clipboard write failed', error);
+      setExportToast({ tone: 'error', text: 'Clipboard is unavailable here. Use Download JSON instead.' });
+    }
+  };
+
+  const downloadPackJson = () => {
+    if (!selected?.videoPack) return;
+    const blob = new Blob([identityPackJson(selected.videoPack)], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = href;
+    anchor.download = `${selected.videoPack.videoId}.video-pack.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(href), 0);
+    setExportToast({ tone: 'success', text: `Downloaded ${anchor.download}` });
+  };
 
   useEffect(() => {
     applyStudioQueryAutoStart({
@@ -736,7 +853,9 @@ export default function OneLoopStudio({
     retryable: selected?.failure?.retryable !== false,
     elapsedSeconds: elapsed,
   });
-  const statusText = transcriptWorking
+  const statusText = sampleRunning
+    ? `Replaying sample · ${selected?.progress ?? 0}% — ${message}`
+    : transcriptWorking
     ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
     : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
 
@@ -798,463 +917,541 @@ export default function OneLoopStudio({
     };
   }, []);
 
+  const toolbarNode = (
+    <>
+      <form
+        onSubmit={analyze}
+        toolname="run_studio_video_analysis"
+        tooldescription="Extract transcript, numbered chapters, events, and runnable deliverables from a YouTube video URL in UVAI Studio"
+        className="flex min-w-0 flex-1 items-center gap-2"
+        data-testid="studio-ide-url-form"
+      >
+        <label className="sr-only" htmlFor="youtube-url">
+          YouTube URL
+        </label>
+        <input
+          id="youtube-url"
+          name="youtubeUrl"
+          value={url}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            if (!busy && message) setMessage('');
+          }}
+          placeholder="Paste a YouTube link…"
+          autoComplete="off"
+          className="uvai-input min-w-0 flex-1 font-mono disabled:opacity-40"
+        />
+        {busy || sampleRunning ? (
+          <button
+            type="button"
+            onClick={cancelAnalysis}
+            data-testid="studio-ide-cancel"
+            className="uvai-btn uvai-btn-danger shrink-0 !font-semibold"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            data-testid="studio-ide-run"
+            className={clsx('uvai-btn shrink-0', !hasPayload && 'uvai-btn-primary')}
+          >
+            Analyze
+          </button>
+        )}
+      </form>
+      {videos.some((video) => video.videoPack) ? (
+        <div className="flex min-w-0 items-center gap-1.5" data-testid="studio-ide-packs">
+          <select
+            id="stored-pack"
+            value={selected?.videoPack ? selected.id : ''}
+            disabled={busy}
+            onChange={(event) => selectVideo(event.target.value || null)}
+            aria-label="Saved videos"
+            className="uvai-input min-w-0 max-w-48 truncate !py-1.5 !text-xs disabled:opacity-40"
+          >
+            <option value="">Saved videos</option>
+            {videos.filter((video) => video.videoPack).map((video) => (
+              <option key={video.id} value={video.id}>
+                {formatSavedVideoLabel(video)}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+      <div className="flex items-center gap-1.5 sm:border-l sm:border-[var(--uvai-border-strong)] sm:pl-2" role="toolbar" aria-label="Pack actions">
+        <button
+          type="button"
+          onClick={() => void exportPkg()}
+          disabled={!shipCta.enabled}
+          data-testid="studio-ide-ship"
+          title={shipCta.hint}
+          className={clsx(
+            'uvai-btn inline-flex shrink-0 items-center gap-1.5 disabled:opacity-40',
+            shipCta.enabled && hasPayload && 'uvai-btn-primary',
+          )}
+        >
+          <Download className="h-4 w-4" aria-hidden />
+          Export
+        </button>
+        {isLive ? (
+          <>
+            <button
+              type="button"
+              onClick={() => void copyPackJson()}
+              disabled={!selected?.videoPack}
+              data-testid="live-copy-pack"
+              title="Copy the hashed Video Pack JSON"
+              className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
+            >
+              <Copy className="h-4 w-4" aria-hidden />
+              Copy JSON
+            </button>
+            <button
+              type="button"
+              onClick={downloadPackJson}
+              disabled={!selected?.videoPack}
+              data-testid="live-download-pack"
+              aria-label="Download Video Pack JSON"
+              title="Download the hashed Video Pack JSON"
+              className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
+            >
+              <FileJson className="h-4 w-4" aria-hidden />
+              JSON
+            </button>
+            <button
+              type="button"
+              onClick={() => void runSample()}
+              disabled={busy}
+              data-testid="live-try-sample"
+              className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
+            >
+              <Sparkles className="h-4 w-4" aria-hidden />
+              Try a sample
+            </button>
+          </>
+        ) : null}
+      </div>
+      {isLive ? (
+        <h1 className="sr-only">Paste a YouTube URL to build a live Video Pack</h1>
+      ) : (
+        <p className="w-full min-w-0 font-mono text-[11px] leading-snug text-[var(--uvai-ink-faint)]" role="status" data-testid="studio-ide-status">
+          {statusText}
+        </p>
+      )}
+      {showTranscriptRetry && !transcriptWorking && selected?.status === 'failed' ? (
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-3 py-2 text-xs text-[var(--uvai-danger-ink)]">
+          <span className="min-w-0 flex-1 truncate">
+            {selected?.failure?.message || 'Extraction stopped before finishing.'}
+          </span>
+          <button
+            type="button"
+            data-testid="studio-transcript-retry"
+            onClick={() => void runAnalysis(url || selected?.url || '')}
+            className="uvai-btn shrink-0 !border-[var(--uvai-danger-border)] !bg-[var(--uvai-surface)] !px-3 !py-1 !text-xs font-medium !text-[var(--uvai-danger-ink)] hover:!opacity-90"
+          >
+            Retry transcript
+          </button>
+        </div>
+      ) : showTranscriptRetry && transcriptWorking ? (
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] px-3 py-1.5 text-xs text-[var(--uvai-ink-soft)]">
+          <span className="min-w-0 flex-1 truncate">
+            Still extracting — this video is taking longer than usual.
+          </span>
+          <button
+            type="button"
+            data-testid="studio-transcript-retry"
+            onClick={() => void runAnalysis(url || selected?.url || '')}
+            className="uvai-btn shrink-0 !px-3 !py-1 !text-xs font-medium"
+          >
+            Retry transcript
+          </button>
+        </div>
+      ) : null}
+    </>
+  );
+
+  const playerNode = (
+    <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
+      {videoId ? (
+        <div
+          key={`${videoId}-${playerEpoch}`}
+          className={clsx(
+            'relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950',
+            !isLive && 'max-h-[200px] max-w-[356px]',
+          )}
+        >
+          {preferDirectEmbed ? (
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
+              title="YouTube source player"
+              className="h-full w-full border-0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+              allowFullScreen
+              referrerPolicy="strict-origin-when-cross-origin"
+              data-testid="studio-player-fallback-iframe"
+            />
+          ) : (
+            <>
+              {!playerReady && !playerFailed ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`}
+                  alt={selected ? `${formatSavedVideoLabel(selected)} preview` : 'YouTube video preview'}
+                  data-testid="studio-player-poster"
+                  width={480}
+                  height={360}
+                  fetchPriority="high"
+                  decoding="async"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                  className="absolute inset-0 h-full w-full object-cover"
+                />
+              ) : null}
+              <div
+                ref={containerRef}
+                className="relative z-10 h-full w-full"
+                data-testid="studio-player"
+                title="YouTube source"
+              />
+              {playerOverlay && playerPhase === 'loading' ? (
+                <button
+                  type="button"
+                  data-testid="studio-player-overlay"
+                  onClick={() => setPreferDirectEmbed(true)}
+                  aria-label="Play video"
+                  className="group absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/30 px-4 text-center transition-colors hover:bg-black/20"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#146ef5] text-white shadow-md transition-transform group-hover:scale-105">
+                    <Play className="ml-0.5 h-5 w-5 fill-current" aria-hidden />
+                  </span>
+                  <span className="rounded-full bg-black/65 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                    {playerOverlay}
+                  </span>
+                </button>
+              ) : playerOverlay && playerPhase === 'error' ? (
+                <div
+                  data-testid="studio-player-overlay"
+                  className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex flex-wrap items-center justify-end gap-1.5"
+                >
+                  <button
+                    type="button"
+                    data-testid="studio-player-retry"
+                    onClick={() => {
+                      setPreferDirectEmbed(false);
+                      setPlayerEpoch((epoch) => epoch + 1);
+                    }}
+                    className="uvai-btn pointer-events-auto !bg-black/75 !px-2.5 !py-1 !text-[11px] text-white backdrop-blur-sm"
+                  >
+                    Retry player
+                  </button>
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : (
+        <div
+          className={clsx(
+            'flex aspect-video w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]',
+            !isLive && 'max-h-[200px]',
+          )}
+        >
+          <p>Paste a YouTube link above or in chat to load the video.</p>
+          <button
+            type="button"
+            data-testid="studio-try-sample"
+            onClick={isLive ? () => void runSample() : () => setUrl(FIXTURE)}
+            disabled={busy}
+            className="uvai-chip !px-3 !py-1 !text-xs font-medium text-[var(--uvai-ink)] hover:border-[var(--uvai-accent)] disabled:opacity-40"
+          >
+            Try sample
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const videoPaneNode = (
+    <div className="studio-source-stack flex min-w-0 flex-col gap-3">
+      {playerNode}
+      <div className="studio-steps-bar flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-3 py-1.5">
+        <ol
+          data-testid="studio-extraction-steps"
+          aria-label="Extraction progress"
+          className="studio-steps min-w-0 max-w-full flex-1 flex-wrap"
+        >
+          {(
+            [
+              { id: 'pack', label: 'Pack' },
+              { id: 'captions', label: 'Captions' },
+              { id: 'transcript', label: 'Transcript' },
+              { id: 'events', label: 'Events' },
+              { id: 'ready', label: 'Ready' },
+            ] as const
+          ).map((step, idx) => {
+            const activeIdx =
+              transcriptStage.id === 'ready'
+                ? 4
+                : transcriptStage.id === 'events'
+                  ? 3
+                  : transcriptStage.id === 'transcript'
+                    ? 2
+                    : transcriptStage.id === 'captions'
+                      ? 1
+                      : 0;
+            const isDone =
+              !transcriptWorking &&
+              selected?.status !== 'failed' &&
+              Boolean(selected?.videoPack || selected?.transcript?.trim());
+            const isFailed = !transcriptWorking && selected?.status === 'failed';
+            const stepState = isDone
+              ? 'done'
+              : isFailed
+                ? idx < activeIdx
+                  ? 'done'
+                  : idx === activeIdx
+                    ? 'failed'
+                    : 'idle'
+                : transcriptWorking
+                  ? idx < activeIdx
+                    ? 'done'
+                    : idx === activeIdx
+                      ? 'active'
+                      : 'idle'
+                  : 'idle';
+            return (
+              <li key={step.id} data-state={stepState} data-step={step.id}>
+                {step.label}
+              </li>
+            );
+          })}
+        </ol>
+        {watchHref ? (
+          <a
+            href={watchHref}
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Trouble with this video? Watch it directly on YouTube"
+            title="Trouble with this video? Watch it directly on YouTube"
+            data-testid="studio-watch-on-youtube"
+            className="shrink-0 text-[11px] font-medium text-[var(--uvai-ink-soft)] underline-offset-2 hover:text-[var(--uvai-ink)] hover:underline"
+          >
+            YouTube ↗
+          </a>
+        ) : null}
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">
+        {selected?.videoPack ? (
+          <div className="uvai-card studio-pack-card min-w-0 max-w-full overflow-hidden p-3">
+            <div className="studio-pack-card__head flex min-w-0 flex-wrap items-center justify-between gap-2">
+              <p className="uvai-section-label">Extracted pack</p>
+              <span className="min-w-0 max-w-full truncate font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                {selected.videoPack.sourceHash.slice(0, 12)}…
+              </span>
+            </div>
+            <div className="studio-pack-card__chips mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
+              {selected.videoPack.pack.action_items?.length ? (
+                <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                  {countLabel(selected.videoPack.pack.action_items.length, 'action')}
+                </span>
+              ) : null}
+              {selected.videoPack.pack.stack?.tools?.length ? (
+                <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                  {countLabel(selected.videoPack.pack.stack.tools.length, 'tool')}
+                </span>
+              ) : null}
+              {selected.videoPack.pack.code_snippets?.length ? (
+                <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                  {countLabel(selected.videoPack.pack.code_snippets.length, 'code file')}
+                </span>
+              ) : null}
+              {transcriptWordCount > 0 ? (
+                <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
+                  {countLabel(transcriptWordCount, 'word')}
+                </span>
+              ) : null}
+              {selected.status === 'complete' && !transcriptWorking ? (
+                <span className="max-w-full truncate rounded-full border border-[#1E9A80]/45 bg-[#1E9A80]/15 px-2 py-0.5 font-semibold text-[#1E9A80]">
+                  Ready
+                </span>
+              ) : transcriptWorking ? (
+                <span className="max-w-full truncate rounded-full border border-[var(--uvai-accent)]/45 bg-[var(--uvai-accent-soft)] px-2 py-0.5 font-semibold text-[var(--uvai-accent-ink)]">
+                  Working
+                </span>
+              ) : selected.status === 'failed' ? (
+                <span className="max-w-full truncate rounded-full border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-2 py-0.5 font-semibold text-[var(--uvai-danger-ink)]">
+                  Needs retry
+                </span>
+              ) : null}
+            </div>
+            <p className="studio-pack-card__url mt-2 min-w-0 max-w-full truncate text-xs text-[var(--uvai-ink-faint)]">
+              {selected.videoPack.sourceUrl}
+            </p>
+            {selected.videoPack.pack.chapters?.length ? (
+              <div className="studio-pack-card__jump mt-3 min-w-0 max-w-full border-t border-[var(--uvai-border)] pt-2.5">
+                <p className="uvai-section-label mb-2">Quick jump</p>
+                <ol className="flex min-w-0 flex-col gap-1.5">
+                  {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
+                    const canSeekPack = videoId === selected.videoPack?.pack.video_id;
+                    return (
+                      <li key={`${chapter.topic}-${index}`} className="min-w-0 max-w-full">
+                        <button
+                          type="button"
+                          data-testid={`studio-quick-jump-${index}`}
+                          disabled={!canSeekPack}
+                          title={
+                            canSeekPack
+                              ? `Seek to ${chapter.start}s`
+                              : 'Run analysis or switch URL back to this pack to seek.'
+                          }
+                          onClick={() => {
+                            if (canSeekPack) seekTo(chapter.start);
+                          }}
+                          className="flex w-full min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="flex min-w-0 flex-1 items-center gap-2">
+                            <span className="shrink-0 font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
+                              {String(index + 1).padStart(2, '0')}
+                            </span>
+                            <span className="min-w-0 truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
+                          </span>
+                          <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
+                            {chapter.start}s
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="uvai-card studio-outline-card p-4">
+            <p className="uvai-section-label">Workspace outline</p>
+            <p className="mt-2 text-sm font-medium text-[var(--uvai-ink)]">
+              Video-in, deliverables-out workflow
+            </p>
+            <ul className="mt-3 space-y-2 text-xs text-[var(--uvai-ink-soft)]">
+              <li className="flex items-center gap-2">
+                <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">01</span>
+                <span>Bound tasks linked to spoken timestamps</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">02</span>
+                <span>Numbered chapters, named tools & code files</span>
+              </li>
+              <li className="flex items-center gap-2">
+                <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">03</span>
+                <span>Interactive chat, Live Preview & Pack Export</span>
+              </li>
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const chatNode = (
+    <StudioIdeChat
+      videoId={selected?.videoPack?.videoId ?? (videoId || null)}
+      packId={selected?.videoPack?.packId ?? null}
+      disabled={transcriptWorking}
+      isWorking={transcriptWorking}
+      statusText={statusText}
+      activeStage={transcriptStage.label}
+      videoTitle={selected ? formatSavedVideoLabel(selected) : null}
+      onSubmitUrl={handleAnalyzeUrl}
+      onSeek={canSeekActiveVideo ? seekTo : undefined}
+    />
+  );
+
+  const outputNode = (
+    <StudioIdeOutput
+      video={selected}
+      eventsEmptyMessage={eventsEmptyMessage}
+      stackChecks={stackCheckViews}
+      previewVideoId={
+        scopedPackBuildLiveSuccess?.youtubeVideoId ??
+        selected?.videoPack?.videoId ??
+        videoId ??
+        null
+      }
+      previewReady={Boolean(scopedPackBuildLiveSuccess)}
+      onBuildLive={() => void buildLive()}
+      buildBusy={buildBusy}
+      focusPreviewSignal={previewFocusEpoch}
+      initialSection="tasks"
+      onSeek={canSeekActiveVideo ? seekTo : undefined}
+      reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
+        const card = studioActionCard(action);
+        return {
+          tool: action.tool,
+          input: action.input,
+          status: action.status,
+          result: action.result ?? card.detail,
+        };
+      })}
+      packWorkbench={
+        promotePack ? (
+          <PackWorkbench
+            architecture={packFormation.architecture}
+            artifacts={packFormation.artifacts}
+            tools={packFormation.tools}
+            onExport={() => void exportPkg()}
+            canExport={hasPayload}
+          />
+        ) : undefined
+      }
+      specReview={
+        selected?.videoPack?.pack ? (
+          <GroundedSpecReview
+            key={selected.id}
+            videoId={selected.id}
+            pack={selected.videoPack.pack}
+            acknowledgment={selected.specReviewAcknowledgment}
+            persistenceAvailable={dashboardPersistenceSucceeded()}
+            onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
+            onAcknowledge={(value) => {
+              if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
+              updateVideo(selected.id, { specReviewAcknowledgment: value });
+              return dashboardPersistenceSucceeded();
+            }}
+          />
+        ) : undefined
+      }
+    />
+  );
+
   return (
     <div className="template-studio flex min-h-screen flex-col text-[var(--uvai-ink)]">
       <Nav variant="rail" defaultCollapsed rightSlot={<StudioAuthNavLink />} />
 
-      <StudioIdeShell
-        toolbar={
-          <>
-            <form
-              onSubmit={analyze}
-              toolname="run_studio_video_analysis"
-              tooldescription="Extract transcript, numbered chapters, events, and runnable deliverables from a YouTube video URL in UVAI Studio"
-              className="flex min-w-0 flex-1 items-center gap-2"
-              data-testid="studio-ide-url-form"
-            >
-              <label className="sr-only" htmlFor="youtube-url">
-                YouTube URL
-              </label>
-              <input
-                id="youtube-url"
-                name="youtubeUrl"
-                value={url}
-                onChange={(e) => {
-                  setUrl(e.target.value);
-                  if (!busy && message) setMessage('');
-                }}
-                placeholder="Paste a YouTube link…"
-                autoComplete="off"
-                className="uvai-input min-w-0 flex-1 font-mono disabled:opacity-40"
-              />
-              {busy ? (
-                <button
-                  type="button"
-                  onClick={cancelAnalysis}
-                  data-testid="studio-ide-cancel"
-                  className="uvai-btn uvai-btn-danger shrink-0 !font-semibold"
-                >
-                  Stop
-                </button>
-              ) : (
-                <button
-                  type="submit"
-                  data-testid="studio-ide-run"
-                  className={clsx('uvai-btn shrink-0', !hasPayload && 'uvai-btn-primary')}
-                >
-                  Analyze
-                </button>
-              )}
-            </form>
-            {videos.some((video) => video.videoPack) ? (
-              <div className="flex min-w-0 items-center gap-1.5" data-testid="studio-ide-packs">
-                <select
-                  id="stored-pack"
-                  value={selected?.videoPack ? selected.id : ''}
-                  disabled={busy}
-                  onChange={(event) => selectVideo(event.target.value || null)}
-                  aria-label="Saved videos"
-                  className="uvai-input min-w-0 max-w-48 truncate !py-1.5 !text-xs disabled:opacity-40"
-                >
-                  <option value="">Saved videos</option>
-                  {videos.filter((video) => video.videoPack).map((video) => (
-                    <option key={video.id} value={video.id}>
-                      {formatSavedVideoLabel(video)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-            <div className="flex items-center gap-1.5 sm:border-l sm:border-[var(--uvai-border-strong)] sm:pl-2" role="toolbar" aria-label="Pack actions">
-              <button
-                type="button"
-                onClick={() => void exportPkg()}
-                disabled={!shipCta.enabled}
-                data-testid="studio-ide-ship"
-                title={shipCta.hint}
-                className={clsx(
-                  'uvai-btn inline-flex shrink-0 items-center gap-1.5 disabled:opacity-40',
-                  shipCta.enabled && hasPayload && 'uvai-btn-primary',
-                )}
-              >
-                <Download className="h-4 w-4" aria-hidden />
-                Export
-              </button>
-            </div>
-            <p className="w-full min-w-0 font-mono text-[11px] leading-snug text-[var(--uvai-ink-faint)]" role="status" data-testid="studio-ide-status">
-              {statusText}
-            </p>
-            {showTranscriptRetry && !transcriptWorking && selected?.status === 'failed' ? (
-              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-3 py-2 text-xs text-[var(--uvai-danger-ink)]">
-                <span className="min-w-0 flex-1 truncate">
-                  {selected?.failure?.message || 'Extraction stopped before finishing.'}
-                </span>
-                <button
-                  type="button"
-                  data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn shrink-0 !border-[var(--uvai-danger-border)] !bg-[var(--uvai-surface)] !px-3 !py-1 !text-xs font-medium !text-[var(--uvai-danger-ink)] hover:!opacity-90"
-                >
-                  Retry transcript
-                </button>
-              </div>
-            ) : showTranscriptRetry && transcriptWorking ? (
-              <div className="flex w-full flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] px-3 py-1.5 text-xs text-[var(--uvai-ink-soft)]">
-                <span className="min-w-0 flex-1 truncate">
-                  Still extracting — this video is taking longer than usual.
-                </span>
-                <button
-                  type="button"
-                  data-testid="studio-transcript-retry"
-                  onClick={() => void runAnalysis(url || selected?.url || '')}
-                  className="uvai-btn shrink-0 !px-3 !py-1 !text-xs font-medium"
-                >
-                  Retry transcript
-                </button>
-              </div>
-            ) : null}
-          </>
-        }
-        videoPane={
-          <div className="studio-source-stack flex min-w-0 flex-col gap-3">
-            <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
-              {videoId ? (
-                <div
-                  key={`${videoId}-${playerEpoch}`}
-                  className="relative mx-auto aspect-video max-h-[200px] w-full max-w-[356px] overflow-hidden bg-neutral-950"
-                >
-                  {preferDirectEmbed ? (
-                    <iframe
-                      src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
-                      title="YouTube source player"
-                      className="h-full w-full border-0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                      allowFullScreen
-                      referrerPolicy="strict-origin-when-cross-origin"
-                      data-testid="studio-player-fallback-iframe"
-                    />
-                  ) : (
-                    <>
-                      {!playerReady && !playerFailed ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`}
-                          alt={selected ? `${formatSavedVideoLabel(selected)} preview` : 'YouTube video preview'}
-                          data-testid="studio-player-poster"
-                          width={480}
-                          height={360}
-                          fetchPriority="high"
-                          decoding="async"
-                          onError={(event) => {
-                            event.currentTarget.style.display = 'none';
-                          }}
-                          className="absolute inset-0 h-full w-full object-cover"
-                        />
-                      ) : null}
-                      <div
-                        ref={containerRef}
-                        className="relative z-10 h-full w-full"
-                        data-testid="studio-player"
-                        title="YouTube source"
-                      />
-                      {playerOverlay && playerPhase === 'loading' ? (
-                        <button
-                          type="button"
-                          data-testid="studio-player-overlay"
-                          onClick={() => setPreferDirectEmbed(true)}
-                          aria-label="Play video"
-                          className="group absolute inset-0 z-20 flex flex-col items-center justify-center gap-2 bg-black/30 px-4 text-center transition-colors hover:bg-black/20"
-                        >
-                          <span className="flex h-11 w-11 items-center justify-center rounded-full bg-[#146ef5] text-white shadow-md transition-transform group-hover:scale-105">
-                            <Play className="ml-0.5 h-5 w-5 fill-current" aria-hidden />
-                          </span>
-                          <span className="rounded-full bg-black/65 px-2.5 py-0.5 text-[11px] font-medium text-white backdrop-blur-sm">
-                            {playerOverlay}
-                          </span>
-                        </button>
-                      ) : playerOverlay && playerPhase === 'error' ? (
-                        <div
-                          data-testid="studio-player-overlay"
-                          className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex flex-wrap items-center justify-end gap-1.5"
-                        >
-                          <button
-                            type="button"
-                            data-testid="studio-player-retry"
-                            onClick={() => {
-                              setPreferDirectEmbed(false);
-                              setPlayerEpoch((epoch) => epoch + 1);
-                            }}
-                            className="uvai-btn pointer-events-auto !bg-black/75 !px-2.5 !py-1 !text-[11px] text-white backdrop-blur-sm"
-                          >
-                            Retry player
-                          </button>
-                        </div>
-                      ) : null}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="flex aspect-video max-h-[200px] w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
-                  <p>Paste a YouTube link above or in chat to load the video.</p>
-                  <button
-                    type="button"
-                    data-testid="studio-try-sample"
-                    onClick={() => setUrl(FIXTURE)}
-                    disabled={busy}
-                    className="uvai-chip !px-3 !py-1 !text-xs font-medium text-[var(--uvai-ink)] hover:border-[var(--uvai-accent)] disabled:opacity-40"
-                  >
-                    Try sample
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="studio-steps-bar flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-3 py-1.5">
-              <ol
-                data-testid="studio-extraction-steps"
-                aria-label="Extraction progress"
-                className="studio-steps min-w-0 max-w-full flex-1 flex-wrap"
-              >
-                {(
-                  [
-                    { id: 'pack', label: 'Pack' },
-                    { id: 'captions', label: 'Captions' },
-                    { id: 'transcript', label: 'Transcript' },
-                    { id: 'events', label: 'Events' },
-                    { id: 'ready', label: 'Ready' },
-                  ] as const
-                ).map((step, idx) => {
-                  const activeIdx =
-                    transcriptStage.id === 'ready'
-                      ? 4
-                      : transcriptStage.id === 'events'
-                        ? 3
-                        : transcriptStage.id === 'transcript'
-                          ? 2
-                          : transcriptStage.id === 'captions'
-                            ? 1
-                            : 0;
-                  const isDone =
-                    !transcriptWorking &&
-                    selected?.status !== 'failed' &&
-                    Boolean(selected?.videoPack || selected?.transcript?.trim());
-                  const isFailed = !transcriptWorking && selected?.status === 'failed';
-                  const stepState = isDone
-                    ? 'done'
-                    : isFailed
-                      ? idx < activeIdx
-                        ? 'done'
-                        : idx === activeIdx
-                          ? 'failed'
-                          : 'idle'
-                      : transcriptWorking
-                        ? idx < activeIdx
-                          ? 'done'
-                          : idx === activeIdx
-                            ? 'active'
-                            : 'idle'
-                        : 'idle';
-                  return (
-                    <li key={step.id} data-state={stepState} data-step={step.id}>
-                      {step.label}
-                    </li>
-                  );
-                })}
-              </ol>
-              {watchHref ? (
-                <a
-                  href={watchHref}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Trouble with this video? Watch it directly on YouTube"
-                  title="Trouble with this video? Watch it directly on YouTube"
-                  data-testid="studio-watch-on-youtube"
-                  className="shrink-0 text-[11px] font-medium text-[var(--uvai-ink-soft)] underline-offset-2 hover:text-[var(--uvai-ink)] hover:underline"
-                >
-                  YouTube ↗
-                </a>
-              ) : null}
-            </div>
-            <div className="flex min-w-0 flex-col gap-3">
-              {selected?.videoPack ? (
-                <div className="uvai-card studio-pack-card min-w-0 max-w-full overflow-hidden p-3">
-                  <div className="studio-pack-card__head flex min-w-0 flex-wrap items-center justify-between gap-2">
-                    <p className="uvai-section-label">Extracted pack</p>
-                    <span className="min-w-0 max-w-full truncate font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
-                      {selected.videoPack.sourceHash.slice(0, 12)}…
-                    </span>
-                  </div>
-                  <div className="studio-pack-card__chips mt-2 flex min-w-0 max-w-full flex-wrap items-center gap-1.5 text-[11px] text-[var(--uvai-ink-soft)]">
-                    {selected.videoPack.pack.action_items?.length ? (
-                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {countLabel(selected.videoPack.pack.action_items.length, 'action')}
-                      </span>
-                    ) : null}
-                    {selected.videoPack.pack.stack?.tools?.length ? (
-                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {countLabel(selected.videoPack.pack.stack.tools.length, 'tool')}
-                      </span>
-                    ) : null}
-                    {selected.videoPack.pack.code_snippets?.length ? (
-                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {countLabel(selected.videoPack.pack.code_snippets.length, 'code file')}
-                      </span>
-                    ) : null}
-                    {transcriptWordCount > 0 ? (
-                      <span className="max-w-full truncate rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 font-medium">
-                        {countLabel(transcriptWordCount, 'word')}
-                      </span>
-                    ) : null}
-                    {selected.status === 'complete' && !transcriptWorking ? (
-                      <span className="max-w-full truncate rounded-full border border-[#1E9A80]/45 bg-[#1E9A80]/15 px-2 py-0.5 font-semibold text-[#1E9A80]">
-                        Ready
-                      </span>
-                    ) : transcriptWorking ? (
-                      <span className="max-w-full truncate rounded-full border border-[var(--uvai-accent)]/45 bg-[var(--uvai-accent-soft)] px-2 py-0.5 font-semibold text-[var(--uvai-accent-ink)]">
-                        Working
-                      </span>
-                    ) : selected.status === 'failed' ? (
-                      <span className="max-w-full truncate rounded-full border border-[var(--uvai-danger-border)] bg-[var(--uvai-danger-bg)] px-2 py-0.5 font-semibold text-[var(--uvai-danger-ink)]">
-                        Needs retry
-                      </span>
-                    ) : null}
-                  </div>
-                  <p className="studio-pack-card__url mt-2 min-w-0 max-w-full truncate text-xs text-[var(--uvai-ink-faint)]">
-                    {selected.videoPack.sourceUrl}
-                  </p>
-                  {selected.videoPack.pack.chapters?.length ? (
-                    <div className="studio-pack-card__jump mt-3 min-w-0 max-w-full border-t border-[var(--uvai-border)] pt-2.5">
-                      <p className="uvai-section-label mb-2">Quick jump</p>
-                      <ol className="flex min-w-0 flex-col gap-1.5">
-                        {selected.videoPack.pack.chapters.slice(0, 4).map((chapter, index) => {
-                          const canSeekPack = videoId === selected.videoPack?.pack.video_id;
-                          return (
-                            <li key={`${chapter.topic}-${index}`} className="min-w-0 max-w-full">
-                              <button
-                                type="button"
-                                data-testid={`studio-quick-jump-${index}`}
-                                disabled={!canSeekPack}
-                                title={
-                                  canSeekPack
-                                    ? `Seek to ${chapter.start}s`
-                                    : 'Run analysis or switch URL back to this pack to seek.'
-                                }
-                                onClick={() => {
-                                  if (canSeekPack) seekTo(chapter.start);
-                                }}
-                                className="flex w-full min-w-0 max-w-full items-center justify-between gap-2 rounded-md border border-[var(--uvai-border)] bg-[var(--uvai-bg)] px-2.5 py-1.5 text-left text-xs transition-colors hover:border-[var(--uvai-border-strong)] hover:bg-[var(--uvai-surface-warm)] disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                <span className="flex min-w-0 flex-1 items-center gap-2">
-                                  <span className="shrink-0 font-mono text-[11px] font-semibold text-[var(--uvai-accent-ink)]">
-                                    {String(index + 1).padStart(2, '0')}
-                                  </span>
-                                  <span className="min-w-0 truncate text-[var(--uvai-ink)]">{chapter.topic}</span>
-                                </span>
-                                <span className="shrink-0 font-mono text-[11px] text-[var(--uvai-ink-faint)]">
-                                  {chapter.start}s
-                                </span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ol>
-                    </div>
-                  ) : null}
-                </div>
-              ) : (
-                <div className="uvai-card studio-outline-card p-4">
-                  <p className="uvai-section-label">Workspace outline</p>
-                  <p className="mt-2 text-sm font-medium text-[var(--uvai-ink)]">
-                    Video-in, deliverables-out workflow
-                  </p>
-                  <ul className="mt-3 space-y-2 text-xs text-[var(--uvai-ink-soft)]">
-                    <li className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">01</span>
-                      <span>Bound tasks linked to spoken timestamps</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">02</span>
-                      <span>Numbered chapters, named tools & code files</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <span className="font-mono text-[11px] text-[var(--uvai-accent-ink)]">03</span>
-                      <span>Interactive chat, Live Preview & Pack Export</span>
-                    </li>
-                  </ul>
-                </div>
-              )}
-            </div>
-          </div>
-        }
-        chatPane={
-          <StudioIdeChat
-            videoId={selected?.videoPack?.videoId ?? (videoId || null)}
-            packId={selected?.videoPack?.packId ?? null}
-            disabled={transcriptWorking}
-            isWorking={transcriptWorking}
-            statusText={statusText}
-            activeStage={transcriptStage.label}
-            videoTitle={selected ? formatSavedVideoLabel(selected) : null}
-            onSubmitUrl={handleAnalyzeUrl}
-            onSeek={canSeekActiveVideo ? seekTo : undefined}
-          />
-        }
-        outputPane={
-          <StudioIdeOutput
-            video={selected}
-            eventsEmptyMessage={eventsEmptyMessage}
-            stackChecks={stackCheckViews}
-            previewVideoId={
-              scopedPackBuildLiveSuccess?.youtubeVideoId ??
-              selected?.videoPack?.videoId ??
-              videoId ??
-              null
-            }
-            previewReady={Boolean(scopedPackBuildLiveSuccess)}
-            onBuildLive={() => void buildLive()}
-            buildBusy={buildBusy}
-            focusPreviewSignal={previewFocusEpoch}
-            initialSection="tasks"
-            onSeek={canSeekActiveVideo ? seekTo : undefined}
-            reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
-              const card = studioActionCard(action);
-              return {
-                tool: action.tool,
-                input: action.input,
-                status: action.status,
-                result: action.result ?? card.detail,
-              };
-            })}
-            packWorkbench={
-              promotePack ? (
-                <PackWorkbench
-                  architecture={packFormation.architecture}
-                  artifacts={packFormation.artifacts}
-                  tools={packFormation.tools}
-                  onExport={() => void exportPkg()}
-                  canExport={hasPayload}
-                />
-              ) : undefined
-            }
-            specReview={
-              selected?.videoPack?.pack ? (
-                <GroundedSpecReview
-                  key={selected.id}
-                  videoId={selected.id}
-                  pack={selected.videoPack.pack}
-                  acknowledgment={selected.specReviewAcknowledgment}
-                  persistenceAvailable={dashboardPersistenceSucceeded()}
-                  onSeek={videoId === selected.videoPack.pack.video_id ? seekTo : undefined}
-                  onAcknowledge={(value) => {
-                    if (useDashboardStore.getState().selectedVideoId !== selected.id) return false;
-                    updateVideo(selected.id, { specReviewAcknowledgment: value });
-                    return dashboardPersistenceSucceeded();
-                  }}
-                />
-              ) : undefined
-            }
-          />
-        }
-      />
+      {isLive ? (
+        <LiveStudioWorkspace
+          header={toolbarNode}
+          player={playerNode}
+          chat={chatNode}
+          deliverables={outputNode}
+          video={selected}
+          live={busy || sampleRunning}
+          statusText={statusText}
+          canSeek={canSeekActiveVideo}
+          onSeek={seekTo}
+          onSaveTaskEdits={(taskEdits) => {
+            if (selected) updateVideo(selected.id, { taskEdits });
+          }}
+        />
+      ) : (
+        <StudioIdeShell
+          toolbar={toolbarNode}
+          videoPane={videoPaneNode}
+          chatPane={chatNode}
+          outputPane={outputNode}
+        />
+      )}
 
 
       {exportToast ? (
