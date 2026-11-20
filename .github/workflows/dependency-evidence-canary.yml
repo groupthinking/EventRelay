@@ -15,7 +15,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: Fetch exact historical comparison objects
-        run: git fetch --no-tags origin 3735132cdf6b0527630428cac3b24c9833f06d67 222c0f05a3f28338a35298a035d5b2b0de55f6aa 697581531dff8573ade650a9e7a0b4d5d6618301 812ae9b00de9458ffaf1dfc68197c5b2d0a0e7dc
+        run: git fetch --no-tags origin e1181c222579db5e433c0b9eb6223f84065e8202 cb9ed412bfb671a6568e3e00902bf239f00d3c29 4d17fe3ea4647b92f04b48bcdc1fde7e8670154e b7986634f97019fdd1057f0db306e6cb8749e033 25c5e936e2133d3448f539d5cc56211fc5e8aeeb
       - name: Capture real dependency API pages
         env:
           GITHUB_TOKEN: ${{ github.token }}

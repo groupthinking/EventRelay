@@ -12,13 +12,21 @@ from urllib.request import HTTPRedirectHandler, build_opener
 from scripts.ci.record_dependency_review import record_dependency_review
 
 PAIRS = {
-    "control": (
-        "3735132cdf6b0527630428cac3b24c9833f06d67",
-        "222c0f05a3f28338a35298a035d5b2b0de55f6aa",
+    "uv_lock_transition": (
+        "e1181c222579db5e433c0b9eb6223f84065e8202",
+        "25c5e936e2133d3448f539d5cc56211fc5e8aeeb",
     ),
-    "large": (
-        "697581531dff8573ade650a9e7a0b4d5d6618301",
-        "812ae9b00de9458ffaf1dfc68197c5b2d0a0e7dc",
+    "pre_uv_to_current": (
+        "cb9ed412bfb671a6568e3e00902bf239f00d3c29",
+        "25c5e936e2133d3448f539d5cc56211fc5e8aeeb",
+    ),
+    "legacy_to_current": (
+        "4d17fe3ea4647b92f04b48bcdc1fde7e8670154e",
+        "25c5e936e2133d3448f539d5cc56211fc5e8aeeb",
+    ),
+    "oldest_to_current": (
+        "b7986634f97019fdd1057f0db306e6cb8749e033",
+        "25c5e936e2133d3448f539d5cc56211fc5e8aeeb",
     ),
 }
 
@@ -116,8 +124,8 @@ def main():
                           Path("dependency-trace-evidence") / name, opener)
         summaries[name] = (receipt["status"], len(receipt["pages"]), receipt.get("rows"))
         print(name, summaries[name])
-    status, pages, _ = summaries["large"]
-    return int(status != "recorded" or pages < 2)
+    return int(not any(status == "recorded" and pages >= 2
+                       for status, pages, _ in summaries.values()))
 
 
 if __name__ == "__main__":
