@@ -6,6 +6,20 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-20: Grok Build project MCP wiring (docs)
+
+#### Added
+
+- `.grok/config.toml`: project-scoped GitHub and Vercel MCP stubs that expand
+  `GITHUB_TOKEN` / `VERCEL_TOKEN` (optional `VERCEL_TEAM_ID`) at load time.
+  Enable with `grok mcp add ... -s project`. No secrets in git. (#2760)
+
+#### Changed
+
+- `AGENTS.md`: remaining locked public facts (repo of record, extractor model
+  id, pack store resource name, no-bounce list, 50/50 exit). README points
+  `grok inspect --cwd` at those instructions. (#2760)
+
 ### 2026-11-19: Nightly audit cleanup (apps/web)
 
 Tracked by #2756.

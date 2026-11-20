@@ -1,9 +1,12 @@
 # UVAI▶ — Agent Instructions
 
 Grok Build (`grok --cwd <this-repo>`) appends this file to the system prompt; keep locked UVAI facts here.
-This is the live UVAI product repo (`uvai.io`, Vercel project `v0-uvai`).
 
-**Do not invent prices, catalog SKUs, or stack.** If a fact is not locked here, look it up in the repo or leave it unset.
+**Public brand:** UVAI▶ at https://uvai.io
+**Repo of record:** github.com/groupthinking/EventRelay
+**Live Vercel project:** `v0-uvai` (not Origin tmp project `uvai`)
+
+**Do not invent prices, catalog SKUs, or stack.** If a fact is not locked here, stop and ask — do not guess.
 
 ## Product (locked)
 
@@ -11,7 +14,7 @@ This is the live UVAI product repo (`uvai.io`, Vercel project `v0-uvai`).
 
 Paste a YouTube URL → hashed **Video Pack** → shipable architecture / build rails.
 
-The differentiator is **action / ship**, not transcription. Do not compete with Google on STT or models. Ride **Gemini 3.8 Flash via Vercel AI Gateway**.
+The differentiator is **action / ship**, not transcription. Do not compete with Google on STT or models. Ride **Gemini 3.8 Flash via Vercel AI Gateway** as the video-to-spec extractor (`google/gemini-3.8-flash`). Do not wait on Qwen. Do not self-host 80GB. Do not put an LLM in Origin wasm.
 
 ## Pricing (locked)
 
@@ -27,16 +30,16 @@ Do not invent other prices or imply Maintain / Ship checkout exists unless the r
 
 ## Pack store (locked)
 
-Video Pack persistence is **Upstash REST only** (`KV_REST_API_*`, or the equivalent `UPSTASH_REDIS_REST_*` pair the integration injects).
+Video Pack persistence is **Upstash REST only** (`KV_REST_API_*`, or the equivalent `UPSTASH_REDIS_REST_*` pair the integration injects). Sole pack store resource name: `upstash-uvai-pack`.
 
-**Official Redis TCP is not the pack store.** Do not add `redis://`, ioredis, or other TCP Redis clients for packs.
+**Official Redis TCP is not the pack store.** Do not add `redis://`, ioredis, or other TCP Redis clients for packs. Do not use TCP `STORAGE_REDIS_URL` / `redis-carmine-saddle` as the pack store.
 
 ## Already live (do not re-litigate)
 
-- Get Pro checkout
+- Get Pro checkout (Turnstile→Stripe)
 - Hashed Video Pack
 - UI unify — single skin; `/dashboard` and sibling skins redirect into the canonical studio
-- Pack-quality — architecture / artifacts / `stack.tools`; **no forced Shopify gate**
+- Pack-quality — architecture / artifacts / `stack.tools`; stack-checks grounded in pack tools — **no forced Shopify gate** on Cloudflare/X402 sources like `MNNfat_QP0E`
 
 ## Lineage backbone (locked)
 
@@ -50,7 +53,7 @@ UVAI▶
   → ExperienceOS
 ```
 
-**FORGE / Workbench / Living Notebook / VIZUL** are UX patterns only — not product brands and not parallel products.
+**FORGE / Workbench / Living Notebook / VIZUL** are UX patterns only — not product brands and not parallel products. Do not bounce work to forge, slingshot, reach, uvai-skills, ClipToAction, or Origin tmp project `uvai`. Origin is **not** Google G.A.T.E./GEAR; do not retarget to GEAR.
 
 ## Operating model (locked)
 
@@ -58,7 +61,7 @@ UVAI▶
 | --- | --- |
 | **UVAI Loop** | The standing ship |
 | **Chief of Staff** | Orchestration only — no codebase diving |
-| **Grok Build** | Repo-side checker (`grok --cwd`) |
+| **Grok Build** | Inspects/reviews repos via `grok --cwd` |
 | **Builder** | Stays off parallel UVAI cuts unless Loop asks |
 
 ## Authorized next cut
@@ -66,6 +69,10 @@ UVAI▶
 **Origin G.A.T.E.** only.
 
 `asRecord` / claim stay **held** unless that cut requires them. Do not start adjacent cuts (Mission Workspace, Agent Factory, ExperienceOS, FORGE-as-product, etc.) unless Loop asks.
+
+## Exit (locked)
+
+uvai.io distribution-ready **and** 50 distinct videos with real Video Packs. The 50/50 milestone is already met on the official list.
 
 ## G.A.T.E. vs Zero-Sim (locked)
 
@@ -81,10 +88,9 @@ UVAI▶
 
 - **Project rules:** this `AGENTS.md` (also `CLAUDE.md` if present). Grok walks repo root → cwd. Each file is capped at 10k characters.
 - **Skills:** auto-discovered from `.grok/skills/` (repo or cwd). Extra `[skills] paths` belong in `~/.grok/config.toml`, not project config.
-- **Project `.grok/config.toml`:** official docs honor **`[mcp_servers]` only** here. Do not add one unless sharing MCP servers. This repo has no committed project MCP config.
+- **Project `.grok/config.toml`:** official docs honor **`[mcp_servers]` only** here (`https://docs.x.ai/build/settings`). This repo ships GitHub and Vercel MCP stubs that expand `GITHUB_TOKEN` / `VERCEL_TOKEN` (optional `VERCEL_TEAM_ID`) at load time — no secrets in git. Enable from the checkout with `grok mcp add ... -s project` (commands are commented in that file). Confirm what loaded: `grok inspect --cwd <this-repo>`.
 - **Existing Claude skills** in `.claude/skills/` load via Grok’s Claude compatibility. Do not duplicate them under `.grok/skills/` unless a Grok-native override is required.
 - **Workflows:** auto-discovered from `.grok/workflows/*.rhai` (already present). Treat as automation, not product lineage.
-- Confirm what loaded: `grok inspect --cwd <this-repo>`.
 
 ## Repo conventions
 
