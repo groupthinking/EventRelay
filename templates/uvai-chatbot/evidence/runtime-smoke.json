@@ -1,0 +1,68 @@
+{
+  "verifiedAt": "2026-10-09T22:42:11.303Z",
+  "environment": "local production build",
+  "credentials": "ephemeral auth test secret; no database or AI provider",
+  "checks": [
+    {
+      "path": "/login",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "malformedAuthorization": false,
+      "passed": true
+    },
+    {
+      "path": "/register",
+      "expectedStatus": 200,
+      "actualStatus": 200,
+      "malformedAuthorization": false,
+      "passed": true
+    },
+    {
+      "path": "/api/auth/guest",
+      "expectedStatus": 404,
+      "actualStatus": 404,
+      "malformedAuthorization": false,
+      "passed": true
+    },
+    {
+      "path": "/api/video-guide/download?id=00000000-0000-0000-0000-000000000000",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "malformedAuthorization": false,
+      "passed": true
+    },
+    {
+      "path": "/api/chat",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "malformedAuthorization": false,
+      "passed": true
+    },
+    {
+      "path": "/api/chat",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "malformedAuthorization": true,
+      "passed": true
+    },
+    {
+      "path": "/api/chat",
+      "expectedStatus": 401,
+      "actualStatus": 401,
+      "malformedAuthorization": true,
+      "passed": true
+    },
+    {
+      "path": "/",
+      "expectedStatus": 307,
+      "actualStatus": 307,
+      "malformedAuthorization": false,
+      "passed": true
+    }
+  ],
+  "limitations": [
+    "No authenticated customer journey",
+    "No browser or provider-quality verification",
+    "No database migrations or cross-tenant verification"
+  ]
+}
