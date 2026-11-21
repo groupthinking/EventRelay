@@ -20,7 +20,8 @@ test.afterEach(async ({ page }, testInfo) => {
 // starting video processing, AI generation, checkout, or deployment.
 async function openStudio(page: Page, width: number) {
   await page.setViewportSize({ width, height: 900 });
-  await page.goto('/studio');
+  // The live-studio flag serves the live workspace; this suite covers the classic IDE shell.
+  await page.goto('/studio?shell=classic');
   await expect(page.getByTestId('studio-ide-shell')).toBeVisible();
 }
 
