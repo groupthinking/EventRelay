@@ -150,7 +150,7 @@ jobs:
         if: >-
           ${{ github.event_name == 'pull_request' &&
               steps.dependency-changes.outputs.changed == 'true' }}
-        uses: actions/dependency-review-action@v5.0.0
+        uses: actions/dependency-review-action@v5.0.1
         with:
           base-ref: ${{ github.event.pull_request.base.sha }}
           head-ref: ${{ github.event.pull_request.head.sha }}
