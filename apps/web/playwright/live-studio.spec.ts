@@ -135,26 +135,30 @@ test('the Video Pack exports as JSON', async ({ page }) => {
   expect(download.suggestedFilename()).toBe('auJzb1D-fag.video-pack.json');
 });
 
-test('the live Studio page scrolls past the player to deliverables', async ({ page }) => {
+test('the live Studio fits the workbench and keeps build files folded', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openSample(page);
   await waitForSampleDone(page);
 
   const metrics = await page.evaluate(() => {
     const shell = document.querySelector('.template-studio');
+    const main = document.querySelector('main.live-studio');
     return {
       scrollHeight: document.documentElement.scrollHeight,
-      clientHeight: document.documentElement.clientHeight,
+      mainHeight: main ? main.getBoundingClientRect().height : 0,
       overflowY: shell ? getComputedStyle(shell).overflowY : '',
     };
   });
   expect(metrics.overflowY).not.toBe('hidden');
-  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight + 200);
+  expect(metrics.mainHeight).toBeGreaterThan(400);
+  expect(metrics.mainHeight).toBeLessThan(2200);
+  expect(metrics.scrollHeight).toBeLessThan(2600);
 
-  const deliverables = page.getByTestId('live-deliverables');
-  await deliverables.scrollIntoViewIfNeeded();
-  await expect(deliverables).toBeInViewport();
+  await page.getByTestId('live-dispatch-button').scrollIntoViewIfNeeded();
   await expect(page.getByTestId('live-dispatch-button')).toBeVisible();
+  await expect(page.getByTestId('studio-ide-output')).toBeHidden();
+  await page.getByTestId('live-deliverables').getByText('Review and build files', { exact: true }).click();
+  await expect(page.getByTestId('studio-ide-output')).toBeVisible();
 });
 
 for (const width of [390, 1280]) {

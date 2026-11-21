@@ -51,7 +51,6 @@ import {
   studioPromotePackWorkbench,
   studioRunQuality,
   studioShipCta,
-  studioStatusLabel,
   studioStatusMessage,
   studioTranscriptEtaLabel,
   studioTranscriptStage,
@@ -831,7 +830,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     ? `Replaying sample · ${selected?.progress ?? 0}% — ${message}`
     : transcriptWorking
     ? `Working · ${elapsed}s — ${transcriptStage.label}. ${studioTranscriptEtaLabel(elapsed)}`
-    : `${studioStatusLabel(quality, runState)} — ${message || studioStatusMessage(quality, runState, 'Analysis', false)}`;
+    : message || studioStatusMessage(quality, runState, 'Analysis', false);
 
   const transcriptWordCount = selected?.transcript
     ? selected.transcript.trim().split(/\s+/).length
@@ -975,11 +974,11 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
               onClick={() => void copyPackJson()}
               disabled={!selected?.videoPack}
               data-testid="live-copy-pack"
+              aria-label="Copy Video Pack JSON"
               title="Copy the hashed Video Pack JSON"
               className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
             >
               <Copy className="h-4 w-4" aria-hidden />
-              Copy JSON
             </button>
             <button
               type="button"
@@ -991,18 +990,19 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
               className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
             >
               <FileJson className="h-4 w-4" aria-hidden />
-              JSON
             </button>
-            <button
-              type="button"
-              onClick={() => void runSample()}
-              disabled={busy}
-              data-testid="live-try-sample"
-              className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
-            >
-              <Sparkles className="h-4 w-4" aria-hidden />
-              Try a sample
-            </button>
+            {selected?.videoPack ? null : (
+              <button
+                type="button"
+                onClick={() => void runSample()}
+                disabled={busy}
+                data-testid="live-try-sample"
+                className="uvai-btn inline-flex shrink-0 items-center gap-1.5 !px-3 disabled:opacity-40"
+              >
+                <Sparkles className="h-4 w-4" aria-hidden />
+                Try a sample
+              </button>
+            )}
           </>
         ) : null}
       </div>

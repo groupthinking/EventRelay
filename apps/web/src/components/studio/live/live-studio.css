@@ -1,4 +1,4 @@
-/* Live Studio workspace: docs-style three-column layout on UVAI tokens. */
+/* Live Studio: one player, source beside tasks. Build files stay folded. */
 
 /* The classic shell locks the page to one viewport. The live Studio is a document. */
 @media (min-width: 680px) {
@@ -35,8 +35,8 @@
   min-width: 0;
 }
 
-.live-studio__bar > form { flex: 1 1 360px; }
-.live-studio__bar [role='toolbar'] { flex-wrap: wrap; }
+.live-studio__bar > form { flex: 1 1 220px; min-width: 0; }
+.live-studio__bar [role='toolbar'] { flex: 0 1 auto; flex-wrap: wrap; }
 
 @media (max-width: 640px) {
   .live-studio__bar > form,
@@ -169,7 +169,7 @@
 /* ---------- Grid ---------- */
 .live-studio__grid {
   display: grid;
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr) minmax(320px, 400px);
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
   min-width: 0;
@@ -177,39 +177,49 @@
 
 .live-rail,
 .live-side {
-  position: sticky;
-  top: 12px;
-  max-height: calc(100vh - 24px);
-  overflow: auto;
-  min-width: 0;
-}
-
-.live-center {
   display: flex;
   flex-direction: column;
   gap: 14px;
   min-width: 0;
 }
 
-.live-player .studio-video-wrap > div {
-  max-height: none !important;
-  max-width: none !important;
+.live-player .studio-video-wrap {
+  display: flex;
+  justify-content: center;
+  background: #000;
 }
 
-@media (min-width: 1024px) {
-  .live-rail,
+.live-player .studio-video-wrap > div {
+  width: min(100%, 640px);
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  aspect-ratio: 16 / 9;
+}
+
+@media (min-width: 900px) {
+  .live-studio__grid {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    grid-template-areas:
+      "player player"
+      "source tasks";
+  }
+  .live-player { grid-area: player; }
+  .live-rail { grid-area: source; }
   .live-side {
+    grid-area: tasks;
+    position: sticky;
+    top: 12px;
     max-height: calc(100dvh - 24px);
+    overflow: auto;
     overscroll-behavior: contain;
   }
-  .live-side { display: flex; flex-direction: column; }
   .live-side .live-run-log { max-height: 200px; }
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 899px) {
   .live-studio { padding: 12px 12px 40px; }
   .live-studio__tabs { display: flex; }
-  .live-studio__grid { grid-template-columns: minmax(0, 1fr); }
   .live-rail,
   .live-side {
     position: static;
@@ -217,8 +227,8 @@
     overflow: visible;
   }
   [data-mobile-hidden='true'] { display: none !important; }
+  .live-player { order: 0; }
   .live-rail { order: 1; }
-  .live-center { order: 0; }
   .live-side { order: 2; }
 }
 
@@ -302,6 +312,13 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.live-chapter-list,
+.live-transcript {
+  max-height: 280px;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .live-chapter {
@@ -578,28 +595,52 @@
 .live-dispatch__note { margin: 10px 0 0; font-size: 14px; color: var(--uvai-ink-soft); }
 .live-dispatch__note a { color: var(--uvai-accent-ink, var(--uvai-accent)); text-decoration: underline; }
 
-/* ---------- Chat + deliverables ---------- */
-.live-chat > summary { cursor: pointer; list-style: revert; }
-.live-chat__body { margin-top: 10px; min-height: 360px; display: flex; flex-direction: column; }
+/* ---------- Folded source, chat, and build files ---------- */
+.live-extras,
 .live-deliverables {
+  min-width: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--uvai-border);
+  border-radius: 12px;
+  background: var(--uvai-surface);
+}
+
+.live-extras > summary,
+.live-deliverables > summary,
+.live-chat > summary {
+  cursor: pointer;
+  list-style: revert;
+}
+
+.live-extras > summary,
+.live-deliverables > summary {
+  font: 650 13px var(--font-body);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--uvai-ink-soft);
+}
+
+.live-extras[open] > :not(summary),
+.live-chat[open] > :not(summary) { margin-top: 12px; }
+
+.live-chat__body { min-height: 240px; display: flex; flex-direction: column; }
+
+.live-deliverables[open] {
   display: flex;
   flex-direction: column;
   height: min(72vh, 760px);
   min-height: 420px;
-  min-width: 0;
 }
 
-.live-deliverables > .live-section {
-  display: flex;
+.live-deliverables[open] > :not(summary) {
   flex: 1 1 auto;
-  flex-direction: column;
   min-height: 0;
+  margin-top: 12px;
   overflow: hidden;
 }
 
 .live-deliverables [data-testid='studio-ide-output'] {
-  flex: 1 1 auto;
-  height: auto;
+  height: 100%;
   min-height: 0;
   overflow: hidden;
 }
