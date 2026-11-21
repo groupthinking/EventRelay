@@ -120,3 +120,39 @@ def test_receipt_cannot_overwrite_input(tmp_path, monkeypatch, kind):
     assert error.value.code == 2
     assert config.read_text() == original
 
+
+
+def test_active_mcp_configs_have_no_mutable_third_party_or_credential_argv():
+    configs = [
+        ROOT / ".github/mcp-servers.json",
+        ROOT / ".gemini/settings.json",
+    ]
+    entries = [
+        entry
+        for path in configs
+        for entry in audit.audit(audit.load(path), str(path.relative_to(ROOT)))
+    ]
+    forbidden = {"MUTABLE_PACKAGE", "CREDENTIAL_ARGV", "LITERAL_CREDENTIAL", "UNSAFE_REMOTE_URL"}
+    violations = {
+        (entry["config"], entry["server"]): sorted(forbidden.intersection(entry["findings"]))
+        for entry in entries
+        if forbidden.intersection(entry["findings"])
+    }
+    assert violations == {}
+
+    by_identity = {(entry["config"], entry["server"]): entry for entry in entries}
+    assert by_identity[(".github/mcp-servers.json", "github")]["network_destinations"] == ["api.githubcopilot.com"]
+    assert by_identity[(".github/mcp-servers.json", "supabase")]["network_destinations"] == ["mcp.supabase.com"]
+    assert by_identity[(".github/mcp-servers.json", "context7")]["network_destinations"] == ["mcp.context7.com"]
+    assert by_identity[(".github/mcp-servers.json", "sentry")]["network_destinations"] == ["mcp.sentry.dev"]
+
+    pinned = {
+        entry["server"]: (entry["package"], entry["version"])
+        for entry in entries
+        if entry["config"] == ".github/mcp-servers.json" and entry["executable"] == "npx"
+    }
+    assert pinned == {
+        "notebooklm": ("notebooklm-mcp", "2.0.0"),
+        "playwright": ("@playwright/mcp", "0.0.86"),
+        "sequential-thinking": ("@modelcontextprotocol/server-sequential-thinking", "2.2.0"),
+    }
