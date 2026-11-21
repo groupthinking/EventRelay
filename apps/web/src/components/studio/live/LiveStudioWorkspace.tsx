@@ -7,7 +7,6 @@ import {
   LiveChapterRail,
   LiveEvents,
   LiveKeyframes,
-  LiveSection,
   LiveStageList,
   LiveTranscript,
   type LiveStageState,
@@ -79,12 +78,17 @@ export default function LiveStudioWorkspace({
   })();
 
   const panelHidden = (tab: MobileTab) => (mobileTab === tab ? undefined : true);
+  const settled = !live && stages.every((stage) => stage.state === 'done');
+  const sourceMeta = [
+    keyframes.length ? `${keyframes.length} frames` : '',
+    events.length ? `${events.length} events` : '',
+  ].filter(Boolean).join(' · ');
 
   return (
     <main id="main-content" className="live-studio" data-testid="live-studio" data-live={live || undefined}>
       <div className="live-studio__bar">{header}</div>
       <div className="live-studio__status">
-        <LiveStageList stages={stages} />
+        <LiveStageList stages={stages} settled={settled} />
         <p className="live-studio__status-text" role="status" data-testid="live-status">
           {video?.sample ? (
             <span className="uvai-chip live-sample-chip" data-testid="live-sample-label">
@@ -113,14 +117,15 @@ export default function LiveStudioWorkspace({
         ))}
       </div>
       <div className="live-studio__grid">
-        <aside className="live-rail" id="live-panel-watch" data-mobile-hidden={panelHidden('watch')} aria-label="Chapters">
+        <div className="live-player" data-mobile-hidden={panelHidden('watch')}>{player}</div>
+        <div className="live-rail" id="live-panel-watch" data-mobile-hidden={panelHidden('watch')} aria-label="Chapters and transcript">
           <LiveChapterRail chapters={chapters} live={live} canSeek={canSeek} onSeek={onSeek} />
-        </aside>
-        <div className="live-center" data-mobile-hidden={panelHidden('watch')}>
-          <div className="live-player">{player}</div>
           <LiveTranscript segments={segments} live={live} canSeek={canSeek} onSeek={onSeek} />
-          <LiveKeyframes keyframes={keyframes} live={live} canSeek={canSeek} onSeek={onSeek} />
-          <LiveEvents events={events} live={live} canSeek={canSeek} onSeek={onSeek} />
+          <details className="live-extras" data-testid="live-source-extra">
+            <summary>Keyframes and events{sourceMeta ? ` · ${sourceMeta}` : ''}</summary>
+            <LiveKeyframes keyframes={keyframes} live={live} canSeek={canSeek} onSeek={onSeek} />
+            <LiveEvents events={events} live={live} canSeek={canSeek} onSeek={onSeek} />
+          </details>
           <details className="live-section live-chat" data-testid="live-chat">
             <summary className="live-section__title">Ask the video</summary>
             <div className="live-chat__body">{chat}</div>
@@ -142,11 +147,10 @@ export default function LiveStudioWorkspace({
           />
         </aside>
       </div>
-      <div id="live-panel-more" className="live-deliverables" data-mobile-hidden={panelHidden('more')}>
-        <LiveSection id="live-deliverables" title="Deliverables, review & Build live">
-          {deliverables}
-        </LiveSection>
-      </div>
+      <details id="live-panel-more" className="live-deliverables" data-testid="live-deliverables" data-mobile-hidden={panelHidden('more')}>
+        <summary>Review and build files</summary>
+        {deliverables}
+      </details>
     </main>
   );
 }

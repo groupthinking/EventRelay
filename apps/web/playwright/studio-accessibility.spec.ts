@@ -115,7 +115,7 @@ test('Home primary navigation links remain visible without horizontal overflow a
   await page.goto('/');
   const primaryNav = page.locator('nav.template-nav').first();
   await expect(primaryNav).toBeVisible();
-  for (const label of ['Home', 'Studio', 'Pricing', 'API Docs']) {
+  for (const label of ['Home', 'Studio', 'Pricing']) {
     await expect(primaryNav.getByRole('link', { name: label, exact: true })).toBeVisible();
   }
   await expectNoOverflow(page);

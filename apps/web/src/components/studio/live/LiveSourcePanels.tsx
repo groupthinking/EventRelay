@@ -227,9 +227,16 @@ export function LiveEvents({
 
 export type LiveStageState = 'idle' | 'active' | 'done' | 'failed';
 
-export function LiveStageList({ stages }: { stages: ReadonlyArray<{ id: string; label: string; state: LiveStageState; detail?: string }> }) {
+export function LiveStageList({
+  stages,
+  settled = false,
+}: {
+  stages: ReadonlyArray<{ id: string; label: string; state: LiveStageState; detail?: string }>;
+  /** Every stage finished. Keep the list in the DOM for the run, but don't spend a row on it. */
+  settled?: boolean;
+}) {
   return (
-    <ol className="live-stages" aria-label="Build progress" data-testid="live-stages">
+    <ol className="live-stages" hidden={settled} aria-label="Build progress" data-testid="live-stages" data-settled={settled ? 'true' : 'false'}>
       {stages.map((stage) => (
         <li key={stage.id} data-state={stage.state} data-stage={stage.id}>
           <span className="live-stages__dot" aria-hidden="true" />
