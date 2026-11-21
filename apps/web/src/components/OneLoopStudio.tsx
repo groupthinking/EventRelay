@@ -1080,7 +1080,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                   onError={(event) => {
                     event.currentTarget.style.display = 'none';
                   }}
-                  className="absolute inset-0 h-full w-full object-cover"
+                  className="absolute inset-0 h-full w-full object-contain"
                 />
               ) : null}
               <div
@@ -1400,7 +1400,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   );
 
   return (
-    <div className="template-studio flex min-h-screen flex-col text-[var(--uvai-ink)]">
+    <div className={clsx('template-studio flex min-h-screen flex-col text-[var(--uvai-ink)]', isLive && 'template-studio--document')}>
       <Nav variant="rail" defaultCollapsed rightSlot={<StudioAuthNavLink />} />
 
       {isLive ? (

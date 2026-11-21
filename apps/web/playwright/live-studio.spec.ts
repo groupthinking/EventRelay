@@ -135,6 +135,28 @@ test('the Video Pack exports as JSON', async ({ page }) => {
   expect(download.suggestedFilename()).toBe('auJzb1D-fag.video-pack.json');
 });
 
+test('the live Studio page scrolls past the player to deliverables', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openSample(page);
+  await waitForSampleDone(page);
+
+  const metrics = await page.evaluate(() => {
+    const shell = document.querySelector('.template-studio');
+    return {
+      scrollHeight: document.documentElement.scrollHeight,
+      clientHeight: document.documentElement.clientHeight,
+      overflowY: shell ? getComputedStyle(shell).overflowY : '',
+    };
+  });
+  expect(metrics.overflowY).not.toBe('hidden');
+  expect(metrics.scrollHeight).toBeGreaterThan(metrics.clientHeight + 200);
+
+  const deliverables = page.getByTestId('live-deliverables');
+  await deliverables.scrollIntoViewIfNeeded();
+  await expect(deliverables).toBeInViewport();
+  await expect(page.getByTestId('live-dispatch-button')).toBeVisible();
+});
+
 for (const width of [390, 1280]) {
   test(`live Studio has no horizontal overflow at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });

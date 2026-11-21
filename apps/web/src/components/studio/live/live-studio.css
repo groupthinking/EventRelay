@@ -1,5 +1,14 @@
 /* Live Studio workspace: docs-style three-column layout on UVAI tokens. */
 
+/* The classic shell locks the page to one viewport. The live Studio is a document. */
+@media (min-width: 680px) {
+  .template-studio.template-studio--document {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+}
+
 .live-studio {
   display: flex;
   flex-direction: column;
@@ -188,27 +197,12 @@
 }
 
 @media (min-width: 1024px) {
+  .live-rail,
   .live-side {
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 24px);
-    overflow: hidden;
-  }
-  .live-side .live-task-column { flex: 1; min-height: 0; }
-  .live-side .live-tasks {
-    flex: 1;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  .live-side .live-task-list {
-    flex: 1;
-    min-height: 0;
-    overflow: auto;
+    max-height: calc(100dvh - 24px);
     overscroll-behavior: contain;
-    padding-right: 2px;
   }
-  .live-side .live-dispatch { flex-shrink: 0; }
+  .live-side { display: flex; flex-direction: column; }
   .live-side .live-run-log { max-height: 200px; }
 }
 
@@ -331,12 +325,6 @@
 .live-chapter__time { grid-column: 2; font: 12px var(--font-mono); color: var(--uvai-ink-faint); }
 
 /* ---------- Transcript ---------- */
-.live-transcript {
-  max-height: 420px;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-
 .live-transcript__line,
 .live-event {
   display: grid;
@@ -593,4 +581,25 @@
 /* ---------- Chat + deliverables ---------- */
 .live-chat > summary { cursor: pointer; list-style: revert; }
 .live-chat__body { margin-top: 10px; min-height: 360px; display: flex; flex-direction: column; }
-.live-deliverables { min-width: 0; }
+.live-deliverables {
+  display: flex;
+  flex-direction: column;
+  height: min(72vh, 760px);
+  min-height: 420px;
+  min-width: 0;
+}
+
+.live-deliverables > .live-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.live-deliverables [data-testid='studio-ide-output'] {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  overflow: hidden;
+}
