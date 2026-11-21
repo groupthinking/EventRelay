@@ -9,7 +9,7 @@ Paste a YouTube URL → inspect a hashed **Video Pack** → export grounded buil
 
 ## Start here
 
-- [AGENTS.md](AGENTS.md): locked product, pricing, storage, and scope rules.
+- [AGENTS.md](AGENTS.md): locked product, pricing, storage, and scope rules. After checkout, `grok inspect --cwd <this-repo>` should list those instructions. Project MCP stubs (GitHub / Vercel, env-var tokens only) live in `.grok/config.toml`.
 - [Repository map](docs/REPO_MAP.md): current entry points and where code lives.
 - [Build-out roadmap](docs/MASTER_ROADMAP.md): inspected capabilities, remaining work, and acceptance criteria.
 - [Next authorized cut](docs/NEXT-PHASE.md): Origin G.A.T.E.; later product work remains held.
