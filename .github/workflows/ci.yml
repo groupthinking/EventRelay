@@ -197,10 +197,8 @@ jobs:
           enable-cache: false
       - name: Check lockfile
         run: uv lock --check
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev,youtube]"
+      - name: Install locked dependencies
+        run: uv sync --locked --python "${{ matrix.python-version }}" --extra dev --extra youtube
       - name: Run tests
         # This is a fast unit-only sanity job. It measures coverage but must NOT
         # enforce the 84.2153% baseline: that figure (6,525 / 7,748 statements)
@@ -210,8 +208,8 @@ jobs:
         # against the same package-wide denominator, so a full-suite floor here
         # would fail every run. See coverage.yml for the enforced baseline.
         run: >-
-          PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120
+          PYTHONPATH=src .venv/bin/python -m pytest tests/unit/ -v --timeout=120
           --cov=src/youtube_extension --cov-fail-under=0
           --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
       - name: Offline MCP inventory and approval regressions
-        run: python -m pytest tests/security/test_local_mcp_config.py tests/security/test_mcp_catalog_approval.py -q -o addopts=''
+        run: .venv/bin/python -m pytest tests/security/test_local_mcp_config.py tests/security/test_mcp_catalog_approval.py -q -o addopts=''
