@@ -1080,7 +1080,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                   onError={(event) => {
                     event.currentTarget.style.display = 'none';
                   }}
-                  className="absolute inset-0 h-full w-full object-contain"
+                  className="absolute inset-0 h-full w-full object-cover"
                 />
               ) : null}
               <div

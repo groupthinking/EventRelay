@@ -259,6 +259,7 @@ export default function LiveTaskPanel({
   const allSelected = tasks.length > 0 && chosen.length === tasks.length;
 
   return (
+    <>
     <div className="live-task-column">
       <LiveSection
         id="live-tasks"
@@ -389,9 +390,8 @@ export default function LiveTaskPanel({
         title="Dispatch"
         className="live-dispatch"
         meta={
-          <span className="live-dispatch__status" data-testid="live-dispatch-backend">
-            Agent backend: {backend === null ? 'checking…' : backend ? 'connected' : 'not configured'}
-            {' · '}WebMCP: {webMcp === null ? '…' : webMcp ? 'browser tools on' : 'not in this browser'}
+          <span className="live-dispatch__status">
+            WebMCP: {webMcp === null ? '…' : webMcp ? 'browser tools on' : 'not in this browser'}
           </span>
         }
       >
@@ -409,6 +409,40 @@ export default function LiveTaskPanel({
               ? `Dispatch ${chosen.length} task${chosen.length === 1 ? '' : 's'}`
               : 'Dispatch tasks'}
         </button>
+        {upgradeRequired ? (
+          <p className="live-dispatch__note" data-testid="live-dispatch-upgrade">
+            Agent dispatch is part of Workflow Pro. <Link href="/pricing">See plans</Link>
+          </p>
+        ) : null}
+      </LiveSection>
+    </div>
+    <section className="live-agent-dock" aria-label="Agent workspace" data-testid="live-agent-dock">
+      <div className="live-agent-canvas" data-testid="live-agent-canvas">
+        <header className="live-agent-dock__bar">
+          <span>Canvas</span>
+          <span>{chosen.length === 0 ? 'Nothing selected' : `${chosen.length} on the bench`}</span>
+        </header>
+        {chosen.length === 0 ? (
+          <p className="live-empty">Select tasks. The agent works from those specs.</p>
+        ) : (
+          <ol className="live-agent-canvas__list">
+            {chosen.map((task) => (
+              <li key={task.id}>
+                <p className="live-agent-canvas__title"><span>{task.id}</span> {task.title}</p>
+                <p>{task.spec}</p>
+                {task.check ? <pre>{task.check}</pre> : null}
+              </li>
+            ))}
+          </ol>
+        )}
+      </div>
+      <div className="live-agent-terminal">
+        <header className="live-agent-dock__bar">
+          <span>Terminal</span>
+          <span className="live-dispatch__status" data-testid="live-dispatch-backend">
+            Agent backend: {backend === null ? 'checking…' : backend ? 'connected' : 'not configured'}
+          </span>
+        </header>
         <ol ref={logRef} className="live-run-log" role="log" aria-live="polite" aria-label="Agent run log" data-testid="live-run-log">
           {lines.length === 0 ? (
             <li className="live-run-log__idle">$ select tasks, then dispatch — status lines stream here</li>
@@ -422,12 +456,8 @@ export default function LiveTaskPanel({
             ))
           )}
         </ol>
-        {upgradeRequired ? (
-          <p className="live-dispatch__note" data-testid="live-dispatch-upgrade">
-            Agent dispatch is part of Workflow Pro. <Link href="/pricing">See plans</Link>
-          </p>
-        ) : null}
-      </LiveSection>
-    </div>
+      </div>
+    </section>
+    </>
   );
 }

@@ -143,16 +143,28 @@ test('the live Studio fits the workbench and keeps build files folded', async ({
   const metrics = await page.evaluate(() => {
     const shell = document.querySelector('.template-studio');
     const main = document.querySelector('main.live-studio');
+    const wrap = document.querySelector('.studio-video-wrap');
+    const frame = wrap?.querySelector(':scope > div');
+    const wrapBox = wrap?.getBoundingClientRect();
+    const frameBox = frame?.getBoundingClientRect();
     return {
       scrollHeight: document.documentElement.scrollHeight,
       mainHeight: main ? main.getBoundingClientRect().height : 0,
       overflowY: shell ? getComputedStyle(shell).overflowY : '',
+      wrapWidth: wrapBox?.width ?? 0,
+      frameWidth: frameBox?.width ?? 0,
+      frameHeight: frameBox?.height ?? 0,
     };
   });
   expect(metrics.overflowY).not.toBe('hidden');
   expect(metrics.mainHeight).toBeGreaterThan(400);
-  expect(metrics.mainHeight).toBeLessThan(2200);
-  expect(metrics.scrollHeight).toBeLessThan(2600);
+  expect(metrics.mainHeight).toBeLessThan(2600);
+  expect(metrics.scrollHeight).toBeLessThan(3200);
+  expect(Math.abs(metrics.frameWidth - metrics.wrapWidth)).toBeLessThan(4);
+  expect(metrics.frameWidth / metrics.frameHeight).toBeGreaterThan(1.7);
+  expect(metrics.frameWidth / metrics.frameHeight).toBeLessThan(1.85);
+  await expect(page.getByTestId('live-agent-dock')).toBeVisible();
+  await expect(page.getByTestId('live-run-log')).toBeVisible();
 
   await page.getByTestId('live-dispatch-button').scrollIntoViewIfNeeded();
   await expect(page.getByTestId('live-dispatch-button')).toBeVisible();
