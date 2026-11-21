@@ -1,0 +1,7 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "dependabot/github_actions/astral-sh/setup-uv-10.3.1": false
+    }
+  }
+}
