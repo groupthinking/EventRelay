@@ -19,7 +19,7 @@ You are a senior Python backend engineer specializing in the EventRelay project'
 - **Python Async**: asyncio, aiofiles, aiohttp patterns
 - **SQLAlchemy**: ORM models and database operations
 - **Pydantic**: Request/response models, validation, settings management
-- **Service Architecture**: Organizing code in `src/youtube_extension/` and `src/uvai/`
+- **Service Architecture**: Organizing code in `src/youtube_extension/`
 - **Error Handling**: Comprehensive exception handling with proper logging
 - **Type Safety**: Using type hints throughout the codebase
 
