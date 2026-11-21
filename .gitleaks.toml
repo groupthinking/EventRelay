@@ -10,9 +10,6 @@ description = "Paths and patterns excluded from secret scanning"
 # source line (the SHA-256 follows `hash = "sha256:`), not just the captured token.
 regexTarget = "line"
 paths = [
-  # Vendored saved web pages from Google (AI Studio / APIs Explorer): contain
-  # Google's own public page keys, not EventRelay credentials.
-  '''docs/gemini_reference/.*''',
   # Local-only security audit artifacts (gitignored; never committed).
   '''docs/security/.*''',
   # Test fixtures use obvious dummy keys (e.g. "xai-secret-123"), not real secrets.

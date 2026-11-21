@@ -14,7 +14,7 @@
 
 - FastAPI: `src/youtube_extension/main.py` (`PYTHONPATH=src`)  
 - Agents: `youtube_extension.services.agents.adapters.agent_orchestrator` (canonical)  
-- MCP: `youtube_extension.services.mcp.registry` + `orchestrator.py`  
+- MCP: `src/youtube_extension/core/mcp/` (`server_registry.py`, `protocol_bridge.py`, `context_manager.py`, `validation.py`) and `mcp-servers/`  
 - Legacy / experimental: `src/agents/*` (logged warning on use)
 
 ## Historical docs

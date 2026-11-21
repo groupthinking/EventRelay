@@ -18,13 +18,13 @@ with the patterns below.
 ## Before reviewing
 
 1. Identify which parts of the repo the diff touches:
-   - `src/youtube_extension/backend/` — FastAPI backend (`api/v1/`, `services/`,
-     `models/`, `middleware/`)
-   - `src/youtube_extension/mcp/` or `mcp-servers/` — MCP agent/tool servers
-   - `apps/web/` — Next.js/TypeScript frontend
-   - `sdk/python/eventrelay_sdk/` — Python SDK types
+   - `apps/web/` — Next.js App Router product and server routes
+   - `apps/backend/main.py` — caption service (health and YouTube caption acquisition)
+   - `src/youtube_extension/` — internal Python/FastAPI runtime (`main.py`)
+   - `mcp-servers/` — MCP servers (`langextract`, `vercel`)
+   - `sdk/` — client SDKs
    - `.github/workflows/` — CI/CD
-   - `tests/` — pytest suite (`unit/`, `integration/`, `fixtures/`, `workflows/`)
+   - `tests/unit/` — pytest unit suite
 2. Read `AGENTS.md` / `CLAUDE.md` at the repo root for the current locked
    product rules before flagging anything as "wrong" — some things that look
    like bugs (e.g. `PYTHONPATH=src` imports, Upstash-only pack storage) are
@@ -47,19 +47,14 @@ EventRelay has **one** workflow: YouTube link → transcript → extracted event
   flag new untyped `def`s in `src/`.
 - Request/response models must be Pydantic; flag hand-rolled dict validation
   in route handlers.
-- `sdk/python/eventrelay_sdk/types.py` must stay aligned with
-  `src/youtube_extension/backend/api/v1/models.py`. If a PR changes one
-  without the other, flag the drift. Enum-typed fields (e.g. `job_status`)
-  must use the SDK enum, not a bare `str`.
 - Flag `try/except TypeError` fallbacks added around Anthropic SDK
   `thinking={"type": "adaptive"}` or `output_config={"effort": ...}` calls —
   the SDK floor (`anthropic>=0.105.0`) already guarantees these exist.
 - Flag use of raw SQL string interpolation; parameterized queries via
   SQLAlchemy are required.
-- Alembic migrations live in `src/youtube_extension/backend/migrations`, not
-  `infrastructure/database` — flag migrations added in the wrong location.
 - New top-level `src` packages need an explicit coverage target added in
-  `pyproject.toml`, or they silently don't count toward the 90% threshold.
+  `pyproject.toml`, or they silently don't count toward the `fail_under`
+  threshold (84.2).
 
 ## Frontend (Next.js/TypeScript)
 
@@ -87,8 +82,8 @@ EventRelay has **one** workflow: YouTube link → transcript → extracted event
   (banned — causes flaky/age-gated test failures).
 - Flag `pyfakefs` or other fake-filesystem mocks; this repo uses real
   `tempfile`/`shutil` temp directories, cleaned up after the test.
-- New backend features should include tests under `tests/unit/` or
-  `tests/integration/`; flag untested new endpoints or services.
+- New backend features should include tests under `tests/unit/`; flag
+  untested new endpoints or services.
 
 ## Security
 
