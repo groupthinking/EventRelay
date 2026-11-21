@@ -70,13 +70,6 @@ create_issue() {
     echo ""
 }
 
-# Create Phase 1 issue
-create_issue \
-    "Phase 1" \
-    "[Phase 1] Security & Environment Setup" \
-    "phase-1-security-environment.md" \
-    "production,security,phase-1,high-priority"
-
 # Create Phase 2 issue
 create_issue \
     "Phase 2" \
@@ -84,21 +77,12 @@ create_issue \
     "phase-2-monitoring-cicd.md" \
     "production,monitoring,ci-cd,phase-2,high-priority"
 
-# Create Phase 3 issue
-create_issue \
-    "Phase 3" \
-    "[Phase 3] Testing & Production Launch" \
-    "phase-3-testing-launch.md" \
-    "production,testing,phase-3,deployment"
-
 echo "========================================================="
 echo "✅ All production preparation issues created successfully!"
 echo ""
 echo "📊 Next steps:"
-echo "   1. Review each issue for detailed tasks"
-echo "   2. Start with Phase 1 (Security & Environment)"
-echo "   3. Complete phases sequentially (1 → 2 → 3)"
-echo "   4. Track progress in GitHub Issues"
+echo "   1. Review the Phase 2 issue for detailed tasks"
+echo "   2. Track progress in GitHub Issues"
 echo ""
 echo "📚 Documentation: .github/ISSUE_TEMPLATE/README.md"
 echo "🔗 View issues: https://github.com/$REPO/issues"
@@ -133,18 +117,6 @@ fi
 echo "✅ GitHub CLI authenticated"
 echo ""
 
-# Create Phase 1 Issue
-echo "📝 Creating Phase 1: Security & Environment Setup..."
-PHASE1_BODY=$(cat "$ISSUE_DIR/phase-1-security-environment.md" | tail -n +7)
-PHASE1_ISSUE=$(gh issue create \
-    --repo "$REPO" \
-    --title "[PHASE 1] Security & Environment Setup" \
-    --body "$PHASE1_BODY" \
-    --label "phase-1,security,environment,production")
-echo "   ✅ Created: $PHASE1_ISSUE"
-PHASE1_NUMBER=$(echo "$PHASE1_ISSUE" | grep -o '[0-9]*$')
-echo ""
-
 # Create Phase 2 Issue
 echo "📝 Creating Phase 2: Monitoring & CI/CD Setup..."
 PHASE2_BODY=$(cat "$ISSUE_DIR/phase-2-monitoring-cicd.md" | tail -n +7)
@@ -157,31 +129,16 @@ echo "   ✅ Created: $PHASE2_ISSUE"
 PHASE2_NUMBER=$(echo "$PHASE2_ISSUE" | grep -o '[0-9]*$')
 echo ""
 
-# Create Phase 3 Issue
-echo "📝 Creating Phase 3: Testing & Production Launch..."
-PHASE3_BODY=$(cat "$ISSUE_DIR/phase-3-testing-launch.md" | tail -n +7)
-PHASE3_ISSUE=$(gh issue create \
-    --repo "$REPO" \
-    --title "[PHASE 3] Testing & Production Launch" \
-    --body "$PHASE3_BODY" \
-    --label "phase-3,testing,production,launch")
-echo "   ✅ Created: $PHASE3_ISSUE"
-PHASE3_NUMBER=$(echo "$PHASE3_ISSUE" | grep -o '[0-9]*$')
-echo ""
-
 echo "=================================================="
 echo "✅ All production phase issues created successfully!"
 echo ""
 echo "📋 Issue Summary:"
-echo "   Phase 1 (Security & Environment): #$PHASE1_NUMBER"
-echo "   Phase 2 (Monitoring & CI/CD):     #$PHASE2_NUMBER"
-echo "   Phase 3 (Testing & Launch):       #$PHASE3_NUMBER"
+echo "   Phase 2 (Monitoring & CI/CD): #$PHASE2_NUMBER"
 echo ""
 echo "🚀 Next Steps:"
-echo "   1. Start with Phase 1: gh issue view $PHASE1_NUMBER --web"
-echo "   2. Follow the getting started commands in each issue"
+echo "   1. Open the issue: gh issue view $PHASE2_NUMBER --web"
+echo "   2. Follow the getting started commands in the issue"
 echo "   3. Mark tasks as complete using the checkboxes"
-echo "   4. Move to next phase after completing all tasks"
 echo ""
 echo "💡 Tip: Assign issues to team members with:"
 echo "   gh issue edit <issue-number> --add-assignee <username>"

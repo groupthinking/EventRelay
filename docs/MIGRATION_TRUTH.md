@@ -116,5 +116,3 @@ Tenant boundary is application-owned `owner_subject` filtering plus uniqueness o
 - Verifies `studio_chats` parity across the ordered migration chain, `rowSchema` in `chat-store.ts`, SELECT `columns` projection, and `MIGRATION_TRUTH.md`.
 - Validates live SQL-level RLS (`ENABLE` + `FORCE`), `REVOKE ALL` from `public`/`anon`/`authenticated`, `GRANT SELECT, INSERT, UPDATE, DELETE` to `service_role`, `(owner_subject, request_id)` uniqueness, and `owner_subject` filtering.
 - Parses `src/youtube_extension/services/shared_sql_state.py` via AST to verify every `Table(...)`, column list, and `.create_all(...)` invocation matches `runtime_managed_domains` accurately.
-
-Historical claim retained for audit: a previous file revision asserted three committed revisions (`001`–`003`) and a `test_migration_truth.py` count guard. That claim is not valid for the inspected current tree.
