@@ -8,6 +8,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ### 2026-11-22: Remove unused transcript embedding path (apps/web)
 
+Tracked by #2787.
+
 #### Removed
 
 - `embedding-store.ts` and `gemini-embedding.ts`. Neither had a production importer after `/api/video/search` was removed. Both were unchanged since the November 4 lib audit.
