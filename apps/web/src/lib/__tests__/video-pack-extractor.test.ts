@@ -351,6 +351,161 @@ describe('extractVideoPackSpec', () => {
     expect(runVideo.mock.calls[0]?.[0].sectionPrompt.startsWith('PROBE:')).toBe(false);
   });
 
+  it('rejects an agentic citation that falls outside the video duration', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    const quote = 'Spoken line past the video.';
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [],
+    });
+    const grounded = {
+      version: '1',
+      outputClass: 'browser-interactive',
+      sourceStatus: 'partial',
+      confidence: 0.8,
+      limitations: ['Coverage is partial.'],
+      app: { name: 'Pack viewer', purpose: 'Show the extracted pack.' },
+      screens: [{ id: 'scr', name: 'Viewer', purpose: 'Show evidence.' }],
+      state: [],
+      requirements: [
+        {
+          id: 'req1',
+          screenId: 'scr',
+          title: 'Show the spoken line',
+          detail: 'The line is on screen.',
+          classification: 'observed',
+          required: true,
+          capabilities: ['browser-ui'],
+          rationale: 'Heard in the video.',
+          citations: [
+            {
+              kind: 'transcript',
+              index: 0,
+              videoId: CANON,
+              startSeconds: 900,
+              endSeconds: 901,
+              quote,
+            },
+          ],
+        },
+      ],
+      acceptanceCriteria: [
+        {
+          id: 'ac1',
+          requirementId: 'req1',
+          given: 'The pack is open',
+          when: 'The line is shown',
+          then: 'The quote is visible',
+        },
+      ],
+      unresolved: [],
+      unsupported: [],
+    };
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        transcript: {
+          language: 'en',
+          full_text: quote,
+          segments: [{ idx: 0, start_s: 900, end_s: 901, text: quote }],
+        },
+        grounded_spec: grounded,
+      }),
+      interactionId: 'int-late',
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+    );
+
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(spec.grounded_spec).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'out-of-range-citation' })]),
+    });
+  });
+
+  it('keeps an agentic citation that stays inside the video duration', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    const quote = 'Spoken line inside the video.';
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [],
+    });
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        transcript: {
+          language: 'en',
+          full_text: quote,
+          segments: [{ idx: 0, start_s: 10, end_s: 12, text: quote }],
+        },
+        grounded_spec: {
+          version: '1',
+          outputClass: 'browser-interactive',
+          sourceStatus: 'partial',
+          confidence: 0.8,
+          limitations: ['Coverage is partial.'],
+          app: { name: 'Pack viewer', purpose: 'Show the extracted pack.' },
+          screens: [{ id: 'scr', name: 'Viewer', purpose: 'Show evidence.' }],
+          state: [],
+          requirements: [
+            {
+              id: 'req1',
+              screenId: 'scr',
+              title: 'Show the spoken line',
+              detail: 'The line is on screen.',
+              classification: 'observed',
+              required: true,
+              capabilities: ['browser-ui'],
+              rationale: 'Heard in the video.',
+              citations: [
+                {
+                  kind: 'transcript',
+                  index: 0,
+                  videoId: CANON,
+                  startSeconds: 10,
+                  endSeconds: 12,
+                  quote,
+                },
+              ],
+            },
+          ],
+          acceptanceCriteria: [
+            {
+              id: 'ac1',
+              requirementId: 'req1',
+              given: 'The pack is open',
+              when: 'The line is shown',
+              then: 'The quote is visible',
+            },
+          ],
+          unresolved: [],
+          unsupported: [],
+        },
+      }),
+      interactionId: 'int-inside',
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+    );
+
+    expect(spec.grounded_spec?.status).toBe('available');
+  });
+
   it('calls the direct worker with gemini-3.8-flash and a narrowed range (never full-video-only)', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({

@@ -1047,7 +1047,9 @@ export async function extractVideoPackSpec(
     }
 
     try {
-      const spec = parseSpecJson(result.text, input.videoId).spec;
+      const observedRange =
+        call.processing === 'agentic' ? { start_s: call.start_s, end_s: call.end_s } : undefined;
+      const spec = parseSpecJson(result.text, input.videoId, observedRange).spec;
       return finishConsolidatedSpec(
         [spec],
         metadata,
