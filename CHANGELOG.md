@@ -33,6 +33,18 @@ Related: #2491. Does not close it. Dogfood video `pBsT6v-ciO8`. No G.A.T.E. No i
 - Named pack tools, including SeaDance 2.5, Claude Fable 5, Character.ai, and Cluely Desktop, render as **Proposed** cards that say UVAI has not run them.
 - Studio content on a narrow screen keeps 72px of clearance above the sticky pane dock.
 
+### 2026-11-22: Grok Vercel MCP uses OAuth, not VERCEL_TOKEN (docs)
+
+#### Changed
+
+- `.grok/config.toml`: Vercel MCP stub is URL-only (`https://mcp.vercel.com`).
+  A static `Authorization: Bearer ${VERCEL_TOKEN}` header made Grok skip OAuth
+  and fail `mcp doctor vercel` with `invalid_token`. GitHub still uses
+  `Bearer ${GITHUB_TOKEN}`. First Vercel grant is stored in
+  `~/.grok/mcp_credentials.json`. (#2778)
+- `docs/vercel-ai-setup.md`: Vercel MCP is Streamable HTTP + OAuth 2.1;
+  `VERCEL_TOKEN` remains CLI/REST-only.
+
 ### 2026-11-22: Evidence-bound local video reconstruction
 
 #### Added
