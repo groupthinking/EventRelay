@@ -6,6 +6,12 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Remove pack-build-live re-export barrel (apps/web)
+
+#### Removed
+
+- `pack-build-live.ts`. It only re-exported `pack-build-live-client`, and the Studio UI already imports the client. The pack-build-live tests now import the client directly.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
