@@ -141,6 +141,10 @@ def test_active_mcp_configs_have_no_mutable_third_party_or_credential_argv():
     assert violations == {}
 
     by_identity = {(entry["config"], entry["server"]): entry for entry in entries}
+    gemini = audit.load(ROOT / ".gemini/settings.json")["mcpServers"]
+    github = audit.load(ROOT / ".github/mcp-servers.json")["mcpServers"]
+    assert gemini["github"]["type"] == "http"
+    assert github["sentry"]["headers"]["Authorization"] == "Sentry-Bearer ${env:SENTRY_AUTH_TOKEN}"
     assert by_identity[(".github/mcp-servers.json", "github")]["network_destinations"] == ["api.githubcopilot.com"]
     assert by_identity[(".github/mcp-servers.json", "supabase")]["network_destinations"] == ["mcp.supabase.com"]
     assert by_identity[(".github/mcp-servers.json", "context7")]["network_destinations"] == ["mcp.context7.com"]
