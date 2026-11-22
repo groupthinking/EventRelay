@@ -6,6 +6,16 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
+
+Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
+
+#### Changed
+
+- Named-tool stack checks that UVAI cannot run stay `unknown`. Their label says they can be skipped and are not a production hold. It does not mark them passed.
+- The sticky Studio action is **Ship this** (`studio-ide-ship`). It enables from pack exportability (transcript, architecture, artifacts, or stack) and is not disabled by those four checks.
+- Signed-in `deployHoldReason` still holds while Vercel, Shopify, or GitHub checks in `pack.stack.tools` are open. Anonymous Studio does not start a G.A.T.E. deploy.
+
 ### 2026-11-20: Grok Build project MCP wiring (docs)
 
 #### Added

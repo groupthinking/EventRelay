@@ -60,7 +60,7 @@ afterEach(() => {
 });
 
 describe('OneLoopStudio IDE shell', () => {
-  it('renders the streamlined IDE shell with Analyze, Export, and no duplicate toolbar bloat', () => {
+  it('renders the streamlined IDE shell with Analyze, Ship this, and no duplicate toolbar bloat', () => {
     render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-toolbar')).toBeTruthy();
@@ -70,7 +70,7 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.queryByTestId('studio-ide-splitter-left')).toBeNull();
     expect(screen.queryByTestId('studio-ide-splitter-right')).toBeNull();
     expect(screen.getByTestId('studio-ide-run').textContent?.trim()).toBe('Analyze');
-    expect(screen.getByTestId('studio-ide-ship').textContent?.trim()).toBe('Export');
+    expect(screen.getByTestId('studio-ide-ship').textContent?.trim()).toBe('Ship this');
     expect(screen.queryByTestId('studio-act-button')).toBeNull();
     expect(screen.queryByTestId('studio-build-live-button')).toBeNull();
     expect(screen.queryByTestId('studio-ide-delete-pack')).toBeNull();
@@ -249,7 +249,10 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-output')).toBeTruthy();
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-tasks'));
     expect(screen.getByTestId('pack-stack-tools').textContent).toMatch(/Workflow API/);
-    expect((screen.getByTestId('studio-ide-ship') as HTMLButtonElement).disabled).toBe(false);
+    const ship = screen.getByTestId('studio-ide-ship') as HTMLButtonElement;
+    expect(ship.disabled).toBe(false);
+    expect(ship.textContent?.trim()).toBe('Ship this');
+    expect(ship.getAttribute('title')).toMatch(/not a production hold/i);
   });
 
   it('shows transcript retry when analysis failed and is retryable', () => {

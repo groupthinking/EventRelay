@@ -164,7 +164,7 @@ describe('StudioIdeOutput playflow', () => {
             id: 'chk_tool_seadance',
             title: 'Use SeaDance 2.5 as named in the video',
             status: 'unknown',
-            statusLabel: 'Unknown — UVAI cannot run this check',
+            statusLabel: 'Can be skipped — not a production hold. UVAI cannot run this check.',
             holdsShip: false,
           },
         ]}
@@ -173,8 +173,10 @@ describe('StudioIdeOutput playflow', () => {
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-code'));
     const row = screen.getByTestId('studio-stack-check-chk_tool_seadance');
     expect(row.textContent).toMatch(/SeaDance 2\.5/);
+    expect(row.textContent).toMatch(/can be skipped/i);
+    expect(row.textContent).toMatch(/not a production hold/i);
     expect(row.textContent).toMatch(/cannot run this check/i);
-    expect(row.textContent).not.toMatch(/production is held/i);
+    expect(row.textContent).not.toMatch(/\bpassed\b/i);
   });
 
   it('uses the honest Events empty copy and hosts the pack workbench inside Tasks & Tools', () => {
