@@ -83,13 +83,6 @@ export interface VideoPackActionItem {
   priority?: 'low' | 'normal' | 'high' | null;
 }
 
-export const packChapterSchema = z.object({
-  start: z.number().nonnegative(),
-  end: z.number().nonnegative(),
-  topic: z.string().trim().min(1),
-  key_points: z.array(z.string().trim().min(1)).min(1),
-});
-
 export const packActionItemSchema = z.object({
   id: z.string().trim().min(1).optional(),
   type: z.string().trim().min(1).nullable().optional(),

@@ -6,6 +6,13 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Remove unused lib helpers (apps/web)
+
+#### Removed
+
+- `hasUpstashSearch`, `packChapterSchema`, `JSON_CANVAS_SPEC`, `JSON_CANVAS_SPEC_URL`, and deprecated `resolveBillingEmailFromRequest`. Each had no caller. The files were unchanged since the November 4 lib audit.
+- Unused `zipUtf8Files` import in `action-surface.ts`. The export stays; workspace export and its tests still call it.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).

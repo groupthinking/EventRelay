@@ -31,10 +31,6 @@ export function resolveSearchConfig(): { url: string; token: string } | null {
   return { url, token };
 }
 
-export function hasUpstashSearch(): boolean {
-  return resolveSearchConfig() !== null;
-}
-
 export function resolveSearchIndexName(): string {
   return process.env.UPSTASH_SEARCH_INDEX?.trim() || DEFAULT_SEARCH_INDEX;
 }
