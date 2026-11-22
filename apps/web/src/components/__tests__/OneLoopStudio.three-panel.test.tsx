@@ -121,6 +121,64 @@ describe('OneLoopStudio IDE shell', () => {
     expect(openYouTube.textContent).toMatch(/Open on YouTube/i);
   });
 
+  it('shows the nocookie iframe when the IFrame API stalls and does not cover it', () => {
+    playerStateMock.mockImplementation(() => ({
+      containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
+      currentTime: 0,
+      duration: 0,
+      isPlaying: false,
+      ready: false,
+      failed: false,
+      direct: true,
+      seekTo: seekToMock,
+      play: vi.fn(),
+      pause: vi.fn(),
+    }));
+    render(<OneLoopStudio />);
+    const iframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
+    expect(iframe.src).toContain(
+      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
+    );
+    expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
+    expect(screen.queryByText(/did not load/i)).toBeNull();
+
+    cleanup();
+    render(<OneLoopStudio layout="live" />);
+    expect(screen.getByTestId('live-studio')).toBeTruthy();
+    const liveIframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
+    expect(liveIframe.src).toContain(
+      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
+    );
+    expect(screen.queryByText(/did not load/i)).toBeNull();
+  });
+
+  it('falls through to the direct embed on Retry and covers only a failed embed', () => {
+    playerStateMock.mockImplementation(() => ({
+      containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
+      currentTime: 0,
+      duration: 0,
+      isPlaying: false,
+      ready: false,
+      failed: true,
+      direct: false,
+      seekTo: seekToMock,
+      play: vi.fn(),
+      pause: vi.fn(),
+    }));
+    render(<OneLoopStudio />);
+    const overlay = screen.getByTestId('studio-player-overlay');
+    expect(overlay.className).toMatch(/bg-neutral-950/);
+    expect(overlay.textContent).toMatch(/did not load/i);
+
+    fireEvent.click(screen.getByTestId('studio-player-retry'));
+    const iframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
+    expect(iframe.src).toContain(
+      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
+    );
+    expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
+    expect(screen.queryByText(/did not load/i)).toBeNull();
+  });
+
   it('never auto-selects failed runs on boot, formats Saved videos cleanly, and clears prior errors on switch or Analyze', async () => {
     const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
     const pack = reviewPackFixture();
@@ -351,11 +409,42 @@ describe('OneLoopStudio IDE shell', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(200);
     });
-    expect(result.current.failed).toBe(true);
+    expect(result.current.failed).toBe(false);
+    expect(result.current.direct).toBe(true);
     const iframe = host.querySelector('iframe') as HTMLIFrameElement | null;
     expect(iframe).not.toBeNull();
     expect(iframe?.src).toBe(
       'https://www.youtube-nocookie.com/embed/6TrjBFW6EKg?rel=0&modestbranding=1',
+    );
+
+    unmount();
+    host.remove();
+    vi.useRealTimers();
+  });
+
+  it('useYouTubePlayer stall exposes the direct embed without marking the embed failed', async () => {
+    vi.useFakeTimers();
+    const actual = await vi.importActual<typeof import('@/lib/use-youtube-player')>(
+      '@/lib/use-youtube-player',
+    );
+    const { renderHook } = await import('@testing-library/react');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { result, unmount } = renderHook(() => actual.useYouTubePlayer('auJzb1D-fag'));
+    act(() => {
+      result.current.containerRef(host);
+    });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+
+    expect(result.current.direct).toBe(true);
+    expect(result.current.failed).toBe(false);
+    const iframe = host.querySelector('iframe') as HTMLIFrameElement | null;
+    expect(iframe?.src).toBe(
+      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
     );
 
     unmount();

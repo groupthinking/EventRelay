@@ -222,7 +222,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
-  const [playerEpoch, setPlayerEpoch] = useState(0);
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
@@ -582,12 +581,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
-  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
+  const { containerRef, ready: playerReady, failed: playerFailed, direct: playerDirect, seekTo } =
     useYouTubePlayer(videoId);
 
   useEffect(() => {
     setPreferDirectEmbed(false);
-  }, [videoId, playerEpoch]);
+  }, [videoId]);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
@@ -595,6 +594,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     failed: playerFailed,
   });
   const playerOverlay = studioPlayerOverlay(playerPhase);
+  // `playerDirect` means the IFrame API stalled or was blocked and a nocookie
+  // iframe is the player. That iframe stays visible. The opaque cover is only
+  // for an IFrame API embed error (`failed`), and Retry leaves that path.
+  const showDirectEmbed = preferDirectEmbed || playerDirect;
+  const showErrorCover = !showDirectEmbed && playerPhase === 'error';
+  const embedErrorText = studioPlayerOverlay('error');
   const eventCount = selected?.events?.length ?? 0;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
@@ -1049,13 +1054,13 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
       {videoId ? (
         <div
-          key={`${videoId}-${playerEpoch}`}
+          key={videoId}
           className={clsx(
             'relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950',
             !isLive && 'max-h-[200px] max-w-[356px]',
           )}
         >
-          {preferDirectEmbed ? (
+          {showDirectEmbed ? (
             <iframe
               src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
               title="YouTube source player"
@@ -1089,7 +1094,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                 data-testid="studio-player"
                 title="YouTube source"
               />
-              {playerOverlay && playerPhase === 'loading' ? (
+              {playerOverlay && playerPhase === 'loading' && !showErrorCover ? (
                 <button
                   type="button"
                   data-testid="studio-player-overlay"
@@ -1104,20 +1109,17 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                     {playerOverlay}
                   </span>
                 </button>
-              ) : playerOverlay && playerPhase === 'error' ? (
+              ) : showErrorCover ? (
                 <div
                   data-testid="studio-player-overlay"
                   className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-neutral-950 px-4 text-center"
                 >
-                  <p className="max-w-sm text-sm font-medium text-white">{playerOverlay}</p>
+                  <p className="max-w-sm text-sm font-medium text-white">{embedErrorText}</p>
                   <div className="flex flex-wrap items-center justify-center gap-2">
                     <button
                       type="button"
                       data-testid="studio-player-retry"
-                      onClick={() => {
-                        setPreferDirectEmbed(false);
-                        setPlayerEpoch((epoch) => epoch + 1);
-                      }}
+                      onClick={() => setPreferDirectEmbed(true)}
                       className="uvai-btn !bg-white !px-3 !py-1 !text-xs !text-neutral-950"
                     >
                       Retry player
