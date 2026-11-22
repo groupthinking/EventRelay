@@ -60,7 +60,7 @@
     "sentry": {
       "url": "https://mcp.sentry.dev/mcp",
       "headers": {
-        "Authorization": "Bearer ${env:SENTRY_AUTH_TOKEN}"
+        "Authorization": "Sentry-Bearer ${env:SENTRY_AUTH_TOKEN}"
       }
     }
   }
