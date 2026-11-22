@@ -6,6 +6,12 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Remove finished lib task logs
+
+#### Removed
+
+- Ten completed `PLAN.md` files under `apps/web/src/lib/`. Nothing in the app imported them. Emitter fixtures and tests stay. (#2793)
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
