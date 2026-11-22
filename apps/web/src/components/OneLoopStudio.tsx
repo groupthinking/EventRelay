@@ -582,7 +582,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
   const { containerRef, ready: playerReady, failed: playerFailed, direct: playerDirect, seekTo } =
-    useYouTubePlayer(videoId);
+    useYouTubePlayer(videoId, { direct: preferDirectEmbed });
 
   useEffect(() => {
     setPreferDirectEmbed(false);
@@ -594,9 +594,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     failed: playerFailed,
   });
   const playerOverlay = studioPlayerOverlay(playerPhase);
-  // `playerDirect` means the IFrame API stalled or was blocked and a nocookie
-  // iframe is the player. That iframe stays visible. The opaque cover is only
-  // for an IFrame API embed error (`failed`), and Retry leaves that path.
+  // The hook owns the nocookie iframe and its seek ref. The shell only hides
+  // the cover; it does not swap in a second iframe.
   const showDirectEmbed = preferDirectEmbed || playerDirect;
   const showErrorCover = !showDirectEmbed && playerPhase === 'error';
   const embedErrorText = studioPlayerOverlay('error');
@@ -1060,19 +1059,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
             !isLive && 'max-h-[200px] max-w-[356px]',
           )}
         >
-          {showDirectEmbed ? (
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
-              title="YouTube source player"
-              className="h-full w-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              referrerPolicy="strict-origin-when-cross-origin"
-              data-testid="studio-player-fallback-iframe"
-            />
-          ) : (
-            <>
-              {!playerReady && !playerFailed ? (
+              {!showDirectEmbed && !playerReady && !playerFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`}
@@ -1094,7 +1081,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                 data-testid="studio-player"
                 title="YouTube source"
               />
-              {playerOverlay && playerPhase === 'loading' && !showErrorCover ? (
+              {!showDirectEmbed && playerOverlay && playerPhase === 'loading' && !showErrorCover ? (
                 <button
                   type="button"
                   data-testid="studio-player-overlay"
@@ -1138,8 +1125,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                   </div>
                 </div>
               ) : null}
-            </>
-          )}
         </div>
       ) : (
         <div

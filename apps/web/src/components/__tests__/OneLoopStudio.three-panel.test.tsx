@@ -22,8 +22,23 @@ const playerStateMock = vi.fn(() => ({
   play: vi.fn(),
   pause: vi.fn(),
 }));
+const playerBridge: {
+  useActual: boolean;
+  actual: ((videoId: string | null, options?: { direct?: boolean }) => {
+    containerRef: (node: HTMLDivElement | null) => void;
+    seekTo: (seconds: number) => void;
+    direct: boolean;
+    failed: boolean;
+    ready: boolean;
+  }) | null;
+} = { useActual: false, actual: null };
 vi.mock('@/lib/use-youtube-player', () => ({
-  useYouTubePlayer: () => playerStateMock(),
+  useYouTubePlayer: (videoId: string | null, options?: { direct?: boolean }) => {
+    if (playerBridge.useActual && playerBridge.actual) {
+      return playerBridge.actual(videoId, options);
+    }
+    return playerStateMock(videoId, options);
+  },
 }));
 
 const baseVideo: Video = {
@@ -37,6 +52,8 @@ const baseVideo: Video = {
 
 beforeEach(() => {
   vi.stubGlobal('React', React);
+  playerBridge.useActual = false;
+  playerBridge.actual = null;
   seekToMock.mockReset();
   playerStateMock.mockImplementation(() => ({
     containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
@@ -95,8 +112,9 @@ describe('OneLoopStudio IDE shell', () => {
     const poster = screen.getByTestId('studio-player-poster');
     expect(poster.getAttribute('src')).toBe('https://i.ytimg.com/vi/auJzb1D-fag/hqdefault.jpg');
     fireEvent.click(screen.getByTestId('studio-player-overlay'));
-    const iframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
-    expect(iframe.src).toContain('https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1');
+    expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
+    expect(screen.getByTestId('studio-player')).toBeTruthy();
+    expect(playerStateMock).toHaveBeenCalledWith('auJzb1D-fag', { direct: true });
 
     cleanup();
     playerStateMock.mockImplementation(() => ({
@@ -135,20 +153,15 @@ describe('OneLoopStudio IDE shell', () => {
       pause: vi.fn(),
     }));
     render(<OneLoopStudio />);
-    const iframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
-    expect(iframe.src).toContain(
-      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
-    );
+    expect(screen.getByTestId('studio-player')).toBeTruthy();
     expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
     expect(screen.queryByText(/did not load/i)).toBeNull();
 
     cleanup();
     render(<OneLoopStudio layout="live" />);
     expect(screen.getByTestId('live-studio')).toBeTruthy();
-    const liveIframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
-    expect(liveIframe.src).toContain(
-      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
-    );
+    expect(screen.getByTestId('studio-player')).toBeTruthy();
+    expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
     expect(screen.queryByText(/did not load/i)).toBeNull();
   });
 
@@ -171,12 +184,65 @@ describe('OneLoopStudio IDE shell', () => {
     expect(overlay.textContent).toMatch(/did not load/i);
 
     fireEvent.click(screen.getByTestId('studio-player-retry'));
-    const iframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
-    expect(iframe.src).toContain(
-      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
-    );
     expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
     expect(screen.queryByText(/did not load/i)).toBeNull();
+    expect(screen.getByTestId('studio-player')).toBeTruthy();
+    expect(playerStateMock).toHaveBeenCalledWith('auJzb1D-fag', { direct: true });
+  });
+
+  it('keeps chapter and transcript seek on the hook fallback iframe after the API stalls', async () => {
+    vi.useFakeTimers();
+    const actual = await vi.importActual<typeof import('@/lib/use-youtube-player')>(
+      '@/lib/use-youtube-player',
+    );
+    playerBridge.actual = actual.useYouTubePlayer;
+    playerBridge.useActual = true;
+
+    const { reviewPackFixture } = await import('@/test/grounded-spec-fixture');
+    const pack = reviewPackFixture();
+    pack.chapters = [{ start: 12, end: 40, topic: 'Calibration', key_points: ['Mount camera'] }];
+    pack.transcript = {
+      language: 'en',
+      full_text: 'Select a task to mark it complete.',
+      segments: [{ idx: 0, start_s: 4, end_s: 8, text: 'Select a task to mark it complete.' }],
+    };
+    useDashboardStore.setState({
+      videos: [
+        {
+          ...baseVideo,
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        },
+      ],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+
+    const iframe = screen.getByTestId('studio-player-fallback-iframe') as HTMLIFrameElement;
+    expect(iframe.closest('[data-testid="studio-player"]')).toBeTruthy();
+    expect(screen.queryByTestId('studio-player-overlay')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('studio-quick-jump-0'));
+    expect(iframe.isConnected).toBe(true);
+    expect(iframe.src).toContain('start=12');
+
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-transcript'));
+    fireEvent.click(screen.getByTestId('studio-transcript-seek-0'));
+    expect(iframe.isConnected).toBe(true);
+    expect(iframe.src).toContain('start=4');
+
+    playerBridge.useActual = false;
+    vi.useRealTimers();
   });
 
   it('never auto-selects failed runs on boot, formats Saved videos cleanly, and clears prior errors on switch or Analyze', async () => {
@@ -414,7 +480,7 @@ describe('OneLoopStudio IDE shell', () => {
     const iframe = host.querySelector('iframe') as HTMLIFrameElement | null;
     expect(iframe).not.toBeNull();
     expect(iframe?.src).toBe(
-      'https://www.youtube-nocookie.com/embed/6TrjBFW6EKg?rel=0&modestbranding=1',
+      'https://www.youtube-nocookie.com/embed/6TrjBFW6EKg?rel=0&modestbranding=1&autoplay=1',
     );
 
     unmount();
@@ -444,8 +510,13 @@ describe('OneLoopStudio IDE shell', () => {
     expect(result.current.failed).toBe(false);
     const iframe = host.querySelector('iframe') as HTMLIFrameElement | null;
     expect(iframe?.src).toBe(
-      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1',
+      'https://www.youtube-nocookie.com/embed/auJzb1D-fag?rel=0&modestbranding=1&autoplay=1',
     );
+    act(() => {
+      result.current.seekTo(12);
+    });
+    expect(iframe?.isConnected).toBe(true);
+    expect(iframe?.src).toContain('start=12');
 
     unmount();
     host.remove();

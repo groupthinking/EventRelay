@@ -148,7 +148,11 @@ export interface UseYouTubePlayerResult {
  * Polls getCurrentTime on a light interval so consumers can highlight the
  * active transcript line / timeline marker as the video plays.
  */
-export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult {
+export function useYouTubePlayer(
+  videoId: string | null,
+  options?: { direct?: boolean },
+): UseYouTubePlayerResult {
+  const forceDirect = options?.direct === true;
   // Track the container as state (via a callback ref) rather than a RefObject
   // so the init effect re-runs when the element is swapped, not only when
   // `videoId` changes.
@@ -213,9 +217,8 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
     }
 
     if (!container) {
-      // The Studio shell unmounts this host once it renders the direct iframe.
-      // Keep `direct` for the same video so that swap does not restart the API.
-      // A new video must try the API again.
+      // A new video must try the API again. The same video keeps `direct` so a
+      // host that is briefly detached does not drop the fallback iframe.
       if (videoChanged) {
         readyRef.current = false;
         fallbackIframeRef.current = null;
@@ -225,6 +228,28 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
         setIsPlaying(false);
       }
       return;
+    }
+
+    if (forceDirect) {
+      readyRef.current = false;
+      setReady(false);
+      setFailed(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        /* noop */
+      }
+      playerRef.current = null;
+      fallbackIframeRef.current = mountFallbackIframe(container, videoId, { autoplay: true });
+      setDirect(true);
+      return () => {
+        fallbackIframeRef.current = null;
+        playerRef.current = null;
+        container.replaceChildren();
+      };
     }
 
     readyRef.current = false;
@@ -251,7 +276,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
         /* noop */
       }
       playerRef.current = null;
-      fallbackIframeRef.current = mountFallbackIframe(container, videoId);
+      fallbackIframeRef.current = mountFallbackIframe(container, videoId, { autoplay: true });
       setReady(false);
       setIsPlaying(false);
       // The script never started the player. The nocookie iframe may still work,
@@ -349,7 +374,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
       fallbackIframeRef.current = null;
       container.replaceChildren();
     };
-  }, [videoId, container, startPolling, stopPolling]);
+  }, [videoId, container, forceDirect, startPolling, stopPolling]);
 
   const seekTo = useCallback((seconds: number) => {
     const target = Math.max(0, seconds);
