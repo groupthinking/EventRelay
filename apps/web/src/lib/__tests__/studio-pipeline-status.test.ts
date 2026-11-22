@@ -368,7 +368,7 @@ describe('studio-pipeline-status', () => {
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
-  it('enables Export from pack exportability and ignores stack-check hold copy', () => {
+  it('enables Ship this from pack exportability and ignores named-tool hold copy', () => {
     expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
     expect(
       studioShipEnabled({
@@ -377,18 +377,25 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBe(true);
     expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
-    const cta = studioShipCta({ canExport: true, holdReason: 'Production is held until 4 stack check(s) pass.' });
-    expect(cta.label).toBe('Export');
+    const cta = studioShipCta({
+      canExport: true,
+      holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+    });
+    expect(cta.label).toBe('Ship this');
     expect(cta.enabled).toBe(true);
-    expect(cta.hint.toLowerCase()).toMatch(/skip|unknown/);
+    expect(cta.hint).toMatch(/can be skipped/i);
+    expect(cta.hint).toMatch(/not a production hold/i);
+    expect(cta.hint).not.toMatch(/\bpassed\b/i);
     expect(studioShipCta({ canExport: false }).enabled).toBe(false);
+    expect(studioShipCta({ canExport: false }).label).toBe('Ship this');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
-    expect(studio).toContain('Export');
+    expect(studio).toContain('{shipCta.label}');
     expect(studio).not.toContain('studio-deploy-button');
     expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
+    expect(studio).not.toMatch(/disabled=\{deployBusy \|\| !hasPayload \|\| Boolean\(holdReason\)\}/);
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {

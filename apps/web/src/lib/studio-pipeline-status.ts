@@ -241,8 +241,8 @@ export function studioCanExport(input: {
 }
 
 /**
- * Anonymous Export is pack-exportability only. Stack-check hold copy
- * (SeaDance/Cluely-class unknown, signed-out vendor skip) never disables it.
+ * Anonymous Ship this is pack-exportability only. Named-tool checks
+ * (SeaDance/Cluely) can be skipped and are not a production hold.
  */
 export function studioShipEnabled(input: {
   canExport: boolean;
@@ -255,14 +255,14 @@ export function studioShipEnabled(input: {
 export function studioShipCta(input: {
   canExport: boolean;
   holdReason?: string | null;
-}): { label: 'Export'; enabled: boolean; hint: string } {
+}): { label: 'Ship this'; enabled: boolean; hint: string } {
   const enabled = studioShipEnabled(input);
   return {
-    label: 'Export',
+    label: 'Ship this',
     enabled,
     hint: enabled
-      ? 'Download the Video Pack ZIP. Named tools that UVAI cannot run are skip/unknown — they do not block export.'
-      : 'Run analysis first so there is a pack to export.',
+      ? 'Download the Video Pack ZIP. Named tools UVAI cannot run can be skipped — they are not a production hold.'
+      : 'Run analysis first so there is a pack to ship.',
   };
 }
 

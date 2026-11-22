@@ -965,7 +965,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           )}
         >
           <Download className="h-4 w-4" aria-hidden />
-          Export
+          {shipCta.label}
         </button>
         {isLive ? (
           <>
