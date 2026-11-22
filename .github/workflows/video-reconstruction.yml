@@ -42,16 +42,19 @@ jobs:
       - name: Install locked dependencies without lifecycle scripts
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Install local browser
+        id: browser
         run: npm exec --workspace apps/web -- playwright install --with-deps chromium
       - name: Select the workspace Playwright browser
         run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'RECONSTRUCTION_CHROMIUM=' + require('./apps/web/node_modules/playwright').chromium.executablePath() + '\n')"
       - name: Type-check the reconstruction boundary
+        id: types
         run: npm exec -- tsc -p scripts/video-reconstruction/tsconfig.json
       - name: Contract, current receipts and browser regressions
         run: node --import tsx --test tests/video-reconstruction*.test.ts
       - name: Existing EventRelay recovery regressions
         run: python3 -m unittest discover -s tests -p test_relay_local_harness.py -v
       - name: Reconstruct the retained real source and verify current evidence
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' && steps.types.outcome == 'success' }}
         run: |
           node --import tsx scripts/video-reconstruction/cli.ts run --out "$RUNNER_TEMP/video-reconstruction"
           node --import tsx scripts/video-reconstruction/cli.ts verify --out "$RUNNER_TEMP/video-reconstruction"

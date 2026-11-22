@@ -70,7 +70,15 @@ The live and retained packs parsed to the same JSON content. Their exact byte ha
 
 Use a Linux checkout with the repository dependencies installed, Node 24, Python 3, and a supported Chromium installation. The generated browser app itself has no build dependencies. The local command journal requires the existing Python standard-library runtime. No model credentials are needed for this scoped reconstruction.
 
-From the repository root:
+Install the workspace Playwright browser and recorder from the repository root.
+
+```bash
+npm exec --workspace apps/web -- playwright install --with-deps chromium
+```
+
+This installs Playwright’s Chromium build, its system dependencies, and the FFmpeg binary used to record browser sessions. Playwright requires its FFmpeg binary even when the runner uses a system Chromium executable.
+
+Run the reconstruction commands from the repository root.
 
 ```bash
 node --import tsx scripts/video-reconstruction/cli.ts run --out /tmp/uvai-reconstruction

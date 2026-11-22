@@ -272,17 +272,25 @@ export function validateFiles(directory: string, entries: readonly GeneratedFile
     for (const name of readdirSync(join(directory, relativeDirectory))) {
       const relativePath = relativeDirectory ? `${relativeDirectory}/${name}` : name;
       const path = join(directory, relativePath);
-      const stat = lstatSync(path);
-      if (directories.has(relativePath) && stat.isDirectory()) {
+      const unsafePath = `Unexpected or unsafe generated path: ${relativePath}`;
+      if (directories.has(relativePath)) {
+        if (!lstatSync(path).isDirectory()) throw new Error(unsafePath);
         visit(relativePath);
         continue;
       }
       const file = expected.get(relativePath);
-      if (!file || !stat.isFile()) throw new Error(`Unexpected or unsafe generated path: ${relativePath}`);
-      const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      if (!file) throw new Error(unsafePath);
+      let fd: number;
+      try {
+        fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+      } catch (error) {
+        if (error instanceof Error && 'code' in error && error.code === 'ELOOP') throw new Error(unsafePath, { cause: error });
+        throw error;
+      }
       try {
         const opened = fstatSync(fd);
-        if (!opened.isFile() || opened.nlink !== 1 || opened.size !== file.bytes) {
+        if (!opened.isFile()) throw new Error(unsafePath);
+        if (opened.nlink !== 1 || opened.size !== file.bytes) {
           throw new Error(`Generated file byte count or type mismatch: ${relativePath}`);
         }
         const bytes = readFileSync(fd);

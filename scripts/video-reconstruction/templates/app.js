@@ -240,12 +240,15 @@ if (imageFile) {
         throw new Error('Choose an image within 8192 × 8192 pixels and 24 megapixels.');
       }
       if (request !== selection) return;
+      const previous = byId('local-image');
+      decoded.id = previous.id;
+      decoded.alt = previous.alt;
+      const displayWidth = Math.min(decoded.naturalWidth, 560 * decoded.naturalWidth / decoded.naturalHeight);
+      byId('image-stage').style.width = displayWidth + 'px';
+      previous.replaceWith(decoded);
       if (imageUrl) URL.revokeObjectURL(imageUrl);
       imageUrl = candidate;
       candidate = undefined;
-      const displayWidth = Math.min(decoded.naturalWidth, 560 * decoded.naturalWidth / decoded.naturalHeight);
-      byId('image-stage').style.width = displayWidth + 'px';
-      byId('local-image').src = imageUrl;
       byId('image-name').textContent = file.name;
       resetBoxes();
       show(byId('spatial-empty'), false);
