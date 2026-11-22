@@ -6,6 +6,23 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Obsolete unused-surface cleanup
+
+#### Removed
+
+- Fly deploy script and `FLY_API_TOKEN` setup/template refs
+- Broken `scripts/nightly_audit_agent.py` and its unit test
+- Empty `STAGE_RUNNERS` autonomous-video CI scripts, workflow, and unit tests
+- Unused `infrastructure/k8s/ray/**` manifests (kept `src/uvai/ml` library)
+- Deleted-backend verify/populate/load probes and `AUTOMATION_LAUNCHER.sh`
+
+#### Changed
+
+- Relocated `knowledge_base` to `src/agents/knowledge_base.py` and fixed the
+  `mcp_agent_network` import (no more `scripts/` on `sys.path`)
+- Retargeted `tests/e2e/pipeline.test.ts` so `/features` and `/dashboard`
+  assert permanent redirects to `/` and `/studio`
+
 ### 2026-11-13: Agent staff governance (docs)
 
 #### Added
