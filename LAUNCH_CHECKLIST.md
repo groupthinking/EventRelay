@@ -96,10 +96,10 @@ production `assertEntitlementDurability()` **throws on boot** without Upstash.
 ### 1.5 Google OAuth + NextAuth (sign-in) — ✅ LIVE (providers 200)
 Verified 2026-07-14: `/api/auth/providers` returns Google and `/api/auth/csrf` returns a token, so `NEXTAUTH_SECRET` + Google creds are set in Production. Auth is Google-only.
 
-> **`NEXTAUTH_SECRET` is mandatory in production.** If it is missing, `/dashboard`
-> and non-public `/api/*` fail **closed** with HTTP 503 instead of being served
-> to anonymous visitors. To run a deliberately public production deployment, set
-> `AUTH_ALLOW_UNAUTHENTICATED=1` explicitly.
+> **`NEXTAUTH_SECRET` is mandatory in production.** If it is missing, non-public
+> `/api/*` fail **closed** with HTTP 503 instead of being served to anonymous
+> visitors. `/dashboard` redirects to `/studio`. To run a deliberately public
+> production deployment, set `AUTH_ALLOW_UNAUTHENTICATED=1` explicitly.
 - Create a Google OAuth app (Authorized redirect URI:
   `https://<domain>/api/auth/callback/google`).
 - Set in `apps/web/.env.local`:
@@ -120,13 +120,12 @@ Verified 2026-07-14: `/api/auth/providers` returns Google and `/api/auth/csrf` r
 
 ### 1.7 Vercel AI Gateway (recommended)
 The frontend already prefers the Gateway when configured
-(`apps/web/src/lib/vercel-ai-gateway.ts`; e.g. `extract-events/route.ts` calls
-`gatewayChat()` when `hasAiGatewayKey()`), falling back to direct
+(`apps/web/src/lib/vercel-ai-gateway.ts`), falling back to direct
 Gemini/OpenAI otherwise. Enabling it buys unified billing, one key for many
 providers, failover, spend caps, and request observability — zero code changes.
 - Set `AI_GATEWAY_API_KEY` (or `VERCEL_AI_GATEWAY_API_KEY`) in the Vercel env.
 - Optional overrides: `VERCEL_AI_GATEWAY_MODEL` (default
-  `google/gemini-2.5-flash`) and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL` (default
+  `google/gemini-3.8-flash`) and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL` (default
   `openai/text-embedding-3-small`).
 - Leave unset to keep direct-provider behavior.
 
@@ -142,7 +141,7 @@ Vercel has none by default, so `/api/agents/dispatch` returns 503.
 - Backend deploy image should install the `[youtube]` extra so server-side
   transcript capture (`youtube-transcript-api`, `yt-dlp`) works without leaning
   on paid AI fallbacks.
-- Run Alembic migrations against the prod DB (Postgres) before first traffic.
+- This tree has no `alembic.ini`. Do not run Alembic from this repository (`docs/MIGRATION_TRUTH.md`).
 
 *(This is tracked as follow-up work after the code/CI hygiene PR lands.)*
 

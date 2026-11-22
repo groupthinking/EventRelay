@@ -14,7 +14,6 @@ UVAI is the public product; EventRelay is the internal runtime and repository na
 | Grounded model extraction | [`video-pack-extractor.ts`](../apps/web/src/lib/video-pack-extractor.ts) |
 | Pack identity and format | [`video-pack.ts`](../apps/web/src/lib/video-pack.ts) |
 | Upstash REST pack persistence | [`video-pack-store.ts`](../apps/web/src/lib/video-pack-store.ts) |
-| Backend pack store (same Upstash keys) | [`videopack/store_factory.py`](../src/youtube_extension/videopack/store_factory.py) |
 | Deep audit remediation tracker (#2175) | [`AUDIT_REMEDIATION_STATUS.md`](AUDIT_REMEDIATION_STATUS.md), [`AUDIT_SESSION_CLOSEOUT_REPORT.md`](AUDIT_SESSION_CLOSEOUT_REPORT.md), [`CURRENT_ARCHITECTURE.md`](CURRENT_ARCHITECTURE.md), [`AUDIT_ISSUE_TRIAGE.md`](AUDIT_ISSUE_TRIAGE.md), [`MIGRATION_TRUTH.md`](MIGRATION_TRUTH.md) |
 | Evidence-workspace emitter | [`emit-app-builder-sandbox.ts`](../apps/web/src/lib/emit-app-builder-sandbox.ts) |
 | Sandbox HTTP endpoint | [`api/video/sandbox/route.ts`](../apps/web/src/app/api/video/sandbox/route.ts) |
@@ -34,9 +33,8 @@ EventRelay/
 ├── src/agents/                Internal agent implementations
 ├── mcp-servers/               Internal MCP implementations
 ├── tools/mcp/                 Repository tooling servers
-├── packages/                  Shared code
 ├── sdk/                       Python and TypeScript clients
-├── tests/                     Backend and integration tests
+├── tests/                     Backend tests
 ├── docs/                      Current guidance plus dated historical records
 ├── scripts/                   CI, development, deployment, maintenance helpers
 ├── infrastructure/            Deployment/infrastructure definitions
@@ -54,7 +52,7 @@ Directory presence does not establish an active deployment or npm workspace. Roo
 - Web library tests: `apps/web/src/lib/__tests__/`.
 - Web component tests: `apps/web/src/components/__tests__/`.
 - Route tests: beside routes under `apps/web/src/app/api/`.
-- Backend tests: `tests/`; API response models must stay aligned with `sdk/python/eventrelay_sdk/types.py`.
+- Backend tests: `tests/`.
 - Commands and requirements: [README.md](../README.md), [package.json](../package.json), [apps/web/package.json](../apps/web/package.json), and [pyproject.toml](../pyproject.toml).
 
 ## Documentation authority and history

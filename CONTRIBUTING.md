@@ -7,17 +7,17 @@ We welcome contributions to EventRelay! Please follow these guidelines to ensure
 1.  **Fork the repository** and clone it locally.
 2.  **Set up your environment**:
     ```bash
-    python -m venv .venv
+    python3 -m venv .venv
     source .venv/bin/activate
-    pip install -e .[dev,youtube,ml]
-    npm install                        # installs all monorepo workspaces
+    pip install -e '.[dev,youtube]'
+    npm ci
     ```
 3.  **Start the services**:
     ```bash
-    # Terminal 1 — backend (PYTHONPATH=src is required; see CLAUDE.md)
-    PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
+    # Terminal 1 — backend (PYTHONPATH=src is required; see README.md)
+    PYTHONPATH=src python3 -m uvicorn youtube_extension.main:app --reload --port 8000
     # Terminal 2 — frontend
-    turbo run dev
+    npm run dev:web
     ```
 4.  **Create a branch** for your feature or fix:
     ```bash
