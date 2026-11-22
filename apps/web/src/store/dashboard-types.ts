@@ -3,6 +3,7 @@ import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evid
 import type { VideoPackCitation } from '@/lib/emit-video-pack';
 import type { LinkedSop } from '@/lib/linked-sop';
 import type { SpecReviewAcknowledgment } from '@/lib/grounded-build-spec';
+import type { LiveTaskEdits } from '@/lib/live-studio-tasks';
 
 export interface PipelineResult {
   live_url: string | null;
@@ -53,6 +54,10 @@ export interface Video {
   /** Hashed VideoPack v0 citation emitted from paste-URL. */
   videoPack?: VideoPackCitation;
   specReviewAcknowledgment?: SpecReviewAcknowledgment;
+  /** Inline Studio task edits keyed by task id; source evidence stays untouched. */
+  taskEdits?: LiveTaskEdits;
+  /** Present when this record is the bundled cached sample replayed client-side. */
+  sample?: { label: string; capturedAt: string };
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
   failure?: {

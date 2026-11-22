@@ -1,6 +1,6 @@
 import { vercelAdapter } from '@flags-sdk/vercel';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { agentWorkflowUi, customBadge } from '@/flags';
+import { customBadge, liveStudio } from '@/flags';
 
 beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -13,7 +13,6 @@ afterEach(() => {
 
 describe.each([
   { key: customBadge.key, featureFlag: customBadge },
-  { key: agentWorkflowUi.key, featureFlag: agentWorkflowUi },
 ])('$key', ({ featureFlag }) => {
   function evaluateFlag() {
     return featureFlag.run({
@@ -50,5 +49,41 @@ describe.each([
     vi.spyOn(vercelAdapter(), 'decide').mockRejectedValue(redirect);
 
     await expect(evaluateFlag()).rejects.toBe(redirect);
+  });
+});
+
+describe(liveStudio.key, () => {
+  function evaluateFlag(featureFlag = liveStudio) {
+    return featureFlag.run({
+      identify: undefined,
+      request: new Request('https://uvai.example/'),
+    });
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it('defaults to enabled outside production so previews show the live Studio', async () => {
+    vi.spyOn(vercelAdapter(), 'decide').mockResolvedValue(undefined);
+
+    await expect(evaluateFlag()).resolves.toBe(true);
+  });
+
+  it('defaults to disabled in production until the flag is turned on', async () => {
+    vi.stubEnv('VERCEL_ENV', 'production');
+    vi.resetModules();
+    const flags = await import('@/flags');
+    const adapter = (await import('@flags-sdk/vercel')).vercelAdapter();
+    vi.spyOn(adapter, 'decide').mockRejectedValue(new Error('Flag provider unavailable'));
+
+    await expect(evaluateFlag(flags.liveStudio)).resolves.toBe(false);
+  });
+
+  it.each([true, false])('preserves the provider value %s', async (value) => {
+    vi.spyOn(vercelAdapter(), 'decide').mockResolvedValue(value);
+
+    await expect(evaluateFlag()).resolves.toBe(value);
   });
 });

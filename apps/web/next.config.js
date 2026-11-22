@@ -165,7 +165,8 @@ const nextConfig = {
       },
       {
         source: '/features',
-        destination: '/',
+        // The live-studio flag replaces `/` with the on-ramp; the brochure stays on the classic shell.
+        destination: '/?shell=classic',
         permanent: true,
       },
       {

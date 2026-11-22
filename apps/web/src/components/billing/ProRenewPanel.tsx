@@ -65,11 +65,11 @@ export default function ProRenewPanel({ annual, className }: ProRenewPanelProps)
     <div
       data-testid="pro-renew-panel"
       className={clsx(
-        'max-w-xl mx-auto mb-10 p-5 rounded-2xl border border-white/[0.1] bg-white/[0.03] text-center',
+        'max-w-xl mx-auto mb-10 rounded-2xl border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface)] p-5 text-center text-[var(--uvai-ink)]',
         className,
       )}
     >
-      <p className="text-sm text-white/70 mb-3">
+      <p className="mb-3 text-sm text-[var(--uvai-ink-soft)]">
         {status?.plan === 'pro'
           ? `Your Pro plan is ${status.status}. Renew or change billing anytime.`
           : 'Returning subscriber? Renew Pro without re-verifying as a new signup.'}
@@ -79,13 +79,13 @@ export default function ProRenewPanel({ annual, className }: ProRenewPanelProps)
         onClick={handleRenew}
         disabled={loading}
         className={clsx(
-          'btn btn-secondary py-2.5 px-6 text-sm',
-          loading && 'opacity-60 cursor-not-allowed',
+          'uvai-btn uvai-btn-primary px-6 py-2.5 text-sm',
+          loading && 'cursor-not-allowed opacity-60',
         )}
       >
         {loading ? 'Opening renewal checkout…' : 'Renew Pro subscription'}
       </button>
-      {error && <p className="text-xs text-red-400 mt-2">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
     </div>
   );
 }

@@ -1,0 +1,111 @@
+// @vitest-environment jsdom
+import React from 'react';
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import LiveStudioWorkspace from '@/components/studio/live/LiveStudioWorkspace';
+import { loadSamplePack, sampleReplaySteps } from '@/lib/sample-pack';
+import type { Video } from '@/store/dashboard-store';
+
+const citation = loadSamplePack();
+const steps = sampleReplaySteps(citation);
+
+function videoAt(stepIndex: number, status: Video['status'] = 'processing'): Video {
+  const step = steps[stepIndex];
+  return {
+    id: 'sample-row',
+    title: 'Sample',
+    url: citation.sourceUrl,
+    status,
+    progress: step.progress,
+    videoPack: { ...citation, pack: step.pack },
+  };
+}
+
+function workspace(video: Video, live: boolean) {
+  return (
+    <LiveStudioWorkspace
+      header={<span>header</span>}
+      player={<div>player</div>}
+      chat={<div>chat</div>}
+      deliverables={<div>deliverables</div>}
+      video={video}
+      live={live}
+      statusText="status"
+      canSeek
+      onSeek={vi.fn()}
+      onSaveTaskEdits={vi.fn()}
+    />
+  );
+}
+
+/** Step the clock so each reveal tick re-renders before the next timer is scheduled. */
+function advance(ms: number) {
+  for (let elapsed = 0; elapsed < ms; elapsed += 20) {
+    act(() => {
+      vi.advanceTimersByTime(20);
+    });
+  }
+}
+
+beforeEach(() => {
+  vi.stubGlobal('React', React);
+  vi.useFakeTimers();
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ available: false }), { status: 200 })));
+});
+
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+describe('Live Studio streaming render', () => {
+  it('shows skeleton rows for sections that have not arrived yet', () => {
+    render(workspace(videoAt(0), true));
+    expect(screen.getByTestId('live-transcript-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('live-chapters-skeleton')).toBeTruthy();
+    expect(screen.getByTestId('live-tasks-skeleton')).toBeTruthy();
+    expect(screen.queryByTestId('live-transcript-line-0')).toBeNull();
+    const stages = screen.getByTestId('live-stages');
+    expect(stages.querySelector('[data-stage="pack"]')?.getAttribute('data-state')).toBe('done');
+    expect(stages.querySelector('[data-stage="transcript"]')?.getAttribute('data-state')).toBe('active');
+  });
+
+  it('fills transcript rows in place a few at a time instead of all at once', () => {
+    const { rerender } = render(workspace(videoAt(0), true));
+    const firstChunk = steps.findIndex((step) => step.stage === 'transcript');
+    rerender(workspace(videoAt(firstChunk), true));
+    const arrived = steps[firstChunk]?.pack.transcript?.segments?.length ?? 0;
+    expect(arrived).toBeGreaterThan(4);
+
+    advance(40);
+    const early = screen.queryAllByTestId(/^live-transcript-line-/).length;
+    expect(early).toBeGreaterThan(0);
+    expect(early).toBeLessThan(arrived);
+    expect(screen.getByTestId('live-transcript-skeleton')).toBeTruthy();
+
+    advance(2_000);
+    expect(screen.queryAllByTestId(/^live-transcript-line-/)).toHaveLength(arrived);
+    expect(screen.getByTestId('live-transcript').textContent).toContain('streaming');
+  });
+
+  it('renders chapters, keyframes, tasks and checks once the pack completes, with no skeletons left', () => {
+    const { rerender } = render(workspace(videoAt(0), true));
+    rerender(workspace(videoAt(steps.length - 1, 'complete'), false));
+    advance(5_000);
+    expect(screen.queryAllByTestId(/^live-transcript-line-/)).toHaveLength(41);
+    expect(screen.queryAllByTestId(/^live-chapter-\d+$/)).toHaveLength(9);
+    expect(screen.queryAllByTestId(/^live-keyframe-\d+$/)).toHaveLength(12);
+    expect(screen.getByTestId('live-task-G-REQ-01')).toBeTruthy();
+    expect(screen.getByTestId('live-task-ACT-03')).toBeTruthy();
+    expect(screen.queryByTestId('live-transcript-skeleton')).toBeNull();
+    expect(screen.queryByTestId('live-tasks-skeleton')).toBeNull();
+    const stages = screen.getByTestId('live-stages');
+    expect([...stages.querySelectorAll('[data-state]')].every((node) => node.getAttribute('data-state') === 'done')).toBe(true);
+  });
+
+  it('labels the sample as replayed cached data', () => {
+    render(workspace({ ...videoAt(steps.length - 1, 'complete'), sample: { label: 'Cached sample · replayed in pipeline order', capturedAt: '2026-10-16T07:19:03.888Z' } }, false));
+    expect(screen.getByTestId('live-sample-label').textContent).toMatch(/Cached sample/);
+  });
+});

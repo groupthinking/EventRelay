@@ -17,9 +17,9 @@ You are a senior Python backend engineer specializing in the EventRelay project'
 
 - **FastAPI Development**: Building REST APIs, async endpoints, dependency injection
 - **Python Async**: asyncio, aiofiles, aiohttp patterns
-- **SQLAlchemy**: ORM models, migrations with Alembic, database operations
+- **SQLAlchemy**: ORM models and database operations
 - **Pydantic**: Request/response models, validation, settings management
-- **Service Architecture**: Organizing code in `src/youtube_extension/` and `src/uvai/`
+- **Service Architecture**: Organizing code in `src/youtube_extension/`
 - **Error Handling**: Comprehensive exception handling with proper logging
 - **Type Safety**: Using type hints throughout the codebase
 
@@ -27,20 +27,18 @@ You are a senior Python backend engineer specializing in the EventRelay project'
 
 ### Backend Architecture
 ```
-src/
-├── youtube_extension/
-│   ├── backend/           # FastAPI routers, deployment helpers
-│   ├── services/          # Business logic, agents, workflows
-│   ├── integrations/      # Cloud AI, external providers
-│   ├── processors/        # Video processors
-│   └── main.py           # FastAPI entry point
-└── uvai/
-    └── api/              # Additional API modules
+apps/web/                    # Next.js app
+apps/backend/main.py         # caption service (YouTube caption acquisition)
+src/youtube_extension/       # internal FastAPI runtime
+  services/
+  integrations/
+  processors/
+  main.py
 ```
 
 ### Key Technologies
 - **Framework**: FastAPI 0.104+
-- **Python Version**: 3.9+
+- **Python Version**: 3.11–3.12 (`pyproject.toml`)
 - **Database**: SQLAlchemy 2.0+ with SQLite (dev) / PostgreSQL (prod)
 - **Async**: uvicorn with async/await patterns
 - **Validation**: Pydantic v2.5+
@@ -114,7 +112,6 @@ async def get_video(
 
 ### Test File Location
 - Unit tests: `tests/unit/`
-- Integration tests: `tests/integration/`
 - Fixtures: `tests/fixtures/`
 
 ### Default Test Video ID
@@ -189,19 +186,15 @@ ruff check . --fix
 pip install -e .[dev,youtube,ml]
 
 # Run development server
-uvicorn uvai.api.main:app --reload --port 8000
+PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
 
 # Run tests
-pytest tests/ -v --cov
+pytest tests/unit/ -v --cov
 
 # Lint and format
 black .
 ruff check . --fix
 mypy src/
-
-# Database migrations
-alembic revision --autogenerate -m "Description"
-alembic upgrade head
 ```
 
 ## Security Best Practices
@@ -214,7 +207,7 @@ alembic upgrade head
 
 ## Boundaries
 
-- **Never modify**: Frontend code in `frontend/`, Node.js configs
+- **Never modify**: Next.js app code in `apps/web/`, Node.js configs
 - **Always update**: Tests when changing functionality
 - **Document**: New API endpoints in docstrings and README
 - **Check**: Environment variables are properly documented
@@ -224,7 +217,7 @@ alembic upgrade head
 ### Adding a New API Endpoint
 
 1. Create Pydantic models in appropriate module
-2. Add router in `src/youtube_extension/backend/` or `src/uvai/api/`
+2. Product routes live in the Next.js app (`apps/web`). The caption service is `apps/backend/main.py`. The internal runtime entry is `src/youtube_extension/main.py`.
 3. Implement with proper error handling and logging
 4. Add tests in `tests/`
 5. Update API documentation in docstrings
@@ -233,10 +226,9 @@ alembic upgrade head
 ### Working with Database
 
 1. Define SQLAlchemy models
-2. Create Alembic migration
-3. Use dependency injection for sessions
-4. Handle errors with rollback
-5. Add tests with test fixtures
+2. Use dependency injection for sessions
+3. Handle errors with rollback
+4. Add tests with test fixtures
 
 ### Integrating External APIs
 
@@ -250,7 +242,7 @@ alembic upgrade head
 
 - **Services**: Business logic goes in `src/youtube_extension/services/`
 - **Processors**: Video processing in `src/youtube_extension/processors/`
-- **Agents**: Agent implementations in `development/agents/`
+- **Agents**: Agent implementations in `src/agents/` and `src/youtube_extension/services/agents/`
 - **Models**: Pydantic models near their routers
 - **Tests**: Mirror source structure in `tests/`
 
@@ -271,8 +263,7 @@ When working with MCP (Model Context Protocol):
 - Follow JSON-RPC 2.0 protocol
 - Implement proper error codes
 - Use AST-based code analysis for safety
-- Store MCP servers in `external/mcp_servers/`
-- Test with `mcp_youtube-0.2.0/` examples
+- MCP servers live in `mcp-servers/` and `src/youtube_extension/core/mcp/`
 
 ## Remember
 

@@ -1,7 +1,5 @@
 # UVAI — Universal Video Action Intelligence
 
-<!-- ✅ AI agent access verified: write/sync capability confirmed via test task resolution -->
-
 [![CI](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml/badge.svg)](https://github.com/groupthinking/EventRelay/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -9,7 +7,7 @@ Paste a YouTube URL → inspect a hashed **Video Pack** → export grounded buil
 
 ## Start here
 
-- [AGENTS.md](AGENTS.md): locked product, pricing, storage, and scope rules.
+- [AGENTS.md](AGENTS.md): locked product, pricing, storage, and scope rules. After checkout, `grok inspect --cwd <this-repo>` should list those instructions. Project MCP stubs (GitHub / Vercel, env-var tokens only) live in `.grok/config.toml`.
 - [Repository map](docs/REPO_MAP.md): current entry points and where code lives.
 - [Build-out roadmap](docs/MASTER_ROADMAP.md): inspected capabilities, remaining work, and acceptance criteria.
 - [Next authorized cut](docs/NEXT-PHASE.md): Origin G.A.T.E.; later product work remains held.
@@ -88,12 +86,6 @@ npm --workspace=apps/web run lint
 npm run build:web
 ```
 
-For backend model changes:
-
-```bash
-PYTHONPATH=src python3 -m pytest tests/unit/test_api_v1_models.py -v --override-ini='addopts='
-```
-
 Default video fixture: `auJzb1D-fag`. Preserve separately documented historical fixtures when checking their original cuts. A passing unit suite, generated bundle, or old smoke receipt is not a fresh production end-to-end result.
 
 ## Repository layout
@@ -103,8 +95,8 @@ Default video fixture: `auJzb1D-fag`. Preserve separately documented historical 
 | `apps/web/` | Next.js App Router product and server routes |
 | `src/youtube_extension/` | Internal Python/FastAPI runtime |
 | `src/agents/`, `mcp-servers/`, `tools/mcp/` | Internal orchestration and tooling |
-| `sdk/` | Client SDKs; keep Python response types aligned with backend models |
-| `packages/` | Shared code; root npm workspace membership is defined in `package.json` |
+| `sdk/` | Client SDKs |
+| `apps/backend/main.py` | Caption service (YouTube caption acquisition) |
 | `tests/`, `apps/web/src/**/__tests__/` | Backend and web verification |
 | `docs/`, `scripts/`, `.github/` | Documentation, operational helpers, and CI |
 

@@ -111,7 +111,7 @@ for (const viewport of [{ width: 830, height: 709 }, { width: 390, height: 844 }
     await openCodeAndSpecTab(page);
     await expect(acknowledgment).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Clear local acknowledgment' })).toHaveCount(0);
-    await expect(page.getByTestId('studio-ide-ship')).toHaveText('Export');
+    await expect(page.getByTestId('studio-ide-ship')).toHaveText('Ship this');
     await expect(page.getByTestId('studio-deploy-button')).toHaveCount(0);
     expect(unexpected).toEqual([]);
   });

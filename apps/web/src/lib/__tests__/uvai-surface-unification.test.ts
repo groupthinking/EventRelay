@@ -64,7 +64,7 @@ describe('UVAI is one product surface', () => {
     const pricing = readSource('app/pricing/page.tsx');
     const nav = readSource('components/Nav.tsx');
     expect(config).toContain("source: '/features'");
-    expect(config).toMatch(/source: '\/features'[\s\S]{0,120}destination: '\/'/);
+    expect(config).toMatch(/source: '\/features'[\s\S]{0,200}destination: '\/(\?shell=classic)?'/);
     expect(pricing).toContain("from '@/components/Nav'");
     expect(pricing).not.toContain('href="/dashboard"');
     // Orphaned landing/ components deleted per product direction (2026-10-07).

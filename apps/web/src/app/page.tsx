@@ -15,13 +15,14 @@ import Nav from '@/components/Nav';
 import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
 import HomeTemplateShell from '@/components/home/HomeTemplateShell';
+import LiveOnRamp from '@/components/home/LiveOnRamp';
 import '@/components/home/home-template.css';
 import '@/styles/home-shipper.css';
 import {
   WORKFLOW_PRO_PRODUCT_NAME,
   workflowProPriceLabel,
 } from '@/lib/billing/checkout-config';
-import { customBadge } from '@/flags';
+import { customBadge, liveStudio } from '@/flags';
 
 export const metadata: Metadata = {
   title: 'UVAI — YouTube videos to bound tasks',
@@ -142,8 +143,13 @@ const AGENT_FLOW = ['Video', 'Video Pack', 'Tasks', 'Checks', 'Review'] as const
  * 3-card preview strip -> hero bento (emerald/cobalt stage composer + 3x2 badged process tiles)
  * -> compact workflow band -> compact plans CTA strip -> footer.
  */
-export default async function HomePage() {
-  const showCustomBadge = await customBadge();
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const [showCustomBadge, liveStudioEnabled, params] = await Promise.all([customBadge(), liveStudio(), searchParams]);
+  if (liveStudioEnabled && params.shell !== 'classic') return <LiveOnRamp />;
 
   return (
     <main className="min-h-screen overflow-x-clip" style={{ background: 'var(--uvai-bg)' }}>

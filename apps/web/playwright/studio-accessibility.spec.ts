@@ -20,7 +20,8 @@ test.afterEach(async ({ page }, testInfo) => {
 // starting video processing, AI generation, checkout, or deployment.
 async function openStudio(page: Page, width: number) {
   await page.setViewportSize({ width, height: 900 });
-  await page.goto('/studio');
+  // The live-studio flag serves the live workspace; this suite covers the classic IDE shell.
+  await page.goto('/studio?shell=classic');
   await expect(page.getByTestId('studio-ide-shell')).toBeVisible();
 }
 
@@ -114,7 +115,7 @@ test('Home primary navigation links remain visible without horizontal overflow a
   await page.goto('/');
   const primaryNav = page.locator('nav.template-nav').first();
   await expect(primaryNav).toBeVisible();
-  for (const label of ['Home', 'Studio', 'Pricing', 'API Docs']) {
+  for (const label of ['Home', 'Studio', 'Pricing']) {
     await expect(primaryNav.getByRole('link', { name: label, exact: true })).toBeVisible();
   }
   await expectNoOverflow(page);

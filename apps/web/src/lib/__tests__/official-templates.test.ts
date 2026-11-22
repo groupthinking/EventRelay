@@ -220,10 +220,22 @@ describe('deployHoldReason', () => {
       expect(stackCheckStatus(item, [], 'signed-in')).toBe('unknown');
     }
     expect(stackCheckStatusLabel('unknown')).toMatch(/cannot run this check/i);
+    expect(stackCheckStatusLabel('unknown')).toMatch(/can be skipped/i);
+    expect(stackCheckStatusLabel('unknown')).toMatch(/not a production hold/i);
+    expect(stackCheckStatusLabel('unknown')).not.toMatch(/\b(passed|done)\b/i);
     const rows = stack.map((item) => studioStackCheckView(item, [], 'anonymous'));
     expect(rows.every((row) => row.status === 'unknown')).toBe(true);
     expect(rows.every((row) => row.holdsShip === false)).toBe(true);
+    expect(rows.map((row) => row.title)).toEqual([
+      'Use SeaDance 2.5 as named in the video',
+      'Use Claude Fable 5 as named in the video',
+      'Use Character.ai as named in the video',
+      'Use Cluely Desktop as named in the video',
+    ]);
     expect(rows[0]?.statusLabel).toMatch(/cannot run this check/i);
+    expect(rows[0]?.statusLabel).toMatch(/can be skipped/i);
+    expect(rows[0]?.statusLabel).toMatch(/not a production hold/i);
+    expect(rows.every((row) => !/\b(passed|done)\b/i.test(row.statusLabel))).toBe(true);
   });
 
   it('does not let unknown tool checks hold a signed-in Vercel pack', () => {

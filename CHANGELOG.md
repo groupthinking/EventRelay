@@ -23,6 +23,56 @@ versioning aims for [SemVer](https://semver.org/).
 - Retargeted `tests/e2e/pipeline.test.ts` so `/features` and `/dashboard`
   assert permanent redirects to `/` and `/studio`
 
+### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
+
+Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
+
+#### Changed
+
+- Named-tool stack checks that UVAI cannot run stay `unknown`. Their label says they can be skipped and are not a production hold. It does not mark them passed.
+- The sticky Studio action is **Ship this** (`studio-ide-ship`). It enables from pack exportability (transcript, architecture, artifacts, or stack) and is not disabled by those four checks.
+- Signed-in `deployHoldReason` still holds while Vercel, Shopify, or GitHub checks in `pack.stack.tools` are open. Anonymous Studio does not start a G.A.T.E. deploy.
+
+### 2026-11-20: Grok Build project MCP wiring (docs)
+
+#### Added
+
+- `.grok/config.toml`: project-scoped GitHub and Vercel MCP stubs. GitHub uses
+  the official remote `https://api.githubcopilot.com/mcp/` with
+  `Authorization: Bearer ${GITHUB_TOKEN}`. Vercel uses `https://mcp.vercel.com`
+  with `${VERCEL_TOKEN}` (optional `${VERCEL_TEAM_ID}`). Stubs are committed;
+  `grok mcp add ... -s project` comments use single-quoted headers so a
+  shell-exported token cannot land in the tracked file. (#2760)
+
+#### Changed
+
+- `AGENTS.md`: remaining locked public facts (repo of record, extractor model
+  id, pack store resource name, no-bounce list, 50/50 exit). README points
+  `grok inspect --cwd` at those instructions. (#2760)
+
+### 2026-11-19: Nightly audit cleanup (apps/web)
+
+Tracked by #2756.
+
+#### Removed
+
+- Unwired HTTP surfaces with no in-repo caller: legacy `/api/video`, dashboard embed, search, video search, video generate, extract-events, agent dispatch/status, realtime session, training, refinery dataset, studio chat routes, and `/api/v1/video/*` aliases. `/api/agents/actions` stays; the durable review journal imports it.
+- Shared in-memory preferences route (`let sessionPreferences`) and its unused client.
+- Studio deploy durable workflow. `POST /api/workflows/studio-deploy` stays a 409 G.A.T.E. refusal and does not start a run.
+- Unused `agentWorkflowUi` flag, discarded Studio computations, GitHub PR server action with no button, unused field/empty/label/separator primitives, styled-jsx types, and two unreferenced public PNGs.
+
+#### Changed
+
+- Public privacy, terms, API docs, and `GET /api` name the product UVAI.
+- Renew panel, spec-review button, and alert use the light studio tokens.
+- Studio chat `POST /api/chat` uses `AbortSignal.timeout(30_000)`.
+- `test:gate` no longer lists the deleted `OneLoopStudio.gate.test.tsx`.
+- Pricing no longer carries the hidden billing-marker paragraphs. Checkout still names Turnstile in visible copy.
+- Pack admission fixtures no longer use the banned video id.
+- The home smoke spec matches the current heading.
+
+`apps/hybrid-workspace` is unchanged. Auth-path entries for the removed URLs stay, so those paths remain session-gated. `apps/backend/requirements.txt` pins the pydantic 2.14.3 and pydantic-core 2.50.4 versions already resolved for that file on main.
+
 ### 2026-11-13: Agent staff governance (docs)
 
 #### Added

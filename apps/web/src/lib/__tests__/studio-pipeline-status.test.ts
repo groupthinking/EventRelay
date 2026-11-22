@@ -368,7 +368,7 @@ describe('studio-pipeline-status', () => {
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
-  it('enables Export from pack exportability and ignores stack-check hold copy', () => {
+  it('enables Ship this from pack exportability and ignores named-tool hold copy', () => {
     expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
     expect(
       studioShipEnabled({
@@ -377,18 +377,25 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBe(true);
     expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
-    const cta = studioShipCta({ canExport: true, holdReason: 'Production is held until 4 stack check(s) pass.' });
-    expect(cta.label).toBe('Export');
+    const cta = studioShipCta({
+      canExport: true,
+      holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+    });
+    expect(cta.label).toBe('Ship this');
     expect(cta.enabled).toBe(true);
-    expect(cta.hint.toLowerCase()).toMatch(/skip|unknown/);
+    expect(cta.hint).toMatch(/can be skipped/i);
+    expect(cta.hint).toMatch(/not a production hold/i);
+    expect(cta.hint).not.toMatch(/\bpassed\b/i);
     expect(studioShipCta({ canExport: false }).enabled).toBe(false);
+    expect(studioShipCta({ canExport: false }).label).toBe('Ship this');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
-    expect(studio).toContain('Export');
+    expect(studio).toContain('{shipCta.label}');
     expect(studio).not.toContain('studio-deploy-button');
     expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
+    expect(studio).not.toMatch(/disabled=\{deployBusy \|\| !hasPayload \|\| Boolean\(holdReason\)\}/);
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -486,26 +493,9 @@ describe('studio-pipeline-status', () => {
     // The Studio no longer contains a deploy call site.
     expect(studio).not.toContain('const deploy = async');
     expect(studio).not.toContain('studio-deploy-button');
-    const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
-    expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
-    expect(workflow).toMatch(/isAbortTimeout|retryable/);
-    expect(workflow).not.toMatch(/studioDeployReadyTranscriptHold\(\s*\)/);
-    expect(workflow).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
-    expect(workflow).not.toMatch(/transcript\s*\n\s*\? STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    expect(workflow).toMatch(/KICKOFF_RETRIES|kickoffRetries|for \(let i = 0; i < .*KICKOFF/);
-    const kickoffRetryMatch = workflow.match(/const KICKOFF_RETRIES\s*=\s*(\d+)/);
-    expect(kickoffRetryMatch).not.toBeNull();
-    expect(Number(kickoffRetryMatch?.[1])).toBeLessThanOrEqual(1);
-    const retryLoop = workflow.slice(workflow.indexOf('KICKOFF_RETRIES'));
-    const afterRetries = retryLoop.slice(0, retryLoop.indexOf('if (kicked.kind === \'live\''));
-    expect(afterRetries).toMatch(/kind:\s*['"]handoff['"]/);
-    expect(afterRetries).not.toMatch(/throw new FatalError\(kicked\.message/);
-    expect(workflow).toMatch(/catch/);
-    expect(workflow).toMatch(/import \{[^}]*sleep[^}]*\} from ['"]workflow['"]/);
-    expect(workflow).toMatch(/await sleep\(['"]10s['"]\)/);
-    expect(workflow).toMatch(/decideStudioDeployPoll/);
-    expect(workflow).not.toMatch(/setTimeout/);
-    expect(workflow).not.toMatch(/AbortSignal\.timeout/);
+    const preflight = readFileSync(join(process.cwd(), 'src/app/api/workflows/studio-deploy/route.ts'), 'utf8');
+    expect(preflight).toContain('status: 409');
+    expect(preflight).not.toMatch(/\bstart\(/);
     const asyncJob = readFileSync(join(process.cwd(), 'src/lib/pipeline-async-job.ts'), 'utf8');
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
@@ -652,11 +642,11 @@ describe('studio-pipeline-status', () => {
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     // IDE: empty state lives in the video pane; the shell replaces the workbench.
     expect(shell).toContain('data-testid="studio-ide-video-pane"');
-    expect(studio).toContain('studioWorkbenchEmptyView');
+    expect(studio).not.toContain('studioWorkbenchEmptyView');
     expect(studio).toContain('data-testid="studio-build-live-failure"');
     expect(studio).not.toContain('/d/{videoId}');
     expect(studio).not.toContain("{'{videoId}'}");
-    expect(studio).toContain('studioTranscriptBody');
+    expect(studio).not.toContain('studioTranscriptBody');
     expect(
       studioWorkbenchEmptyView({
         busy: false,

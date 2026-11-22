@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  BookOpen,
   Clapperboard,
   Contrast,
   CreditCard,
@@ -35,14 +34,12 @@ const NAV_LINKS = [
   { href: '/', label: 'Home' },
   { href: '/studio', label: 'Studio' },
   { href: '/pricing', label: 'Pricing' },
-  { href: '/docs/api', label: 'API Docs' },
 ];
 
 const NAV_ICONS: Record<string, typeof Home> = {
   '/': Home,
   '/studio': Clapperboard,
   '/pricing': CreditCard,
-  '/docs/api': BookOpen,
 };
 
 function isNavActive(pathname: string, href: string): boolean {

@@ -13,7 +13,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
-vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({
   useYouTubePlayer: () => ({
     containerRef: { current: null },
@@ -45,7 +44,7 @@ afterEach(() => {
 
 describe('OneLoopStudio Build live honesty (B3b)', () => {
   it('renders IDE empty UI when no pack is stored', () => {
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
@@ -77,7 +76,7 @@ describe('OneLoopStudio Build live honesty (B3b)', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
     fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
@@ -117,7 +116,7 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
     fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
@@ -170,7 +169,7 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
     fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
