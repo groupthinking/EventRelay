@@ -94,7 +94,7 @@ def test_credential_url_never_enters_package_receipt():
     assert entry['disposition'] == 'BLOCKED'
 
 
-@pytest.mark.parametrize('value', ['Bearer fixture-secret${env:SUFFIX}', '${env:TOKEN}fixture-secret', 'fixture-secret${env:TOKEN}'])
+@pytest.mark.parametrize('value', ['Bearer fixture-secret${env:SUFFIX}', 'Sentry-Bearer fixture-secret${env:SUFFIX}', '${env:TOKEN}fixture-secret', 'fixture-secret${env:TOKEN}'])
 def test_mixed_literal_placeholder_is_blocked(value):
     entry = audit.audit({'mcpServers': {'x': {'url': 'https://example.com/mcp', 'headers': {'Authorization': value}}}}, 'fixture')[0]
     assert 'LITERAL_CREDENTIAL' in entry['findings']
