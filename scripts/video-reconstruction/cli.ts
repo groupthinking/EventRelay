@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstatSync, mkdirSync, renameSync } from 'node:fs';
+import { accessSync, constants, lstatSync, mkdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
@@ -12,7 +12,7 @@ import {
 } from './contract.ts';
 import { emitReconstruction } from './emitter.ts';
 import { jsonText, parseJsonBytes, readJson, readLocalFile, requireDirectory, writeNew } from './local-files.ts';
-import { persistManifest, verifyRelayReceipt } from './relay.ts';
+import { persistManifest, verifyRelayReceipt, type RelayOptions } from './relay.ts';
 
 const defaultSource = fileURLToPath(new URL('../../apps/web/src/lib/sample-pack/auJzb1D-fag.pack.json', import.meta.url));
 const defaultProfile = fileURLToPath(new URL('./profiles/auJzb1D-fag.json', import.meta.url));
@@ -31,6 +31,7 @@ schema prints the manifest JSON Schema. Runtime verification is required for evi
 
 The default source and profile use the retained auJzb1D-fag sample. RECONSTRUCTION_CHROMIUM can select an
 installed browser with an absolute executable path. The runner otherwise uses local or bundled Chromium.
+RECONSTRUCTION_PYTHON can select an absolute Python 3 executable. The default is /usr/bin/python3.
 `;
 
 type Arguments = { command: 'run' | 'verify'; output: string; source: string; profile: string };
@@ -68,7 +69,21 @@ async function reconstruct(args: Arguments) {
 
 type Reconstruction = Awaited<ReturnType<typeof reconstruct>>;
 
-function replay(output: string, reconstruction: Reconstruction, metadataDirectory = join(output, 'evidence', 'verified')) {
+function configuredPython(): string | undefined {
+  const python = process.env.RECONSTRUCTION_PYTHON;
+  if (python === undefined) return undefined;
+  if (!isAbsolute(python)) throw new Error('RECONSTRUCTION_PYTHON requires an absolute executable path');
+  try {
+    if (!statSync(python).isFile()) throw new Error('The configured interpreter is not a file');
+    accessSync(python, constants.X_OK);
+  } catch (cause) {
+    throw new Error('RECONSTRUCTION_PYTHON must point to an executable file', { cause });
+  }
+  return python;
+}
+
+function replay(output: string, reconstruction: Reconstruction, relayOptions: RelayOptions,
+  metadataDirectory = join(output, 'evidence', 'verified')) {
   requireDirectory(output);
   const app = join(output, 'app');
   const evidence = join(output, 'evidence');
@@ -94,7 +109,7 @@ function replay(output: string, reconstruction: Reconstruction, metadataDirector
     throw new Error('Stored final manifest differs from reconstructed and verified evidence');
   }
   const savedRelayReceipt = readLocalFile(join(metadataDirectory, 'relay-receipt.json'), 1_048_576);
-  const { receipt, rawReceipt: currentRawRelayReceipt } = verifyRelayReceipt(finalized, { stateDirectory: join(output, 'relay-state') });
+  const { receipt, rawReceipt: currentRawRelayReceipt } = verifyRelayReceipt(finalized, relayOptions);
   if (!savedRelayReceipt.equals(Buffer.from(currentRawRelayReceipt))) {
     throw new Error('Stored EventRelay receipt differs from the current harness receipt');
   }
@@ -117,7 +132,7 @@ function assertVerified(manifest: ReturnType<typeof finalizeManifest>, rawReceip
   }
 }
 
-async function runReconstruction(args: Arguments, reconstruction: Reconstruction) {
+async function runReconstruction(args: Arguments, reconstruction: Reconstruction, relayOptions: RelayOptions) {
   const { output } = args;
   requireDirectory(dirname(output));
   mkdirSync(output, { mode: 0o700 });
@@ -146,10 +161,10 @@ async function runReconstruction(args: Arguments, reconstruction: Reconstruction
     writeNew(join(staged, 'browser-receipt.json'), jsonText(finalized.verifiedFunctionality.receipt));
     writeNew(join(staged, 'manifest.json'), serializeManifest(finalized));
     relayEffect = { status: 'unconfirmed' };
-    const relay = persistManifest(finalized, { stateDirectory: join(output, 'relay-state') });
+    const relay = persistManifest(finalized, relayOptions);
     relayEffect = { status: 'persisted', taskId: relay.receipt.task_id, evidenceSha256: relay.receipt.evidence.sha256 };
     writeNew(join(staged, 'relay-receipt.json'), relay.rawReceipt);
-    const result = replay(output, reconstruction, staged);
+    const result = replay(output, reconstruction, relayOptions, staged);
     if (lstatSync(published, { throwIfNoEntry: false })) throw new Error('Verified evidence destination already exists');
     // Publish all successful metadata together after verifying the actual local relay effect.
     renameSync(staged, published);
@@ -176,10 +191,11 @@ async function main(args: string[]) {
     return;
   }
   const parsed = parseArguments(args);
+  const relayOptions = { stateDirectory: join(parsed.output, 'relay-state'), pythonExecutable: configuredPython() };
   const reconstruction = await reconstruct(parsed);
   const result = parsed.command === 'run'
-    ? await runReconstruction(parsed, reconstruction)
-    : replay(parsed.output, reconstruction);
+    ? await runReconstruction(parsed, reconstruction, relayOptions)
+    : replay(parsed.output, reconstruction, relayOptions);
   process.stdout.write(jsonText(result));
 }
 

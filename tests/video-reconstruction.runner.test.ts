@@ -137,6 +137,28 @@ test('CLI rejects a mismatched profile before creating the output', (t) => {
   assert.equal(existsSync(output), false);
 });
 
+test('CLI rejects invalid Python interpreter overrides before browser work or replay', (t) => {
+  const temp = temporaryDirectory(t);
+  const output = join(temp, 'run');
+  const nonExecutable = join(temp, 'non-executable');
+  writeFileSync(nonExecutable, '', { mode: 0o600 });
+  const cases = [
+    ['run', 'relative-python', /RECONSTRUCTION_PYTHON requires an absolute executable path/],
+    ['run', join(temp, 'missing-python'), /RECONSTRUCTION_PYTHON must point to an executable file/],
+    ['run', nonExecutable, /RECONSTRUCTION_PYTHON must point to an executable file/],
+    ['verify', temp, /RECONSTRUCTION_PYTHON must point to an executable file/],
+  ] as const;
+  for (const [command, python, message] of cases) {
+    const execution = invokeCli([command, '--out', output], {
+      ...process.env, RECONSTRUCTION_PYTHON: python, RECONSTRUCTION_CHROMIUM: 'invalid-relative-browser',
+    });
+    assert.equal(execution.status, 1);
+    assert.match(execution.stderr, message);
+    assert.equal(execution.stdout, '');
+    assert.equal(existsSync(output), false);
+  }
+});
+
 test('CLI leaves browser startup failures unverified without a relay write', (t) => {
   const output = join(temporaryDirectory(t), 'run');
   const execution = invokeCli(['run', '--out', output], { ...process.env, RECONSTRUCTION_CHROMIUM: 'invalid-relative-browser' });

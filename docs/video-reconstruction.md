@@ -90,6 +90,8 @@ node --import tsx scripts/video-reconstruction/cli.ts schema
 
 `RECONSTRUCTION_CHROMIUM` can select an installed browser using a trusted absolute executable path. The runner otherwise uses the local or bundled Chromium. A blocked launch or failed check exits nonzero and leaves unverified failure evidence. It cannot create a successful browser receipt or completed relay effect by skipping the browser.
 
+The EventRelay harness uses `/usr/bin/python3` by default. Set `RECONSTRUCTION_PYTHON` to the trusted absolute path of another Python 3 executable for both `run` and `verify`.
+
 The output contains the generated app under `app/` and run evidence under `evidence/`. The pending manifest and browser-run identity are recorded before verification. The capture inventory, browser receipt, finalized manifest and exact EventRelay receipt are staged together under `evidence/partial/`, checked against actual files and relay state, then published atomically under `evidence/verified/`. Replay accepts the published directory only and rejects any run containing `failure.json`.
 
 A late publication failure preserves any actual append-only journal write and records the relay effect as `not_attempted`, `unconfirmed` or `persisted`. Partial evidence stays separate from the canonical success files. A failed overall run is never described as successful, and a completed local write is never falsely described as unexecuted.
