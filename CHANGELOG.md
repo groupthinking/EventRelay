@@ -6,6 +6,12 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Remove completed task notes from apps/web/src/lib
+
+#### Removed
+
+- Nine finished `*PLAN.md` notes that nothing in the repo links: the lib root plan, billing, assemble, backend-url gate, gate-transition chip, json-canvas emit, keyframe image, video-pack json parse, and studio playflow. `app-builder-sandbox-PLAN.md` stays because `docs/REPO_MAP.md` and `docs/MASTER_ROADMAP.md` link it.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
