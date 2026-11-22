@@ -1,3 +1,8 @@
+## 2026-11-22 — Benchmark evidence correction
+
+- Reclassify the three static benchmark examples as unverified fixtures; remove unsupported acquisition dates and latency measurements and prevent their quality gates passing.
+- Retain deterministic hash/scaffold coverage and add a regression guard. SOP: `docs/benchmark-evidence-maintenance.md`. Related live-acceptance work: https://github.com/groupthinking/EventRelay/pull/2472 (not completed by this fix).
+
 # Changelog
 
 All notable changes to UVAI / EventRelay are documented in this file.
