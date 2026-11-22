@@ -8,6 +8,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ### 2026-11-22: Remove unused lib helpers (apps/web)
 
+Tracked by #2790.
+
 #### Removed
 
 - `hasUpstashSearch`, `packChapterSchema`, `JSON_CANVAS_SPEC`, `JSON_CANVAS_SPEC_URL`, and deprecated `resolveBillingEmailFromRequest`. Each had no caller. The files were unchanged since the November 4 lib audit.
