@@ -8,6 +8,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ### 2026-11-22: Remove pack-build-live re-export barrel (apps/web)
 
+Tracked by #2788.
+
 #### Removed
 
 - `pack-build-live.ts`. It only re-exported `pack-build-live-client`, and the Studio UI already imports the client. The pack-build-live tests now import the client directly.
