@@ -113,6 +113,12 @@ describe('OneLoopStudio IDE shell', () => {
     render(<OneLoopStudio />);
     expect(screen.queryByTestId('studio-player-poster')).toBeNull();
     expect(screen.getByTestId('studio-player-retry')).toBeTruthy();
+    const overlay = screen.getByTestId('studio-player-overlay');
+    expect(overlay.className).toMatch(/inset-0/);
+    expect(overlay.textContent).toMatch(/did not load/i);
+    const openYouTube = screen.getByTestId('studio-player-open-youtube') as HTMLAnchorElement;
+    expect(openYouTube.href).toContain('https://www.youtube.com/watch?v=auJzb1D-fag');
+    expect(openYouTube.textContent).toMatch(/Open on YouTube/i);
   });
 
   it('never auto-selects failed runs on boot, formats Saved videos cleanly, and clears prior errors on switch or Analyze', async () => {

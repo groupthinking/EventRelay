@@ -1107,19 +1107,33 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
               ) : playerOverlay && playerPhase === 'error' ? (
                 <div
                   data-testid="studio-player-overlay"
-                  className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex flex-wrap items-center justify-end gap-1.5"
+                  className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-neutral-950 px-4 text-center"
                 >
-                  <button
-                    type="button"
-                    data-testid="studio-player-retry"
-                    onClick={() => {
-                      setPreferDirectEmbed(false);
-                      setPlayerEpoch((epoch) => epoch + 1);
-                    }}
-                    className="uvai-btn pointer-events-auto !bg-black/75 !px-2.5 !py-1 !text-[11px] text-white backdrop-blur-sm"
-                  >
-                    Retry player
-                  </button>
+                  <p className="max-w-sm text-sm font-medium text-white">{playerOverlay}</p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      data-testid="studio-player-retry"
+                      onClick={() => {
+                        setPreferDirectEmbed(false);
+                        setPlayerEpoch((epoch) => epoch + 1);
+                      }}
+                      className="uvai-btn !bg-white !px-3 !py-1 !text-xs !text-neutral-950"
+                    >
+                      Retry player
+                    </button>
+                    {watchHref ? (
+                      <a
+                        href={watchHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid="studio-player-open-youtube"
+                        className="uvai-btn !px-3 !py-1 !text-xs text-white"
+                      >
+                        Open on YouTube
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
             </>
@@ -1354,6 +1368,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         null
       }
       previewReady={Boolean(scopedPackBuildLiveSuccess)}
+      transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}
+      showTranscriptRetry={showTranscriptRetry}
+      onRetryTranscript={() => void runAnalysis(url || selected?.url || '')}
       onBuildLive={() => void buildLive()}
       buildBusy={buildBusy}
       focusPreviewSignal={previewFocusEpoch}
@@ -1414,6 +1431,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           statusText={statusText}
           canSeek={canSeekActiveVideo}
           onSeek={seekTo}
+          transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}
+          onRetryTranscript={() => void runAnalysis(url || selected?.url || '')}
           onSaveTaskEdits={(taskEdits) => {
             if (selected) updateVideo(selected.id, { taskEdits });
           }}
@@ -1433,10 +1452,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           data-testid="studio-export-toast"
           role={exportToast.tone === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
-            exportToast.tone === 'success'
-              ? 'border-[#146ef5]/50 bg-[#111a2e]/95 text-[#e8f0ff]'
-              : 'border-red-500/45 bg-[#241012]/95 text-red-200',
+            'studio-export-toast',
+            exportToast.tone === 'success' ? 'studio-export-toast--success' : 'studio-export-toast--error',
           )}
         >
           {exportToast.text}

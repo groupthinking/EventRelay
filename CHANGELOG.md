@@ -11,6 +11,18 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Studio transcript, player, export, and proposed-tool honesty (apps/web)
+
+Related: #2491. Does not close it. Dogfood video `pBsT6v-ciO8`. No G.A.T.E. No invented events.
+
+#### Changed
+
+- A slow transcript fetch shows the remaining-time estimate in the transcript pane. A failed fetch keeps **Retry transcript** next to the error in the live Studio transcript.
+- A YouTube player that does not load is covered by an error state with **Retry player** and **Open on YouTube**.
+- The Video Pack ZIP success toast sits above the sticky mobile dock and uses the page colors so the download confirmation stays visible.
+- Named pack tools, including SeaDance 2.5, Claude Fable 5, Character.ai, and Cluely Desktop, render as **Proposed** cards that say UVAI has not run them.
+- Studio content on a narrow screen keeps 72px of clearance above the sticky pane dock.
+
 ### 2026-11-22: Evidence-bound local video reconstruction
 
 #### Added

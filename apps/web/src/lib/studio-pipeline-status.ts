@@ -628,6 +628,21 @@ export function studioExportFilename(projectName?: string | null): string {
   return base.toLowerCase().endsWith('.zip') ? base : `${base}.zip`;
 }
 
+/** Named pack tools are proposals. UVAI has not run them. */
+export function studioProposedToolCard(tool: {
+  name: string;
+  evidence?: string | null;
+}): { title: string; statusLabel: 'Proposed'; detail: string } {
+  const title = tool.name.trim();
+  const evidence = tool.evidence?.trim();
+  const named = 'Named in the video. UVAI has not run this tool.';
+  return {
+    title,
+    statusLabel: 'Proposed',
+    detail: evidence ? `${evidence} ${named}` : named,
+  };
+}
+
 export function studioActionCard(action: {
   tool: string;
   status: string;

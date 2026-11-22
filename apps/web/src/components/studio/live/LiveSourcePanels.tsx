@@ -98,11 +98,17 @@ export function LiveTranscript({
   live,
   canSeek,
   onSeek,
+  etaLabel = null,
+  failureMessage = null,
+  onRetry,
 }: {
   segments: readonly VideoPackTranscriptSegment[];
   live: boolean;
   canSeek: boolean;
   onSeek: (seconds: number) => void;
+  etaLabel?: string | null;
+  failureMessage?: string | null;
+  onRetry?: () => void;
 }) {
   const visible = useProgressiveCount(segments.length, { stepMs: 35, batch: 2 });
   return (
@@ -132,8 +138,27 @@ export function LiveTranscript({
         label="Transcript still arriving"
         testId="live-transcript-skeleton"
       />
+      {live && segments.length === 0 && etaLabel ? (
+        <p data-testid="live-transcript-eta" className="live-empty">{etaLabel}</p>
+      ) : null}
       {!live && segments.length === 0 ? (
-        <p className="live-empty">Paste a YouTube link or try the sample to stream a transcript here.</p>
+        failureMessage ? (
+          <div className="live-empty">
+            <p>{failureMessage}</p>
+            {onRetry ? (
+              <button
+                type="button"
+                data-testid="live-transcript-retry"
+                onClick={onRetry}
+                className="uvai-btn mt-2 !px-3 !py-1 !text-xs"
+              >
+                Retry transcript
+              </button>
+            ) : null}
+          </div>
+        ) : (
+          <p className="live-empty">Paste a YouTube link or try the sample to stream a transcript here.</p>
+        )
       ) : null}
     </LiveSection>
   );
