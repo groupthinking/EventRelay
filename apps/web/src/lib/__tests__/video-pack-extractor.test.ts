@@ -252,7 +252,7 @@ describe('extractVideoPackSpec', () => {
     expect(runVideo).not.toHaveBeenCalled();
   });
 
-  it('uses sectional direct calls with narrowed ranges for long/chaptered sources', async () => {
+  it('uses sectional static calls with narrowed ranges for a short chaptered source', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
     vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
@@ -260,16 +260,17 @@ describe('extractVideoPackSpec', () => {
       title: 'Flat tire change',
       channel: 'Test',
       description: '',
-      durationSeconds: 620,
+      durationSeconds: 240,
       chapters: [
         { time: '0:00', title: 'Intro' },
-        { time: '3:00', title: 'Jack' },
-        { time: '6:00', title: 'Finish' },
+        { time: '1:20', title: 'Jack' },
+        { time: '2:40', title: 'Finish' },
       ],
     });
 
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
       expect(call.model).toBe('gemini-3.8-flash');
+      expect(call.processing).not.toBe('agentic');
       expect(call.sourceUrl).toBe('https://www.youtube.com/watch?v=QjZ5ohr7sGA');
       expect(call.end_s).toBeGreaterThan(call.start_s);
       const prompt = call.sectionPrompt;
@@ -293,7 +294,61 @@ describe('extractVideoPackSpec', () => {
     expect(spec.concepts).toEqual(['zoo', 'elephants']);
     expect(runVideo).toHaveBeenCalledTimes(3);
     const ranges = runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s]);
-    expect(ranges).toEqual([[0, 180], [180, 360], [360, 620]]);
+    expect(ranges).toEqual([[0, 80], [80, 160], [160, 240]]);
+  });
+
+  it('uses one agentic call for a video of at least 300 seconds and does not fan out shards', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [
+        { time: '0:00', title: 'Intro' },
+        { time: '3:00', title: 'Jack' },
+        { time: '6:00', title: 'Finish' },
+      ],
+    });
+
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
+      expect(call.model).toBe('gemini-3.8-flash');
+      expect(call.processing).toBe('agentic');
+      expect(call.sourceUrl).toBe(SOURCE_URL);
+      expect(call.start_s).toBe(0);
+      expect(call.end_s).toBe(620);
+      expect(call.fps).toBeUndefined();
+      expect(call.sectionPrompt).toMatch(/Return ONLY a JSON object/);
+      expect(call.sectionPrompt).toContain('architecture');
+      expect(call.sectionPrompt).toContain('stack: { tools:');
+      expect(call.sectionPrompt).toContain('Untrusted chapter titles');
+      expect(call.sectionPrompt).toContain('0:00 Intro');
+      expect(call.sectionPrompt).toContain('3:00 Jack');
+      expect(call.sectionPrompt).not.toMatch(/focus_time_range_seconds/i);
+      return { text: JSON.stringify(SPEC_JSON), interactionId: 'int-agentic' };
+    });
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      {
+        runVideoInteraction: runVideo,
+        clipProbe: {
+          sourceUrl: SOURCE_URL,
+          start_s: 0,
+          end_s: 180,
+          model: 'gemini-3.8-flash',
+          prompt: 'PROBE: describe only this clip.',
+          forbiddenPhrases: ['torque wrench calibration'],
+          expectedPhrases: ['safety briefing'],
+        },
+      },
+    );
+
+    expect(spec.concepts).toEqual(['zoo', 'elephants']);
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0].sectionPrompt.startsWith('PROBE:')).toBe(false);
   });
 
   it('calls the direct worker with gemini-3.8-flash and a narrowed range (never full-video-only)', async () => {
@@ -317,6 +372,7 @@ describe('extractVideoPackSpec', () => {
       throw new Error('runVideoInteraction was not called');
     }
     expect(call.model).toBe('gemini-3.8-flash');
+    expect(call.processing).toBe('static');
     expect(call.sourceUrl).toBe(SOURCE_URL);
     expect(call.start_s).toBe(0);
     expect(call.end_s).toBeGreaterThan(call.start_s);
@@ -773,11 +829,11 @@ describe('extractVideoPackSpec', () => {
       title: 'Flat tire change',
       channel: 'Test',
       description: '',
-      durationSeconds: 620,
+      durationSeconds: 240,
       chapters: [
         { time: '0:00', title: 'Intro' },
-        { time: '3:00', title: 'Jack' },
-        { time: '6:00', title: 'Finish' },
+        { time: '1:20', title: 'Jack' },
+        { time: '2:40', title: 'Finish' },
       ],
     });
     const calls: string[] = [];
@@ -820,11 +876,11 @@ describe('extractVideoPackSpec', () => {
       title: 'Flat tire change',
       channel: 'Test',
       description: '',
-      durationSeconds: 620,
+      durationSeconds: 240,
       chapters: [
         { time: '0:00', title: 'Intro' },
-        { time: '3:00', title: 'Jack' },
-        { time: '6:00', title: 'Finish' },
+        { time: '1:20', title: 'Jack' },
+        { time: '2:40', title: 'Finish' },
       ],
     });
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({

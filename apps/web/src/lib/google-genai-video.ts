@@ -6,17 +6,25 @@ import { canonicalYouTubeSource, resolveYouTubeSourceId } from '@/lib/video-sour
 /**
  * Direct Google GenAI video path (Gate 1, locked 2026-09-21).
  *
- * Visual shard workers call `client.interactions.create()` with a YouTube
- * URL plus provider-enforced `start_offset` / `end_offset`. Video NEVER
+ * Short clips call `client.interactions.create()` with a YouTube URL plus
+ * provider-enforced `start_offset` / `end_offset`. A long video is one
+ * Interactions call with `processing: "agentic"` and
+ * `generation_config.thinking_level: "high"` on the same model. Video NEVER
  * goes through the Vercel AI Gateway; the gateway stays for
  * transcript/chat/consolidation only.
  *
- * Fail-closed: an invalid range, a missing key, or an empty model
- * response throws. There is deliberately NO full-video fallback —
- * silently dropping the clip would reintroduce O(shards × full video).
+ * Fail-closed: an invalid range, a missing key, an empty model response,
+ * or an SDK rejection of agentic processing throws. There is deliberately
+ * NO static full-video fallback — that ingest is the cost agentic mode
+ * exists to avoid.
  */
 
-/** Worker contract: narrowed range only, never full-video-by-default. */
+/** High is the thinking tier for the agentic long-video call. Not a second model id. */
+export const AGENTIC_VIDEO_THINKING_LEVEL = 'high' as const;
+
+export type ShardVideoProcessing = 'static' | 'agentic';
+
+/** Worker contract. Static calls are a narrowed range. Agentic calls span the full URL. */
 export interface ShardVideoCall {
   sourceUrl: string;
   start_s: number;
@@ -24,7 +32,11 @@ export interface ShardVideoCall {
   model: string;
   systemInstruction: string;
   sectionPrompt: string;
-  /** Frames/sec sampling density. Defaults to 1 (cost control). */
+  /**
+   * Omitted or `static`: clipped frames. `agentic`: one full-URL call, no offsets and no fps.
+   */
+  processing?: ShardVideoProcessing;
+  /** Frames/sec sampling density for static calls. Defaults to 1 (cost control). Ignored when agentic. */
   fps?: number;
 }
 
@@ -34,24 +46,38 @@ export interface ShardVideoResult {
 }
 
 /** Minimal structural boundary for the Interactions SDK (mocked in tests). */
-export interface ShardVideoBlock {
+export interface StaticShardVideoBlock {
   type: 'video';
   uri: string;
   mime_type: string;
   processing: { type: 'static'; start_offset: string; end_offset: string; fps: number };
 }
 
+export interface AgenticShardVideoBlock {
+  type: 'video';
+  uri: string;
+  mime_type: 'video/mp4';
+  processing: 'agentic';
+}
+
+export type ShardVideoBlock = StaticShardVideoBlock | AgenticShardVideoBlock;
+
 export interface ShardTextBlock {
   type: 'text';
   text: string;
 }
 
+export interface ShardInteractionCreateParams {
+  model: string;
+  input: Array<ShardVideoBlock | ShardTextBlock>;
+  generation_config?: { thinking_level: typeof AGENTIC_VIDEO_THINKING_LEVEL };
+}
+
 export interface InteractionsClient {
   interactions: {
-    create: (params: {
-      model: string;
-      input: Array<ShardVideoBlock | ShardTextBlock>;
-    }) => Promise<{ output_text?: string | undefined; id?: string | undefined }>;
+    create: (
+      params: ShardInteractionCreateParams,
+    ) => Promise<{ output_text?: string | undefined; id?: string | undefined }>;
   };
 }
 
@@ -74,6 +100,22 @@ export function secondsToOffset(seconds: number): string {
   return `${seconds}s`;
 }
 
+function resolveVideoProcessing(
+  processing: ShardVideoCall['processing'],
+): ShardVideoProcessing {
+  switch (processing) {
+    case 'agentic':
+      return 'agentic';
+    case 'static':
+    case undefined:
+      return 'static';
+    default: {
+      const unexpected: never = processing;
+      throw new Error(`Unexpected video processing ${String(unexpected)}`);
+    }
+  }
+}
+
 function assertValidRange(call: ShardVideoCall): void {
   if (!(call.start_s >= 0) || !(call.end_s > call.start_s)) {
     throw new Error(
@@ -86,7 +128,9 @@ function assertValidRange(call: ShardVideoCall): void {
   if (!videoId || call.sourceUrl !== canonicalYouTubeSource(videoId)) {
     throw new Error('Shard video call requires a canonical YouTube watch sourceUrl');
   }
-  resolveShardFps(call.fps);
+  if (resolveVideoProcessing(call.processing) === 'static') {
+    resolveShardFps(call.fps);
+  }
 }
 
 /** Max frames/sec a shard may request; Gemini's default sampling is 1. */
@@ -105,20 +149,46 @@ export function buildShardInteractionInput(
   call: ShardVideoCall,
 ): Array<ShardVideoBlock | ShardTextBlock> {
   assertValidRange(call);
-  return [
-    {
-      type: 'video',
-      uri: call.sourceUrl,
-      mime_type: 'video/mp4',
-      processing: {
-        type: 'static',
-        start_offset: secondsToOffset(call.start_s),
-        end_offset: secondsToOffset(call.end_s),
-        fps: resolveShardFps(call.fps),
-      },
-    },
-    { type: 'text', text: `${call.systemInstruction}\n\n${call.sectionPrompt}` },
-  ];
+  const text: ShardTextBlock = {
+    type: 'text',
+    text: `${call.systemInstruction}\n\n${call.sectionPrompt}`,
+  };
+  const processing = resolveVideoProcessing(call.processing);
+  const video: ShardVideoBlock =
+    processing === 'agentic'
+      ? {
+          type: 'video',
+          uri: call.sourceUrl,
+          mime_type: 'video/mp4',
+          processing: 'agentic',
+        }
+      : {
+          type: 'video',
+          uri: call.sourceUrl,
+          mime_type: 'video/mp4',
+          processing: {
+            type: 'static',
+            start_offset: secondsToOffset(call.start_s),
+            end_offset: secondsToOffset(call.end_s),
+            fps: resolveShardFps(call.fps),
+          },
+        };
+  return [video, text];
+}
+
+/** Model, input, and — for the agentic call only — thinking level high. */
+export function buildShardInteractionCreateParams(
+  call: ShardVideoCall,
+): ShardInteractionCreateParams {
+  const input = buildShardInteractionInput(call);
+  if (resolveVideoProcessing(call.processing) === 'agentic') {
+    return {
+      model: call.model,
+      input,
+      generation_config: { thinking_level: AGENTIC_VIDEO_THINKING_LEVEL },
+    };
+  }
+  return { model: call.model, input };
 }
 
 let memoizedClient: GoogleGenAI | null = null;
@@ -134,6 +204,9 @@ function defaultClient(apiKey: string): InteractionsClient {
         const interaction = await sdk.interactions.create({
           model: params.model,
           input: params.input,
+          ...(params.generation_config
+            ? { generation_config: params.generation_config }
+            : {}),
           stream: false,
         });
         return { output_text: interaction.output_text, id: interaction.id };
@@ -152,10 +225,7 @@ export async function runShardVideoInteraction(
 ): Promise<ShardVideoResult> {
   assertValidRange(call);
   const client = deps.client ?? defaultClient(resolveDirectGoogleKey());
-  const interaction = await client.interactions.create({
-    model: call.model,
-    input: buildShardInteractionInput(call),
-  });
+  const interaction = await client.interactions.create(buildShardInteractionCreateParams(call));
   const text = typeof interaction.output_text === 'string' ? interaction.output_text : '';
   if (text.trim().length === 0) {
     throw new Error(
