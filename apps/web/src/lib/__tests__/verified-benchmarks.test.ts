@@ -2,12 +2,14 @@ import { createHash } from 'crypto';
 import { describe, expect, it } from 'vitest';
 import { FIXTURE_BENCHMARKS, getBenchmarkByYoutubeId } from '../verified-benchmarks';
 import { buildScaffoldPackage } from '../action-surface';
-import { transcriptTextFromSegments } from '../analysis-evidence';
+import { assessAnalysisEvidence, transcriptTextFromSegments } from '../analysis-evidence';
 
 describe('verified-benchmarks', () => {
   it('keeps static fixtures ineligible for live evidence acceptance', () => {
     expect(FIXTURE_BENCHMARKS.length).toBeGreaterThanOrEqual(3);
     for (const bench of FIXTURE_BENCHMARKS) {
+      const reassessed = assessAnalysisEvidence(bench);
+      expect(reassessed).toMatchObject({ passed: false, state: 'unavailable' });
       expect(bench.quality.passed).toBe(false);
       expect(bench.quality.state).toBe('unavailable');
       expect(bench.provenance.transcriptVerified).toBe(false);

@@ -1,4 +1,6 @@
 import {
+  STATIC_FIXTURE_SOURCE,
+  STATIC_FIXTURE_WARNING,
   assessAnalysisEvidence,
   calculateDurationCoverageSeconds,
   transcriptTextFromSegments,
@@ -55,8 +57,6 @@ interface RawBenchmarkSpec {
     category: string;
   }>;
 }
-
-const FIXTURE_WARNING = 'Static fixture; live provider acquisition has not been verified.';
 
 // Hand-authored examples. URLs, timestamps and hashes do not establish source fidelity.
 const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
@@ -299,31 +299,23 @@ function buildFixtureBenchmark(spec: RawBenchmarkSpec): FixtureBenchmark {
   const provenance: AnalysisProvenance = {
     sourceUrl: url,
     sourceHost: 'www.youtube.com',
-    acquisitionMethod: 'static-fixture',
-    transcriptSource: 'static-fixture',
+    acquisitionMethod: STATIC_FIXTURE_SOURCE,
+    transcriptSource: STATIC_FIXTURE_SOURCE,
     transcriptVerified: false,
     acquiredAt: '',
     segmentCount: spec.segments.length,
     timedSegmentCount: spec.segments.length,
     durationCoverageSeconds: calculateDurationCoverageSeconds(spec.segments),
     contentSha256: spec.sha256,
-    warnings: [FIXTURE_WARNING],
+    warnings: [STATIC_FIXTURE_WARNING],
   };
 
-  const assessed = assessAnalysisEvidence({
+  const quality = assessAnalysisEvidence({
     transcript: rawTranscriptText,
     segments: spec.segments,
     provenance,
     now: '',
   });
-
-  // Fixture integrity is useful for deterministic tests, never live acceptance.
-  const quality: EvidenceAssessment = {
-    ...assessed,
-    state: 'unavailable',
-    passed: false,
-    issues: [...assessed.issues, FIXTURE_WARNING],
-  };
 
   const events: ExtractedEvent[] = spec.events.map((evt, index) => ({
     id: `evt_${spec.youtubeId}_${index}`,
