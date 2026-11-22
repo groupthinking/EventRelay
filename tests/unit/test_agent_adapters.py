@@ -1462,6 +1462,19 @@ class TestPersonalityAgent:
 class TestStrategyAgent:
     """Tests for StrategyAgent."""
 
+    @staticmethod
+    def _a2ui_payload() -> list[dict[str, Any]]:
+        return [
+            {
+                "version": "1.0",
+                "createSurface": {
+                    "surfaceId": "strategic-funnel",
+                    "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
+                    "components": [{"id": "root", "component": "Column", "children": []}],
+                },
+            }
+        ]
+
     def _make_agent(self, process_result: HybridResult | None = None) -> Any:
         from youtube_extension.services.agents.adapters.strategy_agent import (
             StrategyAgent,
@@ -1475,7 +1488,7 @@ class TestStrategyAgent:
                         "user_intent_analysis": "Learning",
                         "action_optimization": {"the_better_way": "automate", "gain": "3x"},
                     },
-                    "a2ui_payload": [{"type": "beginRendering"}],
+                    "a2ui_payload": self._a2ui_payload(),
                 })
             )
         )
@@ -1562,7 +1575,7 @@ class TestStrategyAgent:
         agent, processor = self._make_agent()
         json_response = json.dumps({
             "strategic_analysis": {"core_principle": "Growth"},
-            "a2ui_payload": [],
+            "a2ui_payload": self._a2ui_payload(),
         })
         processor.process = AsyncMock(return_value=_make_hybrid_result(response=json_response))
 
@@ -1577,11 +1590,50 @@ class TestStrategyAgent:
 
     async def test_generate_strategy_no_transcript(self):
         agent, processor = self._make_agent()
-        json_response = json.dumps({"strategic_analysis": {}, "a2ui_payload": []})
+        json_response = json.dumps({"strategic_analysis": {}, "a2ui_payload": self._a2ui_payload()})
         processor.process = AsyncMock(return_value=_make_hybrid_result(response=json_response))
 
         strategy = await agent._generate_strategy(None, {"title": "Test"}, {})
         assert "strategic_analysis" in strategy
+
+    # --- A2UI protocol compatibility ---
+
+    def test_accepts_a2ui_v1_envelope(self):
+        from youtube_extension.services.agents.adapters.strategy_agent import (
+            StrategyAgent,
+        )
+
+        StrategyAgent._validate_a2ui_payload(self._a2ui_payload())
+
+    def test_rejects_legacy_a2ui_envelope(self):
+        from youtube_extension.services.agents.adapters.strategy_agent import (
+            StrategyAgent,
+        )
+
+        with pytest.raises(ValueError, match="version 1.0"):
+            StrategyAgent._validate_a2ui_payload(
+                [{"beginRendering": {"surfaceId": "strategic-funnel"}}]
+            )
+
+    async def test_run_rejects_model_legacy_envelope(self):
+        agent, processor = self._make_agent()
+        processor.process = AsyncMock(
+            return_value=_make_hybrid_result(
+                response=json.dumps(
+                    {
+                        "strategic_analysis": {},
+                        "a2ui_payload": [
+                            {"beginRendering": {"surfaceId": "strategic-funnel"}}
+                        ],
+                    }
+                )
+            )
+        )
+
+        result = await agent.run(_req(transcript="text"))
+
+        assert result.status == "error"
+        assert any("version 1.0" in message for message in result.logs)
 
     # --- run: output contains model metadata ---
 
