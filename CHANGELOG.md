@@ -6,6 +6,13 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-22: Remove unused transcript embedding path (apps/web)
+
+#### Removed
+
+- `embedding-store.ts` and `gemini-embedding.ts`. Neither had a production importer after `/api/video/search` was removed. Both were unchanged since the November 4 lib audit.
+- Gateway embedding helpers that only those modules called: `gatewayEmbed`, `gatewayEmbedOne`, `chunkTextForEmbedding`, and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL`. Chat completion on the same client stays.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
