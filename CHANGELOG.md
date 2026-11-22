@@ -8,6 +8,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ### 2026-11-22: Remove fixture-only skill import and factory handoff (apps/web)
 
+Tracked by #2786.
+
 #### Removed
 
 - `chatgpt-mcp-skill-import` and `factory-video-pack-handoff`, plus their tests. Neither module had a production importer. The `xymcbrfsj4c-emit` fixture stays; other pack tests still use it.
