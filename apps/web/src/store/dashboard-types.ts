@@ -5,22 +5,6 @@ import type { LinkedSop } from '@/lib/linked-sop';
 import type { SpecReviewAcknowledgment } from '@/lib/grounded-build-spec';
 import type { LiveTaskEdits } from '@/lib/live-studio-tasks';
 
-export interface PipelineResult {
-  live_url: string | null;
-  github_repo: string | null;
-  build_status: string;
-  code_generation: {
-    framework: string;
-    files_created: string[];
-    entry_point: string;
-  } | null;
-  deployment: {
-    status: string;
-    platforms: string[];
-    urls: Record<string, string>;
-  } | null;
-}
-
 export interface Action {
   title: string;
   description: string;
@@ -44,7 +28,6 @@ export interface Video {
   transcript?: string;
   events?: ExtractedEvent[];
   agents?: AgentExecution[];
-  pipelineResult?: PipelineResult;
   /** Async backend job id when pipeline runs in background. */
   jobId?: string;
   /** Poll URL for async job status. */
@@ -81,17 +64,4 @@ export interface Video {
     /** Tools the video named, SOP in speech order, plus stack deploy checks. */
     linkedSop?: LinkedSop;
   };
-}
-
-export interface Activity {
-  time: string;
-  event: string;
-  type: 'success' | 'info' | 'error';
-}
-
-export interface SearchResult {
-  start: number;
-  duration: number;
-  text: string;
-  score: number;
 }
