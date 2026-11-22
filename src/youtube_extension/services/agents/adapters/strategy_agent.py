@@ -9,6 +9,7 @@ import json
 import logging
 import os
 from typing import Any, Optional
+from uuid import uuid4
 
 from ...ai.hybrid_processor_service import (
     HybridConfig,
@@ -25,16 +26,44 @@ A2UI_PROTOCOL_VERSION = "1.0"
 A2UI_BASIC_CATALOG_ID = (
     "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
 )
-A2UI_MESSAGE_TYPES = frozenset(
-    {
-        "createSurface",
-        "updateComponents",
-        "updateDataModel",
-        "deleteSurface",
-        "callRendererFunction",
-        "agentFunctionResponse",
+
+
+def _strategy_surface(analysis: Any) -> dict[str, Any]:
+    """Build one display-only A2UI surface; model values enter only literal Text fields."""
+
+    def required_text(obj: Any, key: str) -> str:
+        value = obj.get(key) if isinstance(obj, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"strategic_analysis requires nonempty text for {key}")
+        return value.strip()
+
+    principle = required_text(analysis, "core_principle")
+    intent = required_text(analysis, "user_intent_analysis")
+    optimization = analysis.get("action_optimization")
+    better_way = required_text(optimization, "the_better_way")
+    gain = required_text(optimization, "gain")
+
+    def label(component_id: str, text: str) -> dict[str, str]:
+        return {"id": component_id, "component": "Text", "text": text}
+
+    return {
+        "version": A2UI_PROTOCOL_VERSION,
+        "createSurface": {
+            "surfaceId": f"strategic-funnel-{uuid4().hex}",
+            "catalogId": A2UI_BASIC_CATALOG_ID,
+            "components": [
+                {"id": "root", "component": "Column", "children": ["title", "stages", "better-way"]},
+                label("title", f"Actionable funnel: {intent}"),
+                {"id": "stages", "component": "List", "children": ["info", "application", "mastery"]},
+                label("info", f"Info: {principle}"),
+                label("application", f"Application: {better_way}"),
+                label("mastery", f"Mastery check: {gain}"),
+                {"id": "better-way", "component": "Card", "child": "better-way-text"},
+                label("better-way-text", f"Better Way: {better_way}"),
+            ],
+        },
     }
-)
+
 
 @register
 class StrategyAgent(BaseAgent):
@@ -84,16 +113,11 @@ class StrategyAgent(BaseAgent):
         prompt = (
             "You are a master strategist. Analyze the video data and personality mapping provided to generate a "
             "deep strategic analysis and an 'Actionable Funnel' for the user.\n\n"
-            "Produce a JSON object with two main keys:\n"
-            "1. 'strategic_analysis': { 'core_principle': str, 'user_intent_analysis': str, 'action_optimization': { 'the_better_way': str, 'gain': str } }\n"
-            "2. 'a2ui_payload': A list of A2UI v1.0 agent-to-renderer messages that visualize the 3-stage funnel (Info, Application, Mastery).\n\n"
-            "A2UI Payload Requirements:\n"
-            "- Every message must set 'version' to '1.0'.\n"
-            "- The first message must use 'createSurface' with surfaceId 'strategic-funnel' and catalogId "
-            f"'{A2UI_BASIC_CATALOG_ID}'.\n"
-            "- Put the initial Heading, List, and 'Better Way' Card component tree in createSurface.components, with root component id 'root'.\n"
-            "- Later messages may use updateComponents or updateDataModel only after createSurface.\n"
-            "- Do not emit legacy beginRendering, surfaceUpdate, or dataModelUpdate messages.\n\n"
+            "Return only a JSON object with a 'strategic_analysis' object. "
+            "Use nonempty text for 'core_principle' (what to learn), 'user_intent_analysis' (goal), "
+            "and the two fields inside 'action_optimization': 'the_better_way' (an action to apply) "
+            "and 'gain' (a concrete way to recognize mastery or assess the expected benefit). "
+            "Do not generate UI components or an a2ui_payload; the application builds the interface.\n\n"
             f"Personality Map: {json.dumps(personality_map)}\n"
             f"Video Metadata: {json.dumps(video_metadata)}\n"
         )
@@ -115,42 +139,12 @@ class StrategyAgent(BaseAgent):
 
         try:
             strategy = json.loads(result.response)
-            self._validate_a2ui_payload(strategy.get("a2ui_payload"))
-            return strategy
-        except json.JSONDecodeError:
-            # Return raw response as fallback
-            return {"strategic_analysis": {"raw": result.response}, "a2ui_payload": []}
-
-    @staticmethod
-    def _validate_a2ui_payload(payload: Any) -> None:
-        """Reject legacy or malformed A2UI envelopes before they reach a renderer."""
-        if not isinstance(payload, list) or not payload:
-            raise ValueError("a2ui_payload must contain at least one A2UI v1.0 message")
-
-        surface_created = False
-        for index, message in enumerate(payload):
-            if not isinstance(message, dict) or message.get("version") != A2UI_PROTOCOL_VERSION:
-                raise ValueError(f"a2ui_payload[{index}] must declare version 1.0")
-
-            kinds = A2UI_MESSAGE_TYPES.intersection(message)
-            if len(kinds) != 1:
-                raise ValueError(f"a2ui_payload[{index}] must contain exactly one v1.0 message")
-
-            kind = next(iter(kinds))
-            body = message[kind]
-            if not isinstance(body, dict):
-                raise ValueError(f"a2ui_payload[{index}].{kind} must be an object")
-
-            if kind == "createSurface":
-                if index != 0 or surface_created:
-                    raise ValueError("createSurface must be the first and only surface creation")
-                if body.get("surfaceId") != "strategic-funnel":
-                    raise ValueError("createSurface must target strategic-funnel")
-                if body.get("catalogId") != A2UI_BASIC_CATALOG_ID:
-                    raise ValueError("createSurface must use the A2UI v1.0 basic catalog")
-                surface_created = True
-            elif not surface_created:
-                raise ValueError("createSurface must precede all other A2UI messages")
+        except json.JSONDecodeError as exc:
+            raise ValueError("Strategy response must be valid JSON") from exc
+        if not isinstance(strategy, dict) or set(strategy) != {"strategic_analysis"}:
+            raise ValueError("Strategy response must contain only strategic_analysis")
+        analysis = strategy["strategic_analysis"]
+        return {"strategic_analysis": analysis, "a2ui_payload": [_strategy_surface(analysis)]}
 
     def _failure(self, message: str, start_time: float) -> AgentResult:
         return AgentResult(

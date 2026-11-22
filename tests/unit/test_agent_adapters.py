@@ -1463,17 +1463,12 @@ class TestStrategyAgent:
     """Tests for StrategyAgent."""
 
     @staticmethod
-    def _a2ui_payload() -> list[dict[str, Any]]:
-        return [
-            {
-                "version": "1.0",
-                "createSurface": {
-                    "surfaceId": "strategic-funnel",
-                    "catalogId": "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json",
-                    "components": [{"id": "root", "component": "Column", "children": []}],
-                },
-            }
-        ]
+    def _analysis() -> dict[str, Any]:
+        return {
+            "core_principle": "Compare a baseline",
+            "user_intent_analysis": "Reduce rework",
+            "action_optimization": {"the_better_way": "Check the first sample", "gain": "Count corrections"},
+        }
 
     def _make_agent(self, process_result: HybridResult | None = None) -> Any:
         from youtube_extension.services.agents.adapters.strategy_agent import (
@@ -1482,14 +1477,7 @@ class TestStrategyAgent:
 
         processor = _make_mock_processor(
             process_result=process_result or _make_hybrid_result(
-                response=json.dumps({
-                    "strategic_analysis": {
-                        "core_principle": "Efficiency",
-                        "user_intent_analysis": "Learning",
-                        "action_optimization": {"the_better_way": "automate", "gain": "3x"},
-                    },
-                    "a2ui_payload": self._a2ui_payload(),
-                })
+                response=json.dumps({"strategic_analysis": self._analysis()})
             )
         )
         return StrategyAgent({"hybrid_processor": processor}), processor
@@ -1560,23 +1548,11 @@ class TestStrategyAgent:
         result = await agent.run(_req(transcript="text"))
         assert result.status == "error"
 
-    # --- _generate_strategy: invalid JSON fallback ---
-
-    async def test_generate_strategy_invalid_json_fallback(self):
-        agent, processor = self._make_agent()
-        processor.process = AsyncMock(return_value=_make_hybrid_result(response="not json"))
-        strategy = await agent._generate_strategy("transcript", {}, {})
-        assert "strategic_analysis" in strategy
-        assert "raw" in strategy["strategic_analysis"]
-
     # --- _generate_strategy: with transcript ---
 
     async def test_generate_strategy_with_transcript(self):
         agent, processor = self._make_agent()
-        json_response = json.dumps({
-            "strategic_analysis": {"core_principle": "Growth"},
-            "a2ui_payload": self._a2ui_payload(),
-        })
+        json_response = json.dumps({"strategic_analysis": self._analysis()})
         processor.process = AsyncMock(return_value=_make_hybrid_result(response=json_response))
 
         strategy = await agent._generate_strategy(
@@ -1584,13 +1560,13 @@ class TestStrategyAgent:
             {"title": "Strategy Talk"},
             {"creator_persona": {"type": "Visionary"}},
         )
-        assert strategy["strategic_analysis"]["core_principle"] == "Growth"
+        assert strategy["strategic_analysis"] == self._analysis()
 
     # --- _generate_strategy: no transcript ---
 
     async def test_generate_strategy_no_transcript(self):
         agent, processor = self._make_agent()
-        json_response = json.dumps({"strategic_analysis": {}, "a2ui_payload": self._a2ui_payload()})
+        json_response = json.dumps({"strategic_analysis": self._analysis()})
         processor.process = AsyncMock(return_value=_make_hybrid_result(response=json_response))
 
         strategy = await agent._generate_strategy(None, {"title": "Test"}, {})
@@ -1598,42 +1574,56 @@ class TestStrategyAgent:
 
     # --- A2UI protocol compatibility ---
 
-    def test_accepts_a2ui_v1_envelope(self):
-        from youtube_extension.services.agents.adapters.strategy_agent import (
-            StrategyAgent,
-        )
+    async def test_builds_display_only_funnel_from_analysis(self):
+        agent, _ = self._make_agent()
+        first = await agent.run(_req(transcript="text"))
+        second = await agent.run(_req(transcript="text"))
+        assert first.status == second.status == "ok"
+        [message] = first.output["a2ui_payload"]
+        assert set(message) == {"version", "createSurface"}
+        assert message["version"] == "1.0"
+        surface = message["createSurface"]
+        assert set(surface) == {"surfaceId", "catalogId", "components"}
+        assert surface["catalogId"] == "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+        assert surface["surfaceId"] != second.output["a2ui_payload"][0]["createSurface"]["surfaceId"]
+        nodes = {c["id"]: c for c in surface["components"]}
+        assert len(nodes) == len(surface["components"])
+        assert nodes["root"]["children"] == ["title", "stages", "better-way"]
+        assert nodes["stages"] == {"id": "stages", "component": "List", "children": ["info", "application", "mastery"]}
+        assert nodes["better-way"] == {"id": "better-way", "component": "Card", "child": "better-way-text"}
+        assert {key: value["text"] for key, value in nodes.items() if value["component"] == "Text"} == {
+            "title": "Actionable funnel: Reduce rework",
+            "info": "Info: Compare a baseline",
+            "application": "Application: Check the first sample",
+            "mastery": "Mastery check: Count corrections",
+            "better-way-text": "Better Way: Check the first sample",
+        }
 
-        StrategyAgent._validate_a2ui_payload(self._a2ui_payload())
-
-    def test_rejects_legacy_a2ui_envelope(self):
-        from youtube_extension.services.agents.adapters.strategy_agent import (
-            StrategyAgent,
-        )
-
-        with pytest.raises(ValueError, match="version 1.0"):
-            StrategyAgent._validate_a2ui_payload(
-                [{"beginRendering": {"surfaceId": "strategic-funnel"}}]
-            )
-
-    async def test_run_rejects_model_legacy_envelope(self):
-        agent, processor = self._make_agent()
-        processor.process = AsyncMock(
-            return_value=_make_hybrid_result(
-                response=json.dumps(
-                    {
-                        "strategic_analysis": {},
-                        "a2ui_payload": [
-                            {"beginRendering": {"surfaceId": "strategic-funnel"}}
-                        ],
-                    }
-                )
-            )
-        )
-
+    @pytest.mark.parametrize("response", [
+        "not JSON", "[]", "{}", '{"strategic_analysis":null}',
+        '{"strategic_analysis":{"core_principle":"  "}}',
+        '{"strategic_analysis":{"core_principle":"Learn","user_intent_analysis":"Practice","action_optimization":{"the_better_way":"Try","gain":{"call":"tool"}}}}',
+    ])
+    async def test_invalid_model_response_never_returns_a_surface(self, response):
+        agent, _ = self._make_agent(_make_hybrid_result(response=response))
         result = await agent.run(_req(transcript="text"))
-
         assert result.status == "error"
-        assert any("version 1.0" in message for message in result.logs)
+        assert result.output == {}
+
+    @pytest.mark.parametrize("payload", [
+        [],
+        [{"beginRendering": {"surfaceId": "legacy"}}],
+        [{"version": "1.0", "createSurface": {"catalogId": "unapproved"}}],
+        [{"version": "1.0", "updateComponents": {}}],
+        [{"version": "1.0", "callRendererFunction": {}}],
+        [{"version": "1.0", "unknown": {}}],
+    ])
+    async def test_model_cannot_supply_a_renderer_message(self, payload):
+        response = json.dumps({"strategic_analysis": self._analysis(), "a2ui_payload": payload})
+        agent, _ = self._make_agent(_make_hybrid_result(response=response))
+        result = await agent.run(_req(transcript="text"))
+        assert result.status == "error"
+        assert result.output == {}
 
     # --- run: output contains model metadata ---
 
