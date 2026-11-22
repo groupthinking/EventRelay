@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
 const seekToMock = vi.fn();
-const playerStateMock = vi.fn(() => ({
+const playerStateMock = vi.fn((_videoId: string | null, _options?: { direct?: boolean }) => ({
   containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
   currentTime: 0,
   duration: 0,
