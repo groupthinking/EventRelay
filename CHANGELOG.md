@@ -8,6 +8,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ### 2026-11-22: Remove completed task notes from apps/web/src/lib
 
+Tracked by #2789.
+
 #### Removed
 
 - Nine finished `*PLAN.md` notes that nothing in the repo links: the lib root plan, billing, assemble, backend-url gate, gate-transition chip, json-canvas emit, keyframe image, video-pack json parse, and studio playflow. `app-builder-sandbox-PLAN.md` stays because `docs/REPO_MAP.md` and `docs/MASTER_ROADMAP.md` link it.
