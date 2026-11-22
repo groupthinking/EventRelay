@@ -52,14 +52,14 @@ def _strategy_surface(analysis: Any) -> dict[str, Any]:
             "surfaceId": f"strategic-funnel-{uuid4().hex}",
             "catalogId": A2UI_BASIC_CATALOG_ID,
             "components": [
-                {"id": "root", "component": "Column", "children": ["title", "stages", "better-way"]},
+                {"id": "root", "component": "Column", "children": ["title", "stages", "better_way"]},
                 label("title", f"Actionable funnel: {intent}"),
                 {"id": "stages", "component": "List", "children": ["info", "application", "mastery"]},
                 label("info", f"Info: {principle}"),
                 label("application", f"Application: {better_way}"),
                 label("mastery", f"Mastery check: {gain}"),
-                {"id": "better-way", "component": "Card", "child": "better-way-text"},
-                label("better-way-text", f"Better Way: {better_way}"),
+                {"id": "better_way", "component": "Card", "child": "better_way_text"},
+                label("better_way_text", f"Better Way: {better_way}"),
             ],
         },
     }

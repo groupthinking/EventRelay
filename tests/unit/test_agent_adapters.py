@@ -1588,15 +1588,20 @@ class TestStrategyAgent:
         assert surface["surfaceId"] != second.output["a2ui_payload"][0]["createSurface"]["surfaceId"]
         nodes = {c["id"]: c for c in surface["components"]}
         assert len(nodes) == len(surface["components"])
-        assert nodes["root"]["children"] == ["title", "stages", "better-way"]
+        # The web renderer requires identifier syntax for component IDs and references.
+        assert all(node_id.isidentifier() for node_id in nodes)
+        for node in nodes.values():
+            references = node.get("children", []) + ([node["child"]] if "child" in node else [])
+            assert all(ref.isidentifier() and ref in nodes for ref in references)
+        assert nodes["root"]["children"] == ["title", "stages", "better_way"]
         assert nodes["stages"] == {"id": "stages", "component": "List", "children": ["info", "application", "mastery"]}
-        assert nodes["better-way"] == {"id": "better-way", "component": "Card", "child": "better-way-text"}
+        assert nodes["better_way"] == {"id": "better_way", "component": "Card", "child": "better_way_text"}
         assert {key: value["text"] for key, value in nodes.items() if value["component"] == "Text"} == {
             "title": "Actionable funnel: Reduce rework",
             "info": "Info: Compare a baseline",
             "application": "Application: Check the first sample",
             "mastery": "Mastery check: Count corrections",
-            "better-way-text": "Better Way: Check the first sample",
+            "better_way_text": "Better Way: Check the first sample",
         }
 
     @pytest.mark.parametrize("response", [
