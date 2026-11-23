@@ -28,6 +28,15 @@ Full original-app acceptance, live inference, visual parity and deployment remai
 
 - Ten completed `PLAN.md` files under `apps/web/src/lib/`. Nothing in the app imported them. Emitter fixtures and tests stay. (#2793)
 
+### 2026-11-22: Remove fixture-only skill import and factory handoff (apps/web)
+
+Tracked by #2786.
+
+#### Removed
+
+- `chatgpt-mcp-skill-import` and `factory-video-pack-handoff`, plus their tests. Neither module had a production importer. The `xymcbrfsj4c-emit` fixture stays; other pack tests still use it.
+- Direct `yaml` dependency. It was only imported by the skill-import module. Vite still lists `yaml` as an optional peer.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
