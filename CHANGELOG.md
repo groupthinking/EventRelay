@@ -61,6 +61,15 @@ Tracked by #2787.
 - `embedding-store.ts` and `gemini-embedding.ts`. Neither had a production importer after `/api/video/search` was removed. Both were unchanged since the November 4 lib audit.
 - Gateway embedding helpers that only those modules called: `gatewayEmbed`, `gatewayEmbedOne`, `chunkTextForEmbedding`, and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL`. Chat completion on the same client stays.
 
+### 2026-11-22: Remove unused lib helpers (apps/web)
+
+Tracked by #2790.
+
+#### Removed
+
+- `hasUpstashSearch`, `packChapterSchema`, `JSON_CANVAS_SPEC`, `JSON_CANVAS_SPEC_URL`, and deprecated `resolveBillingEmailFromRequest`. Each had no caller. The files were unchanged since the November 4 lib audit.
+- Unused `zipUtf8Files` import in `action-surface.ts`. The export stays; workspace export and its tests still call it.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
