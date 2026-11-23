@@ -52,6 +52,15 @@ Tracked by #2788.
 - Studio video store no longer keeps `searchQuery`, `searchResults`, `searchLoading`, `setSearchQuery`, `loading`, `setLoading`, or `selectedVideo()`. Nothing in the studio reads them. `processVideo` and the persisted video list are unchanged.
 - Unused `SearchResult`, `Activity`, and `PipelineResult` types. `pipelineResult` was never written.
 
+### 2026-11-22: Remove unused transcript embedding path (apps/web)
+
+Tracked by #2787.
+
+#### Removed
+
+- `embedding-store.ts` and `gemini-embedding.ts`. Neither had a production importer after `/api/video/search` was removed. Both were unchanged since the November 4 lib audit.
+- Gateway embedding helpers that only those modules called: `gatewayEmbed`, `gatewayEmbedOne`, `chunkTextForEmbedding`, and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL`. Chat completion on the same client stays.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).
