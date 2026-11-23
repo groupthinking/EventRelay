@@ -3,15 +3,23 @@
 - **Reviewed:** 2026-09-13
 - **Inspected baseline:** `f531f34d` on `main`
 - **Authority:** [AGENTS.md](../AGENTS.md)
-- **Execution boundary:** Origin G.A.T.E. only; later phases below are proposals, not authorization.
+- **Operational boundary:** Origin G.A.T.E. continues to govern consequential transitions. The explicitly authorized local reconstruction cut below is separate; other later phases remain proposals.
 
-This replaces the June execution board and its stale environment assertions. The [June roadmap remains in Git history](https://github.com/groupthinking/EventRelay/blob/f531f34d/docs/MASTER_ROADMAP.md). This review changes documentation only: it does not promote, deploy, migrate storage, or reopen adjacent product cuts.
+The September review replaced the June execution board and its stale environment assertions. The [June roadmap remains in Git history](https://github.com/groupthinking/EventRelay/blob/f531f34d/docs/MASTER_ROADMAP.md). That review changed documentation only. The separately authorized November local implementation is recorded below; it does not promote, deploy or migrate storage.
 
 ## Intended outcome
 
 A user starts with a YouTube URL, inspects a source-grounded Video Pack, approves the intended output, and receives a reproducible artifact with verification evidence. A live claim requires the applicable G.A.T.E. decision and verified receipts, not merely generated files or a completed workflow status.
 
 The existing workspace export is a useful evidence handoff. It must not be sold as proof that the application demonstrated in a video has been recreated.
+
+## Local reconstruction cut — November 22, 2026
+
+Hayden explicitly authorized work on UVAI/EventRelay integration and video reconstruction. [Issue #2798](https://github.com/groupthinking/EventRelay/issues/2798) scopes the additive local implementation; [the executable specification and SOP](video-reconstruction.md) describe its interfaces, commands, evidence and limits.
+
+The path consumes an existing real UVAI Video Pack, validates exact source/citation bindings, emits supported browser interactions, runs actual Chromium checks and persists the exact finalized manifest through the existing EventRelay local harness. The first profile reconstructs URL attachment, structured-summary rendering and image-annotation rendering from `auJzb1D-fag`. Imported data is labeled as such, and source-model output is not promoted to verified observation.
+
+This is a local CLI integration. It does not activate a public Studio workflow or replace the existing App Builder evidence viewer. Full original-app acceptance, live inference, token accounting, visual parity and deployment remain held. Passing a local browser test or writing an artifact is not an operational G.A.T.E. PASS. The dedicated CI workflow retains current run evidence; the historical verification record below remains historical.
 
 ## What the current source supports
 
@@ -20,7 +28,7 @@ The existing workspace export is a useful evidence handoff. It must not be sold 
 | One public product and canonical workbench | [`app/page.tsx`](../apps/web/src/app/page.tsx), [`studio/page.tsx`](../apps/web/src/app/studio/page.tsx), [`auth-paths.ts`](../apps/web/src/lib/auth-paths.ts) | `/` enters `/studio`; retired dashboard skins are not a new product |
 | Hashed Video Pack extraction and persistence | [`video-pack.ts`](../apps/web/src/lib/video-pack.ts), [`video-pack-extractor.ts`](../apps/web/src/lib/video-pack-extractor.ts), [`video-pack-store.ts`](../apps/web/src/lib/video-pack-store.ts) | Gemini 3.8 Flash via AI Gateway; production pack store remains Upstash REST; stored fields are not automatically verified observations |
 | Deterministic App Builder workspace emit | [`emit-app-builder-sandbox.ts`](../apps/web/src/lib/emit-app-builder-sandbox.ts), [`sandbox/route.ts`](../apps/web/src/app/api/video/sandbox/route.ts) | Displays transcript, visual events, and SOP; strips architecture/code snippets at this boundary; does not execute or deploy the bundle |
-| Prior two-video emit work | [`app-builder-sandbox-PLAN.md`](../apps/web/src/lib/app-builder-sandbox-PLAN.md) and emitter fixtures/tests | Preserve original fixtures and receipts; old VM smoke and PR status are not freshly reverified here |
+| Prior two-video emit work | [`qj-z5ohr7sga-emit.ts`](../apps/web/src/lib/__fixtures__/qj-z5ohr7sga-emit.ts), [`xymcbrfsj4c-emit.ts`](../apps/web/src/lib/__fixtures__/xymcbrfsj4c-emit.ts), and emitter tests | Preserve original fixtures and receipts; old VM smoke and PR status are not freshly reverified here |
 | Same-run actions and deployment attempts | [`OneLoopStudio.tsx`](../apps/web/src/components/OneLoopStudio.tsx), [`studio-workflow.ts`](../apps/web/src/lib/studio-workflow.ts) | Backend/provider configuration and authenticated workflows need their own current operational evidence |
 | Four-way gate and canonical receipt hash | [`gate-transition.ts`](../apps/web/src/lib/gate-transition.ts), [contract](gate-transition-contract.md) | Client-callable policy; current Studio adapter passes `anonymous` authority and derives its evidence verdict from URL validation; not independent provider/ownership verification |
 | Get Pro and locked offers | Root policy; [`app/page.tsx`](../apps/web/src/app/page.tsx) | Workflow Pro $39/mo or $390/yr; Maintain $199/mo per live product; Ship per-job quote. No new checkout promises |
