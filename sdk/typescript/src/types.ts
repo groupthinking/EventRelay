@@ -1,9 +1,10 @@
 /**
  * EventRelay SDK — shared TypeScript types.
  *
- * These types mirror the Pydantic models in the backend
- * (src/youtube_extension/backend/api/v1/models.py) and are derived from
- * openapi/eventrelay.openapi.json.
+ * The backend models tree (src/youtube_extension/backend/, including
+ * api/v1/models.py) is gone, and openapi/eventrelay.openapi.json is not
+ * in the repository. These types mirror sdk/python/eventrelay_sdk/types.py,
+ * which is the remaining source of truth.
  */
 
 // ---------------------------------------------------------------------------
