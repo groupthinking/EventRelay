@@ -1,16 +1,23 @@
 import { createHash } from 'crypto';
 import { describe, expect, it } from 'vitest';
-import { VERIFIED_BENCHMARKS, getBenchmarkByYoutubeId } from '../verified-benchmarks';
+import { FIXTURE_BENCHMARKS, getBenchmarkByYoutubeId } from '../verified-benchmarks';
 import { buildScaffoldPackage } from '../action-surface';
-import { transcriptTextFromSegments } from '../analysis-evidence';
+import { assessAnalysisEvidence, transcriptTextFromSegments } from '../analysis-evidence';
 
 describe('verified-benchmarks', () => {
-  it('exposes three verified enterprise benchmarks with passing quality gates', () => {
-    expect(VERIFIED_BENCHMARKS.length).toBeGreaterThanOrEqual(3);
-    for (const bench of VERIFIED_BENCHMARKS) {
-      expect(bench.quality.passed).toBe(true);
-      expect(bench.quality.state).toBe('verified');
-      expect(bench.provenance.transcriptVerified).toBe(true);
+  it('keeps static fixtures ineligible for live evidence acceptance', () => {
+    expect(FIXTURE_BENCHMARKS.length).toBeGreaterThanOrEqual(3);
+    for (const bench of FIXTURE_BENCHMARKS) {
+      const reassessed = assessAnalysisEvidence(bench);
+      expect(reassessed).toMatchObject({ passed: false, state: 'unavailable' });
+      expect(bench.quality.passed).toBe(false);
+      expect(bench.quality.state).toBe('unavailable');
+      expect(bench.provenance.transcriptVerified).toBe(false);
+      expect(bench.provenance.acquisitionMethod).toBe('static-fixture');
+      expect(bench.provenance.transcriptSource).toBe('static-fixture');
+      expect(bench.provenance.acquiredAt).toBe('');
+      expect(bench.latencyMs).toBeNull();
+      expect(bench.quality.issues).toContain('Static fixture; live provider acquisition has not been verified.');
       expect(bench.provenance.contentSha256).toMatch(/^[a-f0-9]{64}$/);
       const expectedSha256 = createHash('sha256')
         .update(transcriptTextFromSegments(bench.segments), 'utf8')
