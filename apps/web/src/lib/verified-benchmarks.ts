@@ -1,4 +1,6 @@
 import {
+  STATIC_FIXTURE_SOURCE,
+  STATIC_FIXTURE_WARNING,
   assessAnalysisEvidence,
   calculateDurationCoverageSeconds,
   transcriptTextFromSegments,
@@ -10,7 +12,7 @@ import { compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
 import { formatSeconds } from '@/lib/timestamp';
 import type { ExtractedEvent } from '@/lib/types';
 
-export interface VerifiedBenchmark {
+export interface FixtureBenchmark {
   id: string;
   youtubeId: string;
   url: string;
@@ -27,7 +29,7 @@ export interface VerifiedBenchmark {
   quality: EvidenceAssessment;
   events: ExtractedEvent[];
   linkedSop: LinkedSop;
-  latencyMs: number;
+  latencyMs: null;
 }
 
 interface RawBenchmarkSpec {
@@ -41,8 +43,6 @@ interface RawBenchmarkSpec {
   summary: string;
   topics: string[];
   sha256: string;
-  acquiredAt: string;
-  latencyMs: number;
   segments: TranscriptSegment[];
   events: Array<{
     type: ExtractedEvent['type'];
@@ -58,11 +58,12 @@ interface RawBenchmarkSpec {
   }>;
 }
 
+// Hand-authored examples. URLs, timestamps and hashes do not establish source fidelity.
 const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
   {
     id: 'multi-agent-ops',
     youtubeId: 'auJzb1D-fag',
-    badge: 'BENCHMARK 01 · AI OPERATIONS SOP',
+    badge: 'FIXTURE 01 · AI OPERATIONS SOP',
     category: 'Multi-Agent Workflow Rollout',
     title: '4-Week Autonomous Agent Operations & Chief of Staff Architecture',
     channel: 'Enterprise AI Operations',
@@ -71,8 +72,6 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
       'Operational blueprint for standing up an autonomous agent team without context sprawl: begin with a single Chief of Staff agent in Google AI Studio + Gemini, lock scope for Week 2 execution across Slack, Notion, and Gmail, audit real operational bottlenecks in Week 3, and wire deterministic cron routines and Vercel + GitHub deployment checks in Week 4.',
     topics: ['Multi-Agent Rollout', 'Chief of Staff Pattern', 'Context Isolation', 'Deployment Checks'],
     sha256: '5da3377b190bdcec18a594cc8b06fbdee9e5943516b69d81b6fa550d9267f2e7',
-    acquiredAt: '2026-11-06T08:15:00.000Z',
-    latencyMs: 1420,
     segments: [
       {
         start: 0,
@@ -156,7 +155,7 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
   {
     id: 'nextjs-stripe-launch',
     youtubeId: 'sal78ACtGTc',
-    badge: 'BENCHMARK 02 · FULL-STACK SAAS DEPLOY',
+    badge: 'FIXTURE 02 · FULL-STACK SAAS DEPLOY',
     category: 'Next.js + Stripe + Supabase Architecture',
     title: 'Production SaaS Billing & Webhook Verification Pipeline',
     channel: 'Systems Engineering',
@@ -165,8 +164,6 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
       'End-to-end production architecture for a Next.js App Router application backed by Supabase row-level security and Stripe webhook signature verification, deployed via Vercel with automated GitHub Actions preflight gates.',
     topics: ['Next.js App Router', 'Stripe Webhooks', 'Supabase RLS', 'Vercel Deployment Checks'],
     sha256: 'dfc3310bb0bffbfaa967852150d8eb5b93a07655e623d07679ba42a8b0025b4a',
-    acquiredAt: '2026-11-06T08:20:00.000Z',
-    latencyMs: 1180,
     segments: [
       {
         start: 0,
@@ -228,7 +225,7 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
   {
     id: 'fastapi-rag-pipeline',
     youtubeId: 'aircAruvnKk',
-    badge: 'BENCHMARK 03 · AI INFRASTRUCTURE',
+    badge: 'FIXTURE 03 · AI INFRASTRUCTURE',
     category: 'FastAPI + Hugging Face + Gemini Indexing',
     title: 'Deterministic Video-to-Action Indexing & Grounded Inference',
     channel: 'ML Infrastructure Lab',
@@ -237,8 +234,6 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
       'Technical deep dive into grounded multimodal indexing: acquiring verified timed captions, embedding transcript segments with Hugging Face and Gemini, serving deterministic JSON schemas over FastAPI, and surfacing source citations in React.',
     topics: ['Grounded Inference', 'FastAPI Contracts', 'Timestamp Provenance', 'Citation Verification'],
     sha256: 'b04333a13649337e98edad1a870bbbd97d03354468158b3d9a0dc2d1c26f42db',
-    acquiredAt: '2026-11-06T08:25:00.000Z',
-    latencyMs: 1310,
     segments: [
       {
         start: 0,
@@ -294,7 +289,7 @@ const RAW_BENCHMARKS: RawBenchmarkSpec[] = [
   },
 ];
 
-function buildVerifiedBenchmark(spec: RawBenchmarkSpec): VerifiedBenchmark {
+function buildFixtureBenchmark(spec: RawBenchmarkSpec): FixtureBenchmark {
   const url = `https://www.youtube.com/watch?v=${spec.youtubeId}`;
   const rawTranscriptText = transcriptTextFromSegments(spec.segments);
   const formattedTranscript = spec.segments
@@ -304,22 +299,22 @@ function buildVerifiedBenchmark(spec: RawBenchmarkSpec): VerifiedBenchmark {
   const provenance: AnalysisProvenance = {
     sourceUrl: url,
     sourceHost: 'www.youtube.com',
-    acquisitionMethod: 'innertube-caption-track',
-    transcriptSource: 'youtube-captions',
-    transcriptVerified: true,
-    acquiredAt: spec.acquiredAt,
+    acquisitionMethod: STATIC_FIXTURE_SOURCE,
+    transcriptSource: STATIC_FIXTURE_SOURCE,
+    transcriptVerified: false,
+    acquiredAt: '',
     segmentCount: spec.segments.length,
     timedSegmentCount: spec.segments.length,
     durationCoverageSeconds: calculateDurationCoverageSeconds(spec.segments),
     contentSha256: spec.sha256,
-    warnings: [],
+    warnings: [STATIC_FIXTURE_WARNING],
   };
 
   const quality = assessAnalysisEvidence({
     transcript: rawTranscriptText,
     segments: spec.segments,
     provenance,
-    now: spec.acquiredAt,
+    now: '',
   });
 
   const events: ExtractedEvent[] = spec.events.map((evt, index) => ({
@@ -361,12 +356,12 @@ function buildVerifiedBenchmark(spec: RawBenchmarkSpec): VerifiedBenchmark {
     quality,
     events,
     linkedSop,
-    latencyMs: spec.latencyMs,
+    latencyMs: null,
   };
 }
 
-export const VERIFIED_BENCHMARKS: VerifiedBenchmark[] = RAW_BENCHMARKS.map(buildVerifiedBenchmark);
+export const FIXTURE_BENCHMARKS: FixtureBenchmark[] = RAW_BENCHMARKS.map(buildFixtureBenchmark);
 
-export function getBenchmarkByYoutubeId(youtubeId: string): VerifiedBenchmark | undefined {
-  return VERIFIED_BENCHMARKS.find((b) => b.youtubeId === youtubeId);
+export function getBenchmarkByYoutubeId(youtubeId: string): FixtureBenchmark | undefined {
+  return FIXTURE_BENCHMARKS.find((b) => b.youtubeId === youtubeId);
 }
