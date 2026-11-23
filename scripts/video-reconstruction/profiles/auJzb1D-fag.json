@@ -1,0 +1,15 @@
+{
+  "id": "uvai-multimodal-workbench",
+  "version": "1",
+  "videoId": "auJzb1D-fag",
+  "reviewSha256": "e86e5b3383a64cc4508b4d5681a4c3e6e3aafe0c64473cf796e88cb8c82ea40c",
+  "name": "Multimodal workbench",
+  "description": "A local reconstruction of the video analysis and spatial annotation workflows demonstrated in Google Cloud Tech’s multimodal tutorial.",
+  "scope": "scoped-browser-capabilities",
+  "fullSourceAcceptance": "HOLD",
+  "mappings": [
+    { "requirementId": "G-REQ-01", "capability": "youtube-attachment" },
+    { "requirementId": "G-REQ-02", "capability": "summary-renderer" },
+    { "requirementId": "G-REQ-03", "capability": "box-renderer" }
+  ]
+}

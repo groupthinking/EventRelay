@@ -67,7 +67,7 @@ Directory presence does not establish an active deployment or npm workspace. Roo
 | [runbook/linear-loop-recovery-2026-10-19.md](runbook/linear-loop-recovery-2026-10-19.md) | Linear loop recovery gate and evidence checklist for issue #2449 |
 | [ARCHITECTURE_DIAGRAM.md](ARCHITECTURE_DIAGRAM.md) | Historical runtime/issue map, not current health |
 | [video_to_gtm_architecture.md](video_to_gtm_architecture.md) | Historical March architecture proposal |
-| [App Builder cut record](../apps/web/src/lib/app-builder-sandbox-PLAN.md) | Recorded second-video emit smoke; not a current deployment receipt |
+| [Second-video emit fixtures](../apps/web/src/lib/__fixtures__/qj-z5ohr7sga-emit.ts) | Fixture inputs for the App Builder emit tests; not a current deployment receipt |
 | [Workflow catalog](../.github/workflows/README.md) | CI and automation navigation; inspect current workflow definitions before execution |
 
 When a dated record conflicts with locked policy, preserve the record as history and follow the current policy. Do not add another competing roadmap.
