@@ -131,7 +131,7 @@ Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, 
 - `studio-shell-storage.ts` — Studio shell persistence.
 - `use-youtube-player.ts` — YouTube IFrame player hook.
 - `chat-pack-grounding.ts` — binds chat to a pack's evidence.
-- `pack-build-live-client.ts` / `pack-build-live.ts` — Build-live flow.
+- `pack-build-live-client.ts` — Build-live flow.
 - `official-templates.ts` — template picking, deploy hold reasons, stack checks.
 - `linked-sop.ts` — SOP steps linked against events; stack check compilation.
 
