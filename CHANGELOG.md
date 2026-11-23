@@ -45,6 +45,13 @@ Tracked by #2788.
 
 - `pack-build-live.ts`. It only re-exported `pack-build-live-client`, and the Studio UI already imports the client. The pack-build-live tests now import the client directly.
 
+### 2026-11-22: Drop unused studio store search surface
+
+#### Removed
+
+- Studio video store no longer keeps `searchQuery`, `searchResults`, `searchLoading`, `setSearchQuery`, `loading`, `setLoading`, or `selectedVideo()`. Nothing in the studio reads them. `processVideo` and the persisted video list are unchanged.
+- Unused `SearchResult`, `Activity`, and `PipelineResult` types. `pipelineResult` was never written.
+
 ### 2026-11-22: Anonymous Studio Ship this skips named-tool checks (apps/web)
 
 Dogfood pack `pBsT6v-ciO8` (SeaDance 2.5, Claude Fable 5, Character.ai, Cluely Desktop).

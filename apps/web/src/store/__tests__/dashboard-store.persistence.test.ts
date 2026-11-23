@@ -44,10 +44,6 @@ function resetStore() {
   useDashboardStore.setState({
     videos: [],
     selectedVideoId: null,
-    loading: false,
-    searchQuery: '',
-    searchResults: [],
-    searchLoading: false,
   });
 }
 
@@ -86,10 +82,6 @@ describe('dashboard-store persistence', () => {
     useDashboardStore.setState({
       videos: [video],
       selectedVideoId: video.id,
-      loading: true,
-      searchQuery: 'ignored',
-      searchResults: [{ start: 0, duration: 3, text: 'ignored', score: 1 }],
-      searchLoading: true,
     });
 
     const stored = readStoredState(storage);
@@ -100,6 +92,7 @@ describe('dashboard-store persistence', () => {
     expect('activities' in stored.state).toBe(false);
     expect('selectedVideoId' in stored.state).toBe(false);
     expect('searchQuery' in stored.state).toBe(false);
+    expect('loading' in stored.state).toBe(false);
   });
 
   it('rehydrates persisted videos and ignores a stored activity log', async () => {
@@ -121,10 +114,6 @@ describe('dashboard-store persistence', () => {
     const state = useDashboardStore.getState();
     expect(state.videos).toEqual([video]);
     expect(state.selectedVideoId).toBeNull();
-    expect(state.loading).toBe(false);
-    expect(state.searchQuery).toBe('');
-    expect(state.searchResults).toEqual([]);
-    expect(state.searchLoading).toBe(false);
   });
 
   it('keeps a session usable when browser storage writes fail', () => {
