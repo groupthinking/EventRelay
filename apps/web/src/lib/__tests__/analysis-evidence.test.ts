@@ -39,6 +39,21 @@ describe('analysis evidence gate', () => {
     expect(result.issues).toEqual([]);
   });
 
+  it.each([
+    { acquisitionMethod: 'static-fixture' },
+    { transcriptSource: 'static-fixture' },
+  ])('rejects an explicit fixture marker even with other trusted metadata: %o', (marker) => {
+    const text = 'A static example can be well formed and timestamped without being live evidence.';
+    const result = assessAnalysisEvidence({
+      transcript: text,
+      segments: [{ start: 0, duration: 12, text }],
+      provenance: provenance(marker),
+    });
+    expect(result.state).toBe('unavailable');
+    expect(result.passed).toBe(false);
+    expect(fatalQualityFailure(result)).toMatch(/static fixture/i);
+  });
+
   it('marks a real but untimed transcript degraded, not failed', () => {
     const text = 'This verified speech is long enough to analyze, but source timestamps were unavailable.';
     const result = assessAnalysisEvidence({

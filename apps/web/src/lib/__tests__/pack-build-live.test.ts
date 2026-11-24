@@ -7,7 +7,7 @@ import {
   studioPackBuildLiveSuccessReceiptForSelection,
   studioPackLiveReceiptForSelection,
   verifyPackBuildLive,
-} from '@/lib/pack-build-live';
+} from '@/lib/pack-build-live-client';
 import { XYMC_VIDEO_ID, XYMC_SOURCE_HASH } from '@/lib/__fixtures__/xymcbrfsj4c-emit';
 
 afterEach(() => {

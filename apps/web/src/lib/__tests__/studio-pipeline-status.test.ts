@@ -364,6 +364,9 @@ describe('studio-pipeline-status', () => {
     // IDE: transcript stage + ETA surface in the toolbar status line.
     expect(studio).toContain('data-testid="studio-ide-status"');
     expect(studio).toContain('data-testid="studio-transcript-retry"');
+    expect(studio).toContain('transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}');
+    expect(studio).toContain('showTranscriptRetry={showTranscriptRetry}');
+    expect(studio).toContain('onRetryTranscript={() => void runAnalysis(url || selected?.url || \'\')}');
     expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
@@ -528,6 +531,12 @@ describe('studio-pipeline-status', () => {
     expect(shell).toContain('data-testid="studio-ide-shell"');
     expect(shell).toContain('data-testid="studio-ide-toolbar"');
     expect(studio).toContain('StudioIdeShell');
+    const workbench = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    const mobile = workbench.slice(workbench.indexOf('<= 679px'));
+    expect(mobile).toMatch(/template-studio-bands\s*\{[^}]*padding-bottom:\s*calc\(72px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    const toastCss = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*z-index:\s*60/);
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\)\)/);
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
     expect(pricing).not.toContain('Durable workflow run history');
     expect(pricing).not.toContain('Review-only action preparation');
@@ -587,6 +596,11 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/setExportToast\(toast\);\s*setMessage\(/);
     expect(studio).toMatch(/role=\{exportToast\.tone === 'error' \? 'alert' : 'status'\}/);
     expect(studio).not.toContain('bottom-20');
+    expect(studio).toContain('studio-export-toast');
+    const toastAt = studio.indexOf('data-testid="studio-export-toast"');
+    const toastBlock = studio.slice(Math.max(0, toastAt - 80), toastAt + 500);
+    expect(toastBlock).not.toContain('bottom-4');
+    expect(toastBlock).toContain('studio-export-toast');
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {
