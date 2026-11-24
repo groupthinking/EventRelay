@@ -73,6 +73,32 @@ describe('verifyIdentityPack (CoS: fail closed)', () => {
     expect(citation.sourceHash).toBe(HASH);
   });
 
+  it('keeps pack events[] so Studio can render extracted events', () => {
+    const citation = verifyIdentityPack({
+      status: 'success',
+      data: {
+        ...VALID.data,
+        events: [
+          {
+            id: 'evt-clip',
+            type: 'action',
+            title: 'Clip signed',
+            timestamp: 12,
+            description: 'Signed clip',
+          },
+        ],
+      },
+    });
+    expect(citation.pack.events).toEqual([
+      expect.objectContaining({
+        id: 'evt-clip',
+        type: 'action',
+        title: 'Clip signed',
+        timestamp: 12,
+      }),
+    ]);
+  });
+
   it('fails closed when source_url is missing', () => {
     const { source_url: _omit, ...data } = VALID.data;
     expect(() => verifyIdentityPack({ status: 'success', data })).toThrow(/source_url/i);
