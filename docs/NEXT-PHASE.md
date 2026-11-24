@@ -4,11 +4,13 @@
 - **Authority:** [../AGENTS.md](../AGENTS.md)
 - **Plan:** [MASTER_ROADMAP.md](MASTER_ROADMAP.md)
 
+**November 22, 2026 local cut:** Hayden separately authorized the [evidence-bound reconstruction integration](video-reconstruction.md), tracked by [#2798](https://github.com/groupthinking/EventRelay/issues/2798). It adds a local CLI and verification path; it does not activate the public Studio or grant an operational G.A.T.E. PASS. This page continues to describe the consequential transition boundary.
+
 The former P3 “Act on the same run” document described an earlier cut. Same-run actions already exist in `OneLoopStudio`; do not restart that work or use its historical `/` routing as current guidance. `/studio` is the canonical workbench.
 
 ## Next owned slice
 
-Origin G.A.T.E. is the only cut authorized by root policy. The requested implementation now covers the `studio.deploy` proposed-to-live acceptance boundary: session-derived identity, scoped independent Ed25519 attestations, exact artifact/run/target binding, signed retained receipts, and atomic replay protection. See the [current contract](gate-transition-contract.md).
+Origin G.A.T.E. remains the operational cut authorized by root policy. Its implementation covers the `studio.deploy` proposed-to-live acceptance boundary: session-derived identity, scoped independent Ed25519 attestations, exact artifact/run/target binding, signed retained receipts, and atomic replay protection. See the [current contract](gate-transition-contract.md).
 
 **Goal:** make the approved consequential transition depend on trustworthy evidence and authority, without changing the fail-closed decision vocabulary or creating a second product.
 

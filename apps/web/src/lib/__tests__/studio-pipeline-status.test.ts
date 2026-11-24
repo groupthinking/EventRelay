@@ -364,11 +364,14 @@ describe('studio-pipeline-status', () => {
     // IDE: transcript stage + ETA surface in the toolbar status line.
     expect(studio).toContain('data-testid="studio-ide-status"');
     expect(studio).toContain('data-testid="studio-transcript-retry"');
+    expect(studio).toContain('transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}');
+    expect(studio).toContain('showTranscriptRetry={showTranscriptRetry}');
+    expect(studio).toContain('onRetryTranscript={() => void runAnalysis(url || selected?.url || \'\')}');
     expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
-  it('enables Export from pack exportability and ignores stack-check hold copy', () => {
+  it('enables Ship this from pack exportability and ignores named-tool hold copy', () => {
     expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
     expect(
       studioShipEnabled({
@@ -377,18 +380,25 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBe(true);
     expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
-    const cta = studioShipCta({ canExport: true, holdReason: 'Production is held until 4 stack check(s) pass.' });
-    expect(cta.label).toBe('Export');
+    const cta = studioShipCta({
+      canExport: true,
+      holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+    });
+    expect(cta.label).toBe('Ship this');
     expect(cta.enabled).toBe(true);
-    expect(cta.hint.toLowerCase()).toMatch(/skip|unknown/);
+    expect(cta.hint).toMatch(/can be skipped/i);
+    expect(cta.hint).toMatch(/not a production hold/i);
+    expect(cta.hint).not.toMatch(/\bpassed\b/i);
     expect(studioShipCta({ canExport: false }).enabled).toBe(false);
+    expect(studioShipCta({ canExport: false }).label).toBe('Ship this');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
-    expect(studio).toContain('Export');
+    expect(studio).toContain('{shipCta.label}');
     expect(studio).not.toContain('studio-deploy-button');
     expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
+    expect(studio).not.toMatch(/disabled=\{deployBusy \|\| !hasPayload \|\| Boolean\(holdReason\)\}/);
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -521,6 +531,12 @@ describe('studio-pipeline-status', () => {
     expect(shell).toContain('data-testid="studio-ide-shell"');
     expect(shell).toContain('data-testid="studio-ide-toolbar"');
     expect(studio).toContain('StudioIdeShell');
+    const workbench = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    const mobile = workbench.slice(workbench.indexOf('<= 679px'));
+    expect(mobile).toMatch(/template-studio-bands\s*\{[^}]*padding-bottom:\s*calc\(72px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    const toastCss = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*z-index:\s*60/);
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\)\)/);
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
     expect(pricing).not.toContain('Durable workflow run history');
     expect(pricing).not.toContain('Review-only action preparation');
@@ -580,6 +596,11 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/setExportToast\(toast\);\s*setMessage\(/);
     expect(studio).toMatch(/role=\{exportToast\.tone === 'error' \? 'alert' : 'status'\}/);
     expect(studio).not.toContain('bottom-20');
+    expect(studio).toContain('studio-export-toast');
+    const toastAt = studio.indexOf('data-testid="studio-export-toast"');
+    const toastBlock = studio.slice(Math.max(0, toastAt - 80), toastAt + 500);
+    expect(toastBlock).not.toContain('bottom-4');
+    expect(toastBlock).toContain('studio-export-toast');
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {

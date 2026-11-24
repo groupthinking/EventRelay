@@ -74,6 +74,8 @@ describe('StudioIdeOutput playflow', () => {
     expect(screen.getByTestId('studio-ide-output-tab-tasks').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('studio-pack-chapters').textContent).toContain('Camera setup');
     expect(screen.getByTestId('studio-ide-output-tools').textContent).toContain('Next.js');
+    expect(screen.getByTestId('studio-proposed-tool-card').textContent).toMatch(/Proposed/);
+    expect(screen.getByTestId('studio-proposed-tool-card').textContent).toMatch(/not run/i);
     expect(screen.getByTestId('studio-ide-output-topics').textContent).toContain('Robotics');
 
     // Keyboard tab navigation across the 4 tabs.
@@ -164,7 +166,7 @@ describe('StudioIdeOutput playflow', () => {
             id: 'chk_tool_seadance',
             title: 'Use SeaDance 2.5 as named in the video',
             status: 'unknown',
-            statusLabel: 'Unknown — UVAI cannot run this check',
+            statusLabel: 'Can be skipped — not a production hold. UVAI cannot run this check.',
             holdsShip: false,
           },
         ]}
@@ -173,8 +175,10 @@ describe('StudioIdeOutput playflow', () => {
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-code'));
     const row = screen.getByTestId('studio-stack-check-chk_tool_seadance');
     expect(row.textContent).toMatch(/SeaDance 2\.5/);
+    expect(row.textContent).toMatch(/can be skipped/i);
+    expect(row.textContent).toMatch(/not a production hold/i);
     expect(row.textContent).toMatch(/cannot run this check/i);
-    expect(row.textContent).not.toMatch(/production is held/i);
+    expect(row.textContent).not.toMatch(/\bpassed\b/i);
   });
 
   it('uses the honest Events empty copy and hosts the pack workbench inside Tasks & Tools', () => {
@@ -189,6 +193,80 @@ describe('StudioIdeOutput playflow', () => {
     expect(events.textContent).toMatch(/no extracted events/i);
     expect(events.textContent).not.toMatch(/INSIGHT/i);
     expect(screen.getByTestId('studio-pack-workbench')).toBeTruthy();
+  });
+
+  it('shows a transcript ETA while the fetch is in progress and a retry when it fails', () => {
+    const onRetry = vi.fn();
+    const view = render(
+      <StudioIdeOutput
+        video={{ ...baseVideo, status: 'processing', transcript: '' }}
+        transcriptEta="About 33s left (typical ~45s)"
+        initialSection="transcript"
+      />,
+    );
+    expect(screen.getByTestId('studio-transcript-eta').textContent).toMatch(/33s left/i);
+    expect(screen.queryByText('Nothing yet.')).toBeNull();
+
+    view.rerender(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          status: 'failed',
+          transcript: '',
+          failure: {
+            stage: 'analysis',
+            message: 'Gemini 3.8 Flash returned no extracted spec content.',
+            retryable: true,
+            failedAt: '2026-11-22T00:00:00.000Z',
+          },
+        }}
+        showTranscriptRetry
+        onRetryTranscript={onRetry}
+        initialSection="transcript"
+      />,
+    );
+    expect(screen.getByTestId('studio-transcript-body').textContent).toMatch(
+      /Gemini 3\.8 Flash returned no extracted spec content/,
+    );
+    fireEvent.click(screen.getByTestId('studio-transcript-pane-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders pBsT6v-ciO8 named tools as proposed cards instead of a dead name list', () => {
+    const pack = reviewPackFixture();
+    pack.video_id = 'pBsT6v-ciO8';
+    pack.source_url = 'https://www.youtube.com/watch?v=pBsT6v-ciO8';
+    pack.stack.tools = [
+      { name: 'SeaDance 2.5', evidence: 'Named on screen.' },
+      { name: 'Claude Fable 5' },
+      { name: 'Character.ai' },
+      { name: 'Cluely Desktop' },
+    ];
+    render(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          url: 'https://www.youtube.com/watch?v=pBsT6v-ciO8',
+          videoPack: {
+            packId: pack.id,
+            videoId: 'pBsT6v-ciO8',
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        }}
+      />,
+    );
+    const cards = screen.getAllByTestId('studio-proposed-tool-card');
+    expect(cards).toHaveLength(4);
+    expect(cards.map((card) => card.textContent).join('\n')).toMatch(/SeaDance 2\.5/);
+    expect(cards.map((card) => card.textContent).join('\n')).toMatch(/Cluely Desktop/);
+    for (const card of cards) {
+      expect(card.textContent).toMatch(/Proposed/);
+      expect(card.textContent).toMatch(/not run/i);
+      expect(card.textContent).not.toMatch(/\b(passed|done|executed)\b/i);
+    }
   });
 
   it('renders review_action results and pending tool proposals inside Tasks & Tools', () => {

@@ -660,7 +660,9 @@
     min-width: 0;
     max-width: 100%;
     padding: 10px 12px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
+
   .uvai-cards.template-studio-shell .template-studio-bands > * {
     min-width: 0;
     max-width: 100%;
@@ -719,4 +721,31 @@
   .uvai-cards.template-studio-shell .studio-steps {
     gap: 4px;
   }
+}
+
+.studio-export-toast {
+  position: fixed;
+  left: 50%;
+  z-index: 60;
+  bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  width: min(36rem, calc(100% - 2rem));
+  transform: translateX(-50%);
+  border-radius: 8px;
+  border: 1px solid var(--uvai-border-strong);
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+
+.studio-export-toast--success {
+  background: var(--uvai-surface);
+  color: var(--uvai-ink);
+  border-color: var(--uvai-accent);
+}
+
+.studio-export-toast--error {
+  background: var(--uvai-danger-bg, #fff1f1);
+  color: var(--uvai-danger-ink, #8f1d1d);
+  border-color: var(--uvai-danger-border, #e7b4b4);
 }

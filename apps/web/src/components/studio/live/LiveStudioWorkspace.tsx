@@ -33,6 +33,8 @@ export interface LiveStudioWorkspaceProps {
   canSeek: boolean;
   onSeek: (seconds: number) => void;
   onSaveTaskEdits: (edits: LiveTaskEdits) => void;
+  transcriptEta?: string | null;
+  onRetryTranscript?: () => void;
 }
 
 export default function LiveStudioWorkspace({
@@ -46,6 +48,8 @@ export default function LiveStudioWorkspace({
   canSeek,
   onSeek,
   onSaveTaskEdits,
+  transcriptEta = null,
+  onRetryTranscript,
 }: LiveStudioWorkspaceProps) {
   const [mobileTab, setMobileTab] = useState<MobileTab>('watch');
   const pack = video?.videoPack?.pack;
@@ -120,7 +124,19 @@ export default function LiveStudioWorkspace({
         <div className="live-player" data-mobile-hidden={panelHidden('watch')}>{player}</div>
         <div className="live-rail" id="live-panel-watch" data-mobile-hidden={panelHidden('watch')} aria-label="Chapters and transcript">
           <LiveChapterRail chapters={chapters} live={live} canSeek={canSeek} onSeek={onSeek} />
-          <LiveTranscript segments={segments} live={live} canSeek={canSeek} onSeek={onSeek} />
+          <LiveTranscript
+            segments={segments}
+            live={live}
+            canSeek={canSeek}
+            onSeek={onSeek}
+            etaLabel={transcriptEta}
+            failureMessage={
+              !live && video?.status === 'failed'
+                ? video.failure?.message?.trim() || 'Transcript failed.'
+                : null
+            }
+            onRetry={onRetryTranscript}
+          />
           <details className="live-extras" data-testid="live-source-extra">
             <summary>Keyframes and events{sourceMeta ? ` · ${sourceMeta}` : ''}</summary>
             <LiveKeyframes keyframes={keyframes} live={live} canSeek={canSeek} onSeek={onSeek} />
