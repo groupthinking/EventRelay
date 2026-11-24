@@ -1,5 +1,6 @@
 import samplePackEnvelope from '@/lib/sample-pack/auJzb1D-fag.pack.json';
 import { verifyIdentityPack, type EmittedVideoPack, type VideoPackCitation } from '@/lib/emit-video-pack';
+import { studioPackExtractedEvents } from '@/lib/studio-pipeline-status';
 import type { ExtractedEvent } from '@/lib/types';
 import type { Video } from '@/store/dashboard-types';
 
@@ -107,20 +108,8 @@ export function sampleReplaySteps(citation: VideoPackCitation): SampleReplayStep
   return steps;
 }
 
-function humanize(value: string): string {
-  const spaced = value.replace(/[_-]+/g, ' ').trim();
-  return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : 'Visual event';
-}
-
-export function sampleEvents(pack: EmittedVideoPack, recordId: string): ExtractedEvent[] {
-  return (pack.visual_context?.visual_elements ?? []).map((element, index) => ({
-    id: `evt_${recordId}_${index}`,
-    type: 'insight',
-    title: humanize(element.element_type),
-    description: element.content,
-    timestamp: String(element.timestamp),
-    ...(typeof element.confidence === 'number' ? { confidence: element.confidence } : {}),
-  }));
+export function sampleEvents(pack: EmittedVideoPack, _recordId: string): ExtractedEvent[] {
+  return studioPackExtractedEvents(pack);
 }
 
 export function sampleCompletionPatch(citation: VideoPackCitation, recordId: string): Partial<Video> {
