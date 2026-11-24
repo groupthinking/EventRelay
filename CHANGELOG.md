@@ -11,6 +11,16 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+### 2026-11-24: Long Video Packs use one agentic Gemini call
+
+Tracked by #2808.
+
+#### Changed
+
+- A YouTube video of at least 300 seconds is extracted with one direct Gemini Interactions call on `gemini-3.8-flash`, `processing: "agentic"`, and `thinking_level: "high"`. The call sends no offsets and no fps. Shorter clips keep the static shard path.
+- A grounded citation on that call must stay inside `0..durationSeconds`. A citation past the duration is invalid (`out-of-range-citation`).
+- An empty response, invalid JSON, or an SDK rejection of agentic processing throws `VideoPackExtractError`. There is no static full-video fallback.
+
 ### 2026-11-22: Studio transcript, player, export, and proposed-tool honesty (apps/web)
 
 Related: #2491. Does not close it. Dogfood video `pBsT6v-ciO8`. No G.A.T.E. No invented events.
