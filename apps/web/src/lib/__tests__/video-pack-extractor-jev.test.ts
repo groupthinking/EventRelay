@@ -101,11 +101,15 @@ describe('extractVideoPackSpec Jev wiring', () => {
 
     const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
     expect(validateShardManifest(manifest).ok).toBe(1);
+    expect(manifest.shards.length).toBeGreaterThan(1);
     expect(experimental_evaluate).not.toHaveBeenCalled();
-    expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
-    expect(runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s])).toEqual(
-      manifest.shards.map((shard) => [shard.start_s, shard.end_s]),
-    );
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0]).toMatchObject({
+      processing: 'agentic',
+      model: 'gemini-3.8-flash',
+      start_s: 0,
+      end_s: 620,
+    });
     expect(spec.concepts).toEqual(['zoo', 'elephants']);
   });
 
@@ -125,13 +129,15 @@ describe('extractVideoPackSpec Jev wiring', () => {
 
     const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
     expect(validateShardManifest(manifest).ok).toBe(1);
-    // Planner call fires; a stop is treated as a null decision so the
-    // deterministic manifest drives the shard workers.
+    // Planner call fires; a stop is a skip. Duration still routes the
+    // extract to one agentic call instead of the deterministic shards.
     expect(experimental_evaluate).toHaveBeenCalled();
-    expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
-    expect(runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s])).toEqual(
-      manifest.shards.map((shard) => [shard.start_s, shard.end_s]),
-    );
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0]).toMatchObject({
+      processing: 'agentic',
+      start_s: 0,
+      end_s: 620,
+    });
     expect(spec.concepts).toEqual(['zoo', 'elephants']);
   });
 
@@ -148,8 +154,10 @@ describe('extractVideoPackSpec Jev wiring', () => {
     );
 
     const manifest = planShardManifest(CANON, SOURCE_URL, LONG_METADATA, 620);
+    expect(manifest.shards.length).toBeGreaterThan(1);
     expect(experimental_evaluate).not.toHaveBeenCalled();
-    expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0].processing).toBe('agentic');
   });
 
   it('uses the Jev-returned manifest for other actions and still requires validator ok', async () => {
@@ -182,10 +190,13 @@ describe('extractVideoPackSpec Jev wiring', () => {
       'retry',
       'stop',
     ]);
-    expect(runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s])).toEqual(
-      manifest.shards.map((shard) => [shard.start_s, shard.end_s]),
-    );
-    expect(runVideo.mock.calls[0]?.[0].model).toBe('gemini-3.8-flash');
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0]).toMatchObject({
+      processing: 'agentic',
+      model: 'gemini-3.8-flash',
+      start_s: 0,
+      end_s: 620,
+    });
   });
 
   it('rejects a chunk decision when validateShardManifest returns 0', async () => {
@@ -229,6 +240,8 @@ describe('extractVideoPackSpec Jev wiring', () => {
     expect(experimental_evaluate).toHaveBeenCalledTimes(2);
     const postCheck = experimental_evaluate.mock.calls[1]?.[0] as { state: string };
     expect(postCheck.state).toContain('merged Video Pack');
-    expect(runVideo).toHaveBeenCalledTimes(manifest.shards.length);
+    expect(manifest.shards.length).toBeGreaterThan(1);
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0].processing).toBe('agentic');
   });
 });
