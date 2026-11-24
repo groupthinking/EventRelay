@@ -506,6 +506,47 @@ describe('extractVideoPackSpec', () => {
     expect(spec.grounded_spec?.status).toBe('available');
   });
 
+  it('does not fall back to static shards when the agentic call is empty, invalid, or rejected', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    const longMetadata = {
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [],
+    };
+    const failures: Array<ShardVideoInteractionRunner> = [
+      async () => {
+        throw new Error(
+          'Empty interaction output for shard 0–620: refusing to continue without evidence',
+        );
+      },
+      async () => ({ text: '{not json', interactionId: 'int-bad' }),
+      async () => {
+        throw new Error('SDK rejected agentic processing');
+      },
+    ];
+
+    for (const fail of failures) {
+      vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce(longMetadata);
+      const runVideo = vi.fn(fail);
+      await expect(
+        extractVideoPackSpec(
+          { sourceUrl: SOURCE_URL, videoId: CANON },
+          { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+        ),
+      ).rejects.toBeInstanceOf(VideoPackExtractError);
+      expect(runVideo.mock.calls.length).toBeGreaterThan(0);
+      for (const [call] of runVideo.mock.calls) {
+        expect(call.processing).toBe('agentic');
+        expect(call.start_s).toBe(0);
+        expect(call.end_s).toBe(620);
+      }
+    }
+  });
+
   it('calls the direct worker with gemini-3.8-flash and a narrowed range (never full-video-only)', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
