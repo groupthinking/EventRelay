@@ -21,3 +21,4 @@
 * **What was done:** Deleted obsolete Fly/nightly/autonomous-video/Ray-K8s/dead-backend probe surfaces; moved knowledge_base into `src/agents/`; retargeted e2e redirects.
 * **Why it was needed:** Leftovers implied a parallel product/deploy path that is not authorized and confused CI/docs.
 * **How it was tested:** Import/call check for relocated KB; 23 focused MCP unit tests passed.
+* **CI note:** PR body includes `Closes #2455` for the require-issue-closer gate.
