@@ -1,0 +1,2 @@
+# Security floors for transitive Python packages copied into the runtime image.
+urllib3>=2.8.0

@@ -12,11 +12,6 @@ This directory contains comprehensive guides for deploying and managing EventRel
   - Total time: 20 minutes + DNS propagation
 
 ### 📚 Complete Guides
-- **[API_COST_POSTGRESQL_RUNBOOK.md](./API_COST_POSTGRESQL_RUNBOOK.md)** - Canonical Cloud Run backend runbook
-  - Shared PostgreSQL and distinct DDL/DML roles
-  - Dedicated disabled worker and migration-first rollout
-  - WIF, immutable secrets, health gates and rollback
-
 - **[VERCEL_PRODUCTION_RUNBOOK.md](./VERCEL_PRODUCTION_RUNBOOK.md)** - Current UVAI launch-readiness runbook
   - Vercel project and production domains
   - Incident response and rollback path
@@ -90,7 +85,7 @@ All these URLs redirect to https://uvai.io:
 ### Database
 - **Development**: SQLite (`.runtime/app.db`)
 - **Production**: PostgreSQL (configured via Terraform)
-- **Migrations**: Alembic
+- **Migrations**: no `alembic.ini` in this tree (see `docs/MIGRATION_TRUTH.md`)
 
 ## Deployment Workflows
 
@@ -101,13 +96,9 @@ All these URLs redirect to https://uvai.io:
 git push origin main
 # Vercel automatically deploys and runs build
 
-# Backend - Manual trigger via GitHub Actions
-# Go to: Actions → Deploy to Google Cloud Run → Run workflow
+# Backend — api.uvai.io is the live FastAPI service.
+# This tree has no `.github/workflows/deploy-cloud-run.yml`.
 ```
-
-There is no supported manual backend deployment. Direct deploy entrypoints are
-retired because they bypass database and rollout gates. Use the protected
-workflow and follow `API_COST_POSTGRESQL_RUNBOOK.md`.
 
 ## Environment Setup
 
@@ -137,14 +128,13 @@ workflow and follow `API_COST_POSTGRESQL_RUNBOOK.md`.
 ### Deploy Backend Update
 1. Make code changes
 2. Commit and push to GitHub
-3. Trigger workflow: `.github/workflows/deploy-cloud-run.yml`
+3. This tree has no `.github/workflows/deploy-cloud-run.yml`. `https://api.uvai.io` is the live backend.
 4. Monitor deployment in Cloud Console
 5. Verify health check: `curl https://api.uvai.io/api/v1/health`
 6. Verify database readiness: `curl https://api.uvai.io/readyz`
 
 ### Configure Redirects
-- **Vercel**: Edit `apps/web/vercel.json` and `apps/web/next.config.js`
-- **Cloudflare Pages**: Edit `apps/web/public/_redirects`
+- **Vercel**: Edit `vercel.json` and `apps/web/next.config.js`
 
 ### View Logs
 ```bash
@@ -209,7 +199,6 @@ dig @1.1.1.1 uvai.io +short  # Cloudflare
 ## Related Documentation
 
 - [../CLAUDE.md](../CLAUDE.md) - Claude Code context and guidelines
-- [../ONBOARDING.md](../ONBOARDING.md) - Developer onboarding guide
 - [../../infrastructure/](../../infrastructure/) - Infrastructure as Code (Terraform, K8s)
 - [../../.github/workflows/](../../.github/workflows/) - CI/CD workflows
 

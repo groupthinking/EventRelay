@@ -21,9 +21,9 @@ for (const viewport of viewports) {
     await page.setViewportSize(viewport);
     await page.goto('/');
 
-    await expect(page.getByRole('heading', { name: 'Your videos know what to do next.' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Turn YouTube into bound tasks.' })).toBeVisible();
     await expect(page.getByLabel('YouTube URL')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Run in Studio' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Build from video in Studio' })).toBeVisible();
     await expect(page.getByText('UVAI Workflow Pro').last()).toBeVisible();
     await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
     await expect(page.getByRole('link', { name: 'See all plans' })).toBeVisible();
@@ -46,7 +46,7 @@ test('announces an invalid URL and exposes the invalid field state', async ({ pa
   const input = page.getByLabel('YouTube URL');
 
   await input.fill('not a YouTube URL');
-  await page.getByRole('button', { name: 'Run in Studio' }).click();
+  await page.getByRole('button', { name: 'Build from video in Studio' }).click();
 
   await expect(input).toHaveAttribute('aria-invalid', 'true');
   await expect(input).toHaveAttribute('aria-describedby', 'home-youtube-url-error');
@@ -55,7 +55,8 @@ test('announces an invalid URL and exposes the invalid field state', async ({ pa
 
 test('opens mobile workflow context without losing the source input', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.goto('/');
+  // Workflow context lives on the classic home; the live on-ramp has no side panel.
+  await page.goto('/?shell=classic');
   const input = page.getByLabel('YouTube URL');
   await input.fill('https://www.youtube.com/watch?v=auJzb1D-fag');
   const context = page.getByRole('complementary', { name: 'Video workflow context' });
@@ -73,7 +74,7 @@ test('keeps the keyboard path on native labelled controls', async ({ page }) => 
   await page.goto('/');
 
   const input = page.getByLabel('YouTube URL');
-  const submit = page.getByRole('button', { name: 'Run in Studio' });
+  const submit = page.getByRole('button', { name: 'Build from video in Studio' });
   const monthly = page.getByRole('button', { name: 'Monthly checkout' });
   const annual = page.getByRole('button', { name: 'Annual checkout' });
   const pricing = page.getByRole('link', { name: 'See all plans' });

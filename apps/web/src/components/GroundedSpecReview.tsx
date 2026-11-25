@@ -33,28 +33,28 @@ function Issues({ issues }: { issues: SpecIssue[] }) {
 
 function Requirement({ requirement, onSeek }: { requirement: GroundedBuildSpec['requirements'][number]; onSeek?: (seconds: number) => void }) {
   return (
-    <li className="flex flex-col gap-2 rounded-lg border border-slate-200 p-4">
-      <p className="font-medium">{requirement.title}</p>
-      <p className="text-slate-500">{requirement.id} · {requirement.classification} · {requirement.required ? 'Required' : 'Optional'} · {requirement.capabilities.join(', ')}</p>
+    <li className="flex flex-col gap-2 rounded-lg border border-[var(--uvai-border-strong)] p-4">
+      <p className="font-medium text-[var(--uvai-ink)]">{requirement.title}</p>
+      <p className="text-[var(--uvai-ink-faint)]">{requirement.id} · {requirement.classification} · {requirement.required ? 'Required' : 'Optional'} · {requirement.capabilities.join(', ')}</p>
       <p>{requirement.detail}</p>
       {requirement.rationale ? <p>Rationale: {requirement.rationale}</p> : null}
       {requirement.citations.length ? (
         <details>
-          <summary className="cursor-pointer rounded-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-4">Supporting source</summary>
+          <summary className="cursor-pointer rounded-sm font-medium text-[var(--uvai-accent-ink)] focus-visible:outline-2 focus-visible:outline-offset-4">Supporting source</summary>
           <ul className="flex flex-col gap-3 py-3">
             {requirement.citations.map((ref, index) => (
               <li key={index} className="flex flex-col gap-2">
-                <p className="text-slate-500">{ref.kind === 'visual' ? 'Model-described visual observation — not a verified frame' : 'Source-linked transcript quotation'}</p>
+                <p className="text-[var(--uvai-ink-faint)]">{ref.kind === 'visual' ? 'Model-described visual observation — not a verified frame' : 'Source-linked transcript quotation'}</p>
                 <blockquote className="text-pretty">{ref.quote}</blockquote>
                 <div className="flex flex-wrap items-center gap-3">
                   {onSeek ? <Button type="button" variant="secondary" onClick={() => onSeek(ref.startSeconds)}>Seek to {formatSeconds(ref.startSeconds)}</Button> : null}
-                  <a className="rounded-sm underline underline-offset-4 focus-visible:outline-2" href={`https://www.youtube.com/watch?v=${ref.videoId}&t=${Math.floor(ref.startSeconds)}s`} target="_blank" rel="noopener noreferrer">Open source at {formatSeconds(ref.startSeconds)}</a>
+                  <a className="rounded-sm text-[var(--uvai-accent-ink)] underline underline-offset-4 focus-visible:outline-2" href={`https://www.youtube.com/watch?v=${ref.videoId}&t=${Math.floor(ref.startSeconds)}s`} target="_blank" rel="noopener noreferrer">Open source at {formatSeconds(ref.startSeconds)}</a>
                 </div>
               </li>
             ))}
           </ul>
         </details>
-      ) : <p className="text-slate-500">No observed source citation for this choice.</p>}
+      ) : <p className="text-[var(--uvai-ink-faint)]">No observed source citation for this choice.</p>}
     </li>
   );
 }
@@ -91,11 +91,11 @@ export default function GroundedSpecReview({ videoId, pack, acknowledgment, pers
   };
 
   return (
-    <section data-testid="grounded-spec-review" aria-labelledby={titleId} className="uvai-card min-w-0 p-4 font-sans text-sm leading-relaxed text-slate-700 lg:col-span-2 sm:p-6">
+    <section data-testid="grounded-spec-review" aria-labelledby={titleId} className="uvai-card min-w-0 p-4 font-sans text-sm leading-relaxed text-[var(--uvai-ink-soft)] lg:col-span-2 sm:p-6">
       <div className="flex flex-col gap-6 break-words">
         <header className="flex flex-col gap-2">
-          <h2 id={titleId} className="text-xl font-semibold text-balance">Grounded specification</h2>
-          <p className="text-slate-500">Browser-only interactive apps · Specification review only</p>
+          <h2 id={titleId} className="text-xl font-semibold text-[var(--uvai-ink)] text-balance">Grounded specification</h2>
+          <p className="text-[var(--uvai-ink-faint)]">Browser-only interactive apps · Specification review only</p>
           <p id={scopeId}>Acknowledgment records inspection, not acceptance of proposals or authorization. It does not verify evidence, lock builder inputs, run tests, or produce a G.A.T.E. receipt.</p>
         </header>
         {!available ? (
@@ -105,9 +105,9 @@ export default function GroundedSpecReview({ videoId, pack, acknowledgment, pers
         ) : (
           <>
             <div className="flex flex-col gap-2">
-              <h3 className="text-lg font-medium text-balance">{available.spec.app.name || 'Application purpose unresolved'}</h3>
+              <h3 className="text-lg font-medium text-[var(--uvai-ink)] text-balance">{available.spec.app.name || 'Application purpose unresolved'}</h3>
               <p>{available.spec.app.purpose || 'No purpose supplied.'}</p>
-              <p className="text-slate-500">Model-reported source coverage: {available.spec.sourceStatus} · confidence: {Math.round(available.spec.confidence * 100)}%</p>
+              <p className="text-[var(--uvai-ink-faint)]">Model-reported source coverage: {available.spec.sourceStatus} · confidence: {Math.round(available.spec.confidence * 100)}%</p>
               <ul className="flex flex-col gap-1">{available.spec.limitations.map((limitation, index) => <li key={index}>{limitation}</li>)}</ul>
             </div>
             <ReviewGroup title="Blockers and source limitations"><Issues issues={available.issues} /></ReviewGroup>
@@ -124,17 +124,17 @@ export default function GroundedSpecReview({ videoId, pack, acknowledgment, pers
               ['Unknown requirements', ['unknown']],
             ] as const).map(([title, classifications]) => {
               const rows = available.spec.requirements.filter((row) => (classifications as readonly string[]).includes(row.classification));
-              return <ReviewGroup key={title} title={title}>{rows.length ? <ul className="flex flex-col gap-3">{rows.map((row) => <Requirement key={row.id} requirement={row} onSeek={onSeek} />)}</ul> : <p className="text-slate-500">None reported.</p>}</ReviewGroup>;
+              return <ReviewGroup key={title} title={title}>{rows.length ? <ul className="flex flex-col gap-3">{rows.map((row) => <Requirement key={row.id} requirement={row} onSeek={onSeek} />)}</ul> : <p className="text-[var(--uvai-ink-faint)]">None reported.</p>}</ReviewGroup>;
             })}
             <ReviewGroup title="Unresolved questions">
-              {available.spec.unresolved.length ? <ul className="flex flex-col gap-2">{available.spec.unresolved.map((row) => <li key={row.id}>{row.question} · Affects: {row.requirementIds.join(', ') || 'Application scope'}</li>)}</ul> : <p className="text-slate-500">None reported.</p>}
+              {available.spec.unresolved.length ? <ul className="flex flex-col gap-2">{available.spec.unresolved.map((row) => <li key={row.id}>{row.question} · Affects: {row.requirementIds.join(', ') || 'Application scope'}</li>)}</ul> : <p className="text-[var(--uvai-ink-faint)]">None reported.</p>}
             </ReviewGroup>
             <ReviewGroup title="Unsupported capabilities">
-              <p className="text-slate-500">Servers, accounts, shared databases, payments, secrets, native devices, and privileged/background execution are outside this scope. No local fake is substituted.</p>
+              <p className="text-[var(--uvai-ink-faint)]">Servers, accounts, shared databases, payments, secrets, native devices, and privileged/background execution are outside this scope. No local fake is substituted.</p>
               <ul className="flex flex-col gap-2">{available.spec.unsupported.map((row) => <li key={row.id}><strong>{row.capability}</strong>: {row.reason} · Affects: {row.requirementIds.join(', ') || 'Application scope'}</li>)}</ul>
             </ReviewGroup>
             <ReviewGroup title="Proposed acceptance criteria">
-              <p className="text-slate-500">Proposed checks only. These tests have not been executed.</p>
+              <p className="text-[var(--uvai-ink-faint)]">Proposed checks only. These tests have not been executed.</p>
               <ul className="flex flex-col gap-3">{available.spec.acceptanceCriteria.map((row) => <li key={row.id}><strong>{row.id} · {row.requirementId}</strong><p>Given: {row.given}</p><p>When: {row.when}</p><p>Expected: {row.then}</p></li>)}</ul>
             </ReviewGroup>
             <footer className="flex flex-col gap-3">

@@ -62,11 +62,10 @@ This checklist verifies the responsive landing-page behavior, the Google sign-in
 
 ### Known Limitations
 - **Landing Page Implementation:** The design task is scoped but not yet implemented.
-- **Production Access:** This checklist relies on local verification; it does not authorize or execute a production deployment. See [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md) for production provisioning.
+- **Production Access:** This checklist relies on local verification; it does not authorize or execute a production deployment.
 
 ## 🔗 References
 
-- [LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)
 - [Draft PR #1978: recover failed Google sign-in initiation](https://github.com/groupthinking/EventRelay/pull/1978)
 - [Draft PR #1980: add evidence-backed sprint demo agenda](https://github.com/groupthinking/EventRelay/pull/1980)
 - [Notion task: Prepare QA checklist](https://app.notion.com/p/3dd3c2339c0481019c8fdf22053d0a4d?pvs=204)

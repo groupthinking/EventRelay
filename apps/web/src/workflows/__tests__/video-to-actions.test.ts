@@ -5,6 +5,7 @@ const runActionAgent = vi.fn().mockResolvedValue({
   actions: [
     {
       tool: 'create_workflow_task',
+      input: { title: 'Create a grounded task' },
       status: 'pending',
       result: 'Prepared for review.',
     },
@@ -73,5 +74,6 @@ describe('videoToActionsWorkflow', () => {
     );
     expect(result.usedProvidedTranscript).toBe(true);
     expect(result.actions[0]?.tool).toBe('create_workflow_task');
+    expect(result.actions[0]?.input).toEqual({ title: 'Create a grounded task' });
   });
 });

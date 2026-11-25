@@ -22,10 +22,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Default file paths
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-DEFAULT_DATABASE_PATH = _PROJECT_ROOT / "docs" / "knowledge_prototypes" / "mcp-servers" / "docs" / "knowledge_database.json"
-
 
 class KnowledgeDeduplicator:
     """Handles parsing, deduplicating, and consolidating a knowledge database JSON file."""
@@ -241,7 +237,7 @@ class KnowledgeDeduplicator:
 
 def main():
     parser = argparse.ArgumentParser(description="Knowledge Base Deduplicator")
-    parser.add_argument("--path", default=str(DEFAULT_DATABASE_PATH), help="Path to knowledge_database.json")
+    parser.add_argument("--path", required=True, help="Path to knowledge_database.json")
     parser.add_argument("--dry-run", action="store_true", help="Perform dry run without writing changes")
     parser.add_argument("--consolidate", action="store_true", help="Consolidate highly similar technology terms")
 

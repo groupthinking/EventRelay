@@ -1,9 +1,12 @@
 # UVAI▶ — Agent Instructions
 
 Grok Build (`grok --cwd <this-repo>`) appends this file to the system prompt; keep locked UVAI facts here.
-This is the live UVAI product repo (`uvai.io`, Vercel project `v0-uvai`).
 
-**Do not invent prices, catalog SKUs, or stack.** If a fact is not locked here, look it up in the repo or leave it unset.
+**Public brand:** UVAI▶ at https://uvai.io
+**Repo of record:** github.com/groupthinking/EventRelay
+**Live Vercel project:** `v0-uvai` (not Origin tmp project `uvai`)
+
+**Do not invent prices, catalog SKUs, or stack.** If a fact is not locked here, stop and ask — do not guess.
 
 ## Product (locked)
 
@@ -11,7 +14,7 @@ This is the live UVAI product repo (`uvai.io`, Vercel project `v0-uvai`).
 
 Paste a YouTube URL → hashed **Video Pack** → shipable architecture / build rails.
 
-The differentiator is **action / ship**, not transcription. Do not compete with Google on STT or models. Ride **Gemini 3.8 Flash via Vercel AI Gateway**.
+The differentiator is **action / ship**, not transcription. Do not compete with Google on STT or models. Ride **Gemini 3.8 Flash via Vercel AI Gateway** as the video-to-spec extractor (`google/gemini-3.8-flash`). Do not wait on Qwen. Do not self-host 80GB. Do not put an LLM in Origin wasm.
 
 ## Pricing (locked)
 
@@ -27,16 +30,16 @@ Do not invent other prices or imply Maintain / Ship checkout exists unless the r
 
 ## Pack store (locked)
 
-Video Pack persistence is **Upstash REST only** (`KV_REST_API_*`, or the equivalent `UPSTASH_REDIS_REST_*` pair the integration injects).
+Video Pack persistence is **Upstash REST only** (`KV_REST_API_*`, or the equivalent `UPSTASH_REDIS_REST_*` pair the integration injects). Sole pack store resource name: `upstash-uvai-pack`.
 
-**Official Redis TCP is not the pack store.** Do not add `redis://`, ioredis, or other TCP Redis clients for packs.
+**Official Redis TCP is not the pack store.** Do not add `redis://`, ioredis, or other TCP Redis clients for packs. Do not use TCP `STORAGE_REDIS_URL` / `redis-carmine-saddle` as the pack store.
 
 ## Already live (do not re-litigate)
 
-- Get Pro checkout
+- Get Pro checkout (Turnstile→Stripe)
 - Hashed Video Pack
 - UI unify — single skin; `/dashboard` and sibling skins redirect into the canonical studio
-- Pack-quality — architecture / artifacts / `stack.tools`; **no forced Shopify gate**
+- Pack-quality — architecture / artifacts / `stack.tools`; stack-checks grounded in pack tools — **no forced Shopify gate** on Cloudflare/X402 sources like `MNNfat_QP0E`
 
 ## Lineage backbone (locked)
 
@@ -50,7 +53,7 @@ UVAI▶
   → ExperienceOS
 ```
 
-**FORGE / Workbench / Living Notebook / VIZUL** are UX patterns only — not product brands and not parallel products.
+**FORGE / Workbench / Living Notebook / VIZUL** are UX patterns only — not product brands and not parallel products. Do not bounce work to forge, slingshot, reach, uvai-skills, ClipToAction, or Origin tmp project `uvai`. Origin is **not** Google G.A.T.E./GEAR; do not retarget to GEAR.
 
 ## Operating model (locked)
 
@@ -58,7 +61,7 @@ UVAI▶
 | --- | --- |
 | **UVAI Loop** | The standing ship |
 | **Chief of Staff** | Orchestration only — no codebase diving |
-| **Grok Build** | Repo-side checker (`grok --cwd`) |
+| **Grok Build** | Inspects/reviews repos via `grok --cwd` |
 | **Builder** | Stays off parallel UVAI cuts unless Loop asks |
 
 ## Authorized next cut
@@ -66,6 +69,10 @@ UVAI▶
 **Origin G.A.T.E.** only.
 
 `asRecord` / claim stay **held** unless that cut requires them. Do not start adjacent cuts (Mission Workspace, Agent Factory, ExperienceOS, FORGE-as-product, etc.) unless Loop asks.
+
+## Exit (locked)
+
+uvai.io distribution-ready **and** 50 distinct videos with real Video Packs. The 50/50 milestone is already met on the official list.
 
 ## G.A.T.E. vs Zero-Sim (locked)
 
@@ -81,10 +88,9 @@ UVAI▶
 
 - **Project rules:** this `AGENTS.md` (also `CLAUDE.md` if present). Grok walks repo root → cwd. Each file is capped at 10k characters.
 - **Skills:** auto-discovered from `.grok/skills/` (repo or cwd). Extra `[skills] paths` belong in `~/.grok/config.toml`, not project config.
-- **Project `.grok/config.toml`:** official docs honor **`[mcp_servers]` only** here. Do not add one unless sharing MCP servers. This repo has no committed project MCP config.
+- **Project `.grok/config.toml`:** official docs honor **`[mcp_servers]` only** here (`https://docs.x.ai/build/settings`). This repo ships GitHub and Vercel MCP stubs that expand `GITHUB_TOKEN` / `VERCEL_TOKEN` (optional `VERCEL_TEAM_ID`) at load time — no secrets in git. Leave the committed stubs; export tokens in the Grok launch shell. Do not re-run `grok mcp add` with double-quoted `${GITHUB_TOKEN}` (the shell would write the secret into the tracked file). Confirm what loaded: `grok inspect --cwd <this-repo>`.
 - **Existing Claude skills** in `.claude/skills/` load via Grok’s Claude compatibility. Do not duplicate them under `.grok/skills/` unless a Grok-native override is required.
 - **Workflows:** auto-discovered from `.grok/workflows/*.rhai` (already present). Treat as automation, not product lineage.
-- Confirm what loaded: `grok inspect --cwd <this-repo>`.
 
 ## Repo conventions
 
@@ -101,3 +107,16 @@ When running the nightly first-principles audit (status &gt; 400 or latency &gt;
 ```bash
 PYTHONPATH=src python3 scripts/nightly_audit_agent.py --dry-run
 ```
+
+## Security dependency maintenance
+
+For an advisory-driven dependency update, follow [docs/security-dependency-maintenance.md](docs/security-dependency-maintenance.md). Reuse the canonical issue/PR, preserve direct versus transitive dependencies, and include the Security dependency evidence block. Before an authorized merge, re-fetch the exact head, applicable checks, reviews, unresolved threads, and mergeability; use expected-head protection and record the resulting merge commit. A recipe or green historical run is not current verification. This procedure grants no deployment or spending authority.
+
+## Agent staff governance
+
+Full spec: [docs/agent-staff-governance.md](docs/agent-staff-governance.md).
+
+- **Five rules:** (1) no external state change without a standing policy or task authorization; (2) one human approval gate; (3) all work committed to a tracked GitHub branch; (4) a changelog entry linked to the issue, PR, or Video Pack hash; (5) every fix leaves an SOP and a regression test or check.
+- **The one gate (Hayden):** production deploys, live database changes, billing, entitlements and spend, and credentials or access settings. CI-green merges to `main` that touch none of these fall under the standing merge policy (POL-001) and MERGE_POLICY.md.
+- **Policy loop:** spot the inconsistency, propose a rule plus its check, Hayden approves it once, then codify it and enforce it automatically.
+- **Hiring brief:** every agent role states what it owns, how it thinks, its definition of done, and what it never touches. It states its execution limits before taking work and never claims access it lacks.

@@ -29,6 +29,18 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'pull_request_target' }}
 
 jobs:
+  mcp-catalog-offline:
+    name: MCP catalog offline regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Fixture-only approval and drift regressions
+        run: python -m unittest discover -s tests/security -p test_mcp_catalog_approval.py -v
+
   guards:
     # Fail fast on the class of breakage that shipped to main un-caught:
     # committed merge-conflict markers and import-time Python SyntaxErrors.
@@ -88,7 +100,7 @@ jobs:
         run: npm --workspace=apps/web run test:studio-preflight:services
       - name: Retain real Studio preflight evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: studio-preflight-real-${{ github.sha }}
           path: ${{ runner.temp }}/studio-preflight-real/
@@ -96,7 +108,7 @@ jobs:
           retention-days: 7
       - name: Build web production image
         run: docker build --file apps/web/Dockerfile .
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: build-artifacts
           path: |
@@ -114,7 +126,7 @@ jobs:
       - run: pip install ruff
       - name: Lint Python (informational)
         continue-on-error: true
-        run: ruff check src/youtube_extension/backend/ src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
+        run: ruff check src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
 
   lint-frontend:
     runs-on: ubuntu-latest
@@ -158,7 +170,7 @@ jobs:
         run: npm --workspace=apps/web test -- --reporter=default --reporter=json --outputFile.json="$RUNNER_TEMP/web-vitest-report.json"
       - name: Retain machine-readable test evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: web-vitest-${{ github.sha }}
           path: ${{ runner.temp }}/web-vitest-report.json
@@ -172,7 +184,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -201,3 +213,5 @@ jobs:
           PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120
           --cov=src/youtube_extension --cov-fail-under=0
           --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
+      - name: Offline MCP inventory and approval regressions
+        run: python -m pytest tests/security/test_local_mcp_config.py tests/security/test_mcp_catalog_approval.py -q -o addopts=''

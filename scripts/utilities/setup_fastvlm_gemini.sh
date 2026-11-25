@@ -40,7 +40,7 @@ if command -v python3 &> /dev/null; then
     PYTHON_VERSION=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
     print_status "Python $PYTHON_VERSION found"
 else
-    print_error "Python 3 not found. Please install Python 3.10 or higher."
+    print_error "Python 3 not found. Please install Python 3.11 or 3.12."
     exit 1
 fi
 

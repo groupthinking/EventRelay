@@ -7,6 +7,14 @@ test.beforeEach(({ baseURL }) => {
   test.skip(!process.env.BASE_URL || !baseURL || !['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseURL).hostname), 'Synthetic review fixtures are local-only, not production smoke tests.');
 });
 
+async function openCodeAndSpecTab(page: Page) {
+  const deliverablesDockTab = page.getByRole('tab', { name: 'Deliverables', exact: true });
+  if (await deliverablesDockTab.isVisible()) {
+    await deliverablesDockTab.click();
+  }
+  await page.getByTestId('studio-ide-output-tab-code').click();
+}
+
 async function seedReview(page: Page, baseURL: string | undefined, storageBlocked = false) {
   if (!baseURL || !['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseURL).hostname)) {
     throw new Error('Synthetic review tests require an explicit local BASE_URL; never run against production.');
@@ -55,9 +63,10 @@ async function seedReview(page: Page, baseURL: string | undefined, storageBlocke
     }
   }, { key: storageKey, videos, storageBlocked });
   await page.goto('/studio');
-  const selector = page.getByRole('combobox', { name: 'Stored packs' });
+  const selector = page.getByRole('combobox', { name: 'Saved videos' });
   await expect(selector).toBeVisible();
   await selector.selectOption('synthetic-0');
+  await openCodeAndSpecTab(page);
   await expect(page.getByRole('button', { name: 'Acknowledge review', exact: true })).toBeEnabled();
   return unexpectedRequests;
 }
@@ -84,23 +93,26 @@ for (const viewport of [{ width: 830, height: 709 }, { width: 390, height: 844 }
     await mkdir('/tmp/agent-browser', { recursive: true });
     await review.screenshot({ path: `/tmp/agent-browser/grounded-review-${viewport.width}.png` });
     await page.reload();
-    await page.getByRole('combobox', { name: 'Stored packs' }).selectOption('synthetic-0');
+    await page.getByRole('combobox', { name: 'Saved videos' }).selectOption('synthetic-0');
+    await openCodeAndSpecTab(page);
     await expect(page.getByRole('button', { name: 'Clear local acknowledgment' })).toBeVisible();
-    await page.getByRole('combobox', { name: 'Stored packs' }).selectOption('synthetic-1');
+    await page.getByRole('combobox', { name: 'Saved videos' }).selectOption('synthetic-1');
     await expect(review).toContainText('Grounded specification unavailable for this pack.');
     await expect(acknowledgment).toHaveCount(0);
-    await page.getByRole('combobox', { name: 'Stored packs' }).selectOption('synthetic-2');
+    await page.getByRole('combobox', { name: 'Saved videos' }).selectOption('synthetic-2');
     await expect(review).toContainText('Content digest does not match.');
     await expect(acknowledgment).toBeDisabled();
     await expect(page.getByRole('button', { name: 'Clear local acknowledgment' })).toHaveCount(0);
-    await page.getByRole('combobox', { name: 'Stored packs' }).selectOption('synthetic-0');
+    await page.getByRole('combobox', { name: 'Saved videos' }).selectOption('synthetic-0');
     await page.getByRole('button', { name: 'Clear local acknowledgment' }).click();
     await expect(acknowledgment).toBeEnabled();
     await page.reload();
-    await page.getByRole('combobox', { name: 'Stored packs' }).selectOption('synthetic-0');
+    await page.getByRole('combobox', { name: 'Saved videos' }).selectOption('synthetic-0');
+    await openCodeAndSpecTab(page);
     await expect(acknowledgment).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Clear local acknowledgment' })).toHaveCount(0);
-    await expect(page.getByTestId('studio-deploy-button')).toHaveText('Check preflight');
+    await expect(page.getByTestId('studio-ide-ship')).toHaveText('Ship this');
+    await expect(page.getByTestId('studio-deploy-button')).toHaveCount(0);
     expect(unexpected).toEqual([]);
   });
 }
@@ -110,7 +122,8 @@ test('synthetic storage failure is session-only and cannot survive reload', asyn
   await page.getByRole('button', { name: 'Acknowledge review', exact: true }).click();
   await expect(page.getByTestId('grounded-spec-review')).toContainText('Session-only review state — not saved for reload.');
   await page.reload();
-  await page.getByRole('combobox', { name: 'Stored packs' }).selectOption('synthetic-0');
+  await page.getByRole('combobox', { name: 'Saved videos' }).selectOption('synthetic-0');
+  await openCodeAndSpecTab(page);
   await expect(page.getByRole('button', { name: 'Acknowledge review', exact: true })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Clear local acknowledgment' })).toHaveCount(0);
   expect(unexpected).toEqual([]);

@@ -22,7 +22,9 @@ server names, configuration filenames or environment variable names.
 
 The catalog helper hashes the complete recorded tool list plus server identity;
 ordering of tools and object keys is normalized. Its output is evidence only,
-not approval. Approval binding and invalidation integration remain unimplemented.
+not approval. The separate offline recorded-catalog comparison is documented in
+`local-mcp-catalog-approval.md`; launcher/runtime approval integration remains
+unimplemented.
 
 Remaining #2349 work: official publisher/version resolution, credential argv
 migration, sandbox/filesystem/egress policy, complete container inventory, explicit

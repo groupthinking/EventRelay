@@ -14,7 +14,7 @@ SENSITIVE = re.compile(r"token|secret|password|authorization|api[_-]?key", re.I)
 
 
 def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
 
 
 def catalog_digest(identity, response):
@@ -26,6 +26,80 @@ def catalog_digest(identity, response):
     if len({t["name"] for t in tools}) != len(tools):
         raise ValueError("duplicate tool")
     return hashlib.sha256(canonical({"identity": identity, "tools": sorted(tools, key=lambda t: t["name"])}).encode()).hexdigest()
+
+
+def digest(value):
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def catalog_record(identity, response):
+    """Hash an offline, complete capture; evidence never grants approval."""
+    full_digest = catalog_digest(identity, response)
+    if response.get("nextCursor") is not None:
+        raise ValueError("incomplete catalog")
+    records = []
+    for tool in response["tools"]:
+        if not tool["name"] or ("description" in tool and not isinstance(tool["description"], str)):
+            raise ValueError("invalid tool")
+        for key in ("annotations", "outputSchema"):
+            if key in tool and not isinstance(tool[key], dict):
+                raise ValueError("invalid tool")
+        # Hash every field for enforcement. Split digests are diagnostics only.
+        # Omitted description differs from an explicitly empty description.
+        records.append({
+            "name_digest": digest(tool["name"]),
+            "schema_digest": digest({key: tool[key] for key in ("inputSchema", "outputSchema") if key in tool}),
+            "description_digest": digest({"description": tool["description"]} if "description" in tool else {}),
+            "tool_digest": digest(tool),
+        })
+    return {"schema_version": 1, "approved": False,
+            "identity_digest": digest(identity), "catalog_digest": full_digest,
+            "tools": sorted(records, key=lambda item: item["name_digest"])}
+
+
+def compare_catalog(identity, response, approval):
+    """Compare against a separately reviewed pin; emit hashes/codes only."""
+    observed = catalog_record(identity, response)
+    fields = {"schema_version", "approved", "identity_digest", "catalog_digest", "tools"}
+    tool_fields = {"name_digest", "schema_digest", "description_digest", "tool_digest"}
+    def valid_hash(value):
+        return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
+    if (not isinstance(approval, dict) or set(approval) != fields
+            or type(approval["schema_version"]) is not int or approval["schema_version"] != 1
+            or type(approval["approved"]) is not bool
+            or not all(valid_hash(approval[key]) for key in ("identity_digest", "catalog_digest"))
+            or not isinstance(approval["tools"], list)
+            or any(not isinstance(item, dict) or set(item) != tool_fields
+                   or not all(valid_hash(value) for value in item.values()) for item in approval["tools"])):
+        raise ValueError("invalid approval")
+    old = {item["name_digest"]: item for item in approval["tools"]}
+    if len(old) != len(approval["tools"]):
+        raise ValueError("duplicate approval tool")
+    new = {item["name_digest"]: item for item in observed["tools"]}
+    findings = []
+    if approval["approved"] is not True:
+        findings.append("UNAPPROVED_CATALOG")
+    if approval["identity_digest"] != observed["identity_digest"]:
+        findings.append("SERVER_IDENTITY_CHANGED")
+    if approval["catalog_digest"] != observed["catalog_digest"]:
+        findings.append("CATALOG_CHANGED")
+    changes = []
+    for name in sorted(old.keys() | new.keys()):
+        codes = []
+        if name not in old:
+            codes.append("TOOL_ADDED")
+        elif name not in new:
+            codes.append("TOOL_REMOVED")
+        else:
+            for field, code in (("schema_digest", "SCHEMA_CHANGED"),
+                                ("description_digest", "DESCRIPTION_CHANGED"),
+                                ("tool_digest", "TOOL_CONTRACT_CHANGED")):
+                if old[name][field] != new[name][field]:
+                    codes.append(code)
+        if codes:
+            changes.append({"name_digest": name, "codes": codes})
+    return {"schema_version": 1, "status": "BLOCKED" if findings or changes else "MATCH",
+            "findings": findings, "changes": changes, "observed": observed}
 
 
 def audit(config, label):

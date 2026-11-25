@@ -230,6 +230,10 @@ data/audit/*.jsonl
 # Local AI session artifacts
 *.rtf
 .gemini/extensions/
+!.gemini/extensions/
+.gemini/extensions/*
+!.gemini/extensions/eventrelay-engineering/
+!.gemini/extensions/eventrelay-engineering/**
 
 # Local verification and native-module quarantine artifacts
 /work/

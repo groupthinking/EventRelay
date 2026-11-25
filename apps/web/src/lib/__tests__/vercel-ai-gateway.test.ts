@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   gatewayChat,
-  chunkTextForEmbedding,
   hasAiGatewayKey,
   resolveAiGatewayKey,
   stripJsonCodeFence,
@@ -42,13 +41,6 @@ describe('vercel-ai-gateway', () => {
     const pretty = '{\n  "ok": true,\n  "n": 1\n}';
     expect(stripJsonCodeFence('```json\n' + pretty + '\n```')).toBe(pretty);
     expect(JSON.parse(stripJsonCodeFence('```json\n' + pretty + '\n```'))).toEqual({ ok: true, n: 1 });
-  });
-
-  it('chunks text using embeddings-demo sentence split', () => {
-    expect(chunkTextForEmbedding('First idea. Second idea.')).toEqual([
-      'First idea',
-      'Second idea',
-    ]);
   });
 });
 

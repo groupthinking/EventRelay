@@ -310,6 +310,8 @@ describe('emitAppBuilderSandbox (ingest→App Builder sandbox emit)', () => {
     expect(main).toContain('bindOutlineNav');
     expect(main).toContain("fetch('/api/chat'");
     expect(main).toContain('postLiveChat');
+    expect(main).toContain('planIntent');
+    expect(main).toContain('planInterview');
     expect(html).toContain('data-testid="shell-chat-send">Send</button>');
     expect(html).not.toContain('Send (preview)');
     expect(html).not.toContain('Sign in required');

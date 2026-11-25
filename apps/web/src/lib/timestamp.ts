@@ -3,10 +3,10 @@
  *
  * These utilities convert between human timestamps ("1:23", "[01:02:03]"),
  * seconds, extract the YouTube video id from a URL, and parse a plain-text
- * transcript into time-synchronized segments for InteractiveTranscript.
+ * transcript into time-synchronized segments.
  */
 
-import type { TranscriptSegment } from '@/components/InteractiveTranscript';
+import type { TranscriptSegment } from '@/lib/transcript-search';
 
 /** Matches a leading timestamp token, optionally wrapped in [] or (). */
 const LEADING_TIMESTAMP =

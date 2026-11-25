@@ -215,7 +215,7 @@ def test_reconciliation_workflow_triggers_on_schedule_and_dispatch() -> None:
 def test_reconciliation_workflow_reacts_to_repo_state_changes() -> None:
     """The report refreshes on governance state changes, not every code push."""
     triggers = _load_workflow()[True]
-    assert triggers["pull_request_target"]["types"] == [
+    assert triggers["pull_request"]["types"] == [
         "opened",
         "reopened",
         "edited",
@@ -226,6 +226,28 @@ def test_reconciliation_workflow_reacts_to_repo_state_changes() -> None:
     assert triggers["issues"]["types"] == ["opened", "reopened", "closed"]
     assert "create" in triggers
     assert "delete" in triggers
+
+
+def test_reconciliation_fork_event_cannot_write() -> None:
+    workflow = _load_workflow()
+    assert "pull_request_target" not in workflow[True]
+    condition = workflow["jobs"]["report"]["if"]
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node required for event condition execution")
+    script = """const c=CONDITION;
+for(const [event,head,want] of [
+  ['pull_request','other/fork',false],
+  ['pull_request','groupthinking/EventRelay',true],
+  ['schedule',null,true],['issues',null,true],['workflow_dispatch',null,true]
+]) {
+ const github={event_name:event,event:head?{pull_request:{head:{repo:{full_name:head}}}}:{},
+ repository:'groupthinking/EventRelay'};
+ if(eval(c)!==want)throw Error(event+':'+head);
+}
+""".replace("CONDITION", json.dumps(condition))
+    result = subprocess.run([node, "-e", script], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
 
 
 def test_reconciliation_workflow_minimum_permissions() -> None:

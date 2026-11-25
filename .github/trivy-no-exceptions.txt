@@ -1,0 +1,2 @@
+# No accepted image vulnerability exceptions.
+# Bare advisory IDs are intentionally absent.

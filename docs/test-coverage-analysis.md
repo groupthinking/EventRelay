@@ -174,7 +174,7 @@ These tests are primarily **live integration tests** that call real APIs (YouTub
 | `app/api/video/route.ts` | 281 | Multi-strategy video analysis with 3 fallback tiers |
 | `app/api/transcribe/route.ts` | 239 | 4-strategy transcript extraction pipeline |
 | `app/api/extract-events/route.ts` | 229 | Structured event extraction with JSON schema validation |
-| `app/api/pipeline/route.ts` | 163 | End-to-end pipeline orchestration |
+| ~~`app/api/pipeline/route.ts`~~ | — | Retired in #2322; replaced by the Video Pack flow (`app/api/video/pack/route.ts` → `lib/video-pack.ts`) |
 | `lib/api-client.ts` | 89 | Base HTTP client with retry logic |
 | `components/AnalysisPanel.tsx` | 187 | Chat interface with message state and error handling |
 | `app/dashboard/page.tsx` | 763 | Main dashboard with modals, tabs, and complex interactions |

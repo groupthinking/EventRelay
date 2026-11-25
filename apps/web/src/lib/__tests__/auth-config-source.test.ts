@@ -49,11 +49,12 @@ describe('auth configuration source safety', () => {
     expect(source).toContain('HomePasteForm');
   });
 
-  it('folds the retired dashboard skin into the studio', () => {
-    const dashboard = readSource('app/dashboard/page.tsx');
-    expect(dashboard).toContain('canonicalStudioPath');
-    expect(dashboard).toContain('redirect(');
-    expect(dashboard).not.toContain('DashboardSplitView');
-    expect(dashboard).not.toContain('VideoCard');
+  it('folds the retired dashboard skin into the studio redirect', () => {
+    const config = readSource('../next.config.js');
+    expect(config).toContain("source: '/dashboard'");
+    expect(config).toContain("source: '/dashboard/:path*'");
+    expect(config).toContain("destination: '/studio'");
+    expect(config).toContain('permanent: true');
+    expect(config).not.toContain('DashboardSplitView');
   });
 });

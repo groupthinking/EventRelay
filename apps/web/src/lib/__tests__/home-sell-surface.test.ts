@@ -20,12 +20,13 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(home).not.toContain('OneLoopStudio');
     expect(home).not.toContain('Loading studio');
     expect(home).toContain('Universal Video Action Intelligence');
-    expect(home).toContain('Your videos know what to do next.');
+    expect(home).toContain('Turn YouTube into bound tasks.');
     expect(home).toContain('hashed Video Pack');
-    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
+    expect(home).toContain('and proposed checks in one workspace.');
+    expect(home).toContain('Studio prepares proposed work and build rails for you to review.');
     expect(home).toContain('HomePasteForm');
     expect(home).toContain('$199');
-    expect(home).toContain('HomeProCheckout');
+    expect(home).not.toContain('HomeProCheckout');
     expect(home).toContain('Get Pro');
     expect(home).toContain('workflowProPriceLabel');
     expect(home).not.toContain('$19/mo');
@@ -35,13 +36,14 @@ describe('Home is a sell page; Studio is the workbench', () => {
   it('presents a responsive YouTube URL-to-Studio conversion hierarchy', () => {
     const home = readSource('app/page.tsx');
 
-    expect(home).toContain('Your videos know what to do next.');
-    expect(home).toContain('prepares proposed work and build rails for you to review in Studio');
+    expect(home).toContain('Turn YouTube into bound tasks.');
+    expect(home).toContain('and proposed checks in one workspace.');
+    expect(home).toContain('Studio prepares proposed work and build rails for you to review.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('HomeTemplateShell');
     expect(home).toContain('Inspect the Video Pack');
     expect(home).toContain('HomePasteForm');
-    expect(home).toContain('HomeProCheckout');
+    expect(home).toContain('href="/pricing"');
   });
 
   it('does not claim arbitrary-video production E2E or a guaranteed transcript', () => {
@@ -52,7 +54,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const structured = readSource('components/StructuredData.tsx');
     const ogAlt = readSource('app/opengraph-image.tsx');
     const sellCopy = `${home}\n${checkout}\n${nav}\n${layout}\n${structured}\n${ogAlt}`;
-    expect(home).toContain('Your videos know what to do next.');
+    expect(home).toContain('Turn YouTube into bound tasks.');
     expect(home).toContain('Transcript quality varies by source.');
     expect(home).toContain('Transcript quality varies by source');
     expect(home).not.toContain('turns it into something real');
@@ -125,7 +127,7 @@ describe('Home is a sell page; Studio is the workbench', () => {
     const config = readWebFile('next.config.js');
     expect(config).toContain("source: '/features'");
     expect(config).toContain("source: '/playground'");
-    expect(config).toMatch(/source: '\/features'[\s\S]*destination: '\/'/);
+    expect(config).toMatch(/source: '\/features'[\s\S]*destination: '\/(\?shell=classic)?'/);
     expect(config).toMatch(/source: '\/playground'[\s\S]*destination: '\/'/);
     expect(config).toContain("source: '/dashboard'");
     expect(config).toContain("destination: '/studio'");
@@ -133,32 +135,27 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(config).toContain("source: '/prototype'");
   });
 
-  it('folds Get Pro checkout onto Home via the existing ProCheckoutButton path', () => {
+  it('keeps checkout ownership on /pricing and links Get Pro cleanly from Home and Nav', () => {
     const home = readSource('app/page.tsx');
-    const checkout = readSource('components/home/HomeProCheckout.tsx');
     const button = readSource('components/billing/ProCheckoutButton.tsx');
     const nav = readSource('components/Nav.tsx');
     const pricing = readSource('app/pricing/page.tsx');
+    const shipperCss = readSource('styles/home-shipper.css');
+    const studioCss = readSource('styles/studio-workbench.css');
     const config = readWebFile('next.config.js');
-    expect(home).toContain('HomeProCheckout');
+    expect(home).not.toContain('HomeProCheckout');
     expect(home).toContain('id="get-pro"');
-    expect(home).not.toMatch(/href="\/pricing"[\s\S]{0,80}Get Pro/);
-    expect(checkout).toContain("from '@/components/billing/ProCheckoutButton'");
-    expect(checkout).toContain('ProCheckoutButton');
-    expect(checkout).toContain('Monthly checkout');
-    expect(checkout).toContain('Annual checkout');
-    expect(checkout).toContain('workflowProPriceLabel');
-    expect(checkout).toContain('WORKFLOW_PRO_PRODUCT_NAME');
-    expect(checkout).toContain('href="/pricing"');
-    expect(checkout).not.toContain('/api/billing/checkout');
-    expect(checkout).not.toContain('Maintain');
-    expect(checkout).not.toContain('Ship');
+    expect(home).toContain('href="/pricing"');
     expect(button).toContain("fetch('/api/billing/checkout'");
     expect(button).toContain('turnstileToken');
-    expect(nav).toContain('href="/#get-pro"');
+    expect(nav).toContain('href="/pricing"');
+    expect(nav).not.toContain('href="/#get-pro"');
     expect(nav).toContain("href: '/pricing'");
     expect(pricing).toContain('ProCheckoutButton');
-    expect(pricing).toContain('turnstile');
+    expect(pricing).toContain('Turnstile');
+    expect(pricing).not.toContain('billing-surface-markers');
+    expect(shipperCss).not.toContain('linear-gradient(135deg, #0f172a');
+    expect(studioCss).not.toContain('max-width: 1360px');
     expect(config).not.toMatch(/source: '\/pricing'/);
   });
 
@@ -168,5 +165,16 @@ describe('Home is a sell page; Studio is the workbench', () => {
     expect(docs).toContain('end-to-end YouTube workflow');
     expect(docs).toContain('/api/video/pack');
     expect(docs).toContain('/api/workflows/video-to-actions');
+    expect(docs).toContain('Build &amp; Launch Checklist');
+    expect(docs).toContain('Download .md');
+    expect(docs).toContain('On this page');
+  });
+
+  it('renders Shipper visual showcase stages and badged capability tiles on Home', () => {
+    const home = readSource('app/page.tsx');
+    expect(home).toContain('home-showcase-stage');
+    expect(home).toContain('home-showcase-display');
+    expect(home).toContain('home-tile-badge');
+    expect(home).toContain('NEW · WEBMCP');
   });
 });

@@ -72,11 +72,6 @@ performance_monitoring.db
    - Location: `/Users/garvey/Dev/projects/EventRelay/`
    - Action: Verify if actively used or should be gitignored
 
-3. **docs/guides/PRODUCTION_DEPLOYMENT_GUIDE.md**
-   - Still contains references to `uvai-frontend`
-   - Lines 135, 389
-   - Action: Update to reference `apps/web` instead
-
 ### 📋 **Security Note**
 
 NPM audit found 12 vulnerabilities (1 moderate, 11 high). Run:

@@ -1,8 +1,5 @@
 /**
- * Centralized Zustand store for the EventRelay dashboard.
- *
- * Combines video processing, event extraction, and agent dispatch
- * into a single store so every component shares the same state.
+ * Zustand store for studio video records.
  *
  * `processVideo` starts one durable Workflow run and only marks a record
  * complete when the persisted result includes verified source evidence and a
@@ -15,16 +12,12 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 import type {
   ExtractedEvent,
   AgentExecution,
-  AgentStatus,
 } from '@/lib/types';
 import type {
   Action,
-  Activity,
-  PipelineResult,
-  SearchResult,
   Video,
 } from '@/store/dashboard-types';
-import { formatSeconds } from '@/lib/timestamp';
+import { extractYouTubeId, formatSeconds } from '@/lib/timestamp';
 import { emitVideoPack, type VideoPackCitation } from '@/lib/emit-video-pack';
 import {
   pollVideoToActions,
@@ -36,48 +29,42 @@ import { compileLinkedSop } from '@/lib/linked-sop';
 
 export type {
   Action,
-  Activity,
-  PipelineResult,
-  SearchResult,
   Video,
 } from '@/store/dashboard-types';
 
+export const ANALYSIS_STOPPED_MESSAGE =
+  'Analysis stopped in this browser. Server work already accepted may continue.';
+
 interface DashboardState {
-  // Data
   videos: Video[];
-  activities: Activity[];
   selectedVideoId: string | null;
-  loading: boolean;
 
-  // Computed
-  selectedVideo: () => Video | undefined;
-
-  // Actions
   addVideo: (video: Video) => void;
   updateVideo: (id: string, patch: Partial<Video>) => void;
   removeVideo: (id: string) => void;
   selectVideo: (id: string | null) => void;
-  addActivity: (event: string, type: Activity['type']) => void;
-  setLoading: (loading: boolean) => void;
 
-  // Workflow actions
   processVideo: (url: string, opts?: { signal?: AbortSignal }) => Promise<string>;
-  resumeProcessingRuns: () => Promise<void>;
-  extractEvents: (videoId: string) => void;
-  dispatchToAgents: (videoId: string) => Promise<void>;
-  refreshAgentStatus: (videoId: string) => Promise<void>;
-
-  // Search actions
-  searchQuery: string;
-  searchResults: SearchResult[];
-  searchLoading: boolean;
-  setSearchQuery: (query: string) => void;
-  performSearch: (videoId: string, query: string) => Promise<void>;
 }
 
-/** Trim a URL for display in titles/activity. */
+/** Trim a string for display in titles. */
 function truncate(value: string, max: number): string {
   return value.length > max ? value.substring(0, max - 3) + '…' : value;
+}
+
+function fallbackVideoTitle(url: string): string {
+  const videoId = extractYouTubeId(url);
+  return videoId ? `YouTube · ${videoId}` : 'YouTube video';
+}
+
+function isPlaceholderVideoTitle(title: string): boolean {
+  const trimmed = title.trim();
+  return (
+    trimmed.length === 0 ||
+    /^analyzing:\s*/i.test(trimmed) ||
+    /^analysis\s+(?:blocked|stopped)\b/i.test(trimmed) ||
+    /^https?:\/\//i.test(trimmed)
+  );
 }
 
 function formatVerifiedTranscript(segments: TranscriptSegment[]): string | undefined {
@@ -124,6 +111,7 @@ function normalizeDashboardActions(value: unknown): Action[] {
 
 function verifiedResultPatch(
   id: string,
+  url: string,
   runId: string,
   result: VideoToActionsResult | undefined,
   pack?: VideoPackCitation,
@@ -153,7 +141,7 @@ function verifiedResultPatch(
   });
   const events: ExtractedEvent[] = (analysis.events || []).map((event, index) => ({
     id: `evt_${id}_${index}`,
-    type: 'insight',
+    type: 'topic',
     title: event.label,
     description: event.description,
     timestamp: Number.isFinite(event.timestamp) ? String(event.timestamp) : undefined,
@@ -191,7 +179,7 @@ function verifiedResultPatch(
     status: 'complete',
     progress: 100,
     pipelineMode: 'workflow',
-    title: truncate(analysis.title || 'Verified video analysis', 60),
+    title: truncate(analysis.title?.trim() || fallbackVideoTitle(url), 60),
     processedAt: new Date().toISOString(),
     duration: `${provenance.segmentCount} segments`,
     transcript,
@@ -226,7 +214,7 @@ function workflowFailurePatch(url: string, startedAt: string, message: string): 
   return {
     status: 'failed',
     progress: 100,
-    title: `Analysis blocked: ${truncate(url, 38)}`,
+    title: `Analysis blocked · ${fallbackVideoTitle(url)}`,
     processedAt: failedAt,
     failure: {
       stage,
@@ -266,8 +254,6 @@ function workflowFailurePatch(url: string, startedAt: string, message: string): 
   };
 }
 
-const activeRunResumptions = new Set<string>();
-
 let persistenceSucceeded = false;
 export function dashboardPersistenceSucceeded(): boolean {
   return persistenceSucceeded;
@@ -304,28 +290,31 @@ function isStoredVideo(value: unknown): value is Video {
     && typeof row.progress === 'number' && Number.isFinite(row.progress)
     && ['processing', 'complete', 'failed'].includes(String(row.status));
 }
-function isStoredActivity(value: unknown): value is Activity {
-  if (!value || typeof value !== 'object') return false;
-  const row = value as Record<string, unknown>;
-  return typeof row.time === 'string' && typeof row.event === 'string' && ['success', 'info', 'error'].includes(String(row.type));
-}
 
+function normalizePersistedVideo(video: Video): Video {
+  const cleanTitle = isPlaceholderVideoTitle(video.title)
+    ? fallbackVideoTitle(video.url)
+    : video.title;
+  if (video.status !== 'processing') {
+    return cleanTitle === video.title ? video : { ...video, title: cleanTitle };
+  }
+  return {
+    ...video,
+    title: cleanTitle,
+    status: 'failed',
+    failure: video.failure ?? {
+      stage: 'analysis',
+      message: 'Previous extraction did not finish before the page reloaded.',
+      retryable: true,
+      failedAt: new Date().toISOString(),
+    },
+  };
+}
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
   videos: [],
-  activities: [],
   selectedVideoId: null,
-  loading: false,
-
-  searchQuery: '',
-  searchResults: [],
-  searchLoading: false,
-
-  selectedVideo: () => {
-    const { videos, selectedVideoId } = get();
-    return videos.find((v) => v.id === selectedVideoId);
-  },
 
   addVideo: (video) =>
     set((s) => ({ videos: [video, ...s.videos] })),
@@ -341,73 +330,56 @@ export const useDashboardStore = create<DashboardState>()(
       selectedVideoId: s.selectedVideoId === id ? null : s.selectedVideoId,
     })),
 
-  selectVideo: (id) => set({
-    selectedVideoId: id,
-    searchQuery: '',
-    searchResults: [],
-    searchLoading: false,
-  }),
-
-  addActivity: (event, type) => {
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    set((s) => ({
-      activities: [{ time, event, type }, ...s.activities].slice(0, 30),
-    }));
-  },
-
-  setLoading: (loading) => set({ loading }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
-
-  // ── Perform semantic RAG search against video chunks ──
-  performSearch: async (videoId, query) => {
-    if (!query.trim()) {
-      set({ searchResults: [] });
-      return;
-    }
-
-    set({ searchLoading: true });
-    get().addActivity(`Searching for: "${query}"`, 'info');
-
-    try {
-      const res = await fetch(`/api/video/search?videoId=${encodeURIComponent(videoId)}&q=${encodeURIComponent(query)}`);
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-      const data = await res.json();
-      set({ searchResults: data.results || [] });
-      get().addActivity(`Found ${data.results?.length || 0} matching segments`, 'success');
-    } catch (err) {
-      console.error('Search error:', err);
-      get().addActivity('Search failed. Video may not have finished embedding.', 'error');
-      set({ searchResults: [] });
-    } finally {
-      set({ searchLoading: false });
-    }
-  },
+  selectVideo: (id) => set({ selectedVideoId: id }),
 
   // ── Process a video URL through one durable, evidence-gated workflow ──
   processVideo: async (url, opts) => {
-    const { addVideo, updateVideo, addActivity } = get();
+    const { addVideo, updateVideo } = get();
     const signal = opts?.signal;
     const id = crypto.randomUUID();
     const startedAt = new Date().toISOString();
 
     addVideo({
       id,
-      title: `Analyzing: ${truncate(url, 50)}`,
+      title: fallbackVideoTitle(url),
       url,
       status: 'processing',
       progress: 0,
       pipelineMode: 'workflow',
     });
-    addActivity(`Processing started: ${truncate(url, 40)}`, 'info');
+
+    let locallyStopped = false;
+    const stopLocalAnalysis = () => {
+      if (locallyStopped) return;
+      locallyStopped = true;
+      updateVideo(id, {
+        status: 'failed',
+        title: fallbackVideoTitle(url),
+        failure: {
+          stage: 'analysis',
+          message: ANALYSIS_STOPPED_MESSAGE,
+          retryable: true,
+          failedAt: new Date().toISOString(),
+        },
+      });
+    };
+    signal?.addEventListener('abort', stopLocalAnalysis, { once: true });
 
     try {
-      const videoPack = await emitVideoPack(url);
+      signal?.throwIfAborted();
+      const videoPack = await emitVideoPack(url, { signal });
+      signal?.throwIfAborted();
       updateVideo(id, { videoPack, progress: 5 });
-      addActivity(`Video pack ${videoPack.version} ${videoPack.sourceHash.slice(0, 12)}`, 'success');
 
-      const started = await startVideoToActions({ url });
+      const started = await startVideoToActions({ url, signal });
+      // Preserve a known accepted run for later readback, even if local waiting stopped.
+      if (started.runId) {
+        updateVideo(id, {
+          runId: started.runId,
+          statusUrl: started.statusUrl || `/api/workflows/video-to-actions/${encodeURIComponent(started.runId)}`,
+        });
+      }
+      signal?.throwIfAborted();
       if (!started.ok || !started.runId) {
         throw new Error(
           `Workflow start failed: ${started.error || started.message || 'no run ID returned.'}`,
@@ -419,7 +391,6 @@ export const useDashboardStore = create<DashboardState>()(
         statusUrl: started.statusUrl || `/api/workflows/video-to-actions/${encodeURIComponent(started.runId)}`,
         progress: 10,
       });
-      addActivity(`Durable run created: ${started.runId}`, 'success');
 
       const terminal = await pollVideoToActions(started.runId, {
         statusUrl: started.statusUrl,
@@ -428,193 +399,35 @@ export const useDashboardStore = create<DashboardState>()(
         signal,
       });
 
-      if (signal?.aborted) {
-        updateVideo(id, {
-          status: 'failed',
-          failure: {
-            stage: 'analysis',
-            message: 'Cancelled by user.',
-            retryable: true,
-            failedAt: new Date().toISOString(),
-          },
-        });
-        addActivity(`Processing cancelled: ${truncate(url, 40)}`, 'info');
-        return id;
-      }
+      signal?.throwIfAborted();
 
       if (terminal.runStatus !== 'completed') {
         if (terminal.runStatus === 'running' || terminal.runStatus === 'pending') {
           updateVideo(id, { status: 'processing', progress: 10 });
-          addActivity(`Run still ${terminal.runStatus}; result remains addressable by run ID`, 'info');
           return id;
         }
         throw new Error(terminal.error || terminal.message || `Workflow ${terminal.runStatus || 'failed'}.`);
       }
 
-      updateVideo(id, verifiedResultPatch(id, started.runId, terminal.result, videoPack));
-      addActivity('Verified analysis persisted by the durable workflow', 'success');
+      updateVideo(id, verifiedResultPatch(id, url, started.runId, terminal.result, videoPack));
     } catch (error) {
+      if (signal?.aborted) {
+        stopLocalAnalysis();
+        return id;
+      }
       const message = error instanceof Error ? error.message : 'Analysis failed.';
       updateVideo(id, workflowFailurePatch(url, startedAt, message));
-      addActivity(`Analysis blocked: ${message}`, 'error');
+    } finally {
+      signal?.removeEventListener('abort', stopLocalAnalysis);
     }
 
     return id;
-  },
-
-  // ── Resume durable runs that outlived a tab refresh or prior poll window ──
-  resumeProcessingRuns: async () => {
-    const candidates = get().videos.filter(
-      (video) => video.status === 'processing' && Boolean(video.runId),
-    );
-
-    await Promise.all(candidates.map(async (video) => {
-      const runId = video.runId;
-      if (!runId || activeRunResumptions.has(runId)) return;
-      activeRunResumptions.add(runId);
-      try {
-        const terminal = await pollVideoToActions(runId, {
-          statusUrl: video.statusUrl,
-          attempts: 180,
-          delayMs: 2000,
-        });
-        if (terminal.runStatus === 'completed') {
-          get().updateVideo(video.id, verifiedResultPatch(video.id, runId, terminal.result, video.videoPack));
-          get().addActivity(`Recovered verified durable run: ${runId}`, 'success');
-          return;
-        }
-        if (terminal.runStatus === 'failed' || terminal.runStatus === 'cancelled') {
-          const message = terminal.error || terminal.message || `Workflow ${terminal.runStatus}.`;
-          get().updateVideo(
-            video.id,
-            workflowFailurePatch(video.url, video.processedAt || new Date().toISOString(), message),
-          );
-          get().addActivity(`Analysis blocked: ${message}`, 'error');
-        }
-      } catch (error) {
-        get().addActivity(
-          `Run recovery check failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          'error',
-        );
-      } finally {
-        activeRunResumptions.delete(runId);
-      }
-    }));
-  },
-  // ── Re-derive events from a completed video's insights ──
-  extractEvents: (videoId) => {
-    const { videos, updateVideo, addActivity } = get();
-    const video = videos.find((v) => v.id === videoId);
-    if (!video) return;
-
-    addActivity('Extracting events…', 'info');
-
-    const events: ExtractedEvent[] = [];
-
-    // Derive events from insights
-    normalizeDashboardActions(video.insights?.actions || []).forEach((action, i) => {
-      events.push({
-        id: `evt_${videoId}_${i}`,
-        type: 'action',
-        title: action.title,
-        description: action.description,
-      });
-    });
-    (video.insights?.topics || []).forEach((topic, i) => {
-      events.push({
-        id: `evt_${videoId}_t${i}`,
-        type: 'topic',
-        title: topic,
-      });
-    });
-
-    updateVideo(videoId, { events });
-    addActivity(`Extracted ${events.length} events`, 'success');
-  },
-
-  // ── Dispatch the video's events to the real backend agent + MCP layer ──
-  dispatchToAgents: async (videoId) => {
-    const { videos, updateVideo, addActivity } = get();
-    const video = videos.find((v) => v.id === videoId);
-    if (!video?.events?.length) {
-      addActivity('No events to dispatch — extract events first', 'info');
-      return;
-    }
-
-    addActivity(`Dispatching agents to act on ${video.events.length} events…`, 'info');
-    try {
-      const res = await fetch('/api/agents/dispatch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          events: video.events.map((e) => ({
-            id: e.id,
-            type: e.type,
-            title: e.title,
-            description: e.description,
-          })),
-          transcript: video.transcript,
-        }),
-      });
-
-      if (res.status === 503) {
-        addActivity('Agent backend offline — deploy FastAPI and set BACKEND_URL', 'info');
-        return;
-      }
-      if (!res.ok) throw new Error(`Dispatch failed: ${res.status}`);
-
-      const data = await res.json();
-      const executions: AgentExecution[] = Array.isArray(data.executions) ? data.executions : [];
-      updateVideo(videoId, { agents: executions });
-      addActivity(`Dispatched ${executions.length} agents`, 'success');
-    } catch (error) {
-      addActivity(
-        `Agent dispatch failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-        'error',
-      );
-    }
-  },
-
-  // ── Poll status for any running/queued dispatched agents ──
-  refreshAgentStatus: async (videoId) => {
-    const { videos, updateVideo } = get();
-    const video = videos.find((v) => v.id === videoId);
-    const pending = (video?.agents || []).filter(
-      (a) => a.status === 'running' || a.status === 'queued',
-    );
-    if (pending.length === 0) return;
-
-    const refreshed = await Promise.all(
-      pending.map(async (agent) => {
-        try {
-          const res = await fetch(`/api/agents/status?agentId=${encodeURIComponent(agent.agent_id)}`);
-          if (!res.ok) return agent;
-          const data = await res.json();
-          return {
-            ...agent,
-            status: (data.status as AgentStatus) || agent.status,
-            progress: typeof data.progress === 'number' ? data.progress : agent.progress,
-            result: data.result ?? agent.result,
-            error: data.error ?? agent.error,
-          } satisfies AgentExecution;
-        } catch {
-          return agent;
-        }
-      }),
-    );
-
-    const byId = new Map(refreshed.map((a) => [a.agent_id, a]));
-    const merged = (get().videos.find((v) => v.id === videoId)?.agents || []).map(
-      (a) => byId.get(a.agent_id) ?? a,
-    );
-    updateVideo(videoId, { agents: merged });
   },
 }),
     {
       name: 'eventrelay-dashboard-v1',
       partialize: (state) => ({
         videos: state.videos,
-        activities: state.activities,
       }),
       storage: createJSONStorage(() => dashboardStorage),
       merge: (persisted, current) => {
@@ -622,8 +435,9 @@ export const useDashboardStore = create<DashboardState>()(
         const saved = persisted as Record<string, unknown>;
         return {
           ...current,
-          videos: Array.isArray(saved.videos) ? saved.videos.filter(isStoredVideo) : current.videos,
-          activities: Array.isArray(saved.activities) ? saved.activities.filter(isStoredActivity) : current.activities,
+          videos: Array.isArray(saved.videos)
+            ? saved.videos.filter(isStoredVideo).map(normalizePersistedVideo)
+            : current.videos,
         };
       },
       skipHydration: true,

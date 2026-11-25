@@ -23,9 +23,11 @@ env:
   #      "Protection Bypass for Automation" value, under Vercel → Project →
   #      Settings → Deployment Protection. Without it the suite fails fast with
   #      an explicit missing-secret message rather than silently asserting
-  #      against Vercel's login page. If no PR preview can be resolved, the
-  #      workflow fails closed rather than silently skipping the gate or probing
-  #      production. Every suite request also carries `X-EventRelay-Probe: e2e`
+  #      against Vercel's login page. Deployment-impacting PRs fail closed if
+  #      their own preview cannot be resolved. PRs that change no input from
+  #      `.github/e2e-deployment-inputs.json` keep the required job present but
+  #      report the live suite as not applicable instead of probing production.
+  #      Every suite request also carries `X-EventRelay-Probe: e2e`
   #      and `User-Agent: EventRelay-E2E/<GITHUB_RUN_ID>`; proxy.ts emits the
   #      bounded `e2e_probe_request` event so Vercel logs can be filtered by run.
   #      These headers are observability only and never authorize or bypass limits.
@@ -64,7 +66,56 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Classify Vercel deployment impact
+        id: impact
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const manifest = JSON.parse(
+              fs.readFileSync('.github/e2e-deployment-inputs.json', 'utf8'),
+            );
+            const [files, { data: pullRequest }] = await Promise.all([
+              github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              }),
+              github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              }),
+            ]);
+            const fileListIncomplete = files.length < pullRequest.changed_files;
+            const changedPaths = files.flatMap((file) =>
+              [file.filename, file.previous_filename].filter(Boolean),
+            );
+            const deploymentInputs = changedPaths.filter((path) =>
+              manifest.files.includes(path) ||
+              manifest.prefixes.some((prefix) => path.startsWith(prefix)),
+            );
+            // GitHub caps pull-file listings at 3,000 entries. If that cap
+            // hides any path, fail closed and require a preview rather than
+            // allowing an unseen deployment input to bypass live E2E.
+            const needsPreview = fileListIncomplete || deploymentInputs.length > 0;
+
+            core.setOutput('needs_preview', String(needsPreview));
+            await core.summary
+              .addHeading('E2E deployment impact', 3)
+              .addRaw(
+                fileListIncomplete
+                  ? `GitHub returned ${files.length} of ${pullRequest.changed_files} changed files; the live E2E suite will fail closed and require this PR's preview.`
+                  : needsPreview
+                  ? `A Vercel deployment input changed (${deploymentInputs.length} matching path(s)); the live E2E suite will run against this PR's preview.`
+                  : 'No Vercel deployment input changed; the live E2E suite is not applicable to this PR.',
+              )
+              .write();
+
       - name: Setup Node.js
+        if: github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -72,7 +123,7 @@ jobs:
 
       - name: Extract Vercel preview URL for this PR
         id: preview
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.impact.outputs.needs_preview == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -137,10 +188,12 @@ jobs:
           exit 1
 
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true'
         run: npm install --legacy-peer-deps
 
       - name: Run E2E tests
         id: e2e_tests
+        if: github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true'
         run: |
           # The verdict travels out via PIPESTATUS, not via this step's exit code.
           # Piping to `tee` makes the pipeline return tee's status, and the
@@ -154,7 +207,9 @@ jobs:
 
       - name: Parse test results
         id: results
-        if: always()
+        if: >-
+          always() &&
+          (github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true')
         run: |
           if [ "${{ steps.e2e_tests.outputs.exit_code }}" = "0" ]; then
             echo "status=green" >> $GITHUB_OUTPUT
@@ -175,7 +230,10 @@ jobs:
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
 
       - name: Post PR comment with results
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: >-
+          github.event_name == 'pull_request' &&
+          steps.impact.outputs.needs_preview == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v9
         with:
           script: |
@@ -262,3 +320,13 @@ jobs:
         run: |
           echo "✅ ALL TESTS PASSED"
           echo "Deployment at $BASE_URL is healthy."
+
+      - name: Record E2E as not applicable
+        if: github.event_name == 'pull_request' && steps.impact.outputs.needs_preview == 'false'
+        run: |
+          {
+            echo "### ⏭️ E2E not applicable"
+            echo ""
+            echo "This PR does not change a Vercel deployment input, so it has no PR-specific preview to probe."
+            echo "The required E2E job still ran and classified the change; pushes to main and deployment-impacting PRs continue to run the full live suite."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,47 +1,21 @@
 import { NextResponse } from 'next/server';
-import { formatApiError } from '@/lib/error-handling';
 
-/**
- * GET /api
- * Health check and API information endpoint
- * 
- * This endpoint provides basic API information and should always return
- * a valid response. No external dependencies or error-prone operations.
- */
+/** GET /api — service descriptor. The body is a literal and does not call out. */
 export async function GET() {
-  try {
-    return NextResponse.json({
-      name: 'EventRelay API',
-      version: '2.0.0',
-      status: 'operational',
-      documentation: '/docs/api',
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV || 'production',
-      endpoints: {
-        video_pack: 'POST /api/video/pack - Emit a hashed Video Pack from a YouTube URL',
-        transcribe: 'POST /api/transcribe - Extract video transcripts',
-        video: 'POST /api/video - Video analysis only',
-        health: 'GET /api - This endpoint',
-      },
-    });
-  } catch (error) {
-    console.error('Health check error:', error);
-    const formatted = formatApiError(error);
-    
-    // Always return 200 OK for health checks, even if there are internal errors
-    // but indicate degraded status
-    return NextResponse.json(
-      {
-        name: 'EventRelay API',
-        version: '2.0.0',
-        status: 'degraded',
-        documentation: '/docs/api',
-        warning: 'Health check encountered an error',
-        error: formatted.message,
-      },
-      { status: 200 } // Return 200 to indicate the endpoint itself is responding
-    );
-  }
+  return NextResponse.json({
+    name: 'UVAI API',
+    version: '2.0.0',
+    status: 'operational',
+    documentation: '/docs/api',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'production',
+    endpoints: {
+      video_pack: 'POST /api/video/pack - Emit a hashed Video Pack from a YouTube URL',
+      transcribe: 'POST /api/transcribe - Extract video transcripts',
+      pipeline: 'Legacy /api/pipeline routes are retired',
+      health: 'GET /api - This endpoint',
+    },
+  });
 }
 
 export async function HEAD() {

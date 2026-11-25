@@ -1,18 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { verifyIdentityPack } from '@/lib/emit-video-pack';
+import { GOLDEN_IDENTITY_HASHES } from '@/lib/video-pack';
 import {
   STUDIO_PRODUCT_TAGLINE,
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
+  studioShipCta,
+  studioShipEnabled,
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
   studioDeployReceiptForSelection,
+  studioDisplayEvents,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
+  studioPackExtractedEventCount,
   studioHasDeployReceipt,
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
@@ -214,7 +221,7 @@ describe('studio-pipeline-status', () => {
         artifactCount: 0,
         toolCount: 0,
       }),
-    ).toBe('Events show up after Run.');
+    ).toBe('Events appear after you analyze a video.');
 
     const emptyWithPack = studioEventsEmptyMessage({
       busy: false,
@@ -234,6 +241,102 @@ describe('studio-pipeline-status', () => {
     expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
       false,
     );
+  });
+
+  it('counts only pack events[] — not visual_elements or insight workflow cards', () => {
+    const pack = {
+      architecture: { summary: 'Pipeline', stages: [] },
+      artifacts: [{ path_hint: 'src/a.ts', purpose: 'x', interface: 'y' }],
+      stack: { tools: [{ name: 'SeaDance 2.5' }] },
+      visual_context: {
+        visual_elements: [
+          { timestamp: 1, element_type: 'guest', content: 'Guest' },
+          { timestamp: 2, element_type: 'host', content: 'Host' },
+          { timestamp: 3, element_type: 'studio', content: 'Studio' },
+        ],
+      },
+    };
+    const insightCards = [
+      {
+        id: 'evt_1',
+        type: 'insight' as const,
+        title: 'Five-Step AI Video Retainer Pipeline',
+      },
+      { id: 'evt_2', type: 'insight' as const, title: 'Cluey two-engineer architecture' },
+      { id: 'evt_3', type: 'insight' as const, title: 'creator affiliate network' },
+      { id: 'evt_4', type: 'insight' as const, title: 'Fable/safety' },
+    ];
+
+    expect(studioPackExtractedEventCount(pack)).toBe(0);
+    expect(studioDisplayEvents({ pack, videoEvents: insightCards })).toEqual([]);
+    expect(
+      studioEventsEmptyMessage({
+        busy: false,
+        hasCompletedRun: true,
+        eventCount: studioDisplayEvents({ pack, videoEvents: insightCards }).length,
+        hasArchitecture: true,
+        artifactCount: 1,
+        toolCount: 1,
+      }).toLowerCase(),
+    ).toMatch(/no extracted events/);
+
+    const withEvents = {
+      ...pack,
+      events: [{ type: 'action', title: 'Clip signed', label: 'Clip signed', timestamp: 12 }],
+    };
+    const shown = studioDisplayEvents({ pack: withEvents, videoEvents: insightCards });
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('Clip signed');
+    expect(shown[0]?.type).not.toBe('insight');
+    expect(studioPackExtractedEventCount(withEvents)).toBe(1);
+  });
+
+  it('keeps pack events[] after verifyIdentityPack and still ignores insight cards', () => {
+    const canon = 'jNQXAC9IVRw';
+    const hash = GOLDEN_IDENTITY_HASHES[canon];
+    const insightCards = [
+      { id: 'evt_1', type: 'insight' as const, title: 'Five-Step AI Video Retainer Pipeline' },
+    ];
+    const identity = {
+      version: 'v0',
+      id: `vp:v0:${canon}`,
+      video_id: canon,
+      source_url: `https://www.youtube.com/watch?v=${canon}`,
+      transcript: { full_text: `cite:youtube:${canon}`, segments: [] },
+      provenance: { source_hash: hash },
+      visual_context: {
+        visual_elements: [{ timestamp: 1, element_type: 'guest', content: 'Guest' }],
+      },
+    };
+
+    const emptyCitation = verifyIdentityPack({ status: 'success', data: identity });
+    expect(emptyCitation.pack.events).toBeUndefined();
+    expect(studioDisplayEvents({ pack: emptyCitation.pack, videoEvents: insightCards })).toEqual([]);
+
+    const withEvents = verifyIdentityPack({
+      status: 'success',
+      data: {
+        ...identity,
+        events: [{ id: 'evt-clip', type: 'action', title: 'Clip signed', timestamp: 12 }],
+      },
+    });
+    const shown = studioDisplayEvents({ pack: withEvents.pack, videoEvents: insightCards });
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('Clip signed');
+    expect(shown[0]?.type).not.toBe('insight');
+  });
+
+  it('keeps unsigned ZIP export on the page with a Pro-required toast', () => {
+    const toast = studioExportProRequiredToast();
+    expect(toast.tone).toBe('error');
+    expect(toast.text.toLowerCase()).toMatch(/require pro/);
+    expect(toast.text.toLowerCase()).not.toContain('redirecting');
+    expect(toast.text.toLowerCase()).toMatch(/pricing|stay on this page/);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioExportProRequiredToast');
+    expect(studio).not.toMatch(/window\.location\.href\s*=\s*result\.checkoutUrl/);
+    expect(studio).not.toMatch(/Redirecting to checkout/);
   });
 
   it('does not claim a transcript exists when a completed run only has pack identity', () => {
@@ -272,12 +375,6 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBe(false);
 
-    const dashboardPanels = readFileSync(
-      join(process.cwd(), 'src/components/dashboard/panels.tsx'),
-      'utf8',
-    );
-    expect(dashboardPanels).toContain('actionsFromStudioRun');
-    expect(dashboardPanels).toContain('studioCanExport');
   });
 
   it('names an invalid ?video= handoff instead of staying silent', () => {
@@ -367,8 +464,42 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioTranscriptEtaLabel');
     // IDE: transcript stage + ETA surface in the toolbar status line.
     expect(studio).toContain('data-testid="studio-ide-status"');
+    expect(studio).toContain('data-testid="studio-transcript-retry"');
+    expect(studio).toContain('transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}');
+    expect(studio).toContain('showTranscriptRetry={showTranscriptRetry}');
+    expect(studio).toContain('onRetryTranscript={() => void runAnalysis(url || selected?.url || \'\')}');
     expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
+  });
+
+  it('enables Ship this from pack exportability and ignores named-tool hold copy', () => {
+    expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
+    expect(
+      studioShipEnabled({
+        canExport: true,
+        holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+      }),
+    ).toBe(true);
+    expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
+    const cta = studioShipCta({
+      canExport: true,
+      holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+    });
+    expect(cta.label).toBe('Ship this');
+    expect(cta.enabled).toBe(true);
+    expect(cta.hint).toMatch(/can be skipped/i);
+    expect(cta.hint).toMatch(/not a production hold/i);
+    expect(cta.hint).not.toMatch(/\bpassed\b/i);
+    expect(studioShipCta({ canExport: false }).enabled).toBe(false);
+    expect(studioShipCta({ canExport: false }).label).toBe('Ship this');
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioShipCta');
+    expect(studio).toContain('data-testid="studio-ide-ship"');
+    expect(studio).toContain('{shipCta.label}');
+    expect(studio).not.toContain('studio-deploy-button');
+    expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
+    expect(studio).not.toMatch(/disabled=\{deployBusy \|\| !hasPayload \|\| Boolean\(holdReason\)\}/);
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -466,27 +597,9 @@ describe('studio-pipeline-status', () => {
     // The Studio no longer contains a deploy call site.
     expect(studio).not.toContain('const deploy = async');
     expect(studio).not.toContain('studio-deploy-button');
-    expect(studio).toContain('usableProvidedTranscript');
-    const workflow = readFileSync(join(process.cwd(), 'src/workflows/studio-deploy.ts'), 'utf8');
-    expect(workflow).toMatch(/kickoffAsyncVideoJob\(url,\s*\{\s*transcript/);
-    expect(workflow).toMatch(/isAbortTimeout|retryable/);
-    expect(workflow).not.toMatch(/studioDeployReadyTranscriptHold\(\s*\)/);
-    expect(workflow).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
-    expect(workflow).not.toMatch(/transcript\s*\n\s*\? STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    expect(workflow).toMatch(/KICKOFF_RETRIES|kickoffRetries|for \(let i = 0; i < .*KICKOFF/);
-    const kickoffRetryMatch = workflow.match(/const KICKOFF_RETRIES\s*=\s*(\d+)/);
-    expect(kickoffRetryMatch).not.toBeNull();
-    expect(Number(kickoffRetryMatch?.[1])).toBeLessThanOrEqual(1);
-    const retryLoop = workflow.slice(workflow.indexOf('KICKOFF_RETRIES'));
-    const afterRetries = retryLoop.slice(0, retryLoop.indexOf('if (kicked.kind === \'live\''));
-    expect(afterRetries).toMatch(/kind:\s*['"]handoff['"]/);
-    expect(afterRetries).not.toMatch(/throw new FatalError\(kicked\.message/);
-    expect(workflow).toMatch(/catch/);
-    expect(workflow).toMatch(/import \{[^}]*sleep[^}]*\} from ['"]workflow['"]/);
-    expect(workflow).toMatch(/await sleep\(['"]10s['"]\)/);
-    expect(workflow).toMatch(/decideStudioDeployPoll/);
-    expect(workflow).not.toMatch(/setTimeout/);
-    expect(workflow).not.toMatch(/AbortSignal\.timeout/);
+    const preflight = readFileSync(join(process.cwd(), 'src/app/api/workflows/studio-deploy/route.ts'), 'utf8');
+    expect(preflight).toContain('status: 409');
+    expect(preflight).not.toMatch(/\bstart\(/);
     const asyncJob = readFileSync(join(process.cwd(), 'src/lib/pipeline-async-job.ts'), 'utf8');
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
@@ -519,7 +632,17 @@ describe('studio-pipeline-status', () => {
     expect(shell).toContain('data-testid="studio-ide-shell"');
     expect(shell).toContain('data-testid="studio-ide-toolbar"');
     expect(studio).toContain('StudioIdeShell');
+    const workbench = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    const mobile = workbench.slice(workbench.indexOf('<= 679px'));
+    expect(mobile).toMatch(/template-studio-bands\s*\{[^}]*padding-bottom:\s*calc\(72px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    const toastCss = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*z-index:\s*60/);
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\)\)/);
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
+    expect(pricing).not.toContain('Durable workflow run history');
+    expect(pricing).not.toContain('Review-only action preparation');
+    expect(pricing).toContain('Workflow run history');
+    expect(pricing).toContain('Proposed work from a Video Pack');
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
   });
 
@@ -543,8 +666,10 @@ describe('studio-pipeline-status', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioActionCard');
-    // IDE: actions surface in the output pane Intent tab.
-    expect(output).toContain("{ id: 'intent', label: 'Intent' }");
+    expect(output).toContain('studioActionCard');
+    expect(output).toContain('data-testid="studio-review-action-card"');
+    // IDE: actions surface in the Tasks & Tools tab.
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
   });
 
   it('returns a toast for export success and failure including filename', () => {
@@ -571,6 +696,12 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('data-testid="studio-export-toast"');
     expect(studio).not.toMatch(/setExportToast\(toast\);\s*setMessage\(/);
     expect(studio).toMatch(/role=\{exportToast\.tone === 'error' \? 'alert' : 'status'\}/);
+    expect(studio).not.toContain('bottom-20');
+    expect(studio).toContain('studio-export-toast');
+    const toastAt = studio.indexOf('data-testid="studio-export-toast"');
+    const toastBlock = studio.slice(Math.max(0, toastAt - 80), toastAt + 500);
+    expect(toastBlock).not.toContain('bottom-4');
+    expect(toastBlock).toContain('studio-export-toast');
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {
@@ -626,11 +757,11 @@ describe('studio-pipeline-status', () => {
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     // IDE: empty state lives in the video pane; the shell replaces the workbench.
     expect(shell).toContain('data-testid="studio-ide-video-pane"');
-    expect(studio).toContain('studioWorkbenchEmptyView');
+    expect(studio).not.toContain('studioWorkbenchEmptyView');
     expect(studio).toContain('data-testid="studio-build-live-failure"');
     expect(studio).not.toContain('/d/{videoId}');
     expect(studio).not.toContain("{'{videoId}'}");
-    expect(studio).toContain('studioTranscriptBody');
+    expect(studio).not.toContain('studioTranscriptBody');
     expect(
       studioWorkbenchEmptyView({
         busy: false,
@@ -649,9 +780,41 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioEventsEmptyMessage');
     expect(studio).toContain('studioQueryFromSearchParams');
     expect(studio).toContain('studioCanExport');
-    // IDE: events live in the output pane Events tab.
-    expect(output).toContain("{ id: 'events', label: 'Events' }");
+    // IDE: events live in the Tasks & Tools tab.
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
+  });
+
+  it('rewires playflow B–G into the IDE (retry, Events≠INSIGHTs, stack skip, review cards)', () => {
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
+
+    // B — Retry transcript is a visible control, not only a computed flag.
+    expect(studio).toContain('data-testid="studio-transcript-retry"');
+    expect(studio).toMatch(/Retry transcript/);
+    expect(studio).toContain('showTranscriptRetry');
+
+    // API events[] vs UI: consolidated into Tasks & Tools, never INSIGHTs.
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
+    expect(output).not.toMatch(/label:\s*['"]INSIGHT/i);
+    expect(output).not.toMatch(/label:\s*['"]Insights['"]/);
+    expect(output).toContain('eventsEmptyMessage');
+    expect(studio).toMatch(/studioEventsEmptyMessage\(/);
+    expect(studio).toMatch(/<PackWorkbench/);
+
+    // F — anonymous stack checks surface skip/unknown; Build live is not held.
+    expect(output).toContain('stackChecks');
+    expect(studio).toMatch(/stackCheckStatus\(/);
+    expect(studio).toMatch(/stackCheckStatusLabel\(/);
+    expect(studio).toMatch(/stackCheckStatus\([^)]*'anonymous'/);
+    expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
+    expect(studio).not.toContain('studio-deploy-button');
+
+    // E — proposed actions render in the Intent tab.
+    expect(output).toContain('reviewActions');
+    expect(studio).toMatch(/studioActionCard\(/);
+    expect(output).toMatch(/Needs review|statusLabel/);
+    expect(output).toContain('studio-review-act-button');
   });
 
   it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {

@@ -15,9 +15,8 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
 - ✅ **Per-domain Copilot agent instructions** — `.github/agents/*.agent.md`
   (`git-ops`, `mcp`, `python-backend`, `frontend`, `testing`,
   `video-processing`, `documentation`).
-- ✅ **Host-level instructions** — root `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`,
-  `SKILL.md` (each read by a different agent host: Copilot/Codex, Claude,
-  Gemini CLI, generic skill loaders).
+- ✅ **Host-level instructions** — root `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`
+  (each read by a different agent host: Copilot/Codex, Claude, Gemini CLI).
 - ✅ **Application agents** — `src/agents/` (e.g.
   `mcp_ecosystem_coordinator.py`, `mcp_agent_network.py`,
   `process_video_with_mcp.py`) drive the video → event → agent pipeline.
@@ -66,8 +65,8 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
   draft-only conformance scope in
   [`docs/mcp-skills-sep-2640-watch.md`](./mcp-skills-sep-2640-watch.md)
   (issue [#1640](https://github.com/groupthinking/EventRelay/issues/1640)).
-- ✅ **Video-processing MCP layer** — `src/youtube_extension/mcp/`,
-  `src/mcp/mcp_ecosystem_coordinator.py`, `src/mcp/mcp_video_processor.py`.
+- ✅ **Video-processing MCP layer** — `src/agents/mcp_ecosystem_coordinator.py`
+  (`MCPVideoProcessorServer`).
 - ✅ **Standalone MCP servers** — `mcp-servers/langextract/`,
   `mcp-servers/vercel/`.
 
@@ -101,9 +100,9 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
 - ✅ **Static analysis** — CodeQL (`codeql-analysis.yml`,
   JavaScript/TypeScript + Python), `ruff`/`black`/`mypy` (Python),
   ESLint (`turbo run lint`, `apps/web`).
-- ✅ **AST-based code analysis tool** — `code_analyzer` in
-  `src/mcp/mcp_ecosystem_coordinator.py` (also referenced in
-  `.github/agents/mcp.agent.md`).
+- ⚠️ **AST-based code analysis tool** — `src/agents/mcp_ecosystem_coordinator.py`
+  does not define `code_analyzer`. The unreferenced
+  `src/analysis/code_structure_analyzer.py` stub is removed.
 - ✅ **Code review** — GitHub Copilot code review, invoked on pull requests;
   described alongside AI-assisted issue triage in
   `.github/copilot-instructions.md`.

@@ -252,7 +252,7 @@ describe('extractVideoPackSpec', () => {
     expect(runVideo).not.toHaveBeenCalled();
   });
 
-  it('uses sectional direct calls with narrowed ranges for long/chaptered sources', async () => {
+  it('uses sectional static calls with narrowed ranges for a short chaptered source', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
     vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
@@ -260,22 +260,28 @@ describe('extractVideoPackSpec', () => {
       title: 'Flat tire change',
       channel: 'Test',
       description: '',
-      durationSeconds: 620,
+      durationSeconds: 240,
       chapters: [
         { time: '0:00', title: 'Intro' },
-        { time: '3:00', title: 'Jack' },
-        { time: '6:00', title: 'Finish' },
+        { time: '1:20', title: 'Jack' },
+        { time: '2:40', title: 'Finish' },
       ],
     });
 
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
       expect(call.model).toBe('gemini-3.8-flash');
+      expect(call.processing).not.toBe('agentic');
       expect(call.sourceUrl).toBe('https://www.youtube.com/watch?v=QjZ5ohr7sGA');
       expect(call.end_s).toBeGreaterThan(call.start_s);
       const prompt = call.sectionPrompt;
       expect(prompt).toMatch(/focus_time_range_seconds/i);
-      expect(prompt).toMatch(/Do not emit grounded_spec in sectional mode/i);
-      expect(prompt).not.toMatch(/Also emit grounded_spec/i);
+      expect(prompt).toMatch(/Also emit grounded_spec as a partial/i);
+      expect(prompt).toMatch(/citation indices are zero-based positions in this section response/i);
+      expect(prompt).toContain('Capabilities are browser-ui, local-state, local-persistence, server, accounts, shared-database, payments, secrets, native, background, unknown.');
+      expect(prompt).toContain('Use all listed fields, no extra fields. Maximum 32 items per collection');
+      expect(prompt).toContain('1..64 alphanumeric, hyphen or underscore');
+      expect(prompt).toContain('Inferred/proposed choices need a rationale');
+      expect(prompt).not.toMatch(/Do not emit grounded_spec in sectional mode/i);
       return { text: JSON.stringify(SPEC_JSON), interactionId: `int-${call.start_s}` };
     });
 
@@ -288,7 +294,257 @@ describe('extractVideoPackSpec', () => {
     expect(spec.concepts).toEqual(['zoo', 'elephants']);
     expect(runVideo).toHaveBeenCalledTimes(3);
     const ranges = runVideo.mock.calls.map(([call]) => [call.start_s, call.end_s]);
-    expect(ranges).toEqual([[0, 180], [180, 360], [360, 620]]);
+    expect(ranges).toEqual([[0, 80], [80, 160], [160, 240]]);
+  });
+
+  it('uses one agentic call for a video of at least 300 seconds and does not fan out shards', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [
+        { time: '0:00', title: 'Intro' },
+        { time: '3:00', title: 'Jack' },
+        { time: '6:00', title: 'Finish' },
+      ],
+    });
+
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async (call) => {
+      expect(call.model).toBe('gemini-3.8-flash');
+      expect(call.processing).toBe('agentic');
+      expect(call.sourceUrl).toBe(SOURCE_URL);
+      expect(call.start_s).toBe(0);
+      expect(call.end_s).toBe(620);
+      expect(call.fps).toBeUndefined();
+      expect(call.sectionPrompt).toMatch(/Return ONLY a JSON object/);
+      expect(call.sectionPrompt).toContain('architecture');
+      expect(call.sectionPrompt).toContain('stack: { tools:');
+      expect(call.sectionPrompt).toContain('Untrusted chapter titles');
+      expect(call.sectionPrompt).toContain('0:00 Intro');
+      expect(call.sectionPrompt).toContain('3:00 Jack');
+      expect(call.sectionPrompt).not.toMatch(/focus_time_range_seconds/i);
+      return { text: JSON.stringify(SPEC_JSON), interactionId: 'int-agentic' };
+    });
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      {
+        runVideoInteraction: runVideo,
+        clipProbe: {
+          sourceUrl: SOURCE_URL,
+          start_s: 0,
+          end_s: 180,
+          model: 'gemini-3.8-flash',
+          prompt: 'PROBE: describe only this clip.',
+          forbiddenPhrases: ['torque wrench calibration'],
+          expectedPhrases: ['safety briefing'],
+        },
+      },
+    );
+
+    expect(spec.concepts).toEqual(['zoo', 'elephants']);
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(runVideo.mock.calls[0]?.[0].sectionPrompt.startsWith('PROBE:')).toBe(false);
+  });
+
+  it('rejects an agentic citation that falls outside the video duration', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    const quote = 'Spoken line past the video.';
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [],
+    });
+    const grounded = {
+      version: '1',
+      outputClass: 'browser-interactive',
+      sourceStatus: 'partial',
+      confidence: 0.8,
+      limitations: ['Coverage is partial.'],
+      app: { name: 'Pack viewer', purpose: 'Show the extracted pack.' },
+      screens: [{ id: 'scr', name: 'Viewer', purpose: 'Show evidence.' }],
+      state: [],
+      requirements: [
+        {
+          id: 'req1',
+          screenId: 'scr',
+          title: 'Show the spoken line',
+          detail: 'The line is on screen.',
+          classification: 'observed',
+          required: true,
+          capabilities: ['browser-ui'],
+          rationale: 'Heard in the video.',
+          citations: [
+            {
+              kind: 'transcript',
+              index: 0,
+              videoId: CANON,
+              startSeconds: 900,
+              endSeconds: 901,
+              quote,
+            },
+          ],
+        },
+      ],
+      acceptanceCriteria: [
+        {
+          id: 'ac1',
+          requirementId: 'req1',
+          given: 'The pack is open',
+          when: 'The line is shown',
+          then: 'The quote is visible',
+        },
+      ],
+      unresolved: [],
+      unsupported: [],
+    };
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        transcript: {
+          language: 'en',
+          full_text: quote,
+          segments: [{ idx: 0, start_s: 900, end_s: 901, text: quote }],
+        },
+        grounded_spec: grounded,
+      }),
+      interactionId: 'int-late',
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+    );
+
+    expect(runVideo).toHaveBeenCalledTimes(1);
+    expect(spec.grounded_spec).toMatchObject({
+      status: 'invalid',
+      issues: expect.arrayContaining([expect.objectContaining({ code: 'out-of-range-citation' })]),
+    });
+  });
+
+  it('keeps an agentic citation that stays inside the video duration', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    const quote = 'Spoken line inside the video.';
+    vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce({
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [],
+    });
+    const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
+      text: JSON.stringify({
+        ...SPEC_JSON,
+        transcript: {
+          language: 'en',
+          full_text: quote,
+          segments: [{ idx: 0, start_s: 10, end_s: 12, text: quote }],
+        },
+        grounded_spec: {
+          version: '1',
+          outputClass: 'browser-interactive',
+          sourceStatus: 'partial',
+          confidence: 0.8,
+          limitations: ['Coverage is partial.'],
+          app: { name: 'Pack viewer', purpose: 'Show the extracted pack.' },
+          screens: [{ id: 'scr', name: 'Viewer', purpose: 'Show evidence.' }],
+          state: [],
+          requirements: [
+            {
+              id: 'req1',
+              screenId: 'scr',
+              title: 'Show the spoken line',
+              detail: 'The line is on screen.',
+              classification: 'observed',
+              required: true,
+              capabilities: ['browser-ui'],
+              rationale: 'Heard in the video.',
+              citations: [
+                {
+                  kind: 'transcript',
+                  index: 0,
+                  videoId: CANON,
+                  startSeconds: 10,
+                  endSeconds: 12,
+                  quote,
+                },
+              ],
+            },
+          ],
+          acceptanceCriteria: [
+            {
+              id: 'ac1',
+              requirementId: 'req1',
+              given: 'The pack is open',
+              when: 'The line is shown',
+              then: 'The quote is visible',
+            },
+          ],
+          unresolved: [],
+          unsupported: [],
+        },
+      }),
+      interactionId: 'int-inside',
+    }));
+
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+    );
+
+    expect(spec.grounded_spec?.status).toBe('available');
+  });
+
+  it('does not fall back to static shards when the agentic call is empty, invalid, or rejected', async () => {
+    process.env.GEMINI_API_KEY = 'test-direct-key';
+    const { fetchYouTubeMetadata } = await import('@/lib/youtube-metadata');
+    const longMetadata = {
+      videoId: CANON,
+      title: 'Long walkthrough',
+      channel: 'Test',
+      description: '',
+      durationSeconds: 620,
+      chapters: [],
+    };
+    const failures: Array<ShardVideoInteractionRunner> = [
+      async () => {
+        throw new Error(
+          'Empty interaction output for shard 0–620: refusing to continue without evidence',
+        );
+      },
+      async () => ({ text: '{not json', interactionId: 'int-bad' }),
+      async () => {
+        throw new Error('SDK rejected agentic processing');
+      },
+    ];
+
+    for (const fail of failures) {
+      vi.mocked(fetchYouTubeMetadata).mockResolvedValueOnce(longMetadata);
+      const runVideo = vi.fn(fail);
+      await expect(
+        extractVideoPackSpec(
+          { sourceUrl: SOURCE_URL, videoId: CANON },
+          { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+        ),
+      ).rejects.toBeInstanceOf(VideoPackExtractError);
+      expect(runVideo.mock.calls.length).toBeGreaterThan(0);
+      for (const [call] of runVideo.mock.calls) {
+        expect(call.processing).toBe('agentic');
+        expect(call.start_s).toBe(0);
+        expect(call.end_s).toBe(620);
+      }
+    }
   });
 
   it('calls the direct worker with gemini-3.8-flash and a narrowed range (never full-video-only)', async () => {
@@ -312,6 +568,7 @@ describe('extractVideoPackSpec', () => {
       throw new Error('runVideoInteraction was not called');
     }
     expect(call.model).toBe('gemini-3.8-flash');
+    expect(call.processing).toBe('static');
     expect(call.sourceUrl).toBe(SOURCE_URL);
     expect(call.start_s).toBe(0);
     expect(call.end_s).toBeGreaterThan(call.start_s);
@@ -768,11 +1025,11 @@ describe('extractVideoPackSpec', () => {
       title: 'Flat tire change',
       channel: 'Test',
       description: '',
-      durationSeconds: 620,
+      durationSeconds: 240,
       chapters: [
         { time: '0:00', title: 'Intro' },
-        { time: '3:00', title: 'Jack' },
-        { time: '6:00', title: 'Finish' },
+        { time: '1:20', title: 'Jack' },
+        { time: '2:40', title: 'Finish' },
       ],
     });
     const calls: string[] = [];
@@ -815,11 +1072,11 @@ describe('extractVideoPackSpec', () => {
       title: 'Flat tire change',
       channel: 'Test',
       description: '',
-      durationSeconds: 620,
+      durationSeconds: 240,
       chapters: [
         { time: '0:00', title: 'Intro' },
-        { time: '3:00', title: 'Jack' },
-        { time: '6:00', title: 'Finish' },
+        { time: '1:20', title: 'Jack' },
+        { time: '2:40', title: 'Finish' },
       ],
     });
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
@@ -848,7 +1105,7 @@ describe('extractVideoPackSpec', () => {
     expect(runVideo).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed when consolidated code contains a placeholder', async () => {
+  it('preserves extracted pack data while stripping explicit placeholder code snippets', async () => {
     process.env.GEMINI_API_KEY = 'test-direct-key';
     const runVideo = vi.fn<ShardVideoInteractionRunner>(async () => ({
       text: JSON.stringify({
@@ -859,27 +1116,25 @@ describe('extractVideoPackSpec', () => {
             lang: 'ts',
             content: 'export const zoo = placeholder;',
           },
+          {
+            path_hint: 'robotics/cornhole_pipeline.py',
+            lang: 'py',
+            content: 'def run_policy(obs): ...\npose = frames[..., :3]',
+          },
         ],
       }),
       interactionId: 'int-test',
     }));
 
-    await expect(
-      extractVideoPackSpec(
-        { sourceUrl: SOURCE_URL, videoId: CANON },
-        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
-      ),
-    ).rejects.toThrow(/Consolidated app failed 0\/1/);
+    const spec = await extractVideoPackSpec(
+      { sourceUrl: SOURCE_URL, videoId: CANON },
+      { runVideoInteraction: runVideo, fetchCaptions: async () => null },
+    );
     expect(runVideo).toHaveBeenCalled();
-    try {
-      await extractVideoPackSpec(
-        { sourceUrl: SOURCE_URL, videoId: CANON },
-        { runVideoInteraction: runVideo, fetchCaptions: async () => null },
-      );
-    } catch (error) {
-      expect(error).toBeInstanceOf(VideoPackExtractError);
-      expect(isTransientVideoPackExtractError(error)).toBe(false);
-    }
+    expect(spec.concepts).toContain('zoo');
+    expect(spec.code_snippets.map((snippet) => snippet.path_hint)).toEqual([
+      'robotics/cornhole_pipeline.py',
+    ]);
   });
 
   it('keeps the extract when the Jev post-check is stop', async () => {

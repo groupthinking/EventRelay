@@ -205,7 +205,6 @@ jobs:
                 'lint-python',
                 'lint-frontend',
                 'build',
-                'test (Python 3.10)',
                 'test (Python 3.11)',
                 'test (Python 3.12)',
                 'test-frontend',

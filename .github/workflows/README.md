@@ -18,7 +18,7 @@ workflow; this README is the index.
 | Dependency Review | `dependency-review.yml` | push to `main`; all PRs | Seed main-branch dependency snapshots and review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
-| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
+| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate metadata/security evidence; fork and Dependabot findings use check annotations without comment writes |
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
@@ -30,7 +30,7 @@ workflow; this README is the index.
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
-| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; repository state changes | Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; same-repository PR and other repository state changes | Fork PRs remain in scheduled inventories; no fork-event writes. Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
 
 ## Key Workflows
 
@@ -132,8 +132,9 @@ record, so any artifact can be linked back to its originating run.
 
 ## Maintenance Log
 
-A full audit of this directory was performed (see
-`.github/workflows/AUDIT.md` for the per-file decision matrix). Summary:
+A full audit of this directory was performed; every verdict has been
+applied, and this log is now the record of record (the standalone
+`AUDIT.md` decision matrix was retired once it was fully actioned). Summary:
 
 - **Removed** `deploy.yml` — referenced a non-existent `deployments/` tree
   (actual infra lives in `infrastructure/`) and duplicated
@@ -157,6 +158,21 @@ A full audit of this directory was performed (see
   assignees endpoint after run logs showed GitHub App installation tokens cannot
   use the CLI's GraphQL assignable mutation for this assignment.
 - **Removed** `api-cost-postgres.yml` — exercised the deleted Python backend (`youtube_extension.backend.api_cost_migrate`); with the backend removed every run would fail, so the workflow was removed.
+- **Fixed** every `engine: codex` gh-aw workflow (`canonical-pr-remediator`,
+  `focused-coverage-controller`, `repo-assist`) — a `pre-agent-steps` preflight
+  requires the dedicated `CODEX_API_KEY` secret so runs fail fast with an
+  explicit error instead of falling back ambiguously. Lock files are compiled
+  with the pinned gh-aw version enforced by `gh-aw-validation.yml`.
+- **Fixed** `autonomous-video-processing.yml` — the old "processing" step only
+  incremented a counter, so every run claimed success. Logic now lives in
+  `scripts/ci/autonomous_video_{plan,processing,summary}.py`; status is derived
+  from real stage records (`discovered` → `blocked`/`failed` → `delivered`).
+  ATLAS / PRISM / FORGE / SENTINEL are *role labels* over the existing
+  `src/agents/pipeline_orchestrator.py` stages (`video-ingest`,
+  `research-grounding`, `code-gen`, `quality-gate`; `STAGES` constant), not a
+  second agent roster — a parallel pipeline would contradict the
+  single-workflow principle. The workflow has no `contents: write`; evidence
+  is artifact-only (30-day retention).
 - **Removed** `deploy-cloud-run.yml` — deployed the deleted Python backend (`uvai-backend` service) to Cloud Run; nothing remains to deploy (`BACKEND_URL` is unset in every environment), so the workflow was removed.
 
 ## Resources

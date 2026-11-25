@@ -1,50 +1,179 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
-describe('OpenAI template Studio navigation', () => {
+describe('Horizontal Webflow + Antigravity Studio navigation', () => {
   it('switches source/chat/output without losing a conversation draft', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={<span>Run controls</span>} videoPane={<p>Source evidence</p>}
-      chatPane={<input aria-label="Draft" defaultValue="" />} outputPane={<p>Deliverables</p>} />);
-    fireEvent.change(screen.getByLabelText('Draft'), { target: { value: 'Which step is unclear?' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Source' }));
+    render(
+      <StudioIdeShell
+        toolbar={<span>Run controls</span>}
+        videoPane={<p>Source evidence</p>}
+        chatPane={<input aria-label="Draft" defaultValue="" />}
+        outputPane={<p>Deliverables</p>}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText('Draft'), {
+      target: { value: 'Which step is unclear?' },
+    });
+    fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
-    expect(screen.getByRole('button', { name: 'Source' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Deliverables' }));
+    expect(screen.getByRole('tab', { name: 'Source' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
-    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }));
-    expect((screen.getByLabelText('Draft') as HTMLInputElement).value).toBe('Which step is unclear?');
+    fireEvent.click(screen.getByRole('tab', { name: 'Conversation' }));
+    expect((screen.getByLabelText('Draft') as HTMLInputElement).value).toBe(
+      'Which step is unclear?',
+    );
   });
-  it('returns to Conversation after either selected mobile side pane collapses', () => {
+
+  it('returns to Conversation after either selected mobile band collapses', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
-    for (const [view, collapse] of [['Source', 'Collapse video pane'], ['Deliverables', 'Collapse output pane']]) {
-      fireEvent.click(screen.getByRole('button', { name: view }));
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
+    for (const [view, collapse] of [
+      ['Source', 'Collapse video pane'],
+      ['Deliverables', 'Collapse output pane'],
+    ]) {
+      fireEvent.click(screen.getByRole('tab', { name: view }));
       fireEvent.click(screen.getByRole('button', { name: collapse }));
       expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('chat');
-      expect(screen.getByRole('button', { name: 'Conversation' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('tab', { name: 'Conversation' }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
     }
   });
+
   it('supports arrow and Home/End keys within the view toolbar', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Conversation' }), { key: 'ArrowRight' });
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Conversation' }), { key: 'ArrowRight' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Deliverables' }));
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Deliverables' }), { key: 'Home' });
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Deliverables' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Deliverables' }), { key: 'Home' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
   });
-  it('restores a collapsed pane through the mobile view controls', () => {
+
+  it('restores collapsed bands through restore controls and mobile view tabs', () => {
     vi.stubGlobal('React', React);
-    render(<StudioIdeShell toolbar={null} videoPane={<p>Source</p>} chatPane={<p>Chat</p>} outputPane={<p>Files</p>} />);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Collapse video pane' }));
     expect(screen.queryByTestId('studio-ide-video-pane')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Source' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
     expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse output pane' }));
+    expect(screen.queryByTestId('studio-ide-output-pane')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show deliverables' }));
+    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
+  });
+
+  it('keeps one main landmark containing the selected horizontal sections', () => {
+    vi.stubGlobal('React', React);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+      />,
+    );
+
+    const main = screen.getByRole('main');
+    expect(screen.getAllByRole('main')).toHaveLength(1);
+    for (const name of ['Source', 'Conversation', 'Deliverables']) {
+      const tab = screen.getByRole('tab', { name });
+      fireEvent.click(tab);
+      const panel = document.getElementById(tab.getAttribute('aria-controls')!);
+      expect(panel?.getAttribute('role')).toBe('tabpanel');
+      expect(panel?.getAttribute('aria-labelledby')).toBe(tab.id);
+      expect(main.contains(panel)).toBe(true);
+      expect(screen.getByRole('main')).toBe(main);
+    }
+  });
+
+  it('omits vertical drag splitters in favor of the split workbench grid', () => {
+    vi.stubGlobal('React', React);
+    render(
+      <StudioIdeShell
+        toolbar={<span>Controls</span>}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+        detailsRail={<p>Rail metadata</p>}
+      />,
+    );
+    expect(screen.queryByTestId('studio-ide-splitter-left')).toBeNull();
+    expect(screen.queryByTestId('studio-ide-splitter-right')).toBeNull();
+    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-details-rail')).toBeTruthy();
+    expect(screen.getByRole('main').dataset.detailsRail).toBe('true');
+  });
+
+  it('supports controlled mobilePane and onMobilePaneChange callbacks', () => {
+    vi.stubGlobal('React', React);
+    const onMobilePaneChange = vi.fn();
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Files</p>}
+        mobilePane="video"
+        onMobilePaneChange={onMobilePaneChange}
+      />,
+    );
+    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
+    fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
+    expect(onMobilePaneChange).toHaveBeenCalledWith('output');
+  });
+
+  it('places Conversation full-height left and splits side-by-side down to 680px', () => {
+    const shellSource = readFileSync(
+      join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'),
+      'utf8',
+    );
+    const cssSource = readFileSync(
+      join(process.cwd(), 'src/styles/studio-workbench.css'),
+      'utf8',
+    );
+    expect(shellSource).toContain('min-[680px]:flex');
+    expect(shellSource).toContain('min-[680px]:!hidden');
+    expect(shellSource).not.toContain('min-[901px]');
+    expect(cssSource).toContain('@media (min-width: 680px)');
+    expect(cssSource).toContain('@media (max-width: 679px)');
+    expect(cssSource).toContain('minmax(290px, 0.9fr)');
   });
 });

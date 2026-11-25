@@ -40,8 +40,8 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/workspace/export')).toBe(false);
   });
 
-  it('keeps the retired /api/pipeline surface non-public', () => {
-    // The legacy pipeline routes were removed (Video Pack pipeline is
+  it('keeps the deprecated, retired /api/pipeline surface non-public', () => {
+    // The legacy pipeline routes remain retired (Video Pack pipeline is
     // canonical). They must not be re-added as public by accident.
     expect(isPublicApiPath('/api/pipeline')).toBe(false);
     expect(isPublicApiPath('/api/pipeline/stream')).toBe(false);
@@ -289,4 +289,3 @@ describe('AI route classification (rate-limit budget)', () => {
     expect(isAiRoute('/api/transcribe/status', 'GET')).toBe(true);
   });
 });
-

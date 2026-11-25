@@ -8,13 +8,13 @@
 2. `/studio` — `OneLoopStudio` workbench  
 3. `/api/video/pack` — hashed Video Pack (Upstash REST in production)  
 4. `/api/workflows/video-to-actions` — durable transcript → analyze → review-only actions  
-5. `studio.deploy` — Origin G.A.T.E. (`/api/gate/transitions`) + HTTP probe (`/api/gate/probe-live`) before live claims  
+5. `studio.deploy` — Origin G.A.T.E. (`/api/gate/transitions`). `POST /api/workflows/studio-deploy` is a 409 preflight and does not start a run. A live claim still needs a verified `https://` hostname.
 
 ## Internal runtime
 
 - FastAPI: `src/youtube_extension/main.py` (`PYTHONPATH=src`)  
 - Agents: `youtube_extension.services.agents.adapters.agent_orchestrator` (canonical)  
-- MCP: `youtube_extension.services.mcp.registry` + `orchestrator.py`  
+- MCP: `src/youtube_extension/core/mcp/` (`server_registry.py`, `protocol_bridge.py`, `context_manager.py`, `validation.py`) and `mcp-servers/`  
 - Legacy / experimental: `src/agents/*` (logged warning on use)
 
 ## Historical docs
