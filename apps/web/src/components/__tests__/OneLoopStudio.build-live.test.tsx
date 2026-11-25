@@ -13,7 +13,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
-vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({
   useYouTubePlayer: () => ({
     containerRef: { current: null },
@@ -45,7 +44,7 @@ afterEach(() => {
 
 describe('OneLoopStudio Build live honesty (B3b)', () => {
   it('renders IDE empty UI when no pack is stored', () => {
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
@@ -77,8 +76,9 @@ describe('OneLoopStudio Build live honesty (B3b)', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    render(<OneLoopStudio />);
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-build-live-failure')).toBeTruthy();
@@ -116,8 +116,9 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    render(<OneLoopStudio />);
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
@@ -127,7 +128,7 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
     const artifactLink = screen.getByTestId('studio-pack-build-live-artifact-link');
     expect(artifactLink.getAttribute('href')).toBe(`/d/${youtubeId}`);
     const proCta = screen.getByTestId('studio-pack-build-live-pro-cta');
-    expect(proCta.getAttribute('href')).toBe('/#get-pro');
+    expect(proCta.getAttribute('href')).toBe('/pricing');
     expect(proCta.textContent).toMatch(/unlock workflow pro/i);
     expect(screen.getByTestId('studio-pack-build-live-reason-code').textContent).toBe(
       'FACTORY_DELIVER_READY',
@@ -168,15 +169,16 @@ describe('OneLoopStudio Build live Setup→Result (D1)', () => {
       selectedVideoId: baseVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    render(<OneLoopStudio />);
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-pack-build-live-result')).toBeTruthy();
     });
     expect(screen.getByTestId('studio-pack-build-live-video-id').textContent).toBe(youtubeId);
 
-    fireEvent.click(screen.getByTestId('studio-build-live-button'));
+    fireEvent.click(screen.getByTestId('studio-ide-preview-verify'));
 
     await waitFor(() => {
       expect(screen.getByTestId('studio-build-live-failure')).toBeTruthy();

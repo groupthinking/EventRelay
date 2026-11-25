@@ -1,0 +1,70 @@
+name: Evidence-bound video reconstruction
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/video-reconstruction/**'
+      - 'scripts/relay_harness/**'
+      - 'tests/video-reconstruction*.test.ts'
+      - 'apps/web/src/lib/grounded-build-spec.ts'
+      - 'apps/web/src/lib/sample-pack/auJzb1D-fag.pack.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'apps/web/package.json'
+      - '.github/workflows/video-reconstruction.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: video-reconstruction-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  local-reconstruction:
+    name: Local reconstruction and artifact evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - name: Select the setup-python interpreter
+        run: python3 -c 'import sys; print(f"RECONSTRUCTION_PYTHON={sys.executable}")' >> "$GITHUB_ENV"
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Use the repository-declared package manager
+        run: npm install --global npm@10.8.0
+      - name: Install locked dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install local browser
+        id: browser
+        run: npm exec --workspace apps/web -- playwright install --with-deps chromium
+      - name: Select the workspace Playwright browser
+        run: node -e "require('node:fs').appendFileSync(process.env.GITHUB_ENV, 'RECONSTRUCTION_CHROMIUM=' + require('./apps/web/node_modules/playwright').chromium.executablePath() + '\n')"
+      - name: Type-check the reconstruction boundary
+        id: types
+        run: npm exec -- tsc -p scripts/video-reconstruction/tsconfig.json
+      - name: Contract, current receipts and browser regressions
+        run: node --import tsx --test tests/video-reconstruction*.test.ts
+      - name: Existing EventRelay recovery regressions
+        run: python3 -m unittest discover -s tests -p test_relay_local_harness.py -v
+      - name: Reconstruct the retained real source and verify current evidence
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' && steps.types.outcome == 'success' }}
+        run: |
+          node --import tsx scripts/video-reconstruction/cli.ts run --out "$RUNNER_TEMP/video-reconstruction"
+          node --import tsx scripts/video-reconstruction/cli.ts verify --out "$RUNNER_TEMP/video-reconstruction"
+      - name: Retain source-bound local evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: video-reconstruction-${{ github.event.pull_request.head.sha || github.sha }}
+          path: ${{ runner.temp }}/video-reconstruction
+          if-no-files-found: warn
+          retention-days: 7

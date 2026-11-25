@@ -4,6 +4,7 @@ import {
   type ChecklistItem,
   type LinkedEntity,
 } from '@/lib/linked-sop';
+import type { ExtractedEvent } from '@/lib/types';
 import type {
   VideoPackArchitecture,
   VideoPackArtifact,
@@ -156,7 +157,7 @@ export function studioWorkbenchEmptyView(input: {
     return {
       title: 'Analysis in progress',
       description:
-        'Waiting on transcript and pack storage. Ship this and Build live unlock when the run finishes.',
+        'Waiting on transcript and pack storage. Export and Live Preview unlock when the run finishes.',
       primaryAction: null,
     };
   }
@@ -181,7 +182,7 @@ export function studioWorkbenchEmptyView(input: {
   return {
     title: 'Video Pack not stored',
     description:
-      'Transcript is here but no pack was persisted for Build live. Re-run analysis to store a Video Pack.',
+      'Transcript is here but no pack was persisted for Live Preview. Re-run analysis to store a Video Pack.',
     primaryAction: 'run',
   };
 }
@@ -197,7 +198,7 @@ export function studioEventsEmptyMessage(input: {
 }): string {
   if (input.eventCount > 0) return '';
   if (input.busy) return 'Extracting events…';
-  if (!input.hasCompletedRun) return 'Events show up after Run.';
+  if (!input.hasCompletedRun) return 'Events appear after you analyze a video.';
   const packReady =
     input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
   if (packReady) {
@@ -207,6 +208,76 @@ export function studioEventsEmptyMessage(input: {
     return 'This run has no extracted events. Transcript and pack identity stay on this page.';
   }
   return 'This run has no extracted events. Pack identity stays on this page.';
+}
+
+const NAMED_EVENT_TYPES = ['action', 'topic', 'code', 'alert', 'mention'] as const;
+
+function isNamedEventType(value: string): value is (typeof NAMED_EVENT_TYPES)[number] {
+  return (NAMED_EVENT_TYPES as readonly string[]).includes(value);
+}
+
+function packEventTitle(row: Record<string, unknown>): string {
+  if (typeof row.title === 'string' && row.title.trim()) return row.title.trim();
+  if (typeof row.label === 'string' && row.label.trim()) return row.label.trim();
+  return '';
+}
+
+function packEventType(row: Record<string, unknown>): ExtractedEvent['type'] {
+  const raw = typeof row.type === 'string' ? row.type.trim().toLowerCase() : '';
+  if (raw && raw !== 'insight' && isNamedEventType(raw)) return raw;
+  return 'topic';
+}
+
+function packEventTimestamp(row: Record<string, unknown>): string | undefined {
+  const raw = row.timestamp ?? row.t_s ?? row.start;
+  if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
+  if (typeof raw === 'string' && raw.trim()) return raw.trim();
+  return undefined;
+}
+
+/** Pack `events[]` only. Visual elements, SOP steps, and analysis insight cards are not events. */
+export function studioPackExtractedEvents(pack: unknown): ExtractedEvent[] {
+  if (!pack || typeof pack !== 'object') return [];
+  const raw = (pack as { events?: unknown }).events;
+  if (!Array.isArray(raw)) return [];
+  const events: ExtractedEvent[] = [];
+  for (const [index, item] of raw.entries()) {
+    if (!item || typeof item !== 'object') continue;
+    const row = item as Record<string, unknown>;
+    const title = packEventTitle(row);
+    if (!title) continue;
+    const id = typeof row.id === 'string' && row.id.trim() ? row.id.trim() : `pack_evt_${index}`;
+    const description =
+      typeof row.description === 'string' && row.description.trim() ? row.description.trim() : undefined;
+    const timestamp = packEventTimestamp(row);
+    events.push({
+      id,
+      type: packEventType(row),
+      title,
+      ...(description ? { description } : {}),
+      ...(timestamp ? { timestamp } : {}),
+    });
+  }
+  return events;
+}
+
+export function studioPackExtractedEventCount(pack: unknown): number {
+  return studioPackExtractedEvents(pack).length;
+}
+
+export function studioDisplayEvents(input: {
+  pack?: unknown;
+  videoEvents?: ExtractedEvent[] | null;
+}): ExtractedEvent[] {
+  void input.videoEvents;
+  return studioPackExtractedEvents(input.pack);
+}
+
+export function studioExportProRequiredToast(): { tone: 'error'; text: string } {
+  return {
+    tone: 'error',
+    text: 'Workspace ZIP exports require Pro. Stay on this page — open Pricing to subscribe, then export again.',
+  };
 }
 
 export function studioPromotePackWorkbench(input: {
@@ -241,8 +312,8 @@ export function studioCanExport(input: {
 }
 
 /**
- * Anonymous Ship this is pack-exportability only. Stack-check hold copy
- * (SeaDance/Cluely-class unknown, signed-out vendor skip) never disables it.
+ * Anonymous Ship this is pack-exportability only. Named-tool checks
+ * (SeaDance/Cluely) can be skipped and are not a production hold.
  */
 export function studioShipEnabled(input: {
   canExport: boolean;
@@ -261,7 +332,7 @@ export function studioShipCta(input: {
     label: 'Ship this',
     enabled,
     hint: enabled
-      ? 'Download the Video Pack ZIP. Named tools that UVAI cannot run are skip/unknown — they do not block ship.'
+      ? 'Download the Video Pack ZIP. Named tools UVAI cannot run can be skipped — they are not a production hold.'
       : 'Run analysis first so there is a pack to ship.',
   };
 }
@@ -626,6 +697,21 @@ export type StudioExportToastKind = 'pack' | 'sop' | 'scaffold' | 'empty';
 export function studioExportFilename(projectName?: string | null): string {
   const base = (projectName || 'uvai-project').trim() || 'uvai-project';
   return base.toLowerCase().endsWith('.zip') ? base : `${base}.zip`;
+}
+
+/** Named pack tools are proposals. UVAI has not run them. */
+export function studioProposedToolCard(tool: {
+  name: string;
+  evidence?: string | null;
+}): { title: string; statusLabel: 'Proposed'; detail: string } {
+  const title = tool.name.trim();
+  const evidence = tool.evidence?.trim();
+  const named = 'Named in the video. UVAI has not run this tool.';
+  return {
+    title,
+    statusLabel: 'Proposed',
+    detail: evidence ? `${evidence} ${named}` : named,
+  };
 }
 
 export function studioActionCard(action: {

@@ -1,9 +1,10 @@
 """
-Pydantic models mirroring the EventRelay API request/response schemas.
+Pydantic models for the EventRelay API request/response schemas.
 
-These are derived from openapi/eventrelay.openapi.json and kept in sync
-with the backend models defined in:
-  src/youtube_extension/backend/api/v1/models.py
+The backend models tree (src/youtube_extension/backend/, including
+api/v1/models.py) is gone, and openapi/eventrelay.openapi.json is not in
+the repository. This module is the remaining source of truth.
+sdk/typescript/src/types.ts mirrors these models.
 """
 
 from __future__ import annotations

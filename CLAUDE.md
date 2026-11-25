@@ -2,144 +2,20 @@
 
 Read [AGENTS.md](AGENTS.md) first. Its locked product facts and scope take precedence over historical plans. The current execution boundary is [docs/NEXT-PHASE.md](docs/NEXT-PHASE.md); the evidence-based build-out plan is [docs/MASTER_ROADMAP.md](docs/MASTER_ROADMAP.md).
 
-## Project Overview
-
-UVAI (Universal Video Action Intelligence) turns a YouTube URL into a hashed Video Pack and grounded build rails. The public entry is `/`; `OneLoopStudio` at `/studio` is the canonical workbench, and legacy `/dashboard` skins redirect there. EventRelay is the internal Python/FastAPI runtime and repository name, not the public product. The web app uses Next.js App Router, React, and TypeScript.
-
-Video Pack extraction uses Gemini 3.8 Flash via Vercel AI Gateway. Production pack persistence is Upstash REST only. An App Builder workspace export is not proof of app recreation or deployment. Origin G.A.T.E. is the only authorized next cut; do not start adjacent product work or reopen held `asRecord` / claim work without the required authority.
-
-## Repository Structure
-
-```
-src/                          # Python backend
-  youtube_extension/
-    backend/                  # FastAPI app (api/v1/, services/, models/, middleware/)
-    services/                 # Orchestration (agents/, workflows/, ai/)
-    mcp/                      # MCP ecosystem coordinator
-    main.py                   # FastAPI entry point
-apps/
-  web/                        # Next.js frontend (port 3000)
-packages/                     # Shared monorepo packages (eslint-config, tsconfig, logger, etc.)
-mcp-servers/                  # MCP server implementations (litert-mcp, shared-state)
-tests/                        # Python tests (unit/, integration/, fixtures/, workflows/)
-docs/                         # Extended documentation
-infrastructure/               # Kubernetes manifests, Terraform, database setup
-.github/workflows/            # CI/CD (ci.yml, security.yml, deploy-cloud-run.yml, etc.)
-```
-
-## Common Commands
-
-### Python Backend
-
-```bash
-# Install (editable with dev extras)
-pip install -e .[dev,youtube,ml]
-
-# Run backend server (PYTHONPATH=src is required: the package uses absolute
-# imports rooted at src/, so the `src.youtube_extension.main` form silently
-# fails to load the API v1 router and event routes)
-PYTHONPATH=src uvicorn youtube_extension.main:app --reload --port 8000
-
-# Run tests
-pytest tests/ -v
-pytest tests/unit/ -v                    # Unit tests only
-pytest tests/ -m "not slow"              # Skip slow tests
-
-# Lint and format
-ruff check src/                          # Lint
-ruff check src/ --fix                    # Auto-fix
-black src/                               # Format
-isort src/                               # Sort imports
-mypy src/                                # Type check
-```
+Repository layout, commands, code style, tests, and policies are in [AGENTS.md](AGENTS.md) and [README.md](README.md).
 
 ### Frontend (Next.js)
 
 ```bash
 # Node.js >=22; packageManager is npm@10.8.0; root lockfile only
-npm ci
-
-# Root scripts invoke the local Turbo binary
-npm run build
-npm run dev
-npm run lint
-npm run test
-
-# Focus on the public web app
-npm run dev:web
-npm --workspace=apps/web run type-check
 ```
-
-## Code Style
-
-### Python
-- **Formatter**: Black, 88-char line length
-- **Import sorting**: isort (profile: black)
-- **Linter**: Ruff (E, W, F, I, B, C4, UP rules; E501 ignored)
-- **Type checking**: mypy strict mode (`disallow_untyped_defs = true`)
-- Target Python 3.11–3.12 (`pyproject.toml` is authoritative)
-- Config in `pyproject.toml`
-
-### TypeScript/JavaScript
-- **Strict mode** TypeScript (`apps/web/tsconfig.json`)
-- **ESLint** with Next.js rules (shared config in `packages/eslint-config/`)
-- **Tailwind CSS** for styling
-- Path alias: `@/*` maps to `src/*`
-
-## Testing
-
-### Python (pytest)
-- Config: `pyproject.toml` `[tool.pytest.ini_options]`
-- `pythonpath = src`, `testpaths = tests`
-- Async mode: `asyncio_mode = "auto"`
-- Markers: `unit`, `integration`, `slow`, `asyncio`, `database`, `security`, `e2e`, `performance`
-- Coverage target: 88.1833% minimum, source: `src/youtube_extension`
-
-### Frontend
-- Tests in `apps/web/src/components/__tests__/` and `apps/web/src/__tests__/`
-
-## Architecture Notes
-
-- **Event-driven**: Events follow `<domain>.<entity>.<action>` naming (e.g. `youtube.video.captured`)
-- **Dependency injection**: Service container pattern in `backend/containers/`
-- **Product AI**: Video Pack extraction uses Gemini 3.8 Flash through Vercel AI Gateway; internal runtime paths also contain other provider integrations
-- **MCP integration**: Internal agent orchestration via Model Context Protocol
-- **Video Pack store**: Upstash REST only; never substitute a Redis TCP client or backend SQL store
-- **Other runtime data**: SQLAlchemy / Alembic and auxiliary stores exist; inspect the owning service before changing one
-- **Auth**: Existing NextAuth.js web configuration; backend auth has its own middleware policy. Do not infer one from the other
-- **Monorepo**: Turbo; root npm workspace membership is `apps/*`. Shared packages and MCP directories are not automatically npm workspaces
 
 ## Key Policies
 
-- **REAL_MODE_ONLY**: No mock delays, fake data, or simulated responses in production code
-- **No secrets in code**: All keys/credentials go in `.env` (gitignored)
-- **Security**: Validate inputs via Pydantic; no `dangerouslySetInnerHTML` in React; sanitize subprocess args
-- **Type safety enforced**: mypy strict (Python), TypeScript strict (frontend)
-- **Vercel docs context**: Use `https://vercel.com/docs/llms-full.txt` when you need complete Vercel platform context for AI Gateway, Hosting, or MCP-related work.
 - **Protected previews**: E2E reaches Vercel deployment-protected previews with `VERCEL_AUTOMATION_BYPASS_SECRET` forwarded as `x-vercel-protection-bypass`. Do not send `x-vercel-set-bypass-cookie` from stateless test clients; it creates redirect loops instead of a durable session.
 - **E2E Attribution**: Synthetic requests must carry `X-EventRelay-Probe: e2e` and `User-Agent: EventRelay-E2E/<run-id>` to enable Vercel log filtering. The proxy emits bounded `e2e_probe_request` events; these headers are observability-only and do not authorize access or bypass limits.
 - **Vercel Filesystem**: The `/var/task` environment is read-only. Do not write persistent data to local disk.
 - **Preview Verification**: Missing PR previews fail closed. Do not fall back to production.
-- **Gate Tests**: Redis is required for gate tests.
-
-## SDK ↔ Backend Contract Alignment
-
-`sdk/python/eventrelay_sdk/types.py` must stay in sync with `src/youtube_extension/backend/api/v1/models.py`.
-
-**Rules:**
-- The backend `models.py` is the source of truth — never infer SDK types from test behaviour or API docs alone.
-- When a test fails with `ValidationError`, fix the test mock to match the real response shape; do not weaken the SDK type (e.g., making required fields `Optional`).
-- Enum fields (e.g., `job_status: Optional[JobStatus]`) must use the SDK enum type, not `str`.
-- After any change to backend response models, audit the corresponding SDK model for drift.
-
-**Verify alignment with:**
-
-```bash
-# Backend source of truth
-grep -A 30 "class TranscriptActionResponse" src/youtube_extension/backend/api/v1/models.py
-# SDK model
-grep -A 30 "class TranscriptActionResponse" sdk/python/eventrelay_sdk/types.py
-```
 
 ## Anthropic SDK Version
 
@@ -149,8 +25,3 @@ The project requires `anthropic>=0.105.0` (see `pyproject.toml`). This floor gua
 - Current model string: `claude-opus-4-8` (no date suffix)
 
 Do not add `try/except TypeError` fallbacks around these parameters — if the SDK is too old the install constraint is wrong, not the call site.
-
-## Repo Hygiene
-
-- **History was rewritten**: `main` has been force-pushed (a secret-purge of committed credentials). Older branches are therefore *orphaned* — they share little real ancestry with current `main`. Consequence: `git diff main...branch` (three-dot) and `git merge-tree` are **unreliable** for those branches (a three-dot diff can read "0 files" for a branch that diverges by thousands; merge-tree reports "clean" because unrelated trees don't textually conflict). When auditing branches, trust **PR state + staleness** (age, commits-behind), not raw diffs.
-- **Branch audits**: use the `branch-cleanup` skill (`.claude/skills/branch-cleanup/`) — it runs the 6-gate fail-test harness (`scripts/maintenance/branch-fail-test.sh`) and emits a decision matrix. Never delete branches without archive-tagging first (`git tag archive/<branch>`).

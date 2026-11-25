@@ -186,7 +186,7 @@ Below the buttons:
 ### Selection-scoped derivations (recomputed per selected video)
 
 - `selected` — the active `Video` row.
-- `scopedDeployReceipt`, `scopedPackLiveUrl`, `scopedPackBuildLiveSuccess` — receipt scoping helpers: a receipt only shows when its `receiptVideoId` matches `selectedVideoId` (prevents stale receipts bleeding across packs).
+- `scopedDeployReceipt`, `scopedPackBuildLiveSuccess` — receipt scoping helpers: a receipt only shows when its `receiptVideoId` matches `selectedVideoId` (prevents stale receipts bleeding across packs).
 - `packFormation` — `studioPackFormation(selected.videoPack)`: architecture, artifacts, tools, checks.
 - `linkedSop` — compiled SOP from transcript + events + insight actions + pack tools, via `compileLinkedSop` + `applyPackStackChecks`; falls back to stored `insights.linkedSop`.
 - On `selectedVideoId` change, all run-scoped state resets (receipts, gate receipt, failures, pane, transcript expansion).
@@ -197,12 +197,10 @@ Below the buttons:
 
 | Caller | Endpoint | Method | When |
 |---|---|---|---|
-| `tryExtractEvents` | `/api/extract-events` | POST `{transcript, videoTitle, videoUrl}` | Inside `act()` when transcript ≥ `MIN_ACT_TRANSCRIPT_CHARS` and no events yet. **Session-gated enrich: 401/403 → returns null, Act still proceeds.** 45s timeout. |
-| `StudioIdeChat.send` | `/api/chat` | POST `{query, history (last 10), video_id?, pack_id?}` | Every chat send. **402 + `upgradeRequired` → quota banner (free tier = 5 msgs/day).** Other errors → inline error banner + error assistant message. |
-| `downloadScaffoldPackage` | `/api/workspace/export` | POST (ship package payload) | `exportPkg()`. Retries while `!ok && status >= 500`. **402 + `checkoutUrl` → toast "Workspace ZIP exports require Pro. Redirecting to checkout…" then `window.location.href = checkoutUrl` (Stripe).** |
+| `StudioIdeChat.send` | `/api/chat` | POST `{query, history (last 10), video_id?, pack_id?}` | Every chat send. **30s `AbortSignal.timeout`. 402 + `upgradeRequired` → quota banner (free tier = 5 msgs/day).** Other errors → inline error banner + error assistant message. |
+| `downloadScaffoldPackage` | `/api/workspace/export` | POST (ship package payload) | `exportPkg()`. Retries while `!ok && status >= 500`. **402 / `upgradeRequired` → on-page toast "Workspace ZIP exports require Pro. Stay on this page — open Pricing to subscribe, then export again." Does not navigate to Stripe.** |
 | `startStudioDeploy` | `/api/workflows/studio-deploy` | POST `{url}` | `deploy()` (Check preflight). |
-| `pollStudioDeploy` | status URL from start response | GET (poll) | `deploy()` after start. |
-| `probeStudioDeployLiveUrl` | `/api/gate/probe-live` | POST | `deploy()` when a `live_url` candidate exists — HTTP probe fed into the G.A.T.E. evaluation. |
+| `pollStudioDeploy` | status URL from start response | GET (poll) | `deploy()` after a start that actually returns a run. The preflight route currently returns 409 and creates no run. |
 | `startVideoToActions` | `/api/workflows/video-to-actions` | POST (act input payload) | `act()` — **no UI button in current render** (see §17). |
 | `pollVideoToActions` | `/api/workflows/video-to-actions/<runId>` | GET (24 attempts × 2s) | `act()` after start. |
 | `verifyPackBuildLive` | (client lib `pack-build-live-client`) | — | `buildLive()` — verifies hosted pack by `videoId` + `sourceHash` against `window.location.origin`. |
@@ -232,7 +230,7 @@ Below the buttons:
 
 ### Act (video-to-actions) — currently triggerless
 
-`act()` builds input via `buildSameRunActInput({url, videoTitle, transcript, events + SOP steps as events})`, optionally enriches events via `/api/extract-events`, starts + polls the workflow, stores `workflowActions`. Intended to surface an "Actions" workbench pane (`hasActionsPane = showAgentWorkflowUi && (actRunId || workflowActions)`), but **no button calls `act()` in the current render** (see §17).
+`act()` builds input via `buildSameRunActInput({url, videoTitle, transcript, events + SOP steps as events})`, starts + polls the workflow, and stores `workflowActions`. **No button calls `act()` in the current render** (see §17). `/api/extract-events` is removed.
 
 ### Export
 
@@ -242,7 +240,7 @@ Below the buttons:
 3. Emptiness guard: no actions, scaffold, SOP steps, architecture, artifacts, or tools → error toast "empty".
 4. `buildStudioShipPackage({projectName, actions, projectScaffold, linkedSop, videoPack, transcript, sopSteps})`.
 5. `downloadScaffoldPackage(pkg)` → POST `/api/workspace/export`.
-   - 402 + checkoutUrl → error toast + redirect to Stripe checkout (Pro $39/mo).
+   - 402 / `upgradeRequired` → error toast that Pro is required; stay on Studio. Do not assign `window.location` to Stripe Checkout.
    - Other failure → error toast.
    - Success → success toast; if an official template matched, message names the cloned template + SOP + DEPLOY.md.
 
@@ -307,7 +305,7 @@ Component: `StudioIdeChat` — fully self-contained, props: `videoId`, `packId`,
 
 - Button: **Export** (`studio-ide-export`), enabled by `hasPayload` = any of: transcript, events, architecture, artifacts, tools, linked SOP steps, project scaffold.
 - Empty payload → error toast, no network call.
-- POST `/api/workspace/export` → on 402 with `checkoutUrl`, error toast "Workspace ZIP exports require Pro. Redirecting to checkout…" then full-page redirect to Stripe Checkout for **Workflow Pro ($39/mo)**. No payment/account is created by the Studio.
+- POST `/api/workspace/export` → on 402 / `upgradeRequired`, error toast "Workspace ZIP exports require Pro. Stay on this page — open Pricing to subscribe, then export again." Studio does not navigate to Stripe. Workflow Pro remains **$39/mo**.
 - Success → browser download of the ZIP (scaffold package: actions, project scaffold, SOP, video pack, transcript) + success toast naming the template when an official template matched ("Exported `<clone>` plus SOP and DEPLOY.md. `<filename>`").
 
 ---

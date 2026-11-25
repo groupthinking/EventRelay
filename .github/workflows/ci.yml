@@ -126,7 +126,7 @@ jobs:
       - run: pip install ruff
       - name: Lint Python (informational)
         continue-on-error: true
-        run: ruff check src/youtube_extension/backend/ src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
+        run: ruff check src/youtube_extension/main.py --ignore E402,F811,F401,F821,B904,B020,E701,E722
 
   lint-frontend:
     runs-on: ubuntu-latest

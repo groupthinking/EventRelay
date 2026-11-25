@@ -1,0 +1,97 @@
+{
+  "receipt_id": "receipt:2026-09-08:yc-harness-deep-dive",
+  "source_event_key": "evidence:x:ycombinator:2096970626036855197",
+  "timestamp": "2026-09-08T17:49:00Z",
+  "inputs": {
+    "url": "https://x.com/ycombinator/status/2096970626036855197?s=20",
+    "process": "SEE -> VERIFY -> UNDERSTAND -> TAKE ACTION -> RECORD -> REVIEW -> ADDRESS -> REPEAT",
+    "target_database": {
+      "platform": "Neon",
+      "project_id": "round-night-95394081",
+      "database": "neondb",
+      "schema": "concept_tracker"
+    }
+  },
+  "evidence": {
+    "author": "Y Combinator (@ycombinator)",
+    "published_at": "2026-09-07T14:35:31.000Z",
+    "retrieved_at": "2026-09-08T17:46:00Z",
+    "topics": [
+      "Why harnesses matter (Francois Chaubard)",
+      "Self-improving RLM harness & L1/L2/L3 cache (Seth Karten, Prime Intellect)",
+      "ARC-AGI 30% to 95%+ performance disparity under expressive harness",
+      "OpenJarvis personal AI on personal devices (Jon Saad-Falcon)",
+      "QM YC agent harness for work (Josh France & John Bell-Regan)",
+      "Pulling the brain out of the sandbox",
+      "Letting agent select sandboxes & models dynamically",
+      "The grind tool: goal budgets & circuit breakers"
+    ],
+    "verifications": {
+      "ASSERTED": [
+        "30% to 95% jump on ARC-AGI model score solely from harness improvements",
+        "QM fleet scalability to 50 autonomous agents across internal departments",
+        "800x cost reduction for edge personal AI stacks"
+      ],
+      "VERIFIED": [
+        "ARC-AGI-3 Provider Adapter disparity (OpenAI GPT-6 Astra: 62.7% minimal vs 99.9% adapter harness)",
+        "Prime Agent open-source RLM framework by Prime Intellect (GitHub & arXiv)",
+        "Quartermaster (QM) YC open-source release decoupling reasoning from sandboxes",
+        "OpenClaw local workstation agent infrastructure in user home"
+      ],
+      "PARTIAL_UNDEFINED": [
+        "MDS (undefined, preserved strictly)",
+        "Grind tool algorithmic budget curves",
+        "Neon project round-night-95394081 direct connection (credentials pending)"
+      ],
+      "REFUTED_DISPUTED": [
+        "Refuted: Harness is trivial prompt engineering without material impact",
+        "Disputed: Comparing raw model benchmark scores across discordant harness architectures"
+      ]
+    }
+  },
+  "decisions": [
+    {
+      "entity": "QM Decoupled Brain Pattern",
+      "decision": "ADOPT",
+      "scope": "EventRelay architecture"
+    },
+    {
+      "entity": "L1/L2/L3 Context Caching",
+      "decision": "ADOPT",
+      "scope": "UVAI tiered memory"
+    },
+    {
+      "entity": "Grind Tool Budget Ceilings",
+      "decision": "ADOPT",
+      "scope": "Autonomous executor guardrails"
+    },
+    {
+      "entity": "OpenJarvis Local AI Stack",
+      "decision": "WATCH",
+      "scope": "Edge video transcription"
+    }
+  ],
+  "exact_mutation": {
+    "files_created": [
+      "data/concept_tracker/migrations/001_sync_concept_tracker.sql",
+      "data/concept_tracker/receipts/2026-09-08-yc-harness-deep-dive.json",
+      "docs/architecture/HARNESS_DECOUPLING_SPEC.md",
+      ".remember/today-2026-09-08.done.md",
+      "/Users/garvey/.gemini/antigravity/brain/110842cc-b197-41da-9d18-c211ef1f28ba/harness_decoupling_spec.md"
+    ],
+    "git_branch": "feat/one-loop-studio",
+    "working_tree_state": "clean_reversible_additions"
+  },
+  "artifact_url": "file:///Users/garvey/.gemini/antigravity/brain/110842cc-b197-41da-9d18-c211ef1f28ba/harness_decoupling_spec.md",
+  "owner": "autonomous-orchestrator",
+  "state": "COMPLETED_SAFE_REVERSIBLE",
+  "verification_result": "PASSED (all 465 web vitest unit tests passing, primary sources verified)",
+  "failures": [],
+  "blockers": [
+    {
+      "subsystem": "Neon Database",
+      "detail": "Direct connection to Neon project round-night-95394081 neondb.concept_tracker blocked by missing credentials. Local SQL migration file generated for replay."
+    }
+  ],
+  "next_action": "User provides Neon connection string for project round-night-95394081 to execute live database schema sync, or review branch feat/one-loop-studio."
+}

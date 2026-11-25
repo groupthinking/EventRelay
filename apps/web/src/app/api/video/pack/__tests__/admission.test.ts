@@ -14,7 +14,7 @@ vi.mock('@/lib/billing/entitlement-store', () => ({ isProSubscriber }));
 
 const VIDEO_A = 'auJzb1D-fag';
 const VIDEO_B = 'jNQXAC9IVRw';
-const VIDEO_C = 'dQw4w9WgXcQ';
+const VIDEO_C = 'M7lc1UVf-VE';
 
 function post(body: unknown, headers: Record<string, string> = {}) {
   return new Request('http://localhost:3000/api/video/pack', {

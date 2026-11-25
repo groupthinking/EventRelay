@@ -96,11 +96,8 @@ stale-branch growth.
 
 ### Action items
 
-1. ~~Remove the inert nested duplicate workflow
-   `.github/workflows/.github/workflows/anthropic-wif-test.yml`~~ — done in
-   the change that added this document.
-2. No new Copilot app configuration is required; existing customization
+1. No new Copilot app configuration is required; existing customization
    surfaces already cover it.
-3. Revisit this verdict if (a) the app gains Linear integration, or (b) a
+2. Revisit this verdict if (a) the app gains Linear integration, or (b) a
    gh-aw report-first workflow demonstrates sustained signal, making
    scheduled automation worth expanding.

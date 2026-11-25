@@ -220,9 +220,38 @@ describe('consolidateShardExtract', () => {
     expect(local.app.ok).toBe(1);
   });
 
+  it('allows valid JS spread/rest, Python Ellipsis indexing/types, and quoted status strings', async () => {
+    const result = await consolidateShardExtract({
+      videoId: VIDEO_ID,
+      specs: [
+        section({
+          code_snippets: [
+            {
+              path_hint: 'src/spread.ts',
+              lang: 'ts',
+              content:
+                'export function merge(...args: string[]) {\n  const note = "Calibrating...";\n  return { ...{ ok: true }, args, note };\n}',
+            },
+            {
+              path_hint: 'robotics/cornhole_pipeline.py',
+              lang: 'py',
+              content:
+                'def slice_pose(frame: tuple[int, ...], arr):\n    return arr[..., :3]\n',
+            },
+          ],
+        }),
+      ],
+    });
+    expect(result.app).toEqual({ ok: 1, failures: [] });
+  });
+
   it.each([
     ['placeholder', 'export const zoo = placeholder;', 'placeholder'],
     ['ascii ellipsis', 'export function rest() { return ... }', 'ellipsis'],
+    ['comment stub ellipsis', '// ... implementation omitted\nexport const x = 1;', 'ellipsis'],
+    ['inline comment stub', 'export const x = 1; // ...', 'ellipsis'],
+    ['block comment stub', 'export function run() { /* ... */ }', 'ellipsis'],
+    ['python comment stub', '# ... todo\nx = 1', 'ellipsis'],
     ['unicode ellipsis', 'export const cut = \u2026', 'ellipsis'],
     ['the word ellipsis', 'export const note = "ellipsis in the signature";', 'ellipsis'],
     ['rest of code here', 'export function run() { /* REST OF CODE HERE */ }', 'rest of code here'],

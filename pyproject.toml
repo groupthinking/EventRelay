@@ -64,7 +64,7 @@ dependencies = [
     "PyYAML>=6.0.0",
     "requests>=2.31.0",
     "Pillow>=13.0.0",
-    "google-genai>=2.21.0",
+    "google-genai>=2.21.0,<3",
     "google-generativeai>=0.3.0",
     "opentelemetry-distro>=0.40b0",
     "opentelemetry-exporter-otlp>=1.20.0",
@@ -100,7 +100,7 @@ dev = [
     "jupyter>=1.0.0",
     "ipykernel>=6.25.0",
     "notebook>=7.0.0",
-    "locust==2.46.0",
+    "locust==2.47.0",
     # Test-time only. TestGeneratedFastAPIBehaviour executes the FastAPI app
     # that code_generator emits, and that app imports jwt. EventRelay itself
     # never imports it, so it does not belong in the runtime dependencies.

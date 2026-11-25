@@ -7,16 +7,14 @@ AI pipeline: SSE streaming, CloudEvents, Ray Serve, MCP tools.
 
 ## Critical paths — always flag issues here
 - apps/web/src/app/api/video/pack/route.ts + apps/web/src/lib/video-pack.ts — Video Pack pipeline (the legacy /api/pipeline SSE routes were retired in #2322)
-- src/uvai/unified_ai_sdk/ — must be real implementations, not stubs
-- src/mcp/ — MCP tool definitions and registry
 
 ## Vercel documentation
 Full LLM context: https://vercel.com/docs/llms-full.txt
 
 ## AI Gateway
-- Video generation route: apps/web/src/app/api/video/generate/route.ts
-- Video model: google/veo-3.1-generate-001
+- Video Pack extraction: apps/web/src/app/api/video/pack/route.ts (Gemini 3.8 Flash)
 - Env var: AI_GATEWAY_API_KEY
+- `/api/video/generate` was removed; do not recreate it as a Veo route
 
 ## TypeScript rules
 - strict mode is ON — no implicit any, no unsafe assertions

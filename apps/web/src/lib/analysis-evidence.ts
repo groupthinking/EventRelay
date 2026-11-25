@@ -35,6 +35,9 @@ export interface EvidenceAssessment {
   checkedAt: string;
 }
 
+export const STATIC_FIXTURE_SOURCE = 'static-fixture';
+export const STATIC_FIXTURE_WARNING = 'Static fixture; live provider acquisition has not been verified.';
+
 const TRUSTED_TRANSCRIPT_SOURCES = new Set([
   'youtube',
   'youtube-api',
@@ -147,6 +150,9 @@ export function assessAnalysisEvidence(input: {
   }
 
   const fatal: string[] = [];
+  const isFixture = [input.provenance.acquisitionMethod, input.provenance.transcriptSource]
+    .some((value) => value?.trim().toLowerCase() === STATIC_FIXTURE_SOURCE);
+  if (isFixture) fatal.push(STATIC_FIXTURE_WARNING);
   if (transcript.length < 40) {
     fatal.push('Transcript is empty or too short to support analysis.');
   }
@@ -162,7 +168,7 @@ export function assessAnalysisEvidence(input: {
     input.provenance.transcriptVerified &&
     isTrustedTranscriptSource(input.provenance.transcriptSource);
   const state: EvidenceState = !passed
-    ? transcript.length === 0
+    ? isFixture || transcript.length === 0
       ? 'unavailable'
       : 'failed'
     : trusted && timedSegmentCount === segmentCount && segmentCount > 0
