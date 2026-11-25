@@ -23,7 +23,7 @@ import pytest
 from agents import pipeline_orchestrator as po
 from agents.mcp_agent_network import MCPAgentNetwork
 
-NOT_IMPLEMENTED = "not_implemented"  # contract: same status scripts/ci/autonomous_video_processing.py uses
+NOT_IMPLEMENTED = "not_implemented"  # contract: same status agents.mcp_agent_network uses
 
 
 class _Emitter:
