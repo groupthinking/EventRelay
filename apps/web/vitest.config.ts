@@ -36,6 +36,9 @@ export default defineConfig({
       VERCEL_AI_GATEWAY_API_KEY: '',
       VERCEL_AI_GATEWAY_API: '',
       VERCEL_API_KEY: '',
+      // Keep existing routes' default behavior independent of a local operator's
+      // opt-in journal configuration. Focused integration tests set it explicitly.
+      RELAY_REVIEW_JOURNAL_MODE: '',
     },
   },
   resolve: {

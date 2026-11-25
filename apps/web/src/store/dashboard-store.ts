@@ -15,11 +15,9 @@ import type {
 } from '@/lib/types';
 import type {
   Action,
-  PipelineResult,
-  SearchResult,
   Video,
 } from '@/store/dashboard-types';
-import { formatSeconds } from '@/lib/timestamp';
+import { extractYouTubeId, formatSeconds } from '@/lib/timestamp';
 import { emitVideoPack, type VideoPackCitation } from '@/lib/emit-video-pack';
 import {
   pollVideoToActions,
@@ -31,40 +29,42 @@ import { compileLinkedSop } from '@/lib/linked-sop';
 
 export type {
   Action,
-  PipelineResult,
-  SearchResult,
   Video,
 } from '@/store/dashboard-types';
 
+export const ANALYSIS_STOPPED_MESSAGE =
+  'Analysis stopped in this browser. Server work already accepted may continue.';
+
 interface DashboardState {
-  // Data
   videos: Video[];
   selectedVideoId: string | null;
-  loading: boolean;
 
-  // Computed
-  selectedVideo: () => Video | undefined;
-
-  // Actions
   addVideo: (video: Video) => void;
   updateVideo: (id: string, patch: Partial<Video>) => void;
   removeVideo: (id: string) => void;
   selectVideo: (id: string | null) => void;
-  setLoading: (loading: boolean) => void;
 
-  // Workflow actions
   processVideo: (url: string, opts?: { signal?: AbortSignal }) => Promise<string>;
-
-  // Search actions
-  searchQuery: string;
-  searchResults: SearchResult[];
-  searchLoading: boolean;
-  setSearchQuery: (query: string) => void;
 }
 
-/** Trim a URL for display in titles/activity. */
+/** Trim a string for display in titles. */
 function truncate(value: string, max: number): string {
   return value.length > max ? value.substring(0, max - 3) + '…' : value;
+}
+
+function fallbackVideoTitle(url: string): string {
+  const videoId = extractYouTubeId(url);
+  return videoId ? `YouTube · ${videoId}` : 'YouTube video';
+}
+
+function isPlaceholderVideoTitle(title: string): boolean {
+  const trimmed = title.trim();
+  return (
+    trimmed.length === 0 ||
+    /^analyzing:\s*/i.test(trimmed) ||
+    /^analysis\s+(?:blocked|stopped)\b/i.test(trimmed) ||
+    /^https?:\/\//i.test(trimmed)
+  );
 }
 
 function formatVerifiedTranscript(segments: TranscriptSegment[]): string | undefined {
@@ -111,6 +111,7 @@ function normalizeDashboardActions(value: unknown): Action[] {
 
 function verifiedResultPatch(
   id: string,
+  url: string,
   runId: string,
   result: VideoToActionsResult | undefined,
   pack?: VideoPackCitation,
@@ -140,7 +141,7 @@ function verifiedResultPatch(
   });
   const events: ExtractedEvent[] = (analysis.events || []).map((event, index) => ({
     id: `evt_${id}_${index}`,
-    type: 'insight',
+    type: 'topic',
     title: event.label,
     description: event.description,
     timestamp: Number.isFinite(event.timestamp) ? String(event.timestamp) : undefined,
@@ -178,7 +179,7 @@ function verifiedResultPatch(
     status: 'complete',
     progress: 100,
     pipelineMode: 'workflow',
-    title: truncate(analysis.title || 'Verified video analysis', 60),
+    title: truncate(analysis.title?.trim() || fallbackVideoTitle(url), 60),
     processedAt: new Date().toISOString(),
     duration: `${provenance.segmentCount} segments`,
     transcript,
@@ -213,7 +214,7 @@ function workflowFailurePatch(url: string, startedAt: string, message: string): 
   return {
     status: 'failed',
     progress: 100,
-    title: `Analysis blocked: ${truncate(url, 38)}`,
+    title: `Analysis blocked · ${fallbackVideoTitle(url)}`,
     processedAt: failedAt,
     failure: {
       stage,
@@ -289,21 +290,31 @@ function isStoredVideo(value: unknown): value is Video {
     && typeof row.progress === 'number' && Number.isFinite(row.progress)
     && ['processing', 'complete', 'failed'].includes(String(row.status));
 }
+
+function normalizePersistedVideo(video: Video): Video {
+  const cleanTitle = isPlaceholderVideoTitle(video.title)
+    ? fallbackVideoTitle(video.url)
+    : video.title;
+  if (video.status !== 'processing') {
+    return cleanTitle === video.title ? video : { ...video, title: cleanTitle };
+  }
+  return {
+    ...video,
+    title: cleanTitle,
+    status: 'failed',
+    failure: video.failure ?? {
+      stage: 'analysis',
+      message: 'Previous extraction did not finish before the page reloaded.',
+      retryable: true,
+      failedAt: new Date().toISOString(),
+    },
+  };
+}
 export const useDashboardStore = create<DashboardState>()(
   persist(
     (set, get) => ({
   videos: [],
   selectedVideoId: null,
-  loading: false,
-
-  searchQuery: '',
-  searchResults: [],
-  searchLoading: false,
-
-  selectedVideo: () => {
-    const { videos, selectedVideoId } = get();
-    return videos.find((v) => v.id === selectedVideoId);
-  },
 
   addVideo: (video) =>
     set((s) => ({ videos: [video, ...s.videos] })),
@@ -319,15 +330,7 @@ export const useDashboardStore = create<DashboardState>()(
       selectedVideoId: s.selectedVideoId === id ? null : s.selectedVideoId,
     })),
 
-  selectVideo: (id) => set({
-    selectedVideoId: id,
-    searchQuery: '',
-    searchResults: [],
-    searchLoading: false,
-  }),
-
-  setLoading: (loading) => set({ loading }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  selectVideo: (id) => set({ selectedVideoId: id }),
 
   // ── Process a video URL through one durable, evidence-gated workflow ──
   processVideo: async (url, opts) => {
@@ -338,18 +341,45 @@ export const useDashboardStore = create<DashboardState>()(
 
     addVideo({
       id,
-      title: `Analyzing: ${truncate(url, 50)}`,
+      title: fallbackVideoTitle(url),
       url,
       status: 'processing',
       progress: 0,
       pipelineMode: 'workflow',
     });
 
+    let locallyStopped = false;
+    const stopLocalAnalysis = () => {
+      if (locallyStopped) return;
+      locallyStopped = true;
+      updateVideo(id, {
+        status: 'failed',
+        title: fallbackVideoTitle(url),
+        failure: {
+          stage: 'analysis',
+          message: ANALYSIS_STOPPED_MESSAGE,
+          retryable: true,
+          failedAt: new Date().toISOString(),
+        },
+      });
+    };
+    signal?.addEventListener('abort', stopLocalAnalysis, { once: true });
+
     try {
-      const videoPack = await emitVideoPack(url);
+      signal?.throwIfAborted();
+      const videoPack = await emitVideoPack(url, { signal });
+      signal?.throwIfAborted();
       updateVideo(id, { videoPack, progress: 5 });
 
-      const started = await startVideoToActions({ url });
+      const started = await startVideoToActions({ url, signal });
+      // Preserve a known accepted run for later readback, even if local waiting stopped.
+      if (started.runId) {
+        updateVideo(id, {
+          runId: started.runId,
+          statusUrl: started.statusUrl || `/api/workflows/video-to-actions/${encodeURIComponent(started.runId)}`,
+        });
+      }
+      signal?.throwIfAborted();
       if (!started.ok || !started.runId) {
         throw new Error(
           `Workflow start failed: ${started.error || started.message || 'no run ID returned.'}`,
@@ -369,18 +399,7 @@ export const useDashboardStore = create<DashboardState>()(
         signal,
       });
 
-      if (signal?.aborted) {
-        updateVideo(id, {
-          status: 'failed',
-          failure: {
-            stage: 'analysis',
-            message: 'Cancelled by user.',
-            retryable: true,
-            failedAt: new Date().toISOString(),
-          },
-        });
-        return id;
-      }
+      signal?.throwIfAborted();
 
       if (terminal.runStatus !== 'completed') {
         if (terminal.runStatus === 'running' || terminal.runStatus === 'pending') {
@@ -390,10 +409,16 @@ export const useDashboardStore = create<DashboardState>()(
         throw new Error(terminal.error || terminal.message || `Workflow ${terminal.runStatus || 'failed'}.`);
       }
 
-      updateVideo(id, verifiedResultPatch(id, started.runId, terminal.result, videoPack));
+      updateVideo(id, verifiedResultPatch(id, url, started.runId, terminal.result, videoPack));
     } catch (error) {
+      if (signal?.aborted) {
+        stopLocalAnalysis();
+        return id;
+      }
       const message = error instanceof Error ? error.message : 'Analysis failed.';
       updateVideo(id, workflowFailurePatch(url, startedAt, message));
+    } finally {
+      signal?.removeEventListener('abort', stopLocalAnalysis);
     }
 
     return id;
@@ -410,7 +435,9 @@ export const useDashboardStore = create<DashboardState>()(
         const saved = persisted as Record<string, unknown>;
         return {
           ...current,
-          videos: Array.isArray(saved.videos) ? saved.videos.filter(isStoredVideo) : current.videos,
+          videos: Array.isArray(saved.videos)
+            ? saved.videos.filter(isStoredVideo).map(normalizePersistedVideo)
+            : current.videos,
         };
       },
       skipHydration: true,

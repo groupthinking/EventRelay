@@ -128,6 +128,24 @@ describe('studio-workflow (WDK Product v1)', () => {
     vi.restoreAllMocks();
   });
 
+  it('keeps the workflow kickoff timeout when a caller can stop analysis', async () => {
+    const caller = new AbortController();
+    const timeout = new AbortController();
+    const timeoutSpy = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ ok: true, runId: 'wrun_timeout_bound' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await startVideoToActions({ url: 'https://www.youtube.com/watch?v=auJzb1D-fag', signal: caller.signal });
+    timeout.abort(new DOMException('Timed out', 'TimeoutError'));
+
+    expect(timeoutSpy).toHaveBeenCalledWith(30_000);
+    expect(caller.signal.aborted).toBe(false);
+    expect(fetchMock.mock.calls[0]?.[1].signal.aborted).toBe(true);
+  });
+
   it('startVideoToActions parses runId and statusUrl', async () => {
     vi.stubGlobal(
       'fetch',

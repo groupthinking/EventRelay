@@ -55,7 +55,8 @@ test('announces an invalid URL and exposes the invalid field state', async ({ pa
 
 test('opens mobile workflow context without losing the source input', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.goto('/');
+  // Workflow context lives on the classic home; the live on-ramp has no side panel.
+  await page.goto('/?shell=classic');
   const input = page.getByLabel('YouTube URL');
   await input.fill('https://www.youtube.com/watch?v=auJzb1D-fag');
   const context = page.getByRole('complementary', { name: 'Video workflow context' });

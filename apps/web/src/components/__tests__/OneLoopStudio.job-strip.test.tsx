@@ -11,7 +11,6 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/studio',
 }));
 vi.mock('@/components/Nav', () => ({ default: () => null }));
-vi.mock('@/app/studio/actions', () => ({ openGitHubPrsForApprovedSpecs: vi.fn() }));
 vi.mock('@/lib/use-youtube-player', () => ({
   useYouTubePlayer: () => ({
     containerRef: { current: null },
@@ -43,7 +42,7 @@ afterEach(() => {
 
 describe('OneLoopStudio IDE status and transcript', () => {
   it('shows idle status in the toolbar when no pack is stored', () => {
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
 
     expect(screen.getByTestId('studio-ide-shell')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-status')).toBeTruthy();
@@ -72,12 +71,14 @@ describe('OneLoopStudio IDE status and transcript', () => {
       selectedVideoId: idleVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
 
-    expect(screen.getByTestId('studio-build-live-button').getAttribute('title')).toBe(
+    expect(screen.getByRole('combobox', { name: 'Saved videos' })).toBeTruthy();
+    fireEvent.click(screen.getByTestId('studio-ide-output-tab-preview'));
+    expect(screen.getByTestId('studio-ide-preview-verify').getAttribute('title')).toBe(
       'Compile the stored Video Pack for auJzb1D-fag.',
     );
-    expect(screen.getByTestId('studio-build-live-button').getAttribute('title')).not.toContain('/d/');
+    expect(screen.getByTestId('studio-ide-ship').getAttribute('title')).not.toContain('/d/');
   });
 
   it('shows the extract error instead of the idle transcript after a failed pack', () => {
@@ -99,10 +100,11 @@ describe('OneLoopStudio IDE status and transcript', () => {
       selectedVideoId: idleVideo.id,
     });
 
-    render(<OneLoopStudio showAgentWorkflowUi={false} />);
+    render(<OneLoopStudio />);
 
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-transcript'));
-    expect(screen.getByTestId('studio-transcript-body').textContent).toBe(extractError);
+    expect(screen.getByTestId('studio-transcript-body').textContent).toContain(extractError);
+    expect(screen.getByTestId('studio-transcript-pane-retry').textContent).toMatch(/Retry transcript/i);
     expect(screen.queryByText('Nothing yet.')).toBeNull();
   });
 });

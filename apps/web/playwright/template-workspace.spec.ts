@@ -5,11 +5,12 @@ import { test, expect } from '@playwright/test';
 for (const width of [390, 1280]) {
   test(`OpenAI template Home, Pricing and Studio are usable at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto('/');
+    // The live-studio flag serves the on-ramp and live workspace; this spec covers the classic template.
+    await page.goto('/?shell=classic');
     await expect(page.locator('[data-template="openai-responses-starter"]')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Turn YouTube into bound tasks.' })).toBeVisible();
     await expect(page.locator('.template-use-cases')).toBeVisible();
-    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#C2410C');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--uvai-accent').trim())).toBe('#146ef5');
     await page.getByLabel('YouTube URL').fill('unsupported-source');
     await page.getByRole('button', { name: 'Build from video in Studio' }).click();
     await expect(page.locator('#home-youtube-url-error')).toHaveText('Need a valid YouTube URL.');
@@ -21,7 +22,7 @@ for (const width of [390, 1280]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: test.info().outputPath(`pricing-${width}.png`), fullPage: true });
 
-    await page.goto('/studio');
+    await page.goto('/studio?shell=classic');
     await expect(page.getByTestId('studio-ide-shell')).toBeVisible();
     await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
     await page.getByLabel('YouTube URL', { exact: true }).fill('https://www.youtube.com/watch?v=auJzb1D-fag');

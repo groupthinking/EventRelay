@@ -1,5 +1,6 @@
 import { decodeGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
 import type {
+  VideoPackCodeSnippet,
   VideoPackKeyframe,
   VideoPackRequirement,
   VideoPackTranscriptSegment,
@@ -13,6 +14,15 @@ import {
   type VideoPackChapter,
   type VideoPackStack,
 } from '@/lib/video-pack-types';
+
+export interface EmittedVideoPackEvent {
+  id?: string;
+  type?: string;
+  title?: string;
+  label?: string;
+  description?: string;
+  timestamp?: number | string;
+}
 
 export interface EmittedVideoPack {
   grounded_spec?: GroundedSpecRecord;
@@ -29,11 +39,13 @@ export interface EmittedVideoPack {
   visual_context?: VideoPackVisualContext | null;
   keyframes?: VideoPackKeyframe[];
   requirements?: VideoPackRequirement[];
+  code_snippets?: VideoPackCodeSnippet[];
   architecture?: VideoPackArchitecture | null;
   artifacts?: VideoPackArtifact[];
   stack?: VideoPackStack;
   chapters?: VideoPackChapter[];
   action_items?: VideoPackActionItem[];
+  events?: EmittedVideoPackEvent[];
 }
 
 export interface VideoPackCitation {
@@ -110,7 +122,22 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   const visualContext = data?.visual_context;
   const keyframes = Array.isArray(data?.keyframes) ? data.keyframes : undefined;
   const requirements = Array.isArray(data?.requirements) ? data.requirements : undefined;
+  const codeSnippets = Array.isArray(data?.code_snippets)
+    ? (data.code_snippets as unknown[]).flatMap((item): VideoPackCodeSnippet[] => {
+        const snippet = asRecord(item);
+        const content = typeof snippet?.content === 'string' ? snippet.content : '';
+        if (!content.trim()) return [];
+        return [
+          {
+            path_hint: typeof snippet?.path_hint === 'string' ? snippet.path_hint : null,
+            lang: typeof snippet?.lang === 'string' ? snippet.lang : null,
+            content,
+          },
+        ];
+      })
+    : undefined;
   const grounding = data ? decodeGroundedSpec(data) : undefined;
+  const events = readPackEvents(data?.events);
 
   return {
     version,
@@ -139,23 +166,69 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(visualContext ? { visual_context: visualContext as VideoPackVisualContext } : {}),
       ...(keyframes ? { keyframes: keyframes as VideoPackKeyframe[] } : {}),
       ...(requirements ? { requirements: requirements as VideoPackRequirement[] } : {}),
+      ...(codeSnippets && codeSnippets.length > 0 ? { code_snippets: codeSnippets } : {}),
       ...(formation.architecture ? { architecture: formation.architecture } : {}),
       ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
       ...(formation.chapters.length > 0 ? { chapters: formation.chapters } : {}),
       ...(formation.action_items.length > 0 ? { action_items: formation.action_items } : {}),
+      ...(events.length > 0 ? { events } : {}),
     },
   };
+}
+
+function readPackEvents(value: unknown): EmittedVideoPackEvent[] {
+  if (!Array.isArray(value)) return [];
+  const events: EmittedVideoPackEvent[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const title =
+      typeof row.title === 'string' && row.title.trim()
+        ? row.title.trim()
+        : typeof row.label === 'string' && row.label.trim()
+          ? row.label.trim()
+          : '';
+    if (!title) continue;
+    const event: EmittedVideoPackEvent = { title };
+    if (typeof row.id === 'string' && row.id.trim()) event.id = row.id.trim();
+    if (typeof row.type === 'string' && row.type.trim()) event.type = row.type.trim();
+    if (typeof row.label === 'string' && row.label.trim()) event.label = row.label.trim();
+    if (typeof row.description === 'string' && row.description.trim()) {
+      event.description = row.description.trim();
+    }
+    if (typeof row.timestamp === 'number' && Number.isFinite(row.timestamp)) {
+      event.timestamp = row.timestamp;
+    } else if (typeof row.timestamp === 'string' && row.timestamp.trim()) {
+      event.timestamp = row.timestamp.trim();
+    }
+    events.push(event);
+  }
+  return events;
 }
 
 export function identityPackJson(pack: VideoPackCitation): string {
   return JSON.stringify(pack.pack, null, 2);
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
+}
+
+function packRequestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(15_000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 function packErrorMessage(payload: unknown, fallback: string): string {
@@ -181,20 +254,23 @@ function processingQuery(payload: unknown, fallbackUrl: string): string {
 async function pollReadyPack(
   payload: unknown,
   fallbackUrl: string,
-  options: { pollIntervalMs: number; timeoutMs: number },
+  options: { pollIntervalMs: number; timeoutMs: number; signal?: AbortSignal },
 ): Promise<VideoPackCitation> {
   const deadline = Date.now() + options.timeoutMs;
   const query = processingQuery(payload, fallbackUrl);
   while (Date.now() <= deadline) {
+    options.signal?.throwIfAborted();
     if (options.pollIntervalMs > 0) {
-      await delay(options.pollIntervalMs);
+      await delay(options.pollIntervalMs, options.signal);
     }
+    options.signal?.throwIfAborted();
     const response = await fetch(`/api/video/pack?${query}`, {
       method: 'GET',
       credentials: 'same-origin',
-      signal: AbortSignal.timeout(15_000),
+      signal: packRequestSignal(options.signal),
     });
     const next: unknown = await response.json().catch(() => null);
+    options.signal?.throwIfAborted();
     if (response.status === 200) {
       return verifyIdentityPack(next);
     }
@@ -206,13 +282,14 @@ async function pollReadyPack(
   throw new Error('Video pack emit timed out waiting for spec extract.');
 }
 
-function postVideoPack(url: string): Promise<Response> {
+function postVideoPack(url: string, signal?: AbortSignal): Promise<Response> {
+  signal?.throwIfAborted();
   return fetch('/api/video/pack', {
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ url }),
-    signal: AbortSignal.timeout(15_000),
+    signal: packRequestSignal(signal),
   });
 }
 
@@ -240,17 +317,18 @@ export function startVideoPackEmit(watchUrl: string): void {
 
 export async function emitVideoPack(
   url: string,
-  options: { pollIntervalMs?: number; timeoutMs?: number } = {},
+  options: { pollIntervalMs?: number; timeoutMs?: number; signal?: AbortSignal } = {},
 ): Promise<VideoPackCitation> {
   const pollIntervalMs = options.pollIntervalMs ?? 1_000;
   const timeoutMs = options.timeoutMs ?? 120_000;
-  const response = await postVideoPack(url);
+  const response = await postVideoPack(url, options.signal);
   const payload: unknown = await response.json().catch(() => null);
+  options.signal?.throwIfAborted();
   if (response.status === 200) {
     return verifyIdentityPack(payload);
   }
   if (response.status === 202) {
-    return pollReadyPack(payload, url, { pollIntervalMs, timeoutMs });
+    return pollReadyPack(payload, url, { pollIntervalMs, timeoutMs, signal: options.signal });
   }
   throw new Error(packErrorMessage(payload, 'Video pack emit failed.'));
 }

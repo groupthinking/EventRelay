@@ -37,9 +37,14 @@ describe('UVAI is one product surface', () => {
     expect(nav).not.toContain("href: '/features'");
     expect(nav).toContain("href: '/pricing'");
     expect(studio).not.toContain('href="/dashboard"');
-    // IDE: stack/tools surface in the output pane Tools tab.
+    // IDE: 4 plain-English deliverable tabs in the output pane.
     const output = readSource('components/studio/StudioIdeOutput.tsx');
-    expect(output).toContain("{ id: 'tools', label: 'Tools' }");
+    expect(output).toContain("{ id: 'preview', label: 'Preview' }");
+    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
+    expect(output).toContain("{ id: 'code', label: 'Code & Spec' }");
+    expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
+    expect(output).not.toContain("{ id: 'lingo',");
+    expect(output).not.toContain("{ id: 'signals',");
   });
 
   it('308s /dashboard, /app, and /prototype into the canonical workbench', () => {
@@ -59,7 +64,7 @@ describe('UVAI is one product surface', () => {
     const pricing = readSource('app/pricing/page.tsx');
     const nav = readSource('components/Nav.tsx');
     expect(config).toContain("source: '/features'");
-    expect(config).toMatch(/source: '\/features'[\s\S]{0,120}destination: '\/'/);
+    expect(config).toMatch(/source: '\/features'[\s\S]{0,200}destination: '\/(\?shell=classic)?'/);
     expect(pricing).toContain("from '@/components/Nav'");
     expect(pricing).not.toContain('href="/dashboard"');
     // Orphaned landing/ components deleted per product direction (2026-10-07).

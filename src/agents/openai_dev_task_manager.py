@@ -6,7 +6,7 @@ OpenAI Dev Task Manager (MCP-first)
 - Generates deliverables: Blueprint.md and SubAgent-Spec.json
 
 Notes:
-- Uses existing `src/mcp/mcp_video_processor.py` (no re-creation)
+- Video processing goes through `src/agents/mcp_ecosystem_coordinator.py`
 - Coordinates subagents via A2A framework when needed
 - PR creation is output as a ready-to-run command script (no auto-push here)
 """
@@ -18,7 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from agents.mcp_ecosystem_coordinator import MCPVideoProcessorServer
 from utils.path_utils import select_writable_dir
+from youtube_extension.utils.video_utils import extract_video_id
 
 
 @dataclass
@@ -49,14 +51,9 @@ class OpenAIDevTaskManager:
         self.output_root = self.workspace_root / "workflow_output"
         self.output_root.mkdir(parents=True, exist_ok=True)
 
-    def _load_mcp_video_processor(self):
-        """Dynamically load MCPVideoProcessor from src/mcp/mcp_video_processor.py by file path."""
-        try:
-            from mcp.mcp_video_processor import MCPVideoProcessor
-
-            return MCPVideoProcessor()
-        except ImportError as e:
-            raise ImportError("Unable to load MCPVideoProcessor module") from e
+    def _load_mcp_video_processor(self) -> MCPVideoProcessorServer:
+        """Load the live video processor from the MCP ecosystem coordinator."""
+        return MCPVideoProcessorServer()
 
     async def run_videos(self, video_urls: list[str]) -> list[DevTaskResult]:
         results: list[DevTaskResult] = []
@@ -67,23 +64,38 @@ class OpenAIDevTaskManager:
 
     async def _process_single_video(self, video_url: str) -> DevTaskResult:
         processor = self._load_mcp_video_processor()
+        video_id = "unknown"
         try:
-            processing = await processor.process_video_mcp(video_url)
+            video_id = extract_video_id(video_url)
+            processing = await processor.handle_request(
+                {"action": "process_video", "video_id": video_id}
+            )
 
-            if not processing.get("success", True):
+            if processing.get("status") != "success":
                 return DevTaskResult(
-                    video_id=processing.get("video_id", "unknown"),
+                    video_id=video_id,
                     success=False,
                     actions_generated=0,
                     transcript_segments=0,
-                    category=processing.get("category", "unknown"),
+                    category=str(processing.get("category", "unknown")),
                     result_path=None,
-                    error=processing.get("error", "Unknown error"),
+                    error=str(
+                        processing.get("message")
+                        or processing.get("error")
+                        or "Unknown error"
+                    ),
                 )
 
-            # Gates
-            transcript_segments = int(processing.get("transcript_segments", 0))
-            actions_generated = int(processing.get("actions_generated", 0))
+            analysis = processing.get("analysis") or {}
+            actions = analysis.get("actions") or []
+            topics = analysis.get("topics") or []
+            actions_generated = len(actions) if isinstance(actions, list) else 0
+            transcript_segments = int(processing.get("transcript_segments") or 0)
+            category = (
+                topics[0]
+                if isinstance(topics, list) and topics
+                else str(processing.get("category", "general"))
+            )
 
             self._enforce_gate(
                 transcript_segments >= 5, "Transcript too short (<5 segments)"
@@ -91,9 +103,6 @@ class OpenAIDevTaskManager:
             self._enforce_gate(
                 actions_generated >= 2, "Insufficient actions generated (<2)"
             )
-
-            video_id = processing["video_id"]
-            category = processing.get("category", "general")
 
             # Deliverables
             dest = self.output_root / video_id
@@ -117,7 +126,7 @@ class OpenAIDevTaskManager:
         except Exception as e:
             # Hard fail gate
             return DevTaskResult(
-                video_id="unknown",
+                video_id=video_id,
                 success=False,
                 actions_generated=0,
                 transcript_segments=0,
@@ -142,8 +151,8 @@ class OpenAIDevTaskManager:
 - Category: {category}
 
 ## Architecture
-- Processor: `src/mcp/mcp_video_processor.py`
-- Orchestrator (optional): `src/mcp/mcp_ecosystem_coordinator.py`
+- Processor: `src/agents/mcp_ecosystem_coordinator.py` (`MCPVideoProcessorServer`)
+- Orchestrator: `src/agents/mcp_ecosystem_coordinator.py` (`MCPEcosystemCoordinator`)
 - YouTube Proxy: `shared/libs/youtube_proxy.py`
 - A2A: `agents/a2a_framework.py`
 

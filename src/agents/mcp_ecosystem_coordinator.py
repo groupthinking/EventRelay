@@ -19,9 +19,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from youtube_extension.processors.enhanced_extractor import VideoContent
 
-# Add src/mcp to path for imports
-# REMOVED: sys.path.append removed
-
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +79,9 @@ class MCPVideoProcessorServer(BaseMCPServer):
 
                 return {
                     "status": "success",
+                    "video_id": video_id,
                     "result": content.summary,
+                    "transcript_segments": len(content.transcript or []),
                     "metadata": asdict(content.metadata),
                     "analysis": {
                         "topics": content.topics,

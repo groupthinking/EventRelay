@@ -1,5 +1,6 @@
 import type { Redis } from '@upstash/redis';
 import { appendFile } from 'node:fs/promises';
+import { createUpstashRedisClient } from './upstash-client';
 
 export type KaizenTraceEntry = {
   ts: string;
@@ -17,20 +18,7 @@ let redisPromise: Promise<Redis | null> | null = null;
 
 async function getRedis(): Promise<Redis | null> {
   if (redisPromise) return redisPromise;
-  redisPromise = (async () => {
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-      return null;
-    }
-    try {
-      const { Redis } = await import('@upstash/redis');
-      return new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-      });
-    } catch {
-      return null;
-    }
-  })();
+  redisPromise = createUpstashRedisClient();
   return redisPromise;
 }
 
