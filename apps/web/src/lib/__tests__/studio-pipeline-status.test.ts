@@ -14,12 +14,11 @@ import {
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
   studioDeployReceiptForSelection,
-  studioDisplayEvents,
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportProRequiredToast,
   studioExportToastMessage,
-  studioPackExtractedEventCount,
+  studioPackExtractedEvents,
   studioHasDeployReceipt,
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
@@ -256,24 +255,12 @@ describe('studio-pipeline-status', () => {
         ],
       },
     };
-    const insightCards = [
-      {
-        id: 'evt_1',
-        type: 'insight' as const,
-        title: 'Five-Step AI Video Retainer Pipeline',
-      },
-      { id: 'evt_2', type: 'insight' as const, title: 'Cluey two-engineer architecture' },
-      { id: 'evt_3', type: 'insight' as const, title: 'creator affiliate network' },
-      { id: 'evt_4', type: 'insight' as const, title: 'Fable/safety' },
-    ];
-
-    expect(studioPackExtractedEventCount(pack)).toBe(0);
-    expect(studioDisplayEvents({ pack, videoEvents: insightCards })).toEqual([]);
+    expect(studioPackExtractedEvents(pack)).toEqual([]);
     expect(
       studioEventsEmptyMessage({
         busy: false,
         hasCompletedRun: true,
-        eventCount: studioDisplayEvents({ pack, videoEvents: insightCards }).length,
+        eventCount: studioPackExtractedEvents(pack).length,
         hasArchitecture: true,
         artifactCount: 1,
         toolCount: 1,
@@ -284,19 +271,15 @@ describe('studio-pipeline-status', () => {
       ...pack,
       events: [{ type: 'action', title: 'Clip signed', label: 'Clip signed', timestamp: 12 }],
     };
-    const shown = studioDisplayEvents({ pack: withEvents, videoEvents: insightCards });
+    const shown = studioPackExtractedEvents(withEvents);
     expect(shown).toHaveLength(1);
     expect(shown[0]?.title).toBe('Clip signed');
     expect(shown[0]?.type).not.toBe('insight');
-    expect(studioPackExtractedEventCount(withEvents)).toBe(1);
   });
 
   it('keeps pack events[] after verifyIdentityPack and still ignores insight cards', () => {
     const canon = 'jNQXAC9IVRw';
     const hash = GOLDEN_IDENTITY_HASHES[canon];
-    const insightCards = [
-      { id: 'evt_1', type: 'insight' as const, title: 'Five-Step AI Video Retainer Pipeline' },
-    ];
     const identity = {
       version: 'v0',
       id: `vp:v0:${canon}`,
@@ -311,7 +294,7 @@ describe('studio-pipeline-status', () => {
 
     const emptyCitation = verifyIdentityPack({ status: 'success', data: identity });
     expect(emptyCitation.pack.events).toBeUndefined();
-    expect(studioDisplayEvents({ pack: emptyCitation.pack, videoEvents: insightCards })).toEqual([]);
+    expect(studioPackExtractedEvents(emptyCitation.pack)).toEqual([]);
 
     const withEvents = verifyIdentityPack({
       status: 'success',
@@ -320,7 +303,7 @@ describe('studio-pipeline-status', () => {
         events: [{ id: 'evt-clip', type: 'action', title: 'Clip signed', timestamp: 12 }],
       },
     });
-    const shown = studioDisplayEvents({ pack: withEvents.pack, videoEvents: insightCards });
+    const shown = studioPackExtractedEvents(withEvents.pack);
     expect(shown).toHaveLength(1);
     expect(shown[0]?.title).toBe('Clip signed');
     expect(shown[0]?.type).not.toBe('insight');

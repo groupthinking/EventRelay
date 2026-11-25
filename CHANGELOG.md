@@ -11,6 +11,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio event display reads pack `events[]` through one parser. The unused display count, sample-events wrapper, and lib task note are gone. Related: #2328.
+
 ### 2026-11-24: Long Video Packs use one agentic Gemini call
 
 Tracked by #2808.
