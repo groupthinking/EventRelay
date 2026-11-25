@@ -10,13 +10,15 @@ workflow; this README is the index.
 |----------|------|---------|---------|
 | CI | `ci.yml` | push / PR to `main` | Type-check + lint `apps/web`, build the web app, lint Python (informational), run unit tests |
 | Coverage | `coverage.yml` | push / PR to `main`,`develop`; manual | Generate pytest coverage and upload lcov to Qlty |
-| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.82.14`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| gh-aw Validation | `gh-aw-validation.yml` | push / PR to `main` on gh-aw files; manual | Pin `gh aw` to `v0.88.7`, compile custom EventRelay `.md` workflows, and run validate + actionlint + zizmor + poutine checks |
+| Repo Assist | `repo-assist.md` / `.lock.yml` | manual (`workflow_dispatch`) | Read-only status reporter: checks `docs/AGENT_CAPABILITIES_CHECKLIST.md` and `docs/REPO_MAP.md` against the current tree and posts a single summary comment; never writes to branches, labels, or pull requests |
+| PR Iteration Loop | `pr-iteration-loop.md` / `.lock.yml` | issue opened; PR opened/ready; weekdays + weekly; push to `main` | Long-running verified loop that selects one failing/stale repository checkpoint, iterates on one canonical draft PR, records durable memory, and can publish a discussion digest with chart assets |
 | CodeQL Analysis | `codeql-analysis.yml` | push / PR to `main`; weekly (Mon 06:00 UTC) | Static security analysis for JavaScript/TypeScript and Python |
 | Security Scan | `security.yml` | push / PR to `main`; weekly (Sun 00:00 UTC) | npm audit, Python safety, bandit, Trivy image scan |
-| Dependency Review | `dependency-review.yml` | PR to `main`,`develop` | Review new dependencies for vulnerabilities and license policy |
+| Dependency Review | `dependency-review.yml` | push to `main`; all PRs | Seed main-branch dependency snapshots and review new dependencies for vulnerabilities and license policy |
 | Secret Scan | `secret-scan.yml` | push to `main`; all PRs | gitleaks scan of the working tree |
 | Dependabot Auto Merge | `dependabot-auto-merge.yml` | `pull_request_target`, `check_suite` | Approve and auto-merge patch/minor Dependabot PRs (majors excluded) |
-| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate PR title (conventional commits) and description |
+| PR Checks | `pr-checks.yml` | PR opened/edited/synchronize | Validate metadata/security evidence; fork and Dependabot findings use check annotations without comment writes |
 | Auto Label | `auto-label.yml` | PR opened/reopened/synchronize | Label PRs by changed file type (docs, tests, python, etc.) |
 | Auto-Assign Issues | `auto-assign.yml` | issue opened | Assign new issues to the repository owner |
 | Issue Triage | `issue-triage.yml` | issue opened | Auto-label new issues by keyword and post a triage comment |
@@ -27,10 +29,8 @@ workflow; this README is the index.
 | E2E Tests | `e2e-tests.yml` | push / PR to `main` | Run Vitest E2E pipeline tests against production or the PR's Vercel preview deployment and report results on the PR |
 | Autonomous Video Processing | `autonomous-video-processing.yml` | manual; `workflow_call` | Batch-process YouTube videos by category (matrix) through the ATLAS→PRISM→FORGE→SENTINEL stage pipeline, emitting per-video correlation-ID manifests |
 | Real Video Processing (Cloud) | `real-processing.yml` | manual | Process a single video: transcript and/or AI analysis |
-| API-cost PostgreSQL | `api-cost-postgres.yml` | push / PR when substrate changes; manual | Exercise fresh, upgrade-from-002, and round-trip migrations plus runtime-role integration tests on PostgreSQL 16 |
-| Deploy to Google Cloud Run | `deploy-cloud-run.yml` | manual | Run migrations, deploy the bounded delivery-disabled worker, then promote a tested API candidate |
 | Emergency Stop | `emergency-stop.yml` | manual (typed confirmation) | Operational kill-switch announcement for running automation |
-| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Drift report: PRs without canonical issues, competing PRs, stale branches; auto-comments on untracked PRs and auto-closes superseded drafts |
+| Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual; same-repository PR and other repository state changes | Fork PRs remain in scheduled inventories; no fork-event writes. Drift report and reminders for untracked ready PRs; excludes Dependabot and code examples from missing-issue checks. Competing PRs and stale branches require owner decisions; no PR closure or branch deletion. |
 
 ## Key Workflows
 
@@ -121,15 +121,6 @@ record, so any artifact can be linked back to its originating run.
   QA stage — reports success. The deliverables artifact upload is conditioned on
   that status, so a blocked run publishes evidence but never deliverables.
 
-### Deploy to Google Cloud Run — `deploy-cloud-run.yml`
-
-The only backend deployment path. It remains manual (`workflow_dispatch`) so a
-protected-environment reviewer can approve the exact tested SHA. The workflow
-requires all three PostgreSQL migration checks, authenticates only through
-Workload Identity Federation, pins numeric secret versions, migrates before
-either runtime, promotes the API only after candidate readiness succeeds, and
-reuses the latest successful staging run's exact image digest in production.
-
 ## Adding More Workflows
 
 1. Create a new `.yml` file in this directory (always include a top-level
@@ -141,8 +132,9 @@ reuses the latest successful staging run's exact image digest in production.
 
 ## Maintenance Log
 
-A full audit of this directory was performed (see
-`.github/workflows/AUDIT.md` for the per-file decision matrix). Summary:
+A full audit of this directory was performed; every verdict has been
+applied, and this log is now the record of record (the standalone
+`AUDIT.md` decision matrix was retired once it was fully actioned). Summary:
 
 - **Removed** `deploy.yml` — referenced a non-existent `deployments/` tree
   (actual infra lives in `infrastructure/`) and duplicated
@@ -152,6 +144,9 @@ A full audit of this directory was performed (see
 - **Removed** `verify-litert-mcp.yml` and `vision-reasoning.yml` — both only
   exercised the `mcp-servers/` tree, which was deleted in the dead-code cleanup;
   with the target modules gone every run failed, so the workflows were removed.
+- **Removed** `verification.yml` — the branch-specific hybrid-refactor gates no
+  longer had an owner, overlapped with `ci.yml`/`security.yml`/`e2e-tests.yml`,
+  and its last seven runs all failed without affecting the current delivery path.
 - **Renamed** `.yaml` → `stale.yml` — the file had no basename.
 - **Fixed** `codeql-analysis.yml` — removed the fragile OWASP dependency-check
   job (`@main`, dead paths) and switched the Node cache from a dead
@@ -162,6 +157,23 @@ A full audit of this directory was performed (see
 - **Fixed** `auto-assign.yml` — replaced `gh issue edit` with the REST
   assignees endpoint after run logs showed GitHub App installation tokens cannot
   use the CLI's GraphQL assignable mutation for this assignment.
+- **Removed** `api-cost-postgres.yml` — exercised the deleted Python backend (`youtube_extension.backend.api_cost_migrate`); with the backend removed every run would fail, so the workflow was removed.
+- **Fixed** every `engine: codex` gh-aw workflow (`canonical-pr-remediator`,
+  `focused-coverage-controller`, `repo-assist`) — a `pre-agent-steps` preflight
+  requires the dedicated `CODEX_API_KEY` secret so runs fail fast with an
+  explicit error instead of falling back ambiguously. Lock files are compiled
+  with the pinned gh-aw version enforced by `gh-aw-validation.yml`.
+- **Fixed** `autonomous-video-processing.yml` — the old "processing" step only
+  incremented a counter, so every run claimed success. Logic now lives in
+  `scripts/ci/autonomous_video_{plan,processing,summary}.py`; status is derived
+  from real stage records (`discovered` → `blocked`/`failed` → `delivered`).
+  ATLAS / PRISM / FORGE / SENTINEL are *role labels* over the existing
+  `src/agents/pipeline_orchestrator.py` stages (`video-ingest`,
+  `research-grounding`, `code-gen`, `quality-gate`; `STAGES` constant), not a
+  second agent roster — a parallel pipeline would contradict the
+  single-workflow principle. The workflow has no `contents: write`; evidence
+  is artifact-only (30-day retention).
+- **Removed** `deploy-cloud-run.yml` — deployed the deleted Python backend (`uvai-backend` service) to Cloud Run; nothing remains to deploy (`BACKEND_URL` is unset in every environment), so the workflow was removed.
 
 ## Resources
 
@@ -171,18 +183,15 @@ A full audit of this directory was performed (see
 - [pytest-cov Documentation](https://pytest-cov.readthedocs.io/)
 
 
-| PR Governance | `pr-governance.yml` | `pull_request_target` (opened/edited/reopened/synchronize/ready_for_review) | Validates that every ready PR links exactly one real open canonical issue and contains non-empty delivery evidence sections; fails on competing PRs. |
 | Repository Reconciliation | `repository-reconciliation.yml` | daily (13:17 UTC); manual | Non-destructive daily report of ready PRs missing a canonical issue, issues with competing implementation PRs, and stale unattached branches. |
 
 ## Agent-completion enforcement
 
-Removed. The `agent-completion/truth-gate` status and the `Agent completion
-enforcement` Check were retired because they were unsatisfiable: the gate scored a
-pull request against an intent snapshot written only on `issues` events, so any
-pull request that satisfied `PR Governance` (which requires `Closes #<issue>`)
-necessarily armed the gate and then failed it. It was red on ~100% of pull
-requests, including merged ones such as #1368.
+Removed. The retired `Agent completion enforcement` checks were unsatisfiable: the gate scored a
+pull request against an intent snapshot written only on `issues` events, so a pull
+request with a `Closes #<issue>` binding necessarily armed the gate and then
+failed it. It was red on ~100% of pull requests, including merged ones such as
+#1368.
 
-Binding a pull request to one focused issue is now owned solely by
-`pr-governance.yml`, which produces the `PR Governance` and `Canonical issue and
-evidence` Checks. See `MERGE_POLICY.md` at the repository root.
+Binding a pull request to one focused issue is now a policy-level requirement
+with no automated gate. See `MERGE_POLICY.md` at the repository root.

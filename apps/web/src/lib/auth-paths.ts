@@ -10,6 +10,9 @@ const PUBLIC_API_PREFIXES = [
   // Studio "Act on findings" (WDK B) — public page, durable start + poll.
   // Sibling /api/workflows/* routes stay gated; this prefix is exact-segment.
   '/api/workflows/video-to-actions',
+  // App-served keyframe JPEGs — same anonymous surface as GET /api/video/pack.
+  // Exact pack path stays exact so /api/video/pack siblings stay gated.
+  '/api/video/pack/frames',
 ] as const;
 
 /** Exact public API paths (prefix match would over-expose siblings). */
@@ -30,15 +33,48 @@ const PUBLIC_API_EXACT = new Set([
   // (or anonymous), not a NextAuth session; it only opens a Stripe checkout, so
   // it is the same pre-payment surface class as /api/billing/checkout.
   '/api/billing/renew',
-  // Core pipeline SSE endpoint — the primary public entry point for the
-  // EventRelay workflow (YouTube link → transcript → events → agents).
-  // Must be accessible without a session so anonymous users can run the
-  // pipeline; the route handler applies its own rate limiting via proxy.ts.
-  '/api/pipeline/stream',
+  // Home paste-URL pack emit + anonymous per-hash/per-video GET.
+  // Exact paths so /api/video, /api/video/generate, and a packs listing stay gated.
+  '/api/video/pack',
+  '/api/v1/video/pack',
+  // Deterministic sandbox emit from a stored pack (no model work).
+  '/api/video/sandbox',
+  '/api/v1/video/sandbox',
+  // Planned assembly receipt from a stored pack (no npm, no model work).
+  '/api/video/assemble',
+  '/api/v1/video/assemble',
+  // Hosted /d pack-grounded chat (#2122): session-optional; proxy AI rate limit + route quota.
+  '/api/chat',
+  // Workspace ZIP export: session-optional BY DESIGN. The route handler enforces
+  // the Pro paywall itself (402 + Stripe checkout URL for non-Pro). Gating it
+  // behind a NextAuth session in middleware would 401 anonymous users before
+  // they ever see the paywall — the paywall IS the gate, per product direction.
+  '/api/workspace/export',
 ]);
 
-/** App routes that require a session when NEXTAUTH_SECRET is configured. */
-const PROTECTED_PAGE_PREFIXES = ['/dashboard'] as const;
+/** Canonical OneLoopStudio workbench. Legacy /dashboard skins redirect here. */
+export const CANONICAL_STUDIO_PATH = '/studio';
+
+/**
+ * App routes that require a session when NEXTAUTH_SECRET is configured.
+ * Product pages (home, studio, pricing) stay public so anonymous
+ * pack emit and stack-check unlock do not teleport through login.
+ * APIs remain gated via needsAuthentication().
+ */
+const PROTECTED_PAGE_PREFIXES: readonly string[] = [];
+
+/** Retired library / agents skins — never a second product chrome. */
+export function isLegacyDashboardPath(pathname: string): boolean {
+  return pathname === '/dashboard' || pathname.startsWith('/dashboard/');
+}
+
+/** Keep ?video= (and other query) when folding /dashboard into the studio. */
+export function canonicalStudioPath(search = ''): string {
+  if (!search) return CANONICAL_STUDIO_PATH;
+  return search.startsWith('?')
+    ? `${CANONICAL_STUDIO_PATH}${search}`
+    : `${CANONICAL_STUDIO_PATH}?${search}`;
+}
 
 export function isPublicApiPath(pathname: string): boolean {
   if (PUBLIC_API_EXACT.has(pathname)) return true;
@@ -67,11 +103,11 @@ export function needsAuthentication(pathname: string): boolean {
 export function safeCallbackPath(pathname: string, search = ''): string {
   const candidate = `${pathname}${search}`;
   if (!candidate.startsWith('/') || candidate.startsWith('//')) {
-    return '/dashboard';
+    return CANONICAL_STUDIO_PATH;
   }
   // Block backslash tricks and encoded schemes
   if (candidate.includes('\\') || /^\/[a-z]+:/i.test(candidate)) {
-    return '/dashboard';
+    return CANONICAL_STUDIO_PATH;
   }
   return candidate;
 }
@@ -87,7 +123,6 @@ const AI_ROUTE_PREFIXES = [
   '/api/agents/dispatch',
   '/api/chat',
   '/api/extract-events',
-  '/api/pipeline',
   '/api/realtime',
   '/api/training',
   '/api/transcribe',
@@ -108,8 +143,8 @@ const AI_ROUTE_PREFIXES = [
  * rate-limit bucket is keyed by *class*, not by path — every AI prefix shares
  * one `ai:<ip>` counter. A Studio run polls its status ~40x/min against an
  * AI budget defaulting to 12/min, so without this exemption a single run
- * exhausts the shared allowance in ~17s and 429s /api/chat, /api/transcribe
- * and /api/pipeline along with itself.
+ * exhausts the shared allowance in ~17s and 429s /api/chat and /api/transcribe
+ * along with itself.
  *
  * Deliberately keyed per-prefix rather than exempting GET globally: the other
  * prefixes have no polling client, and a blanket GET exemption would be an
@@ -120,6 +155,26 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
   '/api/workflows': new Set(['GET', 'HEAD']),
 };
 
+/** Identity hash only — not model work. Keep /api/video siblings on the AI budget. */
+const IDENTITY_PACK_PATHS = new Set([
+  '/api/video/pack',
+  '/api/v1/video/pack',
+  '/api/video/sandbox',
+  '/api/v1/video/sandbox',
+  '/api/video/assemble',
+  '/api/v1/video/assemble',
+]);
+
+/** App-served frame JPEGs are identity-pack bytes, not model work. */
+const IDENTITY_PACK_PREFIXES = ['/api/video/pack/frames'] as const;
+
+function isIdentityPackSurface(pathname: string): boolean {
+  if (IDENTITY_PACK_PATHS.has(pathname)) return true;
+  return IDENTITY_PACK_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 /**
  * Whether a request should be metered against the AI budget rather than the
  * general one.
@@ -128,6 +183,11 @@ const AI_ROUTE_METHOD_EXEMPT: Record<string, ReadonlySet<string>> = {
  * limit) rather than silently widening the budget.
  */
 export function isAiRoute(pathname: string, method: string = 'POST'): boolean {
+  if (pathname === '/api/video/pack' || pathname === '/api/v1/video/pack') {
+    return !new Set(['GET', 'HEAD']).has(method.toUpperCase());
+  }
+  if (isIdentityPackSurface(pathname)) return false;
+
   const prefix = AI_ROUTE_PREFIXES.find((candidate) =>
     pathname.startsWith(candidate),
   );
@@ -183,3 +243,4 @@ export function resolveAuthGateMode(env: {
   if (env.nodeEnv === 'production') return 'misconfigured';
   return 'disabled';
 }
+

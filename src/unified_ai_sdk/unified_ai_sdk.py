@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
+
 from .rate_limiter import ModelProvider, RateLimiter
 
 logger = logging.getLogger(__name__)
@@ -457,7 +459,7 @@ class UnifiedAISDK:
             response = await self._gemini_client.aio.models.generate_content(
                 model=request.model,
                 contents=request.prompt,
-                config=_genai_types.GenerateContentConfig(**config_kwargs) if _genai_types else None
+                config=_genai_types.GenerateContentConfig(**without_deprecated_sampling(request.model, config_kwargs)) if _genai_types else None
             )
 
             text = response.text

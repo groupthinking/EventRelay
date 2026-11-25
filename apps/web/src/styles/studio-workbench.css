@@ -1,0 +1,751 @@
+/* ============================================================
+   UVAI Studio — Antigravity + Webflow-obsidian split workbench.
+
+   Isolated layout layer for StudioIdeShell (imported from the shell).
+   - >= 680px : single-viewport 2-column split.
+                Left  = full-height Conversation (minmax(290px, 0.9fr)).
+                Right = compact Source video (max-height 280px, 16:9 <= 175px)
+                        above full-flex Deliverables (minmax(0, 1fr)).
+                The page itself never scrolls; panes scroll internally.
+   - <= 679px : one pane at a time with a sticky bottom dock tablist
+                (Source | Conversation | Deliverables), no horizontal overflow.
+
+   Every selector is prefixed with `.uvai-cards.template-studio-shell` so it
+   deterministically beats openai-template.css / studio-cards.css / Tailwind
+   utilities regardless of stylesheet order.
+   ============================================================ */
+
+/* Zero out globals.css `.uvai-card` 1.5rem padding on Studio split panes so inner headers & tabs span edge-to-edge. */
+.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card {
+  padding: 0;
+}
+
+/* ---- Webflow `.cc_toc` numbered syllabus (Chapters) — all widths ---- */
+.cc_toc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cc_toc-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+  padding: 10px 4px;
+  border-top: 1px solid var(--uvai-border);
+}
+.cc_toc-row:first-child {
+  border-top: 0;
+}
+.cc_toc-num {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: var(--uvai-accent-ink);
+}
+.cc_toc-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--uvai-ink);
+}
+.cc_toc-row:hover .cc_toc-title {
+  color: var(--uvai-accent-ink);
+}
+.cc_toc-point {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+.cc_toc-time {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.9;
+  color: var(--uvai-ink-faint);
+  white-space: nowrap;
+}
+
+/* ---- Extraction steps bar (all widths) ---- */
+.studio-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.studio-steps li {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid var(--uvai-border);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--uvai-ink-faint);
+  white-space: nowrap;
+}
+.studio-steps li::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--uvai-border-strong);
+}
+.studio-steps li[data-state='done'] {
+  color: var(--uvai-ink-soft);
+  border-color: rgba(30, 154, 128, 0.45);
+}
+.studio-steps li[data-state='done']::before {
+  background: #1e9a80;
+}
+.studio-steps li[data-state='active'] {
+  color: var(--uvai-ink);
+  border-color: var(--uvai-accent);
+}
+.studio-steps li[data-state='active']::before {
+  background: var(--uvai-accent);
+  animation: studio-step-pulse 1.1s ease-in-out infinite;
+}
+.studio-steps li[data-state='failed'] {
+  color: var(--uvai-danger-ink, #f87171);
+  border-color: var(--uvai-danger-border, rgba(248, 113, 113, 0.45));
+}
+.studio-steps li[data-state='failed']::before {
+  background: var(--uvai-danger, #f87171);
+}
+@keyframes studio-step-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .studio-steps li[data-state='active']::before {
+    animation: none;
+  }
+}
+
+/* ---- Antigravity Conversation UX (all widths) ---- */
+.uvai-cards.template-studio-shell .studio-chat-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--uvai-border);
+  background: var(--uvai-surface);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--uvai-border-strong);
+  background: var(--uvai-surface-warm);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  color: var(--uvai-ink-soft);
+}
+
+.uvai-cards.template-studio-shell .studio-chat-status-pill[data-state='ready'] {
+  border-color: var(--uvai-success-border);
+  background: var(--uvai-success-bg);
+  color: var(--uvai-success-ink);
+}
+
+.uvai-cards.template-studio-shell .studio-chat-status-pill[data-state='working'] {
+  border-color: rgba(20, 110, 245, 0.45);
+  background: var(--uvai-accent-soft);
+  color: var(--uvai-accent-ink);
+}
+
+.uvai-cards.template-studio-shell .uvai-chat-user {
+  align-self: flex-end;
+  border-radius: 16px 16px 4px 16px;
+  background: var(--uvai-accent);
+  color: #ffffff;
+  padding: 10px 14px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  max-width: 88%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-shadow: none;
+}
+
+.uvai-cards.template-studio-shell .uvai-chat-assistant {
+  align-self: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--uvai-ink);
+  padding: 2px 0;
+  font-size: 14px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  box-shadow: none;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-timeline {
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 14px;
+  background: var(--uvai-surface);
+  padding: 14px;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-prompt-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--uvai-border-strong);
+  background: var(--uvai-surface);
+  color: var(--uvai-ink);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background 150ms ease;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-prompt-pill:hover {
+  border-color: var(--uvai-accent);
+  background: var(--uvai-accent-soft);
+}
+
+.uvai-cards.template-studio-shell .studio-ts-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 2px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(20, 110, 245, 0.38);
+  background: var(--uvai-accent-soft);
+  color: var(--uvai-accent-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-decoration: none;
+  vertical-align: baseline;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
+}
+
+.uvai-cards.template-studio-shell .studio-ts-chip:hover {
+  border-color: var(--uvai-accent);
+  background: rgba(20, 110, 245, 0.24);
+}
+
+.uvai-cards.template-studio-shell .template-chat-composer {
+  flex-shrink: 0;
+  padding: 10px 12px 12px;
+  border-top: 1px solid var(--uvai-border);
+  background: var(--uvai-bg);
+}
+
+.uvai-cards.template-studio-shell .studio-chat-composer-box {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 16px;
+  background: var(--uvai-surface-warm);
+  min-width: 0;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-composer-box:focus-within {
+  border-color: var(--uvai-accent);
+  box-shadow: 0 0 0 3px rgba(20, 110, 245, 0.22);
+  outline: none;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-composer-box .uvai-input {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  padding: 8px 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--uvai-ink);
+  min-height: 40px;
+  max-height: 144px;
+  overflow-y: auto;
+  resize: none;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-composer-box .uvai-input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+.uvai-cards.template-studio-shell .studio-chat-composer-box .template-send {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+}
+
+/* ---- Optional details rail: hidden unless the shell is given one at wide widths ---- */
+.template-details-rail {
+  display: none;
+}
+
+/* ============================================================
+   >= 680px: zero-scroll 2-column split workbench (half-screen & desktop)
+   ============================================================ */
+@media (min-width: 680px) {
+  /* Page never scrolls: Nav + shell fill exactly one dynamic viewport. */
+  .template-studio {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .template-studio > *:not(.template-studio-shell) {
+    flex-shrink: 0;
+  }
+
+  .uvai-cards.template-studio-shell {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0%;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* Hide mobile dock at >= 680px (beats openai-template.css <= 900px) */
+  .uvai-cards.template-studio-shell .template-pane-tabs {
+    display: none;
+  }
+
+  /* Force all uncollapsed panes visible side-by-side (beats openai-template.css <= 900px) */
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+    display: flex;
+  }
+
+  /* Compact sticky toolbar */
+  .uvai-cards.template-studio-shell .uvai-toolbar {
+    flex-shrink: 0;
+    min-height: 46px;
+    padding: 6px 12px;
+  }
+  .uvai-cards.template-studio-shell .uvai-toolbar [data-testid='studio-ide-url-form'] {
+    flex: 1 1 220px;
+    flex-basis: auto;
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell .uvai-toolbar .uvai-input {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .uvai-cards.template-studio-shell .uvai-toolbar [data-testid='studio-ide-status'] {
+    width: auto;
+    flex: 1 1 100%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Split grid: Full-height Conversation left (~42%), compact Video top-right + Deliverables bottom-right (~58%), filling 100% width beside rail */
+  .uvai-cards.template-studio-shell .template-studio-bands {
+    display: grid;
+    grid-template-columns: minmax(290px, 0.85fr) minmax(0, 1.15fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 10px;
+    flex: 1 1 0%;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 10px 12px;
+    overflow: hidden;
+  }
+
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'] {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'] {
+    grid-column: 2;
+    grid-row: 1;
+    min-height: 0;
+    min-width: 0;
+    max-height: 300px;
+    overflow: hidden;
+  }
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+    grid-column: 2;
+    grid-row: 2;
+    min-height: 0;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* Collapsed panes: remaining panes reclaim the right or full space cleanly. */
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-video-collapsed='true']
+    > [data-testid='studio-ide-output-pane'] {
+    grid-column: 2;
+    grid-row: 1 / 3;
+  }
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-output-collapsed='true']
+    > [data-testid='studio-ide-video-pane'] {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    align-self: start;
+    max-height: 320px;
+  }
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-output-collapsed='true'][data-video-collapsed='true']
+    > [data-testid='studio-ide-chat-pane'] {
+    grid-column: 1 / 3;
+    grid-row: 1 / 3;
+  }
+
+  /* Pane chrome */
+  .uvai-cards.template-studio-shell .template-studio-bands .uvai-pane-header {
+    flex-shrink: 0;
+    min-height: 32px;
+    padding: 4px 12px;
+  }
+  .uvai-cards.template-studio-shell .studio-pane-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .uvai-cards.template-studio-shell .studio-pane-body > * {
+    min-height: 0;
+    min-width: 0;
+  }
+
+  /* Source video: compact 16:9 frame + wrapping steps & metric chips (never clips right/bottom edge) */
+  .uvai-cards.template-studio-shell .studio-pane-body--video {
+    padding: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    flex: 0 1 auto;
+    min-height: auto;
+  }
+  .uvai-cards.template-studio-shell .studio-source-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell .studio-video-wrap {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #000;
+    flex-shrink: 0;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] .aspect-video {
+    max-height: 165px;
+    width: min(100%, 294px);
+    margin-inline: auto;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] [data-testid='studio-player'] iframe {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  .uvai-cards.template-studio-shell .studio-steps-bar {
+    height: auto;
+    min-height: 26px;
+    border-top: 1px solid var(--uvai-border);
+    padding: 4px 10px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .uvai-cards.template-studio-shell .studio-steps {
+    flex-wrap: wrap;
+    overflow: visible;
+    gap: 4px;
+    padding: 0;
+    height: auto;
+    align-items: center;
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell .studio-steps li {
+    padding: 0 6px;
+    line-height: 16px;
+    font-size: 10.5px;
+  }
+  .uvai-cards.template-studio-shell .studio-pack-card {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    height: auto;
+    padding: 6px 10px;
+    overflow: visible;
+    min-width: 0;
+    border: 0;
+    border-top: 1px solid var(--uvai-border);
+    border-radius: 0;
+    box-shadow: none;
+    background: transparent;
+  }
+  .uvai-cards.template-studio-shell .studio-pack-card > *,
+  .uvai-cards.template-studio-shell .studio-pack-card__head,
+  .uvai-cards.template-studio-shell .studio-pack-card__chips,
+  .uvai-cards.template-studio-shell .studio-pack-card__jump {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .uvai-cards.template-studio-shell .studio-pack-card__url,
+  .uvai-cards.template-studio-shell .studio-pack-card__jump > .uvai-section-label,
+  .uvai-cards.template-studio-shell .studio-outline-card {
+    display: none;
+  }
+  .uvai-cards.template-studio-shell .studio-pack-card__jump ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0;
+    padding: 0;
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell .studio-pack-card__jump button {
+    width: auto;
+    max-width: 170px;
+    padding: 2px 8px;
+    gap: 6px;
+  }
+
+  /* Chat: fills entire primary left column, message stream scrolls internally */
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-chat'] {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-chat-messages'] {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Deliverables: tabs fixed, content scrolls internally */
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] {
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] [role='tablist'] {
+    padding: 0;
+    gap: 2px;
+  }
+}
+
+/* Half-screen (680px–960px) alongside persistent 48px vertical left sidebar:
+   give Deliverables/Video slightly more width so all 4 tabs + .md fit without clipping. */
+@media (min-width: 680px) and (max-width: 960px) {
+  .uvai-cards.template-studio-shell .template-studio-bands {
+    grid-template-columns: minmax(244px, 0.82fr) minmax(0, 1.18fr);
+    gap: 8px;
+    padding: 8px 10px;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] [role='tab'] {
+    padding: 4px 5px;
+    font-size: 10.5px;
+  }
+}
+
+/* Wider desktop polish (>= 1024px) */
+@media (min-width: 1024px) {
+  .uvai-cards.template-studio-shell .uvai-toolbar {
+    padding: 6px 16px;
+  }
+  .uvai-cards.template-studio-shell .uvai-toolbar [data-testid='studio-ide-status'] {
+    flex: 0 1 260px;
+  }
+  .uvai-cards.template-studio-shell .template-studio-bands {
+    gap: 12px;
+    padding: 12px 16px;
+  }
+  .uvai-cards.template-studio-shell .template-studio-bands[data-details-rail='true'] {
+    grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.1fr) 288px;
+  }
+  .uvai-cards.template-studio-shell .template-details-rail {
+    display: flex;
+    flex-direction: column;
+    grid-column: 3;
+    grid-row: 1 / 3;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    border: 1px solid var(--uvai-border);
+    border-radius: 8px;
+    background: var(--uvai-surface);
+    font-size: 12px;
+    color: var(--uvai-ink-soft);
+  }
+}
+
+/* ============================================================
+   <= 679px: single pane + sticky bottom dock tablist
+   ============================================================ */
+@media (max-width: 679px) {
+  .uvai-cards.template-studio-shell {
+    max-width: 100%;
+    min-height: calc(100dvh - var(--uvai-topbar-h, 56px));
+    overflow-x: clip;
+  }
+  .uvai-cards.template-studio-shell .template-studio-bands {
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 12px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .uvai-cards.template-studio-shell .template-studio-bands > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+    display: none;
+  }
+  .uvai-cards.template-studio-shell[data-mobile-pane='video'] .template-studio-bands > [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] .template-studio-bands > [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell[data-mobile-pane='output'] .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+    display: flex;
+  }
+
+  .uvai-cards.template-studio-shell .template-studio-restore,
+  .uvai-cards.template-studio-shell .template-details-rail {
+    display: none;
+  }
+
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-chat'] {
+    flex: 1 1 auto;
+    min-height: calc(100dvh - 220px);
+    min-width: 0;
+  }
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-chat-messages'] {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .uvai-cards.template-studio-shell .template-pane-tabs {
+    display: flex;
+    position: sticky;
+    bottom: 0;
+    order: 2;
+    margin-top: auto;
+    z-index: 40;
+    gap: 4px;
+    padding: 6px 12px calc(6px + env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid var(--uvai-border-strong);
+    border-bottom: 0;
+    background: var(--uvai-surface);
+  }
+  .uvai-cards.template-studio-shell .template-pane-tabs button {
+    min-height: 44px;
+  }
+
+  .uvai-cards.template-studio-shell .studio-steps-bar {
+    flex-wrap: wrap;
+    padding: 6px 8px;
+    border-top: 1px solid var(--uvai-border);
+  }
+  .uvai-cards.template-studio-shell .studio-steps {
+    gap: 4px;
+  }
+}
+
+.studio-export-toast {
+  position: fixed;
+  left: 50%;
+  z-index: 60;
+  bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  width: min(36rem, calc(100% - 2rem));
+  transform: translateX(-50%);
+  border-radius: 8px;
+  border: 1px solid var(--uvai-border-strong);
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+
+.studio-export-toast--success {
+  background: var(--uvai-surface);
+  color: var(--uvai-ink);
+  border-color: var(--uvai-accent);
+}
+
+.studio-export-toast--error {
+  background: var(--uvai-danger-bg, #fff1f1);
+  color: var(--uvai-danger-ink, #8f1d1d);
+  border-color: var(--uvai-danger-border, #e7b4b4);
+}

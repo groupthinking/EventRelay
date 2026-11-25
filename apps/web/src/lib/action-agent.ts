@@ -1,3 +1,4 @@
+import { geminiSampling } from '@/lib/gemini-parameters';
 import 'server-only';
 
 /**
@@ -31,6 +32,7 @@ import {
   type ActionToolResult,
   type ToolContext,
 } from '@/lib/action-tools';
+import { dedupeAgentActions } from '@/lib/action-lifecycle';
 
 let _openai: OpenAI | null = null;
 function getOpenAI(): OpenAI {
@@ -213,7 +215,7 @@ async function runWithGemini(opts: RunActionAgentOptions, ctx: ToolContext): Pro
     model: MODEL_GEMINI,
     contents: `${SYSTEM_PROMPT}\n\n${buildUserPrompt(opts.transcript, opts.videoTitle)}`,
     config: {
-      temperature: 0.3,
+      ...geminiSampling(MODEL_GEMINI, 0.3),
       tools: [{ functionDeclarations: toGeminiFunctionDeclarations() }],
     },
   });
@@ -315,8 +317,9 @@ export async function executePreparedActions(
     jobId: opts.jobId,
   };
 
+  const uniqueActions = dedupeAgentActions(opts.actions);
   const actions: AgentAction[] = [];
-  for (const prepared of opts.actions) {
+  for (const prepared of uniqueActions) {
     const tool = getTool(prepared.tool);
     if (!tool || !isPlainObject(prepared.input)) {
       actions.push(

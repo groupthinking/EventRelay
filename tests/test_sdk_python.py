@@ -85,6 +85,19 @@ class TestVideoModels:
         assert req.video_url == TEST_VIDEO_URL
         assert req.language == "en"
 
+    def test_video_process_request_accepts_ready_transcript(self) -> None:
+        ready = (
+            "Studio Video Pack for auJzb1D-fag already has a usable "
+            "transcript ready for deploy."
+        )
+        req = VideoProcessJobRequest(
+            video_url=TEST_VIDEO_URL,
+            transcript=ready,
+            options={"pipeline": "video-to-software"},
+        )
+        assert req.transcript == ready
+        assert req.options["pipeline"] == "video-to-software"
+
     def test_video_process_response_parse(self) -> None:
         data = {"job_id": TEST_JOB_ID, "video_url": TEST_VIDEO_URL, "status": "pending"}
         resp = VideoProcessJobResponse.model_validate(data)

@@ -1,0 +1,86 @@
+import { test, expect, type Page } from '@playwright/test';
+
+const viewports = [
+  { width: 360, height: 800 },
+  { width: 1280, height: 720 },
+] as const;
+
+test.beforeEach(({ baseURL }) => {
+  test.skip(
+    !baseURL || !['localhost', '127.0.0.1', '[::1]'].includes(new URL(baseURL).hostname),
+    'Landing-page acceptance checks require an explicit local BASE_URL.',
+  );
+});
+
+async function expectNoHorizontalOverflow(page: Page) {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+}
+
+for (const viewport of viewports) {
+  test(`keeps the landing conversion path visible without horizontal overflow at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/');
+
+    await expect(page.getByRole('heading', { name: 'Turn YouTube into bound tasks.' })).toBeVisible();
+    await expect(page.getByLabel('YouTube URL')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Build from video in Studio' })).toBeVisible();
+    await expect(page.getByText('UVAI Workflow Pro').last()).toBeVisible();
+    await expect(page.getByTestId('home-pro-checkout')).toBeVisible();
+    await expect(page.getByRole('link', { name: 'See all plans' })).toBeVisible();
+    const context = page.getByRole('complementary', { name: 'Video workflow context' });
+    const toggle = page.getByRole('button', { name: 'Show workflow details' });
+    if (viewport.width >= 1024) {
+      await expect(context).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Inspect the Video Pack' })).toBeVisible();
+      await expect(toggle).toBeHidden();
+    } else {
+      await expect(context).toBeHidden();
+      await expect(toggle).toBeVisible();
+    }
+    await expectNoHorizontalOverflow(page);
+  });
+}
+
+test('announces an invalid URL and exposes the invalid field state', async ({ page }) => {
+  await page.goto('/');
+  const input = page.getByLabel('YouTube URL');
+
+  await input.fill('not a YouTube URL');
+  await page.getByRole('button', { name: 'Build from video in Studio' }).click();
+
+  await expect(input).toHaveAttribute('aria-invalid', 'true');
+  await expect(input).toHaveAttribute('aria-describedby', 'home-youtube-url-error');
+  await expect(page.locator('#home-youtube-url-error')).toHaveText('Need a valid YouTube URL.');
+});
+
+test('opens mobile workflow context without losing the source input', async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  // Workflow context lives on the classic home; the live on-ramp has no side panel.
+  await page.goto('/?shell=classic');
+  const input = page.getByLabel('YouTube URL');
+  await input.fill('https://www.youtube.com/watch?v=auJzb1D-fag');
+  const context = page.getByRole('complementary', { name: 'Video workflow context' });
+  await expect(context).toBeHidden();
+  await page.getByRole('button', { name: 'Show workflow details' }).click();
+  await expect(context).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Inspect the Video Pack' })).toBeVisible();
+  await expect(input).toHaveValue('https://www.youtube.com/watch?v=auJzb1D-fag');
+  await page.getByRole('button', { name: 'Hide workflow details' }).click();
+  await expect(context).toBeHidden();
+  await expectNoHorizontalOverflow(page);
+});
+
+test('keeps the keyboard path on native labelled controls', async ({ page }) => {
+  await page.goto('/');
+
+  const input = page.getByLabel('YouTube URL');
+  const submit = page.getByRole('button', { name: 'Build from video in Studio' });
+  const monthly = page.getByRole('button', { name: 'Monthly checkout' });
+  const annual = page.getByRole('button', { name: 'Annual checkout' });
+  const pricing = page.getByRole('link', { name: 'See all plans' });
+
+  for (const control of [input, submit, monthly, annual, pricing]) {
+    await control.focus();
+    await expect(control).toBeFocused();
+  }
+});

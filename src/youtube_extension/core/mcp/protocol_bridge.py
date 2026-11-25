@@ -25,6 +25,8 @@ from enum import Enum
 from typing import Any, Callable, Optional
 from urllib.parse import urlparse
 
+from youtube_extension.utils.gemini_parameters import without_deprecated_sampling
+
 from .context_manager import MCPContext, get_context_manager
 from .server_registry import ServerCapability
 
@@ -823,7 +825,7 @@ class GoogleAIAdapter(ProtocolAdapter):
             config_kwargs["max_output_tokens"] = max_tokens
         if temperature is not None:
             config_kwargs["temperature"] = temperature
-        config = genai_types.GenerateContentConfig(**config_kwargs) if config_kwargs else None
+        config = genai_types.GenerateContentConfig(**without_deprecated_sampling(model, config_kwargs)) if config_kwargs else None
 
         generate_kwargs: dict[str, Any] = {
             "model": model,

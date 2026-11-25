@@ -40,9 +40,9 @@ def check_test_consistency() -> List[str]:
                 issues.append(f"{test_file}: Should use tempfile for real file operations")
 
             # Check for video ID consistency
-            video_ids = re.findall(r'video_id="([^"]+)"', content)
+            video_ids = re.findall(r"video_id\s*=\s*['\"]([^'\"]+)['\"]", content)
             # Fix regex to properly match assertion patterns
-            assertions = re.findall(r'assert.*video_id.*==.*"([^"]+)"', content, re.MULTILINE)
+            assertions = re.findall(r"assert.*?video_id.*?==\s*['\"]([^'\"]+)['\"]", content)
 
             if video_ids and assertions:
                 unique_video_ids = set(video_ids)

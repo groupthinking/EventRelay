@@ -26,6 +26,7 @@ concurrency:
 jobs:
   auto-assign:
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     steps:
       - name: Assign issue to repository owner
         env:

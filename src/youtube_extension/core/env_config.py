@@ -2,7 +2,7 @@
 
 Runtime tuning must not make a service unimportable. Unset or invalid overrides
 therefore use the shipped default and emit a warning that names the variable.
-Integer settings may also declare a hard maximum when an unbounded value would
+Numeric settings may also declare a hard maximum when an unbounded value would
 create unsafe resource fan-out.
 """
 
@@ -59,7 +59,12 @@ def positive_int_env(
     return value
 
 
-def positive_finite_float_env(name: str, default: float) -> float:
+def positive_finite_float_env(
+    name: str,
+    default: float,
+    *,
+    maximum: float | None = None,
+) -> float:
     """Read a positive finite float override, falling back safely when invalid."""
     raw = _raw_override(name)
     if raw is None:
@@ -70,4 +75,8 @@ def positive_finite_float_env(name: str, default: float) -> float:
         return float(_fallback(name, raw, default, "a positive, finite number"))
     if not math.isfinite(value) or value <= 0:
         return float(_fallback(name, raw, default, "a positive, finite number"))
+    if maximum is not None and value > maximum:
+        return float(
+            _fallback(name, raw, default, f"a number between 1 and {maximum}")
+        )
     return value

@@ -13,19 +13,26 @@ permissions:
   deployments: read
 
 env:
-  # By default the E2E suite runs against production. To validate a PR's own
-  # Vercel preview instead, two things are needed:
-  #   1. Point BASE_URL at the preview — set the `E2E_BASE_URL` repository
-  #      variable, or compute the per-PR preview URL in a prior step and export
-  #      it to $GITHUB_ENV as E2E_BASE_URL.
-  #   2. Provide `VERCEL_AUTOMATION_BYPASS_SECRET` as a repository secret.
+  # Pushes to `main` run against production by default. PRs must run against
+  # the PR's own Vercel preview instead, either from the `E2E_BASE_URL`
+  # repository variable or by auto-discovering the deployment URL below.
+  # `VERCEL_AUTOMATION_BYPASS_SECRET` must exist as a repository secret.
   #      Vercel previews return HTTP 401 to anonymous traffic; the test harness
   #      forwards this value as the `x-vercel-protection-bypass` header on every
-  #      request (see tests/e2e/pipeline.test.ts). Generate it under Vercel →
-  #      Project → Settings → Deployment Protection → Protection Bypass for
-  #      Automation.
-  # When the variable/secret are unset (the default), BASE_URL falls back to
-  # production and no bypass header is sent — behaviour is unchanged.
+  #      request (see tests/e2e/pipeline.test.ts). It is the project's
+  #      "Protection Bypass for Automation" value, under Vercel → Project →
+  #      Settings → Deployment Protection. Without it the suite fails fast with
+  #      an explicit missing-secret message rather than silently asserting
+  #      against Vercel's login page. Deployment-impacting PRs fail closed if
+  #      their own preview cannot be resolved. PRs that change no input from
+  #      `.github/e2e-deployment-inputs.json` keep the required job present but
+  #      report the live suite as not applicable instead of probing production.
+  #      Every suite request also carries `X-EventRelay-Probe: e2e`
+  #      and `User-Agent: EventRelay-E2E/<GITHUB_RUN_ID>`; proxy.ts emits the
+  #      bounded `e2e_probe_request` event so Vercel logs can be filtered by run.
+  #      These headers are observability only and never authorize or bypass limits.
+  #      Search `e2e_probe_request` plus the run ID to isolate a suite execution.
+  #      The marker-only matcher leaves ordinary public-page traffic untouched.
   BASE_URL: ${{ vars.E2E_BASE_URL || 'https://uvai.io' }}
   TEST_YOUTUBE_URL: https://www.youtube.com/watch?v=auJzb1D-fag
   VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
@@ -50,19 +57,65 @@ jobs:
     name: E2E Pipeline Tests
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
-    # Only run on pull requests when a preview target is configured via the
-    # `E2E_BASE_URL` repository variable. Without it the suite would fall back
-    # to production (https://uvai.io) and exercise the live site rather than
-    # the PR's own changes — producing noise failures unrelated to the diff.
-    # Pushes to `main` always run as a production health check.
-    if: github.event_name == 'push' || vars.E2E_BASE_URL != ''
+    # No `continue-on-error` here. It used to sit on this job and neutralized the
+    # explicit `exit 1` in "Fail the job if tests failed" below, so the check
+    # reported success on every run regardless of the test verdict — 6 failing
+    # tests showed as a green check. The job verdict must reflect the tests.
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Classify Vercel deployment impact
+        id: impact
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const fs = require('fs');
+            const manifest = JSON.parse(
+              fs.readFileSync('.github/e2e-deployment-inputs.json', 'utf8'),
+            );
+            const [files, { data: pullRequest }] = await Promise.all([
+              github.paginate(github.rest.pulls.listFiles, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                per_page: 100,
+              }),
+              github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              }),
+            ]);
+            const fileListIncomplete = files.length < pullRequest.changed_files;
+            const changedPaths = files.flatMap((file) =>
+              [file.filename, file.previous_filename].filter(Boolean),
+            );
+            const deploymentInputs = changedPaths.filter((path) =>
+              manifest.files.includes(path) ||
+              manifest.prefixes.some((prefix) => path.startsWith(prefix)),
+            );
+            // GitHub caps pull-file listings at 3,000 entries. If that cap
+            // hides any path, fail closed and require a preview rather than
+            // allowing an unseen deployment input to bypass live E2E.
+            const needsPreview = fileListIncomplete || deploymentInputs.length > 0;
+
+            core.setOutput('needs_preview', String(needsPreview));
+            await core.summary
+              .addHeading('E2E deployment impact', 3)
+              .addRaw(
+                fileListIncomplete
+                  ? `GitHub returned ${files.length} of ${pullRequest.changed_files} changed files; the live E2E suite will fail closed and require this PR's preview.`
+                  : needsPreview
+                  ? `A Vercel deployment input changed (${deploymentInputs.length} matching path(s)); the live E2E suite will run against this PR's preview.`
+                  : 'No Vercel deployment input changed; the live E2E suite is not applicable to this PR.',
+              )
+              .write();
+
       - name: Setup Node.js
+        if: github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: '22'
@@ -70,14 +123,16 @@ jobs:
 
       - name: Extract Vercel preview URL for this PR
         id: preview
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && steps.impact.outputs.needs_preview == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           SHA="${{ github.event.pull_request.head.sha }}"
           PREVIEW_URL=""
+          MAX_PREVIEW_LOOKUP_ATTEMPTS=12
+          PREVIEW_LOOKUP_DELAY_SECONDS=10
 
-          for i in $(seq 1 30); do
+          for i in $(seq 1 "$MAX_PREVIEW_LOOKUP_ATTEMPTS"); do
             DEPLOYMENT_STATUS=0
             DEPLOY_ID=$(gh api \
               "/repos/${{ github.repository }}/deployments?sha=${SHA}&per_page=20" \
@@ -85,6 +140,10 @@ jobs:
             if [ -s deployments.err ]; then
               echo "gh api deployments stderr:" >&2
               cat deployments.err >&2
+              if grep -qi 'rate limit' deployments.err; then
+                echo "::error::GitHub API rate limit reached while resolving the Vercel preview. Preserve this draft and rerun the required E2E check after the quota resets." >&2
+                exit 1
+              fi
             fi
             rm -f deployments.err
 
@@ -100,6 +159,10 @@ jobs:
               if [ -s deployment-status.err ]; then
                 echo "gh api deployment statuses stderr:" >&2
                 cat deployment-status.err >&2
+                if grep -qi 'rate limit' deployment-status.err; then
+                  echo "::error::GitHub API rate limit reached while resolving the Vercel preview. Preserve this draft and rerun the required E2E check after the quota resets." >&2
+                  exit 1
+                fi
               fi
               rm -f deployment-status.err
 
@@ -112,27 +175,41 @@ jobs:
               break
             fi
 
-            sleep 10
+            sleep "$PREVIEW_LOOKUP_DELAY_SECONDS"
           done
 
           if [ -n "$PREVIEW_URL" ]; then
             echo "BASE_URL=$PREVIEW_URL" >> "$GITHUB_ENV"
             echo "preview_url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          echo "::error::No Vercel preview deployment became available for PR SHA ${SHA}."
+          exit 1
+
       - name: Install dependencies
+        if: github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true'
         run: npm install --legacy-peer-deps
 
       - name: Run E2E tests
         id: e2e_tests
-        continue-on-error: true
+        if: github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true'
         run: |
+          # The verdict travels out via PIPESTATUS, not via this step's exit code.
+          # Piping to `tee` makes the pipeline return tee's status, and the
+          # default `bash -e` shell here does not set pipefail, so this step exits
+          # 0 even when vitest fails. That is what allows the reporting steps
+          # below to run and post results; "Fail the job if tests failed" then
+          # converts a red verdict into a real job failure. The
+          # `continue-on-error` this step used to carry was therefore redundant.
           npx vitest run tests/e2e/ --reporter=verbose 2>&1 | tee test-output.txt
           echo "exit_code=${PIPESTATUS[0]}" >> $GITHUB_OUTPUT
 
       - name: Parse test results
         id: results
-        if: always()
+        if: >-
+          always() &&
+          (github.event_name != 'pull_request' || steps.impact.outputs.needs_preview == 'true')
         run: |
           if [ "${{ steps.e2e_tests.outputs.exit_code }}" = "0" ]; then
             echo "status=green" >> $GITHUB_OUTPUT
@@ -153,7 +230,10 @@ jobs:
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
 
       - name: Post PR comment with results
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        if: >-
+          github.event_name == 'pull_request' &&
+          steps.impact.outputs.needs_preview == 'true' &&
+          github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/github-script@v9
         with:
           script: |
@@ -240,3 +320,13 @@ jobs:
         run: |
           echo "✅ ALL TESTS PASSED"
           echo "Deployment at $BASE_URL is healthy."
+
+      - name: Record E2E as not applicable
+        if: github.event_name == 'pull_request' && steps.impact.outputs.needs_preview == 'false'
+        run: |
+          {
+            echo "### ⏭️ E2E not applicable"
+            echo ""
+            echo "This PR does not change a Vercel deployment input, so it has no PR-specific preview to probe."
+            echo "The required E2E job still ran and classified the change; pushes to main and deployment-impacting PRs continue to run the full live suite."
+          } >> "$GITHUB_STEP_SUMMARY"

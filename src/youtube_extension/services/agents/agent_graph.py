@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from .agent_handoff import AgentHandoffEnvelope
 from .base_agent import AgentResult, BaseAgent
@@ -68,23 +69,41 @@ class AgentGraph:
         initial_node: str,
         initial_payload: dict[str, Any],
         trace_id: str | None = None,
+        max_steps: int = 32,
     ) -> dict[str, Any]:
         """
-        Execute the graph starting from initial_node until a terminal node is reached.
+        Execute the graph starting from initial_node until a terminal node is reached,
+        an agent returns a non-ok status, or max_steps is exceeded.
         """
+        if max_steps < 1:
+            raise ValueError("max_steps must be at least 1")
+
         current_node_name = initial_node
+        envelope_kwargs: dict[str, Any] = {}
+        if trace_id:
+            envelope_kwargs["trace_id"] = trace_id
         current_envelope = AgentHandoffEnvelope(
-            trace_id=trace_id or "",
+            **envelope_kwargs,
             sender_agent="graph_entrypoint",
             recipient_agent=current_node_name,
             intent="execute_node",
-            payload=initial_payload,
+            payload=dict(initial_payload),
         )
 
         outputs: dict[str, Any] = {}
         visited: list[str] = []
 
         while current_node_name in self.nodes:
+            if len(visited) >= max_steps:
+                return {
+                    "success": False,
+                    "error": f"Exceeded max_steps ({max_steps}) in pipeline execution.",
+                    "visited_nodes": visited,
+                    "outputs": outputs,
+                    "final_payload": current_envelope.payload,
+                    "trace_id": current_envelope.trace_id,
+                }
+
             visited.append(current_node_name)
             agent = self.nodes[current_node_name]
             current_envelope.acknowledge()
@@ -94,6 +113,17 @@ class AgentGraph:
             node_output = res.output if isinstance(res.output, dict) else {"result": res.output}
             outputs[current_node_name] = node_output
             current_envelope.payload.update(node_output)
+
+            if res.status != "ok":
+                return {
+                    "success": False,
+                    "failed_node": current_node_name,
+                    "error": self._extract_agent_error(current_node_name, res, node_output),
+                    "visited_nodes": visited,
+                    "outputs": outputs,
+                    "final_payload": current_envelope.payload,
+                    "trace_id": current_envelope.trace_id,
+                }
 
             # Check dynamic router
             if current_node_name in self._conditions:
@@ -131,7 +161,21 @@ class AgentGraph:
             "visited_nodes": visited,
             "outputs": outputs,
             "final_payload": current_envelope.payload,
+            "trace_id": current_envelope.trace_id,
         }
+
+    @staticmethod
+    def _extract_agent_error(
+        agent_name: str,
+        res: AgentResult,
+        node_output: dict[str, Any],
+    ) -> str:
+        error_msg = (
+            node_output.get("error")
+            or (res.logs[-1] if res.logs else None)
+            or f"Agent '{agent_name}' failed with status '{res.status}'."
+        )
+        return str(error_msg)
 
     async def execute_fork_join(
         self,
@@ -158,11 +202,19 @@ class AgentGraph:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
         aggregated: dict[str, Any] = {}
-        for name, res in zip(subagent_names, results):
+        for name, res in zip(subagent_names, results, strict=True):
             if isinstance(res, Exception):
                 aggregated[name] = {"error": str(res), "status": "error"}
             else:
-                aggregated[name] = res.output if isinstance(res.output, dict) else {"result": res.output}
+                node_output = res.output if isinstance(res.output, dict) else {"result": res.output}
+                if res.status != "ok":
+                    aggregated[name] = {
+                        **node_output,
+                        "status": res.status,
+                        "error": self._extract_agent_error(name, res, node_output),
+                    }
+                else:
+                    aggregated[name] = node_output
 
         return aggregated
 
@@ -177,6 +229,9 @@ class AgentGraph:
         Execute a cyclic generator-evaluator loop until the evaluator accepts
         or max_iterations is reached.
         """
+        if max_iterations < 1:
+            raise ValueError("max_iterations must be at least 1")
+
         agent = self.nodes.get(generator_name)
         if not agent:
             return LoopResult(
@@ -193,6 +248,23 @@ class AgentGraph:
             req = AgentRequest(task="generate", params=payload)
             res: AgentResult = await agent.run(req)
             output = res.output if isinstance(res.output, dict) else {"result": res.output}
+
+            if res.status != "ok":
+                error_msg = self._extract_agent_error(generator_name, res, output)
+                history.append({
+                    "iteration": i,
+                    "output": output,
+                    "status": res.status,
+                    "passed": False,
+                    "critique": error_msg,
+                })
+                return LoopResult(
+                    success=False,
+                    iterations=i,
+                    final_output=output,
+                    history=history,
+                    error=error_msg,
+                )
 
             passed, critique = evaluator_fn(output)
             history.append({

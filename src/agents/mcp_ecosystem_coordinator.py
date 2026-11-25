@@ -19,9 +19,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     from youtube_extension.processors.enhanced_extractor import VideoContent
 
-# Add src/mcp to path for imports
-# REMOVED: sys.path.append removed
-
 logger = logging.getLogger(__name__)
 
 
@@ -82,7 +79,9 @@ class MCPVideoProcessorServer(BaseMCPServer):
 
                 return {
                     "status": "success",
+                    "video_id": video_id,
                     "result": content.summary,
+                    "transcript_segments": len(content.transcript or []),
                     "metadata": asdict(content.metadata),
                     "analysis": {
                         "topics": content.topics,
@@ -435,30 +434,7 @@ class SkillRegistry:
         module = importlib.import_module(module_path)
         skill_class = getattr(module, class_name)
 
-        # Resolve dependencies from the service container. Imported lazily to
-        # avoid a circular import at module load time, and guarded so that a
-        # container import failure (e.g. a missing optional transitive dep)
-        # degrades to no injection instead of breaking every skill invocation.
         dependencies: dict[str, Any] = {}
-        try:
-            from youtube_extension.backend.containers.service_container import (
-                get_service,
-            )
-        except Exception as e:
-            logger.warning(
-                "Service container unavailable; skipping DI for skill %s: %s",
-                skill_id,
-                e,
-            )
-            get_service = None
-
-        if get_service is not None:
-            for dep_name in meta.get("dependencies", []):
-                try:
-                    dependencies[dep_name] = get_service(dep_name)
-                except Exception as e:
-                    logger.warning("Failed to resolve dependency %s for skill %s: %s", dep_name, skill_id, e)
-
         instance = skill_class(dependencies=dependencies)
         self._instances[skill_id] = instance
         return instance

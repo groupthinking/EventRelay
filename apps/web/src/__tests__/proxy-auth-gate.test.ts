@@ -31,6 +31,8 @@ const ENV_KEYS = [
   'AUTH_ALLOW_UNAUTHENTICATED',
   'UPSTASH_REDIS_REST_URL',
   'UPSTASH_REDIS_REST_TOKEN',
+  'KV_REST_API_URL',
+  'KV_REST_API_TOKEN',
   'STORAGE_REDIS_URL',
   'UVAI_RATE_LIMIT_DISABLED',
 ] as const;
@@ -52,12 +54,100 @@ async function loadProxy(env: Partial<Record<EnvKey, string | undefined>>) {
   }
   vi.resetModules();
   const { NextRequest } = await import('next/server');
-  const { proxy } = await import('@/proxy');
-  return { proxy, NextRequest };
+  const { config, proxy } = await import('@/proxy');
+  return { config, proxy, NextRequest };
 }
 
 describe('login gate must fail closed (issue #1058)', () => {
-  it('does not serve a protected page unauthenticated when NEXTAUTH_SECRET is missing in production', async () => {
+  it('logs a bounded attribution event for validated E2E probe headers', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'development',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    try {
+      await proxy(
+        new NextRequest('https://app.example.com/api/auth/session', {
+          headers: {
+            'user-agent': 'EventRelay-E2E/35117191915',
+            'x-eventrelay-probe': 'e2e',
+          },
+        }),
+      );
+
+      expect(infoSpy).toHaveBeenCalledWith({
+        event: 'e2e_probe_request',
+        method: 'GET',
+        path: '/api/auth/session',
+        runId: '35117191915',
+      });
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('ignores a probe marker without the bounded E2E user agent', async () => {
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'development',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    try {
+      await proxy(
+        new NextRequest('https://app.example.com/api/auth/session', {
+          headers: {
+            'user-agent': 'unknown-client',
+            'x-eventrelay-probe': 'e2e',
+          },
+        }),
+      );
+
+      expect(infoSpy).not.toHaveBeenCalled();
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('matches and logs attributed public page routes without changing their response', async () => {
+    const { config, proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'development',
+      AUTH_ALLOW_UNAUTHENTICATED: undefined,
+    });
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+
+    try {
+      expect(config.matcher).toContainEqual({
+        source: '/:path*',
+        has: [{ type: 'header', key: 'x-eventrelay-probe', value: 'e2e' }],
+      });
+
+      const response = await proxy(
+        new NextRequest('https://app.example.com/features', {
+          headers: {
+            'user-agent': 'EventRelay-E2E/35170330724',
+            'x-eventrelay-probe': 'e2e',
+          },
+        }),
+      );
+
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+      expect(infoSpy).toHaveBeenCalledWith({
+        event: 'e2e_probe_request',
+        method: 'GET',
+        path: '/features',
+        runId: '35170330724',
+      });
+    } finally {
+      infoSpy.mockRestore();
+    }
+  });
+
+  it('folds /dashboard into the public studio when NEXTAUTH_SECRET is missing in production', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: undefined,
       NODE_ENV: 'production',
@@ -66,10 +156,9 @@ describe('login gate must fail closed (issue #1058)', () => {
 
     const response = await proxy(new NextRequest('https://app.example.com/dashboard'));
 
-    // The vulnerability: before the fix this is a pass-through
-    // (NextResponse.next()), meaning /dashboard renders for an anonymous visitor.
-    expect(response.headers.get('x-middleware-next')).not.toBe('1');
-    expect(response.status).toBe(503);
+    // Retired skin: fold into the public studio instead of 503 or login.
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('https://app.example.com/studio');
   });
 
   it('does not serve a protected API route unauthenticated when NEXTAUTH_SECRET is missing in production', async () => {
@@ -95,9 +184,11 @@ describe('login gate must fail closed (issue #1058)', () => {
     const api = await proxy(new NextRequest('https://app.example.com/api/agents/dispatch'));
     expect(api.status).toBe(401);
 
-    const page = await proxy(new NextRequest('https://app.example.com/dashboard'));
-    expect(page.status).toBe(307);
-    expect(page.headers.get('location')).toContain('/login');
+    const page = await proxy(new NextRequest('https://app.example.com/dashboard?video=https://www.youtube.com/watch?v=auJzb1D-fag'));
+    expect(page.status).toBe(308);
+    expect(page.headers.get('location')).toBe(
+      'https://app.example.com/studio?video=https://www.youtube.com/watch?v=auJzb1D-fag',
+    );
   });
 
   it('keeps public auth routes reachable while the app is misconfigured', async () => {
@@ -121,7 +212,8 @@ describe('login gate must fail closed (issue #1058)', () => {
     });
 
     const response = await proxy(new NextRequest('https://app.example.com/dashboard'));
-    expect(response.status).not.toBe(503);
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('https://app.example.com/studio');
   });
 
   it('lets public Studio Act on findings through when the secret IS configured', async () => {
@@ -196,6 +288,42 @@ describe('login gate must fail closed (issue #1058)', () => {
     expect(response.headers.get('x-ratelimit-limit')).toBe('12');
   });
 
+  it('uses KV_REST_API_* credentials when UPSTASH_REDIS_REST_* are unset', async () => {
+    const redisCtorArgs: Array<{ url: string; token: string }> = [];
+    vi.doMock('@upstash/redis', () => ({
+      Redis: function Redis(opts: { url: string; token: string }) {
+        redisCtorArgs.push(opts);
+        return {
+          incr: vi.fn(async () => 1),
+          expire: vi.fn(async () => 1),
+        };
+      },
+    }));
+
+    const { proxy, NextRequest } = await loadProxy({
+      NEXTAUTH_SECRET: undefined,
+      NODE_ENV: 'production',
+      AUTH_ALLOW_UNAUTHENTICATED: '1',
+      UPSTASH_REDIS_REST_URL: undefined,
+      UPSTASH_REDIS_REST_TOKEN: undefined,
+      KV_REST_API_URL: 'https://kv.example.upstash.io',
+      KV_REST_API_TOKEN: 'kv-token',
+      STORAGE_REDIS_URL: undefined,
+    });
+
+    const response = await proxy(
+      new NextRequest('https://app.example.com/api/workflows/video-to-actions', {
+        method: 'POST',
+      }),
+    );
+
+    expect(response.status).not.toBe(503);
+    expect(response.headers.get('x-ratelimit-limit')).toBe('12');
+    expect(redisCtorArgs).toEqual([
+      { url: 'https://kv.example.upstash.io', token: 'kv-token' },
+    ]);
+  });
+
   it('leaves local development unchanged (no secret, no 503)', async () => {
     const { proxy, NextRequest } = await loadProxy({
       NEXTAUTH_SECRET: undefined,
@@ -204,6 +332,7 @@ describe('login gate must fail closed (issue #1058)', () => {
     });
 
     const response = await proxy(new NextRequest('http://localhost:3000/dashboard'));
-    expect(response.status).not.toBe(503);
+    expect(response.status).toBe(308);
+    expect(response.headers.get('location')).toBe('http://localhost:3000/studio');
   });
 });

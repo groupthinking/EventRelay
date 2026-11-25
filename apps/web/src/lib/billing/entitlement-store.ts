@@ -5,6 +5,7 @@ import {
   resetEntitlementFileStoreForTests,
 } from './entitlement-file-store';
 import { resolveUpstashRedisCredentials } from './redis-credentials';
+import { createUpstashRedisClient } from './upstash-client';
 
 export type PlanTier = 'free' | 'pro';
 
@@ -34,21 +35,7 @@ export function assertEntitlementDurability(): void {
 
 async function getRedis(): Promise<Redis | null> {
   if (redisPromise) return redisPromise;
-  redisPromise = (async () => {
-    const creds = resolveUpstashRedisCredentials();
-    if (!creds) {
-      return null;
-    }
-    try {
-      const { Redis } = await import('@upstash/redis');
-      return new Redis({
-        url: creds.url,
-        token: creds.token,
-      });
-    } catch {
-      return null;
-    }
-  })();
+  redisPromise = createUpstashRedisClient();
   return redisPromise;
 }
 
@@ -91,16 +78,13 @@ export async function saveEntitlement(record: EntitlementRecord): Promise<Entitl
   };
   memoryStore.set(normalized, stored);
 
-  await writeEntitlementToFile(stored);
-
   const redis = await getRedis();
   if (redis) {
-    try {
-      await redis.set(entitlementKey(normalized), stored);
-    } catch {
-      // file + memory remain durable for this host
-    }
+    await redis.set(entitlementKey(normalized), stored);
+    return stored;
   }
+
+  await writeEntitlementToFile(stored);
   return stored;
 }
 

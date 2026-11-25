@@ -1,0 +1,85 @@
+:root {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --ink: #111827;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --accent: #2563eb;
+  --accent-soft: #dbeafe;
+  --chat: #f8fafc;
+  --ticket: #4f46e5;
+  --ok: #059669;
+  --danger: #dc2626;
+  --editor-bg: #0f172a;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+
+.app { height: 100%; display: flex; flex-direction: column; }
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 16px; background: #fff; border-bottom: 1px solid var(--line);
+}
+.brand { font-weight: 700; letter-spacing: -0.02em; }
+.brand span { color: var(--accent); }
+.actions { display: flex; gap: 8px; margin-left: 12px; flex-wrap: wrap; }
+.actions button, .chip {
+  border: 1px solid var(--line); background: #fff; color: var(--ink);
+  border-radius: 999px; padding: 8px 14px; cursor: pointer; font-size: 13px;
+}
+.actions button.active, .actions button:hover, .chip:hover { background: var(--accent-soft); border-color: #93c5fd; color: var(--accent); }
+
+.stage { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.main { display: flex; flex: 1; min-height: 0; }
+.workspace, .assistant, .termwrap { background: var(--panel); min-width: 0; min-height: 0; }
+.workspace { display: flex; flex-direction: column; }
+.work-top { display: flex; flex: 1; min-height: 0; }
+.files {
+  width: 180px; border-right: 1px solid var(--line); padding: 10px; font-size: 13px; overflow: auto;
+}
+.files h4 { margin: 0 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; }
+.files button {
+  display: block; width: 100%; text-align: left; border: 0; background: transparent;
+  padding: 6px 8px; border-radius: 6px; cursor: pointer;
+}
+.files button.active, .files button:hover { background: var(--accent-soft); }
+.edit-preview { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+#editor { flex: 1; min-height: 160px; }
+#preview { height: 42%; min-height: 120px; border: 0; border-top: 1px solid var(--line); background: #fff; }
+
+.assistant { display: flex; flex-direction: column; background: var(--chat); }
+.assistant header {
+  padding: 12px 14px; border-bottom: 1px solid var(--line); font-weight: 600;
+}
+.thread { flex: 1; overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.msg { max-width: 92%; padding: 10px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; }
+.msg.bot { background: #fff; border: 1px solid var(--line); align-self: flex-start; }
+.msg.user { background: var(--accent); color: #fff; align-self: flex-end; }
+.msg .meta { display: block; font-size: 11px; opacity: 0.7; margin-bottom: 4px; }
+.prompts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 8px; }
+.composer { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.composer input {
+  flex: 1; border: 1px solid var(--line); border-radius: 999px; padding: 10px 14px; font-size: 13px;
+}
+.composer button { background: var(--accent); color: #fff; border: 0; border-radius: 999px; padding: 0 16px; cursor: pointer; }
+
+.termwrap { height: 180px; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+.termwrap header {
+  font-size: 12px; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line);
+  display: flex; justify-content: space-between;
+}
+#terminal { flex: 1; background: #0b1220; }
+
+.gutter { background: #e5e7eb; }
+.gutter:hover { background: #93c5fd; }
+.gutter-horizontal { cursor: col-resize; width: 6px; }
+.gutter-vertical { cursor: row-resize; height: 6px; }
+
+.ticket { color: var(--ticket); font-weight: 600; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--muted); }
+.status-dot.live { background: var(--ok); }
+.status-dot.off { background: #f59e0b; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }

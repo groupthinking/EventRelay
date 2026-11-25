@@ -43,6 +43,15 @@ export async function deliver(url, httpAgent) {
 }
 `;
 
+const LOCAL_QUEUE_URL_FIXTURE = `import { Agent } from 'undici';
+export async function deliver(url, httpAgent) {
+  return (response = await fetch(url, {
+    method: 'POST',
+    dispatcher: httpAgent,
+  }));
+}
+`;
+
 describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
   it('externalizes undici and world-vercel so webpack cannot split them', () => {
     const config = fs.readFileSync(
@@ -86,6 +95,14 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     const twice = patchWorldLocalSource(src);
     expect(twice.result).toBe('already-patched');
     expect(twice.src).toBe(src);
+  });
+
+  it('rewrites newer world-local url fetches to undiciFetch', () => {
+    const { src, result } = patchWorldLocalSource(LOCAL_QUEUE_URL_FIXTURE);
+    expect(result).toBe('patched');
+    expect(src).toContain("import { Agent, fetch as undiciFetch } from 'undici';");
+    expect(src).toContain('undiciFetch(url, {');
+    expect(src).toMatch(/dispatcher:\s*httpAgent/);
   });
 
   it('undoes a prior undiciFetch rename so Request objects still work', () => {
@@ -152,7 +169,12 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
     expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
     expect(queue).not.toMatch(/dispatcher:\s*getDispatcher/);
     expect(localQueue).toContain("fetch as undiciFetch } from 'undici'");
-    expect(localQueue).toContain('undiciFetch(createWorkflowUrl(');
+    // world-local 4.2.x patches fetch(createWorkflowUrl(...)). Newer builds
+    // deliver via nodeHttpFetch / fetch(url, { dispatcher: httpAgent }).
+    const patchedLegacy = localQueue.includes('undiciFetch(createWorkflowUrl(');
+    const patchedUrl = localQueue.includes('undiciFetch(url');
+    const nodeHttp = localQueue.includes('nodeHttpFetch');
+    expect(patchedLegacy || patchedUrl || nodeHttp).toBe(true);
     expect(localQueue).toMatch(/dispatcher:\s*httpAgent/);
   });
 });

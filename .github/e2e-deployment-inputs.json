@@ -1,0 +1,13 @@
+{
+  "prefixes": [
+    "apps/"
+  ],
+  "files": [
+    ".npmrc",
+    ".vercelignore",
+    "package-lock.json",
+    "package.json",
+    "turbo.json",
+    "vercel.json"
+  ]
+}

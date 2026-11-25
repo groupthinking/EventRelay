@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, afterEach } from 'vitest';
 import { backendHeaders, resolveBackendStatusUrl } from '@/lib/pipeline-backend';
 
@@ -59,5 +61,22 @@ describe('resolveBackendStatusUrl', () => {
     expect(() =>
       resolveBackendStatusUrl('https://evil.example/jobs/abc', backend),
     ).toThrow(/untrusted origin/);
+  });
+});
+
+describe('production BACKEND_URL pin', () => {
+  it('reads backend env names statically so Next.js can inline them on Vercel', () => {
+    const source = readFileSync(join(process.cwd(), 'src/lib/pipeline-backend.ts'), 'utf8');
+    expect(source).toContain('process.env.BACKEND_URL');
+    expect(source).toContain('process.env.NEXT_PUBLIC_BACKEND_URL');
+    expect(source).toContain('process.env.NEXT_PUBLIC_API_URL');
+    expect(source).not.toMatch(/process\.env\[key\]/);
+  });
+
+  it('pins BACKEND_URL for production builds to the verified api.uvai.io origin', () => {
+    const source = readFileSync(join(process.cwd(), 'next.config.js'), 'utf8');
+    expect(source).toContain('BACKEND_URL');
+    expect(source).toContain('https://api.uvai.io');
+    expect(source).toContain('env:');
   });
 });

@@ -42,13 +42,13 @@ describe('action-agent provider routing', () => {
 
     const result = await runActionAgent({ transcript: TRANSCRIPT, executeTools: false });
 
-    expect(result.provider).toBe('gateway:google/gemini-2.5-flash');
+    expect(result.provider).toBe('gateway:google/gemini-3.8-flash');
     expect(openAiState.constructorOptions.at(-1)).toEqual({
       apiKey: 'vck_gateway_test',
       baseURL: 'https://ai-gateway.vercel.sh/v1',
     });
     expect(openAiState.create).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'google/gemini-2.5-flash' }),
+      expect.objectContaining({ model: 'google/gemini-3.8-flash' }),
     );
   });
 

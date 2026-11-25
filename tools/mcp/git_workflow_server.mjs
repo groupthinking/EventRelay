@@ -28,9 +28,14 @@ if (!fs.existsSync(WORKSPACE_ROOT)) {
   process.exit(1);
 }
 
-function runGitCommand(args, { allowEmpty = false } = {}) {
+function runGitCommand(args, { allowEmpty = false, readOnly = false } = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn('git', args, {
+    // Read tools must not execute helpers supplied by repository configuration.
+    // Explicit write tools retain their existing Git/hook behavior.
+    const commandArgs = readOnly
+      ? ['--no-pager', '-c', 'core.fsmonitor=false', ...args]
+      : args;
+    const child = spawn('git', commandArgs, {
       cwd: WORKSPACE_ROOT,
       env: process.env,
     });
@@ -62,7 +67,8 @@ function runGitCommand(args, { allowEmpty = false } = {}) {
 
 async function gitStatus({ porcelain = true } = {}) {
   const args = porcelain ? ['status', '--short', '--branch'] : ['status'];
-  return runGitCommand(args);
+  args.push('--ignore-submodules=dirty');
+  return runGitCommand(args, { readOnly: true });
 }
 
 async function gitAdd({ files }) {
@@ -109,14 +115,14 @@ async function gitPull({ remote, branch, rebase = false } = {}) {
 }
 
 async function gitDiff({ pathspec, staged = false } = {}) {
-  const args = ['diff'];
+  const args = ['diff', '--no-ext-diff', '--no-textconv', '--ignore-submodules=dirty'];
   if (staged) {
     args.push('--staged');
   }
   if (pathspec && pathspec.length > 0) {
     args.push('--', pathspec);
   }
-  return runGitCommand(args);
+  return runGitCommand(args, { readOnly: true });
 }
 
 class GitWorkflowMCPServer {

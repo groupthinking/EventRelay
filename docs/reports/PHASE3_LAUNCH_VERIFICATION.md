@@ -115,7 +115,7 @@ EventRelay implements a **Nightly Audit Agent** script at `scripts/nightly_audit
 - **Execution:** Currently available for manual execution. To enable automatic scheduling:
   1. Add a GitHub Actions workflow scheduled for 02:00 UTC
   2. Update the Workflow Catalog in `.github/workflows/README.md`
-  3. Record the decision in `.github/workflows/AUDIT.md`
+  3. Record the decision in the Maintenance Log of `.github/workflows/README.md`
 
 ---
 

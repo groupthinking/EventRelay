@@ -52,10 +52,17 @@ CI_WORKFLOWS = (
 # Direct runtime dependencies whose floor the deployed app must satisfy.
 RUNTIME_DEPS_UNDER_TEST = ("openai", "ai", "@ai-sdk/gateway")
 
+# CI installs and executes these packages directly, so the declared floor must
+# satisfy them too.
+CI_DEPS_UNDER_TEST = ("jsdom", "vitest")
+NODE_RANGE_DEPS = ("jsdom", "vitest")
+
 # Anchored: the whole range must be one `>=` clause. An unanchored search would
 # happily pull `>=24.0.0` out of `^20.0.0 || ^22.0.0 || >=24.0.0` and report a
 # floor of 24 for a range that accepts Node 20.
 _MIN_VERSION = re.compile(r"^>=\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$")
+_CARET_VERSION = re.compile(r"^\^\s*v?(\d+)(?:\.(\d+))?(?:\.(\d+))?$")
+_EXACT_VERSION = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$")
 _DOCKER_NODE = re.compile(r"^FROM\s+node:(\d+)", re.MULTILINE)
 
 
@@ -109,13 +116,135 @@ def _load(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def _lowest_supported_for_major(
+    spec: str | None, major: int
+) -> tuple[int, int, int] | None:
+    """Return the minimum version a range allows for a specific major."""
+    if not spec:
+        return None
+
+    matching: list[tuple[int, int, int]] = []
+    for clause in (part.strip() for part in spec.split("||")):
+        floor = _parse_floor(clause)
+        if floor is not None and floor[0] == major:
+            matching.append(floor)
+            continue
+        match = _CARET_VERSION.match(clause)
+        if match is None:
+            continue
+        candidate = tuple(int(piece or 0) for piece in match.groups())
+        if candidate[0] == major:
+            matching.append(candidate)
+
+    if not matching:
+        return None
+    return min(matching)
+
+
 def _declared_floor() -> tuple[int, int, int]:
     engines = _load(PACKAGE_JSON).get("engines") or {}
-    floor = _parse_floor(engines.get("node"))
-    assert (
-        floor is not None
-    ), "root package.json must declare engines.node as a >= range"
+    spec = engines.get("node")
+    floor = _lowest_supported_for_major(spec, 22)
+    assert floor is not None, "root package.json must declare a supported Node 22 range"
     return floor
+
+
+def _locked_engine_ranges(name: str) -> set[str]:
+    """Return every non-empty Node engine range for a locked dependency."""
+    ranges: set[str] = set()
+    for path, meta in (_load(PACKAGE_LOCK).get("packages") or {}).items():
+        if not path or not isinstance(meta, dict):
+            continue
+        if path.split("node_modules/")[-1] != name:
+            continue
+        spec = (meta.get("engines") or {}).get("node")
+        if spec:
+            ranges.add(spec)
+    return ranges
+
+
+def _range_intervals(
+    spec: str | None,
+) -> list[tuple[tuple[int, int, int], tuple[int, int, int] | None]]:
+    """Parse the caret/minimum union ranges used by the guarded Node packages."""
+    assert spec, "expected a non-empty Node engine range"
+    intervals = []
+    for clause in (part.strip() for part in spec.split("||")):
+        floor = _parse_floor(clause)
+        if floor is not None:
+            intervals.append((floor, None))
+            continue
+        match = _CARET_VERSION.match(clause)
+        assert match is not None, f"unsupported Node engine clause: {clause!r}"
+        lower = tuple(int(piece or 0) for piece in match.groups())
+        if lower[0] or match.group(2) is None:
+            upper = (lower[0] + 1, 0, 0)
+        elif lower[1] or match.group(3) is None:
+            upper = (0, lower[1] + 1, 0)
+        else:
+            upper = (0, 0, lower[2] + 1)
+        intervals.append((lower, upper))
+    return intervals
+
+
+def _range_is_subset(candidate: str, supported: str) -> bool:
+    """Return whether every interval in candidate is covered by supported."""
+    for candidate_low, candidate_high in _range_intervals(candidate):
+        covered = False
+        for supported_low, supported_high in _range_intervals(supported):
+            lower_ok = supported_low <= candidate_low
+            upper_ok = supported_high is None or (
+                candidate_high is not None and candidate_high <= supported_high
+            )
+            if lower_ok and upper_ok:
+                covered = True
+                break
+        if not covered:
+            return False
+    return True
+
+
+def _version_satisfies(version: str, supported: str) -> bool:
+    """Check the stable exact/caret/minimum ranges used by guarded packages."""
+    if _EXACT_VERSION.fullmatch(supported):
+        return version == supported
+    match = _EXACT_VERSION.match(version)
+    assert match is not None, f"unsupported exact version: {version!r}"
+    candidate = tuple(int(piece) for piece in match.groups())
+    return any(
+        lower <= candidate and (upper is None or candidate < upper)
+        for lower, upper in _range_intervals(supported)
+    )
+
+
+def _nearest_locked_dependency(
+    packages: dict, package_path: str, dependency: str
+) -> tuple[str, dict]:
+    """Resolve a dependency from a lock path using Node's nearest-ancestor order."""
+    ancestor = package_path
+    while True:
+        # Node searches each parent directory, but never node_modules/node_modules.
+        # Workspace consumers can resolve either a local copy or a hoisted one.
+        if ancestor.rsplit("/", 1)[-1] != "node_modules":
+            candidate = (
+                f"{ancestor}/node_modules/{dependency}"
+                if ancestor
+                else f"node_modules/{dependency}"
+            )
+            metadata = packages.get(candidate)
+            if isinstance(metadata, dict):
+                return candidate, metadata
+        if not ancestor:
+            break
+        ancestor = ancestor.rsplit("/", 1)[0] if "/" in ancestor else ""
+    raise AssertionError(
+        f"{package_path} cannot resolve locked dependency {dependency}"
+    )
+
+
+def test_declared_floor_is_node_22() -> None:
+    """Root engines floor must remain on Node 22 for Vercel/runtime parity."""
+    assert _declared_floor()[0] == 22
 
 
 def _locked_floor(name: str) -> tuple[int, int, int] | None:
@@ -177,6 +306,259 @@ def test_declared_floor_satisfies_core_runtime_dependencies(dependency: str) -> 
     )
 
 
+@pytest.mark.parametrize("dependency", CI_DEPS_UNDER_TEST)
+def test_declared_floor_satisfies_ci_installed_dependencies(dependency: str) -> None:
+    """A CI-installed dependency must not demand a newer Node than we declare."""
+    declared = _declared_floor()
+    required = None
+    for path, meta in (_load(PACKAGE_LOCK).get("packages") or {}).items():
+        if not path or not isinstance(meta, dict):
+            continue
+        if path.split("node_modules/")[-1] != dependency:
+            continue
+        floor = _lowest_supported_for_major(
+            (meta.get("engines") or {}).get("node"), declared[0]
+        )
+        if floor is not None and (required is None or floor > required):
+            required = floor
+    assert required is not None, (
+        f"expected {dependency} to admit the repo's declared Node major in "
+        "package-lock.json. Re-read the range by hand and either widen the "
+        "parser or drop this dependency from CI_DEPS_UNDER_TEST — do not let "
+        "the check pass vacuously."
+    )
+    assert declared >= required, (
+        f"{dependency} requires Node >={'.'.join(map(str, required))} but "
+        f"package.json advertises >={'.'.join(map(str, declared))}, so the repo "
+        "promises a Node version this CI-installed dependency does not support"
+    )
+
+
+@pytest.mark.parametrize("dependency", NODE_RANGE_DEPS)
+def test_declared_node_range_fits_ci_dependency_support(
+    dependency: str,
+) -> None:
+    """The repository must not advertise versions rejected by a gating dependency."""
+    declared = (_load(PACKAGE_JSON).get("engines") or {}).get("node")
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    lock_path, metadata = _nearest_locked_dependency(packages, "apps/web", dependency)
+    locked = (metadata.get("engines") or {}).get("node")
+
+    assert locked, f"expected {lock_path} to declare engines.node"
+    assert _range_is_subset(declared, locked), (
+        f"package.json advertises Node {declared!r}, but {lock_path} "
+        f"({dependency}) supports only {locked!r}. Matching only Node 22 floors "
+        "would miss unsupported versions in later branches."
+    )
+
+
+@pytest.mark.parametrize("consumer", ["", "apps/web"])
+def test_direct_dependencies_resolve_versions_declared_by_their_consumer(
+    consumer: str,
+) -> None:
+    """A hoisted update must not leave a stale workspace copy shadowing it."""
+    manifest = _load(REPO_ROOT / consumer / "package.json")
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    for section in ("dependencies", "devDependencies", "optionalDependencies"):
+        for dependency, declared in (manifest.get(section) or {}).items():
+            path, metadata = _nearest_locked_dependency(packages, consumer, dependency)
+            resolved = metadata.get("version")
+            assert resolved and _version_satisfies(resolved, declared), (
+                f"{consumer or 'root'} declares {dependency}@{declared}, "
+                f"but resolves {path}@{resolved}"
+            )
+
+
+@pytest.mark.parametrize(
+    ("version", "declared", "expected"),
+    [
+        ("4.0.117", "4.0.160", False),
+        ("4.0.160", "4.0.160", True),
+        ("0.222.0", "^0.300.0", False),
+        ("0.300.1", "^0.300.0", True),
+        ("0.301.0", "^0.300.0", False),
+        ("0.0.4", "^0.0.4", True),
+        ("0.0.5", "^0.0.4", False),
+        ("0.300.1", "^0", True),
+        ("1.0.0", "^0", False),
+        ("0.0.9", "^0.0", True),
+        ("0.1.0", "^0.0", False),
+    ],
+)
+def test_declared_package_range_validation(
+    version: str, declared: str, expected: bool
+) -> None:
+    assert _version_satisfies(version, declared) is expected
+
+
+def test_v0_cli_config_resolves_patched_zod() -> None:
+    """Keep the newly installed v0 credential-config path off vulnerable Zod."""
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    path = "apps/web"
+    for dependency in ("v0", "@vercel/oidc", "@vercel/cli-config", "zod"):
+        path, metadata = _nearest_locked_dependency(packages, path, dependency)
+    assert _version_satisfies(metadata["version"], "^4.6.7"), (
+        f"v0's CLI config resolves vulnerable Zod at {path}@{metadata['version']}"
+    )
+
+
+def test_web_fetch_runtime_owns_undici_dependency() -> None:
+    """Workspace-only image installs must include the app's direct fetch import."""
+    manifest = _load(REPO_ROOT / "apps/web/package.json")
+    declared = (manifest.get("dependencies") or {}).get("undici")
+    assert declared, "web runtime imports Undici and must own its production dependency"
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    path, metadata = _nearest_locked_dependency(packages, "apps/web", "undici")
+    assert _version_satisfies(metadata["version"], declared), (
+        f"web declares Undici {declared}, but resolves {path}@{metadata['version']}"
+    )
+    assert not metadata.get("dev"), "runtime Undici must survive production installs"
+
+
+def test_jsdom_resolves_its_supported_undici_major() -> None:
+    """The nearest Undici package jsdom loads must satisfy its declared range."""
+    packages = _load(PACKAGE_LOCK).get("packages") or {}
+    jsdom_path, jsdom = _nearest_locked_dependency(packages, "apps/web", "jsdom")
+    required = (jsdom.get("dependencies") or {}).get("undici")
+    resolved_path, resolved = _nearest_locked_dependency(packages, jsdom_path, "undici")
+
+    assert required, "expected jsdom to declare an Undici dependency"
+    resolved_version = str(resolved.get("version", ""))
+    assert _version_satisfies(resolved_version, required), (
+        f"jsdom requires Undici {required!r}, but Node resolution selects "
+        f"{resolved_version!r} at {resolved_path}"
+    )
+
+    for path, meta in packages.items():
+        if not path.endswith("node_modules/undici") or not isinstance(meta, dict):
+            continue
+        version = tuple(int(piece) for piece in meta["version"].split("."))
+        assert version[0] != 7 or version >= (7, 29, 0), (
+            f"{path} resolves vulnerable Undici {meta['version']}; "
+            "Undici 7 consumers must resolve 7.29.0 or newer"
+        )
+
+
+@pytest.mark.parametrize(
+    ("packages", "expected_path", "expected_version", "satisfies"),
+    [
+        (
+            {
+                "node_modules/undici": {"version": "8.10.2"},
+                "node_modules/jsdom/node_modules/undici": {"version": "6.28.1"},
+            },
+            "node_modules/jsdom/node_modules/undici",
+            "6.28.1",
+            False,
+        ),
+        (
+            {
+                "node_modules/undici": {"version": "6.28.1"},
+                "node_modules/jsdom/node_modules/undici": {"version": "8.10.2"},
+            },
+            "node_modules/jsdom/node_modules/undici",
+            "8.10.2",
+            True,
+        ),
+        (
+            {"node_modules/undici": {"version": "8.0.0"}},
+            "node_modules/undici",
+            "8.0.0",
+            False,
+        ),
+        (
+            {"node_modules/undici": {"version": "8.10.2"}},
+            "node_modules/undici",
+            "8.10.2",
+            True,
+        ),
+    ],
+)
+def test_nearest_locked_dependency_and_range_validation(
+    packages: dict, expected_path: str, expected_version: str, satisfies: bool
+) -> None:
+    path, metadata = _nearest_locked_dependency(
+        packages, "node_modules/jsdom", "undici"
+    )
+    assert path == expected_path
+    assert metadata["version"] == expected_version
+    assert _version_satisfies(metadata["version"], "^8.9.0") is satisfies
+
+
+@pytest.mark.parametrize(
+    ("consumer", "dependency", "paths", "expected"),
+    [
+        ("apps/web", "jsdom", ["node_modules/jsdom"], "node_modules/jsdom"),
+        (
+            "apps/web",
+            "jsdom",
+            ["node_modules/jsdom", "apps/web/node_modules/jsdom"],
+            "apps/web/node_modules/jsdom",
+        ),
+        (
+            "apps/web",
+            "jsdom",
+            ["node_modules/jsdom", "apps/node_modules/jsdom"],
+            "apps/node_modules/jsdom",
+        ),
+        (
+            "apps/web/node_modules/jsdom",
+            "undici",
+            ["node_modules/undici", "apps/web/node_modules/undici"],
+            "apps/web/node_modules/undici",
+        ),
+        (
+            "apps/web/node_modules/jsdom",
+            "undici",
+            ["node_modules/undici", "apps/web/node_modules/node_modules/undici"],
+            "node_modules/undici",
+        ),
+    ],
+)
+def test_workspace_dependency_resolution(
+    consumer: str, dependency: str, paths: list[str], expected: str
+) -> None:
+    packages = {path: {"version": "1.0.0"} for path in paths}
+    path, _ = _nearest_locked_dependency(packages, consumer, dependency)
+    assert path == expected
+
+
+def test_workspace_dependency_resolution_rejects_missing_package() -> None:
+    with pytest.raises(AssertionError, match="cannot resolve locked dependency jsdom"):
+        _nearest_locked_dependency({}, "apps/web", "jsdom")
+
+
+def test_frontend_ci_uses_clean_installs_and_builds_the_web_image() -> None:
+    """Gating web jobs must reject lock drift and exercise the production image."""
+    workflow = yaml.safe_load((REPO_ROOT / ".github/workflows/ci.yml").read_text())
+    jobs = workflow["jobs"]
+
+    for job_name in ("build", "lint-frontend", "test-frontend"):
+        runs = [
+            step.get("run")
+            for step in jobs[job_name]["steps"]
+            if isinstance(step, dict) and step.get("run")
+        ]
+        assert "npm ci --legacy-peer-deps" in runs
+        assert not any(command.startswith("npm install ") for command in runs)
+
+    build_runs = [
+        step.get("run")
+        for step in jobs["build"]["steps"]
+        if isinstance(step, dict) and step.get("run")
+    ]
+    assert "docker build --file apps/web/Dockerfile ." in build_runs
+
+    dockerfile = WEB_DOCKERFILE.read_text()
+    patch_copy = (
+        "COPY apps/web/scripts/patch-world-vercel-undici-fetch.mjs "
+        "./apps/web/scripts/"
+    )
+    assert dockerfile.index(patch_copy) < dockerfile.index(
+        "RUN npm ci --workspace=apps/web --legacy-peer-deps"
+    )
+
+
 @pytest.mark.parametrize(
     ("spec", "expected"),
     [
@@ -203,6 +585,50 @@ def test_declared_floor_satisfies_core_runtime_dependencies(dependency: str) -> 
 )
 def test_parse_floor(spec: str | None, expected: tuple[int, int, int] | None) -> None:
     assert _parse_floor(spec) == expected
+
+
+@pytest.mark.parametrize(
+    ("spec", "major", "expected"),
+    [
+        ("^22.22.2 || ^24.15.0 || >=26.0.0", 22, (22, 22, 2)),
+        ("^20.19.0 || ^22.13.0 || >=24", 22, (22, 13, 0)),
+        ("^20.19.0 || >=22.12.0", 22, (22, 12, 0)),
+        ("^20.0.0 || ^22.0.0 || >=24.0.0", 23, None),
+    ],
+)
+def test_lowest_supported_for_major(
+    spec: str | None, major: int, expected: tuple[int, int, int] | None
+) -> None:
+    assert _lowest_supported_for_major(spec, major) == expected
+
+
+@pytest.mark.parametrize(
+    ("candidate", "supported", "expected"),
+    [
+        (
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            True,
+        ),
+        (
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            "^22.12.0 || ^24.0.0 || >=26.0.0",
+            True,
+        ),
+        (
+            ">=22.22.2",
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            False,
+        ),
+        (
+            "^22.22.2 || ^24.15.0 || >=26.0.0",
+            "^22.22.2 || ^24.15.0",
+            False,
+        ),
+    ],
+)
+def test_range_is_subset(candidate: str, supported: str, expected: bool) -> None:
+    assert _range_is_subset(candidate, supported) is expected
 
 
 def test_pinned_node_majors_ignores_commented_and_unrelated_keys(

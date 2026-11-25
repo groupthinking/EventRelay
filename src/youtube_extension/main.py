@@ -6,6 +6,7 @@ Provides the core API endpoints and integrates all services including cloud AI
 
 import logging
 import os
+import shutil
 from urllib.parse import urlparse
 
 import uvicorn
@@ -130,8 +131,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+    allow_headers=["Accept", "Accept-Language", "Authorization", "Content-Language", "Content-Type", "Origin", "X-API-Key", "X-Requested-With"],
 )
 
 # Rate limiting
@@ -155,46 +156,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 
-# API key auth middleware
-try:
-    from .backend.middleware.api_key_auth import (
-        APIKeyAuthMiddleware as APIKeyMiddleware,
-    )
-
-    app.add_middleware(APIKeyMiddleware)
-    logger.info("API key auth middleware loaded")
-except ImportError as e:
-    logger.warning(f"API key auth middleware not available: {e}")
-
-# Include Cloud AI routes
-try:
-    from .backend.cloud_ai_routes import router as cloud_ai_router
-
-    app.include_router(cloud_ai_router)
-    logger.info("Cloud AI routes loaded successfully")
-except ImportError as e:
-    logger.warning(f"Cloud AI routes not available: {e}")
-
-# Include Event Routes
-try:
-    from .backend.api.event_routes import router as event_router
-
-    app.include_router(event_router)
-    logger.info("Event routes loaded successfully")
-except ImportError as e:
-    logger.error(f"Failed to load event routes: {e}")
-
-# Include API v1 Router (production endpoints - transcript-action, health, etc.)
-_API_V1_ROUTER_LOADED = False
-try:
-    from .backend.api.v1.router import router as api_v1_router
-
-    app.include_router(api_v1_router)
-    _API_V1_ROUTER_LOADED = True
-    logger.info("API v1 router loaded successfully")
-except Exception as e:
-    logger.error(f"Failed to load API v1 router: {type(e).__name__}: {e}")
-
 
 def _auth_mode() -> str:
     """Report how APIKeyAuthMiddleware will treat non-public routes (F6)."""
@@ -211,7 +172,12 @@ def _auth_mode() -> str:
     # "fail_closed" would contradict actual request handling.
     if os.getenv("EVENTRELAY_API_KEY"):
         return "api_key"
-    return "fail_closed"
+    if any(
+        (os.getenv(name) or "").strip().lower() == "production"
+        for name in ("ENVIRONMENT", "VERCEL_ENV", "NODE_ENV")
+    ):
+        return "fail_closed"
+    return "open_dev"
 
 
 def _video_dep_status() -> dict[str, bool]:
@@ -223,6 +189,9 @@ def _video_dep_status() -> dict[str, bool]:
             status[name] = True
         except ImportError:
             status[name] = False
+    status["yt_dlp_executable"] = shutil.which("yt-dlp") is not None
+    status["ffmpeg"] = shutil.which("ffmpeg") is not None
+    status["ffprobe"] = shutil.which("ffprobe") is not None
     return status
 
 
@@ -237,30 +206,18 @@ async def health_check():
         # fail_closed → non-public routes 503 until EVENTRELAY_API_KEY or ALLOW_UNAUTHENTICATED=1
         "auth_mode": _auth_mode(),
         "video_deps": video_deps,
+        "yt_dlp_ready": video_deps["yt_dlp"],
+        "youtube_transcript_api_ready": video_deps["youtube_transcript_api"],
+        "yt_dlp_executable_ready": video_deps["yt_dlp_executable"],
+        "ffmpeg_ready": video_deps["ffmpeg"],
+        "ffprobe_ready": video_deps["ffprobe"],
         "video_path_ready": all(video_deps.values()),
     }
 
 
-async def ensure_api_cost_ready() -> None:
-    """Validate the shared API-cost schema and runtime DML permissions."""
-    from .backend.services.api_cost_monitor import ensure_api_cost_database_ready
-
-    await ensure_api_cost_database_ready()
-
-
 @app.get("/readyz")
 async def readiness_check():
-    """Traffic readiness includes the shared PostgreSQL substrate."""
-    if not _API_V1_ROUTER_LOADED:
-        raise HTTPException(status_code=503, detail="API v1 router is not ready")
-    try:
-        await ensure_api_cost_ready()
-    except Exception:
-        logger.exception("API cost database readiness check failed")
-        raise HTTPException(
-            status_code=503,
-            detail="API cost database is not ready",
-        ) from None
+    """Process is accepting traffic."""
     return {"status": "ready", "service": "uvai-backend"}
 
 

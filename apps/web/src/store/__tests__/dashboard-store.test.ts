@@ -8,12 +8,7 @@ import type { Video } from '@/store/dashboard-store';
 function resetStore() {
   useDashboardStore.setState({
     videos: [],
-    activities: [],
     selectedVideoId: null,
-    loading: false,
-    searchQuery: '',
-    searchResults: [],
-    searchLoading: false,
   });
 }
 
@@ -115,80 +110,47 @@ describe('dashboard-store · synchronous reducers', () => {
     expect(store().selectedVideoId).toBe('a');
   });
 
-  it('selectVideo sets the id and resets search state', () => {
-    store().setSearchQuery('hello');
-    useDashboardStore.setState({
-      searchResults: [{ start: 0, duration: 1, text: 't', score: 1 }],
-    });
+  it('selectVideo sets the id', () => {
     store().selectVideo('v1');
     expect(store().selectedVideoId).toBe('v1');
-    expect(store().searchQuery).toBe('');
-    expect(store().searchResults).toEqual([]);
-  });
-
-  it('selectedVideo selector returns the selected video or undefined', () => {
-    store().addVideo(makeVideo({ id: 'a', title: 'Alpha' }));
-    expect(store().selectedVideo()).toBeUndefined();
-    store().selectVideo('a');
-    expect(store().selectedVideo()?.title).toBe('Alpha');
-  });
-
-  it('addActivity prepends newest first and caps history at 30', () => {
-    for (let i = 0; i < 35; i++) store().addActivity(`event ${i}`, 'info');
-    const activities = store().activities;
-    expect(activities).toHaveLength(30);
-    expect(activities[0].event).toBe('event 34');
-    expect(typeof activities[0].time).toBe('string');
-    expect(activities[0].time.length).toBeGreaterThan(0);
-  });
-
-  it('setLoading and setSearchQuery update their flags', () => {
-    store().setLoading(true);
-    expect(store().loading).toBe(true);
-    store().setSearchQuery('q');
-    expect(store().searchQuery).toBe('q');
   });
 });
 
-describe('dashboard-store · extractEvents', () => {
-  it("derives action and topic events from a video's insights", () => {
-    store().addVideo(
-      makeVideo({
-        id: 'v1',
-        insights: {
-          summary: 's',
-          sentiment: 'Neutral',
-          actions: [{ title: 'Build it', description: 'do the thing', category: 'build' }],
-          topics: ['rust', 'wasm'],
-        },
-      }),
-    );
-    store().extractEvents('v1');
-    const events = store().videos[0].events!;
-    expect(events).toHaveLength(3); // 1 action + 2 topics
+const VIDEO_PACK_BODY = {
+  status: 'success',
+  data: {
+    version: 'v0',
+    id: 'vp:v0:auJzb1D-fag',
+    video_id: 'auJzb1D-fag',
+    source_url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+    transcript: { full_text: 'cite:youtube:auJzb1D-fag', segments: [] },
+    provenance: {
+      source_hash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    },
+  },
+};
 
-    const action = events.find((e) => e.type === 'action')!;
-    expect(action.title).toBe('Build it');
-    expect(action.confidence).toBeUndefined();
-    expect(action.id).toBe('evt_v1_0');
-
-    const topics = events.filter((e) => e.type === 'topic');
-    expect(topics.map((t) => t.title)).toEqual(['rust', 'wasm']);
-    expect(topics[0].confidence).toBeUndefined();
-    expect(topics[0].id).toBe('evt_v1_t0');
-  });
-
-  it('is a no-op when the video does not exist', () => {
-    expect(() => store().extractEvents('nope')).not.toThrow();
-    expect(store().videos).toHaveLength(0);
-  });
-
-  it('produces an empty event list when there are no insights', () => {
-    store().addVideo(makeVideo({ id: 'v1' }));
-    store().extractEvents('v1');
-    expect(store().videos[0].events).toEqual([]);
-  });
-});
+const VIDEO_PACK_CITATION = {
+  version: 'v0',
+  videoId: 'auJzb1D-fag',
+  packId: 'vp:v0:auJzb1D-fag',
+  sourceUrl: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+  sourceHash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+  pack: {
+    version: 'v0',
+    id: 'vp:v0:auJzb1D-fag',
+    video_id: 'auJzb1D-fag',
+    source_url: 'https://www.youtube.com/watch?v=auJzb1D-fag',
+    provenance: {
+      source_hash: '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    },
+    transcript: {
+      language: null,
+      full_text: 'cite:youtube:auJzb1D-fag',
+      segments: [],
+    },
+  },
+};
 
 describe('dashboard-store · processVideo (durable evidence workflow)', () => {
   const provenance = {
@@ -214,9 +176,105 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     checkedAt: '2026-08-16T12:00:02.000Z',
   };
 
+  it('does not start a request when the caller has already stopped analysis', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(store().videos.find((video) => video.id === id)?.failure?.message).toContain('Server work already accepted may continue');
+  });
+
+  it('does not start the actions workflow when stopped as the pack completes', async () => {
+    const controller = new AbortController();
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      json: async () => {
+        controller.abort();
+        return VIDEO_PACK_BODY;
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const video = store().videos.find((item) => item.id === id)!;
+    expect(video.status).toBe('failed');
+    expect(video.videoPack).toBeUndefined();
+    expect(video.runId).toBeUndefined();
+    expect(video.failure?.message).toContain('stopped in this browser');
+  });
+
+  it('stops the local row immediately while an aborted transport is still settling', async () => {
+    const controller = new AbortController();
+    let rejectPack!: (error: Error) => void;
+    const fetchMock = vi.fn(() => new Promise<Response>((_resolve, reject) => { rejectPack = reject; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+
+    controller.abort();
+
+    expect(store().videos[0].status).toBe('failed');
+    expect(store().videos[0].failure?.message).toContain('stopped in this browser');
+    rejectPack(new TypeError('Network disconnected after stop'));
+    const id = await pending;
+    expect(store().videos.find((item) => item.id === id)?.failure?.message).not.toContain('Network disconnected');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards stop to workflow kickoff and does not poll a late accepted run', async () => {
+    const controller = new AbortController();
+    let resolveStart!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveStart = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+
+    controller.abort();
+    expect(fetchMock.mock.calls[1]?.[1].signal?.aborted).toBe(true);
+    resolveStart(jsonResponse({ ok: true, runId: 'wrun_accepted_before_stop' }));
+    const id = await pending;
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const video = store().videos.find((item) => item.id === id)!;
+    expect(video.status).toBe('failed');
+    expect(video.runId).toBe('wrun_accepted_before_stop');
+    expect(video.failure?.message).toContain('Server work already accepted may continue');
+  });
+
+  it('does not mark a late completed poll as successful after analysis is stopped', async () => {
+    const controller = new AbortController();
+    let resolvePoll!: (response: Response) => void;
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockResolvedValueOnce(jsonResponse({ ok: true, runId: 'wrun_stopped' }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolvePoll = resolve; }));
+    vi.stubGlobal('fetch', fetchMock);
+    const pending = store().processVideo(provenance.sourceUrl, { signal: controller.signal });
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+
+    controller.abort();
+    expect(fetchMock.mock.calls[2]?.[1].signal?.aborted).toBe(true);
+    resolvePoll(jsonResponse({ ok: true, runId: 'wrun_stopped', runStatus: 'completed', result: {} }));
+    const id = await pending;
+
+    const video = store().videos.find((item) => item.id === id)!;
+    expect(video.status).toBe('failed');
+    expect(video.progress).toBeLessThan(100);
+    expect(video.quality).toBeUndefined();
+    expect(video.failure?.message).toContain('stopped in this browser');
+  });
+
   it('persists the run id and maps only a verified result to complete', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
       .mockResolvedValueOnce(jsonResponse({
         ok: true,
         runId: 'wrun_verified',
@@ -269,14 +327,20 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      '/api/workflows/video-to-actions',
+      '/api/video/pack',
       expect.objectContaining({ method: 'POST' }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      '/api/workflows/video-to-actions',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       '/api/workflows/video-to-actions/wrun_verified',
       expect.objectContaining({ method: 'GET' }),
     );
+    expect(video.videoPack).toEqual(VIDEO_PACK_CITATION);
     expect(video.status).toBe('complete');
     expect(video.runId).toBe('wrun_verified');
     expect(video.quality?.passed).toBe(true);
@@ -300,6 +364,7 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
   it('keeps a failed workflow failed and preserves a recovery record', async () => {
     const fetchMock = vi
       .fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
       .mockResolvedValueOnce(jsonResponse({
         ok: true,
         runId: 'wrun_failed',
@@ -317,6 +382,9 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     const video = store().videos.find((item) => item.id === id)!;
 
     expect(video.status).toBe('failed');
+    expect(video.videoPack?.sourceHash).toBe(
+      '2778c5fc08a1b7f19fe0a83bca959e24ecf20040c3cc1a3b6edd244d68c5e4ea',
+    );
     expect(video.runId).toBe('wrun_failed');
     expect(video.failure?.stage).toBe('acquisition');
     expect(video.quality?.passed).toBe(false);
@@ -324,10 +392,46 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     expect(video.title).toContain('Analysis blocked');
   });
 
+  it('emits the identity pack even when the workflow has no transcript', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_no_speech',
+        statusUrl: '/api/workflows/video-to-actions/wrun_no_speech',
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        ok: true,
+        runId: 'wrun_no_speech',
+        runStatus: 'failed',
+        error: 'No usable transcript. Try another public video.',
+      }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const id = await store().processVideo(provenance.sourceUrl);
+    const video = store().videos.find((item) => item.id === id)!;
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      '/api/video/pack',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(video.videoPack).toEqual(VIDEO_PACK_CITATION);
+    expect(video.videoPack?.sourceUrl).toBe('https://www.youtube.com/watch?v=auJzb1D-fag');
+    expect(video.transcript).toBeUndefined();
+    expect(video.status).toBe('failed');
+    expect(video.insights?.summary).toBe(
+      'Analysis was not generated because source evidence could not be verified.',
+    );
+  });
+
   it('fails closed when no durable run id is created', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(
-      jsonResponse({ ok: false, error: 'world not configured' }, false, 500),
-    ));
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(jsonResponse(VIDEO_PACK_BODY))
+      .mockResolvedValueOnce(
+        jsonResponse({ ok: false, error: 'world not configured' }, false, 500),
+      ));
 
     const id = await store().processVideo(provenance.sourceUrl);
     const video = store().videos.find((item) => item.id === id)!;
@@ -335,208 +439,5 @@ describe('dashboard-store · processVideo (durable evidence workflow)', () => {
     expect(video.status).toBe('failed');
     expect(video.runId).toBeUndefined();
     expect(video.failure?.stage).toBe('start');
-  });
-
-  it('recovers a verified durable result after a page refresh', async () => {
-    store().addVideo(makeVideo({
-      id: 'recover_me',
-      url: provenance.sourceUrl,
-      runId: 'wrun_recovered',
-      status: 'processing',
-      progress: 10,
-    }));
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({
-      ok: true,
-      runId: 'wrun_recovered',
-      runStatus: 'completed',
-      result: {
-        url: provenance.sourceUrl,
-        transcriptChars: 70,
-        actionCount: 1,
-        provider: 'gateway:google/gemini-2.5-flash',
-        actions: [{ tool: 'review_action', status: 'proposed' }],
-        provenance,
-        quality,
-        analysis: {
-          title: 'Recovered Video',
-          summary: 'Recovered from the persisted durable run.',
-          transcript: [{
-            start: 0,
-            duration: 12,
-            text: 'This is verified source speech with enough content for the quality gate.',
-          }],
-          events: [],
-          actions: [],
-          topics: ['recovery'],
-          architectureCode: '',
-          ingestScript: '',
-          e22Snippets: [],
-          provenance,
-          quality,
-        },
-      },
-    })));
-
-    await store().resumeProcessingRuns();
-
-    const recovered = store().videos.find((video) => video.id === 'recover_me')!;
-    expect(recovered.status).toBe('complete');
-    expect(recovered.progress).toBe(100);
-    expect(recovered.title).toBe('Recovered Video');
-    expect(recovered.quality?.passed).toBe(true);
-    expect(store().activities.some((activity) => activity.event.includes('Recovered verified durable run'))).toBe(true);
-  });
-
-  it('does not restart processing records that never received a durable run id', async () => {
-    store().addVideo(makeVideo({ id: 'no_run_id', status: 'processing', progress: 0 }));
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-
-    await store().resumeProcessingRuns();
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(store().videos[0].status).toBe('processing');
-  });
-});
-
-describe('dashboard-store · dispatchToAgents / refreshAgentStatus', () => {
-  it('dispatches the video events and stores returned executions', async () => {
-    store().addVideo(
-      makeVideo({ id: 'v1', events: [{ id: 'e1', type: 'action', title: 'Do X', confidence: 0.9 }] }),
-    );
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({
-        dispatch_id: 'dsp_1',
-        executions: [{ agent_id: 'a1', agent_type: 'analyzer', status: 'running', progress: 0 }],
-      }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    await store().dispatchToAgents('v1');
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/agents/dispatch', expect.objectContaining({ method: 'POST' }));
-    expect(store().videos[0].agents).toHaveLength(1);
-    expect(store().videos[0].agents![0].agent_id).toBe('a1');
-    expect(store().activities.some((a) => a.event.includes('Dispatched 1 agents'))).toBe(true);
-  });
-
-  it('reports honestly when the agent backend is offline (503)', async () => {
-    store().addVideo(
-      makeVideo({ id: 'v1', events: [{ id: 'e1', type: 'action', title: 'Do X', confidence: 0.9 }] }),
-    );
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({ error: 'nope' }, false, 503)));
-
-    await store().dispatchToAgents('v1');
-
-    expect(store().videos[0].agents).toBeUndefined();
-    expect(store().activities.some((a) => a.event.includes('Agent backend offline'))).toBe(true);
-  });
-
-  it('skips dispatch when the video has no events', async () => {
-    store().addVideo(makeVideo({ id: 'v1' }));
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    await store().dispatchToAgents('v1');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('refreshAgentStatus polls only running agents and merges updates', async () => {
-    store().addVideo(
-      makeVideo({
-        id: 'v1',
-        agents: [
-          { agent_id: 'a1', agent_type: 'analyzer', status: 'running', progress: 30 },
-          { agent_id: 'a2', agent_type: 'content_creator', status: 'complete', progress: 100 },
-        ],
-      }),
-    );
-    const fetchMock = vi.fn().mockResolvedValueOnce(
-      jsonResponse({ agent_id: 'a1', status: 'complete', progress: 100, result: { output: 'done' } }),
-    );
-    vi.stubGlobal('fetch', fetchMock);
-
-    await store().refreshAgentStatus('v1');
-
-    expect(fetchMock).toHaveBeenCalledTimes(1); // only the running agent is polled
-    const a1 = store().videos[0].agents!.find((a) => a.agent_id === 'a1')!;
-    expect(a1.status).toBe('complete');
-    expect(a1.progress).toBe(100);
-  });
-
-  it('refreshAgentStatus is a no-op when nothing is running', async () => {
-    store().addVideo(
-      makeVideo({ id: 'v1', agents: [{ agent_id: 'a1', agent_type: 'x', status: 'complete', progress: 100 }] }),
-    );
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    await store().refreshAgentStatus('v1');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});
-
-describe('dashboard-store · deployPipeline (mocked fetch)', () => {
-  it('records the deployment result on success', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce(
-        jsonResponse({
-          status: 'success',
-          result: {
-            live_url: 'https://live.example',
-            github_repo: 'octo/repo',
-            build_status: 'passing',
-            code_generation: { framework: 'next', files_created: ['index.ts'], entry_point: 'index.ts' },
-            deployment: { status: 'ready', platforms: ['vercel'], urls: {} },
-            features_implemented: [],
-          },
-        }),
-      ),
-    );
-    await store().deployPipeline('https://youtu.be/x');
-    const video = store().videos[0];
-    expect(video.status).toBe('complete');
-    expect(video.pipelineResult?.live_url).toBe('https://live.example');
-    expect(video.pipelineResult?.github_repo).toBe('octo/repo');
-    expect(store().activities.some((a) => a.event.includes('live.example'))).toBe(true);
-  });
-
-  it('preserves a deploy failure when the pipeline call errors', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse({}, false, 500)));
-    await store().deployPipeline('https://youtu.be/x');
-    expect(store().videos[0].status).toBe('failed');
-    expect(store().videos[0].title).toContain('Deployment blocked');
-    expect(store().videos[0].pipelineResult?.build_status).toBe('failed_backend_unavailable');
-    expect(store().videos[0].failure?.stage).toBe('deployment');
-  });
-});
-
-describe('dashboard-store · performSearch (mocked fetch)', () => {
-  it('clears results and skips the request for an empty query', async () => {
-    const fetchMock = vi.fn();
-    vi.stubGlobal('fetch', fetchMock);
-    await store().performSearch('v1', '   ');
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(store().searchResults).toEqual([]);
-  });
-
-  it('stores results on a successful search', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValueOnce(
-        jsonResponse({ results: [{ start: 0, duration: 2, text: 'hit', score: 0.9 }] }),
-      ),
-    );
-    await store().performSearch('v1', 'query');
-    expect(store().searchResults).toHaveLength(1);
-    expect(store().searchResults[0].text).toBe('hit');
-    expect(store().searchLoading).toBe(false);
-  });
-
-  it('records an error activity and clears results when the search fails', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(jsonResponse('boom', false, 500)));
-    await store().performSearch('v1', 'query');
-    expect(store().searchResults).toEqual([]);
-    expect(store().activities.some((a) => a.type === 'error')).toBe(true);
-    expect(store().searchLoading).toBe(false);
   });
 });

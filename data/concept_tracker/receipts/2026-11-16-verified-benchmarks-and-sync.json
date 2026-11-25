@@ -23,10 +23,15 @@
     }
   },
   "evidence": {
-    "web_vitest": "78 test files, 467/467 tests passed",
-    "python_pytest": "94/94 tests passed (test_speech_to_text_service.py + test_agent_graph_loops.py)",
+    "web_vitest": "11/11 focused tests passed (verified-benchmarks.test.ts + linked-sop.test.ts) with SHA-256 integrity checks",
+    "python_pytest": "96/96 tests passed (test_speech_to_text_service.py + test_agent_graph_loops.py)",
     "eslint": "0 errors, 0 warnings",
-    "neon_db": "concept_tracker schema live with 7 concepts, 1 term collision, 1 relationship, and synced execution receipts"
+    "pr_review_threads_resolved": [
+      "vercel[bot] #4585205872: verified-benchmarks.ts sha256 digests aligned with transcriptTextFromSegments",
+      "vercel[bot] #4585205886: AgentGraph.execute_pipeline halts with success=False on non-ok AgentResult",
+      "vercel[bot] #4585205900: AgentGraph.execute_pipeline enforces max_steps cycle termination guard"
+    ],
+    "neon_db": "concept_tracker schema live with 7 concepts, 1 term collision, 1 relationship, 2 contradictions, and synced execution receipts"
   },
   "decisions": [
     {
@@ -42,26 +47,27 @@
   ],
   "exact_mutation": {
     "files_modified": [
-      "apps/web/src/app/features/page.tsx",
-      "apps/web/src/app/layout.tsx",
-      "apps/web/src/components/Nav.tsx",
-      "apps/web/src/components/OneLoopStudio.tsx",
+      "src/youtube_extension/services/agents/adapters/agent_orchestrator.py",
       "src/youtube_extension/services/ai/speech_to_text_service.py",
-      "tests/unit/test_speech_to_text_service.py",
-      ".remember/now.md"
+      "tests/unit/test_speech_to_text_service.py"
     ],
     "files_created": [
-      "apps/web/src/lib/verified-benchmarks.ts",
-      "apps/web/src/lib/__tests__/verified-benchmarks.test.ts",
+      "docs/architecture/HARNESS_DECOUPLING_SPEC.md",
+      "data/concept_tracker/migrations/001_sync_concept_tracker.sql",
+      "data/concept_tracker/receipts/2026-09-08-yc-harness-deep-dive.json",
       "data/concept_tracker/receipts/2026-11-16-verified-benchmarks-and-sync.json",
-      ".remember/today-2026-11-16.done.md"
+      "src/youtube_extension/services/agents/agent_graph.py",
+      "src/youtube_extension/services/agents/agent_handoff.py",
+      "tests/unit/test_agent_graph_loops.py",
+      "apps/web/src/lib/verified-benchmarks.ts",
+      "apps/web/src/lib/__tests__/verified-benchmarks.test.ts"
     ],
-    "git_branch": "feat/one-loop-studio"
+    "git_branch": "feat/yc-harness-concept-tracker-and-stt-config"
   },
   "owner": "autonomous-orchestrator",
   "state": "IMPLEMENTED_AND_TESTED",
-  "verification_result": "PASSED (467/467 web tests, Python STT + AgentGraph unit tests, 0 ESLint warnings, Neon DB synced)",
+  "verification_result": "PASSED (11/11 focused web tests with SHA-256 checks, 96/96 Python STT + AgentGraph unit tests, 0 ESLint warnings, 3 vercel[bot] review items fixed, Neon DB synced)",
   "failures": [],
   "blockers": [],
-  "next_action": "Push feat/one-loop-studio and open/update PR for review"
+  "next_action": "Await final CI rerun and human merge approval on PR #2681"
 }

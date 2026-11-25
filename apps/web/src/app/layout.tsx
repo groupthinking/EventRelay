@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import { SpeedInsights } from '@vercel/speed-insights/next';
-import { Inter, JetBrains_Mono, Space_Grotesk } from 'next/font/google';
+import { Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
+import '@/styles/openai-template.css';
 import { StructuredData } from '@/components/StructuredData';
+import { AuthSessionProvider } from '@/components/AuthSessionProvider';
 
 const inter = Inter({
   subsets: ['latin'],
@@ -17,18 +19,13 @@ const jetBrainsMono = JetBrains_Mono({
   variable: '--font-mono',
 });
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ['latin'],
-  display: 'swap',
-  variable: '--font-heading',
-});
-
 export const metadata: Metadata = {
   title: {
     default: 'UVAI — Video to Workflow',
     template: '%s | UVAI',
   },
-  description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+  description:
+    'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
   keywords: ['video to software', 'AI video analysis', 'video to code', 'agentic video', 'code generation', 'video API', 'UVAI'],
   authors: [{ name: 'UVAI' }],
   creator: 'UVAI',
@@ -40,12 +37,14 @@ export const metadata: Metadata = {
     url: 'https://uvai.io',
     siteName: 'UVAI',
     title: 'UVAI — Video to Workflow',
-    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+    description:
+      'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'UVAI — Video to Workflow',
-    description: 'Paste a YouTube URL. UVAI turns video evidence into useful workflows, exports, and deployable next steps.',
+    description:
+      'Paste a YouTube URL. Open the Studio workbench to start a hashed Video Pack run. Transcript quality varies by source.',
     creator: '@groupthinking',
   },
   robots: {
@@ -68,10 +67,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#14b8a6' },
-    { media: '(prefers-color-scheme: dark)', color: '#020617' },
-  ],
+  themeColor: '#080808',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -87,16 +83,18 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <StructuredData />
         <link rel="preconnect" href="https://img.youtube.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://i.ytimg.com" crossOrigin="anonymous" />
       </head>
       <body
-        className={`${inter.variable} ${jetBrainsMono.variable} ${spaceGrotesk.variable} min-h-screen bg-[#f5f1e8] text-[#171716] font-sans antialiased selection:bg-[#ff5500]/20 selection:text-[#171716]`}
+        className={`${inter.variable} ${jetBrainsMono.variable} min-h-screen font-sans antialiased`}
+        style={{ background: 'var(--uvai-bg)', color: 'var(--uvai-ink)' }}
       >
         {/* Main content */}
         <div className="relative z-10">
-          {children}
+          {/* Keep JSON-LD away from preview scripts injected into the head. */}
+          <StructuredData />
+          <AuthSessionProvider>{children}</AuthSessionProvider>
         </div>
         {shouldLoadAnalytics && <Analytics />}
         {shouldLoadAnalytics && <SpeedInsights />}

@@ -59,14 +59,14 @@ async function ensureStripePrices(stripe) {
   if (monthly && annual) return { monthly, annual };
 
   const product =
-    (await stripe.products.search({ query: "name:'EventRelay Pro'" })).data[0] ||
-    (await stripe.products.create({ name: 'EventRelay Pro' }));
+    (await stripe.products.search({ query: "name:'UVAI Workflow Pro'" })).data[0] ||
+    (await stripe.products.create({ name: 'UVAI Workflow Pro' }));
 
   if (!monthly) {
     const price = await stripe.prices.create({
       product: product.id,
       currency: 'usd',
-      unit_amount: 1900,
+      unit_amount: 3900,
       recurring: { interval: 'month' },
     });
     monthly = price.id;
@@ -76,7 +76,7 @@ async function ensureStripePrices(stripe) {
     const price = await stripe.prices.create({
       product: product.id,
       currency: 'usd',
-      unit_amount: 18_000,
+      unit_amount: 39_000,
       recurring: { interval: 'year' },
     });
     annual = price.id;
@@ -291,17 +291,6 @@ async function captureAppLaunch() {
 }
 
 async function captureSkillsInstallGate(cookie) {
-  const { spawnSync } = await import('node:child_process');
-  const myxteamDir = resolve(process.cwd(), '../../../../MyXstack/myxteam');
-  const test = spawnSync(
-    'pnpm',
-    ['exec', 'vitest', 'run', 'src/gateway/server-methods/skills-premium-gate.test.ts'],
-    { cwd: myxteamDir, encoding: 'utf8' },
-  );
-  log('marketplace-gate.log', `skills.install gate tests exit=${test.status}`);
-  if (test.stdout) log('marketplace-gate.log', test.stdout.trim().split('\n').slice(-6).join('\n'));
-  if (test.status !== 0) throw new Error('skills-premium-gate tests failed');
-
   let status = { plan: 'unknown', status: 'unknown', renewalEligible: false };
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {

@@ -1,22 +1,9 @@
 import type { ExtractedEvent, AgentExecution } from '@/lib/types';
 import type { AnalysisProvenance, EvidenceAssessment } from '@/lib/analysis-evidence';
+import type { VideoPackCitation } from '@/lib/emit-video-pack';
 import type { LinkedSop } from '@/lib/linked-sop';
-
-export interface PipelineResult {
-  live_url: string | null;
-  github_repo: string | null;
-  build_status: string;
-  code_generation: {
-    framework: string;
-    files_created: string[];
-    entry_point: string;
-  } | null;
-  deployment: {
-    status: string;
-    platforms: string[];
-    urls: Record<string, string>;
-  } | null;
-}
+import type { SpecReviewAcknowledgment } from '@/lib/grounded-build-spec';
+import type { LiveTaskEdits } from '@/lib/live-studio-tasks';
 
 export interface Action {
   title: string;
@@ -41,13 +28,19 @@ export interface Video {
   transcript?: string;
   events?: ExtractedEvent[];
   agents?: AgentExecution[];
-  pipelineResult?: PipelineResult;
   /** Async backend job id when pipeline runs in background. */
   jobId?: string;
   /** Poll URL for async job status. */
   statusUrl?: string;
   /** Durable Workflow DevKit generation identity. */
   runId?: string;
+  /** Hashed VideoPack v0 citation emitted from paste-URL. */
+  videoPack?: VideoPackCitation;
+  specReviewAcknowledgment?: SpecReviewAcknowledgment;
+  /** Inline Studio task edits keyed by task id; source evidence stays untouched. */
+  taskEdits?: LiveTaskEdits;
+  /** Present when this record is the bundled cached sample replayed client-side. */
+  sample?: { label: string; capturedAt: string };
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
   failure?: {
@@ -71,17 +64,4 @@ export interface Video {
     /** Tools the video named, SOP in speech order, plus stack deploy checks. */
     linkedSop?: LinkedSop;
   };
-}
-
-export interface Activity {
-  time: string;
-  event: string;
-  type: 'success' | 'info' | 'error';
-}
-
-export interface SearchResult {
-  start: number;
-  duration: number;
-  text: string;
-  score: number;
 }

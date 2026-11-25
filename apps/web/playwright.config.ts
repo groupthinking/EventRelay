@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { buildVercelProtectionBypassHeaders } from './src/lib/e2e-preview-auth';
 
 /**
  * Playwright configuration for UVAI/EventRelay smoke tests.
@@ -8,13 +9,9 @@ import { defineConfig, devices } from '@playwright/test';
  * - Automatic Vercel Protection Bypass when VERCEL_AUTOMATION_BYPASS_SECRET is set.
  */
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
-const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
-
-const extraHTTPHeaders: Record<string, string> = {};
-if (VERCEL_BYPASS_SECRET) {
-  extraHTTPHeaders['x-vercel-protection-bypass'] = VERCEL_BYPASS_SECRET;
-  extraHTTPHeaders['x-vercel-set-bypass-cookie'] = 'true';
-}
+const extraHTTPHeaders = buildVercelProtectionBypassHeaders(
+  process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+);
 
 export default defineConfig({
   testDir: './playwright',

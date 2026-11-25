@@ -982,15 +982,41 @@ class TestOpenAIAdapter:
         )
         assert result is False
 
-    async def test_initialize_rejects_loopback_https_base_url(self) -> None:
+    async def test_initialize_rejects_loopback_https_base_url(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "OPENAI_ALLOWED_BASE_URLS", "https://loopback.example/v1"
+        )
         adapter = OpenAIAdapter()
-        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://127.0.0.1"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[_dns_result("127.0.0.1")],
+        ) as getaddrinfo:
+            result = await adapter.initialize(
+                {"api_key": "sk-test", "base_url": "https://loopback.example/v1"}
+            )
         assert result is False
+        getaddrinfo.assert_called_once_with(
+            "loopback.example", 443, type=_pb_mod.socket.SOCK_STREAM
+        )
 
-    async def test_initialize_rejects_private_https_base_url(self) -> None:
+    async def test_initialize_rejects_private_https_base_url(self, monkeypatch) -> None:
+        monkeypatch.setenv(
+            "OPENAI_ALLOWED_BASE_URLS", "https://private.example/v1"
+        )
         adapter = OpenAIAdapter()
-        result = await adapter.initialize({"api_key": "sk-test", "base_url": "https://10.1.2.3"})
+        with patch.object(
+            _pb_mod.socket,
+            "getaddrinfo",
+            return_value=[_dns_result("10.1.2.3")],
+        ) as getaddrinfo:
+            result = await adapter.initialize(
+                {"api_key": "sk-test", "base_url": "https://private.example/v1"}
+            )
         assert result is False
+        getaddrinfo.assert_called_once_with(
+            "private.example", 443, type=_pb_mod.socket.SOCK_STREAM
+        )
 
     async def test_initialize_rejects_hostname_with_mixed_resolution(
         self, monkeypatch
@@ -1487,3 +1513,15 @@ class TestSendAiRequest:
 
         resp = await send_ai_request({"cmd": "test"}, protocol=ProtocolType.OPENAI)
         assert resp["protocol"] == "openai"
+
+
+@pytest.mark.parametrize("model", ["gemini-2.5-pro", "gemini-3.8-flash"])
+async def test_google_adapter_sampling_policy(model):
+    adapter = GoogleAIAdapter()
+    await adapter.initialize({"api_key": "test-key"})
+    response = MagicMock(text="result", candidates=[], usage_metadata=None)
+    adapter._client.models.generate_content = MagicMock(return_value=response)
+    context = _ctx_mod.get_context_manager().create_context(user="u", task="t", intent="i")
+    await adapter.send_request({"model": model, "prompt": "test", "temperature": .3, "max_tokens": 123}, context)
+    config = vars(adapter._client.models.generate_content.call_args.kwargs["config"])
+    assert config == ({"max_output_tokens": 123, "temperature": .3} if model.startswith("gemini-2") else {"max_output_tokens": 123})

@@ -1,0 +1,56 @@
+/**
+ * UVAI pack tokens — option 1 (issue #2197 pivot).
+ * Default: light, calm, chat-first ("Ask about this pack").
+ * Dark enterprise telemetry stays opt-in via [data-pack-theme="enterprise-dark"].
+ *
+ * Client-safe: no node: imports (this module ships in the /studio client
+ * bundle via emit-app-builder-sandbox). Drift against
+ * `../styles/uvai-enterprise-tokens.css` is guarded by
+ * `__tests__/uvai-enterprise-tokens.test.ts`.
+ */
+export const UVAI_ENTERPRISE_TOKENS_CSS = `:root {
+  --uvai-surface: #ffffff;
+  --uvai-elevated: #f8fafc;
+  --uvai-panel: #f1f5f9;
+  --uvai-border: #e2e8f0;
+  --uvai-primary: #0c5cab;
+  --uvai-primary-hover: #0a4a8a;
+  --uvai-accent: #0c5cab;
+  --uvai-success: #15803d;
+  --uvai-warning: #b45309;
+  --uvai-danger: #b91c1c;
+  --uvai-text: #0f172a;
+  --uvai-muted: #475569;
+  --uvai-focus-ring: var(--uvai-primary);
+  --uvai-grid-unit: 8px;
+  --uvai-font-sans: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  --uvai-font-display: Georgia, "Times New Roman", serif;
+}
+
+:root[data-pack-theme="enterprise-dark"] {
+  --uvai-surface: #09090b;
+  --uvai-elevated: #111827;
+  --uvai-panel: #1f2937;
+  --uvai-border: #374151;
+  --uvai-primary: #0c5cab;
+  --uvai-primary-hover: #0a4a8a;
+  --uvai-accent: #38bdf8;
+  --uvai-success: #10b981;
+  --uvai-warning: #f59e0b;
+  --uvai-danger: #ef4444;
+  --uvai-text: #fafafa;
+  --uvai-muted: #9ca3af;
+  --uvai-focus-ring: var(--uvai-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --uvai-motion-safe: 0;
+  }
+}
+`;
+
+/** Enterprise design tokens CSS block (issue #2197 P0). */
+export function uvaiEnterpriseTokensCss(): string {
+  return UVAI_ENTERPRISE_TOKENS_CSS;
+}

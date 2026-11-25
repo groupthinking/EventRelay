@@ -27,6 +27,8 @@ def generate():
     ]
     generate_content_config = types.GenerateContentConfig(
         thinking_config = types.ThinkingConfig(
+            # Generate Content on Gemini 2.5 supports dynamic thinking (-1).
+            # Gemini 3 requires model-supported thinking_level values instead.
             thinking_budget=-1,
         ),
         tools=tools,

@@ -7,9 +7,10 @@ import 'server-only';
  * transcripts, descriptions, chapters, and metadata from YouTube videos.
  * Based on the UVAI PK=998 implementation pattern.
  *
- * Uses gemini-2.5-flash with responseSchema when a real transcript is available.
- * When no transcript exists, falls back to googleSearch grounding without schema
- * (gemini-2.5-flash cannot combine responseSchema + googleSearch).
+ * Uses GEMINI_STRUCTURED_MODEL with responseSchema when a real transcript is available.
+ * Without a transcript, uses GEMINI_SEARCH_MODEL with googleSearch grounding and no schema.
+ * Both default to Gemini 3.8 Flash; the separate request shapes preserve compatibility
+ * with older model overrides that cannot combine responseSchema and googleSearch.
  */
 
 import { Type } from '@google/genai';
@@ -61,6 +62,9 @@ export interface VideoAnalysisResult {
   project_scaffold?: unknown;
   provenance?: AnalysisProvenance;
   quality?: EvidenceAssessment;
+  /** Machine-readable marker for transcript-only timeout/abort fallbacks. */
+  degraded?: true;
+  degradationReason?: 'structured-analysis-timeout';
 }
 
 export interface VerifiedVideoEvidence {
@@ -181,6 +185,48 @@ DATA STRUCTURE REQUIREMENTS:
 === ACTUAL VIDEO TRANSCRIPT ===
 ${actualTranscript}
 === END TRANSCRIPT ===`;
+}
+
+/**
+ * Build an honest degraded result when transcript retrieval succeeded but the
+ * structured provider call exhausted its budget. The transcript is preserved
+ * verbatim; fields that require model analysis remain empty.
+ */
+export function buildTranscriptOnlyAnalysis(actualTranscript: string): VideoAnalysisResult {
+  const normalizedTranscript = actualTranscript.trim();
+  const wordCount = normalizedTranscript ? normalizedTranscript.split(/\s+/).length : 0;
+
+  return {
+    title: 'Transcript captured — structured analysis unavailable',
+    summary:
+      `Captured ${wordCount} words from the video source. Structured AI analysis did not complete.`,
+    transcript: normalizedTranscript
+      ? [{ start: 0, duration: 0, text: actualTranscript }]
+      : [],
+    events: [],
+    actions: [],
+    topics: [],
+    architectureCode: '',
+    ingestScript: '',
+    e22Snippets: [],
+    degraded: true,
+    degradationReason: 'structured-analysis-timeout',
+  };
+}
+
+function isAbortOrTimeout(error: unknown): boolean {
+  const name = error instanceof Error ? error.name : '';
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+
+  return (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    normalized.includes('timed out') ||
+    normalized.includes('timeout') ||
+    normalized.includes('deadline_exceeded') ||
+    normalized.includes('deadline exceeded')
+  );
 }
 
 // Utility to delay operations
@@ -380,6 +426,14 @@ export async function analyzeVideoWithGemini(
       return finalize(parseAnalysisResult(resultText));
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+
+      if (actualTranscript && isAbortOrTimeout(error)) {
+        console.warn(
+          '[Video Analyzer] Structured analysis timed out after transcript capture; returning transcript-only result.',
+        );
+        return buildTranscriptOnlyAnalysis(actualTranscript);
+      }
+
       const retryable =
         error instanceof AnalysisParseError ||
         errorMessage.includes('503') ||

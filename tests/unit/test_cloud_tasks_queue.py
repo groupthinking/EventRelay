@@ -18,6 +18,7 @@ import json
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -1332,43 +1333,66 @@ class TestEnqueueBatchConcurrency:
         ]
 
     async def test_batch_enqueues_concurrently(self):
-        """Wall time must be far below the serial sum of RPC latencies.
+        """Every task in the batch must be inside the RPC at the same time.
 
-        The fan-out bound is pinned to ``count`` for this timing-only test so the
-        assertion measures *that* the batch fans out, independent of the host's
-        CPU count. Left unpinned, ``_ENQUEUE_MAX_CONCURRENCY`` floors at 2 on a
-        single-CPU runner, making 8x50 ms take four waves (200 ms) and tripping
-        the ``< serial_floor / 2`` (200 ms) bound. The derived value itself is
+        A wall-clock bound (``elapsed < serial_sum / 2``) fails when the process
+        default executor is already busy: ``asyncio.to_thread`` then queues the
+        blocking calls and the batch looks serial even though ``enqueue_batch``
+        fans out. Pin the semaphore to ``count`` and run the RPCs on a private
+        pool of that size, then require a barrier of ``count`` waiters. A serial
+        implementation never reaches the barrier. The derived cap itself is
         exercised by ``test_batch_bounds_in_flight_concurrency`` below.
         """
-        count, delay = 8, 0.05
+        count = 8
         mock_tv2 = _routing_tasks_v2()
         svc = _initialized_service(mock_tv2)
+        # All count RPCs must enter before any returns. Timeout fails the
+        # barrier if the batch is serial or the semaphore ignores the pin.
+        entered = threading.Barrier(count, timeout=2)
+        barrier_errors: list[BaseException] = []
 
         def create_task(request=None, **_kwargs):
-            time.sleep(delay)  # stand-in for the blocking gRPC round-trip
+            try:
+                entered.wait()
+            except threading.BrokenBarrierError as exc:
+                barrier_errors.append(exc)
+                raise
             response = MagicMock()
             response.name = f"projects/p/locations/l/queues/q/tasks/{_video_id_of(request)}"
             return response
 
         svc.client.create_task.side_effect = create_task
 
-        with (
-            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
-            patch.object(m, "tasks_v2", mock_tv2),
-            patch.object(m, "_ENQUEUE_MAX_CONCURRENCY", count),
-        ):
-            started = time.perf_counter()
-            ids = await svc.enqueue_batch(self._video_tasks(count))
-            elapsed = time.perf_counter() - started
-
-        assert len(ids) == count
-        serial_floor = count * delay
-        assert elapsed < serial_floor / 2, (
-            f"enqueue_batch took {elapsed * 1000:.0f}ms for {count} tasks; "
-            f"a serial implementation needs >={serial_floor * 1000:.0f}ms, so this "
-            f"is still serial"
+        loop = asyncio.get_running_loop()
+        # Drop a semaphore cached by an earlier test on this loop so the pin
+        # below is the limit this batch actually uses.
+        m._ENQUEUE_SEMAPHORES_BY_LOOP.pop(loop, None)
+        executor = ThreadPoolExecutor(
+            max_workers=count, thread_name_prefix="enqueue-batch-concurrency"
         )
+        previous_executor = getattr(loop, "_default_executor", None)
+        loop.set_default_executor(executor)
+        try:
+            with (
+                patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+                patch.object(m, "tasks_v2", mock_tv2),
+                patch.object(m, "_ENQUEUE_MAX_CONCURRENCY", count),
+            ):
+                ids = await svc.enqueue_batch(self._video_tasks(count))
+        finally:
+            if previous_executor is not None:
+                loop.set_default_executor(previous_executor)
+            else:
+                loop.set_default_executor(
+                    ThreadPoolExecutor(thread_name_prefix="asyncio-default-restored")
+                )
+            executor.shutdown(wait=True)
+
+        assert not barrier_errors, (
+            "enqueue_batch did not have all RPCs in flight together; "
+            "a serial implementation cannot satisfy the barrier"
+        )
+        assert len(ids) == count
 
     async def test_batch_bounds_in_flight_concurrency(self):
         """Fan-out is capped so the shared thread pool is not monopolised."""
@@ -1452,6 +1476,50 @@ class TestEnqueueBatchConcurrency:
             f"two overlapping batches reached {peak} concurrent RPCs, but the "
             f"limit is {m._ENQUEUE_MAX_CONCURRENCY}; the limiter is not shared "
             f"across calls"
+        )
+
+    async def test_distinct_services_share_the_process_bound(self):
+        """Distinct services in one worker must still respect the process bound."""
+        per_batch = 12
+        mock_tv2 = _routing_tasks_v2()
+        first_service = _initialized_service(mock_tv2)
+        second_service = _initialized_service(mock_tv2)
+
+        lock = threading.Lock()
+        in_flight = 0
+        peak = 0
+
+        def create_task(request=None, **_kwargs):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            time.sleep(0.02)
+            with lock:
+                in_flight -= 1
+            response = MagicMock()
+            response.name = f"projects/p/locations/l/queues/q/tasks/{_video_id_of(request)}"
+            return response
+
+        first_service.client.create_task.side_effect = create_task
+        second_service.client.create_task.side_effect = create_task
+
+        with (
+            patch.object(m, "CLOUD_TASKS_AVAILABLE", True),
+            patch.object(m, "tasks_v2", mock_tv2),
+        ):
+            first, second = await asyncio.gather(
+                first_service.enqueue_batch(self._video_tasks(per_batch, prefix="a")),
+                second_service.enqueue_batch(self._video_tasks(per_batch, prefix="b")),
+            )
+
+        assert len(first) == per_batch
+        assert len(second) == per_batch
+        assert peak > 1, "expected concurrent fan-out, observed a serial drain"
+        assert peak <= m._ENQUEUE_MAX_CONCURRENCY, (
+            f"two services reached {peak} concurrent RPCs, but the process limit "
+            f"is {m._ENQUEUE_MAX_CONCURRENCY}; the limiter is not shared across "
+            f"service instances"
         )
 
     async def test_ids_follow_input_order_despite_completion_order(self):

@@ -68,6 +68,8 @@ export function filterSegments(
   segments: readonly TranscriptSegment[],
   { search, speaker }: TranscriptFilter,
 ): TranscriptSegment[] {
+  if (!search && !speaker) return segments as TranscriptSegment[];
+
   // Hoisted out of the loop: removes N toLowerCase() allocations per keystroke
   // update on long transcripts. This is the optimization PR #972 shipped.
   const lowerSearchQuery = search ? search.toLowerCase() : '';

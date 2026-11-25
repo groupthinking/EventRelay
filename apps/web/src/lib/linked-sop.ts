@@ -3,39 +3,14 @@
  *
  * After verified captions land, label the tools the video named, attach only
  * official docs, and turn speech order into a checklist. Unknown names do not
- * get invented URLs. Stack checklists (Vercel Deployment Checks, GitHub Actions)
- * are appended only when that stack is actually in the transcript.
- *
- * Each named process in the video includes hyperlinks to all labeled tools
- * referenced or required at that milestone. Processes required to achieve the
- * intent goal of the video that were not specifically named in speech (such as
- * environment/secret provisioning, dependency installation, and preflight test
- * gates) are synthesized, classified as 'implied', and labeled as
- * 'Required by intent (unstated)'.
+ * get invented URLs. Stack checklists (Vercel Deployment Checks, Shopify CLI)
+ * are appended only from pack.stack.tools — never from hallucinated topics.
  */
 
 import { formatSeconds } from '@/lib/timestamp';
+import type { VideoPackStackTool } from '@/lib/video-pack-types';
 
 export type EntityKind = 'tool' | 'product' | 'process' | 'platform';
-export type ProcessType = 'named' | 'implied';
-export type ToolCategory =
-  | 'ai'
-  | 'hosting'
-  | 'database'
-  | 'payments'
-  | 'automation'
-  | 'framework'
-  | 'comms'
-  | 'workspace'
-  | 'vcs'
-  | 'commerce';
-
-export interface ProcessToolLink {
-  name: string;
-  kind: EntityKind;
-  officialUrl: string;
-  docsUrl?: string;
-}
 
 export interface LinkedEntity {
   name: string;
@@ -54,18 +29,11 @@ export interface SopStep {
   timestamp?: number;
   quote?: string;
   entityNames: string[];
-  /** Hyperlinks to official vendor documentation/sites for tools labeled in this process */
-  tools?: ProcessToolLink[];
-  /** Classification: 'named' (explicitly in video) vs 'implied' (required by intent, unstated) */
-  processType?: ProcessType;
-  /** UI badge / label describing origin: 'Named in video' | 'Required by intent (unstated)' */
-  processLabel?: string;
 }
 
 export interface ChecklistItem {
   id: string;
-  source: 'video-sop' | 'intent-required' | 'stack';
-  processType?: ProcessType;
+  source: 'video-sop' | 'stack';
   stack?: string;
   title: string;
   href?: string;
@@ -73,7 +41,6 @@ export interface ChecklistItem {
 }
 
 export interface LinkedSop {
-  intentGoal?: string;
   entities: LinkedEntity[];
   steps: SopStep[];
   checklist: ChecklistItem[];
@@ -86,21 +53,16 @@ export interface CatalogEntry {
   officialUrl: string;
   docsUrl?: string;
   stack?: string;
-  category?: ToolCategory;
-  requiresCredentials?: boolean;
-  packageName?: string;
-  /** Optional guard for ambiguous terms (e.g. 'react') to prevent English-verb false positives. */
-  contextPattern?: RegExp | ((text: string) => boolean);
 }
 
 export interface LinkedSopInput {
-  title?: string;
-  summary?: string;
   transcript?: string;
   segments?: Array<{ start: number; duration?: number; text: string }>;
   events?: Array<{ timestamp?: number; label?: string; title?: string; description?: string }>;
   actions?: Array<{ title?: string; description?: string; category?: string }>;
   topics?: string[];
+  /** Industry stack checks are generated only from these pack-grounded tools. */
+  packTools?: VideoPackStackTool[] | null;
 }
 
 interface StackCheck {
@@ -112,15 +74,20 @@ interface StackCheck {
 /** Official vendor docs only. Aliases are matched in the transcript, longest first. */
 export const OFFICIAL_CATALOG: CatalogEntry[] = [
   {
+    name: 'Shopify CLI',
+    aliases: ['shopify cli'],
+    kind: 'tool',
+    officialUrl: 'https://shopify.dev/docs/api/shopify-cli',
+    docsUrl: 'https://shopify.dev/docs/api/shopify-cli',
+    stack: 'shopify',
+  },
+  {
     name: 'Shopify',
     aliases: ['shopify'],
     kind: 'platform',
     officialUrl: 'https://shopify.dev',
     docsUrl: 'https://shopify.dev/docs',
     stack: 'shopify',
-    category: 'commerce',
-    requiresCredentials: true,
-    packageName: '@shopify/shopify-api',
   },
   {
     name: 'Vercel',
@@ -129,8 +96,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://vercel.com',
     docsUrl: 'https://vercel.com/docs/deployments',
     stack: 'vercel',
-    category: 'hosting',
-    requiresCredentials: true,
   },
   {
     name: 'Next.js',
@@ -139,9 +104,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://nextjs.org',
     docsUrl: 'https://nextjs.org/docs',
     stack: 'vercel',
-    category: 'framework',
-    requiresCredentials: false,
-    packageName: 'next',
   },
   {
     name: 'GitHub',
@@ -150,8 +112,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     officialUrl: 'https://github.com',
     docsUrl: 'https://docs.github.com',
     stack: 'github',
-    category: 'vcs',
-    requiresCredentials: true,
   },
   {
     name: 'Beehiiv',
@@ -159,8 +119,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://www.beehiiv.com',
     docsUrl: 'https://developers.beehiiv.com',
-    category: 'comms',
-    requiresCredentials: true,
   },
   {
     name: 'Notion',
@@ -168,9 +126,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://www.notion.com',
     docsUrl: 'https://developers.notion.com',
-    category: 'workspace',
-    requiresCredentials: true,
-    packageName: '@notionhq/client',
   },
   {
     name: 'Gmail',
@@ -178,8 +133,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://developers.google.com/gmail',
     docsUrl: 'https://developers.google.com/gmail/api',
-    category: 'comms',
-    requiresCredentials: true,
   },
   {
     name: 'Slack',
@@ -187,36 +140,13 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://api.slack.com',
     docsUrl: 'https://api.slack.com/docs',
-    category: 'comms',
-    requiresCredentials: true,
-    packageName: '@slack/web-api',
   },
   {
     name: 'Make',
-    aliases: ['make.com', 'make scenario'],
+    aliases: ['make.com'],
     kind: 'tool',
     officialUrl: 'https://www.make.com',
     docsUrl: 'https://www.make.com/en/help',
-    category: 'automation',
-    requiresCredentials: true,
-  },
-  {
-    name: 'n8n',
-    aliases: ['n8n'],
-    kind: 'tool',
-    officialUrl: 'https://n8n.io',
-    docsUrl: 'https://docs.n8n.io',
-    category: 'automation',
-    requiresCredentials: true,
-  },
-  {
-    name: 'Zapier',
-    aliases: ['zapier'],
-    kind: 'tool',
-    officialUrl: 'https://zapier.com',
-    docsUrl: 'https://platform.zapier.com/docs',
-    category: 'automation',
-    requiresCredentials: true,
   },
   {
     name: 'Google AI Studio',
@@ -224,9 +154,7 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://aistudio.google.com',
     docsUrl: 'https://ai.google.dev',
-    category: 'ai',
-    requiresCredentials: true,
-    packageName: '@google/genai',
+    stack: 'gemini',
   },
   {
     name: 'Gemini',
@@ -234,29 +162,7 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://ai.google.dev',
     docsUrl: 'https://ai.google.dev/gemini-api/docs',
-    category: 'ai',
-    requiresCredentials: true,
-    packageName: '@google/genai',
-  },
-  {
-    name: 'OpenAI',
-    aliases: ['openai', 'chatgpt'],
-    kind: 'product',
-    officialUrl: 'https://platform.openai.com',
-    docsUrl: 'https://platform.openai.com/docs',
-    category: 'ai',
-    requiresCredentials: true,
-    packageName: 'openai',
-  },
-  {
-    name: 'Anthropic',
-    aliases: ['anthropic', 'claude'],
-    kind: 'product',
-    officialUrl: 'https://www.anthropic.com',
-    docsUrl: 'https://docs.anthropic.com',
-    category: 'ai',
-    requiresCredentials: true,
-    packageName: '@anthropic-ai/sdk',
+    stack: 'gemini',
   },
   {
     name: 'Grok',
@@ -264,8 +170,39 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://grok.com',
     docsUrl: 'https://docs.x.ai',
-    category: 'ai',
-    requiresCredentials: true,
+    stack: 'grok',
+  },
+  {
+    name: 'Webflow',
+    aliases: ['webflow', 'webflow devlink', 'webflow mcp'],
+    kind: 'platform',
+    officialUrl: 'https://webflow.com',
+    docsUrl: 'https://developers.webflow.com',
+    stack: 'webflow',
+  },
+  {
+    name: 'OpenAI',
+    aliases: ['openai', 'chatgpt', 'openai responses'],
+    kind: 'platform',
+    officialUrl: 'https://platform.openai.com',
+    docsUrl: 'https://platform.openai.com/docs',
+    stack: 'openai',
+  },
+  {
+    name: 'NVIDIA',
+    aliases: ['nvidia', 'nvidia nim'],
+    kind: 'platform',
+    officialUrl: 'https://build.nvidia.com',
+    docsUrl: 'https://docs.nvidia.com/nim',
+    stack: 'nvidia',
+  },
+  {
+    name: 'Groq',
+    aliases: ['groq', 'groqcloud'],
+    kind: 'platform',
+    officialUrl: 'https://groq.com',
+    docsUrl: 'https://console.groq.com/docs',
+    stack: 'groq',
   },
   {
     name: 'Hugging Face',
@@ -273,8 +210,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://huggingface.co',
     docsUrl: 'https://huggingface.co/docs',
-    category: 'ai',
-    requiresCredentials: true,
   },
   {
     name: 'Stripe',
@@ -282,9 +217,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'product',
     officialUrl: 'https://stripe.com',
     docsUrl: 'https://docs.stripe.com',
-    category: 'payments',
-    requiresCredentials: true,
-    packageName: 'stripe',
   },
   {
     name: 'Supabase',
@@ -292,48 +224,6 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://supabase.com',
     docsUrl: 'https://supabase.com/docs',
-    category: 'database',
-    requiresCredentials: true,
-    packageName: '@supabase/supabase-js',
-  },
-  {
-    name: 'Firebase',
-    aliases: ['firebase', 'firestore'],
-    kind: 'platform',
-    officialUrl: 'https://firebase.google.com',
-    docsUrl: 'https://firebase.google.com/docs',
-    category: 'database',
-    requiresCredentials: true,
-    packageName: 'firebase',
-  },
-  {
-    name: 'Upstash',
-    aliases: ['upstash'],
-    kind: 'platform',
-    officialUrl: 'https://upstash.com',
-    docsUrl: 'https://upstash.com/docs',
-    category: 'database',
-    requiresCredentials: true,
-    packageName: '@upstash/redis',
-  },
-  {
-    name: 'Prisma',
-    aliases: ['prisma'],
-    kind: 'tool',
-    officialUrl: 'https://www.prisma.io',
-    docsUrl: 'https://www.prisma.io/docs',
-    category: 'database',
-    requiresCredentials: false,
-    packageName: 'prisma',
-  },
-  {
-    name: 'PostgreSQL',
-    aliases: ['postgresql', 'postgres'],
-    kind: 'platform',
-    officialUrl: 'https://www.postgresql.org',
-    docsUrl: 'https://www.postgresql.org/docs',
-    category: 'database',
-    requiresCredentials: true,
   },
   {
     name: 'Cloudflare',
@@ -341,17 +231,31 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'platform',
     officialUrl: 'https://developers.cloudflare.com',
     docsUrl: 'https://developers.cloudflare.com',
-    category: 'hosting',
-    requiresCredentials: true,
+    stack: 'cloudflare',
   },
   {
-    name: 'Docker',
-    aliases: ['docker', 'dockerfile'],
+    name: 'Cloudflare Workers',
+    aliases: ['cloudflare workers'],
+    kind: 'product',
+    officialUrl: 'https://developers.cloudflare.com/workers',
+    docsUrl: 'https://developers.cloudflare.com/workers',
+    stack: 'cloudflare',
+  },
+  {
+    name: 'x402',
+    aliases: ['x402', 'x-402'],
     kind: 'tool',
-    officialUrl: 'https://www.docker.com',
-    docsUrl: 'https://docs.docker.com',
-    category: 'hosting',
-    requiresCredentials: false,
+    officialUrl: 'https://www.x402.org',
+    docsUrl: 'https://www.x402.org',
+    stack: 'x402',
+  },
+  {
+    name: 'MCP',
+    aliases: ['mcp', 'model context protocol'],
+    kind: 'tool',
+    officialUrl: 'https://modelcontextprotocol.io',
+    docsUrl: 'https://modelcontextprotocol.io/docs',
+    stack: 'mcp',
   },
   {
     name: 'FastAPI',
@@ -359,45 +263,13 @@ export const OFFICIAL_CATALOG: CatalogEntry[] = [
     kind: 'tool',
     officialUrl: 'https://fastapi.tiangolo.com',
     docsUrl: 'https://fastapi.tiangolo.com',
-    category: 'framework',
-    requiresCredentials: false,
-    packageName: 'fastapi',
-  },
-  {
-    name: 'TypeScript',
-    aliases: ['typescript'],
-    kind: 'tool',
-    officialUrl: 'https://www.typescriptlang.org',
-    docsUrl: 'https://www.typescriptlang.org/docs',
-    category: 'framework',
-    requiresCredentials: false,
-    packageName: 'typescript',
-  },
-  {
-    name: 'Tailwind CSS',
-    aliases: ['tailwind css', 'tailwindcss', 'tailwind'],
-    kind: 'tool',
-    officialUrl: 'https://tailwindcss.com',
-    docsUrl: 'https://tailwindcss.com/docs',
-    category: 'framework',
-    requiresCredentials: false,
-    packageName: 'tailwindcss',
   },
   {
     name: 'React',
-    aliases: ['react.js', 'reactjs', 'react'],
+    aliases: ['react'],
     kind: 'tool',
     officialUrl: 'https://react.dev',
     docsUrl: 'https://react.dev',
-    category: 'framework',
-    requiresCredentials: false,
-    packageName: 'react',
-    // Avoid matching the English verb "react" unless capitalized or paired with UI/React terms
-    contextPattern: (t: string) =>
-      /\bReact\b/.test(t) ||
-      /\b(react\.js|reactjs|react\s+(app|component|hook|dom|native|router|state|ui|framework|18|19)|jsx|tsx|next\.?js)\b/i.test(
-        t,
-      ),
   },
 ];
 
@@ -424,8 +296,8 @@ const STACK_CHECKS: StackCheck[] = [
   },
   {
     stack: 'shopify',
-    title: 'Verify app scopes and API access in Shopify Partner Dashboard',
-    href: 'https://shopify.dev/docs/apps/launch',
+    title: 'Use Shopify CLI, not a storefront plugin, for store work',
+    href: 'https://shopify.dev/docs/api/shopify-cli',
   },
   {
     stack: 'github',
@@ -434,57 +306,43 @@ const STACK_CHECKS: StackCheck[] = [
   },
 ];
 
-interface SopHint {
-  preset?: 'agent-rollout';
-  pattern: RegExp;
-  title: string;
-  description: string;
-}
-
-const AGENT_ROLLOUT_HINTS: SopHint[] = [
+const SOP_HINTS: Array<{ pattern: RegExp; title: string; description: string }> = [
   {
-    preset: 'agent-rollout',
     pattern: /chief of staff/i,
     title: 'Start with a chief of staff agent',
     description: 'Let it audit the business and name the first teammates.',
   },
   {
-    preset: 'agent-rollout',
     pattern: /week (one|1)\b/i,
     title: 'Week 1 — build the initial team',
     description: 'Stand up the smallest team that can run the mission.',
   },
   {
-    preset: 'agent-rollout',
     pattern: /week (two|2)\b/i,
     title: 'Week 2 — execute without adding agents',
     description: 'Run the work. No new agents, no tinkering.',
   },
   {
-    preset: 'agent-rollout',
     pattern: /week (three|3)\b/i,
     title: 'Week 3 — hire and fire against real gaps',
     description: 'Add or remove agents only after a week of execution.',
   },
   {
-    preset: 'agent-rollout',
     pattern: /week (four|4)\b/i,
     title: 'Week 4 — automate routines',
     description: 'Add cron/routines after the team already works.',
   },
   {
-    preset: 'agent-rollout',
+    pattern: /shopify cli/i,
+    title: 'Use Shopify CLI, not the plugin',
+    description: 'The video SOP is the CLI on the agent machine.',
+  },
+  {
     pattern: /one project per|one grokbot account|one grok bot account/i,
     title: 'One project per account',
     description: 'Keep context and tokens on a single mission.',
   },
 ];
-
-const AGENT_ROLLOUT_CONTEXT_RE = /\b(chief of staff|grok\s*bot|grockbot|agent\s*team|agents)\b/i;
-
-function selectSopHints(text: string): SopHint[] {
-  return AGENT_ROLLOUT_CONTEXT_RE.test(text) ? AGENT_ROLLOUT_HINTS : [];
-}
 
 function escapeRe(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -521,33 +379,90 @@ function findHits(
   return { timestamps: [...new Set(timestamps)].slice(0, 6), quote };
 }
 
-const CATALOG_BY_NAME = new Map<string, CatalogEntry>(
-  OFFICIAL_CATALOG.map((entry) => [entry.name, entry]),
-);
-
-function matchesContextGuard(
-  text: string,
-  guard: RegExp | ((t: string) => boolean) | undefined,
-): boolean {
-  if (!guard) return true;
-  return typeof guard === 'function' ? guard(text) : guard.test(text);
-}
-
-function matchesEntityText(text: string, entityName: string): boolean {
-  const entry = CATALOG_BY_NAME.get(entityName);
-  const terms = entry ? [entry.name, ...entry.aliases] : [entityName];
-  const matched = terms.some((term) => {
-    const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(term)}([^a-z0-9]|$)`, 'i');
-    return pattern.test(text);
-  });
-  if (!matched) return false;
-  return matchesContextGuard(text, entry?.contextPattern);
-}
-
 function entityNamesIn(text: string, entities: LinkedEntity[]): string[] {
   return entities
-    .filter((entity) => matchesEntityText(text, entity.name))
+    .filter((entity) => {
+      const pattern = new RegExp(`(^|[^a-z0-9])${escapeRe(entity.name)}([^a-z0-9]|$)`, 'i');
+      return pattern.test(text);
+    })
     .map((entity) => entity.name);
+}
+
+function slugTool(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'tool';
+}
+
+function catalogForTool(name: string): CatalogEntry | undefined {
+  const lower = name.toLowerCase();
+  return OFFICIAL_CATALOG.find(
+    (entry) =>
+      entry.name.toLowerCase() === lower ||
+      entry.aliases.some((alias) => alias === lower),
+  );
+}
+
+export function stackChecksFromPackTools(
+  tools: VideoPackStackTool[] | null | undefined,
+): ChecklistItem[] {
+  if (!tools?.length) return [];
+  const checks: ChecklistItem[] = [];
+  const seen = new Set<string>();
+  const stacks = new Set<string>();
+
+  for (const tool of tools) {
+    const name = tool.name.trim();
+    if (!name) continue;
+    const entry = catalogForTool(name);
+    if (entry?.stack) stacks.add(entry.stack);
+  }
+
+  for (const check of STACK_CHECKS) {
+    if (!stacks.has(check.stack)) continue;
+    const key = `${check.stack}:${check.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    checks.push({
+      id: `chk_${check.stack}_${checks.length + 1}`,
+      source: 'stack',
+      stack: check.stack,
+      title: check.title,
+      href: check.href,
+    });
+  }
+
+  for (const tool of tools) {
+    const name = tool.name.trim();
+    if (!name) continue;
+    const entry = catalogForTool(name);
+    if (entry?.stack && STACK_CHECKS.some((item) => item.stack === entry.stack)) {
+      continue;
+    }
+    const key = `tool:${name.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    checks.push({
+      id: `chk_tool_${slugTool(name)}_${checks.length + 1}`,
+      source: 'stack',
+      stack: entry?.stack || slugTool(name),
+      title: tool.check?.trim() || `Use ${name} as named in the video`,
+      href: entry?.docsUrl || entry?.officialUrl,
+    });
+  }
+
+  return checks;
+}
+
+export function applyPackStackChecks(
+  sop: LinkedSop,
+  packTools?: VideoPackStackTool[] | null,
+): LinkedSop {
+  return {
+    ...sop,
+    checklist: [
+      ...sop.checklist.filter((item) => item.source !== 'stack'),
+      ...stackChecksFromPackTools(packTools),
+    ],
+  };
 }
 
 function similarTitle(left: string, right: string): boolean {
@@ -555,236 +470,7 @@ function similarTitle(left: string, right: string): boolean {
   const a = norm(left);
   const b = norm(right);
   if (!a || !b) return false;
-  if (a === b || a.includes(b) || b.includes(a)) return true;
-  const wordsA = a.split(' ').filter((w) => w.length >= 4);
-  const wordsB = new Set(b.split(' ').filter((w) => w.length >= 4));
-  const overlap = wordsA.filter((w) => wordsB.has(w));
-  return overlap.length >= 2 || (overlap.length >= 1 && (wordsA.length <= 2 || wordsB.size <= 2));
-}
-
-function toolsForProcess(
-  text: string,
-  timestamp: number | undefined,
-  entities: LinkedEntity[],
-  segments?: LinkedSopInput['segments'],
-): ProcessToolLink[] {
-  const result: ProcessToolLink[] = [];
-  const added = new Set<string>();
-
-  const addEntity = (entity: LinkedEntity) => {
-    if (added.has(entity.name)) return;
-    added.add(entity.name);
-    result.push({
-      name: entity.name,
-      kind: entity.kind,
-      officialUrl: entity.officialUrl,
-      docsUrl: entity.docsUrl,
-    });
-  };
-
-  // 1. Direct name or alias match in step title or description
-  for (const entity of entities) {
-    if (matchesEntityText(text, entity.name)) {
-      addEntity(entity);
-    }
-  }
-
-  // 2. Proximity match by timestamp (within +/- 20s)
-  if (timestamp != null) {
-    for (const entity of entities) {
-      if (entity.timestamps.some((t) => Math.abs(t - timestamp) <= 20)) {
-        addEntity(entity);
-      }
-    }
-  }
-
-  // 3. Segment text matching near the timestamp (using name or aliases)
-  if (timestamp != null && segments) {
-    const nearbySegments = segments.filter((s) => Math.abs(s.start - timestamp) <= 8);
-    for (const seg of nearbySegments) {
-      for (const entity of entities) {
-        if (matchesEntityText(seg.text, entity.name)) {
-          addEntity(entity);
-        }
-      }
-    }
-  }
-
-  return result;
-}
-
-function resolveIntentGoal(input: LinkedSopInput, namedSteps: SopStep[]): string {
-  if (input.summary?.trim()) {
-    const firstSentence = input.summary.trim().split(/[.!?]\s/)[0];
-    if (firstSentence) return firstSentence.trim().replace(/\.$/, '');
-  }
-  if (input.title?.trim()) {
-    return input.title.trim();
-  }
-  if (input.topics && input.topics.length > 0) {
-    return `Implement solution using ${input.topics.slice(0, 3).join(', ')}`;
-  }
-  if (namedSteps.length > 0) {
-    return `Execute workflow: ${namedSteps[0].title}`;
-  }
-  return 'Achieve workflow objective and deploy solution';
-}
-
-function toToolLinks(entities: LinkedEntity[]): ProcessToolLink[] {
-  return entities.map((e) => ({
-    name: e.name,
-    kind: e.kind,
-    officialUrl: e.officialUrl,
-    docsUrl: e.docsUrl,
-  }));
-}
-
-const ENV_NAMED_RE = /\b(env(ironment)?\s*(var|variable)|api\s*keys?|secrets?|credentials?)\b/i;
-const DEPS_NAMED_RE = /\b(install\s*(dep|dependenc|package|sdk)|npm\s+install|pnpm\s+install|pip\s+install|init(ialize)?\s+workspace)\b/i;
-const VERIFY_NAMED_RE = /\b(preflight|integration\s*(test|check)|smoke\s*test|run\s*tests|typecheck)\b/i;
-const DB_NAMED_RE = /\b(migration|migrate|rls|row\s*level\s*security|firestore\.rules|security\s*rules|schema)\b/i;
-const WEBHOOK_NAMED_RE = /\b(webhook\s*(secret|endpoint|signing)|signing\s*secret)\b/i;
-const HOSTING_NAMED_RE = /\b(branch\s*rule|preview\s*deploy|production\s*env)\b/i;
-
-function synthesizeImpliedProcesses(
-  input: LinkedSopInput,
-  entities: LinkedEntity[],
-  namedSteps: SopStep[],
-): SopStep[] {
-  const implied: SopStep[] = [];
-  const namedText = namedSteps.map((s) => `${s.title} ${s.description}`).join('\n');
-  const isNamedAlready = (term: string) =>
-    namedSteps.some((step) => similarTitle(step.title, term) || similarTitle(step.description, term));
-
-  const toolEntries = entities
-    .map((entity) => ({ entity, entry: CATALOG_BY_NAME.get(entity.name) }))
-    .filter(({ entity }) => entity.kind === 'tool' || entity.kind === 'product' || entity.kind === 'platform');
-
-  // 1. Environment & API Credential Configuration (only for tools that require credentials)
-  const credEntities = toolEntries
-    .filter(({ entry }) => entry?.requiresCredentials === true)
-    .map(({ entity }) => entity);
-
-  if (credEntities.length > 0 && !ENV_NAMED_RE.test(namedText)) {
-    implied.push({
-      id: 'sop_implied_env',
-      order: 0,
-      title: 'Configure environment variables and credentials',
-      description: `Provision API keys and secrets for ${credEntities.map((t) => t.name).slice(0, 4).join(', ')}.`,
-      entityNames: credEntities.map((t) => t.name),
-      tools: toToolLinks(credEntities),
-      processType: 'implied',
-      processLabel: 'Required by intent (unstated)',
-    });
-  }
-
-  // 2. Local Runtime & Dependency Setup (only for tools with packages/SDKs or CLI/framework tools)
-  const depEntities = toolEntries
-    .filter(({ entity, entry }) => Boolean(entry?.packageName) || entity.kind === 'tool')
-    .map(({ entity }) => entity);
-
-  if (depEntities.length > 0 && !DEPS_NAMED_RE.test(namedText)) {
-    implied.push({
-      id: 'sop_implied_setup',
-      order: 0,
-      title: 'Initialize workspace and install tool dependencies',
-      description: 'Install SDKs and initialize dependencies required to interact with the target toolchain.',
-      entityNames: depEntities.map((t) => t.name),
-      tools: toToolLinks(depEntities),
-      processType: 'implied',
-      processLabel: 'Required by intent (unstated)',
-    });
-  }
-
-  // 3. Stack-specific implied processes
-  const dbEntities = toolEntries
-    .filter(({ entry }) => entry?.category === 'database')
-    .map(({ entity }) => entity);
-  if (dbEntities.length > 0 && !DB_NAMED_RE.test(namedText)) {
-    implied.push({
-      id: 'sop_implied_db',
-      order: 0,
-      title: 'Apply schema migrations and verify database access/security rules',
-      description: `Validate schema, migrations, and access policies (such as RLS or security rules) for ${dbEntities.map((e) => e.name).join(', ')}.`,
-      entityNames: dbEntities.map((e) => e.name),
-      tools: toToolLinks(dbEntities),
-      processType: 'implied',
-      processLabel: 'Required by intent (unstated)',
-    });
-  }
-
-  const stripeEntity = entities.find((e) => e.name === 'Stripe');
-  if (stripeEntity && !WEBHOOK_NAMED_RE.test(namedText)) {
-    implied.push({
-      id: 'sop_implied_stripe',
-      order: 0,
-      title: 'Configure webhook endpoints and verify webhook signing secrets',
-      description: 'Register Stripe webhook endpoints and validate incoming signatures before enabling live payments.',
-      entityNames: [stripeEntity.name],
-      tools: toToolLinks([stripeEntity]),
-      processType: 'implied',
-      processLabel: 'Required by intent (unstated)',
-    });
-  }
-
-  const hostingEntities = toolEntries
-    .filter(({ entry }) => entry?.category === 'hosting' && entry.name !== 'Docker')
-    .map(({ entity }) => entity);
-  if (hostingEntities.length > 0 && !HOSTING_NAMED_RE.test(namedText)) {
-    implied.push({
-      id: 'sop_implied_hosting',
-      order: 0,
-      title: 'Set production environment variables and configure preview/production branch rules',
-      description: `Configure deployment environment parity and branch protection on ${hostingEntities.map((e) => e.name).join(', ')}.`,
-      entityNames: hostingEntities.map((e) => e.name),
-      tools: toToolLinks(hostingEntities),
-      processType: 'implied',
-      processLabel: 'Required by intent (unstated)',
-    });
-  }
-
-  // 4. Unstated actions from analysis (when timed events exist and actions supplement them)
-  if ((input.events || []).length > 0) {
-    for (const action of input.actions || []) {
-      const title = (action.title || '').trim();
-      if (!title) continue;
-      if (isNamedAlready(title) || implied.some((s) => similarTitle(s.title, title))) continue;
-
-      const matchedTools = toolsForProcess(
-        `${title} ${action.description || ''}`,
-        undefined,
-        entities,
-        input.segments,
-      );
-
-      implied.push({
-        id: `sop_implied_${implied.length + 1}`,
-        order: 0,
-        title,
-        description: (action.description || '').trim() || 'Required task to achieve the video intent goal.',
-        entityNames: matchedTools.map((t) => t.name),
-        tools: matchedTools,
-        processType: 'implied',
-        processLabel: 'Required by intent (unstated)',
-      });
-    }
-  }
-
-  // 5. Preflight Verification & Integration Checks (when tech tools/platforms are in play)
-  if (toolEntries.length > 0 && !VERIFY_NAMED_RE.test(namedText)) {
-    implied.push({
-      id: 'sop_implied_verify',
-      order: 0,
-      title: 'Run preflight verification and integration checks',
-      description: 'Validate end-to-end integration and smoke test components before promoting to production.',
-      entityNames: [],
-      tools: [],
-      processType: 'implied',
-      processLabel: 'Required by intent (unstated)',
-    });
-  }
-
-  return implied;
+  return a === b || a.includes(b) || b.includes(a);
 }
 
 export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
@@ -803,14 +489,11 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
       return pattern.test(text);
     });
     if (!aliasHit) continue;
-    if (!matchesContextGuard(text, entry.contextPattern)) continue;
     used.add(entry.name);
     const hits = findHits(
       text,
       segments,
-      entry.contextPattern instanceof RegExp
-        ? entry.contextPattern
-        : new RegExp(`(^|[^a-z0-9])${escapeRe(aliasHit)}([^a-z0-9]|$)`, 'i'),
+      new RegExp(`(^|[^a-z0-9])${escapeRe(aliasHit)}([^a-z0-9]|$)`, 'i'),
     );
     entities.push({
       name: entry.name,
@@ -822,7 +505,7 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     });
   }
 
-  const namedSteps: SopStep[] = [];
+  const steps: SopStep[] = [];
   const timedEvents = [...(input.events || [])]
     .map((event) => ({
       title: (event.label || event.title || '').trim(),
@@ -836,107 +519,59 @@ export function compileLinkedSop(input: LinkedSopInput): LinkedSop {
     const hits = event.timestamp != null
       ? { timestamps: [event.timestamp], quote: segments.find((s) => Math.abs(s.start - event.timestamp!) < 8)?.text.trim() }
       : findHits(event.title, segments, new RegExp(escapeRe(event.title.split(' ').slice(0, 4).join(' ')), 'i'));
-
-    const stepText = `${event.title} ${event.description}`;
-    const stepEntities = entityNamesIn(stepText, entities);
-    const stepTools = toolsForProcess(stepText, hits.timestamps[0] ?? event.timestamp, entities, segments);
-
-    namedSteps.push({
-      id: `sop_${namedSteps.length + 1}`,
-      order: namedSteps.length + 1,
+    steps.push({
+      id: `sop_${steps.length + 1}`,
+      order: steps.length + 1,
       title: event.title,
       description: event.description,
       timestamp: hits.timestamps[0] ?? event.timestamp,
       quote: hits.quote,
-      entityNames: stepEntities,
-      tools: stepTools,
-      processType: 'named',
-      processLabel: 'Named in video',
+      entityNames: entityNamesIn(`${event.title} ${event.description}`, entities),
     });
   }
 
-  for (const hint of selectSopHints(text)) {
+  for (const hint of SOP_HINTS) {
     const hits = findHits(text, segments, hint.pattern);
     if (hits.timestamps.length === 0 && !hint.pattern.test(text)) continue;
-    if (namedSteps.some((step) => similarTitle(step.title, hint.title))) continue;
-
-    const hintText = `${hint.title} ${hint.description}`;
-    const hintEntities = entityNamesIn(hintText, entities);
-    const hintTools = toolsForProcess(hintText, hits.timestamps[0], entities, segments);
-
-    namedSteps.push({
-      id: `sop_${namedSteps.length + 1}`,
-      order: namedSteps.length + 1,
+    if (steps.some((step) => similarTitle(step.title, hint.title))) continue;
+    steps.push({
+      id: `sop_${steps.length + 1}`,
+      order: steps.length + 1,
       title: hint.title,
       description: hint.description,
       timestamp: hits.timestamps[0],
       quote: hits.quote,
-      entityNames: hintEntities,
-      tools: hintTools,
-      processType: 'named',
-      processLabel: 'Named in video',
+      entityNames: entityNamesIn(`${hint.title} ${hint.description}`, entities),
     });
   }
 
-  if (namedSteps.length === 0) {
+  if (steps.length === 0) {
     for (const action of input.actions || []) {
       const title = (action.title || '').trim();
       if (!title) continue;
       const hits = findHits(title, segments, new RegExp(escapeRe(title.split(' ').slice(0, 5).join(' ')), 'i'));
-      const actionText = `${title} ${action.description || ''}`;
-      const actionEntities = entityNamesIn(actionText, entities);
-      const actionTools = toolsForProcess(actionText, hits.timestamps[0], entities, segments);
-
-      namedSteps.push({
-        id: `sop_${namedSteps.length + 1}`,
-        order: namedSteps.length + 1,
+      steps.push({
+        id: `sop_${steps.length + 1}`,
+        order: steps.length + 1,
         title,
         description: (action.description || '').trim(),
         timestamp: hits.timestamps[0],
         quote: hits.quote,
-        entityNames: actionEntities,
-        tools: actionTools,
-        processType: 'named',
-        processLabel: 'Named in video',
+        entityNames: entityNamesIn(`${title} ${action.description || ''}`, entities),
       });
     }
   }
 
-  const impliedSteps = synthesizeImpliedProcesses(input, entities, namedSteps);
-  const steps: SopStep[] = [...namedSteps, ...impliedSteps].map((step, idx) => ({
-    ...step,
-    id: `sop_${idx + 1}`,
-    order: idx + 1,
-  }));
-
-  const intentGoal = resolveIntentGoal(input, namedSteps);
-
-  const stacks = new Set(
-    entities
-      .map((entity) => OFFICIAL_CATALOG.find((entry) => entry.name === entity.name)?.stack)
-      .filter((stack): stack is string => Boolean(stack)),
-  );
-
   const checklist: ChecklistItem[] = steps.map((step) => ({
     id: `chk_${step.id}`,
-    source: step.processType === 'implied' ? 'intent-required' : 'video-sop',
-    processType: step.processType,
+    source: 'video-sop',
     title: step.title,
     timestamp: step.timestamp,
   }));
 
-  for (const check of STACK_CHECKS) {
-    if (!stacks.has(check.stack)) continue;
-    checklist.push({
-      id: `chk_${check.stack}_${checklist.length + 1}`,
-      source: 'stack',
-      stack: check.stack,
-      title: check.title,
-      href: check.href,
-    });
-  }
+  checklist.push(...stackChecksFromPackTools(input.packTools));
 
-  return { intentGoal, entities, steps, checklist };
+  return { entities, steps, checklist };
 }
 
 export function renderDeployMarkdown(sop: LinkedSop): string {
@@ -945,45 +580,16 @@ export function renderDeployMarkdown(sop: LinkedSop): string {
     '',
     'Compiled from the video SOP plus official stack docs. Do not invent extra steps.',
     '',
+    '## Video SOP',
+    '',
   ];
-
-  if (sop.intentGoal) {
-    lines.push(`**Intent Goal:** ${sop.intentGoal}`, '');
-  }
-
-  const namedSteps = sop.steps.filter((s) => s.processType !== 'implied');
-  lines.push('## Video SOP (Named Processes)', '');
-  if (namedSteps.length === 0) {
+  if (sop.steps.length === 0) {
     lines.push('_No timed SOP steps in this run._', '');
   } else {
-    for (const step of namedSteps) {
+    for (const step of sop.steps) {
       const when = step.timestamp != null ? ` [${formatSeconds(step.timestamp)}]` : '';
       lines.push(`- [ ] ${step.title}${when}`);
       if (step.description) lines.push(`  ${step.description}`);
-      if (step.tools && step.tools.length > 0) {
-        const toolLinks = step.tools.map((t) => {
-          const docs = t.docsUrl && t.docsUrl !== t.officialUrl ? ` ([docs](${t.docsUrl}))` : '';
-          return `[${t.name}](${t.officialUrl})${docs}`;
-        });
-        lines.push(`  Tools: ${toolLinks.join(', ')}`);
-      }
-    }
-    lines.push('');
-  }
-
-  const impliedSteps = sop.steps.filter((s) => s.processType === 'implied');
-  if (impliedSteps.length > 0) {
-    lines.push('## Required Processes (Implied by Intent, Unstated in Video)', '');
-    for (const step of impliedSteps) {
-      lines.push(`- [ ] ${step.title} *(Required by intent)*`);
-      if (step.description) lines.push(`  ${step.description}`);
-      if (step.tools && step.tools.length > 0) {
-        const toolLinks = step.tools.map((t) => {
-          const docs = t.docsUrl && t.docsUrl !== t.officialUrl ? ` ([docs](${t.docsUrl}))` : '';
-          return `[${t.name}](${t.officialUrl})${docs}`;
-        });
-        lines.push(`  Tools: ${toolLinks.join(', ')}`);
-      }
     }
     lines.push('');
   }
@@ -991,7 +597,7 @@ export function renderDeployMarkdown(sop: LinkedSop): string {
   const stackItems = sop.checklist.filter((item) => item.source === 'stack');
   lines.push('## Industry checks', '');
   if (stackItems.length === 0) {
-    lines.push('_No Vercel/GitHub stack detected in the transcript._', '');
+    lines.push('_No Vercel/Shopify/GitHub stack detected in the transcript._', '');
   } else {
     for (const item of stackItems) {
       const link = item.href ? ` ([docs](${item.href}))` : '';
@@ -1012,4 +618,3 @@ export function renderDeployMarkdown(sop: LinkedSop): string {
   }
   return lines.join('\n');
 }
-

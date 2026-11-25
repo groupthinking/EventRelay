@@ -9,13 +9,19 @@ parallel processing, and intelligent routing.
 
 import asyncio
 import logging
+import os
 import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError, SQLAlchemyError
+
+from ...shared_sql_state import SharedSQLStateStore
 from ..base_agent import AgentRequest, AgentResult, BaseAgent
+from ..registry import get as get_agent_class
 
 
 @dataclass
@@ -47,16 +53,13 @@ class OrchestrationResult:
     timestamp: datetime = field(default_factory=datetime.now)
 
 
-from ..registry import get as get_agent_class
-
-
 class AgentOrchestrator:
     """
     Centralized orchestration for AI agents.
     Handles task delegation, parallel processing, and result aggregation.
     """
 
-    def __init__(self):
+    def __init__(self, *, database_url: Optional[str] = None):
         """Initialize agent orchestrator"""
         self.logger = logging.getLogger("agent_orchestrator")
         self._agents: dict[str, BaseAgent] = {}
@@ -65,6 +68,36 @@ class AgentOrchestrator:
         # process and every dispatch appends here, so an unbounded list would
         # grow without limit. maxlen evicts the oldest entries automatically.
         self._a2a_log: deque[A2AContextMessage] = deque(maxlen=1000)
+        shared_database_url = (
+            database_url
+            or os.getenv("EVENTRELAY_SHARED_STATE_DATABASE_URL")
+            or os.getenv("DATABASE_URL")
+        )
+        if shared_database_url:
+            try:
+                try:
+                    make_url(shared_database_url)
+                except ValueError as exc:
+                    # URL parsing uses plain ValueError for malformed ports.
+                    # Store-construction ValueErrors still surface as bugs.
+                    raise ArgumentError("Invalid shared-state database URL") from exc
+                self._shared_state = SharedSQLStateStore(
+                    database_url=shared_database_url
+                )
+            except (SQLAlchemyError, ImportError, OSError) as exc:
+                # Expected setup failures only: database/URL errors, a missing
+                # DB driver, or an unwritable SQLite path. Anything else is a
+                # bug and must surface instead of silently dropping shared state.
+                self.logger.warning(
+                    "Shared A2A SQL state unavailable: %s (error_class=%s)",
+                    exc,
+                    type(exc).__name__,
+                    extra={"error_class": type(exc).__name__},
+                    exc_info=True,
+                )
+                self._shared_state = None
+        else:
+            self._shared_state = None
         self._task_mappings: dict[str, list[str]] = {
             "video_analysis": [
                 "video_master",
@@ -78,6 +111,27 @@ class AgentOrchestrator:
             "strategic_analysis": ["personality_agent", "strategy_agent"],
             "chat_assistance": ["transcript_action"],
         }
+        self._hydrate_a2a_log()
+
+    def _hydrate_a2a_log(self) -> None:
+        if self._shared_state is None:
+            return
+        self._a2a_log.clear()
+        for message in self._shared_state.get_a2a_messages(limit=1000):
+            self._a2a_log.append(A2AContextMessage(**message))
+
+    def _record_a2a_message(self, message: A2AContextMessage) -> None:
+        self._a2a_log.append(message)
+        if self._shared_state is not None:
+            self._shared_state.append_a2a_message(
+                {
+                    "sender": message.sender,
+                    "recipient": message.recipient,
+                    "content": message.content,
+                    "conversation_id": message.conversation_id,
+                    "timestamp": message.timestamp,
+                }
+            )
 
     def register_agent_type(self, name: str, agent_class: type[BaseAgent]):
         """
@@ -116,8 +170,15 @@ class AgentOrchestrator:
                     agent = agent_class()
                 self._agents[name] = agent
                 return agent
-            except Exception as e:
-                self.logger.error(f"Failed to instantiate agent {name}: {e}")
+            except Exception as e:  # exception-boundary: third-party agent constructors can raise anything; get_agent contract is None on failure
+                self.logger.error(
+                    "Failed to instantiate agent %s: %s (error_class=%s)",
+                    name,
+                    e,
+                    type(e).__name__,
+                    extra={"agent": name, "error_class": type(e).__name__},
+                    exc_info=True,
+                )
                 return None
 
         # Fallback to registry
@@ -219,7 +280,7 @@ class AgentOrchestrator:
                                 content={"type": "context_share", "output": sender_result.output},
                                 conversation_id=conv_id,
                             )
-                            self._a2a_log.append(msg)
+                            self._record_a2a_message(msg)
                 self.logger.debug(
                     "A2A context shared across %d agents (conv=%s)",
                     len(orchestration_result.results),
@@ -234,8 +295,15 @@ class AgentOrchestrator:
 
             return orchestration_result
 
-        except Exception as e:
-            self.logger.error(f"Task execution failed: {e}", exc_info=True)
+        except Exception as e:  # exception-boundary: orchestration entry point; callers expect an OrchestrationResult with success=False, never a raise
+            self.logger.error(
+                "Task execution failed: task_type=%s error_class=%s: %s",
+                task_type,
+                type(e).__name__,
+                e,
+                extra={"task_type": task_type, "error_class": type(e).__name__},
+                exc_info=True,
+            )
             return OrchestrationResult(
                 success=False,
                 errors=[f"Orchestration failed: {str(e)}"],
@@ -340,7 +408,7 @@ class AgentOrchestrator:
             )
             # Record the failed dispatch so the session/audit trail is complete
             # (matches the success, agent-failure, and exception paths below).
-            self._a2a_log.append(
+            self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
                     recipient=agent_type,
@@ -360,7 +428,7 @@ class AgentOrchestrator:
             result = await agent.run(request)
 
             # Log execution in A2A log for session tracking
-            self._a2a_log.append(
+            self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
                     recipient=agent_type,
@@ -380,9 +448,16 @@ class AgentOrchestrator:
                     "; ".join(result.logs) or "Agent execution failed"
                 )
                 return {"error": error_msg, "output": result.output}
-        except Exception as e:
-            self.logger.error("execute_single failed for %s: %s", agent_type, e)
-            self._a2a_log.append(
+        except Exception as e:  # exception-boundary: agent dispatch entry point; agent.run() is third-party code and callers expect an error dict
+            self.logger.error(
+                "execute_single failed for %s: %s (error_class=%s)",
+                agent_type,
+                e,
+                type(e).__name__,
+                extra={"agent": agent_type, "error_class": type(e).__name__},
+                exc_info=True,
+            )
+            self._record_a2a_message(
                 A2AContextMessage(
                     sender="orchestrator",
                     recipient=agent_type,
@@ -416,7 +491,15 @@ class AgentOrchestrator:
             List of session log entries.
         """
         dispatch_msgs = [
-            m for m in self._a2a_log
+            m
+            for m in (
+                [
+                    A2AContextMessage(**entry)
+                    for entry in self.get_a2a_log(limit=max(limit, 1000))
+                ]
+                if self._shared_state is not None
+                else list(self._a2a_log)
+            )
             if m.content.get("type") == "agent_dispatch"
         ]
         if agent_type:
@@ -453,15 +536,22 @@ class AgentOrchestrator:
             content=content,
             conversation_id=conversation_id or str(uuid.uuid4()),
         )
-        self._a2a_log.append(msg)
+        self._record_a2a_message(msg)
 
         # Deliver to recipient agent if it exists
         agent = self._agents.get(recipient)
         if agent and hasattr(agent, "receive_context"):
             try:
                 await agent.receive_context(content)
-            except Exception as e:
-                self.logger.warning("Agent %s failed to receive context: %s", recipient, e)
+            except Exception as e:  # exception-boundary: context delivery is best-effort; the message is already recorded and a recipient's bug must not fail the sender
+                self.logger.warning(
+                    "Agent %s failed to receive context: %s (error_class=%s)",
+                    recipient,
+                    e,
+                    type(e).__name__,
+                    extra={"agent": recipient, "error_class": type(e).__name__},
+                    exc_info=True,
+                )
 
         return msg
 
@@ -473,6 +563,12 @@ class AgentOrchestrator:
         """Return recent A2A messages, optionally filtered by conversation."""
         # Materialize to a list so `[-limit:]` slicing works (deque is not
         # sliceable).
+        if self._shared_state is not None:
+            return self._shared_state.get_a2a_messages(
+                conversation_id=conversation_id,
+                limit=limit,
+            )
+
         msgs = list(self._a2a_log)
         if conversation_id:
             msgs = [m for m in msgs if m.conversation_id == conversation_id]
@@ -487,7 +583,39 @@ class AgentOrchestrator:
             for m in msgs[-limit:]
         ]
 
-    # --- Antigravity SDK Workflows ---
+    # --- Managed execution backends ---
+
+    async def execute_antigravity_backend(
+        self,
+        backend: Any,
+        task: str,
+        context: Optional[dict[str, Any]] = None,
+    ) -> Any:
+        """Execute one task through the guarded Antigravity provider adapter.
+
+        The adapter owns feature flags, read-only MCP validation, token limits,
+        and live-call approval.  The orchestrator records only receipt metadata,
+        never the input context or provider credentials.
+        """
+        receipt = await backend.execute(task=task, context=context or {})
+        self._record_a2a_message(
+            A2AContextMessage(
+                sender="orchestrator",
+                recipient="google_antigravity",
+                content={
+                    "type": "managed_backend_dispatch",
+                    "backend": "google_antigravity",
+                    "status": receipt.status,
+                    "receipt_id": receipt.receipt_id,
+                    "interaction_id": receipt.interaction_id,
+                    "environment_id": receipt.environment_id,
+                    "budget_exceeded": receipt.budget_exceeded,
+                },
+            )
+        )
+        return receipt
+
+    # --- Legacy local Antigravity-pattern workflow ---
 
     async def execute_antigravity_delegation(
         self,

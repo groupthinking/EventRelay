@@ -10,13 +10,17 @@ function readSource(relativePath: string) {
 }
 
 describe('landing style safety', () => {
-  it('ContactForm does not use styled-jsx (breaks strict TS builds)', () => {
-    const source = readSource('app/ContactForm.tsx');
-    expect(source).not.toContain('<style jsx>');
+  it('keeps one clear heading for the YouTube URL to Studio workflow', () => {
+    const source = readSource('app/page.tsx');
+    expect(source.match(/<h1\b/g)).toHaveLength(1);
+    expect(source).toContain('Turn YouTube into bound tasks.');
   });
 
-  it('HeroSection does not use styled-jsx (breaks strict TS builds)', () => {
-    const source = readSource('components/landing/HeroSection.tsx');
-    expect(source).not.toContain('<style jsx>');
+  it('promises review of proposed work instead of approval', () => {
+    const source = readSource('app/page.tsx');
+    expect(source).toContain(
+      'Studio prepares proposed work and build rails for you to review.',
+    );
+    expect(source).not.toMatch(/\bapprov(?:e|al|ed|ing)\b/i);
   });
 });

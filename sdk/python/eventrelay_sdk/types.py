@@ -1,9 +1,10 @@
 """
-Pydantic models mirroring the EventRelay API request/response schemas.
+Pydantic models for the EventRelay API request/response schemas.
 
-These are derived from openapi/eventrelay.openapi.json and kept in sync
-with the backend models defined in:
-  src/youtube_extension/backend/api/v1/models.py
+The backend models tree (src/youtube_extension/backend/, including
+api/v1/models.py) is gone, and openapi/eventrelay.openapi.json is not in
+the repository. This module is the remaining source of truth.
+sdk/typescript/src/types.ts mirrors these models.
 """
 
 from __future__ import annotations
@@ -47,6 +48,10 @@ class VideoProcessJobRequest(BaseModel):
     video_url: str = Field(..., description="YouTube video URL")
     language: Optional[str] = Field("en", description="Transcript language")
     options: Optional[dict[str, Any]] = Field(default_factory=dict)
+    transcript: Optional[str] = Field(
+        None,
+        description="Ready transcript to reuse; skip YouTube extract when provided",
+    )
 
 
 class VideoProcessJobResponse(BaseModel):
@@ -65,6 +70,10 @@ class VideoJobStatusResponse(BaseModel):
     progress: float = Field(0.0, ge=0.0, le=100.0)
     video_url: Optional[str] = None
     transcript: Optional[str] = None
+    live_url: Optional[str] = Field(
+        None,
+        description="Verified https live URL when the job persisted one",
+    )
     metadata: Optional[dict[str, Any]] = None
     error: Optional[str] = None
     error_reason: Optional[str] = Field(

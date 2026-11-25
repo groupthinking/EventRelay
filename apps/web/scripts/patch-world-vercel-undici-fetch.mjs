@@ -64,6 +64,10 @@ export function patchWorldLocalSource(src) {
     .replace(
       'response = await fetch(createWorkflowUrl(',
       'response = await undiciFetch(createWorkflowUrl(',
+    )
+    .replace(
+      'response = await fetch(url,',
+      'response = await undiciFetch(url,',
     );
   if (next === src) {
     return { src, result: 'already-patched' };

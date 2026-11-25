@@ -29,11 +29,16 @@ export default defineConfig({
     // a key set it explicitly in their own setup, so a blank default is safe.
     env: {
       BACKEND_URL: '',
+      NEXT_PUBLIC_BACKEND_URL: '',
+      NEXT_PUBLIC_API_URL: '',
       BILLING_COOKIE_SECRET: 'test-billing-cookie-secret',
       AI_GATEWAY_API_KEY: '',
       VERCEL_AI_GATEWAY_API_KEY: '',
       VERCEL_AI_GATEWAY_API: '',
       VERCEL_API_KEY: '',
+      // Keep existing routes' default behavior independent of a local operator's
+      // opt-in journal configuration. Focused integration tests set it explicitly.
+      RELAY_REVIEW_JOURNAL_MODE: '',
     },
   },
   resolve: {

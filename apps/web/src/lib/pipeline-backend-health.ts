@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { backendHeaders } from '@/lib/pipeline-backend';
+import { backendHeaders, resolveConfiguredBackendUrl } from '@/lib/pipeline-backend';
 
 export const PIPELINE_HEALTH_TIMEOUT_MS = 5_000;
 
@@ -12,11 +12,10 @@ export interface BackendHealth {
 }
 
 export function getBackendConfig(): { configured: boolean; url: string } {
-  const raw = (process.env.BACKEND_URL || '').trim();
-  const configured = raw.startsWith('http');
+  const url = resolveConfiguredBackendUrl() ?? '';
   return {
-    configured,
-    url: configured ? raw.replace(/\/$/, '') : '',
+    configured: Boolean(url),
+    url,
   };
 }
 

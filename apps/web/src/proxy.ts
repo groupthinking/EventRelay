@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getToken } from 'next-auth/jwt';
+import { getNextAuthJwtFromRequest } from '@/lib/auth-jwt';
 import {
+  CANONICAL_STUDIO_PATH,
   isAiRoute,
+  isLegacyDashboardPath,
   needsAuthentication,
   resolveAuthGateMode,
   safeCallbackPath,
   shouldSkipRateLimit,
 } from '@/lib/auth-paths';
+import { resolveUpstashRedisCredentials } from '@/lib/billing/redis-credentials';
+import { createUpstashRedisClient } from '@/lib/billing/upstash-client';
 
 /**
  * Frontend proxy (Next.js 16): rate limiting + login gating.
@@ -18,8 +22,9 @@ import {
  * anonymously (issue #1058). Set AUTH_ALLOW_UNAUTHENTICATED=1 to deliberately
  * run a public production deployment.
  *
- * When enforcing, /dashboard and non-public /api/* require a valid NextAuth
- * session. Server-to-server loopback calls carrying a matching
+ * When enforcing, non-public /api/* require a valid NextAuth session.
+ * `/dashboard` is a retired skin and 308s to the public studio — it is not
+ * a login gate. Server-to-server loopback calls carrying a matching
  * `x-eventrelay-internal` header (INTERNAL_REQUEST_TOKEN) bypass both.
  *
  * Path policy lives in `@/lib/auth-paths` so unit tests can cover it offline.
@@ -28,6 +33,7 @@ import {
 const WINDOW_SECONDS = 60;
 const GENERAL_LIMIT = Number(process.env.UVAI_API_RATE_LIMIT_PER_MINUTE || 60);
 const AI_LIMIT = Number(process.env.UVAI_AI_RATE_LIMIT_PER_MINUTE || 12);
+const E2E_USER_AGENT = /^EventRelay-E2E\/([A-Za-z0-9._-]{1,64})$/;
 
 // Login gating (activate-when-configured) + server-to-server bypass.
 const INTERNAL_TOKEN = process.env.INTERNAL_REQUEST_TOKEN;
@@ -99,22 +105,12 @@ function getRedisClient(): Promise<DistributedRedisClient | null> {
   }
 
   redisClientPromise = (async () => {
-    if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
-      try {
-        const { Redis } = await import('@upstash/redis');
-        return new Redis({
-          url: process.env.UPSTASH_REDIS_REST_URL,
-          token: process.env.UPSTASH_REDIS_REST_TOKEN,
-        });
-      } catch {
-        // dynamic import failed; fall back to null below
-        return null;
-      }
+    if (resolveUpstashRedisCredentials()) {
+      return createUpstashRedisClient();
     }
 
     if (process.env.STORAGE_REDIS_URL) {
       try {
-        // @ts-expect-error redis is an optional dependency
         const { createClient } = await import('redis');
         const client = createClient({ url: process.env.STORAGE_REDIS_URL });
         client.on('error', () => {
@@ -263,12 +259,35 @@ if (
   );
 }
 
+function logE2EProbe(request: NextRequest, pathname: string): void {
+  if (request.headers.get('x-eventrelay-probe') !== 'e2e') return;
+
+  const match = request.headers.get('user-agent')?.match(E2E_USER_AGENT);
+  if (!match) return;
+
+  console.info({
+    event: 'e2e_probe_request',
+    method: request.method,
+    path: pathname,
+    runId: match[1],
+  });
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const pathname = request.nextUrl.pathname;
+  logE2EProbe(request, pathname);
 
   // Server-to-server loopback calls bypass both rate limiting and auth.
   if (INTERNAL_TOKEN && request.headers.get('x-eventrelay-internal') === INTERNAL_TOKEN) {
     return NextResponse.next();
+  }
+
+  // Retired library skin: stay in OneLoopStudio instead of login or the
+  // old dashboard chrome. Query (e.g. ?video=) is preserved.
+  if (isLegacyDashboardPath(pathname)) {
+    const dest = request.nextUrl.clone();
+    dest.pathname = CANONICAL_STUDIO_PATH;
+    return NextResponse.redirect(dest, 308);
   }
 
   // Fail closed: in production without NEXTAUTH_SECRET a session cannot be
@@ -294,7 +313,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (AUTH_ENABLED && request.method !== 'OPTIONS' && needsAuthentication(pathname)) {
     // next-auth resolves `NextRequest` from a second hoisted copy of `next` in this
     // monorepo; the types are structurally identical, so bridge them.
-    const token = await getToken({ req: request as any, secret: AUTH_SECRET });
+    const token = await getNextAuthJwtFromRequest(request, AUTH_SECRET!);
     if (!token) {
       if (pathname.startsWith('/api/')) {
         return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
@@ -313,7 +332,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     (process.env.UVAI_RATE_LIMIT_DISABLED === '1' &&
       (process.env.NODE_ENV !== 'production' || !isAiRoute(pathname, request.method))) ||
     request.method === 'OPTIONS' ||
-    // Page routes (e.g. /dashboard) are matched only for auth gating above.
+    // Page routes under the matcher are handled above (legacy dashboard 308).
     // They must not be rate-limited: a JSON 429 would render as a raw blob in
     // the browser and page navigation would burn the shared api:<ip> quota.
     !pathname.startsWith('/api/') ||
@@ -351,12 +370,18 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   return response;
 }
 
-// Next 16 discovers this file directly. The explicit allowlist means Workflow's
-// internal `/.well-known/workflow/*` requests are never intercepted.
+// Next 16 discovers this file directly. Ordinary traffic stays on the explicit
+// allowlist, so Workflow's internal `/.well-known/workflow/*` requests are never
+// intercepted. The header-conditioned entry lets attributed E2E page requests
+// reach logE2EProbe without globally applying auth or rate limiting to pages.
 export const config = {
   matcher: [
     '/dashboard',
     '/dashboard/:path*',
     '/api/:path*',
+    {
+      source: '/:path*',
+      has: [{ type: 'header', key: 'x-eventrelay-probe', value: 'e2e' }],
+    },
   ],
 };

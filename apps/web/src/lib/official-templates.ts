@@ -2,15 +2,29 @@
  * Official starters for Export, and a hold-gate for Deploy.
  *
  * Templates are the vendor CLI/repo, not invented architecture.
- * Deploy stays held while this run's stack checks (Vercel Deployment Checks,
- * Shopify CLI, GitHub Actions) are still open — same rule as Vercel:
- * production does not promote until checks pass.
+ * Signed-in Deploy stays held only while runnable vendor checks (Vercel
+ * Deployment Checks, Shopify CLI, GitHub Actions) are still open.
+ * Anonymous viewers and non-runnable pack tools (SeaDance, Cluely, …)
+ * get honest skip/unknown — they do not hold Deploy.
  */
 
 import { OFFICIAL_CATALOG, type ChecklistItem, type LinkedSop } from '@/lib/linked-sop';
 
+export type StudioViewer = 'anonymous' | 'signed-in';
+export type StackCheckStatus = 'pending' | 'done' | 'skip' | 'unknown';
+
+/** Stacks UVAI can actually verify in-product. Pack-named tools are unknown. */
+const RUNNABLE_STACKS = new Set(['vercel', 'shopify', 'github']);
+
 export interface OfficialTemplate {
-  id: 'vercel-next' | 'shopify-cli';
+  id:
+    | 'vercel-next'
+    | 'shopify-cli'
+    | 'webflow-devlink'
+    | 'google-gemini-live'
+    | 'openai-responses'
+    | 'nvidia-genai'
+    | 'groq-appgen';
   stack: string;
   name: string;
   clone: string;
@@ -18,23 +32,64 @@ export interface OfficialTemplate {
   docsUrl: string;
 }
 
-const NEXT: OfficialTemplate = {
-  id: 'vercel-next',
-  stack: 'vercel',
-  name: 'create-next-app',
-  clone: 'npx create-next-app@latest',
-  repo: 'https://github.com/vercel/next.js/tree/canary/packages/create-next-app',
-  docsUrl: 'https://nextjs.org/docs/app/getting-started/installation',
-};
-
-const SHOPIFY: OfficialTemplate = {
-  id: 'shopify-cli',
-  stack: 'shopify',
-  name: 'Shopify CLI app',
-  clone: 'npm init @shopify/app@latest',
-  repo: 'https://github.com/Shopify/cli',
-  docsUrl: 'https://shopify.dev/docs/apps/build/cli-for-apps',
-};
+export const OFFICIAL_TEMPLATES: readonly OfficialTemplate[] = [
+  {
+    id: 'vercel-next',
+    stack: 'vercel',
+    name: 'create-next-app',
+    clone: 'npx create-next-app@latest',
+    repo: 'https://github.com/vercel/next.js/tree/canary/packages/create-next-app',
+    docsUrl: 'https://nextjs.org/docs/app/getting-started/installation',
+  },
+  {
+    id: 'shopify-cli',
+    stack: 'shopify',
+    name: 'Shopify CLI app',
+    clone: 'npm init @shopify/app@latest',
+    repo: 'https://github.com/Shopify/cli',
+    docsUrl: 'https://shopify.dev/docs/apps/build/cli-for-apps',
+  },
+  {
+    id: 'webflow-devlink',
+    stack: 'webflow',
+    name: 'Webflow DevLink & MCP Examples',
+    clone: 'git clone https://github.com/webflow/devlink-examples.git',
+    repo: 'https://github.com/webflow/devlink-examples',
+    docsUrl: 'https://developers.webflow.com',
+  },
+  {
+    id: 'google-gemini-live',
+    stack: 'gemini',
+    name: 'Gemini Live API Web Console',
+    clone: 'git clone https://github.com/google-gemini/live-api-web-console.git',
+    repo: 'https://github.com/google-gemini/live-api-web-console',
+    docsUrl: 'https://ai.google.dev/gemini-api/docs/live',
+  },
+  {
+    id: 'openai-responses',
+    stack: 'openai',
+    name: 'OpenAI Responses Starter App',
+    clone: 'git clone https://github.com/openai/openai-responses-starter-app.git',
+    repo: 'https://github.com/openai/openai-responses-starter-app',
+    docsUrl: 'https://platform.openai.com/docs',
+  },
+  {
+    id: 'nvidia-genai',
+    stack: 'nvidia',
+    name: 'NVIDIA GenerativeAIExamples',
+    clone: 'git clone https://github.com/NVIDIA/GenerativeAIExamples.git',
+    repo: 'https://github.com/NVIDIA/GenerativeAIExamples',
+    docsUrl: 'https://docs.nvidia.com/nim',
+  },
+  {
+    id: 'groq-appgen',
+    stack: 'groq',
+    name: 'Groq AppGen Starter',
+    clone: 'git clone https://github.com/groq/groq-appgen.git',
+    repo: 'https://github.com/groq/groq-appgen',
+    docsUrl: 'https://console.groq.com/docs',
+  },
+];
 
 export function detectedStacks(sop: LinkedSop | null | undefined): Set<string> {
   const stacks = new Set<string>();
@@ -52,19 +107,78 @@ export function stackCheckItems(sop: LinkedSop | null | undefined): ChecklistIte
   return (sop?.checklist || []).filter((item) => item.source === 'stack');
 }
 
+export function isRunnableStackCheck(item: ChecklistItem): boolean {
+  return item.source === 'stack' && Boolean(item.stack && RUNNABLE_STACKS.has(item.stack));
+}
+
+export function stackCheckStatus(
+  item: ChecklistItem,
+  completedIds: Iterable<string>,
+  viewer: StudioViewer = 'anonymous',
+): StackCheckStatus {
+  const done = new Set(completedIds);
+  if (done.has(item.id)) return 'done';
+  if (!isRunnableStackCheck(item)) return 'unknown';
+  if (viewer === 'anonymous') return 'skip';
+  return 'pending';
+}
+
+export function stackCheckStatusLabel(status: StackCheckStatus): string {
+  switch (status) {
+    case 'done':
+      return 'Done';
+    case 'pending':
+      return 'Pending';
+    case 'skip':
+      return 'Skip — not runnable while signed out';
+    case 'unknown':
+      return 'Can be skipped — not a production hold. UVAI cannot run this check.';
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+export interface StudioStackCheckView {
+  id: string;
+  title: string;
+  status: StackCheckStatus;
+  statusLabel: string;
+  holdsShip: boolean;
+}
+
+export function studioStackCheckView(
+  item: ChecklistItem,
+  completedIds: Iterable<string>,
+  viewer: StudioViewer = 'anonymous',
+): StudioStackCheckView {
+  const status = stackCheckStatus(item, completedIds, viewer);
+  return {
+    id: item.id,
+    title: item.title,
+    status,
+    statusLabel: stackCheckStatusLabel(status),
+    holdsShip: status === 'pending',
+  };
+}
+
 export function pickOfficialTemplate(sop: LinkedSop | null | undefined): OfficialTemplate | null {
   const stacks = detectedStacks(sop);
-  if (stacks.has('vercel')) return NEXT;
-  if (stacks.has('shopify')) return SHOPIFY;
+  for (const template of OFFICIAL_TEMPLATES) {
+    if (stacks.has(template.stack)) return template;
+  }
   return null;
 }
 
 export function deployHoldReason(
   sop: LinkedSop | null | undefined,
   completedIds: Iterable<string>,
+  viewer: StudioViewer = 'anonymous',
 ): string | null {
-  const done = new Set(completedIds);
-  const pending = stackCheckItems(sop).filter((item) => !done.has(item.id));
+  const pending = stackCheckItems(sop).filter(
+    (item) => stackCheckStatus(item, completedIds, viewer) === 'pending',
+  );
   if (pending.length === 0) return null;
   return `Production is held until ${pending.length} stack check(s) pass. Next: ${pending[0].title}`;
 }
@@ -144,5 +258,10 @@ export function officialTemplateFiles(
       'TEMPLATE.md': `# Official template\n\n${template.clone}\n\n${template.repo}\n\n${template.docsUrl}\n`,
     };
   }
-  return { 'SHOPIFY.md': shopifyGuide(projectName, template) };
+  if (template.id === 'shopify-cli') {
+    return { 'SHOPIFY.md': shopifyGuide(projectName, template) };
+  }
+  return {
+    'TEMPLATE.md': `# ${projectName} — ${template.name}\n\n\`\`\`bash\n${template.clone}\n\`\`\`\n\nRepo: ${template.repo}\nDocs: ${template.docsUrl}\n`,
+  };
 }

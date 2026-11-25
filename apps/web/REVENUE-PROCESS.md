@@ -1,11 +1,11 @@
-# EventRelay Pro — subscription revenue process
+# UVAI Workflow Pro — subscription revenue process
 
-Recurring revenue is anchored on **EventRelay Pro** ($19/mo or $180/yr) via Stripe Checkout, with acquisition protected by Cloudflare Turnstile and returning-user flows traced via kaizen-style logs.
+Recurring revenue is anchored on **UVAI Workflow Pro** ($39/mo or $390/yr) via Stripe Checkout, with acquisition protected by Cloudflare Turnstile and returning-user flows traced via kaizen-style logs.
 
 ## Entry point
 
-- **Pricing UI:** `src/app/pricing/page.tsx`
-- **Pro CTA:** `ProCheckoutButton` → `POST /api/billing/checkout` (Turnstile required)
+- **Home + Pricing UI:** `src/app/page.tsx` (`HomeProCheckout`) and `src/app/pricing/page.tsx`
+- **Pro CTA:** `ProCheckoutButton` → `POST /api/billing/checkout` (Turnstile required). Same button on Home and Pricing — no second Stripe path.
 - **Renewal:** `POST /api/billing/renew` (no Turnstile; for returning subscribers)
 
 ## Environment
@@ -16,9 +16,9 @@ Copy from Vercel or use test values in `.env.local`:
 |----------|---------|
 | `STRIPE_SECRET_KEY` | Server-side Stripe API |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | Client Stripe.js (future portal) |
-| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_ANNUAL` | **Required** recurring Price IDs (no inline fallback) |
+| `STRIPE_PRICE_PRO_MONTHLY` / `STRIPE_PRICE_PRO_ANNUAL` | **Required in production.** Last-resort documented fallbacks (non-prod only): `price_1U9AbLAmTgsI2zgNEZD4Kwed` ($39/mo, lookup `uvai-workflow-pro-monthly`) and `price_1U9AbLAmTgsI2zgN0SM70JN9` ($390/yr, lookup `uvai-workflow-pro-annual`). Product `prod_V9TYXeVHLQGrVW`. Never reuse dead EventRelay Pro $19/$180 IDs. |
 | `STRIPE_WEBHOOK_SECRET` | Required for `/api/billing/webhook` (checkout.session.completed) |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget on pricing |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Widget on Home and Pricing |
 | `TURNSTILE_SECRET_KEY` | Server siteverify |
 | `GROK_BILLING_LEAD_MODEL` | Metadata on subscriptions (`grok-4-1-fast` default) |
 | `NEXT_PUBLIC_APP_URL` | Checkout success/cancel URLs |
@@ -50,6 +50,7 @@ npm run dev
 |------|------|
 | `src/lib/billing/checkout-config.ts` | Pure price/URL resolution |
 | `src/lib/billing/stripe-checkout.ts` | Stripe session creation |
+| `src/lib/billing/pro-feature-gate.ts` | Pro verification + checkout handoff for gated downloads |
 | `src/lib/billing/turnstile.ts` | Cloudflare siteverify |
 | `src/lib/billing/grok-lead.ts` | Grok/Composer metadata on paid tier |
 | `src/lib/billing/kaizen-trace.ts` | Structured trace for renewal/debug |
@@ -66,6 +67,8 @@ npm run dev
 |---------|------|-----|
 | AI chat | 5/day | Unlimited, `grok-composer` lead model |
 | Agent dispatch | Blocked (402) | Allowed |
+| Workspace ZIP export | Blocked (402 + checkout) | Download enabled |
+| `/api/v1/refinery/dataset` | Blocked (402 + checkout) | Metadata + JSONL download |
 | API headers | — | `X-Lead-Model`, `X-Billing-Plan` on backend proxy |
 
 ## Returning users
@@ -91,7 +94,7 @@ cd apps/web
 SCRATCH=/path/to/scratch node scripts/run-revenue-spine.mjs
 ```
 
-Truncates scratch logs, runs checkout → signed `checkout.session.completed` webhook → activate → status → pro chat → renew **twice**. MyXstack gate: `myxteam/skills/premium-gate.ts` checks `/api/billing/status`.
+Truncates scratch logs, runs checkout → signed `checkout.session.completed` webhook → activate → status → pro chat → renew **twice**, then records `/api/billing/status`.
 
 ## Non-goals (this repo slice)
 

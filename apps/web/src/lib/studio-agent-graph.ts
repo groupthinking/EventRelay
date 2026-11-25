@@ -166,7 +166,7 @@ function nodeDetailFor(
 
 /**
  * Deterministically builds the AgentGraph execution state and AgentHandoffEnvelope
- * lineage for VideoWorkflowStudio.
+ * lineage for the studio agent graph.
  */
 export function buildStudioAgentGraph(
   input: BuildStudioAgentGraphInput,

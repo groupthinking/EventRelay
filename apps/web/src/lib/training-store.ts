@@ -25,6 +25,8 @@ import 'server-only';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+const IS_VERCEL = process.env.VERCEL === '1';
+
 /** Where training data lives */
 const TRAINING_DIR = path.join(process.cwd(), 'data', 'training');
 const TRAINING_FILE = path.join(TRAINING_DIR, 'video-analysis.jsonl');
@@ -78,6 +80,7 @@ Output ONLY valid JSON matching this schema.`;
  * Ensure the training directory exists.
  */
 async function ensureDir(): Promise<void> {
+  if (IS_VERCEL) return;
   await fs.mkdir(TRAINING_DIR, { recursive: true });
 }
 
@@ -85,6 +88,18 @@ async function ensureDir(): Promise<void> {
  * Load current metadata, or create defaults.
  */
 export async function getMetadata(): Promise<DatasetMetadata> {
+  if (IS_VERCEL) {
+    return {
+      totalExamples: 0,
+      lastUpdated: '',
+      lastVideoUrl: '',
+      lastVideoTitle: '',
+      tuningTriggered: false,
+      tuningTriggeredAt: null,
+      tuningJobId: null,
+      videosProcessed: [],
+    };
+  }
   await ensureDir();
   try {
     const raw = await fs.readFile(METADATA_FILE, 'utf-8');
@@ -107,6 +122,7 @@ export async function getMetadata(): Promise<DatasetMetadata> {
  * Save metadata to disk.
  */
 async function saveMetadata(meta: DatasetMetadata): Promise<void> {
+  if (IS_VERCEL) return;
   await ensureDir();
   await fs.writeFile(METADATA_FILE, JSON.stringify(meta, null, 2), 'utf-8');
 }
@@ -209,6 +225,10 @@ export async function saveTrainingExample(
   videoUrl: string,
   analysisOutput: Record<string, unknown>,
 ): Promise<{ saved: boolean; metadata: DatasetMetadata; milestone: number | null }> {
+  if (IS_VERCEL) {
+    console.log('[info/serverless] Skipping local training data write on Vercel');
+    return { saved: false, metadata: await getMetadata(), milestone: null };
+  }
   await ensureDir();
 
   const meta = await getMetadata();
@@ -294,6 +314,7 @@ export async function getTrainingStatus(): Promise<{
  * Read the raw JSONL file content for upload to Vertex AI.
  */
 export async function readTrainingFile(): Promise<string | null> {
+  if (IS_VERCEL) return null;
   try {
     return await fs.readFile(TRAINING_FILE, 'utf-8');
   } catch {
@@ -305,6 +326,7 @@ export async function readTrainingFile(): Promise<string | null> {
  * Mark that fine-tuning has been triggered.
  */
 export async function markTuningTriggered(jobId: string): Promise<void> {
+  if (IS_VERCEL) return;
   const meta = await getMetadata();
   meta.tuningTriggered = true;
   meta.tuningTriggeredAt = new Date().toISOString();

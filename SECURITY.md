@@ -28,14 +28,14 @@ If email is unavailable, open a private security advisory via the GitHub reposit
 - Never commit secrets; use `.env`, secret managers, or CI vaults. `.env.example` lists required variables.
 - Restrict API keys to the minimum scopes (YouTube Data API, Gemini, OpenAI, Google Speech-to-Text) and rotate them quarterly.
 - Store production credentials in dedicated secret stores (AWS Secrets Manager, GCP Secret Manager, 1Password) instead of shell profiles when possible.
-- Ensure `~/CLAUDE.md`, `~/.claude/CLAUDE.md`, and `/Users/garvey/CLAUDE_CODE_GOVERNANCE.md` have been reviewed before enabling MCP agents.
+- Ensure `~/CLAUDE.md` and `~/.claude/CLAUDE.md` have been reviewed before enabling MCP agents.
 
 ## Secure Development Practices
 
 - Run `youtube-extension lint` and `youtube-extension test` before submitting changes; this enforces Ruff, mypy, and pytest checks.
 - Apply security patches promptly via `pip install -e .[dev]` and `npm audit fix` workflows.
 - Use feature flags when integrating new agents to avoid exposing experimental endpoints in production.
-- Monitor dependencies with `scripts/check_credentials.py` and container scans in your CI pipeline.
+- Monitor dependencies with container scans in your CI pipeline.
 
 ### Container Security Scanning
 
@@ -58,7 +58,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasecurity/trivy:
 
 - Enforce HTTPS for any public deployment behind a load balancer or CDN.
 - Keep `docker-compose.*.yml` secrets externalised via environment files or credential stores.
-- Configure rate limiting and circuit breakers using the defaults in `mcp_servers/youtube_api_proxy.py` unless a revised quota plan is documented.
+- Configure rate limiting and circuit breakers, and document any revised quota plan.
 - Enable Prometheus/OTEL exporters to watch for anomalous traffic and API quota spikes.
 
 ## Incident Response

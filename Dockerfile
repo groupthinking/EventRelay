@@ -1,6 +1,9 @@
 # Dockerfile for EventRelay - Hybrid Python + Node.js (v22)
 # Multi-stage build optimized for production
 
+# Digest pins the publisher's multi-arch index, including the binary inventory.
+FROM mwader/static-ffmpeg:9.0.2-1@sha256:f5d100184884eb3e82b0eb14bb5ebf98da99826ac824989720297fb9ef21c822 AS media
+
 # Stage 1: Builder
 FROM python:3.11-slim AS builder
 
@@ -17,13 +20,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy dependency manifests
-COPY pyproject.toml requirements.txt* ./
+COPY pyproject.toml requirements.txt* constraints.txt ./
 COPY package.json package-lock.json ./
 COPY apps/web/package.json ./apps/web/
 
 # Copy local file dependencies for npm workspace
-COPY src/dataconnect-generated ./src/dataconnect-generated
-COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+# (dataconnect-generated dirs removed in sprawl pass 2 — zero importers)
 
 # apps/web postinstall runs scripts/patch-world-vercel-undici-fetch.mjs, so the
 # scripts directory must exist in the builder stage before `npm ci`
@@ -33,8 +35,12 @@ COPY apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
 COPY apps/web/scripts ./apps/web/scripts
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip && \
-    (pip install --no-cache-dir -r requirements.txt || pip install --no-cache-dir -e .)
+RUN pip install --no-cache-dir --upgrade \
+        pip \
+        "setuptools>=80.10.2" \
+        "wheel>=0.46.2" && \
+    (pip install --no-cache-dir -c constraints.txt -r requirements.txt || \
+     pip install --no-cache-dir -c constraints.txt -e .)
 
 # Install Node.js dependencies for the web app
 # Using workspace to ensure proper hoisting and dependency resolution
@@ -45,32 +51,55 @@ FROM python:3.11-slim AS runtime
 
 WORKDIR /app
 
-# Install runtime system dependencies (ffmpeg and nodejs v22)
+# Install runtime system dependencies for Node.js and font rendering.
 # gnupg is required for the Nodesource setup script
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
+# `apt-get upgrade` applies Debian security updates the pinned base layer
+# predates (e.g. zlib1g 1:1.3.dfsg+really1.3.1-1+deb13u1, DSA-6613-1).
+# Refs #2396: fixable OS findings must not ride in from a stale base layer.
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
+    fontconfig-config fonts-dejavu-core \
     curl \
     gnupg \
     ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
+    && npm install --global npm@12.2.2 \
     && rm -rf /var/lib/apt/lists/*
+
+# Use the same trust store for the static OpenSSL build and Debian clients.
+RUN test -e /etc/ssl/cert.pem || ln -s /etc/ssl/certs/ca-certificates.crt /etc/ssl/cert.pem
 
 # Create non-root user
 RUN groupadd --gid 1000 appuser && \
     useradd --uid 1000 --gid appuser --shell /bin/bash --create-home appuser
 
 # Copy installed Python packages from builder
+# The base image ships packaging metadata of its own. Clear it before copying
+# the builder environment so stale vulnerable dist-info/vendor records cannot
+# survive the directory overlay into the runtime image.
+RUN rm -rf /usr/local/lib/python3.11/site-packages/*
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
+
+# Keep media tools outside the Debian FFmpeg dependency chain (see #2727).
+# Retain the publisher's build-time library inventory: a static binary alone
+# does not let an OS-package scanner identify its embedded XML parser.
+COPY --from=media /ffmpeg /ffprobe /usr/local/bin/
+COPY --from=media /versions.json /usr/local/share/ffmpeg/versions.json
+
+# pip is an install-time tool. Its wheel ships pip/_vendor/bom.cdx.json, which
+# declares the vendored pkg_resources as setuptools 70.3.0, so image scanners
+# report CVE-2025-47273 against it even on the newest pip (26.3). The served
+# app (uvicorn) never invokes pip, so drop it from the runtime image.
+# Refs #2396.
+RUN python -m pip uninstall --yes pip
 
 # Copy installed Node.js packages from builder
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/web/node_modules ./apps/web/node_modules
 
-# Copy local dataconnect artifacts to avoid dangling symlinks
-COPY --from=builder /app/src/dataconnect-generated ./src/dataconnect-generated
-COPY --from=builder /app/apps/web/src/dataconnect-generated ./apps/web/src/dataconnect-generated
+# (dataconnect-generated dirs removed in sprawl pass 2 — zero importers)
 
 # Copy application code with correct ownership
 COPY --chown=appuser:appuser . .

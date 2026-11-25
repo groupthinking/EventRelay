@@ -97,6 +97,7 @@ jobs:
   prepare:
     name: Preflight and batch plan
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     outputs:
       matrix: ${{ steps.build-matrix.outputs.matrix }}
     steps:
@@ -195,6 +196,7 @@ jobs:
     needs: process
     if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 10  # Prevent long-running jobs
     outputs:
       final_status: ${{ steps.aggregate.outputs.final_status }}
       delivered: ${{ steps.aggregate.outputs.delivered }}

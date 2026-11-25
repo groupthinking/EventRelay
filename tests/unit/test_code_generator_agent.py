@@ -72,6 +72,16 @@ class TestValidatePythonSyntax:
 
 
 class TestExecuteReturnsValidationFields:
+    def test_fastapi_template_logs_and_sanitizes_unexpected_errors(self) -> None:
+        template = CodeGeneratorAgent().templates["fastapi_endpoint"]
+
+        assert 'logger.exception("Generated endpoint failed")' in template
+        assert 'detail="Internal server error"' in template
+        assert (
+            "except Exception as e:\n"
+            "        raise HTTPException(status_code=500, detail=str(e))"
+        ) not in template
+
     def test_execute_returns_syntax_valid_field(self) -> None:
         agent = CodeGeneratorAgent()
         result = asyncio.run(agent.execute({"intent": "api endpoint", "context": {}}))

@@ -99,6 +99,7 @@ export default function ProCheckoutButton({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ annual, turnstileToken: tokenRef.current }),
+        signal: AbortSignal.timeout(30_000),
       });
       const data = (await res.json()) as { url?: string; error?: string; sessionId?: string };
       if (!res.ok) {
@@ -142,7 +143,7 @@ export default function ProCheckoutButton({
         onClick={handleCheckout}
         disabled={loading || !ready}
         className={clsx(
-          'btn btn-primary py-3.5 w-full text-sm text-center shadow-lg shadow-primary-500/30',
+          'w-full rounded-md bg-[#146ef5] px-4 py-3 text-center text-sm font-semibold text-white transition hover:bg-[#0d5bd9] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#146ef5] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--uvai-bg)]',
           (loading || !ready) && 'opacity-60 cursor-not-allowed',
           className,
         )}

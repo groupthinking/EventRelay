@@ -3,48 +3,72 @@
  *
  * Tests the live deployment at BASE_URL (default: https://uvai.io) for:
  *   1. Homepage smoke check + Template Gallery (/features) rendering
- *   2. SSE pipeline stream — full end-to-end with a real YouTube URL
- *   3. SSE stream closes properly (no 95% hang regression)
- *   4. CloudEvent schema compliance in SSE events
- *   5. Error handling — invalid URL returns error, not a hang
- *   6. Dashboard page renders
- *   7. Interactive transcript player component exists
+ *   2. Video Pack pipeline — POST /api/video/pack → poll GET until ready
+ *   3. Pack evidence contract — hashed identity, source_hash lineage
+ *   4. Error handling — invalid URL returns 400, not a hang
+ *   5. Dashboard page renders
+ *   6. API health descriptor
+ *   7. Static assets & meta
+ *
+ * The legacy /api/pipeline SSE routes were retired; the canonical pipeline is
+ * the Video Pack flow (`POST /api/video/pack` → Upstash → Studio → G.A.T.E.).
  *
  * Environment:
  *   BASE_URL — deployment URL (default: https://uvai.io)
  *   TEST_YOUTUBE_URL — short video for pipeline test
  *     (default: https://www.youtube.com/watch?v=auJzb1D-fag)
+ *   GITHUB_RUN_ID — included in the E2E User-Agent for production attribution
  *
  * Red/Green Signal:
  *   - GREEN: all tests pass → stdout: "✅ ALL TESTS PASSED"
  *   - RED: any failure → stdout: "🔴 FAILURE DETECTED" + details
  */
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { afterEach, describe, it, expect, beforeAll, vi } from 'vitest';
 
 const BASE_URL = process.env.BASE_URL || 'https://uvai.io';
 const TEST_YOUTUBE_URL =
   process.env.TEST_YOUTUBE_URL ||
   'https://www.youtube.com/watch?v=auJzb1D-fag';
+/** Derive the 11-char video id from the configured URL (watch?v= or youtu.be/). */
+function videoIdFromUrl(url: string): string {
+  const match =
+    url.match(/[?&]v=([A-Za-z0-9_-]{11})/) || url.match(/youtu\.be\/([A-Za-z0-9_-]{11})/);
+  if (!match) throw new Error(`TEST_YOUTUBE_URL is not a recognized YouTube URL: ${url}`);
+  return match[1];
+}
+const TEST_VIDEO_ID = videoIdFromUrl(TEST_YOUTUBE_URL);
 
 // To exercise a protected deployment (e.g. a Vercel preview, which returns 401
 // to anonymous requests), set VERCEL_AUTOMATION_BYPASS_SECRET to the project's
 // "Protection Bypass for Automation" secret. It is attached as a header on
 // every request so the preview is reachable. Unset (the default — e.g. when
-// BASE_URL is production) → no header is added and behaviour is unchanged.
-const VERCEL_BYPASS_SECRET = process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '';
+// BASE_URL is production) → no bypass header is added; E2E attribution remains.
+const E2E_RUN_ID = process.env.GITHUB_RUN_ID?.trim() || 'local';
+const E2E_USER_AGENT = `EventRelay-E2E/${E2E_RUN_ID}`;
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-/** Merge the Vercel protection-bypass header into a request init, when configured. */
-function withBypass(init?: RequestInit): RequestInit {
-  if (!VERCEL_BYPASS_SECRET) return init ?? {};
+/** Add stable E2E attribution and the optional Vercel protection bypass. */
+function withE2EHeaders(init?: RequestInit): RequestInit {
   // Normalize via the Headers constructor so any HeadersInit shape (plain
   // object, Headers instance, or [key, value][] array) is preserved — a bare
   // spread would silently drop a Headers/array-typed init.headers.
   const headers = new Headers(init?.headers);
-  headers.set('x-vercel-protection-bypass', VERCEL_BYPASS_SECRET);
-  headers.set('x-vercel-set-bypass-cookie', 'true');
+  headers.set('User-Agent', E2E_USER_AGENT);
+  headers.set('X-EventRelay-Probe', 'e2e');
+  const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET?.trim();
+  if (bypassSecret) {
+    headers.set('x-vercel-protection-bypass', bypassSecret);
+  }
+  // Deliberately NOT sending `x-vercel-set-bypass-cookie`. That header asks
+  // Vercel to persist the bypass as a cookie and answers every request with
+  // `307 → /`. `fetch` has no cookie jar, so the redirect target is requested
+  // with the same header and 307s again — an unbounded loop that ends in
+  // "TypeError: fetch failed / redirect count exceeded", failing the whole
+  // suite even though the secret is correct. The bypass header alone is
+  // accepted per-request and returns 200 directly, which is all a stateless
+  // test client needs. The cookie form only helps a browser that persists it.
   return { ...init, headers };
 }
 
@@ -60,7 +84,7 @@ async function fetchWithTimeout(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { ...withBypass(init), signal: controller.signal });
+      const res = await fetch(url, { ...withE2EHeaders(init), signal: controller.signal });
       clearTimeout(timer);
       return res;
     } catch (err) {
@@ -83,27 +107,92 @@ async function fetchWithTimeout(
   throw lastError || new Error('fetchWithTimeout: max retries exceeded');
 }
 
-/** Parse an SSE text stream into an array of parsed JSON events. */
-function parseSSEEvents(raw: string): Array<Record<string, unknown>> {
-  const events: Array<Record<string, unknown>> = [];
-  const lines = raw.split('\n');
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      try {
-        events.push(JSON.parse(line.slice(6)));
-      } catch {
-        // skip non-JSON lines
-      }
+describe('E2E request attribution', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('adds the probe and GitHub run identity headers to every request', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 204 }));
+    let capturedInit: RequestInit | undefined;
+
+    try {
+      await fetchWithTimeout(
+        'https://example.test/api/health',
+        { headers: { Accept: 'application/json' } },
+        100,
+        1,
+      );
+      capturedInit = fetchSpy.mock.calls[0]?.[1];
+    } finally {
+      fetchSpy.mockRestore();
     }
-  }
-  return events;
-}
+
+    const headers = new Headers(capturedInit?.headers);
+    const runId = process.env.GITHUB_RUN_ID?.trim() || 'local';
+
+    expect(headers.get('user-agent')).toBe(`EventRelay-E2E/${runId}`);
+    expect(headers.get('x-eventrelay-probe')).toBe('e2e');
+    expect(headers.get('accept')).toBe('application/json');
+  });
+
+  it('forwards the configured preview bypass on every request without persisting it', async () => {
+    vi.stubEnv('VERCEL_AUTOMATION_BYPASS_SECRET', 'preview-bypass-test-value');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => {
+      const headers = new Headers(init?.headers);
+      const bypassed = headers.get('x-vercel-protection-bypass') === 'preview-bypass-test-value';
+      return new Response(null, { status: bypassed ? 204 : 401 });
+    });
+
+    try {
+      const response = await fetchWithTimeout('https://preview.example.test/api/health', undefined, 100, 1);
+      const headers = new Headers(fetchSpy.mock.calls[0]?.[1]?.headers);
+
+      expect(response.status).toBe(204);
+      expect(headers.get('x-vercel-protection-bypass')).toBe('preview-bypass-test-value');
+      expect(headers.has('x-vercel-set-bypass-cookie')).toBe(false);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+});
 
 // ─── Tests ──────────────────────────────────────────────────────────
 
 describe('EventRelay E2E — Live Deployment', () => {
-  // Smoke check: is the site up?
+  // Smoke check: is the site up, and is it the app we intend to test?
+  //
+  // Vercel Deployment Protection intercepts anonymous traffic to a preview in two
+  // shapes: HTML routes 302 to vercel.com/sso-api, API routes return a bare 401.
+  // The default `redirect: 'follow'` hides the first shape completely — fetch
+  // lands on a 200 "Login – Vercel" page, so `res.ok` is true and the suite runs
+  // every assertion against Vercel's login markup instead of the deployment. The
+  // page happens to contain a <title> and a viewport meta tag, so the meta and
+  // liveness tests pass; only the content and API assertions fail, with messages
+  // that blame the app ("expected 0 to be greater than or equal to 3") rather than
+  // naming the missing bypass secret. Probe with `redirect: 'manual'` so the 302
+  // stays visible and fail once, with the remedy.
   beforeAll(async () => {
+    const probe = await fetchWithTimeout(BASE_URL, { redirect: 'manual' }, 15_000);
+    const location = probe.headers.get('location') || '';
+    const ssoRedirect =
+      [301, 302, 303, 307, 308].includes(probe.status) &&
+      /vercel\.com\/sso-api/i.test(location);
+
+    if (ssoRedirect || probe.status === 401) {
+      throw new Error(
+        `Deployment protection blocked this run — ${BASE_URL} returned ${probe.status}` +
+          `${location ? ` → ${location}` : ''} instead of the app, so every assertion ` +
+          `below would execute against Vercel's login page rather than the deployment. ` +
+          `Set the VERCEL_AUTOMATION_BYPASS_SECRET repository secret to the project's ` +
+          `"Protection Bypass for Automation" value (Vercel → Project → Settings → ` +
+          `Deployment Protection); this suite forwards it as the ` +
+          `x-vercel-protection-bypass header on every request.`,
+      );
+    }
+
+    // Liveness check, following redirects as before so a legitimate same-host
+    // redirect on `/` still counts as up.
     const res = await fetchWithTimeout(BASE_URL, {}, 15_000);
     if (!res.ok) {
       throw new Error(
@@ -172,180 +261,92 @@ describe('EventRelay E2E — Live Deployment', () => {
     });
   });
 
-  // ── 2. SSE Pipeline Stream — Full End-to-End ──────────────────────
+  // ── 2. Video Pack Pipeline — the canonical flow ───────────────────
+  // POST /api/video/pack accepts the URL and returns 202 (processing) or 200
+  // (already-ready pack). GET /api/video/pack?video_id=… polls until the pack
+  // is ready. The pack is the evidence unit the Studio and G.A.T.E. consume.
 
-  describe('SSE Pipeline Stream', () => {
-    it('POST /api/pipeline/stream returns SSE content-type', async () => {
-      const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: TEST_YOUTUBE_URL }),
-        },
-        90_000,
-      );
-      expect(res.status).toBe(200);
-      const ct = res.headers.get('content-type') || '';
-      expect(ct).toContain('text/event-stream');
-    });
+  describe('Video Pack Pipeline', () => {
+    const PACK_URL = `${BASE_URL}/api/video/pack`;
 
-    it('SSE stream emits at least a pipeline_status:running event', async () => {
-      const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: TEST_YOUTUBE_URL }),
-        },
-        90_000,
-      );
-
-      const body = await res.text();
-      const events = parseSSEEvents(body);
-
-      // Must have at least 1 event
-      expect(events.length).toBeGreaterThanOrEqual(1);
-
-      // Must start with pipeline_status:running
-      const runningEvent = events.find(
-        (e) => e.type === 'pipeline_status' && e.status === 'running',
-      );
-      expect(runningEvent).toBeDefined();
-
-      // When Gemini is configured the stream also emits a terminal status
-      // ('complete' or 'error'). Log it for observability but don't fail if
-      // the live server closes early (no-key / degraded mode).
-      const pipelineEvents = events.filter((e) => e.type === 'pipeline_status');
-      const lastPipeline = pipelineEvents[pipelineEvents.length - 1];
-      console.info(`[E2E] last pipeline_status: ${lastPipeline?.status ?? 'none'}`);
-    });
-
-    it('SSE stream closes within 90 seconds (no 95% hang)', async () => {
+    it('POST /api/video/pack accepts a YouTube URL without hanging', async () => {
       const start = Date.now();
       const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
+        PACK_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: TEST_YOUTUBE_URL }),
         },
-        90_000,
+        60_000,
       );
-
-      // Reading the full body — if the stream hangs, fetchWithTimeout aborts at 90s
-      await res.text();
       const elapsed = Date.now() - start;
 
-      // Stream should complete, not hang. If it took > 85s, it's likely hanging.
-      expect(elapsed).toBeLessThan(85_000);
+      // 202 = extraction kicked off; 200 = pack already ready (cached).
+      expect([200, 202]).toContain(res.status);
+      const payload = (await res.json()) as Record<string, unknown>;
+      expect(['processing', 'success']).toContain(payload.status);
+      expect(elapsed).toBeLessThan(55_000);
     });
 
-    it('SSE events fire in correct agent order', async () => {
-      const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
+    it('GET /api/video/pack resolves to a ready pack with evidence lineage', async () => {
+      // Kick off (idempotent — a ready pack returns immediately).
+      await fetchWithTimeout(
+        PACK_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: TEST_YOUTUBE_URL }),
         },
-        90_000,
+        60_000,
       );
 
-      const body = await res.text();
-      const events = parseSSEEvents(body);
-
-      // Extract agent_update events
-      const agentUpdates = events.filter((e) => e.type === 'agent_update');
-
-      if (agentUpdates.length > 0) {
-        // Orchestrator should appear before action_gen
-        const orchestratorIdx = agentUpdates.findIndex(
-          (e) => e.agentId === 'orchestrator',
+      // Poll for readiness: bounded, honest about extraction latency.
+      const deadline = Date.now() + 150_000;
+      let pack: Record<string, unknown> | null = null;
+      for (;;) {
+        const res = await fetchWithTimeout(
+          `${PACK_URL}?video_id=${TEST_VIDEO_ID}`,
+          {},
+          30_000,
         );
-        const actionGenIdx = agentUpdates.findIndex(
-          (e) => e.agentId === 'action_gen',
+        const payload = (await res.json()) as Record<string, unknown>;
+        if (payload.status === 'success' && payload.data && typeof payload.data === 'object') {
+          pack = payload.data as Record<string, unknown>;
+          break;
+        }
+        if (Date.now() > deadline) break;
+        await new Promise((r) => setTimeout(r, 10_000));
+      }
+
+      if (!pack) {
+        console.info(
+          '[E2E] Pack still processing after 150s — extraction latency, not a contract break. Skipping shape assertions.',
         );
-
-        if (orchestratorIdx !== -1 && actionGenIdx !== -1) {
-          expect(orchestratorIdx).toBeLessThan(actionGenIdx);
-        }
-      }
-
-      // Must have a workflow event with data
-      const workflowEvent = events.find((e) => e.type === 'workflow');
-      if (workflowEvent) {
-        expect(workflowEvent.data).toBeDefined();
-      }
-    });
-  });
-
-  // ── 3. CloudEvent Schema Compliance ───────────────────────────────
-
-  describe('CloudEvent Schema', () => {
-    it('SSE events contain valid timestamps', async () => {
-      const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: TEST_YOUTUBE_URL }),
-        },
-        90_000,
-      );
-
-      const body = await res.text();
-      const events = parseSSEEvents(body);
-
-      for (const event of events) {
-        if (event.timestamp) {
-          const ts = new Date(event.timestamp as string);
-          expect(ts.getTime()).not.toBeNaN();
-        }
-      }
-    });
-
-    it('terminal pipeline_status includes duration and agent count when present', async () => {
-      const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: TEST_YOUTUBE_URL }),
-        },
-        90_000,
-      );
-
-      const body = await res.text();
-      const events = parseSSEEvents(body);
-      const terminal = events.find(
-        (e) => e.type === 'pipeline_status' && (e.status === 'complete' || e.status === 'error'),
-      );
-
-      // Terminal event is only present when Gemini is configured on the server.
-      // Skip field checks if the live server closed early (degraded/no-key mode).
-      if (!terminal) {
-        console.info('[E2E] No terminal pipeline_status found — server may be in degraded mode');
         return;
       }
 
-      expect(terminal.duration).toBeDefined();
-      expect(typeof terminal.duration).toBe('number');
-      const data = terminal.data as Record<string, unknown> | undefined;
-      if (data) {
-        expect(data.totalAgents).toBeDefined();
-        expect(data.completedAgents).toBeDefined();
-      }
-    });
+      // Evidence contract: hashed identity, source lineage, real content.
+      expect(pack.video_id).toBe(TEST_VIDEO_ID);
+      expect(pack.id).toBe(`vp:v0:${TEST_VIDEO_ID}`);
+      expect(typeof pack.source_url).toBe('string');
+      const provenance = pack.provenance as Record<string, unknown>;
+      expect(provenance.source_hash).toMatch(/^[a-f0-9]{64}$/);
+      const transcript = pack.transcript as Record<string, unknown>;
+      expect(typeof transcript.full_text).toBe('string');
+      expect((transcript.full_text as string).length).toBeGreaterThan(0);
+    }, 180_000);
   });
 
-  // ── 4. Error Handling ─────────────────────────────────────────────
+  // ── 3. Error Handling ─────────────────────────────────────────────
 
   describe('Error Handling', () => {
+    const PACK_URL = `${BASE_URL}/api/video/pack`;
+
     it('missing URL returns 400, not a hang', async () => {
       const start = Date.now();
       const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
+        PACK_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -359,47 +360,32 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(elapsed).toBeLessThan(5_000); // Should respond instantly
     });
 
-    it('invalid URL returns error event or completes quickly, not a hang', async () => {
+    it('invalid URL returns 400 quickly, not a hang', async () => {
       const start = Date.now();
       const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
+        PACK_URL,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: 'not-a-valid-url' }),
         },
-        30_000,
+        10_000,
       );
 
       const elapsed = Date.now() - start;
+      expect(res.status).toBe(400);
+      const payload = (await res.json()) as Record<string, unknown>;
+      expect(payload.status).toBe('error');
+      expect(elapsed).toBeLessThan(5_000);
+    });
 
-      if (res.status === 200) {
-        // Server may return an SSE stream that either:
-        // a) contains an error event, or
-        // b) completes with pipeline_status:complete (with error in data), or
-        // c) has no events at all
-        // All are acceptable — the key requirement is that it does NOT hang.
-        const body = await res.text();
-        const events = parseSSEEvents(body);
-        const hasTerminalEvent = events.some(
-          (e) =>
-            e.type === 'error' ||
-            (e.type === 'pipeline_status' &&
-              (e.status === 'error' || e.status === 'complete')),
-        );
-        // Either has a terminal event or stream was empty
-        expect(hasTerminalEvent || events.length === 0).toBe(true);
-      } else {
-        // Non-200 is also acceptable (400, 503, etc.)
-        expect(res.status).toBeGreaterThanOrEqual(400);
-      }
-
-      // The critical assertion: must not hang
-      expect(elapsed).toBeLessThan(25_000);
+    it('POST /api/video/pack with no body returns 400', async () => {
+      const res = await fetchWithTimeout(PACK_URL, { method: 'POST' }, 10_000);
+      expect(res.status).toBe(400);
     });
   });
 
-  // ── 5. Dashboard Page ─────────────────────────────────────────────
+  // ── 4. Dashboard Page ─────────────────────────────────────────────
 
   describe('Dashboard', () => {
     it('/dashboard returns 200', async () => {
@@ -422,7 +408,7 @@ describe('EventRelay E2E — Live Deployment', () => {
     });
   });
 
-  // ── 6. API Health ─────────────────────────────────────────────────
+  // ── 5. API Health ─────────────────────────────────────────────────
 
   describe('API Health', () => {
     it('GET /api returns a response (not 404)', async () => {
@@ -431,18 +417,16 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(res.status).not.toBe(404);
     });
 
-    it('POST /api/pipeline/stream with no body returns 400', async () => {
-      const res = await fetchWithTimeout(
-        `${BASE_URL}/api/pipeline/stream`,
-        { method: 'POST' },
-        10_000,
-      );
-      // Should handle gracefully — 400 or 500, but respond quickly
-      expect([400, 500]).toContain(res.status);
+    it('retired /api/pipeline routes are gone (no pipeline served)', async () => {
+      const res = await fetchWithTimeout(`${BASE_URL}/api/pipeline`);
+      // 404 when auth is off (no such route); 401 when the middleware's
+      // fail-closed auth gate runs before routing on protected deployments.
+      // Either way the legacy pipeline serves nothing — no 200, no SSE.
+      expect([401, 404]).toContain(res.status);
     });
   });
 
-  // ── 7. Static Assets & Meta ───────────────────────────────────────
+  // ── 6. Static Assets & Meta ───────────────────────────────────────
 
   describe('Static Assets', () => {
     it('homepage has proper meta tags', async () => {

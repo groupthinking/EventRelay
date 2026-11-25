@@ -12,7 +12,7 @@
 - `"use step"` — retryable Node units (full npm access)
 - `start()` / `getRun()` from `workflow/api` — fire and poll from route handlers
 
-**Product pipeline today still uses** FastAPI agents, `POST /api/pipeline`, SSE (`/api/pipeline/stream`), and Cloud Tasks for full Studio deploy / Dashboard analysis. WDK sits **alongside** that path for long transcript → action runs that should survive serverless timeouts.
+**Product pipeline today is the Video Pack pipeline** (`POST /api/video/pack` → Upstash → Studio → G.A.T.E.). The legacy FastAPI/`POST /api/pipeline`/SSE path was retired. WDK remains for long transcript → action runs that should survive serverless timeouts.
 
 ## Product surface (v1)
 
@@ -22,7 +22,7 @@
 | Start | `POST /api/workflows/video-to-actions` `{ "url", "videoTitle?" }` → `{ runId, statusUrl }` |
 | Status | `GET /api/workflows/video-to-actions/:runId` → `{ runStatus, result? }` |
 | Client helpers | `apps/web/src/lib/studio-workflow.ts` |
-| Studio UI | **Act on findings** button in `VideoWorkflowStudio` |
+| Studio UI | **Act on findings** button in `OneLoopStudio` (canonical studio) |
 
 Steps: **transcribe** (`fetchTranscript`) → **run action agent** (`runActionAgent`). No self-HTTP loopback.
 
@@ -50,15 +50,15 @@ npx workflow inspect runs
 
 `turbo.json` build outputs include `apps/web/src/app/.well-known/workflow/**` so cache hits keep workflow registration.
 
-## Product C — Studio deploy durable
+## Product C — Studio deploy preflight
 
 | Piece | Path |
 |-------|------|
-| Workflow | `apps/web/src/workflows/studio-deploy.ts` |
-| Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` (FastAPI `/api/v1/videos/process` + `/api/v1/jobs/:id`, no self-HTTP) |
-| Start | `POST /api/workflows/studio-deploy` `{ "url", projectType?, outcome? }` → `{ runId, statusUrl }` |
-| Status | `GET /api/workflows/studio-deploy/:runId` → `{ runStatus, result? }` |
-| Studio UI | Deploy in `VideoWorkflowStudio`. **401 → /login**. Fallback to F5 `/api/pipeline` only when start() is 5xx/unavailable. |
+| Workflow | Removed. `POST` does not start a durable run. |
+| Kickoff / poll lib | `apps/web/src/lib/pipeline-async-job.ts` remains for other jobs. It is not started by Studio deploy. |
+| Start | `POST /api/workflows/studio-deploy` returns **409** after G.A.T.E. No `runId` is created. |
+| Status | `GET /api/workflows/studio-deploy/:runId` can still read a historical workflow run. |
+| Studio UI | No deploy button. The route is the refusal. |
 
 Auth: this route stays **session-gated**. Studio now has a Sign in link. Never use `dQw4w9WgXcQ` as a fixture — use `auJzb1D-fag`.
 

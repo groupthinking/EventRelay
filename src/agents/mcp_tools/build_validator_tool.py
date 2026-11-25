@@ -356,7 +356,6 @@ Focus on common issues:
                 model='gemini-3-pro-preview',
                 contents=fix_prompt,
                 config=genai_types.GenerateContentConfig(
-                    temperature=1.0,
                     max_output_tokens=4096
                 )
             )

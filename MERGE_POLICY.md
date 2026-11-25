@@ -34,7 +34,7 @@ one quiet window could pass.
 SHA; previews are routinely canceled for reasons unrelated to the change. It
 required independent review approval; CodeRabbit skips any pull request without
 one of 26 labels, so an unlabeled pull request could never obtain the approval
-the gate demanded. `agent-completion/truth-gate` failed `invalid_payload` on
+the gate demanded. The retired agent-completion gate failed `invalid_payload` on
 every pull request that had no dispatch contract — including #1368, which
 merged and became the tip of `main` with that status red.
 
@@ -50,6 +50,22 @@ permanently, and duplicates were exactly what the draft backlog kept producing.
 A gate that cannot be satisfied is not strict — it is broken, and it teaches
 everyone to merge around it.
 
+## Author checklist
+
+When a gate is not satisfied, take the corresponding action below. These are
+remedies, not reasons to leave a pull request in draft indefinitely.
+
+| Gate | Author action |
+| --- | --- |
+| Binding | Add exactly one `Closes #<issue>` reference and use the pull request template. |
+| Required checks | Fix a failing check and push; if a check does not report, verify whether the diff belongs in the conditional list rather than waiting for it. |
+| Review | Request the automated reviewer, address actionable findings, or proceed after its 24-hour response window. |
+| Preview | For an `apps/web/**` change, deploy or retry a READY preview whose `apps/web` tree matches the head; backend-only changes need no preview. |
+| Provenance | Align the declared scope with the diff and remove unrelated changes. |
+| Overlap | Coordinate on one implementation, then close the losing pull request with a pointer to the winner within 72 hours. |
+| Freshness | Merge `main` and resolve conflicts; do not repeatedly rebase just to reach zero commits behind. |
+| Risk class | Classify the change and obtain the approval required by that class. |
+
 ## Gates
 
 A pull request may merge when all of the following hold.
@@ -58,8 +74,8 @@ A pull request may merge when all of the following hold.
 Exactly one `Closes #<issue>` reference, and the pull request description
 follows `.github/pull_request_template.md`.
 
-*Already enforced by the `PR Governance` and `Canonical issue and evidence`
-checks. These work — keep them.*
+Binding is a policy-level, author-declared requirement. There is no automated
+gate for it.
 
 ### 2. Required checks green on the head commit
 
@@ -73,25 +89,23 @@ The real contexts, as observed on live pull requests:
 
 | Surface | Check-run names |
 | --- | --- |
-| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test`, `test-frontend` |
+| CI | `validate`, `guards`, `lint-python`, `lint-frontend`, `build`, `test (Python 3.11)`, `test (Python 3.12)`, `test-frontend` |
 | Static analysis | `CodeQL` |
 | Security | `Security Scan - python`, `Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy` |
 | Secrets | `gitleaks (working tree)` |
 | Dependencies | `dependency-review` |
-| Binding | `PR Governance`, `Canonical issue and evidence` |
 
 Required for every pull request: `validate`, `guards`, `lint-python`,
-`lint-frontend`, `build`, `test`, `test-frontend`, `CodeQL`,
-`gitleaks (working tree)`, `dependency-review`, `PR Governance`,
-`Canonical issue and evidence`, `Security Scan - python`,
-`Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`,
-`trivy`.
+`lint-frontend`, `build`, `test (Python 3.11)`,
+`test (Python 3.12)`, `test-frontend`, `CodeQL`,
+`gitleaks (working tree)`, `dependency-review`, `Security Scan - python`,
+`Security Scan - javascript`, `bandit`, `python-safety`, `npm-audit`, `trivy`.
 
-> **`test` vs `test-frontend`.** The CI job id/name `test` runs **Python**
-> pytest only. Frontend unit tests (apps/web vitest, including CWE-209 /
-> billing disclosure regressions) are the separate required check
-> **`test-frontend`** (#1449). Do not treat a green `test` check as evidence
-> that web unit tests ran.
+> **Python matrix vs `test-frontend`.** The three `test (Python …)` checks run
+> **Python** pytest only. Frontend unit tests (apps/web vitest, including CWE-209
+> / billing disclosure regressions) are the separate required check
+> **`test-frontend`** (#1449). Do not treat green Python checks as evidence that
+> web unit tests ran.
 
 All six were verified to report `success` on a documentation-only pull request
 (#1408 head `27b2ecf`, and again on #1410 head `7af6028`), so none of them can
@@ -99,32 +113,62 @@ strand a change permanently pending. v1 listed `Security` among its required
 six, and dropping every security scan out of the required set would be a
 weakening introduced by the rewrite that set out to make this gate precise.
 
-> **What requiring these does and does not buy you.** Four of the six cannot
-> fail on findings, by construction, in `.github/workflows/security.yml`:
->
-> | Job | Why it always reports `success` |
-> | --- | --- |
-> | `npm-audit` | `continue-on-error: true` |
-> | `python-safety` | `\|\| true` **and** `continue-on-error: true` |
-> | `bandit` | `\|\| true` |
-> | `trivy` | `exit-code: '0'` on both invocations |
->
-> `Security Scan - python` and `Security Scan - javascript` are CodeQL matrix
-> jobs; they report that analysis completed and upload alerts to the Security
-> tab. Whether an alert blocks a merge is a code-scanning check-failure setting,
-> not something the workflow decides.
->
-> So gate 2 requires these checks to **run and complete** — which catches a scan
-> that crashed, timed out, or was silently dropped from the pipeline. It is
-> **not** vulnerability enforcement, and this policy should not be read as
-> claiming it is. Making findings actually block is a change to
-> `security.yml`, with its own diff and its own blast radius; see *What is
-> deliberately not here*.
+`trivy` is temporarily a required **scan-completion gate** for the dependency
+repair bootstrap (#2425, PR #2409). Image build or scanner execution errors
+still fail the job, but reported vulnerabilities do not (`exit-code: '0'`).
+The HIGH/CRITICAL SARIF includes findings without a fix; SARIF, exact source
+commit and image identity are retained even when the job fails. A green `trivy`
+or uppercase `Trivy` SARIF-ingestion check does not establish a clean image.
+
+The dependency repairs are separated from final strict enforcement. This is
+partial remediation, with no accepted baseline and no risk acceptance for the
+remaining findings. Parent #2396 stays open until a re-fetched exact image or
+separately reviewed applicability/VEX evidence accounts for every finding.
+See [the bootstrap evidence and remaining gates](docs/security/image-remediation-bootstrap.md).
+Enable the final `exit-code: '1'` HIGH/CRITICAL gate in a separately reviewed
+change after that accounting, or introduce an explicitly reviewed delta policy
+with package/version/path identity and regression tests. Keep
+`limit-severities-for-sarif: true` so the pinned action honors the threshold.
+
+No exceptions are accepted by the current image scan. Existing bare IDs in
+`.trivyignore` are not evidence of approved risk acceptance and are not applied.
+Any future exception must be introduced in a separately reviewed change with
+an exact advisory/package/version/image scope, applicability evidence,
+compensating controls, an accountable approver, linked issue, expiry, and an
+enforced expiry check. A missing advisory or unproven exposure remains unresolved.
+
+`npm-audit` installs the committed dependency graph with the declared npm version
+and `npm ci`, then fails on high/critical npm advisories or audit execution errors.
+It retains the JSON report even when the audit fails. A passing result covers
+that dependency graph and the advisory data available during that run; it is not
+a claim that the application has no vulnerabilities.
+
+The other security jobs remain completion gates: `python-safety` and `bandit`
+still tolerate findings. CodeQL check failure also depends on the repository's
+code-scanning settings. Their green conclusions do not establish absence of
+vulnerabilities.
 
 > **`trivy` is lowercase.** Two distinct check-runs exist on the same head —
 > `trivy` reports `success`, `Trivy` reports `neutral`, confirmed on both heads
 > above. Selecting the capitalised one requires a check that never passes —
 > precisely the trap the confirmation rule below exists to catch.
+
+> **`PR Governance` / `Canonical issue and evidence` (#1436).** Neither name
+> appears in the required list above, and that is deliberate, not an
+> omission. `pr-governance.yml` was the sole source of both check-run names,
+> and on its escape paths (draft PRs, Dependabot) only its own custom
+> `PR Governance` check reported the honest `neutral`; the job-level
+> `Canonical issue and evidence` check still reported `success`, because the
+> escape never called `core.setFailed`. Requiring the descriptive-sounding
+> `Canonical issue and evidence` name alone would have made every draft and
+> every Dependabot PR read as "contract satisfied" instead of "not
+> evaluated" — the exact trap the confirmation rule below exists to catch,
+> and worse here because nothing in the picker hints which of the two names
+> carries the real signal. The workflow was retired outright (#1665) rather
+> than fixed, so the trap no longer exists to fall into. If a canonical-issue
+> gate is reintroduced, whichever check carries the three-state signal must
+> be the one required, and that must be spelled out here before it is added
+> to branch protection — not discovered afterward on a green draft PR.
 
 **Conditionally required — never require these unconditionally:**
 
@@ -200,7 +244,7 @@ was written to remove.
 > issue is opened against its owner.**
 
 A check red on everything has zero signal and actively hides real failures.
-`agent-completion/truth-gate` was red on ~100% of pull requests for weeks,
+The retired agent-completion gate was red on ~100% of pull requests for weeks,
 including merged ones, and nobody noticed because everyone had learned to
 ignore it. `.github/workflows/agent-completion-enforcement.yml` even documented
 this failure mode in its own comments while its sibling did exactly that. Both
@@ -221,16 +265,13 @@ laundering itself as enforcement.
 - **No evidence ledger requirement.** v1 mandated a receipt comment on #898 for
   every gate evaluation. Nothing consumed those receipts. Git history and
   check runs are the ledger.
-- **No change to what the security scans enforce.** Gate 2 requires the six
-  security checks to run and complete; four of them cannot fail on findings, as
-  documented there. Turning `npm-audit`, `python-safety`, `bandit`, and `trivy`
-  into blocking gates means removing their `continue-on-error` / `|| true` /
-  `exit-code: '0'` escapes in `security.yml`, which will fail pull requests on
-  the existing backlog of findings the moment it lands. That is a deliberate
-  decision about tolerance for known vulnerabilities, not a documentation fix,
-  so it is left to its own pull request. Requiring the checks first is still
-  worth doing: it makes a scan that crashes or quietly disappears from the
-  pipeline visible, which is the failure this policy can actually close.
+- **Strict image enforcement is deferred explicitly.** The #2425 bootstrap
+  keeps `trivy` required for scan completion and evidence retention while #2396
+  owns the unresolved findings and final enforcement. This is not a clean-image
+  claim or an approved exception list. Do not automatically demote `trivy` or
+  suppress findings for a high failure rate; the 50% demotion rule applies to
+  broken execution, not to valid security findings. Final enforcement requires
+  the separate review and finding accounting described in gate 2.
 
 ## Review clock
 
@@ -251,7 +292,7 @@ protection; the re-examination is.
 1. Commit this file. ✅ *(this pull request)*
 2. Retire the v1 Notion page — link here, mark superseded. Any agent still
    reading v1 will keep returning pull requests to draft.
-3. Enable branch protection: the six checks from gate 2, block direct pushes.
+3. Enable branch protection: the required checks from gate 2, and block direct pushes.
 4. Enable the merge queue (makes gate 7 structural).
 5. Implement the 50% demotion rule as a scheduled workflow.
 6. Enable Class A auto-merge. Two clean weeks later, Class B batches.

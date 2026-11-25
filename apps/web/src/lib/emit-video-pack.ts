@@ -1,0 +1,292 @@
+import { decodeGroundedSpec, type GroundedSpecRecord } from '@/lib/grounded-build-spec';
+import type {
+  VideoPackCodeSnippet,
+  VideoPackKeyframe,
+  VideoPackRequirement,
+  VideoPackTranscriptSegment,
+  VideoPackVisualContext,
+} from '@/lib/video-pack';
+import {
+  readPackFormation,
+  type VideoPackActionItem,
+  type VideoPackArchitecture,
+  type VideoPackArtifact,
+  type VideoPackChapter,
+  type VideoPackStack,
+} from '@/lib/video-pack-types';
+
+export interface EmittedVideoPack {
+  grounded_spec?: GroundedSpecRecord;
+  version: string;
+  id: string;
+  video_id: string;
+  source_url: string;
+  provenance: { source_hash: string };
+  transcript?: {
+    language?: string | null;
+    full_text: string;
+    segments?: VideoPackTranscriptSegment[];
+  };
+  visual_context?: VideoPackVisualContext | null;
+  keyframes?: VideoPackKeyframe[];
+  requirements?: VideoPackRequirement[];
+  code_snippets?: VideoPackCodeSnippet[];
+  architecture?: VideoPackArchitecture | null;
+  artifacts?: VideoPackArtifact[];
+  stack?: VideoPackStack;
+  chapters?: VideoPackChapter[];
+  action_items?: VideoPackActionItem[];
+}
+
+export interface VideoPackCitation {
+  version: string;
+  videoId: string;
+  packId: string;
+  sourceUrl: string;
+  sourceHash: string;
+  pack: EmittedVideoPack;
+}
+
+const SOURCE_HASH = /^[a-f0-9]{64}$/;
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : null;
+}
+
+function identityFailure(gaps: readonly string[]): Error {
+  const listed = gaps.join(', ');
+  const verb = gaps.length === 1 ? 'is' : 'are';
+  return new Error(`Video pack verification failed: ${listed} ${verb} required.`);
+}
+
+function surfacedEnvelopeError(envelope: Record<string, unknown>): string | null {
+  if (typeof envelope.error === 'string' && envelope.error.trim()) {
+    return envelope.error;
+  }
+  // Stored pack failures return HTTP 200 with the message on `detail`.
+  if (typeof envelope.detail === 'string' && envelope.detail.trim()) {
+    return envelope.detail;
+  }
+  return null;
+}
+
+export function verifyIdentityPack(payload: unknown): VideoPackCitation {
+  const envelope = asRecord(payload);
+  if (envelope?.status === 'error') {
+    const surfaced = surfacedEnvelopeError(envelope);
+    if (surfaced) {
+      throw new Error(surfaced);
+    }
+  }
+
+  const data = asRecord(envelope?.data);
+  const provenance = asRecord(data?.provenance);
+  const sourceUrl = typeof data?.source_url === 'string' ? data.source_url.trim() : '';
+  const sourceHash = typeof provenance?.source_hash === 'string' ? provenance.source_hash.trim() : '';
+  const videoId = typeof data?.video_id === 'string' ? data.video_id : '';
+  const version = typeof data?.version === 'string' ? data.version : '';
+  const packId = typeof data?.id === 'string' ? data.id : '';
+  const gaps: string[] = [];
+  if (envelope?.status !== 'success') gaps.push('status');
+  if (version !== 'v0') gaps.push('version');
+  if (!videoId) gaps.push('video_id');
+  if (!packId) gaps.push('id');
+  if (!sourceUrl.startsWith('http')) gaps.push('source_url');
+  if (!SOURCE_HASH.test(sourceHash)) gaps.push('source_hash');
+  if (gaps.length > 0) {
+    throw identityFailure(gaps);
+  }
+
+  const formation = data
+    ? readPackFormation(data)
+    : {
+        architecture: null,
+        artifacts: [],
+        stack: { tools: [] },
+        chapters: [],
+        action_items: [],
+      };
+  const transcriptRecord = asRecord(data?.transcript);
+  const transcriptText =
+    typeof transcriptRecord?.full_text === 'string' ? transcriptRecord.full_text : '';
+  const visualContext = data?.visual_context;
+  const keyframes = Array.isArray(data?.keyframes) ? data.keyframes : undefined;
+  const requirements = Array.isArray(data?.requirements) ? data.requirements : undefined;
+  const codeSnippets = Array.isArray(data?.code_snippets)
+    ? (data.code_snippets as unknown[]).flatMap((item): VideoPackCodeSnippet[] => {
+        const snippet = asRecord(item);
+        const content = typeof snippet?.content === 'string' ? snippet.content : '';
+        if (!content.trim()) return [];
+        return [
+          {
+            path_hint: typeof snippet?.path_hint === 'string' ? snippet.path_hint : null,
+            lang: typeof snippet?.lang === 'string' ? snippet.lang : null,
+            content,
+          },
+        ];
+      })
+    : undefined;
+  const grounding = data ? decodeGroundedSpec(data) : undefined;
+
+  return {
+    version,
+    videoId,
+    packId,
+    sourceUrl,
+    sourceHash,
+    pack: {
+      ...(grounding ? { grounded_spec: grounding } : {}),
+      version,
+      id: packId,
+      video_id: videoId,
+      source_url: sourceUrl,
+      provenance: { source_hash: sourceHash },
+      ...(transcriptText
+        ? {
+            transcript: {
+              language: typeof transcriptRecord?.language === 'string' ? transcriptRecord.language : null,
+              full_text: transcriptText,
+              segments: Array.isArray(transcriptRecord?.segments)
+                ? (transcriptRecord.segments as VideoPackTranscriptSegment[])
+                : [],
+            },
+          }
+        : {}),
+      ...(visualContext ? { visual_context: visualContext as VideoPackVisualContext } : {}),
+      ...(keyframes ? { keyframes: keyframes as VideoPackKeyframe[] } : {}),
+      ...(requirements ? { requirements: requirements as VideoPackRequirement[] } : {}),
+      ...(codeSnippets && codeSnippets.length > 0 ? { code_snippets: codeSnippets } : {}),
+      ...(formation.architecture ? { architecture: formation.architecture } : {}),
+      ...(formation.artifacts.length > 0 ? { artifacts: formation.artifacts } : {}),
+      ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
+      ...(formation.chapters.length > 0 ? { chapters: formation.chapters } : {}),
+      ...(formation.action_items.length > 0 ? { action_items: formation.action_items } : {}),
+    },
+  };
+}
+
+export function identityPackJson(pack: VideoPackCitation): string {
+  return JSON.stringify(pack.pack, null, 2);
+}
+
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function packRequestSignal(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(15_000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
+}
+
+function packErrorMessage(payload: unknown, fallback: string): string {
+  const envelope = asRecord(payload);
+  return typeof envelope?.error === 'string' ? envelope.error : fallback;
+}
+
+function processingQuery(payload: unknown, fallbackUrl: string): string {
+  const envelope = asRecord(payload);
+  const data = asRecord(envelope?.data);
+  const provenance = asRecord(data?.provenance);
+  const sourceHash = typeof provenance?.source_hash === 'string' ? provenance.source_hash.trim() : '';
+  if (SOURCE_HASH.test(sourceHash)) {
+    return `source_hash=${encodeURIComponent(sourceHash)}`;
+  }
+  const videoId = typeof data?.video_id === 'string' ? data.video_id : '';
+  if (videoId) {
+    return `video_id=${encodeURIComponent(videoId)}`;
+  }
+  return `url=${encodeURIComponent(fallbackUrl)}`;
+}
+
+async function pollReadyPack(
+  payload: unknown,
+  fallbackUrl: string,
+  options: { pollIntervalMs: number; timeoutMs: number; signal?: AbortSignal },
+): Promise<VideoPackCitation> {
+  const deadline = Date.now() + options.timeoutMs;
+  const query = processingQuery(payload, fallbackUrl);
+  while (Date.now() <= deadline) {
+    options.signal?.throwIfAborted();
+    if (options.pollIntervalMs > 0) {
+      await delay(options.pollIntervalMs, options.signal);
+    }
+    options.signal?.throwIfAborted();
+    const response = await fetch(`/api/video/pack?${query}`, {
+      method: 'GET',
+      credentials: 'same-origin',
+      signal: packRequestSignal(options.signal),
+    });
+    const next: unknown = await response.json().catch(() => null);
+    options.signal?.throwIfAborted();
+    if (response.status === 200) {
+      return verifyIdentityPack(next);
+    }
+    if (response.status === 202) {
+      continue;
+    }
+    throw new Error(packErrorMessage(next, 'Video pack emit failed.'));
+  }
+  throw new Error('Video pack emit timed out waiting for spec extract.');
+}
+
+function postVideoPack(url: string, signal?: AbortSignal): Promise<Response> {
+  signal?.throwIfAborted();
+  return fetch('/api/video/pack', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+    signal: packRequestSignal(signal),
+  });
+}
+
+/**
+ * Kick the existing pack POST without waiting for spec-extract poll.
+ * Home paste uses this so navigation is not blocked by the 120s poll.
+ * Fail-closed: errors are logged; Studio retries via processVideo.
+ */
+export function startVideoPackEmit(watchUrl: string): void {
+  void postVideoPack(watchUrl)
+    .then(async (response) => {
+      if (response.status === 200 || response.status === 202) {
+        return;
+      }
+      const payload: unknown = await response.json().catch(() => null);
+      console.error(
+        '[emit-video-pack] home handoff emit failed closed',
+        packErrorMessage(payload, `Video pack emit failed (${response.status}).`),
+      );
+    })
+    .catch((error: unknown) => {
+      console.error('[emit-video-pack] home handoff emit failed closed', error);
+    });
+}
+
+export async function emitVideoPack(
+  url: string,
+  options: { pollIntervalMs?: number; timeoutMs?: number; signal?: AbortSignal } = {},
+): Promise<VideoPackCitation> {
+  const pollIntervalMs = options.pollIntervalMs ?? 1_000;
+  const timeoutMs = options.timeoutMs ?? 120_000;
+  const response = await postVideoPack(url, options.signal);
+  const payload: unknown = await response.json().catch(() => null);
+  options.signal?.throwIfAborted();
+  if (response.status === 200) {
+    return verifyIdentityPack(payload);
+  }
+  if (response.status === 202) {
+    return pollReadyPack(payload, url, { pollIntervalMs, timeoutMs, signal: options.signal });
+  }
+  throw new Error(packErrorMessage(payload, 'Video pack emit failed.'));
+}
