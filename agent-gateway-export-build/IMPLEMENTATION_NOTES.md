@@ -12,6 +12,7 @@
 
 ## Production hardening
 
+- `POST /api/ai/stream` fails closed until `AI_STREAM_ENABLED=1` and `AI_STREAM_AUTH_TOKEN` are set. Do not deploy it open.
 - Replace `authorizeExport` with your real auth/session/ACL logic.
 - Replace console audit logging with a durable audit event write.
 - If event history can exceed normal response size, persist export artifacts and return a signed download URL.

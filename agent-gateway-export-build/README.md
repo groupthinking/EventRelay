@@ -20,7 +20,9 @@ npm test
 npm run build
 ```
 
-`vc env pull .env.local` should provide `VERCEL_OIDC_TOKEN`, so a separate AI Gateway API key is not required when running inside Vercel's expected auth context.
+`vc env pull .env.local` can provide `VERCEL_OIDC_TOKEN` so the local smoke script can authenticate this app to AI Gateway. That token does not authorize HTTP callers.
+
+`POST /api/ai/stream` stays disabled until both `AI_STREAM_ENABLED=1` and `AI_STREAM_AUTH_TOKEN` (at least 16 characters) are set. Callers must send `Authorization: Bearer <AI_STREAM_AUTH_TOKEN>`. The model comes only from `AI_GATEWAY_MODEL` (default `openai/gpt-5.5`); a different `model` in the body is rejected. Prompts are capped at 4000 characters, completions at 1024 output tokens, and each token is limited to 6 requests per minute in the current instance.
 
 ## Files to integrate into your existing app
 
