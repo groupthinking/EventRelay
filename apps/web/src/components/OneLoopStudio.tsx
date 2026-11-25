@@ -37,8 +37,10 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
+  studioDisplayEvents,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
@@ -599,7 +601,10 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const showDirectEmbed = preferDirectEmbed || playerDirect;
   const showErrorCover = !showDirectEmbed && playerPhase === 'error';
   const embedErrorText = studioPlayerOverlay('error');
-  const eventCount = selected?.events?.length ?? 0;
+  const eventCount = studioDisplayEvents({
+    pack: selected?.videoPack?.pack,
+    videoEvents: selected?.events,
+  }).length;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
     hasArchitecture: Boolean(packFormation.architecture),
@@ -630,7 +635,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
     false,
     Boolean(videoId || selected),
-    { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
+    { transcript: selected?.transcript, eventCount },
   );
   const shellPack = selected?.videoPack?.pack;
   const canSeekActiveVideo = Boolean(
@@ -694,9 +699,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       });
       const result = await downloadScaffoldPackage(pkg);
       if (!result.ok) {
-        if (result.status === 402 && result.checkoutUrl) {
-          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
-          window.location.href = result.checkoutUrl;
+        if (result.status === 402 || result.upgradeRequired) {
+          setExportToast(studioExportProRequiredToast());
           return;
         }
         const toast = studioExportToastMessage({

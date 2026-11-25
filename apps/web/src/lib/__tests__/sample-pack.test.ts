@@ -119,7 +119,8 @@ describe('sampleCompletionPatch', () => {
     const citation = loadSamplePack();
     const patch = sampleCompletionPatch(citation, 'row-9');
     expect(patch.title).toBe(`Sample · ${citation.pack.chapters?.[0]?.topic}`);
-    expect(patch.events?.length).toBe(citation.pack.visual_context?.visual_elements.length);
+    expect(patch.events ?? []).toEqual([]);
+    expect(citation.pack.visual_context?.visual_elements.length).toBeGreaterThan(0);
     expect(patch.insights?.actions.map((action) => (typeof action === 'string' ? action : action.title))).toEqual(
       (citation.pack.action_items ?? []).map((item) => item.title),
     );

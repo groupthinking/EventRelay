@@ -227,7 +227,7 @@ export function LiveEvents({
   const visible = useProgressiveCount(events.length, { stepMs: 80 });
   if (!live && events.length === 0) return null;
   return (
-    <LiveSection id="live-events" title="Events" meta={events.length ? `${events.length} on screen` : undefined}>
+    <LiveSection id="live-events" title="On screen" meta={events.length ? `${events.length} on screen` : undefined}>
       <ol className="live-events">
         {events.slice(0, visible).map((event, index) => (
           <li key={`${event.timestamp}-${index}`} className="live-row-enter">

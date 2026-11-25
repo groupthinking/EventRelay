@@ -102,6 +102,11 @@ describe('Live Studio streaming render', () => {
     expect(screen.queryByTestId('live-tasks-skeleton')).toBeNull();
     const stages = screen.getByTestId('live-stages');
     expect([...stages.querySelectorAll('[data-state]')].every((node) => node.getAttribute('data-state') === 'done')).toBe(true);
+    const eventsStage = stages.querySelector('[data-stage="events"]');
+    expect(eventsStage?.textContent).toMatch(/Events\s*0/);
+    expect(eventsStage?.textContent).not.toMatch(/Events\s*3/);
+    expect(citation.pack.visual_context?.visual_elements.length).toBeGreaterThan(0);
+    expect(citation.pack).not.toHaveProperty('events');
   });
 
   it('shows a transcript ETA while lines are still arriving and a retry when the fetch fails', () => {

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
-import { studioActionCard, studioProposedToolCard } from '@/lib/studio-pipeline-status';
+import { studioActionCard, studioDisplayEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
 import { downloadMarkdownFile } from '@/lib/download-file';
@@ -120,7 +120,10 @@ export default function StudioIdeOutput({
     '';
 
   const pack = video?.videoPack?.pack;
-  const events: ExtractedEvent[] = video?.events ?? [];
+  const events: ExtractedEvent[] = studioDisplayEvents({
+    pack,
+    videoEvents: video?.events,
+  });
   const topics: string[] = video?.insights?.topics ?? [];
   const actionItems = pack?.action_items ?? [];
   const stackTools = pack?.stack?.tools ?? [];

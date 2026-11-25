@@ -15,6 +15,15 @@ import {
   type VideoPackStack,
 } from '@/lib/video-pack-types';
 
+export interface EmittedVideoPackEvent {
+  id?: string;
+  type?: string;
+  title?: string;
+  label?: string;
+  description?: string;
+  timestamp?: number | string;
+}
+
 export interface EmittedVideoPack {
   grounded_spec?: GroundedSpecRecord;
   version: string;
@@ -36,6 +45,7 @@ export interface EmittedVideoPack {
   stack?: VideoPackStack;
   chapters?: VideoPackChapter[];
   action_items?: VideoPackActionItem[];
+  events?: EmittedVideoPackEvent[];
 }
 
 export interface VideoPackCitation {
@@ -127,6 +137,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       })
     : undefined;
   const grounding = data ? decodeGroundedSpec(data) : undefined;
+  const events = readPackEvents(data?.events);
 
   return {
     version,
@@ -161,8 +172,39 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
       ...(formation.chapters.length > 0 ? { chapters: formation.chapters } : {}),
       ...(formation.action_items.length > 0 ? { action_items: formation.action_items } : {}),
+      ...(events.length > 0 ? { events } : {}),
     },
   };
+}
+
+function readPackEvents(value: unknown): EmittedVideoPackEvent[] {
+  if (!Array.isArray(value)) return [];
+  const events: EmittedVideoPackEvent[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const title =
+      typeof row.title === 'string' && row.title.trim()
+        ? row.title.trim()
+        : typeof row.label === 'string' && row.label.trim()
+          ? row.label.trim()
+          : '';
+    if (!title) continue;
+    const event: EmittedVideoPackEvent = { title };
+    if (typeof row.id === 'string' && row.id.trim()) event.id = row.id.trim();
+    if (typeof row.type === 'string' && row.type.trim()) event.type = row.type.trim();
+    if (typeof row.label === 'string' && row.label.trim()) event.label = row.label.trim();
+    if (typeof row.description === 'string' && row.description.trim()) {
+      event.description = row.description.trim();
+    }
+    if (typeof row.timestamp === 'number' && Number.isFinite(row.timestamp)) {
+      event.timestamp = row.timestamp;
+    } else if (typeof row.timestamp === 'string' && row.timestamp.trim()) {
+      event.timestamp = row.timestamp.trim();
+    }
+    events.push(event);
+  }
+  return events;
 }
 
 export function identityPackJson(pack: VideoPackCitation): string {
