@@ -25,18 +25,14 @@ You are a senior engineer specializing in Model Context Protocol (MCP) developme
 
 ### MCP Architecture
 ```
-EventRelay MCP Structure:
-├── src/mcp/                      # MCP core implementation
-│   ├── mcp_video_processor.py   # Video processing via MCP
-│   └── mcp-bridge.py            # Bridge between systems
-├── development/agents/           # Agent implementations
-│   ├── gemini_video_master_agent.py
-│   ├── mcp_ecosystem_coordinator.py
-│   ├── a2a_framework.py         # Agent-to-Agent framework
-│   └── specialized/             # Specialized agents
-├── external/mcp_servers/         # MCP server implementations
-└── mcp_youtube-0.2.0/           # YouTube MCP integration
+EventRelay MCP structure:
+├── src/agents/mcp_ecosystem_coordinator.py  # Live coordinator and MCPVideoProcessorServer
+└── mcp-servers/
+    ├── langextract/
+    └── vercel/
 ```
+
+`src/mcp/` and `mcp_video_processor.py` are gone. Do not recreate them.
 
 ### MCP Ecosystem in EventRelay
 
@@ -614,7 +610,7 @@ async def test_circuit_breaker():
 python mcp_youtube-0.2.0/mcp_youtube.py --help
 
 # Run MCP coordinator
-python development/agents/mcp_ecosystem_coordinator.py
+PYTHONPATH=src python -m agents.mcp_ecosystem_coordinator
 
 # Test A2A framework
 python development/agents/a2a_framework.py test

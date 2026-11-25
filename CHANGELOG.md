@@ -38,6 +38,17 @@ Tracked by #2808.
 - Retargeted `tests/e2e/pipeline.test.ts` so `/features` and `/dashboard`
   assert permanent redirects to `/` and `/studio`
 
+### 2026-11-22: Honest Studio Events and Pro export toast (apps/web)
+
+Tracked by #2491. Live unsigned dogfood of `pBsT6v-ciO8` on uvai.io.
+
+#### Fixed
+
+- Detected events no longer render analysis `insight` cards when the Video Pack has no `events[]`. Empty copy is "this pack has no extracted events".
+- `verifyIdentityPack` keeps real pack `events[]` so Detected events can render extracted events when the store actually has them. It still does not invent events from visual_elements or analysis insights.
+- Live Events stage counts pack `events[]` only. Visual on-screen elements stay under Keyframes extras, not as extracted events.
+- Unsigned **Export** / Ship this on 402 stays on Studio with a Pro-required toast. It does not assign `window.location` to Stripe Checkout.
+
 ### 2026-11-22: Studio transcript, player, export, and proposed-tool honesty (apps/web)
 
 Related: #2491. Does not close it. Dogfood video `pBsT6v-ciO8`. No G.A.T.E. No invented events.
