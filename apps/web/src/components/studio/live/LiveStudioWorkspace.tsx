@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-store';
 import { applyTaskEdits, deriveLiveTasks, type LiveTaskEdits } from '@/lib/live-studio-tasks';
-import { studioPackExtractedEventCount } from '@/lib/studio-pipeline-status';
+import { studioPackExtractedEvents } from '@/lib/studio-pipeline-status';
 import {
   LiveChapterRail,
   LiveEvents,
@@ -60,7 +60,7 @@ export default function LiveStudioWorkspace({
   const chapters = pack?.chapters ?? [];
   const keyframes = pack?.keyframes ?? [];
   const visualElements = pack?.visual_context?.visual_elements ?? [];
-  const extractedEventCount = studioPackExtractedEventCount(pack);
+  const extractedEventCount = studioPackExtractedEvents(pack).length;
   const checkCount = tasks.filter((task) => task.check).length;
 
   const stages = (() => {

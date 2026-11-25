@@ -261,18 +261,6 @@ export function studioPackExtractedEvents(pack: unknown): ExtractedEvent[] {
   return events;
 }
 
-export function studioPackExtractedEventCount(pack: unknown): number {
-  return studioPackExtractedEvents(pack).length;
-}
-
-export function studioDisplayEvents(input: {
-  pack?: unknown;
-  videoEvents?: ExtractedEvent[] | null;
-}): ExtractedEvent[] {
-  void input.videoEvents;
-  return studioPackExtractedEvents(input.pack);
-}
-
 export function studioExportProRequiredToast(): { tone: 'error'; text: string } {
   return {
     tone: 'error',
