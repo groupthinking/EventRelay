@@ -37,13 +37,13 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
-  studioDisplayEvents,
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportProRequiredToast,
   studioExportToastMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackExtractedEvents,
   studioPackFormation,
   studioPackIdentity,
   studioResolveAutoSelectedPackId,
@@ -468,7 +468,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setMessage('Replaying the cached sample pack stage by stage…');
     try {
       await replaySamplePack({
-        recordId: id,
         citation,
         signal: controller.signal,
         apply: (patch) => updateVideo(id, patch),
@@ -601,10 +600,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const showDirectEmbed = preferDirectEmbed || playerDirect;
   const showErrorCover = !showDirectEmbed && playerPhase === 'error';
   const embedErrorText = studioPlayerOverlay('error');
-  const eventCount = studioDisplayEvents({
-    pack: selected?.videoPack?.pack,
-    videoEvents: selected?.events,
-  }).length;
+  const eventCount = studioPackExtractedEvents(selected?.videoPack?.pack).length;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
     hasArchitecture: Boolean(packFormation.architecture),
@@ -892,7 +888,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         },
       },
       { signal: controller.signal },
-    );
+    ).catch((error: unknown) => {
+      console.error('WebMCP tool registration failed:', error);
+    });
     return () => {
       controller.abort();
     };

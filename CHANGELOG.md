@@ -11,6 +11,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio event display reads pack `events[]` through one parser. The unused display count, sample-events wrapper, and lib task note are gone. Related: #2328.
+
 ### 2026-11-24: Long Video Packs use one agentic Gemini call
 
 Tracked by #2808.
@@ -20,6 +22,23 @@ Tracked by #2808.
 - A YouTube video of at least 300 seconds is extracted with one direct Gemini Interactions call on `gemini-3.8-flash`, `processing: "agentic"`, and `thinking_level: "high"`. The call sends no offsets and no fps. Shorter clips keep the static shard path.
 - A grounded citation on that call must stay inside `0..durationSeconds`. A citation past the duration is invalid (`out-of-range-citation`).
 - An empty response, invalid JSON, or an SDK rejection of agentic processing throws `VideoPackExtractError`. There is no static full-video fallback.
+
+### 2026-11-22: Obsolete unused-surface cleanup
+
+#### Removed
+
+- Fly deploy script and `FLY_API_TOKEN` setup/template refs
+- Broken `scripts/nightly_audit_agent.py` and its unit test
+- Empty `STAGE_RUNNERS` autonomous-video CI scripts, workflow, and unit tests
+- Unused `infrastructure/k8s/ray/**` manifests (kept `src/uvai/ml` library)
+- Deleted-backend verify/populate/load probes and `AUTOMATION_LAUNCHER.sh`
+
+#### Changed
+
+- Relocated `knowledge_base` to `src/agents/knowledge_base.py` and fixed the
+  `mcp_agent_network` import (no more `scripts/` on `sys.path`)
+- Retargeted `tests/e2e/pipeline.test.ts` so `/features` and `/dashboard`
+  assert permanent redirects to `/` and `/studio`
 
 ### 2026-11-22: Honest Studio Events and Pro export toast (apps/web)
 
@@ -43,6 +62,38 @@ Related: #2491. Does not close it. Dogfood video `pBsT6v-ciO8`. No G.A.T.E. No i
 - The Video Pack ZIP success toast sits above the sticky mobile dock and uses the page colors so the download confirmation stays visible.
 - Named pack tools, including SeaDance 2.5, Claude Fable 5, Character.ai, and Cluely Desktop, render as **Proposed** cards that say UVAI has not run them.
 - Studio content on a narrow screen keeps 72px of clearance above the sticky pane dock.
+
+### 2026-11-19: WebMCP preview permissions ([#2746](https://github.com/groupthinking/EventRelay/pull/2746))
+
+#### Fixed
+
+- Skip optional WebMCP tool registration when the browser's permissions policy
+  denies `tools`, and handle permission failures without unhandled rejections.
+- Handle in-flight registration cancellation during Studio effect cleanup while
+  preserving diagnostics for unexpected failures. Security headers are unchanged.
+
+#### Regression SOP
+
+- Run `npm --workspace=apps/web run test -- src/lib/__tests__/webmcp-studio-tools.test.ts`
+  for changes to WebMCP initialization (16 tests cover registration, denied or
+  unavailable APIs, audits, and cancellation).
+- Run the web app type check and ESLint on the changed TypeScript files.
+- Check `/studio` normally and with `Permissions-Policy: tools=()` enforced by a
+  local verification proxy. Confirm the sidebar toggles after hydration and no
+  uncaught errors appear. Preserve restrictions rather than enabling tools in
+  embedded previews; forward development WebSocket traffic through the proxy.
+
+### 2026-11-22: Grok Vercel MCP uses OAuth, not VERCEL_TOKEN (docs)
+
+#### Changed
+
+- `.grok/config.toml`: Vercel MCP stub is URL-only (`https://mcp.vercel.com`).
+  A static `Authorization: Bearer ${VERCEL_TOKEN}` header made Grok skip OAuth
+  and fail `mcp doctor vercel` with `invalid_token`. GitHub still uses
+  `Bearer ${GITHUB_TOKEN}`. First Vercel grant is stored in
+  `~/.grok/mcp_credentials.json`. (#2778)
+- `docs/vercel-ai-setup.md`: Vercel MCP is Streamable HTTP + OAuth 2.1;
+  `VERCEL_TOKEN` remains CLI/REST-only.
 
 ### 2026-11-22: Evidence-bound local video reconstruction
 

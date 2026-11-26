@@ -16,6 +16,7 @@ import { createProCheckoutSession } from '@/lib/billing/stripe-checkout';
 
 beforeEach(() => {
   resetEntitlementStoreForTests();
+  vi.mocked(createProCheckoutSession).mockClear();
 });
 
 afterEach(() => {
@@ -57,8 +58,25 @@ describe('POST /api/billing/renew', () => {
     expect(traces.some((t) => t.stage === 'renewal_session')).toBe(true);
   });
 
-  // This route is on PUBLIC_API_EXACT — unauthenticated, so any internet caller
-  // can trigger this branch and read the response.
+  it('rejects anonymous callers without a trusted billing identity', async () => {
+    const req = new NextRequest('http://localhost/api/billing/renew', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ annual: false }),
+    });
+    const res = await POST(req);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({
+      error: 'billing_identity_required',
+      code: 'billing_identity_required',
+    });
+    expect(createProCheckoutSession).not.toHaveBeenCalled();
+    expect(getKaizenTraces('billing').some((t) => t.stage === 'renewal_rejected')).toBe(true);
+  });
+
+  // This route is on PUBLIC_API_EXACT — keep Stripe SDK text, which can echo
+  // account identifiers and partial API keys, server-side even for authenticated callers.
   it('never returns raw Stripe SDK error text', async () => {
     const stripeMessage = "Invalid API Key provided: sk_live_****ABCD (account acct_1QLive)";
     vi.mocked(createProCheckoutSession).mockRejectedValue(new Error(stripeMessage));
@@ -67,7 +85,10 @@ describe('POST /api/billing/renew', () => {
 
     const req = new NextRequest('http://localhost/api/billing/renew', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        cookie: `er_billing_email=${encodeURIComponent(signBillingEmail('returning@example.com') as string)}`,
+      },
       body: JSON.stringify({ annual: false }),
     });
     const res = await POST(req);

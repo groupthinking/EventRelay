@@ -58,7 +58,7 @@ def save_env_file():
         env_content = "# UVAI Deployment Tokens\n"
         env_content += "# WARNING: Never commit this file to version control!\n\n"
 
-        for var in ['VERCEL_TOKEN', 'GITHUB_TOKEN', 'NETLIFY_AUTH_TOKEN', 'FLY_API_TOKEN']:
+        for var in ['VERCEL_TOKEN', 'GITHUB_TOKEN', 'NETLIFY_AUTH_TOKEN']:
             value = os.environ.get(var)
             if value:
                 env_content += f"{var}={value}\n"
@@ -99,7 +99,6 @@ def show_current_status():
         'VERCEL_TOKEN': 'Vercel deployments',
         'GITHUB_TOKEN': 'GitHub repository creation',
         'NETLIFY_AUTH_TOKEN': 'Netlify deployments',
-        'FLY_API_TOKEN': 'Fly.io deployments'
     }
 
     ready_platforms = []

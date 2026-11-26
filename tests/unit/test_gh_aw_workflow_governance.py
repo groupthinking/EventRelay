@@ -69,12 +69,27 @@ def test_coverage_workflow_is_authoritative() -> None:
 def test_ci_installs_the_authoritative_python_environment() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
     steps = workflow["jobs"]["test"]["steps"]
-    install_script = next(
-        step for step in steps if step.get("name") == "Install dependencies"
-    )["run"]
-    test_script = next(step for step in steps if step.get("name") == "Run tests")["run"]
+    lock_check = next(step for step in steps if step.get("name") == "Check lockfile")
+    install = next(
+        step for step in steps if step.get("name") == "Install locked dependencies"
+    )
+    run_tests = next(step for step in steps if step.get("name") == "Run tests")
+    offline_tests = next(
+        step for step in steps
+        if step.get("name") == "Offline MCP inventory and approval regressions"
+    )
+    install_script = install["run"]
+    test_script = run_tests["run"]
 
-    assert 'python -m pip install -e ".[dev,youtube]"' in install_script
+    assert steps.index(lock_check) < steps.index(install) < steps.index(run_tests)
+    assert steps.index(install) < steps.index(offline_tests)
+    assert install_script == (
+        'uv sync --locked --python "${{ matrix.python-version }}" '
+        "--extra dev --extra youtube"
+    )
+    assert not install.get("continue-on-error", False)
+    assert test_script.startswith("PYTHONPATH=src .venv/bin/python -m pytest ")
+    assert offline_tests["run"].startswith(".venv/bin/python -m pytest ")
     assert "--timeout=120" in test_script
     assert "--cov=src/youtube_extension" in test_script
     # The unit-only CI job must NOT enforce the full-suite baseline: 84.2%
@@ -129,7 +144,7 @@ def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
     assert run_tests.get("if") is None
     test_script = run_tests["run"]
     assert test_script == (
-        "PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 "
+        "PYTHONPATH=src .venv/bin/python -m pytest tests/unit/ -v --timeout=120 "
         "--cov=src/youtube_extension --cov-fail-under=0 "
         '--ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"'
     )
@@ -262,15 +277,15 @@ def test_gh_aw_validation_pins_runtime_version() -> None:
     actions_lock = json.loads((ROOT / ".github/aw/actions-lock.json").read_text())
 
     assert workflow["name"] == "gh-aw Validation"
-    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v0.88.7"]
-    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v0.88.7"]
-    assert setup_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
-    assert setup_cli_entry["sha"] == "5e508589e03a7757a7e05b26e834292f5445bfb6"
+    setup_entry = actions_lock["entries"]["github/gh-aw-actions/setup@v1.2.2"]
+    setup_cli_entry = actions_lock["entries"]["github/gh-aw-actions/setup-cli@v1.2.2"]
+    assert setup_entry["sha"] == "53d0749e19424a918acd82b4d140264ce48f2f14"
+    assert setup_cli_entry["sha"] == "53d0749e19424a918acd82b4d140264ce48f2f14"
     step_scripts = [
         step.get("run", "") for step in workflow["jobs"]["validate-gh-aw"]["steps"]
     ]
     combined = "\n".join(step_scripts)
-    assert "gh extension install github/gh-aw --pin v0.88.7" in combined
+    assert "gh extension install github/gh-aw --pin v1.2.2" in combined
     assert "eventrelay-ci-investigator" not in combined
     assert "canonical-pr-remediator" in combined
     assert "focused-coverage-controller" in combined
@@ -300,7 +315,37 @@ def test_pr_iteration_selection_does_not_bypass_ranked_priority() -> None:
     )
 
 
-def test_pr_iteration_push_rule_does_not_require_ai_title_prefix() -> None:
+def test_pr_iteration_push_rule_requires_workflow_owned_labels() -> None:
     workflow_source = (ROOT / ".github/workflows/pr-iteration-loop.md").read_text()
 
     assert "required-title-prefix" not in workflow_source
+    assert "required-labels: [automation, ai-agent]" in workflow_source
+
+
+def test_pr_iteration_activation_shell_uses_trusted_base_checkout() -> None:
+    workflow = _load_yaml(ROOT / ".github/workflows/pr-iteration-loop.lock.yml")
+    steps = workflow["jobs"]["activation"]["steps"]
+    checkout_index, checkout = next(
+        (index, step)
+        for index, step in enumerate(steps)
+        if step.get("uses", "").startswith("actions/checkout@")
+    )
+    checkout_ref = checkout["with"]["ref"]
+
+    assert checkout["with"]["persist-credentials"] is False
+    assert "github.event.pull_request.base.sha" in checkout_ref
+    assert "github.sha" in checkout_ref
+
+    guarded_shell_steps = {
+        "Save agent config folders for base branch restoration",
+        "Log runtime features",
+        "Validate prompt placeholders",
+        "Print prompt",
+    }
+    shell_indexes = [
+        index
+        for index, step in enumerate(steps)
+        if step.get("name") in guarded_shell_steps and "run" in step
+    ]
+    assert len(shell_indexes) == 4
+    assert all(checkout_index < index for index in shell_indexes)

@@ -177,32 +177,25 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
   };
 }
 
+/** Copy event fields through. Title, label, and timestamp normalization is studioPackExtractedEvents. */
 function readPackEvents(value: unknown): EmittedVideoPackEvent[] {
   if (!Array.isArray(value)) return [];
   const events: EmittedVideoPackEvent[] = [];
   for (const item of value) {
     const row = asRecord(item);
-    if (!row) continue;
-    const title =
-      typeof row.title === 'string' && row.title.trim()
-        ? row.title.trim()
-        : typeof row.label === 'string' && row.label.trim()
-          ? row.label.trim()
-          : '';
-    if (!title) continue;
-    const event: EmittedVideoPackEvent = { title };
-    if (typeof row.id === 'string' && row.id.trim()) event.id = row.id.trim();
-    if (typeof row.type === 'string' && row.type.trim()) event.type = row.type.trim();
-    if (typeof row.label === 'string' && row.label.trim()) event.label = row.label.trim();
-    if (typeof row.description === 'string' && row.description.trim()) {
-      event.description = row.description.trim();
-    }
+    if (!row || Array.isArray(item)) continue;
+    const event: EmittedVideoPackEvent = {};
+    if (typeof row.id === 'string') event.id = row.id;
+    if (typeof row.type === 'string') event.type = row.type;
+    if (typeof row.title === 'string') event.title = row.title;
+    if (typeof row.label === 'string') event.label = row.label;
+    if (typeof row.description === 'string') event.description = row.description;
     if (typeof row.timestamp === 'number' && Number.isFinite(row.timestamp)) {
       event.timestamp = row.timestamp;
-    } else if (typeof row.timestamp === 'string' && row.timestamp.trim()) {
-      event.timestamp = row.timestamp.trim();
+    } else if (typeof row.timestamp === 'string') {
+      event.timestamp = row.timestamp;
     }
-    events.push(event);
+    if (Object.keys(event).length > 0) events.push(event);
   }
   return events;
 }

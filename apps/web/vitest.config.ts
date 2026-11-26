@@ -17,6 +17,8 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    // Restores Node's native URL under jsdom so @workflow/core 5.x can import.
+    setupFiles: ['./src/test/node-intrinsics.ts'],
     // Force frontend-only behaviour in route handlers (BACKEND_AVAILABLE=false)
     // so tests are deterministic regardless of the developer's shell env.
     // BILLING_COOKIE_SECRET lets billing tests mint/verify signed identity cookies.

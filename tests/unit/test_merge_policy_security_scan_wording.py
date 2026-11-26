@@ -82,10 +82,28 @@ class ImageGatePolicyTests(unittest.TestCase):
         lock = json.loads((root / "package-lock.json").read_text())
         packages = lock["packages"]
 
-        self.assertEqual(manifest["overrides"]["@workflow/core"]["devalue"], "5.9.3")
+        # devalue 5.9.3 is the scanner-reported *floor*. @workflow/core 5.x
+        # depends on devalue 6.x, and a hard 5.9.3 override under it forced a
+        # broken pre-6 build, so the floor is enforced on the resolved version
+        # (every devalue copy in the lock) rather than by an exact override.
+        devalue_floor = (5, 9, 3)
+
+        def as_tuple(version):
+            return tuple(int(part) for part in version.split("-")[0].split(".")[:3])
+
+        core_override = manifest["overrides"].get("@workflow/core", {})
+        if "devalue" in core_override:
+            self.assertGreaterEqual(as_tuple(core_override["devalue"]), devalue_floor)
+        devalue_copies = {
+            path: meta["version"]
+            for path, meta in packages.items()
+            if path.endswith("node_modules/devalue")
+        }
+        self.assertTrue(devalue_copies, "devalue missing from package-lock.json")
+        for path, version in devalue_copies.items():
+            self.assertGreaterEqual(as_tuple(version), devalue_floor, path)
         self.assertEqual(manifest["overrides"]["proxy-addr"], "^2.0.8")
         self.assertEqual(manifest["overrides"]["source-map-js"], "^1.2.2")
-        self.assertEqual(packages["node_modules/devalue"]["version"], "5.9.3")
         self.assertEqual(packages["node_modules/proxy-addr"]["version"], "2.0.8")
         self.assertEqual(packages["node_modules/source-map-js"]["version"], "1.2.2")
 

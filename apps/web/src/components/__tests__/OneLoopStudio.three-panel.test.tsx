@@ -66,7 +66,7 @@ beforeEach(() => {
     play: vi.fn(),
     pause: vi.fn(),
   }));
-  vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => undefined);
+  vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => Promise.resolve());
   useDashboardStore.setState({ videos: [baseVideo], selectedVideoId: baseVideo.id });
 });
 
