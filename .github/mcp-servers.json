@@ -1,20 +1,16 @@
 {
   "mcpServers": {
     "github": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@github/github-mcp-server"
-      ],
-      "env": {
-        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${env:GITHUB_TOKEN}"
       }
     },
     "notebooklm": {
       "command": "npx",
       "args": [
         "-y",
-        "notebooklm-mcp@latest"
+        "notebooklm-mcp@2.0.0"
       ]
     },
     "stitch": {
@@ -35,43 +31,36 @@
       }
     },
     "supabase": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@supabase/mcp-server-supabase@latest",
-        "--access-token",
-        "${env:SUPABASE_ACCESS_TOKEN}"
-      ]
+      "url": "https://mcp.supabase.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:SUPABASE_ACCESS_TOKEN}"
+      }
     },
     "context7": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@upstash/context7-mcp@latest"
-      ]
+      "url": "https://mcp.context7.com/mcp/oauth"
     },
     "playwright": {
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@latest"
+        "@playwright/mcp@0.0.86"
       ]
     },
     "sequential-thinking": {
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-sequential-thinking"
-      ]
-    },
-    "sentry": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@sentry/mcp-server@latest"
+        "@modelcontextprotocol/server-sequential-thinking@2.2.0"
       ],
       "env": {
-        "SENTRY_AUTH_TOKEN": "${env:SENTRY_AUTH_TOKEN}"
+        "DISABLE_THOUGHT_LOGGING": "true",
+        "MAX_THOUGHT_HISTORY": "100"
+      }
+    },
+    "sentry": {
+      "url": "https://mcp.sentry.dev/mcp",
+      "headers": {
+        "Authorization": "Sentry-Bearer ${env:SENTRY_AUTH_TOKEN}"
       }
     }
   }
