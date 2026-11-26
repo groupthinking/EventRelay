@@ -215,3 +215,9 @@ jobs:
           --ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"
       - name: Offline MCP inventory and approval regressions
         run: python -m pytest tests/security/test_local_mcp_config.py tests/security/test_mcp_catalog_approval.py -q -o addopts=''
+      - name: Anthropic SDK 2 client compatibility
+        run: >-
+          PYTHONPATH=src uv run --no-project --python "${{ matrix.python-version }}"
+          --with pytest --with anthropic==2.0.0 --with httpx2
+          --with aiohttp --with pydantic
+          python -m pytest tests/compat/test_anthropic_v2_compat.py -q -o addopts=''
