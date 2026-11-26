@@ -163,9 +163,14 @@ describe('patch-world-vercel-undici-fetch (issue #1538)', () => {
       'utf8',
     );
     expect(utils).toContain('await fetch(');
-    expect(httpCore).toContain('await fetch(');
+    // world-vercel 4.x awaited `fetch(` inline; 5.x issues `fetch(url, {...})`
+    // from instrumentedFetch and awaits the pending promise further down. Either
+    // way the call must stay on global/Next fetch (not undici's).
+    expect(httpCore).toMatch(/\bfetch\(url,/);
+    expect(httpCore).not.toContain('undiciFetch');
     expect(utils).not.toContain('undiciFetch');
     expect(utils).not.toMatch(/dispatcher:\s*getDispatcher/);
+    expect(utils).not.toMatch(/dispatcher:\s*undiciDispatcher/);
     expect(httpCore).not.toMatch(/^\s*dispatcher,\s*$/m);
     expect(queue).not.toMatch(/dispatcher:\s*getDispatcher/);
     expect(localQueue).toContain("fetch as undiciFetch } from 'undici'");
