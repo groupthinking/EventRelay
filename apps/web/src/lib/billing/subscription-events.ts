@@ -117,7 +117,22 @@ export async function syncFromSubscription(
   sub: Stripe.Subscription,
   email?: string,
 ): Promise<EntitlementRecord | null> {
-  const record = entitlementFromSubscription(sub, email);
+  let resolvedEmail =
+    email ??
+    sub.metadata?.email ??
+    (typeof sub.customer === 'object' && sub.customer && 'email' in sub.customer
+      ? ((sub.customer as Stripe.Customer).email ?? undefined)
+      : undefined);
+
+  if (!resolvedEmail && typeof sub.customer === 'string' && sub.customer.trim()) {
+    const stripe = getStripeClient();
+    const customer = await stripe.customers.retrieve(sub.customer);
+    if (customer && !('deleted' in customer && customer.deleted) && customer.email) {
+      resolvedEmail = customer.email;
+    }
+  }
+
+  const record = entitlementFromSubscription(sub, resolvedEmail);
   if (!record) return null;
   const saved = await saveEntitlement(record);
   kaizenObserve('billing', 'subscription_synced', `Synced ${saved.email} plan=${saved.plan}`, {

@@ -13,7 +13,15 @@ export type CheckoutActivationLink = {
   fulfilledAt: string;
 };
 
+export const CHECKOUT_ACTIVATION_TTL_SECONDS = 60 * 60 * 24;
+
 const memoryLinks = new Map<string, CheckoutActivationLink>();
+
+function isExpired(link: CheckoutActivationLink): boolean {
+  const fulfilledAtMs = Date.parse(link.fulfilledAt);
+  if (!Number.isFinite(fulfilledAtMs)) return true;
+  return Date.now() - fulfilledAtMs > CHECKOUT_ACTIVATION_TTL_SECONDS * 1000;
+}
 
 function sessionKey(sessionId: string): string {
   return `er:checkout:${sessionId.trim()}`;
@@ -49,7 +57,9 @@ export async function linkCheckoutActivation(
   const redis = await getRedis();
   if (redis) {
     try {
-      await redis.set(sessionKey(link.sessionId), link);
+      await redis.set(sessionKey(link.sessionId), link, {
+        ex: CHECKOUT_ACTIVATION_TTL_SECONDS,
+      });
     } catch {
       // memory link remains for this instance
     }
@@ -67,6 +77,10 @@ export async function getCheckoutActivation(
     try {
       const raw = await redis.get<CheckoutActivationLink>(sessionKey(id));
       if (raw) {
+        if (isExpired(raw)) {
+          memoryLinks.delete(id);
+          return null;
+        }
         memoryLinks.set(id, raw);
         return raw;
       }
@@ -74,7 +88,13 @@ export async function getCheckoutActivation(
       // fall through
     }
   }
-  return memoryLinks.get(id) ?? null;
+  const cached = memoryLinks.get(id);
+  if (!cached) return null;
+  if (isExpired(cached)) {
+    memoryLinks.delete(id);
+    return null;
+  }
+  return cached;
 }
 
 export function resetCheckoutSessionStoreForTests(): void {
