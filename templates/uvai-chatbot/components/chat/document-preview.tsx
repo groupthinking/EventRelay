@@ -14,17 +14,8 @@ import { useArtifact } from "@/hooks/use-artifact";
 import type { Document } from "@/lib/db/schema";
 import { cn, fetcher } from "@/lib/utils";
 import type { ArtifactKind, UIArtifact } from "./artifact";
-import { CodeEditor } from "./code-editor";
 import { InlineDocumentSkeleton } from "./document-skeleton";
-import {
-  CodeIcon,
-  FileIcon,
-  FullscreenIcon,
-  ImageIcon,
-  LoaderIcon,
-} from "./icons";
-import { ImageEditor } from "./image-editor";
-import { SpreadsheetEditor } from "./sheet-editor";
+import { FileIcon, FullscreenIcon, LoaderIcon } from "./icons";
 import { Editor } from "./text-editor";
 
 type DocumentToolOutput = {
@@ -37,7 +28,7 @@ type DocumentToolOutput = {
 type DocumentPreviewProps = {
   isReadonly: boolean;
   result?: Partial<DocumentToolOutput>;
-  args?: Partial<DocumentToolOutput> & { isUpdate?: boolean };
+  args?: Partial<DocumentToolOutput>;
 };
 
 export function DocumentPreview({
@@ -76,13 +67,12 @@ export function DocumentPreview({
   }, [artifact.documentId, setArtifact]);
 
   if (isDocumentsFetching) {
-    const kind = result?.kind ?? args?.kind ?? artifact.kind;
     const title = result?.title ?? args?.title ?? artifact.title;
 
     return (
       <div className="w-full max-w-[450px]">
         {title ? (
-          <DocumentHeader isStreaming={true} kind={kind} title={title} />
+          <DocumentHeader isStreaming={true} title={title} />
         ) : (
           <div className="flex flex-row items-center justify-between gap-2 rounded-t-2xl border border-b-0 border-border/50 px-4 py-3 dark:bg-muted">
             <div className="flex flex-row items-center gap-2.5">
@@ -113,7 +103,7 @@ export function DocumentPreview({
       : null;
 
   if (!document) {
-    return <LoadingSkeleton artifactKind={artifact.kind} />;
+    return <LoadingSkeleton />;
   }
 
   return (
@@ -125,7 +115,6 @@ export function DocumentPreview({
       />
       <DocumentHeader
         isStreaming={artifact.status === "streaming"}
-        kind={document.kind}
         title={document.title}
       />
       <DocumentContent document={document} />
@@ -133,7 +122,7 @@ export function DocumentPreview({
   );
 }
 
-const LoadingSkeleton = ({ artifactKind }: { artifactKind: ArtifactKind }) => (
+const LoadingSkeleton = () => (
   <div className="w-full max-w-[450px]">
     <div className="flex flex-row items-center justify-between gap-2 rounded-t-2xl border border-b-0 border-border/50 px-4 py-3 dark:bg-muted">
       <div className="flex flex-row items-center gap-2.5">
@@ -142,15 +131,9 @@ const LoadingSkeleton = ({ artifactKind }: { artifactKind: ArtifactKind }) => (
       </div>
       <div className="w-8" />
     </div>
-    {artifactKind === "image" ? (
-      <div className="overflow-hidden rounded-b-2xl border border-t-0 border-border/50 bg-muted">
-        <div className="h-[257px] w-full animate-pulse bg-muted-foreground/10" />
-      </div>
-    ) : (
-      <div className="h-[257px] overflow-hidden rounded-b-2xl border border-t-0 border-border/50 bg-muted p-6">
-        <InlineDocumentSkeleton />
-      </div>
-    )}
+    <div className="h-[257px] overflow-hidden rounded-b-2xl border border-t-0 border-border/50 bg-muted p-6">
+      <InlineDocumentSkeleton />
+    </div>
   </div>
 );
 
@@ -212,11 +195,9 @@ const HitboxLayer = memo(PureHitboxLayer, (prevProps, nextProps) => {
 
 const PureDocumentHeader = ({
   title,
-  kind,
   isStreaming,
 }: {
   title: string;
-  kind: ArtifactKind;
   isStreaming: boolean;
 }) => (
   <div className="flex flex-row items-center justify-between gap-2 rounded-t-2xl border border-b-0 border-border/50 px-4 py-3 dark:bg-muted">
@@ -226,10 +207,6 @@ const PureDocumentHeader = ({
           <div className="animate-spin">
             <LoaderIcon size={14} />
           </div>
-        ) : kind === "image" ? (
-          <ImageIcon size={14} />
-        ) : kind === "code" ? (
-          <CodeIcon size={14} />
         ) : (
           <FileIcon size={14} />
         )}
@@ -257,7 +234,6 @@ const DocumentContent = ({ document }: { document: Document }) => {
   const containerClassName = cn(
     "h-[257px] overflow-hidden rounded-b-2xl border border-t-0 border-border/50 dark:bg-muted",
     {
-      "p-0": document.kind === "code",
       "p-4 sm:px-10 sm:py-10": document.kind === "text",
     }
   );
@@ -277,32 +253,8 @@ const DocumentContent = ({ document }: { document: Document }) => {
     <div className={cn(containerClassName, "relative")}>
       {document.kind === "text" ? (
         <Editor {...commonProps} onSaveContent={handleSaveContent} />
-      ) : document.kind === "code" ? (
-        <div className="relative flex w-full flex-1">
-          <div className="absolute inset-0">
-            <CodeEditor {...commonProps} onSaveContent={handleSaveContent} />
-          </div>
-        </div>
-      ) : document.kind === "sheet" ? (
-        <div className="relative flex size-full flex-1 p-4">
-          <div className="absolute inset-0">
-            <SpreadsheetEditor {...commonProps} />
-          </div>
-        </div>
-      ) : document.kind === "image" ? (
-        <ImageEditor
-          content={document.content ?? ""}
-          currentVersionIndex={0}
-          isCurrentVersion={true}
-          isInline={true}
-          status={artifact.status}
-          title={document.title}
-        />
       ) : null}
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-muted to-transparent dark:from-muted" />
-      {document.kind === "code" && (
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-muted to-transparent dark:from-muted" />
-      )}
     </div>
   );
 };

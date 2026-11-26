@@ -27,8 +27,7 @@ import { VersionFooter } from "./version-footer";
 import type { VisibilityType } from "./visibility-selector";
 
 export const artifactDefinitions = [textArtifact];
-// Keep legacy type compatibility in dormant upstream modules; only text is rendered.
-export type ArtifactKind = "text" | "code" | "image" | "sheet";
+export type ArtifactKind = "text";
 
 export type UIArtifact = {
   title: string;
@@ -312,14 +311,6 @@ function PureArtifact({
     return null;
   }
 
-  const consoleError =
-    metadata?.outputs
-      ?.filter((o: { status: string }) => o.status === "failed")
-      .flatMap((o: { contents: { type: string; value: string }[] }) =>
-        o.contents.filter((c) => c.type === "text").map((c) => c.value)
-      )
-      .join("\n") || undefined;
-
   const artifactPanel = (
     <>
       {sidebarState !== "collapsed" && (
@@ -400,8 +391,6 @@ function PureArtifact({
                 />
               }
               artifactKind={artifact.kind}
-              consoleError={consoleError}
-              documentId={artifact.documentId}
               isToolbarVisible={isToolbarVisible}
               onClose={handleClose}
               sendMessage={sendMessage}

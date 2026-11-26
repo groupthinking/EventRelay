@@ -1,4 +1,4 @@
-import { geolocation, ipAddress } from "@vercel/functions";
+import { ipAddress } from "@vercel/functions";
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -20,7 +20,6 @@ import {
   getCapabilities,
   getModelAvailability,
 } from "@/lib/ai/models";
-import { type RequestHints } from "@/lib/ai/prompts";
 import { getLanguageModel } from "@/lib/ai/providers";
 import { createVideoGuide, readVideoGuide } from "@/lib/ai/tools/create-video-guide";
 import { isProductionEnvironment } from "@/lib/constants";
@@ -33,7 +32,6 @@ import {
   saveChat,
   saveMessages,
   updateChatTitleById,
-  updateMessage,
 } from "@/lib/db/queries";
 import type { DBMessage } from "@/lib/db/schema";
 import { ChatbotError } from "@/lib/errors";
@@ -74,7 +72,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { id, message, messages, selectedChatModel, selectedVisibilityType } =
+    const { id, message, selectedChatModel, selectedVisibilityType } =
       requestBody;
 
     const [botIdResult, session] = await Promise.all([
@@ -107,8 +105,6 @@ export async function POST(request: Request) {
       return new ChatbotError("rate_limit:chat").toResponse();
     }
 
-    const isToolApprovalFlow = Boolean(messages);
-
     const chat = await getChatById({ id });
     let messagesFromDb: DBMessage[] = [];
     let titlePromise: Promise<string> | null = null;
@@ -128,52 +124,10 @@ export async function POST(request: Request) {
       titlePromise = generateTitleFromUserMessage({ message });
     }
 
-    let uiMessages: ChatMessage[];
-
-    if (isToolApprovalFlow && messages) {
-      const dbMessages = convertToUIMessages(messagesFromDb);
-      const approvalStates = new Map(
-        messages.flatMap(
-          (m) =>
-            m.parts
-              ?.filter(
-                (p: Record<string, unknown>) =>
-                  p.state === "approval-responded" ||
-                  p.state === "output-denied"
-              )
-              .map((p: Record<string, unknown>) => [
-                String(p.toolCallId ?? ""),
-                p,
-              ]) ?? []
-        )
-      );
-      uiMessages = dbMessages.map((msg) => ({
-        ...msg,
-        parts: msg.parts.map((part) => {
-          if (
-            "toolCallId" in part &&
-            approvalStates.has(String(part.toolCallId))
-          ) {
-            return { ...part, ...approvalStates.get(String(part.toolCallId)) };
-          }
-          return part;
-        }),
-      })) as ChatMessage[];
-    } else {
-      uiMessages = [
-        ...convertToUIMessages(messagesFromDb),
-        message as ChatMessage,
-      ];
-    }
-
-    const { longitude, latitude, city, country } = geolocation(request);
-
-    const requestHints: RequestHints = {
-      city,
-      country,
-      latitude,
-      longitude,
-    };
+    const uiMessages: ChatMessage[] = [
+      ...convertToUIMessages(messagesFromDb),
+      message as ChatMessage,
+    ];
 
     if (message?.role === "user") {
       await saveMessages({
@@ -321,35 +275,7 @@ export async function POST(request: Request) {
       },
       generateId: generateUUID,
       onEnd: async ({ messages: finishedMessages }) => {
-        if (isToolApprovalFlow) {
-          await Promise.all(
-            finishedMessages.map(async (finishedMsg) => {
-              const existingMsg = uiMessages.find(
-                (m) => m.id === finishedMsg.id
-              );
-              if (existingMsg) {
-                await updateMessage({
-                  id: finishedMsg.id,
-                  parts: finishedMsg.parts,
-                });
-                return;
-              }
-
-              await saveMessages({
-                messages: [
-                  {
-                    attachments: [],
-                    chatId: id,
-                    createdAt: new Date(),
-                    id: finishedMsg.id,
-                    parts: finishedMsg.parts,
-                    role: finishedMsg.role,
-                  },
-                ],
-              });
-            })
-          );
-        } else if (finishedMessages.length > 0) {
+        if (finishedMessages.length > 0) {
           await saveMessages({
             messages: finishedMessages.map((currentMessage) => ({
               attachments: [],
@@ -373,7 +299,6 @@ export async function POST(request: Request) {
         }
         return "Oops, an error occurred!";
       },
-      originalMessages: isToolApprovalFlow ? uiMessages : undefined,
     });
 
     return createUIMessageStreamResponse({
