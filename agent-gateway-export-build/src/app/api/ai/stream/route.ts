@@ -1,9 +1,9 @@
 import { streamText } from 'ai';
-import { decideAiStream, type AiStreamDecision } from '@/lib/ai-stream-guard';
+import { AI_STREAM_RATE_KEY, decideAiStream, type AiStreamDecision } from '@/lib/ai-stream-guard';
 
 export const runtime = 'edge';
 
-const hitsByToken = new Map<string, number[]>();
+const hitsByIdentity = new Map<string, number[]>();
 
 function jsonError(decision: Extract<AiStreamDecision, { ok: false }>): Response {
   return Response.json(
@@ -31,8 +31,6 @@ export async function POST(request: Request) {
     );
   }
 
-  const authorizationHeader = request.headers.get('authorization');
-  const tokenKey = authorizationHeader ?? '';
   const decision = decideAiStream(
     {
       enabled: process.env.AI_STREAM_ENABLED,
@@ -40,15 +38,15 @@ export async function POST(request: Request) {
       model: process.env.AI_GATEWAY_MODEL,
     },
     {
-      authorizationHeader,
+      authorizationHeader: request.headers.get('authorization'),
       prompt: body.prompt,
       requestedModel: body.model,
       nowMs: Date.now(),
-      recentHits: hitsByToken.get(tokenKey) ?? [],
+      recentHits: hitsByIdentity.get(AI_STREAM_RATE_KEY) ?? [],
     },
   );
-  if (decision.ok || (decision.status !== 401 && decision.status !== 503)) {
-    hitsByToken.set(tokenKey, decision.hits);
+  if (decision.rateLimitKey) {
+    hitsByIdentity.set(decision.rateLimitKey, decision.hits);
   }
 
   if (!decision.ok) {

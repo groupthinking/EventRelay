@@ -10,7 +10,10 @@ export const MAX_PROMPT_CHARS = 4_000;
 export const MAX_OUTPUT_TOKENS = 1_024;
 export const STREAM_RATE_LIMIT = 6;
 export const STREAM_RATE_WINDOW_MS = 60_000;
+/** One configured token, so every accepted credential shares this bucket. */
+export const AI_STREAM_RATE_KEY = 'configured-token';
 const MIN_AUTH_TOKEN_CHARS = 16;
+const CANONICAL_BEARER = /^[Bb][Ee][Aa][Rr][Ee][Rr] ([!-~]+)$/;
 
 export interface AiStreamEnv {
   enabled: string | undefined;
@@ -32,6 +35,7 @@ export type AiStreamDenial = {
   code: 'auth' | 'schema_invalid' | 'rate_limited' | 'disabled';
   message: string;
   hits: number[];
+  rateLimitKey: string | null;
 };
 
 export type AiStreamAllowance = {
@@ -40,6 +44,7 @@ export type AiStreamAllowance = {
   prompt: string;
   maxOutputTokens: number;
   hits: number[];
+  rateLimitKey: string;
 };
 
 export type AiStreamDecision = AiStreamDenial | AiStreamAllowance;
@@ -49,8 +54,15 @@ function denial(
   code: AiStreamDenial['code'],
   message: string,
   hits: number[],
+  rateLimitKey: string | null = null,
 ): AiStreamDenial {
-  return { ok: false, status, code, message, hits };
+  return { ok: false, status, code, message, hits, rateLimitKey };
+}
+
+function presentedToken(header: string | null): string | null {
+  if (!header) return null;
+  const match = CANONICAL_BEARER.exec(header);
+  return match ? match[1] : null;
 }
 
 function tokenMatches(expected: string, provided: string): boolean {
@@ -92,29 +104,33 @@ export function decideAiStream(env: AiStreamEnv, request: AiStreamRequest): AiSt
     );
   }
 
-  const header = request.authorizationHeader?.trim() ?? '';
-  const prefix = 'Bearer ';
-  const presented = header.startsWith(prefix) ? header.slice(prefix.length) : '';
+  const presented = presentedToken(request.authorizationHeader);
   if (!presented || !tokenMatches(authToken, presented)) {
     return denial(401, 'auth', 'Authentication required.', hits);
   }
 
   if (request.requestedModel !== undefined && request.requestedModel !== model) {
-    return denial(400, 'schema_invalid', 'Model is fixed by the server allowlist.', hits);
+    return denial(400, 'schema_invalid', 'Model is fixed by the server allowlist.', hits, AI_STREAM_RATE_KEY);
   }
 
   if (typeof request.prompt !== 'string' || request.prompt.trim().length === 0) {
-    return denial(400, 'schema_invalid', 'Prompt is required.', hits);
+    return denial(400, 'schema_invalid', 'Prompt is required.', hits, AI_STREAM_RATE_KEY);
   }
 
   const prompt = request.prompt.trim();
   if (prompt.length > MAX_PROMPT_CHARS) {
-    return denial(413, 'schema_invalid', `Prompt must be ${MAX_PROMPT_CHARS} characters or fewer.`, hits);
+    return denial(
+      413,
+      'schema_invalid',
+      `Prompt must be ${MAX_PROMPT_CHARS} characters or fewer.`,
+      hits,
+      AI_STREAM_RATE_KEY,
+    );
   }
 
   const rate = consumeStreamRateLimit(hits, request.nowMs);
   if (!rate.allowed) {
-    return denial(429, 'rate_limited', 'AI stream rate limit exceeded.', rate.hits);
+    return denial(429, 'rate_limited', 'AI stream rate limit exceeded.', rate.hits, AI_STREAM_RATE_KEY);
   }
 
   return {
@@ -123,5 +139,6 @@ export function decideAiStream(env: AiStreamEnv, request: AiStreamRequest): AiSt
     prompt,
     maxOutputTokens: MAX_OUTPUT_TOKENS,
     hits: rate.hits,
+    rateLimitKey: AI_STREAM_RATE_KEY,
   };
 }
