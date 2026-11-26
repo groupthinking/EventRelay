@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCheckoutSession } from '@/lib/billing/stripe-checkout';
-import { getCheckoutActivation } from '@/lib/billing/checkout-session-store';
+import {
+  CHECKOUT_ACTIVATION_TTL_SECONDS,
+  getCheckoutActivation,
+} from '@/lib/billing/checkout-session-store';
 import { activateFromCheckoutSession } from '@/lib/billing/subscription-events';
+import { sessionEmail } from '@/lib/billing/stripe-subscription-lookup';
 import type { EntitlementRecord } from '@/lib/billing/entitlement-store';
 import { getEntitlement } from '@/lib/billing/entitlement-store';
 import { BILLING_EMAIL_COOKIE } from '@/lib/billing/billing-context';
@@ -53,7 +57,27 @@ export async function POST(req: NextRequest) {
       }
     } else {
       const session = await getCheckoutSession(sessionId);
-      entitlement = await activateFromCheckoutSession(session);
+      const isStaleSession =
+        typeof session.created === 'number' &&
+        Date.now() - session.created * 1000 > CHECKOUT_ACTIVATION_TTL_SECONDS * 1000;
+
+      if (isStaleSession) {
+        kaizenObserve('billing', 'activate_session_expired', `Rejected stale checkout session ${sessionId}`, {
+          decision: 'expired_checkout_session',
+        });
+        entitlement = null;
+      } else {
+        const email = sessionEmail(session);
+        const current = email ? await getEntitlement(email) : null;
+        if (current && current.plan !== 'pro') {
+          kaizenObserve('billing', 'activate_blocked_downgraded', `Blocked replay for downgraded ${current.email}`, {
+            decision: `status=${current.status}`,
+          });
+          entitlement = current;
+        } else {
+          entitlement = await activateFromCheckoutSession(session);
+        }
+      }
     }
 
     if (!entitlement || entitlement.plan !== 'pro') {

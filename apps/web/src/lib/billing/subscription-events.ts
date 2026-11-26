@@ -1,7 +1,7 @@
 import type Stripe from 'stripe';
 import { GROK_BILLING_LEAD_MODEL } from './grok-lead';
 import type { EntitlementRecord, PlanTier } from './entitlement-store';
-import { saveEntitlement, normalizeBillingEmail } from './entitlement-store';
+import { getEntitlement, saveEntitlement, normalizeBillingEmail } from './entitlement-store';
 import { linkCheckoutActivation } from './checkout-session-store';
 import { kaizenObserve } from './kaizen-trace';
 import { getStripeClient } from './stripe-checkout';
@@ -69,8 +69,29 @@ export function entitlementFromSubscription(
 export async function activateFromCheckoutSession(
   session: Stripe.Checkout.Session,
 ): Promise<EntitlementRecord | null> {
+  const expandedSub =
+    typeof session.subscription === 'object' && session.subscription && 'status' in session.subscription
+      ? (session.subscription as Stripe.Subscription)
+      : null;
+  if (expandedSub && expandedSub.status !== 'active' && expandedSub.status !== 'trialing') {
+    return syncFromSubscription(expandedSub, sessionEmail(session) ?? undefined);
+  }
+
   const record = entitlementFromCheckoutSession(session);
   if (record?.plan === 'pro') {
+    const existing = await getEntitlement(record.email);
+    if (
+      existing &&
+      existing.plan !== 'pro' &&
+      record.stripeSubscriptionId &&
+      existing.stripeSubscriptionId === record.stripeSubscriptionId
+    ) {
+      kaizenObserve('billing', 'activation_skipped', `Refused to reactivate downgraded subscription ${record.stripeSubscriptionId}`, {
+        decision: `status=${existing.status}`,
+      });
+      return existing;
+    }
+
     const saved = await saveEntitlement(record);
     if (session.id) {
       await linkCheckoutActivation(session.id, saved);
