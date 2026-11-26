@@ -2,7 +2,11 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/billing/activate/route';
 import { getKaizenTraces, resetKaizenTracesForTests } from '@/lib/billing/kaizen-trace';
-import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
+import { getEntitlement, saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
+
+const realActivate = vi.hoisted(() => ({
+  fn: null as null | typeof import('@/lib/billing/subscription-events').activateFromCheckoutSession,
+}));
 
 vi.mock('@/lib/billing/stripe-checkout', () => ({
   getCheckoutSession: vi.fn(),
@@ -11,18 +15,28 @@ vi.mock('@/lib/billing/stripe-checkout', () => ({
 vi.mock('@/lib/billing/checkout-session-store', () => ({
   CHECKOUT_ACTIVATION_TTL_SECONDS: 60 * 60 * 24,
   getCheckoutActivation: vi.fn().mockResolvedValue(null),
+  linkCheckoutActivation: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock('@/lib/billing/subscription-events', () => ({
-  activateFromCheckoutSession: vi.fn(),
-}));
+vi.mock('@/lib/billing/subscription-events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/billing/subscription-events')>();
+  realActivate.fn = actual.activateFromCheckoutSession;
+  return {
+    activateFromCheckoutSession: vi.fn(actual.activateFromCheckoutSession),
+  };
+});
 
 import { getCheckoutSession } from '@/lib/billing/stripe-checkout';
 import { activateFromCheckoutSession } from '@/lib/billing/subscription-events';
 
 beforeEach(() => {
   resetEntitlementStoreForTests();
-  vi.mocked(activateFromCheckoutSession).mockClear();
+  const real = realActivate.fn;
+  if (!real) {
+    throw new Error('activateFromCheckoutSession real implementation missing');
+  }
+  vi.mocked(activateFromCheckoutSession).mockReset();
+  vi.mocked(activateFromCheckoutSession).mockImplementation(real);
 });
 
 afterEach(() => {
@@ -144,6 +158,7 @@ describe('POST /api/billing/activate error-code contract', () => {
       status: 'complete',
       customer_details: { email: 'canceled@example.com' },
       metadata: { plan: 'pro' },
+      subscription: 'sub_canceled',
     } as never);
     vi.spyOn(console, 'info').mockImplementation(() => {});
 
@@ -155,6 +170,44 @@ describe('POST /api/billing/activate error-code contract', () => {
       code: 'not_eligible',
       sessionId: 'cs_replay_after_cancel',
     });
-    expect(activateFromCheckoutSession).not.toHaveBeenCalled();
+    expect(activateFromCheckoutSession).toHaveBeenCalled();
+    const stored = await getEntitlement('canceled@example.com');
+    expect(stored?.plan).toBe('free');
+    expect(stored?.stripeSubscriptionId).toBe('sub_canceled');
+  });
+
+  it('activates pro when a canceled user buys a new subscription', async () => {
+    await saveEntitlement({
+      email: 'returning@example.com',
+      plan: 'free',
+      status: 'canceled',
+      stripeCustomerId: 'cus_returning',
+      stripeSubscriptionId: 'sub_canceled',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
+
+    vi.mocked(getCheckoutSession).mockResolvedValue({
+      id: 'cs_new_after_cancel',
+      created: Math.floor(Date.now() / 1000),
+      payment_status: 'paid',
+      status: 'complete',
+      customer_details: { email: 'returning@example.com' },
+      metadata: { plan: 'pro' },
+      subscription: 'sub_new',
+    } as never);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const res = await POST(activateRequest('cs_new_after_cancel'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.plan).toBe('pro');
+    expect(body.status).toBe('active');
+    expect(body.email).toBe('returning@example.com');
+    expect(activateFromCheckoutSession).toHaveBeenCalled();
+    const stored = await getEntitlement('returning@example.com');
+    expect(stored?.plan).toBe('pro');
+    expect(stored?.stripeSubscriptionId).toBe('sub_new');
   });
 });
