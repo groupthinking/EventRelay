@@ -30,7 +30,7 @@ const idleVideo: Video = {
 
 beforeEach(() => {
   vi.stubGlobal('React', React);
-  vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => undefined);
+  vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => Promise.resolve());
   useDashboardStore.setState({ videos: [], selectedVideoId: null });
 });
 
