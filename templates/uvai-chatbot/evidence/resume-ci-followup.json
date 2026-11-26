@@ -1,0 +1,37 @@
+{
+  "verifiedAt": "2026-10-09T22:51:15.232040+00:00",
+  "verifiedHead": "366b64d9ff9d7a6d8b077072e8aa54bcf01d3054",
+  "foundation": {
+    "job": 114058190418,
+    "url": "https://github.com/groupthinking/EventRelay/actions/runs/38000825965/job/114058190418",
+    "conclusion": "success",
+    "focusedTestsPassed": 14,
+    "skipped": 0,
+    "httpChecksPassed": 8,
+    "postgresMigrations": "passed in PostgreSQL 17 CI service",
+    "log": "evidence/resume-ci-foundation.log"
+  },
+  "licenseCorrection": {
+    "globalLicenseAllowlistUnchanged": true,
+    "vulnerabilityThreshold": "moderate",
+    "versionScopedPackages": [
+      {
+        "purl": "pkg:npm/postgres@3.4.9",
+        "license": "Unlicense",
+        "source": "https://github.com/porsager/postgres/blob/v3.4.9/UNLICENSE",
+        "sha256": "b5065838cbac452dfc855ba6e6e031481ad2c68406f70d21ead9321374653e6c"
+      },
+      {
+        "purl": "pkg:npm/robust-predicates@3.0.2",
+        "license": "Unlicense",
+        "source": "installed npm package LICENSE",
+        "sha256": "88d9b4eb60579c191ec391ca04c16130572d7eedc4a86daa58bf28c6e14c9bcd"
+      }
+    ]
+  },
+  "limitations": [
+    "No live AI generation or authenticated video browser journey",
+    "No upload acceptance or production deployment",
+    "Subsequent head checks must be inspected separately"
+  ]
+}
