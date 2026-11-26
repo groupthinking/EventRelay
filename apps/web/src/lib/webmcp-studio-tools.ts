@@ -89,18 +89,42 @@ export type AeoWebMcpAuditResult = {
   score: number;
 };
 
+type WebMcpPermissionsPolicy = {
+  allowsFeature: (feature: string) => boolean;
+};
+
 type DocumentWithModelContext = Document & {
   modelContext?: WebMcpModelContext;
+  permissionsPolicy?: WebMcpPermissionsPolicy;
+  featurePolicy?: WebMcpPermissionsPolicy;
 };
+
+function hasErrorName(error: unknown, ...names: string[]): boolean {
+  // DOMExceptions can originate in a different iframe realm.
+  return (
+    typeof error === 'object' && error !== null && 'name' in error
+    && typeof error.name === 'string' && names.includes(error.name)
+  );
+}
 
 export function getDocumentModelContext(doc?: Document | null): WebMcpModelContext | null {
   const target = doc ?? (typeof document !== 'undefined' ? document : null);
   if (!target) return null;
-  const candidate = (target as DocumentWithModelContext).modelContext;
-  if (!candidate || typeof candidate.registerTool !== 'function') {
-    return null;
+
+  try {
+    const contextDocument = target as DocumentWithModelContext;
+    if (!('modelContext' in contextDocument)) return null;
+    // An embedding preview can deny tools even when the browser exposes WebMCP.
+    const policy = contextDocument.permissionsPolicy ?? contextDocument.featurePolicy;
+    if (policy?.allowsFeature('tools') === false) return null;
+
+    const candidate = contextDocument.modelContext;
+    if (!candidate || typeof candidate.registerTool !== 'function') return null;
+    return candidate;
+  } catch (error) {
+    if (hasErrorName(error, 'NotAllowedError', 'SecurityError')) return null;
+    throw error;
   }
-  return candidate;
 }
 
 /**
@@ -274,8 +298,22 @@ export async function registerStudioWebMcpTools(
 
   const registered: string[] = [];
   for (const tool of tools) {
-    if (options?.signal?.aborted) break;
-    await modelContext.registerTool(tool, registerOptions);
+    if (options?.signal?.aborted) return { registered: [], supported: true };
+    try {
+      await modelContext.registerTool(tool, registerOptions);
+    } catch (error) {
+      if (
+        options?.signal?.aborted
+        && (error === options.signal.reason || hasErrorName(error, 'AbortError'))
+      ) {
+        return { registered: [], supported: true };
+      }
+      if (hasErrorName(error, 'NotAllowedError', 'SecurityError')) {
+        return { registered, supported: false };
+      }
+      throw error;
+    }
+    if (options?.signal?.aborted) return { registered: [], supported: true };
     registered.push(tool.name);
   }
 
