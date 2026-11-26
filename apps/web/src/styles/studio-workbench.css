@@ -15,7 +15,8 @@
    ============================================================ */
 
 /* Zero out globals.css `.uvai-card` 1.5rem padding on Studio split panes so inner headers & tabs span edge-to-edge. */
-.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card {
+.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card,
+.uvai-cards.template-studio-shell .studio-context-pane {
   padding: 0;
 }
 
@@ -520,7 +521,7 @@
     border: 0;
     border-radius: 0;
     border-right: 1px solid var(--uvai-border);
-    background: #000;
+    background: var(--uvai-surface);
   }
 
   .uvai-cards.template-studio-shell .studio-context-rail {
@@ -580,7 +581,7 @@
     background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-stage-header {
-    background: #0a0a0a;
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-pane-body {
     flex: 1 1 auto;
@@ -596,14 +597,14 @@
     min-width: 0;
   }
 
-  /* Stage: media-first — full width of stage column, cinematic 16:9 */
+  /* Stage: media-first — theme surface for chrome; cinematic black stays on the player only */
   .uvai-cards.template-studio-shell .studio-pane-body--video {
     padding: 0;
     overflow-y: auto;
     overflow-x: hidden;
     flex: 1 1 auto;
     min-height: 0;
-    background: #000;
+    background: var(--uvai-surface);
   }
   .uvai-cards.template-studio-shell .studio-source-stack {
     display: flex;
