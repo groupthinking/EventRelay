@@ -101,6 +101,13 @@ export default function StudioIdeShell({
   const mobilePane = controlledMobilePane ?? uncontrolledMobilePane;
   const activityMode = controlledActivityMode ?? uncontrolledActivityMode;
   const showOutputContext = contextShowsOutput(activityMode);
+  // Mobile tabs must drive pane `hidden` even when activityMode is omitted / mismatched
+  // (e.g. controlled mobilePane="output" with default activity "video"). Desktop keeps
+  // activity-driven context when the Source tab is selected (mobilePane === 'video').
+  const chatHidden =
+    mobilePane === 'chat' ? false : mobilePane === 'output' ? true : showOutputContext;
+  const outputHidden =
+    mobilePane === 'output' ? false : mobilePane === 'chat' ? true : !showOutputContext;
 
   const setMobilePane = useCallback(
     (pane: MobilePane) => {
@@ -316,7 +323,7 @@ export default function StudioIdeShell({
               aria-label="Chat"
               role="tabpanel"
               aria-labelledby="studio-tab-chat"
-              hidden={showOutputContext}
+              hidden={chatHidden}
               className="uvai-card studio-context-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
               <div className="studio-pane-body flex-1 min-h-0 min-w-0">{chatPane}</div>
@@ -328,7 +335,7 @@ export default function StudioIdeShell({
               aria-label="Output"
               role="tabpanel"
               aria-labelledby="studio-tab-output"
-              hidden={!showOutputContext}
+              hidden={outputHidden}
               className="uvai-card studio-context-pane flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
             >
               <div className="studio-pane-body flex-1 min-h-0 min-w-0">{outputPane}</div>

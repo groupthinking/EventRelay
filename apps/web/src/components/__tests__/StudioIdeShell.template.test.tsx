@@ -151,6 +151,26 @@ describe('Hybrid D Studio stage shell (Cut 1)', () => {
     expect(onMobilePaneChange).toHaveBeenCalledWith('output');
   });
 
+  it('reveals Deliverables when mobilePane is output without activityMode', () => {
+    vi.stubGlobal('React', React);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Deliverables body</p>}
+        mobilePane="output"
+      />,
+    );
+
+    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
+    expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(false);
+    expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(true);
+    expect(screen.getByTestId('studio-ide-output-pane').textContent).toContain(
+      'Deliverables body',
+    );
+  });
+
   it('locks Hybrid D stage-dominant grid CSS (not conversation-left split)', () => {
     const shellSource = readFileSync(
       join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'),
