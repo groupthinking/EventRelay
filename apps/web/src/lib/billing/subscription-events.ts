@@ -138,16 +138,9 @@ export async function syncFromSubscription(
   sub: Stripe.Subscription,
   email?: string,
 ): Promise<EntitlementRecord | null> {
-  let resolvedEmail =
-    email ??
-    sub.metadata?.email ??
-    (typeof sub.customer === 'object' && sub.customer && 'email' in sub.customer
-      ? ((sub.customer as Stripe.Customer).email ?? undefined)
-      : undefined);
-
-  if (!resolvedEmail && typeof sub.customer === 'string' && sub.customer.trim()) {
-    const stripe = getStripeClient();
-    const customer = await stripe.customers.retrieve(sub.customer);
+  let resolvedEmail = email;
+  if (!email && !sub.metadata?.email && typeof sub.customer === 'string') {
+    const customer = await getStripeClient().customers.retrieve(sub.customer);
     if (customer && !('deleted' in customer && customer.deleted) && customer.email) {
       resolvedEmail = customer.email;
     }
