@@ -10,7 +10,8 @@
     "test": "turbo run test",
     "build:web": "cd apps/web && npm run build",
     "dev:web": "cd apps/web && npm run dev",
-    "install:all": "npm install"
+    "install:all": "npm install",
+    "test:mcp-security": "tsc --project tests/security/tsconfig.mcp.json && vitest run --config tests/security/vitest.mcp.config.mts"
   },
   "workspaces": [
     "apps/*"
@@ -79,7 +80,10 @@
     "ip-address@^10.0.0": "^10.7.4",
     "qs@^6.0.0": "^6.16.1",
     "vitest@^4.0.0": "^4.1.12",
-    "vitest@^5.0.0": "^5.0.3"
+    "vitest@^5.0.0": "^5.0.3",
+    "@modelcontextprotocol/sdk": {
+      "json-schema-typed": "9.0.0"
+    }
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.135",
