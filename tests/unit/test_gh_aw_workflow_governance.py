@@ -69,12 +69,27 @@ def test_coverage_workflow_is_authoritative() -> None:
 def test_ci_installs_the_authoritative_python_environment() -> None:
     workflow = _load_yaml(ROOT / ".github/workflows/ci.yml")
     steps = workflow["jobs"]["test"]["steps"]
-    install_script = next(
-        step for step in steps if step.get("name") == "Install dependencies"
-    )["run"]
-    test_script = next(step for step in steps if step.get("name") == "Run tests")["run"]
+    lock_check = next(step for step in steps if step.get("name") == "Check lockfile")
+    install = next(
+        step for step in steps if step.get("name") == "Install locked dependencies"
+    )
+    run_tests = next(step for step in steps if step.get("name") == "Run tests")
+    offline_tests = next(
+        step for step in steps
+        if step.get("name") == "Offline MCP inventory and approval regressions"
+    )
+    install_script = install["run"]
+    test_script = run_tests["run"]
 
-    assert 'python -m pip install -e ".[dev,youtube]"' in install_script
+    assert steps.index(lock_check) < steps.index(install) < steps.index(run_tests)
+    assert steps.index(install) < steps.index(offline_tests)
+    assert install_script == (
+        'uv sync --locked --python "${{ matrix.python-version }}" '
+        "--extra dev --extra youtube"
+    )
+    assert not install.get("continue-on-error", False)
+    assert test_script.startswith("PYTHONPATH=src .venv/bin/python -m pytest ")
+    assert offline_tests["run"].startswith(".venv/bin/python -m pytest ")
     assert "--timeout=120" in test_script
     assert "--cov=src/youtube_extension" in test_script
     # The unit-only CI job must NOT enforce the full-suite baseline: 84.2%
@@ -129,7 +144,7 @@ def test_ci_runs_supported_python_matrix_with_immutable_actions() -> None:
     assert run_tests.get("if") is None
     test_script = run_tests["run"]
     assert test_script == (
-        "PYTHONPATH=src python -m pytest tests/unit/ -v --timeout=120 "
+        "PYTHONPATH=src .venv/bin/python -m pytest tests/unit/ -v --timeout=120 "
         "--cov=src/youtube_extension --cov-fail-under=0 "
         '--ignore=tests/unit/test_transcript_action_workflow.py -k "not integration"'
     )
