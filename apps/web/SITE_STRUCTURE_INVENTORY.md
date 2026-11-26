@@ -131,7 +131,7 @@ Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, 
 - `studio-shell-storage.ts` — Studio shell persistence.
 - `use-youtube-player.ts` — YouTube IFrame player hook.
 - `chat-pack-grounding.ts` — binds chat to a pack's evidence.
-- `pack-build-live-client.ts` / `pack-build-live.ts` — Build-live flow.
+- `pack-build-live-client.ts` — Build-live flow.
 - `official-templates.ts` — template picking, deploy hold reasons, stack checks.
 - `linked-sop.ts` — SOP steps linked against events; stack check compilation.
 
@@ -142,7 +142,7 @@ Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, 
 - `video-pack-store.ts` — Upstash REST persistence.
 - `video-pack-extractor.ts` + `video-pack-extract-{jev,merge,reason,segments}.ts` — extraction pipeline stages.
 - `video-pack-shard-planner.ts`, `video-pack-consolidator.ts`, `video-pack-clip-probe.ts`, `keyframe-frame-capture.ts`, `keyframe-image-path.ts`.
-- `youtube-captions.ts`, `youtube-metadata.ts`, `transcription-service.ts`, `gemini-video-analyzer.ts`, `gemini-client.ts`, `gemini-models.ts`, `gemini-embedding.ts`.
+- `youtube-captions.ts`, `youtube-metadata.ts`, `transcription-service.ts`, `gemini-video-analyzer.ts`, `gemini-client.ts`, `gemini-models.ts`.
 
 **G.A.T.E. / Zero-Sim (locked, non-bypassable)**
 - `gate-transition.ts` — the contract: `evaluateStudioDeployTransition`, receipt views, `PASS|HOLD|REJECT|ESCALATE`.
@@ -171,7 +171,7 @@ Removed on 2026-11-19 (no in-repo caller): `/api/video`, `/api/video/generate`, 
 - `zip-store.ts` — export zip assembly.
 - `timestamp.ts` — `formatSeconds`, `parseTimestampToSeconds`, `extractYouTubeId`.
 - `site.ts`, `constants.ts` (contact email etc.), `utils.ts` (`clsx`+`tailwind-merge` `cn`).
-- `search-indexer.ts`, `upstash-search.ts`, `embedding-store.ts`.
+- `search-indexer.ts`, `upstash-search.ts`.
 - `video-url-request.ts`, `hosted-spec-paths.ts`, `compiled-spec-host.ts`, `live-deployment-probe.ts`.
 - `world-v
 ...[truncated 3119 chars]

@@ -74,6 +74,8 @@ describe('StudioIdeOutput playflow', () => {
     expect(screen.getByTestId('studio-ide-output-tab-tasks').getAttribute('aria-selected')).toBe('true');
     expect(screen.getByTestId('studio-pack-chapters').textContent).toContain('Camera setup');
     expect(screen.getByTestId('studio-ide-output-tools').textContent).toContain('Next.js');
+    expect(screen.getByTestId('studio-proposed-tool-card').textContent).toMatch(/Proposed/);
+    expect(screen.getByTestId('studio-proposed-tool-card').textContent).toMatch(/not run/i);
     expect(screen.getByTestId('studio-ide-output-topics').textContent).toContain('Robotics');
 
     // Keyboard tab navigation across the 4 tabs.
@@ -179,6 +181,47 @@ describe('StudioIdeOutput playflow', () => {
     expect(row.textContent).not.toMatch(/\bpassed\b/i);
   });
 
+  it('does not render INSIGHT cards when the pack has no events[]', () => {
+    const pack = reviewPackFixture();
+    pack.architecture = {
+      summary: 'Five-step pipeline',
+      stages: [{ id: 'extract', name: 'Extract' }],
+    };
+    pack.artifacts = [{ path_hint: 'src/pipeline.ts', purpose: 'Run the pack', interface: 'extract()' }];
+    render(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          events: [
+            {
+              id: 'evt_1',
+              type: 'insight',
+              title: 'Five-Step AI Video Retainer Pipeline',
+              description: 'Workflow step, not a pack event.',
+            },
+            { id: 'evt_2', type: 'insight', title: 'Cluey two-engineer architecture' },
+            { id: 'evt_3', type: 'insight', title: 'creator affiliate network' },
+            { id: 'evt_4', type: 'insight', title: 'Fable/safety' },
+          ],
+          videoPack: {
+            packId: pack.id,
+            videoId: pack.video_id,
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        }}
+        eventsEmptyMessage="This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page."
+      />,
+    );
+    const events = screen.getByTestId('studio-ide-output-events');
+    expect(events.textContent).toMatch(/no extracted events/i);
+    expect(events.textContent).not.toMatch(/INSIGHT/i);
+    expect(events.textContent).not.toContain('Five-Step AI Video Retainer Pipeline');
+    expect(events.textContent).not.toContain('Cluey two-engineer architecture');
+  });
+
   it('uses the honest Events empty copy and hosts the pack workbench inside Tasks & Tools', () => {
     render(
       <StudioIdeOutput
@@ -191,6 +234,80 @@ describe('StudioIdeOutput playflow', () => {
     expect(events.textContent).toMatch(/no extracted events/i);
     expect(events.textContent).not.toMatch(/INSIGHT/i);
     expect(screen.getByTestId('studio-pack-workbench')).toBeTruthy();
+  });
+
+  it('shows a transcript ETA while the fetch is in progress and a retry when it fails', () => {
+    const onRetry = vi.fn();
+    const view = render(
+      <StudioIdeOutput
+        video={{ ...baseVideo, status: 'processing', transcript: '' }}
+        transcriptEta="About 33s left (typical ~45s)"
+        initialSection="transcript"
+      />,
+    );
+    expect(screen.getByTestId('studio-transcript-eta').textContent).toMatch(/33s left/i);
+    expect(screen.queryByText('Nothing yet.')).toBeNull();
+
+    view.rerender(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          status: 'failed',
+          transcript: '',
+          failure: {
+            stage: 'analysis',
+            message: 'Gemini 3.8 Flash returned no extracted spec content.',
+            retryable: true,
+            failedAt: '2026-11-22T00:00:00.000Z',
+          },
+        }}
+        showTranscriptRetry
+        onRetryTranscript={onRetry}
+        initialSection="transcript"
+      />,
+    );
+    expect(screen.getByTestId('studio-transcript-body').textContent).toMatch(
+      /Gemini 3\.8 Flash returned no extracted spec content/,
+    );
+    fireEvent.click(screen.getByTestId('studio-transcript-pane-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders pBsT6v-ciO8 named tools as proposed cards instead of a dead name list', () => {
+    const pack = reviewPackFixture();
+    pack.video_id = 'pBsT6v-ciO8';
+    pack.source_url = 'https://www.youtube.com/watch?v=pBsT6v-ciO8';
+    pack.stack.tools = [
+      { name: 'SeaDance 2.5', evidence: 'Named on screen.' },
+      { name: 'Claude Fable 5' },
+      { name: 'Character.ai' },
+      { name: 'Cluely Desktop' },
+    ];
+    render(
+      <StudioIdeOutput
+        video={{
+          ...baseVideo,
+          url: 'https://www.youtube.com/watch?v=pBsT6v-ciO8',
+          videoPack: {
+            packId: pack.id,
+            videoId: 'pBsT6v-ciO8',
+            sourceUrl: pack.source_url,
+            sourceHash: pack.provenance.source_hash,
+            version: pack.version,
+            pack,
+          },
+        }}
+      />,
+    );
+    const cards = screen.getAllByTestId('studio-proposed-tool-card');
+    expect(cards).toHaveLength(4);
+    expect(cards.map((card) => card.textContent).join('\n')).toMatch(/SeaDance 2\.5/);
+    expect(cards.map((card) => card.textContent).join('\n')).toMatch(/Cluely Desktop/);
+    for (const card of cards) {
+      expect(card.textContent).toMatch(/Proposed/);
+      expect(card.textContent).toMatch(/not run/i);
+      expect(card.textContent).not.toMatch(/\b(passed|done|executed)\b/i);
+    }
   });
 
   it('renders review_action results and pending tool proposals inside Tasks & Tools', () => {
@@ -271,6 +388,17 @@ describe('StudioIdeOutput playflow', () => {
       ],
     };
     pack.keyframes = [{ t_s: 42, desc: 'Release frame' }];
+    Object.assign(pack, {
+      events: [
+        {
+          id: 'evt-1',
+          type: 'action',
+          title: 'Calibrate camera',
+          description: 'Run checkerboard capture',
+          timestamp: 25,
+        },
+      ],
+    });
 
     render(
       <StudioIdeOutput
@@ -279,12 +407,10 @@ describe('StudioIdeOutput playflow', () => {
           ...baseVideo,
           events: [
             {
-              id: 'evt-1',
-              type: 'action',
-              title: 'Calibrate camera',
-              description: 'Run checkerboard capture',
-              timestamp: '0:25',
-              confidence: 0.9,
+              id: 'ignored-insight',
+              type: 'insight',
+              title: 'Five-Step AI Video Retainer Pipeline',
+              timestamp: '0:01',
             },
           ],
           videoPack: {

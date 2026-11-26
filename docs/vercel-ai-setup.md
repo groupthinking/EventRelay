@@ -17,8 +17,8 @@ vercel env add AI_GATEWAY_API_KEY        # Your Vercel AI Gateway API key
 Get `AI_GATEWAY_API_KEY` from: **Vercel Dashboard → AI → Gateway → API Keys**
 
 > **Security note:** `VERCEL_TOKEN` is a personal access token used only by
-> MCP tooling and CI — it must **not** be exposed to the app's runtime
-> environment. See section 2 for where to configure it.
+> Vercel CLI, REST, and CI — it must **not** be exposed to the app's runtime
+> environment. Vercel MCP does not use this PAT. See section 2.
 
 ### Local development
 
@@ -32,22 +32,38 @@ cp .env.example .env
 
 ## 2. Vercel MCP Server
 
-The Vercel MCP server exposes tools for listing deployments, fetching build
-logs, and managing project env vars directly from AI coding assistants.
+The official Vercel MCP server (`https://mcp.vercel.com`) exposes tools for
+listing deployments, fetching build logs, and managing projects from AI
+coding assistants. It is **OAuth 2.1**, not a Vercel API PAT.
 
 ### Connection details
 
-- **Transport**: SSE
+- **Transport**: Streamable HTTP
 - **URL**: `https://mcp.vercel.com`
-- **Auth**: `VERCEL_TOKEN` (+ optional `VERCEL_TEAM_ID`)
+- **Auth**: OAuth 2.1 browser consent (Grok stores the grant in
+  `~/.grok/mcp_credentials.json`)
 
-`VERCEL_TOKEN` and `VERCEL_TEAM_ID` are **development/CI-scoped** secrets for the
-MCP tooling only. Configure them in your local shell or CI secret store, **not**
-as Vercel project runtime environment variables:
+This repo ships the Grok stub in `.grok/config.toml` as URL-only. Do **not**
+add `Authorization: Bearer ${VERCEL_TOKEN}` — a static header makes Grok skip
+its OAuth client, and `mcp doctor vercel` then fails with `invalid_token`.
 
 ```bash
-# Local shell / CI secret store (NOT the Vercel project runtime env)
-export VERCEL_TOKEN=...       # Vercel personal access token
+# Already committed. Re-add only if the stub was deleted:
+grok mcp add --transport http -s project vercel https://mcp.vercel.com
+
+# Authorize (interactive TUI; headless doctor will not complete consent):
+#   grok --cwd <EventRelay>
+#   /mcps → vercel → i
+```
+
+`VERCEL_TOKEN` and `VERCEL_TEAM_ID` remain **CLI/REST/CI** secrets (Vercel
+deploy scripts, `vercel` CLI). Configure them in your local shell or CI secret
+store, **not** as Vercel project runtime environment variables, and **not** as
+the Grok MCP Authorization header:
+
+```bash
+# Local shell / CI secret store (NOT the Vercel project runtime env, NOT Grok MCP)
+export VERCEL_TOKEN=...       # Vercel personal access token (CLI/REST)
 export VERCEL_TEAM_ID=...     # Vercel team ID (starts with team_)
 ```
 

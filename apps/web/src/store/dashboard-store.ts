@@ -15,8 +15,6 @@ import type {
 } from '@/lib/types';
 import type {
   Action,
-  PipelineResult,
-  SearchResult,
   Video,
 } from '@/store/dashboard-types';
 import { extractYouTubeId, formatSeconds } from '@/lib/timestamp';
@@ -31,8 +29,6 @@ import { compileLinkedSop } from '@/lib/linked-sop';
 
 export type {
   Action,
-  PipelineResult,
-  SearchResult,
   Video,
 } from '@/store/dashboard-types';
 
@@ -40,32 +36,18 @@ export const ANALYSIS_STOPPED_MESSAGE =
   'Analysis stopped in this browser. Server work already accepted may continue.';
 
 interface DashboardState {
-  // Data
   videos: Video[];
   selectedVideoId: string | null;
-  loading: boolean;
 
-  // Computed
-  selectedVideo: () => Video | undefined;
-
-  // Actions
   addVideo: (video: Video) => void;
   updateVideo: (id: string, patch: Partial<Video>) => void;
   removeVideo: (id: string) => void;
   selectVideo: (id: string | null) => void;
-  setLoading: (loading: boolean) => void;
 
-  // Workflow actions
   processVideo: (url: string, opts?: { signal?: AbortSignal }) => Promise<string>;
-
-  // Search actions
-  searchQuery: string;
-  searchResults: SearchResult[];
-  searchLoading: boolean;
-  setSearchQuery: (query: string) => void;
 }
 
-/** Trim a string for display in titles/activity. */
+/** Trim a string for display in titles. */
 function truncate(value: string, max: number): string {
   return value.length > max ? value.substring(0, max - 3) + '…' : value;
 }
@@ -159,7 +141,7 @@ function verifiedResultPatch(
   });
   const events: ExtractedEvent[] = (analysis.events || []).map((event, index) => ({
     id: `evt_${id}_${index}`,
-    type: 'insight',
+    type: 'topic',
     title: event.label,
     description: event.description,
     timestamp: Number.isFinite(event.timestamp) ? String(event.timestamp) : undefined,
@@ -333,16 +315,6 @@ export const useDashboardStore = create<DashboardState>()(
     (set, get) => ({
   videos: [],
   selectedVideoId: null,
-  loading: false,
-
-  searchQuery: '',
-  searchResults: [],
-  searchLoading: false,
-
-  selectedVideo: () => {
-    const { videos, selectedVideoId } = get();
-    return videos.find((v) => v.id === selectedVideoId);
-  },
 
   addVideo: (video) =>
     set((s) => ({ videos: [video, ...s.videos] })),
@@ -358,15 +330,7 @@ export const useDashboardStore = create<DashboardState>()(
       selectedVideoId: s.selectedVideoId === id ? null : s.selectedVideoId,
     })),
 
-  selectVideo: (id) => set({
-    selectedVideoId: id,
-    searchQuery: '',
-    searchResults: [],
-    searchLoading: false,
-  }),
-
-  setLoading: (loading) => set({ loading }),
-  setSearchQuery: (query) => set({ searchQuery: query }),
+  selectVideo: (id) => set({ selectedVideoId: id }),
 
   // ── Process a video URL through one durable, evidence-gated workflow ──
   processVideo: async (url, opts) => {

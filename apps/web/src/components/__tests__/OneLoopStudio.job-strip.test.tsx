@@ -30,7 +30,7 @@ const idleVideo: Video = {
 
 beforeEach(() => {
   vi.stubGlobal('React', React);
-  vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => undefined);
+  vi.spyOn(useDashboardStore.persist, 'rehydrate').mockImplementation(() => Promise.resolve());
   useDashboardStore.setState({ videos: [], selectedVideoId: null });
 });
 
@@ -103,7 +103,8 @@ describe('OneLoopStudio IDE status and transcript', () => {
     render(<OneLoopStudio />);
 
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-transcript'));
-    expect(screen.getByTestId('studio-transcript-body').textContent).toBe(extractError);
+    expect(screen.getByTestId('studio-transcript-body').textContent).toContain(extractError);
+    expect(screen.getByTestId('studio-transcript-pane-retry').textContent).toMatch(/Retry transcript/i);
     expect(screen.queryByText('Nothing yet.')).toBeNull();
   });
 });

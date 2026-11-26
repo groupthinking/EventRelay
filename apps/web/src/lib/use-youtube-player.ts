@@ -129,8 +129,13 @@ export interface UseYouTubePlayerResult {
   duration: number;
   isPlaying: boolean;
   ready: boolean;
-  /** True when the IFrame API could not load/init (e.g. blocked or offline). */
+  /**
+   * True when the IFrame API player reported an embed error.
+   * An API stall or blocked script is `direct`, not `failed`.
+   */
   failed: boolean;
+  /** True when a nocookie iframe is mounted because the IFrame API stalled or was blocked. */
+  direct: boolean;
   seekTo: (seconds: number) => void;
   play: () => void;
   pause: () => void;
@@ -143,7 +148,11 @@ export interface UseYouTubePlayerResult {
  * Polls getCurrentTime on a light interval so consumers can highlight the
  * active transcript line / timeline marker as the video plays.
  */
-export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult {
+export function useYouTubePlayer(
+  videoId: string | null,
+  options?: { direct?: boolean },
+): UseYouTubePlayerResult {
+  const forceDirect = options?.direct === true;
   // Track the container as state (via a callback ref) rather than a RefObject
   // so the init effect re-runs when the element is swapped, not only when
   // `videoId` changes.
@@ -162,6 +171,8 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
   const [isPlaying, setIsPlaying] = useState(false);
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [direct, setDirect] = useState(false);
+  const mountedVideoRef = useRef<string | null>(null);
 
   useEffect(() => {
     videoIdRef.current = videoId;
@@ -190,23 +201,62 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
   useEffect(() => {
     let cancelled = false;
 
+    const videoChanged = mountedVideoRef.current !== videoId;
+    mountedVideoRef.current = videoId;
+
     if (!videoId) {
       readyRef.current = false;
       fallbackIframeRef.current = null;
       setReady(false);
       setFailed(false);
+      setDirect(false);
       setCurrentTime(0);
       setDuration(0);
       setIsPlaying(false);
       return;
     }
 
-    if (!container) return;
+    if (!container) {
+      // A new video must try the API again. The same video keeps `direct` so a
+      // host that is briefly detached does not drop the fallback iframe.
+      if (videoChanged) {
+        readyRef.current = false;
+        fallbackIframeRef.current = null;
+        setReady(false);
+        setFailed(false);
+        setDirect(false);
+        setIsPlaying(false);
+      }
+      return;
+    }
+
+    if (forceDirect) {
+      readyRef.current = false;
+      setReady(false);
+      setFailed(false);
+      setCurrentTime(0);
+      setDuration(0);
+      setIsPlaying(false);
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        /* noop */
+      }
+      playerRef.current = null;
+      fallbackIframeRef.current = mountFallbackIframe(container, videoId, { autoplay: true });
+      setDirect(true);
+      return () => {
+        fallbackIframeRef.current = null;
+        playerRef.current = null;
+        container.replaceChildren();
+      };
+    }
 
     readyRef.current = false;
     fallbackIframeRef.current = null;
     setReady(false);
     setFailed(false);
+    setDirect(false);
     setCurrentTime(0);
     setDuration(0);
     setIsPlaying(false);
@@ -216,7 +266,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
     playerHost.className = 'h-full w-full';
     container.replaceChildren(playerHost);
 
-    const activateFallback = () => {
+    const activateDirect = () => {
       if (cancelled || readyRef.current) return;
       clearTimeout(failTimer);
       stopPolling();
@@ -226,14 +276,35 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
         /* noop */
       }
       playerRef.current = null;
-      fallbackIframeRef.current = mountFallbackIframe(container, videoId);
+      fallbackIframeRef.current = mountFallbackIframe(container, videoId, { autoplay: true });
       setReady(false);
       setIsPlaying(false);
+      // The script never started the player. The nocookie iframe may still work,
+      // so this is not an embed failure and must not be covered as one.
+      setFailed(false);
+      setDirect(true);
+    };
+
+    const markEmbedFailed = () => {
+      if (cancelled) return;
+      clearTimeout(failTimer);
+      stopPolling();
+      readyRef.current = false;
+      try {
+        playerRef.current?.destroy();
+      } catch {
+        /* noop */
+      }
+      playerRef.current = null;
+      fallbackIframeRef.current = null;
+      setReady(false);
+      setIsPlaying(false);
+      setDirect(false);
       setFailed(true);
     };
 
     // If the JS API stalls (blocked script, CSP, offline), mount a direct nocookie iframe after 3.5s.
-    const failTimer = setTimeout(activateFallback, YT_API_STALL_TIMEOUT_MS);
+    const failTimer = setTimeout(activateDirect, YT_API_STALL_TIMEOUT_MS);
 
     loadYouTubeApi()
       .then((YT) => {
@@ -254,6 +325,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
                 fallbackIframeRef.current = null;
                 setReady(true);
                 setFailed(false);
+                setDirect(false);
                 try {
                   setDuration(e.target.getDuration() || 0);
                 } catch {
@@ -277,17 +349,16 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
                 }
               },
               onError: () => {
-                readyRef.current = false;
-                activateFallback();
+                markEmbedFailed();
               },
             },
           });
         } catch {
-          activateFallback();
+          activateDirect();
         }
       })
       .catch(() => {
-        activateFallback();
+        activateDirect();
       });
 
     return () => {
@@ -303,7 +374,7 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
       fallbackIframeRef.current = null;
       container.replaceChildren();
     };
-  }, [videoId, container, startPolling, stopPolling]);
+  }, [videoId, container, forceDirect, startPolling, stopPolling]);
 
   const seekTo = useCallback((seconds: number) => {
     const target = Math.max(0, seconds);
@@ -342,5 +413,5 @@ export function useYouTubePlayer(videoId: string | null): UseYouTubePlayerResult
     }
   }, []);
 
-  return { containerRef, currentTime, duration, isPlaying, ready, failed, seekTo, play, pause };
+  return { containerRef, currentTime, duration, isPlaying, ready, failed, direct, seekTo, play, pause };
 }

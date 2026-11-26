@@ -15,6 +15,15 @@ import {
   type VideoPackStack,
 } from '@/lib/video-pack-types';
 
+export interface EmittedVideoPackEvent {
+  id?: string;
+  type?: string;
+  title?: string;
+  label?: string;
+  description?: string;
+  timestamp?: number | string;
+}
+
 export interface EmittedVideoPack {
   grounded_spec?: GroundedSpecRecord;
   version: string;
@@ -36,6 +45,7 @@ export interface EmittedVideoPack {
   stack?: VideoPackStack;
   chapters?: VideoPackChapter[];
   action_items?: VideoPackActionItem[];
+  events?: EmittedVideoPackEvent[];
 }
 
 export interface VideoPackCitation {
@@ -127,6 +137,7 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       })
     : undefined;
   const grounding = data ? decodeGroundedSpec(data) : undefined;
+  const events = readPackEvents(data?.events);
 
   return {
     version,
@@ -161,8 +172,32 @@ export function verifyIdentityPack(payload: unknown): VideoPackCitation {
       ...(formation.stack.tools.length > 0 ? { stack: formation.stack } : {}),
       ...(formation.chapters.length > 0 ? { chapters: formation.chapters } : {}),
       ...(formation.action_items.length > 0 ? { action_items: formation.action_items } : {}),
+      ...(events.length > 0 ? { events } : {}),
     },
   };
+}
+
+/** Copy event fields through. Title, label, and timestamp normalization is studioPackExtractedEvents. */
+function readPackEvents(value: unknown): EmittedVideoPackEvent[] {
+  if (!Array.isArray(value)) return [];
+  const events: EmittedVideoPackEvent[] = [];
+  for (const item of value) {
+    const row = asRecord(item);
+    if (!row || Array.isArray(item)) continue;
+    const event: EmittedVideoPackEvent = {};
+    if (typeof row.id === 'string') event.id = row.id;
+    if (typeof row.type === 'string') event.type = row.type;
+    if (typeof row.title === 'string') event.title = row.title;
+    if (typeof row.label === 'string') event.label = row.label;
+    if (typeof row.description === 'string') event.description = row.description;
+    if (typeof row.timestamp === 'number' && Number.isFinite(row.timestamp)) {
+      event.timestamp = row.timestamp;
+    } else if (typeof row.timestamp === 'string') {
+      event.timestamp = row.timestamp;
+    }
+    if (Object.keys(event).length > 0) events.push(event);
+  }
+  return events;
 }
 
 export function identityPackJson(pack: VideoPackCitation): string {

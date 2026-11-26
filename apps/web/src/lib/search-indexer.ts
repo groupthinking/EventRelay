@@ -5,8 +5,7 @@ import 'server-only';
  * cross-video search (/api/search) fills organically from the canonical
  * Video Pack pipeline (`POST /api/video/pack` → Upstash).
  *
- * This is the durable complement to the local-disk stores (`training-store`,
- * `embedding-store`), whose writes fail on Vercel's read-only filesystem
+ * This is the durable complement to `training-store`, whose writes fail on Vercel's read-only filesystem
  * (ENOENT /var/task/apps/web/data in production logs). Indexing is ancillary:
  * a missing Upstash config — or any upsert failure — results in an honest
  * skip, never a failed pack run and never fabricated success.
