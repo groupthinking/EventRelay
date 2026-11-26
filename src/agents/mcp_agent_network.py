@@ -280,16 +280,8 @@ class MCPAgentNetwork:
         logger.info(f"Knowledge base call: {action}")
 
         try:
-            import sys
-            from pathlib import Path
+            from .knowledge_base import get_knowledge_base
 
-            # Resolve scripts directory and add to sys.path
-            project_root = Path(__file__).resolve().parent.parent.parent
-            scripts_dir = project_root / "scripts"
-            if str(scripts_dir) not in sys.path:
-                sys.path.insert(0, str(scripts_dir))
-
-            from knowledge_base import get_knowledge_base
             kb = get_knowledge_base()
 
             if action == "capture_technology":

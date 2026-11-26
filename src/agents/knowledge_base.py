@@ -28,8 +28,8 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Resolve project root: scripts/ sits one level below the repo root
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# Resolve project root: src/agents/ is two levels below the repo root
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DEFAULT_KB_PATH = _PROJECT_ROOT / "data" / "knowledge_base.json"
 
 

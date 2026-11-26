@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Video } from '@/store/dashboard-store';
 import { applyTaskEdits, deriveLiveTasks, type LiveTaskEdits } from '@/lib/live-studio-tasks';
+import { studioPackExtractedEvents } from '@/lib/studio-pipeline-status';
 import {
   LiveChapterRail,
   LiveEvents,
@@ -58,7 +59,8 @@ export default function LiveStudioWorkspace({
   const segments = pack?.transcript?.segments ?? [];
   const chapters = pack?.chapters ?? [];
   const keyframes = pack?.keyframes ?? [];
-  const events = pack?.visual_context?.visual_elements ?? [];
+  const visualElements = pack?.visual_context?.visual_elements ?? [];
+  const extractedEventCount = studioPackExtractedEvents(pack).length;
   const checkCount = tasks.filter((task) => task.check).length;
 
   const stages = (() => {
@@ -67,7 +69,7 @@ export default function LiveStudioWorkspace({
       { id: 'transcript', label: 'Transcript', present: segments.length > 0, detail: segments.length ? String(segments.length) : undefined },
       { id: 'chapters', label: 'Chapters', present: chapters.length > 0, detail: chapters.length ? String(chapters.length) : undefined },
       { id: 'keyframes', label: 'Keyframes', present: keyframes.length > 0, detail: keyframes.length ? String(keyframes.length) : undefined },
-      { id: 'events', label: 'Events', present: events.length > 0, detail: events.length ? String(events.length) : undefined },
+      { id: 'events', label: 'Events', present: Boolean(pack), detail: pack ? String(extractedEventCount) : undefined },
       { id: 'tasks', label: 'Tasks', present: tasks.length > 0, detail: tasks.length ? String(tasks.length) : undefined },
       { id: 'checks', label: 'Checks', present: checkCount > 0, detail: checkCount ? String(checkCount) : undefined },
     ];
@@ -85,7 +87,7 @@ export default function LiveStudioWorkspace({
   const settled = !live && stages.every((stage) => stage.state === 'done');
   const sourceMeta = [
     keyframes.length ? `${keyframes.length} frames` : '',
-    events.length ? `${events.length} events` : '',
+    visualElements.length ? `${visualElements.length} on screen` : '',
   ].filter(Boolean).join(' · ');
 
   return (
@@ -140,7 +142,7 @@ export default function LiveStudioWorkspace({
           <details className="live-extras" data-testid="live-source-extra">
             <summary>Keyframes and events{sourceMeta ? ` · ${sourceMeta}` : ''}</summary>
             <LiveKeyframes keyframes={keyframes} live={live} canSeek={canSeek} onSeek={onSeek} />
-            <LiveEvents events={events} live={live} canSeek={canSeek} onSeek={onSeek} />
+            <LiveEvents events={visualElements} live={live} canSeek={canSeek} onSeek={onSeek} />
           </details>
           <details className="live-section live-chat" data-testid="live-chat">
             <summary className="live-section__title">Ask the video</summary>

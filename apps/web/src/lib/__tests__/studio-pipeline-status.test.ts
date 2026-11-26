@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { verifyIdentityPack } from '@/lib/emit-video-pack';
+import { GOLDEN_IDENTITY_HASHES } from '@/lib/video-pack';
 import {
   STUDIO_PRODUCT_TAGLINE,
   studioActionCard,
@@ -14,7 +16,9 @@ import {
   studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
+  studioPackExtractedEvents,
   studioHasDeployReceipt,
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
@@ -236,6 +240,86 @@ describe('studio-pipeline-status', () => {
     expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
       false,
     );
+  });
+
+  it('counts only pack events[] — not visual_elements or insight workflow cards', () => {
+    const pack = {
+      architecture: { summary: 'Pipeline', stages: [] },
+      artifacts: [{ path_hint: 'src/a.ts', purpose: 'x', interface: 'y' }],
+      stack: { tools: [{ name: 'SeaDance 2.5' }] },
+      visual_context: {
+        visual_elements: [
+          { timestamp: 1, element_type: 'guest', content: 'Guest' },
+          { timestamp: 2, element_type: 'host', content: 'Host' },
+          { timestamp: 3, element_type: 'studio', content: 'Studio' },
+        ],
+      },
+    };
+    expect(studioPackExtractedEvents(pack)).toEqual([]);
+    expect(
+      studioEventsEmptyMessage({
+        busy: false,
+        hasCompletedRun: true,
+        eventCount: studioPackExtractedEvents(pack).length,
+        hasArchitecture: true,
+        artifactCount: 1,
+        toolCount: 1,
+      }).toLowerCase(),
+    ).toMatch(/no extracted events/);
+
+    const withEvents = {
+      ...pack,
+      events: [{ type: 'action', title: 'Clip signed', label: 'Clip signed', timestamp: 12 }],
+    };
+    const shown = studioPackExtractedEvents(withEvents);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('Clip signed');
+    expect(shown[0]?.type).not.toBe('insight');
+  });
+
+  it('keeps pack events[] after verifyIdentityPack and still ignores insight cards', () => {
+    const canon = 'jNQXAC9IVRw';
+    const hash = GOLDEN_IDENTITY_HASHES[canon];
+    const identity = {
+      version: 'v0',
+      id: `vp:v0:${canon}`,
+      video_id: canon,
+      source_url: `https://www.youtube.com/watch?v=${canon}`,
+      transcript: { full_text: `cite:youtube:${canon}`, segments: [] },
+      provenance: { source_hash: hash },
+      visual_context: {
+        visual_elements: [{ timestamp: 1, element_type: 'guest', content: 'Guest' }],
+      },
+    };
+
+    const emptyCitation = verifyIdentityPack({ status: 'success', data: identity });
+    expect(emptyCitation.pack.events).toBeUndefined();
+    expect(studioPackExtractedEvents(emptyCitation.pack)).toEqual([]);
+
+    const withEvents = verifyIdentityPack({
+      status: 'success',
+      data: {
+        ...identity,
+        events: [{ id: 'evt-clip', type: 'action', title: 'Clip signed', timestamp: 12 }],
+      },
+    });
+    const shown = studioPackExtractedEvents(withEvents.pack);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('Clip signed');
+    expect(shown[0]?.type).not.toBe('insight');
+  });
+
+  it('keeps unsigned ZIP export on the page with a Pro-required toast', () => {
+    const toast = studioExportProRequiredToast();
+    expect(toast.tone).toBe('error');
+    expect(toast.text.toLowerCase()).toMatch(/require pro/);
+    expect(toast.text.toLowerCase()).not.toContain('redirecting');
+    expect(toast.text.toLowerCase()).toMatch(/pricing|stay on this page/);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioExportProRequiredToast');
+    expect(studio).not.toMatch(/window\.location\.href\s*=\s*result\.checkoutUrl/);
+    expect(studio).not.toMatch(/Redirecting to checkout/);
   });
 
   it('does not claim a transcript exists when a completed run only has pack identity', () => {

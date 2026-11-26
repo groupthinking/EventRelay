@@ -39,9 +39,11 @@ import {
   studioCanRetryTranscript,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackExtractedEvents,
   studioPackFormation,
   studioPackIdentity,
   studioResolveAutoSelectedPackId,
@@ -466,7 +468,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setMessage('Replaying the cached sample pack stage by stage…');
     try {
       await replaySamplePack({
-        recordId: id,
         citation,
         signal: controller.signal,
         apply: (patch) => updateVideo(id, patch),
@@ -599,7 +600,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const showDirectEmbed = preferDirectEmbed || playerDirect;
   const showErrorCover = !showDirectEmbed && playerPhase === 'error';
   const embedErrorText = studioPlayerOverlay('error');
-  const eventCount = selected?.events?.length ?? 0;
+  const eventCount = studioPackExtractedEvents(selected?.videoPack?.pack).length;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
     hasArchitecture: Boolean(packFormation.architecture),
@@ -630,7 +631,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
     false,
     Boolean(videoId || selected),
-    { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
+    { transcript: selected?.transcript, eventCount },
   );
   const shellPack = selected?.videoPack?.pack;
   const canSeekActiveVideo = Boolean(
@@ -694,9 +695,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       });
       const result = await downloadScaffoldPackage(pkg);
       if (!result.ok) {
-        if (result.status === 402 && result.checkoutUrl) {
-          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
-          window.location.href = result.checkoutUrl;
+        if (result.status === 402 || result.upgradeRequired) {
+          setExportToast(studioExportProRequiredToast());
           return;
         }
         const toast = studioExportToastMessage({

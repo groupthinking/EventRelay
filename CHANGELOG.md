@@ -11,6 +11,8 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio event display reads pack `events[]` through one parser. The unused display count, sample-events wrapper, and lib task note are gone. Related: #2328.
+
 ### 2026-11-24: Long Video Packs use one agentic Gemini call
 
 Tracked by #2808.
@@ -20,6 +22,34 @@ Tracked by #2808.
 - A YouTube video of at least 300 seconds is extracted with one direct Gemini Interactions call on `gemini-3.8-flash`, `processing: "agentic"`, and `thinking_level: "high"`. The call sends no offsets and no fps. Shorter clips keep the static shard path.
 - A grounded citation on that call must stay inside `0..durationSeconds`. A citation past the duration is invalid (`out-of-range-citation`).
 - An empty response, invalid JSON, or an SDK rejection of agentic processing throws `VideoPackExtractError`. There is no static full-video fallback.
+
+### 2026-11-22: Obsolete unused-surface cleanup
+
+#### Removed
+
+- Fly deploy script and `FLY_API_TOKEN` setup/template refs
+- Broken `scripts/nightly_audit_agent.py` and its unit test
+- Empty `STAGE_RUNNERS` autonomous-video CI scripts, workflow, and unit tests
+- Unused `infrastructure/k8s/ray/**` manifests (kept `src/uvai/ml` library)
+- Deleted-backend verify/populate/load probes and `AUTOMATION_LAUNCHER.sh`
+
+#### Changed
+
+- Relocated `knowledge_base` to `src/agents/knowledge_base.py` and fixed the
+  `mcp_agent_network` import (no more `scripts/` on `sys.path`)
+- Retargeted `tests/e2e/pipeline.test.ts` so `/features` and `/dashboard`
+  assert permanent redirects to `/` and `/studio`
+
+### 2026-11-22: Honest Studio Events and Pro export toast (apps/web)
+
+Tracked by #2491. Live unsigned dogfood of `pBsT6v-ciO8` on uvai.io.
+
+#### Fixed
+
+- Detected events no longer render analysis `insight` cards when the Video Pack has no `events[]`. Empty copy is "this pack has no extracted events".
+- `verifyIdentityPack` keeps real pack `events[]` so Detected events can render extracted events when the store actually has them. It still does not invent events from visual_elements or analysis insights.
+- Live Events stage counts pack `events[]` only. Visual on-screen elements stay under Keyframes extras, not as extracted events.
+- Unsigned **Export** / Ship this on 402 stays on Studio with a Pro-required toast. It does not assign `window.location` to Stripe Checkout.
 
 ### 2026-11-22: Studio transcript, player, export, and proposed-tool honesty (apps/web)
 

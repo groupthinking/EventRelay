@@ -246,7 +246,6 @@ jobs:
           echo "- fast-processing-optimized"
           echo "- comprehensive-issue-management"
           echo "- bulk-issue-processor"
-          echo "- autonomous-video-processing"
           echo "- ci-cd"
           echo "- deploy"
 

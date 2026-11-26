@@ -141,7 +141,7 @@ function verifiedResultPatch(
   });
   const events: ExtractedEvent[] = (analysis.events || []).map((event, index) => ({
     id: `evt_${id}_${index}`,
-    type: 'insight',
+    type: 'topic',
     title: event.label,
     description: event.description,
     timestamp: Number.isFinite(event.timestamp) ? String(event.timestamp) : undefined,

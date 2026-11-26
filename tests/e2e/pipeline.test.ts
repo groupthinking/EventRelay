@@ -2,11 +2,11 @@
  * EventRelay E2E Test Suite
  *
  * Tests the live deployment at BASE_URL (default: https://uvai.io) for:
- *   1. Homepage smoke check + Template Gallery (/features) rendering
+ *   1. Homepage smoke check
  *   2. Video Pack pipeline — POST /api/video/pack → poll GET until ready
  *   3. Pack evidence contract — hashed identity, source_hash lineage
  *   4. Error handling — invalid URL returns 400, not a hang
- *   5. Dashboard page renders
+ *   5. Retired skins permanently redirect (/features → /, /dashboard → /studio)
  *   6. API health descriptor
  *   7. Static assets & meta
  *
@@ -201,63 +201,14 @@ describe('EventRelay E2E — Live Deployment', () => {
     }
   });
 
-  // ── 1. Template Gallery / Feature Showcase ────────────────────────
-  // The homepage (BASE_URL) is the interactive Video Workflow Studio and
-  // intentionally does NOT render the template gallery. The workflow /
-  // template content lives on the /features page, so the content
-  // assertions below target /features (the homepage keeps a generic
-  // 200/HTML smoke check).
+  // ── 1. Homepage smoke ─────────────────────────────────────────────
 
-  describe('Template Gallery', () => {
-    const FEATURES_URL = `${BASE_URL}/features`;
-
+  describe('Homepage', () => {
     it('homepage returns 200 with HTML', async () => {
       const res = await fetchWithTimeout(BASE_URL);
       expect(res.status).toBe(200);
       const ct = res.headers.get('content-type') || '';
       expect(ct).toContain('text/html');
-    });
-
-    it('features page contains template/workflow markup', async () => {
-      const res = await fetchWithTimeout(FEATURES_URL);
-      expect(res.status).toBe(200);
-      const html = await res.text();
-      // The features page should reference at least some of these workflow names
-      const expectedTemplates = [
-        'Tutorial',
-        'Conference',
-        'Podcast',
-        'Code Review',
-        'Meeting',
-        'Research',
-      ];
-      const found = expectedTemplates.filter((t) =>
-        html.toLowerCase().includes(t.toLowerCase()),
-      );
-      expect(found.length).toBeGreaterThanOrEqual(3);
-    });
-
-    it('features page surfaces at least 5 workflow/template indicators', async () => {
-      const res = await fetchWithTimeout(FEATURES_URL);
-      expect(res.status).toBe(200);
-      const html = await res.text();
-      // Count distinct template-related content blocks across the feature
-      // sections and the shared footer use-case list.
-      const templateIndicators = [
-        'youtube',
-        'tutorial',
-        'conference',
-        'podcast',
-        'meeting',
-        'code review',
-        'research',
-        'demo',
-        'webinar',
-      ];
-      const found = templateIndicators.filter((t) =>
-        html.toLowerCase().includes(t),
-      );
-      expect(found.length).toBeGreaterThanOrEqual(5);
     });
   });
 
@@ -385,26 +336,27 @@ describe('EventRelay E2E — Live Deployment', () => {
     });
   });
 
-  // ── 4. Dashboard Page ─────────────────────────────────────────────
+  // ── 4. Retired skins permanently redirect ─────────────────────────
+  // next.config.js 308s /features → / and /dashboard → /studio. Probe with
+  // redirect: 'manual' so the first hop is visible to the assertion.
 
-  describe('Dashboard', () => {
-    it('/dashboard returns 200', async () => {
-      const res = await fetchWithTimeout(`${BASE_URL}/dashboard`);
-      expect(res.status).toBe(200);
+  describe('Retired skin redirects', () => {
+    it('/features permanently redirects to /', async () => {
+      const res = await fetchWithTimeout(`${BASE_URL}/features`, {
+        redirect: 'manual',
+      });
+      expect([301, 308]).toContain(res.status);
+      const location = res.headers.get('location') || '';
+      expect(new URL(location, BASE_URL).pathname).toBe('/');
     });
 
-    it('/dashboard contains agent or pipeline visualization markup', async () => {
-      const res = await fetchWithTimeout(`${BASE_URL}/dashboard`);
-      const html = await res.text();
-      const indicators = ['agent', 'pipeline', 'dashboard', 'transcript', 'video'];
-      const found = indicators.filter((t) =>
-        html.toLowerCase().includes(t),
-      );
-      // When NEXTAUTH_SECRET is set in production the middleware redirects
-      // unauthenticated requests to the NextAuth sign-in page; that page
-      // contains "dashboard" in the callbackUrl, so we get ≥ 1 match.
-      // A fully-rendered (authenticated) dashboard will match more.
-      expect(found.length).toBeGreaterThanOrEqual(1);
+    it('/dashboard permanently redirects to /studio', async () => {
+      const res = await fetchWithTimeout(`${BASE_URL}/dashboard`, {
+        redirect: 'manual',
+      });
+      expect([301, 308]).toContain(res.status);
+      const location = res.headers.get('location') || '';
+      expect(new URL(location, BASE_URL).pathname).toBe('/studio');
     });
   });
 
@@ -438,9 +390,14 @@ describe('EventRelay E2E — Live Deployment', () => {
       expect(html.toLowerCase()).toContain('viewport');
     });
 
-    it('/features page returns 200', async () => {
-      const res = await fetchWithTimeout(`${BASE_URL}/features`);
-      expect(res.status).toBe(200);
+    it('/studio returns HTML when reachable', async () => {
+      const res = await fetchWithTimeout(`${BASE_URL}/studio`);
+      // 200 when public/auth-off; 401/302 when the auth gate challenges first.
+      expect([200, 302, 307, 401]).toContain(res.status);
+      if (res.status === 200) {
+        const ct = res.headers.get('content-type') || '';
+        expect(ct).toContain('text/html');
+      }
     });
   });
 });

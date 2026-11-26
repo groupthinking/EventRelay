@@ -102,11 +102,7 @@ uvai.io distribution-ready **and** 50 distinct videos with real Video Packs. The
 
 ## Nightly audit (Jules)
 
-When running the nightly first-principles audit (status &gt; 400 or latency &gt; 200ms): analyze origin, remediate atomically, add a preventative guard. Manual dry-run:
-
-```bash
-PYTHONPATH=src python3 scripts/nightly_audit_agent.py --dry-run
-```
+When running the nightly first-principles audit (status &gt; 400 or latency &gt; 200ms): analyze origin, remediate atomically, add a preventative guard. Prefer hosted runtime logs and CI evidence over local stub auditors.
 
 ## Security dependency maintenance
 
