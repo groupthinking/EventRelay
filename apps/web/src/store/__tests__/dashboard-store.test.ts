@@ -9,10 +9,6 @@ function resetStore() {
   useDashboardStore.setState({
     videos: [],
     selectedVideoId: null,
-    loading: false,
-    searchQuery: '',
-    searchResults: [],
-    searchLoading: false,
   });
 }
 
@@ -114,29 +110,9 @@ describe('dashboard-store · synchronous reducers', () => {
     expect(store().selectedVideoId).toBe('a');
   });
 
-  it('selectVideo sets the id and resets search state', () => {
-    store().setSearchQuery('hello');
-    useDashboardStore.setState({
-      searchResults: [{ start: 0, duration: 1, text: 't', score: 1 }],
-    });
+  it('selectVideo sets the id', () => {
     store().selectVideo('v1');
     expect(store().selectedVideoId).toBe('v1');
-    expect(store().searchQuery).toBe('');
-    expect(store().searchResults).toEqual([]);
-  });
-
-  it('selectedVideo selector returns the selected video or undefined', () => {
-    store().addVideo(makeVideo({ id: 'a', title: 'Alpha' }));
-    expect(store().selectedVideo()).toBeUndefined();
-    store().selectVideo('a');
-    expect(store().selectedVideo()?.title).toBe('Alpha');
-  });
-
-  it('setLoading and setSearchQuery update their flags', () => {
-    store().setLoading(true);
-    expect(store().loading).toBe(true);
-    store().setSearchQuery('q');
-    expect(store().searchQuery).toBe('q');
   });
 });
 

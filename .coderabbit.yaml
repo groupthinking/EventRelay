@@ -140,10 +140,12 @@ reviews:
         using the type-safe Stainless-generated client instead.
     - path: "sdk/python/eventrelay_sdk/**"
       instructions: >-
-        Hand-maintained Python SDK that MUST stay in sync with
-        src/youtube_extension/backend/api/v1/models.py (the source of truth). Flag drift:
-        required backend fields weakened to Optional, enum fields typed as str instead of the
-        SDK enum, or response shapes that diverge from the backend models.
+        Hand-maintained Python SDK. The backend models tree
+        src/youtube_extension/backend/ (including api/v1/models.py) is gone.
+        sdk/python/eventrelay_sdk/types.py is the remaining source of truth;
+        sdk/typescript/src/types.ts mirrors it. Flag drift between those two:
+        required fields weakened to Optional, enum fields typed as str instead of the
+        SDK enum, or response shapes that diverge from the Python SDK types.
   tools:
     shellcheck:
       enabled: true

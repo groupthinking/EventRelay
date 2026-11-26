@@ -128,7 +128,7 @@ export function stackCheckStatusLabel(status: StackCheckStatus): string {
     case 'skip':
       return 'Skip — not runnable while signed out';
     case 'unknown':
-      return 'Unknown — UVAI cannot run this check';
+      return 'Can be skipped — not a production hold. UVAI cannot run this check.';
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

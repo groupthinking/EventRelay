@@ -76,7 +76,7 @@ describe('replaySamplePack', () => {
     try {
       const citation = loadSamplePack();
       const patches: Array<Partial<Video>> = [];
-      const done = replaySamplePack({ recordId: 'row-1', citation, apply: (patch) => patches.push(patch), stepDelayMs: 10 });
+      const done = replaySamplePack({ citation, apply: (patch) => patches.push(patch), stepDelayMs: 10 });
       await vi.runAllTimersAsync();
       await done;
       const steps = sampleReplaySteps(citation);
@@ -94,7 +94,6 @@ describe('replaySamplePack', () => {
       const controller = new AbortController();
       const patches: Array<Partial<Video>> = [];
       const done = replaySamplePack({
-        recordId: 'row-1',
         citation: loadSamplePack(),
         apply: (patch) => {
           patches.push(patch);
@@ -117,9 +116,10 @@ describe('replaySamplePack', () => {
 describe('sampleCompletionPatch', () => {
   it('derives title, events and insights from the pack itself', () => {
     const citation = loadSamplePack();
-    const patch = sampleCompletionPatch(citation, 'row-9');
+    const patch = sampleCompletionPatch(citation);
     expect(patch.title).toBe(`Sample · ${citation.pack.chapters?.[0]?.topic}`);
-    expect(patch.events?.length).toBe(citation.pack.visual_context?.visual_elements.length);
+    expect(patch.events ?? []).toEqual([]);
+    expect(citation.pack.visual_context?.visual_elements.length).toBeGreaterThan(0);
     expect(patch.insights?.actions.map((action) => (typeof action === 'string' ? action : action.title))).toEqual(
       (citation.pack.action_items ?? []).map((item) => item.title),
     );

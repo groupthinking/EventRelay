@@ -24,7 +24,7 @@ def test_grok_project_config_exists() -> None:
 
 
 @pytest.mark.unit
-def test_grok_project_config_is_mcp_stubs_with_env_vars() -> None:
+def test_grok_project_config_mcp_stubs() -> None:
     raw = GROK_CONFIG.read_text(encoding="utf-8")
     parsed = tomllib.loads(raw)
     servers = parsed["mcp_servers"]
@@ -34,15 +34,17 @@ def test_grok_project_config_is_mcp_stubs_with_env_vars() -> None:
     assert servers["github"]["url"] == "https://api.githubcopilot.com/mcp/"
     assert servers["github"]["headers"]["Authorization"] == "Bearer ${GITHUB_TOKEN}"
     assert servers["vercel"]["url"] == "https://mcp.vercel.com"
-    assert servers["vercel"]["headers"]["Authorization"] == "Bearer ${VERCEL_TOKEN}"
-    assert servers["vercel"]["env"]["VERCEL_TOKEN"] == "${VERCEL_TOKEN}"
-    assert servers["vercel"]["env"]["VERCEL_TEAM_ID"] == "${VERCEL_TEAM_ID}"
+    assert "headers" not in servers["vercel"]
+    assert "env" not in servers["vercel"]
+    assert "Authorization: Bearer ${VERCEL_TOKEN}" not in raw
     assert "grok mcp add --transport http -s project github" in raw
     assert "grok mcp add --transport http -s project vercel" in raw
     assert "--header 'Authorization: Bearer ${GITHUB_TOKEN}'" in raw
     assert '--header "Authorization: Bearer ${GITHUB_TOKEN}"' not in raw
     assert "writes the literal secret" in raw
     assert "Do not pass a double-quoted Authorization header" in raw
+    assert "OAuth 2.1" in raw
+    assert "mcp_credentials.json" in raw
     assert _SECRETISH.search(raw) is None
 
 

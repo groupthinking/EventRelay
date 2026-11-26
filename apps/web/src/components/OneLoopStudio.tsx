@@ -39,9 +39,11 @@ import {
   studioCanRetryTranscript,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackExtractedEvents,
   studioPackFormation,
   studioPackIdentity,
   studioResolveAutoSelectedPackId,
@@ -222,7 +224,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
-  const [playerEpoch, setPlayerEpoch] = useState(0);
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
@@ -467,7 +468,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setMessage('Replaying the cached sample pack stage by stage…');
     try {
       await replaySamplePack({
-        recordId: id,
         citation,
         signal: controller.signal,
         apply: (patch) => updateVideo(id, patch),
@@ -582,12 +582,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
-  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
-    useYouTubePlayer(videoId);
+  const { containerRef, ready: playerReady, failed: playerFailed, direct: playerDirect, seekTo } =
+    useYouTubePlayer(videoId, { direct: preferDirectEmbed });
 
   useEffect(() => {
     setPreferDirectEmbed(false);
-  }, [videoId, playerEpoch]);
+  }, [videoId]);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
@@ -595,7 +595,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     failed: playerFailed,
   });
   const playerOverlay = studioPlayerOverlay(playerPhase);
-  const eventCount = selected?.events?.length ?? 0;
+  // The hook owns the nocookie iframe and its seek ref. The shell only hides
+  // the cover; it does not swap in a second iframe.
+  const showDirectEmbed = preferDirectEmbed || playerDirect;
+  const showErrorCover = !showDirectEmbed && playerPhase === 'error';
+  const embedErrorText = studioPlayerOverlay('error');
+  const eventCount = studioPackExtractedEvents(selected?.videoPack?.pack).length;
   const promotePack = studioPromotePackWorkbench({
     eventCount,
     hasArchitecture: Boolean(packFormation.architecture),
@@ -626,7 +631,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
     false,
     Boolean(videoId || selected),
-    { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
+    { transcript: selected?.transcript, eventCount },
   );
   const shellPack = selected?.videoPack?.pack;
   const canSeekActiveVideo = Boolean(
@@ -690,9 +695,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       });
       const result = await downloadScaffoldPackage(pkg);
       if (!result.ok) {
-        if (result.status === 402 && result.checkoutUrl) {
-          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
-          window.location.href = result.checkoutUrl;
+        if (result.status === 402 || result.upgradeRequired) {
+          setExportToast(studioExportProRequiredToast());
           return;
         }
         const toast = studioExportToastMessage({
@@ -965,7 +969,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           )}
         >
           <Download className="h-4 w-4" aria-hidden />
-          Export
+          {shipCta.label}
         </button>
         {isLive ? (
           <>
@@ -1049,25 +1053,13 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
       {videoId ? (
         <div
-          key={`${videoId}-${playerEpoch}`}
+          key={videoId}
           className={clsx(
             'relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950',
             !isLive && 'max-h-[200px] max-w-[356px]',
           )}
         >
-          {preferDirectEmbed ? (
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
-              title="YouTube source player"
-              className="h-full w-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              referrerPolicy="strict-origin-when-cross-origin"
-              data-testid="studio-player-fallback-iframe"
-            />
-          ) : (
-            <>
-              {!playerReady && !playerFailed ? (
+              {!showDirectEmbed && !playerReady && !playerFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`}
@@ -1089,7 +1081,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                 data-testid="studio-player"
                 title="YouTube source"
               />
-              {playerOverlay && playerPhase === 'loading' ? (
+              {!showDirectEmbed && playerOverlay && playerPhase === 'loading' && !showErrorCover ? (
                 <button
                   type="button"
                   data-testid="studio-player-overlay"
@@ -1104,26 +1096,35 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                     {playerOverlay}
                   </span>
                 </button>
-              ) : playerOverlay && playerPhase === 'error' ? (
+              ) : showErrorCover ? (
                 <div
                   data-testid="studio-player-overlay"
-                  className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex flex-wrap items-center justify-end gap-1.5"
+                  className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-neutral-950 px-4 text-center"
                 >
-                  <button
-                    type="button"
-                    data-testid="studio-player-retry"
-                    onClick={() => {
-                      setPreferDirectEmbed(false);
-                      setPlayerEpoch((epoch) => epoch + 1);
-                    }}
-                    className="uvai-btn pointer-events-auto !bg-black/75 !px-2.5 !py-1 !text-[11px] text-white backdrop-blur-sm"
-                  >
-                    Retry player
-                  </button>
+                  <p className="max-w-sm text-sm font-medium text-white">{embedErrorText}</p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      data-testid="studio-player-retry"
+                      onClick={() => setPreferDirectEmbed(true)}
+                      className="uvai-btn !bg-white !px-3 !py-1 !text-xs !text-neutral-950"
+                    >
+                      Retry player
+                    </button>
+                    {watchHref ? (
+                      <a
+                        href={watchHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid="studio-player-open-youtube"
+                        className="uvai-btn !px-3 !py-1 !text-xs text-white"
+                      >
+                        Open on YouTube
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
-            </>
-          )}
         </div>
       ) : (
         <div
@@ -1354,6 +1355,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         null
       }
       previewReady={Boolean(scopedPackBuildLiveSuccess)}
+      transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}
+      showTranscriptRetry={showTranscriptRetry}
+      onRetryTranscript={() => void runAnalysis(url || selected?.url || '')}
       onBuildLive={() => void buildLive()}
       buildBusy={buildBusy}
       focusPreviewSignal={previewFocusEpoch}
@@ -1414,6 +1418,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           statusText={statusText}
           canSeek={canSeekActiveVideo}
           onSeek={seekTo}
+          transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}
+          onRetryTranscript={() => void runAnalysis(url || selected?.url || '')}
           onSaveTaskEdits={(taskEdits) => {
             if (selected) updateVideo(selected.id, { taskEdits });
           }}
@@ -1433,10 +1439,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           data-testid="studio-export-toast"
           role={exportToast.tone === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
-            exportToast.tone === 'success'
-              ? 'border-[#146ef5]/50 bg-[#111a2e]/95 text-[#e8f0ff]'
-              : 'border-red-500/45 bg-[#241012]/95 text-red-200',
+            'studio-export-toast',
+            exportToast.tone === 'success' ? 'studio-export-toast--success' : 'studio-export-toast--error',
           )}
         >
           {exportToast.text}

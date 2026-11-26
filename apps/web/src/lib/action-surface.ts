@@ -13,7 +13,6 @@ import {
   type AppBuilderTranscript,
   type AppBuilderVisualEvent,
 } from '@/lib/emit-app-builder-sandbox';
-import { zipUtf8Files } from '@/lib/zip-store';
 
 /**
  * Canonical action surface (F3).

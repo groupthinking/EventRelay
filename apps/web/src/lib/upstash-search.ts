@@ -1,10 +1,7 @@
 /**
  * Upstash Search client (full-text + semantic search over indexed documents).
  *
- * Complements the per-video vector search in `gemini-embedding.ts` /
- * `embedding-store.ts` (which is scoped to one video's transcript chunks and
- * backed by ephemeral storage) with a durable, cross-video index hosted on
- * Upstash. Reads config at call time so a deploy picks up env changes without
+ * Durable cross-video index hosted on Upstash. Reads config at call time so a deploy picks up env changes without
  * module-load ordering concerns — same pattern as `vercel-ai-gateway.ts`.
  *
  * Required env (Vercel project / apps/web/.env.local):
@@ -29,10 +26,6 @@ export function resolveSearchConfig(): { url: string; token: string } | null {
   const token = process.env.UPSTASH_SEARCH_REST_TOKEN?.trim();
   if (!url || !token) return null;
   return { url, token };
-}
-
-export function hasUpstashSearch(): boolean {
-  return resolveSearchConfig() !== null;
 }
 
 export function resolveSearchIndexName(): string {

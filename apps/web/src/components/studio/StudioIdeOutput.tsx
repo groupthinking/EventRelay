@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
-import { studioActionCard } from '@/lib/studio-pipeline-status';
+import { studioActionCard, studioPackExtractedEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
 import { downloadMarkdownFile } from '@/lib/download-file';
@@ -42,6 +42,11 @@ export type StudioIdeOutputProps = {
   activeSection?: OutputSection;
   onSectionChange?: (section: OutputSection) => void;
   onSeek?: (seconds: number) => void;
+  /** Remaining-time copy while a transcript fetch is still running. */
+  transcriptEta?: string | null;
+  /** True when the fetch failed or has run long enough to retry. */
+  showTranscriptRetry?: boolean;
+  onRetryTranscript?: () => void;
 };
 
 /**
@@ -68,6 +73,9 @@ export default function StudioIdeOutput({
   activeSection,
   onSectionChange,
   onSeek,
+  transcriptEta = null,
+  showTranscriptRetry = false,
+  onRetryTranscript,
 }: StudioIdeOutputProps) {
   const [internalActive, setInternalActive] = useState<OutputSection>(
     initialSection ?? (previewReady ? 'preview' : 'tasks'),
@@ -112,7 +120,7 @@ export default function StudioIdeOutput({
     '';
 
   const pack = video?.videoPack?.pack;
-  const events: ExtractedEvent[] = video?.events ?? [];
+  const events: ExtractedEvent[] = studioPackExtractedEvents(pack);
   const topics: string[] = video?.insights?.topics ?? [];
   const actionItems = pack?.action_items ?? [];
   const stackTools = pack?.stack?.tools ?? [];
@@ -124,10 +132,11 @@ export default function StudioIdeOutput({
   const chapters = pack?.chapters ?? [];
   const linkedSop = video?.insights?.linkedSop;
 
-  const toolNames: string[] = stackTools
-    .map((t) => t.name?.trim())
-    .filter((t): t is string => Boolean(t))
-    .filter((t, i, arr) => arr.indexOf(t) === i);
+  const proposedTools = stackTools.flatMap((tool) => {
+    const name = tool.name?.trim();
+    return name ? [{ ...tool, name }] : [];
+  }).filter((tool, index, tools) => tools.findIndex((item) => item.name === tool.name) === index);
+  const toolNames: string[] = proposedTools.map((tool) => tool.name);
 
   const isProcessing = video?.status === 'processing' && !video?.videoPack;
   const canRenderPreview = Boolean(
@@ -585,16 +594,24 @@ export default function StudioIdeOutput({
 
                 {toolNames.length > 0 ? (
                   <div className={`uvai-card p-4 ${chapters.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'}`}>
-                    <p className="uvai-section-label mb-3">Recommended tools & stack</p>
-                    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                      {toolNames.map((t, i) => (
-                        <li key={`${t}-${i}`} className="uvai-metric">
-                          <div className="uvai-metric-icon">
-                            <WrenchIcon />
-                          </div>
-                          <p className="font-mono text-xs font-semibold text-[var(--uvai-ink)]">{t}</p>
-                        </li>
-                      ))}
+                    <p className="uvai-section-label mb-3">Proposed tools</p>
+                    <ul className="flex flex-col gap-2">
+                      {proposedTools.map((tool) => {
+                        const card = studioProposedToolCard(tool);
+                        return (
+                          <li
+                            key={card.title}
+                            data-testid="studio-proposed-tool-card"
+                            className="rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] p-3"
+                          >
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-accent-ink)]">
+                              {card.statusLabel}
+                            </p>
+                            <p className="mt-1 font-mono text-xs font-semibold text-[var(--uvai-ink)]">{card.title}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{card.detail}</p>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 ) : null}
@@ -800,7 +817,26 @@ export default function StudioIdeOutput({
                   {video.transcript}
                 </p>
               ) : video?.failure?.message ? (
-                <p className="text-xs text-[var(--uvai-danger-ink)]">{video.failure.message}</p>
+                <div className="flex flex-col items-start gap-2">
+                  <p className="text-xs text-[var(--uvai-danger-ink)]">{video.failure.message}</p>
+                  {showTranscriptRetry && onRetryTranscript ? (
+                    <button
+                      type="button"
+                      data-testid="studio-transcript-pane-retry"
+                      onClick={onRetryTranscript}
+                      className="uvai-btn !px-3 !py-1 !text-xs"
+                    >
+                      Retry transcript
+                    </button>
+                  ) : null}
+                </div>
+              ) : transcriptEta ? (
+                <div className="flex flex-col gap-1 py-2">
+                  <p data-testid="studio-transcript-eta" className="text-sm font-medium text-[var(--uvai-ink)]">
+                    {transcriptEta}
+                  </p>
+                  <p className="text-xs text-[var(--uvai-ink-soft)]">Waiting on captions — no invented text.</p>
+                </div>
               ) : (
                 <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">Nothing yet.</p>
               )}
@@ -924,14 +960,6 @@ function DotIcon() {
   return (
     <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor" aria-hidden="true">
       <circle cx="3" cy="3" r="3" />
-    </svg>
-  );
-}
-
-function WrenchIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }

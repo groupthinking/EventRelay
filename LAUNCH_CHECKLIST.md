@@ -124,9 +124,8 @@ The frontend already prefers the Gateway when configured
 Gemini/OpenAI otherwise. Enabling it buys unified billing, one key for many
 providers, failover, spend caps, and request observability — zero code changes.
 - Set `AI_GATEWAY_API_KEY` (or `VERCEL_AI_GATEWAY_API_KEY`) in the Vercel env.
-- Optional overrides: `VERCEL_AI_GATEWAY_MODEL` (default
-  `google/gemini-3.8-flash`) and `VERCEL_AI_GATEWAY_EMBEDDING_MODEL` (default
-  `openai/text-embedding-3-small`).
+- Optional override: `VERCEL_AI_GATEWAY_MODEL` (default
+  `google/gemini-3.8-flash`).
 - Leave unset to keep direct-provider behavior.
 
 ---

@@ -1,6 +1,6 @@
 import samplePackEnvelope from '@/lib/sample-pack/auJzb1D-fag.pack.json';
 import { verifyIdentityPack, type EmittedVideoPack, type VideoPackCitation } from '@/lib/emit-video-pack';
-import type { ExtractedEvent } from '@/lib/types';
+import { studioPackExtractedEvents } from '@/lib/studio-pipeline-status';
 import type { Video } from '@/store/dashboard-types';
 
 export const SAMPLE_VIDEO_ID = 'auJzb1D-fag';
@@ -107,23 +107,7 @@ export function sampleReplaySteps(citation: VideoPackCitation): SampleReplayStep
   return steps;
 }
 
-function humanize(value: string): string {
-  const spaced = value.replace(/[_-]+/g, ' ').trim();
-  return spaced ? spaced[0].toUpperCase() + spaced.slice(1) : 'Visual event';
-}
-
-export function sampleEvents(pack: EmittedVideoPack, recordId: string): ExtractedEvent[] {
-  return (pack.visual_context?.visual_elements ?? []).map((element, index) => ({
-    id: `evt_${recordId}_${index}`,
-    type: 'insight',
-    title: humanize(element.element_type),
-    description: element.content,
-    timestamp: String(element.timestamp),
-    ...(typeof element.confidence === 'number' ? { confidence: element.confidence } : {}),
-  }));
-}
-
-export function sampleCompletionPatch(citation: VideoPackCitation, recordId: string): Partial<Video> {
+export function sampleCompletionPatch(citation: VideoPackCitation): Partial<Video> {
   const pack = citation.pack;
   const firstChapter = pack.chapters?.[0]?.topic;
   return {
@@ -132,7 +116,7 @@ export function sampleCompletionPatch(citation: VideoPackCitation, recordId: str
     title: firstChapter ? `Sample · ${firstChapter}` : `Sample · ${citation.videoId}`,
     processedAt: new Date().toISOString(),
     transcript: pack.transcript?.full_text,
-    events: sampleEvents(pack, recordId),
+    events: studioPackExtractedEvents(pack),
     videoPack: citation,
     insights: {
       summary: pack.architecture?.summary ?? '',
@@ -167,13 +151,11 @@ function wait(ms: number, signal?: AbortSignal): Promise<void> {
  * Display pacing only: every value comes from the bundled real pack.
  */
 export async function replaySamplePack({
-  recordId,
   citation,
   apply,
   stepDelayMs = 650,
   signal,
 }: {
-  recordId: string;
   citation: VideoPackCitation;
   apply: (patch: Partial<Video>) => void;
   stepDelayMs?: number;
@@ -190,5 +172,5 @@ export async function replaySamplePack({
     });
   }
   await wait(stepDelayMs, signal);
-  apply(sampleCompletionPatch(citation, recordId));
+  apply(sampleCompletionPatch(citation));
 }
