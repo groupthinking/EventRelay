@@ -126,7 +126,7 @@ def audit(config, label):
                 credentials.add(str(key))
                 placeholder = isinstance(value, str) and PLACEHOLDER.fullmatch(value) is not None
                 if isinstance(value, str) and str(key).lower() == 'authorization':
-                    prefix = re.fullmatch(r'(?:Bearer|Basic) (.+)', value, re.I)
+                    prefix = re.fullmatch(r'(?:Bearer|Basic|Sentry-Bearer) (.+)', value, re.I)
                     placeholder = placeholder or (prefix is not None and PLACEHOLDER.fullmatch(prefix[1]) is not None)
                 if not placeholder:
                     findings.append("LITERAL_CREDENTIAL")

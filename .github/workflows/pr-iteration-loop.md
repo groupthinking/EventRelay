@@ -233,6 +233,7 @@ safe-outputs:
       - "uv.lock"
   push-to-pull-request-branch:
     target: "*"
+    required-labels: [automation, ai-agent]
     if-no-changes: warn
     allowed-files:
       - ".github/workflows/**"
