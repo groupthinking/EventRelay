@@ -79,7 +79,8 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-accent); o
 .template-studio-shell .uvai-chat-assistant { background: var(--uvai-surface); border: 1px solid var(--uvai-border-strong); color: var(--uvai-ink-soft); border-radius: 8px; box-shadow: none; padding: 10px 14px; }
 .template-chat-welcome { padding: 0; }
 .template-pane-tabs { display: none; }
-@media (max-width: 900px) {
+/* Mobile single-pane dock — keep aligned with Hybrid D shell (<=679px). */
+@media (max-width: 679px) {
   .template-pane-tabs { display: flex; gap: 4px; padding: 8px 12px; border-bottom: 1px solid var(--uvai-border-strong); background: var(--uvai-surface); }
   .template-pane-tabs button { flex: 1; border-radius: 6px; font-size: 12px; padding: 9px 4px; color: var(--uvai-ink-soft); background: transparent; }
   .template-pane-tabs button[aria-selected='true'] { background: var(--uvai-accent); color: #ffffff; }

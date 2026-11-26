@@ -24,21 +24,21 @@ for (const width of [390, 1280]) {
 
     await page.goto('/studio?shell=classic');
     await expect(page.getByTestId('studio-ide-shell')).toBeVisible();
-    await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
+    await expect(page.getByTestId('studio-ide-shell')).toHaveAttribute('data-shell', 'hybrid-d');
     await page.getByLabel('YouTube URL', { exact: true }).fill('https://www.youtube.com/watch?v=auJzb1D-fag');
-    if (width < 900) {
-      await expect(page.getByTestId('studio-ide-video-pane')).toBeHidden();
-      await page.getByRole('tab', { name: 'Source', exact: true }).click();
+    if (width < 680) {
       await expect(page.getByTestId('studio-ide-video-pane')).toBeVisible();
-      await expect(page.getByTestId('studio-ide-chat-pane')).toBeHidden();
-      await page.getByRole('button', { name: 'Collapse video pane' }).click();
+      await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
       await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
       await page.getByRole('tab', { name: 'Deliverables', exact: true }).click();
       await expect(page.getByTestId('studio-ide-output-pane')).toBeVisible();
-      await page.getByRole('tab', { name: 'Conversation', exact: true }).click();
-      await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
-    } else {
+      await page.getByRole('tab', { name: 'Source', exact: true }).click();
       await expect(page.getByTestId('studio-ide-video-pane')).toBeVisible();
+    } else {
+      await expect(page.getByTestId('studio-activity-rail')).toBeVisible();
+      await expect(page.getByTestId('studio-ide-video-pane')).toBeVisible();
+      await expect(page.getByTestId('studio-ide-chat-pane')).toBeVisible();
+      await page.getByTestId('studio-activity-tools').click();
       await expect(page.getByTestId('studio-ide-output-pane')).toBeVisible();
     }
     await expect(page.getByLabel('YouTube URL', { exact: true })).toHaveValue('https://www.youtube.com/watch?v=auJzb1D-fag');

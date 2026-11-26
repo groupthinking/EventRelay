@@ -1056,10 +1056,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       {videoId ? (
         <div
           key={videoId}
-          className={clsx(
-            'relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950',
-            !isLive && 'max-h-[200px] max-w-[356px]',
-          )}
+          className="relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950"
         >
               {!showDirectEmbed && !playerReady && !playerFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -1129,12 +1126,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
               ) : null}
         </div>
       ) : (
-        <div
-          className={clsx(
-            'flex aspect-video w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]',
-            !isLive && 'max-h-[200px]',
-          )}
-        >
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
           <p>Paste a YouTube link above or in chat to load the video.</p>
           <button
             type="button"
