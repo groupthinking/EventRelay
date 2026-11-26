@@ -2,7 +2,7 @@
 import type { UseChatHelpers } from "@ai-sdk/react";
 import cx from "classnames";
 import { motion, useMotionValue, useTransform } from "framer-motion";
-import { WrenchIcon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 import { nanoid } from "nanoid";
 import {
   type Dispatch,
@@ -301,25 +301,6 @@ export const Tools = ({
   </motion.div>
 );
 
-const createFixErrorTool = (
-  consoleOutput: string,
-  documentId?: string
-): ArtifactToolbarItem => ({
-  description: "Fix error",
-  icon: <WrenchIcon className="size-4" />,
-  onClick: ({ sendMessage: send }) => {
-    send({
-      parts: [
-        {
-          text: `Fix the error in the existing script${documentId ? ` (id: ${documentId})` : ""} using updateDocument. Do not create a new script. Console error:\n\n${consoleOutput}`,
-          type: "text",
-        },
-      ],
-      role: "user",
-    });
-  },
-});
-
 const PureToolbar = ({
   isToolbarVisible: _isToolbarVisible,
   setIsToolbarVisible,
@@ -328,8 +309,6 @@ const PureToolbar = ({
   stop,
   setMessages,
   artifactKind,
-  consoleError,
-  documentId,
   artifactActions,
   onClose,
 }: {
@@ -340,8 +319,6 @@ const PureToolbar = ({
   stop: UseChatHelpers<ChatMessage>["stop"];
   setMessages: UseChatHelpers<ChatMessage>["setMessages"];
   artifactKind: ArtifactKind;
-  consoleError?: string;
-  documentId?: string;
   artifactActions?: ReactNode;
   onClose?: () => void;
 }) => {
@@ -426,12 +403,7 @@ const PureToolbar = ({
     throw new Error("Artifact definition not found!");
   }
 
-  const toolsByArtifactKind = consoleError
-    ? [
-        createFixErrorTool(consoleError, documentId),
-        ...artifactDefinition.toolbar.slice(1),
-      ]
-    : artifactDefinition.toolbar;
+  const toolsByArtifactKind = artifactDefinition.toolbar;
 
   if (toolsByArtifactKind.length === 0) {
     return null;
@@ -506,9 +478,6 @@ export const Toolbar = memo(PureToolbar, (prevProps, nextProps) => {
     return false;
   }
   if (prevProps.artifactKind !== nextProps.artifactKind) {
-    return false;
-  }
-  if (prevProps.consoleError !== nextProps.consoleError) {
     return false;
   }
   if (prevProps.artifactActions !== nextProps.artifactActions) {
