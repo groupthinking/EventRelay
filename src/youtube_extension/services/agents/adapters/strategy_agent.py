@@ -9,6 +9,7 @@ import json
 import logging
 import os
 from typing import Any, Optional
+from uuid import uuid4
 
 from ...ai.hybrid_processor_service import (
     HybridConfig,
@@ -20,6 +21,49 @@ from ..dto import AgentRequest, AgentResult
 from ..registry import register
 
 logger = logging.getLogger(__name__)
+
+A2UI_PROTOCOL_VERSION = "1.0"
+A2UI_BASIC_CATALOG_ID = (
+    "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json"
+)
+
+
+def _strategy_surface(analysis: Any) -> dict[str, Any]:
+    """Build one display-only A2UI surface; model values enter only literal Text fields."""
+
+    def required_text(obj: Any, key: str) -> str:
+        value = obj.get(key) if isinstance(obj, dict) else None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"strategic_analysis requires nonempty text for {key}")
+        return value.strip()
+
+    principle = required_text(analysis, "core_principle")
+    intent = required_text(analysis, "user_intent_analysis")
+    optimization = analysis.get("action_optimization")
+    better_way = required_text(optimization, "the_better_way")
+    gain = required_text(optimization, "gain")
+
+    def label(component_id: str, text: str) -> dict[str, str]:
+        return {"id": component_id, "component": "Text", "text": text}
+
+    return {
+        "version": A2UI_PROTOCOL_VERSION,
+        "createSurface": {
+            "surfaceId": f"strategic-funnel-{uuid4().hex}",
+            "catalogId": A2UI_BASIC_CATALOG_ID,
+            "components": [
+                {"id": "root", "component": "Column", "children": ["title", "stages", "better_way"]},
+                label("title", f"Actionable funnel: {intent}"),
+                {"id": "stages", "component": "List", "children": ["info", "application", "mastery"]},
+                label("info", f"Info: {principle}"),
+                label("application", f"Application: {better_way}"),
+                label("mastery", f"Mastery check: {gain}"),
+                {"id": "better_way", "component": "Card", "child": "better_way_text"},
+                label("better_way_text", f"Better Way: {better_way}"),
+            ],
+        },
+    }
+
 
 @register
 class StrategyAgent(BaseAgent):
@@ -69,13 +113,11 @@ class StrategyAgent(BaseAgent):
         prompt = (
             "You are a master strategist. Analyze the video data and personality mapping provided to generate a "
             "deep strategic analysis and an 'Actionable Funnel' for the user.\n\n"
-            "Produce a JSON object with two main keys:\n"
-            "1. 'strategic_analysis': { 'core_principle': str, 'user_intent_analysis': str, 'action_optimization': { 'the_better_way': str, 'gain': str } }\n"
-            "2. 'a2ui_payload': A list of A2UI messages (beginRendering, surfaceUpdate) that visualize the 3-stage funnel (Info, Application, Mastery).\n\n"
-            "A2UI Payload Requirements:\n"
-            "- Use 'beginRendering' with surfaceId 'strategic-funnel'.\n"
-            "- Use 'surfaceUpdate' with a Heading component and a List component for the funnel stages.\n"
-            "- Include a 'Better Way' Card component.\n\n"
+            "Return only a JSON object with a 'strategic_analysis' object. "
+            "Use nonempty text for 'core_principle' (what to learn), 'user_intent_analysis' (goal), "
+            "and the two fields inside 'action_optimization': 'the_better_way' (an action to apply) "
+            "and 'gain' (a concrete way to recognize mastery or assess the expected benefit). "
+            "Do not generate UI components or an a2ui_payload; the application builds the interface.\n\n"
             f"Personality Map: {json.dumps(personality_map)}\n"
             f"Video Metadata: {json.dumps(video_metadata)}\n"
         )
@@ -96,10 +138,13 @@ class StrategyAgent(BaseAgent):
             raise RuntimeError(f"Gemini strategic analysis failed: {result.error}")
 
         try:
-            return json.loads(result.response)
-        except json.JSONDecodeError:
-            # Return raw response as fallback
-            return {"strategic_analysis": {"raw": result.response}, "a2ui_payload": []}
+            strategy = json.loads(result.response)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Strategy response must be valid JSON") from exc
+        if not isinstance(strategy, dict) or set(strategy) != {"strategic_analysis"}:
+            raise ValueError("Strategy response must contain only strategic_analysis")
+        analysis = strategy["strategic_analysis"]
+        return {"strategic_analysis": analysis, "a2ui_payload": [_strategy_surface(analysis)]}
 
     def _failure(self, message: str, start_time: float) -> AgentResult:
         return AgentResult(
