@@ -1,7 +1,7 @@
 import type Stripe from 'stripe';
 import { GROK_BILLING_LEAD_MODEL } from './grok-lead';
 import type { EntitlementRecord, PlanTier } from './entitlement-store';
-import { saveEntitlement, normalizeBillingEmail } from './entitlement-store';
+import { getEntitlement, saveEntitlement, normalizeBillingEmail } from './entitlement-store';
 import { linkCheckoutActivation } from './checkout-session-store';
 import { kaizenObserve } from './kaizen-trace';
 import { getStripeClient } from './stripe-checkout';
@@ -69,8 +69,29 @@ export function entitlementFromSubscription(
 export async function activateFromCheckoutSession(
   session: Stripe.Checkout.Session,
 ): Promise<EntitlementRecord | null> {
+  const expandedSub =
+    typeof session.subscription === 'object' && session.subscription && 'status' in session.subscription
+      ? (session.subscription as Stripe.Subscription)
+      : null;
+  if (expandedSub && expandedSub.status !== 'active' && expandedSub.status !== 'trialing') {
+    return syncFromSubscription(expandedSub, sessionEmail(session) ?? undefined);
+  }
+
   const record = entitlementFromCheckoutSession(session);
   if (record?.plan === 'pro') {
+    const existing = await getEntitlement(record.email);
+    if (
+      existing &&
+      existing.plan !== 'pro' &&
+      record.stripeSubscriptionId &&
+      existing.stripeSubscriptionId === record.stripeSubscriptionId
+    ) {
+      kaizenObserve('billing', 'activation_skipped', `Refused to reactivate downgraded subscription ${record.stripeSubscriptionId}`, {
+        decision: `status=${existing.status}`,
+      });
+      return existing;
+    }
+
     const saved = await saveEntitlement(record);
     if (session.id) {
       await linkCheckoutActivation(session.id, saved);
@@ -117,7 +138,22 @@ export async function syncFromSubscription(
   sub: Stripe.Subscription,
   email?: string,
 ): Promise<EntitlementRecord | null> {
-  const record = entitlementFromSubscription(sub, email);
+  let resolvedEmail =
+    email ??
+    sub.metadata?.email ??
+    (typeof sub.customer === 'object' && sub.customer && 'email' in sub.customer
+      ? ((sub.customer as Stripe.Customer).email ?? undefined)
+      : undefined);
+
+  if (!resolvedEmail && typeof sub.customer === 'string' && sub.customer.trim()) {
+    const stripe = getStripeClient();
+    const customer = await stripe.customers.retrieve(sub.customer);
+    if (customer && !('deleted' in customer && customer.deleted) && customer.email) {
+      resolvedEmail = customer.email;
+    }
+  }
+
+  const record = entitlementFromSubscription(sub, resolvedEmail);
   if (!record) return null;
   const saved = await saveEntitlement(record);
   kaizenObserve('billing', 'subscription_synced', `Synced ${saved.email} plan=${saved.plan}`, {

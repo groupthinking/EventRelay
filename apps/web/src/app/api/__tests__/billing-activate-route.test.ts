@@ -1,13 +1,15 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { POST } from '@/app/api/billing/activate/route';
 import { getKaizenTraces, resetKaizenTracesForTests } from '@/lib/billing/kaizen-trace';
+import { saveEntitlement, resetEntitlementStoreForTests } from '@/lib/billing/entitlement-store';
 
 vi.mock('@/lib/billing/stripe-checkout', () => ({
   getCheckoutSession: vi.fn(),
 }));
 
 vi.mock('@/lib/billing/checkout-session-store', () => ({
+  CHECKOUT_ACTIVATION_TTL_SECONDS: 60 * 60 * 24,
   getCheckoutActivation: vi.fn().mockResolvedValue(null),
 }));
 
@@ -17,6 +19,11 @@ vi.mock('@/lib/billing/subscription-events', () => ({
 
 import { getCheckoutSession } from '@/lib/billing/stripe-checkout';
 import { activateFromCheckoutSession } from '@/lib/billing/subscription-events';
+
+beforeEach(() => {
+  resetEntitlementStoreForTests();
+  vi.mocked(activateFromCheckoutSession).mockClear();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -94,5 +101,60 @@ describe('POST /api/billing/activate error-code contract', () => {
       code: 'not_eligible',
       sessionId: 'cs_free',
     });
+  });
+
+  it('rejects post-TTL stale checkout sessions without calling activateFromCheckoutSession', async () => {
+    const expiredCreatedSec = Math.floor((Date.now() - 60 * 60 * 25 * 1000) / 1000);
+    vi.mocked(getCheckoutSession).mockResolvedValue({
+      id: 'cs_stale_25h',
+      created: expiredCreatedSec,
+      payment_status: 'paid',
+      status: 'complete',
+      customer_details: { email: 'stale@example.com' },
+      metadata: { plan: 'pro' },
+    } as never);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const res = await POST(activateRequest('cs_stale_25h'));
+
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({
+      error: 'not_eligible',
+      code: 'not_eligible',
+      sessionId: 'cs_stale_25h',
+    });
+    expect(activateFromCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('blocks replay on fallback when the live entitlement is already downgraded to free', async () => {
+    await saveEntitlement({
+      email: 'canceled@example.com',
+      plan: 'free',
+      status: 'canceled',
+      stripeCustomerId: 'cus_canceled',
+      stripeSubscriptionId: 'sub_canceled',
+      leadModel: 'grok-4-1-fast',
+      updatedAt: new Date().toISOString(),
+    });
+
+    vi.mocked(getCheckoutSession).mockResolvedValue({
+      id: 'cs_replay_after_cancel',
+      created: Math.floor(Date.now() / 1000),
+      payment_status: 'paid',
+      status: 'complete',
+      customer_details: { email: 'canceled@example.com' },
+      metadata: { plan: 'pro' },
+    } as never);
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    const res = await POST(activateRequest('cs_replay_after_cancel'));
+
+    expect(res.status).toBe(402);
+    expect(await res.json()).toEqual({
+      error: 'not_eligible',
+      code: 'not_eligible',
+      sessionId: 'cs_replay_after_cancel',
+    });
+    expect(activateFromCheckoutSession).not.toHaveBeenCalled();
   });
 });
