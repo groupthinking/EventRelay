@@ -1,10 +1,3 @@
-/**
- * Cut 5 — Deploy unify helpers.
- *
- * One deploy path outcome: G.A.T.E. receipt is primary UI.
- * PASS may surface a verified https live URL; non-PASS never claims live.
- */
-
 import type { GateDecision, StudioGateReceiptView } from '@/lib/gate-transition';
 import { studioVerifiedLiveUrl } from '@/lib/studio-pipeline-status';
 
@@ -15,13 +8,6 @@ export function studioGateLiveUrlForDecision(
 ): string | null {
   if (decision !== 'PASS') return null;
   return studioVerifiedLiveUrl(liveUrl);
-}
-
-/** Non-PASS receipts never authorize a live success claim. */
-export function studioGateReceiptClaimsLive(
-  receipt: Pick<StudioGateReceiptView, 'decision'> | null | undefined,
-): boolean {
-  return receipt?.decision === 'PASS';
 }
 
 export function studioGateDecisionChipClass(decision: GateDecision): string {

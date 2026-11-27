@@ -26,7 +26,7 @@ function view(
   };
 }
 
-describe('StudioGateReceiptCard (Cut 5)', () => {
+describe('StudioGateReceiptCard', () => {
   it('shows https live link only on PASS', () => {
     render(
       <StudioGateReceiptCard

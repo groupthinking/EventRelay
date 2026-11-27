@@ -1291,7 +1291,6 @@
   border-color: var(--uvai-border-strong);
 }
 
-/* Cut 5 — G.A.T.E. receipt as primary deploy outcome */
 .studio-gate-receipt {
   display: flex;
   flex-wrap: wrap;

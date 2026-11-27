@@ -1,38 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { GATE_RECEIPT_VERSION, type StudioGateReceiptView } from '@/lib/gate-transition';
+import { GATE_RECEIPT_VERSION } from '@/lib/gate-transition';
 import {
   studioGateDecisionChipClass,
   studioGateLiveUrlForDecision,
-  studioGateReceiptClaimsLive,
   studioGateVersionNote,
 } from '@/lib/studio-deploy-unify';
 
-const FIXTURE_URL = 'https://www.youtube.com/watch?v=auJzb1D-fag';
-
-function receipt(decision: StudioGateReceiptView['decision']): StudioGateReceiptView {
-  return {
-    decision,
-    reason: `${decision} for ${FIXTURE_URL}`,
-    reason_code: `GATE_${decision}`,
-    receiptId: 'er:gate:test',
-    receiptHash: 'a'.repeat(64),
-    version: GATE_RECEIPT_VERSION,
-  };
-}
-
-describe('studio-deploy-unify (Cut 5)', () => {
+describe('studio-deploy-unify', () => {
   it('PASS surfaces a verified https live URL', () => {
     expect(studioGateLiveUrlForDecision('PASS', 'https://demo.vercel.app')).toBe(
       'https://demo.vercel.app',
     );
-    expect(studioGateReceiptClaimsLive(receipt('PASS'))).toBe(true);
   });
 
   it.each(['HOLD', 'REJECT', 'ESCALATE'] as const)(
     '%s never claims live even when a URL string is present',
     (decision) => {
       expect(studioGateLiveUrlForDecision(decision, 'https://demo.vercel.app')).toBeNull();
-      expect(studioGateReceiptClaimsLive(receipt(decision))).toBe(false);
     },
   );
 

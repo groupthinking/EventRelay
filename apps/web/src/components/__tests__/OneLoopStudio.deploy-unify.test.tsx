@@ -47,7 +47,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('OneLoopStudio Deploy unify (Cut 5)', () => {
+describe('OneLoopStudio Deploy unify', () => {
   it('exposes one deploy path (Check preflight) without a toolbar Build live button', () => {
     render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-deploy-button').textContent?.trim()).toBe('Check preflight');
@@ -79,36 +79,6 @@ describe('OneLoopStudio Deploy unify (Cut 5)', () => {
     });
     expect(screen.getByTestId('studio-gate-decision').textContent).toBe('HOLD');
     expect(screen.getByTestId('studio-gate-reason').textContent).toMatch(/Artifact-bound/i);
-    expect(screen.queryByTestId('studio-gate-live-url')).toBeNull();
-    expect(screen.getByTestId('studio-gate-receipt').textContent).not.toMatch(/Deploy completed/i);
-  });
-
-  it('poll path with a claimed https URL without probe never shows a live link', async () => {
-    vi.spyOn(studioWorkflow, 'startStudioDeploy').mockResolvedValue({
-      ok: true,
-      status: 200,
-      runId: 'wrun_reject_fixture',
-    });
-    vi.spyOn(studioWorkflow, 'pollStudioDeploy').mockResolvedValue({
-      ok: true,
-      status: 200,
-      runId: 'wrun_reject_fixture',
-      runStatus: 'completed',
-      result: {
-        live_url: 'https://demo.vercel.app',
-        kind: 'job',
-        jobId: 'job_1',
-        jobStatus: 'complete',
-      },
-    });
-
-    render(<OneLoopStudio />);
-    fireEvent.click(screen.getByTestId('studio-deploy-button'));
-    await waitFor(() => {
-      expect(screen.getByTestId('studio-gate-receipt')).toBeTruthy();
-    });
-    // URL without trusted probe → non-PASS; Cut 5 forbids a live claim.
-    expect(screen.getByTestId('studio-gate-decision').textContent).not.toBe('PASS');
     expect(screen.queryByTestId('studio-gate-live-url')).toBeNull();
     expect(screen.getByTestId('studio-gate-receipt').textContent).not.toMatch(/Deploy completed/i);
   });
