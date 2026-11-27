@@ -10,7 +10,7 @@ import {
 import { formatSeconds } from '@/lib/timestamp';
 
 export type StudioPackTimelineProps = {
-  pack: EmittedVideoPack | null | undefined;
+  pack: EmittedVideoPack;
   canSeek: boolean;
   onSeek?: (seconds: number) => void;
   currentTime?: number;
@@ -30,17 +30,14 @@ export default function StudioPackTimeline({
   playerDuration = null,
 }: StudioPackTimelineProps) {
   const markers = studioPackTimelineMarkers(pack);
-  // Pack-truthful scale/playhead: only bind live player clock when selection matches.
-  const boundPlayerDuration = canSeek ? playerDuration : null;
-  const boundCurrentTime = canSeek ? currentTime : 0;
-  const duration = studioPackTimelineDuration(pack, boundPlayerDuration);
+  const duration = studioPackTimelineDuration(markers, playerDuration);
   const chapters = markers.filter((m) => m.kind === 'chapter');
   const ticks = markers.filter((m) => m.kind !== 'chapter');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
     setSelectedId(null);
-  }, [pack?.id, pack?.video_id]);
+  }, [pack.id, pack.video_id]);
 
   useEffect(() => {
     if (!selectedId) return;
@@ -52,12 +49,12 @@ export default function StudioPackTimeline({
 
   const seekMarker = (marker: StudioTimelineMarker) => {
     setSelectedId(marker.id);
-    if (canSeek && onSeek) onSeek(marker.start);
+    onSeek?.(marker.start);
   };
 
   const playheadPct =
-    duration > 0 && Number.isFinite(boundCurrentTime)
-      ? Math.min(100, Math.max(0, (boundCurrentTime / duration) * 100))
+    duration > 0 && Number.isFinite(currentTime)
+      ? Math.min(100, Math.max(0, (currentTime / duration) * 100))
       : 0;
 
   return (
@@ -127,7 +124,7 @@ export default function StudioPackTimeline({
           );
         })}
 
-        {canSeek && (boundCurrentTime > 0 || boundPlayerDuration) ? (
+        {currentTime > 0 || playerDuration ? (
           <div
             className="studio-pack-timeline__playhead"
             data-testid="studio-pack-timeline-playhead"

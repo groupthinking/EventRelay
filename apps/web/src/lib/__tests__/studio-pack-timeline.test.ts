@@ -3,7 +3,6 @@ import { loadSamplePack } from '@/lib/sample-pack';
 import {
   studioPackTimelineCanSeek,
   studioPackTimelineDuration,
-  studioPackTimelineHasSurface,
   studioPackTimelineMarkers,
 } from '@/lib/studio-pack-timeline';
 import type { EmittedVideoPack } from '@/lib/emit-video-pack';
@@ -12,7 +11,6 @@ describe('studio-pack-timeline', () => {
   it('builds chapter + keyframe + moment markers from the auJzb1D-fag fixture pack', () => {
     const { pack } = loadSamplePack();
     expect(pack.video_id).toBe('auJzb1D-fag');
-    expect(studioPackTimelineHasSurface(pack)).toBe(true);
 
     const markers = studioPackTimelineMarkers(pack);
     const chapters = markers.filter((m) => m.kind === 'chapter');
@@ -30,10 +28,9 @@ describe('studio-pack-timeline', () => {
     expect(markers.every((m) => Number.isFinite(m.start))).toBe(true);
   });
 
-  it('returns no markers and no surface for empty / missing pack (no mocks)', () => {
+  it('returns no markers for empty / missing pack (no mocks)', () => {
     expect(studioPackTimelineMarkers(undefined)).toEqual([]);
     expect(studioPackTimelineMarkers(null)).toEqual([]);
-    expect(studioPackTimelineHasSurface(undefined)).toBe(false);
 
     const empty: EmittedVideoPack = {
       version: 'v0',
@@ -43,7 +40,6 @@ describe('studio-pack-timeline', () => {
       provenance: { source_hash: 'a'.repeat(64) },
     };
     expect(studioPackTimelineMarkers(empty)).toEqual([]);
-    expect(studioPackTimelineHasSurface(empty)).toBe(false);
   });
 
   it('includes optional pack events[] when present without inventing them', () => {
@@ -60,10 +56,11 @@ describe('studio-pack-timeline', () => {
 
   it('derives duration from pack evidence and prefers a longer player duration', () => {
     const { pack } = loadSamplePack();
-    const packSpan = studioPackTimelineDuration(pack);
+    const markers = studioPackTimelineMarkers(pack);
+    const packSpan = studioPackTimelineDuration(markers);
     expect(packSpan).toBeGreaterThanOrEqual(481);
-    expect(studioPackTimelineDuration(pack, 520)).toBe(520);
-    expect(studioPackTimelineDuration(pack, 10)).toBe(packSpan);
+    expect(studioPackTimelineDuration(markers, 520)).toBe(520);
+    expect(studioPackTimelineDuration(markers, 10)).toBe(packSpan);
   });
 
   it('gates seek to the selected pack video id', () => {
