@@ -99,7 +99,7 @@ function useRootThemeState() {
  * Webflow-style utility bar: Light/Dark, High Contrast, and (rail only) the
  * keyboard hint. Compact mode drops the hint cell for the top bar.
  */
-function ThemeBar({ compact }: { compact: boolean }) {
+export function ThemeBar({ compact }: { compact: boolean }) {
   const { lightMode, highContrast, toggleTheme, toggleContrast } = useRootThemeState();
   const themeLabel = lightMode ? 'Switch to dark mode' : 'Switch to light mode';
 

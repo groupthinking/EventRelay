@@ -16,3 +16,12 @@ export const liveStudio = flag<boolean>({
   adapter: vercelAdapter(),
   description: 'Serve the short home on-ramp and the live Studio workspace (chapters, transcript, editable tasks, dispatch)',
 });
+
+// Plan 005: unified AppShell sidebar + Home URL/intent dock and showcase gallery.
+// Production keeps the existing Home until this flag is flipped in the Vercel dashboard.
+export const projectWorkspace = flag<boolean>({
+  key: 'project-workspace',
+  defaultValue: process.env.VERCEL_ENV !== 'production',
+  adapter: vercelAdapter(),
+  description: 'Serve the unified AppShell sidebar and Home URL/intent dock + showcase gallery (Plan 005)',
+});

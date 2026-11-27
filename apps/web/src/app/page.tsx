@@ -16,13 +16,14 @@ import Footer from '@/components/Footer';
 import HomePasteForm from '@/components/home/HomePasteForm';
 import HomeTemplateShell from '@/components/home/HomeTemplateShell';
 import LiveOnRamp from '@/components/home/LiveOnRamp';
+import ProjectWorkspaceHome from '@/components/home/ProjectWorkspaceHome';
 import '@/components/home/home-template.css';
 import '@/styles/home-shipper.css';
 import {
   WORKFLOW_PRO_PRODUCT_NAME,
   workflowProPriceLabel,
 } from '@/lib/billing/checkout-config';
-import { customBadge, liveStudio } from '@/flags';
+import { customBadge, liveStudio, projectWorkspace } from '@/flags';
 
 export const metadata: Metadata = {
   title: 'UVAI — YouTube videos to bound tasks',
@@ -148,7 +149,15 @@ export default async function HomePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const [showCustomBadge, liveStudioEnabled, params] = await Promise.all([customBadge(), liveStudio(), searchParams]);
+  const [showCustomBadge, liveStudioEnabled, projectWorkspaceEnabled, params] = await Promise.all([
+    customBadge(),
+    liveStudio(),
+    projectWorkspace(),
+    searchParams,
+  ]);
+  if (projectWorkspaceEnabled && params.shell !== 'classic' && params.shell !== 'live') {
+    return <ProjectWorkspaceHome sampleEnabled={liveStudioEnabled} />;
+  }
   if (liveStudioEnabled && params.shell !== 'classic') return <LiveOnRamp />;
 
   return (
