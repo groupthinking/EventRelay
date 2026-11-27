@@ -5,7 +5,6 @@ import { verifyIdentityPack } from '@/lib/emit-video-pack';
 import { GOLDEN_IDENTITY_HASHES } from '@/lib/video-pack';
 import {
   STUDIO_PRODUCT_TAGLINE,
-  studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
   studioShipCta,
@@ -635,30 +634,6 @@ describe('studio-pipeline-status', () => {
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
   });
 
-  it('renders review_action as a card with status, title, and detail', () => {
-    const review = studioActionCard({
-      tool: 'review_action',
-      status: 'proposed',
-      result: 'Review evidence',
-    });
-    expect(review.kind).toBe('review');
-    expect(review.title).toMatch(/review this result/i);
-    expect(review.statusLabel).toBe('Needs review');
-    expect(review.detail).toBe('Review evidence');
-
-    const tool = studioActionCard({ tool: 'persist_insight', status: 'completed' });
-    expect(tool.kind).toBe('tool');
-    expect(tool.title).toMatch(/persist insight/i);
-    expect(tool.statusLabel).toBe('Done');
-    expect(tool.detail).toMatch(/no detail/i);
-
-    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
-    // Cut 6: Act leftovers removed from OneLoopStudio; review cards stay in Tasks & Tools.
-    expect(output).toContain('studioActionCard');
-    expect(output).toContain('data-testid="studio-review-action-card"');
-    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
-  });
-
   it('returns a toast for export success and failure including filename', () => {
     expect(studioExportFilename('AI Gold Rushes')).toBe('AI Gold Rushes.zip');
     const filename = 'AI Gold Rushes.zip';
@@ -772,7 +747,7 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
   });
 
-  it('rewires playflow B–G into the IDE (retry, Events≠INSIGHTs, stack skip, review cards)', () => {
+  it('rewires playflow B–G into the IDE (retry, Events≠INSIGHTs, stack skip)', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
 
@@ -801,12 +776,6 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
     expect(studio).toContain('studio-deploy-button');
     expect(studio).not.toContain('studio-build-live-button');
-
-    // E — proposed review actions still render in Tasks & Tools when provided.
-    expect(output).toContain('reviewActions');
-    expect(output).toMatch(/Needs review|statusLabel/);
-    expect(output).toContain('studio-review-act-button');
-    expect(studio).not.toMatch(/studioActionCard\(/);
   });
 
   it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {

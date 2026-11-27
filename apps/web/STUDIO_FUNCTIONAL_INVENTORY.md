@@ -166,7 +166,6 @@ Below the buttons:
 | `actBusy` | Act (video-to-actions) in flight |
 | `deployBusy` | Deploy preflight in flight |
 | `runAbortRef` | `AbortController` for canceling analysis |
-| `workflowActions` | `VideoToActionsResult` after Act completes |
 | `actRunId` | Act run id |
 | `usedSameRun` | Whether Act reused this run's transcript/events |
 | `deployRunId` | Deploy run id |
@@ -228,15 +227,15 @@ Below the buttons:
 
 `StudioIdeChat` receives `videoId` + `packId`; sends `{query, history, video_id, pack_id}` to `/api/chat`; assistant answers are pack-grounded server-side. History resets on pack change.
 
-### Act (video-to-actions) — currently triggerless
+### Act (video-to-actions)
 
-`act()` builds input via `buildSameRunActInput({url, videoTitle, transcript, events + SOP steps as events})`, starts + polls the workflow, and stores `workflowActions`. **No button calls `act()` in the current render** (see §17). `/api/extract-events` is removed.
+The Studio Act shell is deleted (see §16). `/api/extract-events` is removed. Analysis still starts video-to-actions from the dashboard store.
 
 ### Export
 
 `exportPkg()`:
 1. Filename from `studioExportFilename(safeProjectName(title))`.
-2. Actions assembled via `actionsFromStudioRun({insightActions, events, workflowActions})`.
+2. Actions assembled via `actionsFromStudioRun({insightActions, events})`.
 3. Emptiness guard: no actions, scaffold, SOP steps, architecture, artifacts, or tools → error toast "empty".
 4. `buildStudioShipPackage({projectName, actions, projectScaffold, linkedSop, videoPack, transcript, sopSteps})`.
 5. `downloadScaffoldPackage(pkg)` → POST `/api/workspace/export`.
@@ -374,7 +373,7 @@ When `selected.videoPack.pack` exists (`resultReadyShell`), the output area conc
 | Removed surface | Successor |
 | --- | --- |
 | `PackWorkbench` architecture / artifacts / tools card | Code & Spec (`studio-pack-architecture`, `studio-pack-artifacts`) + Tasks & Tools stack |
-| Act button / `workflowActions` Studio state | Analysis pipeline still uses video-to-actions via `dashboard-store`; no separate Act shell |
+| Act button, `workflowActions` export input, and Tasks & Tools review-action cards | Analysis pipeline still uses video-to-actions via `dashboard-store`; no separate Act shell |
 | GitHub PR opener (`openGitHubPrsForApprovedSpecs` / `github-pr-client`) | Deleted orphaned client; GroundedSpecReview remains for specs |
 | SOP `completedChecks` write path | Constant empty list for hold/stack helpers (anonymous) |
 

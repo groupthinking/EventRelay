@@ -153,7 +153,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
-  // Cut 6: SOP check-off UI never populated this; keep an empty list for hold/stack helpers.
   const completedChecks: string[] = [];
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);

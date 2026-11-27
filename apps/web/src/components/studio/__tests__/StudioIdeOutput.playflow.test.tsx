@@ -311,36 +311,6 @@ describe('StudioIdeOutput playflow', () => {
     }
   });
 
-  it('renders review_action results and pending tool proposals inside Tasks & Tools', () => {
-    render(
-      <StudioIdeOutput
-        video={baseVideo}
-        reviewActions={[
-          { tool: 'review_action', status: 'proposed', result: 'Review evidence' },
-          {
-            tool: 'create_workflow_task',
-            input: { title: 'Draft a task from the video' },
-            status: 'pending',
-            result: 'Draft a task from the video',
-          },
-        ]}
-      />,
-    );
-    const cards = screen.getAllByTestId('studio-review-action-card');
-    expect(cards).toHaveLength(2);
-    expect(cards[0]?.textContent).toMatch(/review this result/i);
-    expect(cards[0]?.textContent).toMatch(/needs review/i);
-    expect(cards[0]?.textContent).toMatch(/Review evidence/);
-
-    const buttons = screen.getAllByTestId('studio-review-act-button');
-    fireEvent.click(buttons[0]!);
-    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/No tool has been executed/i);
-
-    fireEvent.click(buttons[1]!);
-    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/create_workflow_task/);
-    expect(screen.getByTestId('studio-proposal-detail').textContent).toMatch(/"title": "Draft a task from the video"/);
-  });
-
   it('renders extracted code snippets and spec review inside Code & Spec', () => {
     const pack = reviewPackFixture();
     pack.code_snippets = [
