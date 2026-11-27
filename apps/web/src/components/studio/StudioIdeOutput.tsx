@@ -33,7 +33,6 @@ export type StudioIdeOutputProps = {
   eventsEmptyMessage?: string;
   stackChecks?: StudioStackCheckView[];
   reviewActions?: StudioReviewActionInput[];
-  packWorkbench?: ReactNode;
   previewVideoId?: string | null;
   previewReady?: boolean;
   onBuildLive?: () => void;
@@ -63,7 +62,6 @@ export default function StudioIdeOutput({
   eventsEmptyMessage,
   stackChecks = [],
   reviewActions = [],
-  packWorkbench,
   previewVideoId,
   previewReady = false,
   onBuildLive,
@@ -175,7 +173,6 @@ export default function StudioIdeOutput({
       chapters.length > 0 ||
       events.length > 0 ||
       eventsEmptyMessage ||
-      packWorkbench ||
       toolNames.length > 0 ||
       linkedSop?.steps?.length ||
       topics.length > 0,
@@ -518,7 +515,7 @@ export default function StudioIdeOutput({
               </section>
             )}
 
-            {(events.length > 0 || eventsEmptyMessage || packWorkbench) && (
+            {(events.length > 0 || eventsEmptyMessage) && (
               <section aria-label="Detected events" className="flex flex-col gap-3" data-testid="studio-ide-output-events">
                 <p className="uvai-section-label px-1">Detected events</p>
                 {events.length === 0 ? (
@@ -559,7 +556,6 @@ export default function StudioIdeOutput({
                     })}
                   </ul>
                 )}
-                {packWorkbench}
               </section>
             )}
 

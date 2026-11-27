@@ -378,7 +378,8 @@ describe('OneLoopStudio IDE shell', () => {
     expect(screen.getByTestId('studio-ide-chat-send')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-output')).toBeTruthy();
     fireEvent.click(screen.getByTestId('studio-ide-output-tab-tasks'));
-    expect(screen.getByTestId('pack-stack-tools').textContent).toMatch(/Workflow API/);
+    // Cut 6: PackWorkbench deleted; proposed tools live on Tasks & Tools IA.
+    expect(screen.getByTestId('studio-proposed-tool-card').textContent).toMatch(/Workflow API/);
     const ship = screen.getByTestId('studio-ide-ship') as HTMLButtonElement;
     expect(ship.disabled).toBe(false);
     expect(ship.textContent?.trim()).toBe('Ship this');

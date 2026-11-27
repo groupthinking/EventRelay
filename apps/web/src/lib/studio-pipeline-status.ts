@@ -202,7 +202,7 @@ export function studioEventsEmptyMessage(input: {
   const packReady =
     input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
   if (packReady) {
-    return 'This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page.';
+    return 'This pack has no extracted events. Architecture and artifacts stay on Code & Spec; stack and tools stay on Tasks & Tools — export them from this page.';
   }
   if (input.hasTranscript) {
     return 'This run has no extracted events. Transcript and pack identity stay on this page.';
@@ -266,16 +266,6 @@ export function studioExportProRequiredToast(): { tone: 'error'; text: string } 
     tone: 'error',
     text: 'Workspace ZIP exports require Pro. Stay on this page — open Pricing to subscribe, then export again.',
   };
-}
-
-export function studioPromotePackWorkbench(input: {
-  eventCount: number;
-  hasArchitecture: boolean;
-  artifactCount: number;
-  toolCount: number;
-}): boolean {
-  if (input.eventCount > 0) return false;
-  return input.hasArchitecture || input.artifactCount > 0 || input.toolCount > 0;
 }
 
 export function studioCanExport(input: {
