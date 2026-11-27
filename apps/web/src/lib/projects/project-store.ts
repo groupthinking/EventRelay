@@ -10,7 +10,6 @@ import {
   PROJECT_VISIBILITIES,
   defaultProjectTitle,
   type ProjectRecord,
-  type ProjectVisibility,
 } from './project-types';
 
 const rowSchema = z.object({
@@ -132,23 +131,16 @@ export function resolveProjectSource(rawUrl: string): {
   return { videoId, sourceUrl: canonicalYouTubeSource(videoId), sourceHash: identityHash(videoId) };
 }
 
-export async function listProjects(
-  owner: StudioOwner,
-  options: { visibility?: ProjectVisibility; query?: string } = {},
-): Promise<ProjectRecord[]> {
-  let query = clientForOwner(owner).from('projects').select(columns).eq('owner_subject', owner.subject);
-  if (options.visibility) query = query.eq('visibility', options.visibility);
-  const { data, error } = await query
+export async function listProjects(owner: StudioOwner): Promise<ProjectRecord[]> {
+  const { data, error } = await clientForOwner(owner)
+    .from('projects')
+    .select(columns)
+    .eq('owner_subject', owner.subject)
     .order('updated_at', { ascending: false })
     .order('id', { ascending: false })
     .limit(100);
   if (error || !Array.isArray(data)) throw unavailable();
-  const projects = data.map((row) => projectFromRow(row, owner));
-  const needle = options.query?.trim().toLowerCase();
-  if (!needle) return projects;
-  return projects.filter((project) =>
-    [project.title, project.videoId, project.sourceUrl].some((value) => value.toLowerCase().includes(needle)),
-  );
+  return data.map((row) => projectFromRow(row, owner));
 }
 
 export async function getProject(owner: StudioOwner, projectId: string): Promise<ProjectRecord> {

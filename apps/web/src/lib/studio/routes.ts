@@ -10,7 +10,7 @@ import { advanceStudioChat, currentStudioMessage, resumeStudioStream, upstreamCh
 import { resolutionSchema, resolvePendingTask } from './interactions';
 import { loadStudioPackContext } from './pack-context';
 import { studioProvider, unwrapStudioResult } from './provider';
-import { readStudioJson, requireStudioMutationOrigin, requireStudioOwner, type StudioOwner } from './security';
+import { privateResponse, readStudioJson, requireStudioMutationOrigin, requireStudioOwner, type StudioOwner } from './security';
 
 type RouteContext = { params: Promise<{ chatId: string }> };
 const messageSchema = z.string().trim().min(1).max(12_000);
@@ -29,13 +29,6 @@ function publicChat(chat: StudioChat) {
 }
 function fingerprint(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
-}
-function privateResponse(response: Response): Response {
-  const headers = new Headers(response.headers);
-  headers.set('cache-control', 'private, no-store');
-  headers.set('vary', 'Cookie, Origin');
-  headers.set('x-content-type-options', 'nosniff');
-  return new Response(response.body, { status: response.status, headers });
 }
 async function guarded(work: () => Promise<Response>): Promise<Response> {
   try { return privateResponse(await work()); }

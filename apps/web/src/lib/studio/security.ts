@@ -82,3 +82,11 @@ export async function readStudioJson(request: NextRequest): Promise<unknown> {
     reader.releaseLock();
   }
 }
+
+export function privateResponse(response: Response): Response {
+  const headers = new Headers(response.headers);
+  headers.set('cache-control', 'private, no-store');
+  headers.set('vary', 'Cookie, Origin');
+  headers.set('x-content-type-options', 'nosniff');
+  return new Response(response.body, { status: response.status, headers });
+}
