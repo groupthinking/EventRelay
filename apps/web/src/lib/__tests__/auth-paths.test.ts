@@ -61,6 +61,16 @@ describe('auth path policy', () => {
     expect(needsAuthentication('/api/workflows/studio-deploy')).toBe(true);
   });
 
+  it('keeps /api/projects session-gated while the /projects page stays public (guest mode)', () => {
+    const id = '0b0b55ec-81f8-4cbf-91b3-75f67796b9c1';
+    expect(isPublicApiPath('/api/projects')).toBe(false);
+    expect(needsAuthentication('/api/projects')).toBe(true);
+    expect(needsAuthentication(`/api/projects/${id}`)).toBe(true);
+    expect(isAiRoute('/api/projects', 'POST')).toBe(false);
+    expect(isProtectedPagePath('/projects')).toBe(false);
+    expect(needsAuthentication('/projects')).toBe(false);
+  });
+
   it('still gates non-allowlisted billing routes', () => {
     // A sibling billing route with no explicit exemption stays protected —
     // guards against prefix-match over-exposure.

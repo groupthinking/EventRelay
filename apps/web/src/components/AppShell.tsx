@@ -10,6 +10,7 @@ import {
   Clapperboard,
   CreditCard,
   Film,
+  FolderKanban,
   LayoutGrid,
   LogIn,
   PanelLeftClose,
@@ -86,6 +87,7 @@ export default function AppShell({ children }: AppShellProps) {
     dock.focus();
   };
 
+  const projectsActive = pathname === '/projects' || pathname.startsWith('/projects/');
   const studioActive = pathname === '/studio' || pathname.startsWith('/studio/');
   const pricingActive = pathname === '/pricing';
   const docsActive = pathname === '/docs/api' || pathname.startsWith('/docs/');
@@ -129,6 +131,14 @@ export default function AppShell({ children }: AppShellProps) {
           >
             <Plus className="h-4 w-4" aria-hidden="true" />
             <span className="uvai-rail-label">New project</span>
+          </Link>
+          <Link
+            href="/projects"
+            aria-current={projectsActive ? 'page' : undefined}
+            className="uvai-rail-link"
+          >
+            <FolderKanban className="h-4 w-4" aria-hidden="true" />
+            <span className="uvai-rail-label">Projects</span>
           </Link>
           <Link
             href="/studio"
