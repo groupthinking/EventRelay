@@ -212,7 +212,7 @@ describe('StudioIdeOutput playflow', () => {
             pack,
           },
         }}
-        eventsEmptyMessage="This pack has no extracted events. Architecture, artifacts, and stack from the video are below — export them from this page."
+        eventsEmptyMessage="This pack has no extracted events. Architecture and artifacts stay on Code & Spec; stack and tools stay on Tasks & Tools — export them from this page."
       />,
     );
     const events = screen.getByTestId('studio-ide-output-events');
@@ -222,18 +222,19 @@ describe('StudioIdeOutput playflow', () => {
     expect(events.textContent).not.toContain('Cluey two-engineer architecture');
   });
 
-  it('uses the honest Events empty copy and hosts the pack workbench inside Tasks & Tools', () => {
+  it('uses the honest Events empty copy without a parallel PackWorkbench shell (Cut 6)', () => {
     render(
       <StudioIdeOutput
         video={baseVideo}
-        eventsEmptyMessage="This pack has no extracted events. Architecture and artifacts stay on this page."
-        packWorkbench={<div data-testid="studio-pack-workbench">Pack workbench</div>}
+        eventsEmptyMessage="This pack has no extracted events. Architecture and artifacts stay on Code & Spec; stack and tools stay on Tasks & Tools — export them from this page."
       />,
     );
     const events = screen.getByTestId('studio-ide-output-events');
     expect(events.textContent).toMatch(/no extracted events/i);
+    expect(events.textContent).toMatch(/code & spec/i);
     expect(events.textContent).not.toMatch(/INSIGHT/i);
-    expect(screen.getByTestId('studio-pack-workbench')).toBeTruthy();
+    expect(screen.queryByTestId('studio-pack-workbench')).toBeNull();
+    expect(screen.queryByTestId('pack-workbench')).toBeNull();
   });
 
   it('shows a transcript ETA while the fetch is in progress and a retry when it fails', () => {

@@ -76,7 +76,9 @@ describe('UVAI is one product surface', () => {
   it('keeps stack-check unlock on the same OneLoopStudio page', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
     expect(studio).toContain('packFormation.checks');
-    expect(studio).toContain('setCompletedChecks');
+    // Cut 6: SOP check-off UI deleted; completedChecks stays an empty list for hold helpers.
+    expect(studio).toContain('completedChecks');
+    expect(studio).not.toContain('setCompletedChecks');
     expect(studio).not.toMatch(/window\.location\.(href|assign).*dashboard/);
     expect(studio).not.toMatch(/router\.push\(['"`]\/dashboard/);
   });

@@ -26,7 +26,6 @@ import {
 } from '@/lib/action-surface';
 import {
   startStudioDeploy,
-  type VideoToActionsResult,
 } from '@/lib/studio-workflow';
 import {
   packBuildLiveFailureDetails,
@@ -37,7 +36,6 @@ import {
   type PackBuildLiveFailureDetails,
 } from '@/lib/pack-build-live-client';
 import {
-  studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
   studioDeployButtonLabel,
@@ -56,7 +54,6 @@ import {
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
-  studioPromotePackWorkbench,
   studioRunQuality,
   studioShipCta,
   studioStatusMessage,
@@ -77,7 +74,6 @@ import {
   type StudioGateReceiptView,
 } from '@/lib/gate-transition';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
-import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
 import StudioIdeOutput, { type OutputSection } from '@/components/studio/StudioIdeOutput';
@@ -136,94 +132,6 @@ function countLabel(count: number, singular: string, plural = `${singular}s`): s
   return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
-function PackWorkbench({
-  architecture,
-  artifacts,
-  tools,
-  onExport,
-  canExport,
-}: {
-  architecture: VideoPackArchitecture | null;
-  artifacts: VideoPackArtifact[];
-  tools: VideoPackStackTool[];
-  onExport: () => void;
-  canExport: boolean;
-}) {
-  return (
-    <section
-      data-testid="pack-workbench"
-      className="uvai-card p-4 lg:col-span-2"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--uvai-accent-ink)]">
-          From this pack
-        </h2>
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={!canExport}
-          className="uvai-btn inline-flex items-center gap-2 disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" aria-hidden />
-          Export pack
-        </button>
-      </div>
-      {architecture ? (
-        <div data-testid="pack-architecture" className="mt-4">
-          <h3 className="uvai-section-label">Architecture</h3>
-          {architecture.summary ? (
-            <p className="mt-2 text-sm text-[var(--uvai-ink-soft)]">{architecture.summary}</p>
-          ) : null}
-          {architecture.stages.length > 0 ? (
-            <ol className="mt-2 space-y-1 text-sm text-[var(--uvai-ink-soft)]">
-              {architecture.stages.map((stage) => (
-                <li key={stage.id}>
-                  <span className="font-medium text-[var(--uvai-ink)]">{stage.name}</span>
-                  {stage.description ? ` — ${stage.description}` : ''}
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          {architecture.mermaid ? (
-            <pre className="mt-2 overflow-auto rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--uvai-ink)]">
-              {architecture.mermaid}
-            </pre>
-          ) : null}
-        </div>
-      ) : null}
-      {artifacts.length > 0 ? (
-        <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
-          {artifacts.map((artifact) => (
-            <li
-              key={artifact.path_hint}
-              className="uvai-doc-row"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12px] font-semibold text-[var(--uvai-accent-ink)]">{artifact.path_hint}</div>
-                <div className="mt-0.5 truncate text-sm text-[var(--uvai-ink-soft)]">{artifact.purpose}</div>
-                <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--uvai-ink-faint)]">{artifact.interface}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {tools.length > 0 ? (
-        <ul data-testid="pack-stack-tools" className="mt-4 space-y-2">
-          {tools.map((tool) => (
-            <li key={tool.name} className="uvai-doc-row">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[var(--uvai-ink)]">{tool.name}</p>
-                {tool.kind ? <p className="text-xs text-[var(--uvai-ink-faint)]">{tool.kind}</p> : null}
-                {tool.evidence ? <p className="text-xs text-[var(--uvai-ink-soft)]">{tool.evidence}</p> : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
 export type StudioLayout = 'live' | 'classic';
 
 export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioLayout } = {}) {
@@ -238,8 +146,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const sampleAbortRef = useRef<AbortController | null>(null);
   const sampleStartedRef = useRef(false);
   const [sampleRunning, setSampleRunning] = useState(false);
-  const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
-  const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
   const [deployBusy, setDeployBusy] = useState(false);
   const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
@@ -247,7 +153,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
-  const [completedChecks, setCompletedChecks] = useState<string[]>([]);
+  // Cut 6: SOP check-off UI never populated this; keep an empty list for hold/stack helpers.
+  const completedChecks: string[] = [];
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [activityMode, setActivityMode] = useState<StudioActivityMode>('video');
@@ -270,12 +177,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
-  const scopedWorkflowActions =
-    workflowActionSelectionId === selectedVideoId &&
-    getYouTubeId(selected?.url || '') === getYouTubeId(workflowActions?.url || '') &&
-    (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
-      ? workflowActions
-      : null;
   const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -317,9 +218,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const stackChecks = packFormation.checks;
 
   useEffect(() => {
-    setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
-    setCompletedChecks([]);
     setBuildLiveFailure(null);
     setPackLiveReceiptUrl(null);
     setPackLiveReceiptVideoId(null);
@@ -401,8 +299,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setPackLiveReceiptVideoId(null);
     setPackLiveReceiptYoutubeId(null);
     setPackLiveReceiptReasonCode(null);
-    setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
     selectVideo(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
@@ -635,12 +531,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const showErrorCover = !showDirectEmbed && playerPhase === 'error';
   const embedErrorText = studioPlayerOverlay('error');
   const eventCount = studioPackExtractedEvents(selected?.videoPack?.pack).length;
-  const promotePack = studioPromotePackWorkbench({
-    eventCount,
-    hasArchitecture: Boolean(packFormation.architecture),
-    artifactCount: packFormation.artifacts.length,
-    toolCount: packFormation.tools.length,
-  });
   const eventsEmptyMessage = studioEventsEmptyMessage({
     busy: transcriptWorking,
     hasCompletedRun: Boolean(selected && selected.status !== 'processing'),
@@ -693,7 +583,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     const actions = actionsFromStudioRun({
       insightActions,
       events: selected?.events,
-      workflowActions: scopedWorkflowActions?.actions,
     });
     if (
       actions.length === 0 &&
@@ -1489,26 +1378,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       activeSection={outputSection}
       onSectionChange={handleOutputSectionChange}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
-      reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
-        const card = studioActionCard(action);
-        return {
-          tool: action.tool,
-          input: action.input,
-          status: action.status,
-          result: action.result ?? card.detail,
-        };
-      })}
-      packWorkbench={
-        promotePack ? (
-          <PackWorkbench
-            architecture={packFormation.architecture}
-            artifacts={packFormation.artifacts}
-            tools={packFormation.tools}
-            onExport={() => void exportPkg()}
-            canExport={hasPayload}
-          />
-        ) : undefined
-      }
       specReview={
         selected?.videoPack?.pack ? (
           <GroundedSpecReview

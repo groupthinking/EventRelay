@@ -367,27 +367,27 @@ When `selected.videoPack.pack` exists (`resultReadyShell`), the output area conc
 
 ---
 
-## 16. Dead / unwired code (do not blindly port)
+## 16. Dead-code triage (Cut 6 — logged decision)
 
-These exist in `OneLoopStudio.tsx` but are **never rendered or triggered** in the current UI. The rebuild should treat each as an explicit product decision (restore, redesign, or drop) rather than carrying them over silently:
+**Decision: DELETE** PackWorkbench / Act UI leftovers / GitHub PR openers. Do not restore as a parallel first-class shell. Successors already live under Cut 4 IA:
 
-1. **`PackWorkbench`** (line ~202) — "From this pack" section with Export pack button, Architecture (summary, stages, mermaid diagram), and Artifacts list. Defined, never rendered.
-2. **`StudioJobStripDestination`** (line ~275) — job-strip link renderer. Defined, never rendered.
-3. **`openApprovedSpecsPrs`** (line ~976) — opens/updates GitHub PRs for approved SOP specs via `openGitHubPrsForApprovedSpecs` server action, branch `spec/<video>-<step>`. **No button calls it.** Related state `approvedSpecIds` / `openingPrs` is write-only.
-4. **`act()`** (video-to-actions) — full implementation (event enrich, start, 24×2s poll, `workflowActions`, `usedSameRun`), plus the `hasActionsPane` workbench gate — **no UI trigger exists**.
-5. **`completedChecks`** — only ever reset to `[]`; nothing populates it, so `deployHoldReason` always evaluates the empty case.
-6. **`Empty` / `Field` / `FieldGroup` / `FieldLabel` / `FieldDescription`** (ui components) — imported, never rendered.
-7. **Lucide icons `Play`, `Rocket`, `Hammer`, `GitPullRequest`, `Download`** — imported; only `Download` is used (inside dead `PackWorkbench`).
-8. **`transcriptExpanded`** — state exists and resets on selection change, but nothing sets it true in the current render.
+| Removed surface | Successor |
+| --- | --- |
+| `PackWorkbench` architecture / artifacts / tools card | Code & Spec (`studio-pack-architecture`, `studio-pack-artifacts`) + Tasks & Tools stack |
+| Act button / `workflowActions` Studio state | Analysis pipeline still uses video-to-actions via `dashboard-store`; no separate Act shell |
+| GitHub PR opener (`openGitHubPrsForApprovedSpecs` / `github-pr-client`) | Deleted orphaned client; GroundedSpecReview remains for specs |
+| SOP `completedChecks` write path | Constant empty list for hold/stack helpers (anonymous) |
+
+Historical inventory notes (pre–Cut 6) that are now resolved: PackWorkbench, Act UI, GitHub PR triggers. Remaining hygiene items outside Cut 6 scope (job-strip destination, unused Field imports, etc.) stay for later cleanup if still present.
 
 ---
 
 ## 17. Rebuild notes / open product decisions
 
-- **"Check preflight" button**: product direction is to delete it and fully redevelop the deploy area. Do not preserve the current preflight+sign-in-redirect behavior.
-- **Deploy vs Build live**: two overlapping deploy paths with contradictory auth behavior (preflight demands sign-in; Build live is anonymous). The rebuild needs one coherent story.
-- **Decide the fate of §16 items**: PackWorkbench (architecture/artifacts view), Act (video-to-actions), GitHub PR flow, and SOP check-offs are implemented but unreachable — restore as designed features or cut deliberately.
-- **Workbench vs extraction tabs**: reconcile the single-pane workbench model (§15) with the seven always-visible extraction tabs.
+- **Deploy unify (Cut 5)**: one G.A.T.E. preflight path + receipt card; Build live stays preview-only in output.
+- **Dead-code triage (Cut 6)**: PackWorkbench / Act / GitHub PR openers **deleted** — see §16.
+- **Workbench vs extraction tabs**: reconcile the single-pane workbench model (§15) with the four deliverable tabs (Cut 4).
+
 - **Receipt scoping**: success/failure/gate receipts are scoped to `selectedVideoId` and cleared on pack switch — preserve this anti-stale behavior.
 - **Chat quota**: free tier = 5 AI messages/day, 402 + `upgradeRequired` → Pro upsell to `/pricing`.
 - **Export paywall**: 402 → Stripe Checkout for Workflow Pro ($39/mo). Preserve the "results persist, redirect, results still there" behavior.
@@ -399,4 +399,4 @@ These exist in `OneLoopStudio.tsx` but are **never rendered or triggered** in th
 
 ## 18. testid catalog (for rebuild verification)
 
-`studio-ide-shell`, `studio-ide-toolbar`, `studio-ide-url-form`, `studio-ide-run`, `studio-ide-cancel`, `studio-ide-packs`, `studio-ide-delete-pack`, `studio-ide-export`, `studio-build-live-button`, `studio-deploy-button`, `studio-ide-status`, `studio-preflight-hint` (id), `studio-gate-receipt`, `studio-gate-decision`, `studio-gate-reason`, `studio-gate-receipt-id`, `studio-gate-receipt-hash`, `studio-gate-live-url`, `studio-ide-video-pane`, `studio-ide-chat-pane`, `studio-ide-output-pane`, `studio-ide-splitter-left`, `studio-ide-splitter-right`, `studio-player`, `studio-player-overlay`, `studio-player-retry`, `studio-ide-chat`, `studio-ide-chat-messages`, `studio-ide-chat-composer`, `studio-ide-chat-input`, `studio-ide-chat-send`, `chat-msg-user`, `chat-msg-assistant`, `studio-ide-output`, `studio-ide-output-tab-events|lingo|tools|intent|signals|spec|transcript`, `studio-ide-output-events|lingo|tools|intent|signals|spec`, `studio-transcript-body`, `studio-export-toast`, `studio-pack-build-live-result`, `studio-pack-build-live-state`, `studio-pack-build-live-video-id`, `studio-pack-build-live-reason-code`, `studio-pack-build-live-artifact-link`, `studio-pack-build-live-pro-cta`, `studio-build-live-failure`, `studio-build-live-recovery-open-hosted|rerun_analysis|scroll_pack`, `studio-job-video-id`, `studio-job-self-link` (dead), `pack-workbench`, `pack-architecture`, `pack-artifacts` (dead).
+`studio-ide-shell`, `studio-ide-toolbar`, `studio-ide-url-form`, `studio-ide-run`, `studio-ide-cancel`, `studio-ide-packs`, `studio-ide-delete-pack`, `studio-ide-export`, `studio-build-live-button`, `studio-deploy-button`, `studio-ide-status`, `studio-preflight-hint` (id), `studio-gate-receipt`, `studio-gate-decision`, `studio-gate-reason`, `studio-gate-receipt-id`, `studio-gate-receipt-hash`, `studio-gate-live-url`, `studio-ide-video-pane`, `studio-ide-chat-pane`, `studio-ide-output-pane`, `studio-ide-splitter-left`, `studio-ide-splitter-right`, `studio-player`, `studio-player-overlay`, `studio-player-retry`, `studio-ide-chat`, `studio-ide-chat-messages`, `studio-ide-chat-composer`, `studio-ide-chat-input`, `studio-ide-chat-send`, `chat-msg-user`, `chat-msg-assistant`, `studio-ide-output`, `studio-ide-output-tab-tasks|code|preview|transcript`, `studio-ide-output-events`, `studio-pack-architecture`, `studio-pack-artifacts`, `studio-transcript-body`, `studio-export-toast`, `studio-pack-build-live-result`, `studio-pack-build-live-state`, `studio-pack-build-live-video-id`, `studio-pack-build-live-reason-code`, `studio-pack-build-live-artifact-link`, `studio-pack-build-live-pro-cta`, `studio-build-live-failure`, `studio-build-live-recovery-open-hosted|rerun_analysis|scroll_pack`, `studio-job-video-id`. Cut 6 removed dead ids: `pack-workbench`, `pack-architecture`, `pack-artifacts`, `studio-act-button`, `studio-open-github-prs`.

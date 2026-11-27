@@ -30,7 +30,6 @@ import {
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
-  studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
@@ -164,9 +163,13 @@ describe('studio-pipeline-status', () => {
     expect(formation.artifacts[0]?.path_hint).toBe('src/mcp_x402_gateway.ts');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioPackFormation');
-    expect(studio).toContain('data-testid="pack-architecture"');
-    expect(studio).toContain('data-testid="pack-artifacts"');
+    // Cut 6: architecture/artifacts render on Code & Spec, not PackWorkbench.
+    expect(output).toContain('data-testid="studio-pack-architecture"');
+    expect(output).toContain('data-testid="studio-pack-artifacts"');
+    expect(studio).not.toContain('data-testid="pack-architecture"');
+    expect(studio).not.toContain('data-testid="pack-artifacts"');
     expect(studio).toContain('packFormation.checks');
     expect(studio).not.toMatch(/router\.(push|replace)\(['"]\/dashboard/);
   });
@@ -233,13 +236,8 @@ describe('studio-pipeline-status', () => {
     expect(emptyWithPack.toLowerCase()).not.toContain('show up after run');
     expect(emptyWithPack.toLowerCase()).not.toContain('extracting');
     expect(emptyWithPack.toLowerCase()).toMatch(/no extracted events/);
-    expect(emptyWithPack.toLowerCase()).toMatch(/architecture|artifacts|stack/);
-    expect(studioPromotePackWorkbench({ eventCount: 0, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
-      true,
-    );
-    expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
-      false,
-    );
+    expect(emptyWithPack.toLowerCase()).toMatch(/code & spec|tasks & tools/);
+    expect(emptyWithPack.toLowerCase()).not.toContain('are below');
   });
 
   it('counts only pack events[] — not visual_elements or insight workflow cards', () => {
@@ -654,12 +652,10 @@ describe('studio-pipeline-status', () => {
     expect(tool.statusLabel).toBe('Done');
     expect(tool.detail).toMatch(/no detail/i);
 
-    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
-    expect(studio).toContain('studioActionCard');
+    // Cut 6: Act leftovers removed from OneLoopStudio; review cards stay in Tasks & Tools.
     expect(output).toContain('studioActionCard');
     expect(output).toContain('data-testid="studio-review-action-card"');
-    // IDE: actions surface in the Tasks & Tools tab.
     expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
   });
 
@@ -791,7 +787,11 @@ describe('studio-pipeline-status', () => {
     expect(output).not.toMatch(/label:\s*['"]Insights['"]/);
     expect(output).toContain('eventsEmptyMessage');
     expect(studio).toMatch(/studioEventsEmptyMessage\(/);
-    expect(studio).toMatch(/<PackWorkbench/);
+    // Cut 6: PackWorkbench deleted — architecture/artifacts live on Code & Spec.
+    expect(studio).not.toMatch(/function PackWorkbench/);
+    expect(studio).not.toContain('pack-workbench');
+    expect(output).toContain('studio-pack-architecture');
+    expect(output).toContain('studio-pack-artifacts');
 
     // F — anonymous stack checks surface skip/unknown; Build live is not held.
     expect(output).toContain('stackChecks');
@@ -802,11 +802,11 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studio-deploy-button');
     expect(studio).not.toContain('studio-build-live-button');
 
-    // E — proposed actions render in the Intent tab.
+    // E — proposed review actions still render in Tasks & Tools when provided.
     expect(output).toContain('reviewActions');
-    expect(studio).toMatch(/studioActionCard\(/);
     expect(output).toMatch(/Needs review|statusLabel/);
     expect(output).toContain('studio-review-act-button');
+    expect(studio).not.toMatch(/studioActionCard\(/);
   });
 
   it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {
