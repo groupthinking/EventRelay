@@ -40,30 +40,16 @@ export function studioPackTimelineCanSeek(input: {
 }
 
 /**
- * Span for laying out the track. Prefer player duration when known and
- * greater than pack evidence; otherwise use the furthest pack timestamp.
+ * Span for laying out the track. Prefer a longer valid player duration;
+ * otherwise the furthest marker start or end. Floor is 1s.
  */
 export function studioPackTimelineDuration(
-  pack: EmittedVideoPack | null | undefined,
+  markers: readonly StudioTimelineMarker[],
   playerDuration?: number | null,
 ): number {
   let span = 0;
-  for (const chapter of pack?.chapters ?? []) {
-    const end = finiteSeconds(chapter.end) ?? 0;
-    const start = finiteSeconds(chapter.start) ?? 0;
-    span = Math.max(span, end, start);
-  }
-  for (const frame of pack?.keyframes ?? []) {
-    const t = finiteSeconds(frame.t_s) ?? 0;
-    span = Math.max(span, t);
-  }
-  for (const element of pack?.visual_context?.visual_elements ?? []) {
-    const t = finiteSeconds(element.timestamp) ?? 0;
-    span = Math.max(span, t);
-  }
-  for (const event of studioPackExtractedEvents(pack)) {
-    const t = finiteSeconds(event.timestamp) ?? 0;
-    span = Math.max(span, t);
+  for (const marker of markers) {
+    span = Math.max(span, marker.start, marker.end ?? 0);
   }
   const player =
     typeof playerDuration === 'number' && Number.isFinite(playerDuration) && playerDuration > 0
@@ -130,10 +116,4 @@ export function studioPackTimelineMarkers(
   });
 
   return markers;
-}
-
-export function studioPackTimelineHasSurface(
-  pack: EmittedVideoPack | null | undefined,
-): boolean {
-  return studioPackTimelineMarkers(pack).length > 0;
 }
