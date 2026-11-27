@@ -68,6 +68,8 @@ import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } fro
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
 import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
+import StudioPackTimeline from '@/components/studio/StudioPackTimeline';
+import { studioPackTimelineCanSeek } from '@/lib/studio-pack-timeline';
 import {
   registerStudioWebMcpTools,
   type StudioWebMcpPackSnapshot,
@@ -582,8 +584,15 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
-  const { containerRef, ready: playerReady, failed: playerFailed, direct: playerDirect, seekTo } =
-    useYouTubePlayer(videoId, { direct: preferDirectEmbed });
+  const {
+    containerRef,
+    ready: playerReady,
+    failed: playerFailed,
+    direct: playerDirect,
+    currentTime: playerCurrentTime,
+    duration: playerDuration,
+    seekTo,
+  } = useYouTubePlayer(videoId, { direct: preferDirectEmbed });
 
   useEffect(() => {
     setPreferDirectEmbed(false);
@@ -634,9 +643,10 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     { transcript: selected?.transcript, eventCount },
   );
   const shellPack = selected?.videoPack?.pack;
-  const canSeekActiveVideo = Boolean(
-    videoId && (!shellPack?.video_id || videoId === shellPack.video_id),
-  );
+  const canSeekActiveVideo = studioPackTimelineCanSeek({
+    videoId,
+    packVideoId: shellPack?.video_id,
+  });
   const handleAnalyzeUrl = useCallback(
     (submittedUrl: string) => {
       void runAnalysis(submittedUrl);
@@ -1142,9 +1152,21 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     </div>
   );
 
+  const timelineNode = shellPack ? (
+    <StudioPackTimeline
+      pack={shellPack}
+      canSeek={canSeekActiveVideo}
+      onSeek={canSeekActiveVideo ? seekTo : undefined}
+      // Selection-scoped: never scale/playhead from a mismatched URL's player.
+      currentTime={canSeekActiveVideo ? playerCurrentTime : 0}
+      playerDuration={canSeekActiveVideo ? playerDuration : null}
+    />
+  ) : null;
+
   const videoPaneNode = (
     <div className="studio-source-stack flex min-w-0 flex-col gap-3">
       {playerNode}
+      {timelineNode}
       <div className="studio-steps-bar flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-3 py-1.5">
         <ol
           data-testid="studio-extraction-steps"
