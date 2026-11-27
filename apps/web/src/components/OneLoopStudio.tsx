@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Download, FileJson, Play, Sparkles } from 'lucide-react';
 import { parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
@@ -24,7 +24,12 @@ import {
   downloadScaffoldPackage,
   safeProjectName,
 } from '@/lib/action-surface';
-import { type VideoToActionsResult } from '@/lib/studio-workflow';
+import {
+  pollStudioDeploy,
+  startStudioDeploy,
+  studioDeployPollResidual,
+  type VideoToActionsResult,
+} from '@/lib/studio-workflow';
 import {
   packBuildLiveFailureDetails,
   packBuildLiveOutcomeMessage,
@@ -37,6 +42,10 @@ import {
   studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
+  studioDeployButtonLabel,
+  studioDeployEnabledHint,
+  studioDeployOutcomeMessage,
+  studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportProRequiredToast,
@@ -64,10 +73,19 @@ import {
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
+import {
+  evaluateStudioDeployTransition,
+  studioDeployAttemptTransitionId,
+  studioGateReceiptView,
+  type StudioGateReceiptView,
+} from '@/lib/gate-transition';
+import { studioGateLiveUrlForDecision } from '@/lib/studio-deploy-unify';
+import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
 import StudioIdeOutput, { type OutputSection } from '@/components/studio/StudioIdeOutput';
+import StudioGateReceiptCard from '@/components/studio/StudioGateReceiptCard';
 import StudioPackTimeline from '@/components/studio/StudioPackTimeline';
 import { studioPackTimelineCanSeek } from '@/lib/studio-pack-timeline';
 import {
@@ -214,6 +232,7 @@ export type StudioLayout = 'live' | 'classic';
 
 export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioLayout } = {}) {
   const isLive = layout === 'live';
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -225,6 +244,10 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [sampleRunning, setSampleRunning] = useState(false);
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
   const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
+  const [deployBusy, setDeployBusy] = useState(false);
+  const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
+  const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
+  const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
@@ -259,6 +282,15 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
       ? workflowActions
       : null;
+  const scopedDeployReceipt = studioDeployReceiptForSelection({
+    selectedVideoId,
+    receiptVideoId: deployReceiptVideoId,
+    liveUrl: deployReceiptUrl,
+  });
+  const scopedGateLiveUrl = studioGateLiveUrlForDecision(
+    gateReceipt?.decision,
+    scopedDeployReceipt,
+  );
   const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -308,6 +340,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setPackLiveReceiptVideoId(null);
     setPackLiveReceiptYoutubeId(null);
     setPackLiveReceiptReasonCode(null);
+    setDeployReceiptUrl(null);
+    setDeployReceiptVideoId(null);
+    setGateReceipt(null);
     setExportToast(null);
     setPreferDirectEmbed(false);
     if (skipMessageResetForIdRef.current === selectedVideoId) {
@@ -762,6 +797,96 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     }
   };
 
+  /** Cut 5 — single deploy path: G.A.T.E. preflight + receipt (no new deploy auth). */
+  const deploy = async () => {
+    const next = (selected?.url || url).trim();
+    if (!getYouTubeId(next)) {
+      setMessage('Analyze a video before deploy.');
+      return;
+    }
+    if (holdReason) {
+      setMessage(holdReason);
+      return;
+    }
+    setDeployBusy(true);
+    const attemptVideoId = selectedVideoId ?? null;
+    setDeployReceiptUrl(null);
+    setDeployReceiptVideoId(attemptVideoId);
+    setGateReceipt(null);
+    try {
+      const started = await startStudioDeploy({ url: next });
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      if (started.status === 401 || started.status === 403) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
+        return;
+      }
+      if (started.gate) {
+        // Preflight returns a gate decision with no live URL — never invent one.
+        setGateReceipt(started.gate);
+        setDeployReceiptUrl(null);
+        setMessage(started.gate.reason);
+        return;
+      }
+      if (!started.ok || !started.runId) {
+        const backendReason = started.error || started.message || 'Deploy needs sign-in.';
+        const gated = evaluateStudioDeployTransition({
+          transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+          kind: 'handoff',
+          backendReason,
+          authority: { actor: 'anonymous' },
+        });
+        setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+        setMessage(backendReason);
+        return;
+      }
+      const polled = await pollStudioDeploy(started.runId);
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      const backendReason = studioDeployPollResidual(polled);
+      const gated = evaluateStudioDeployTransition({
+        transitionId: started.runId,
+        runId: started.runId,
+        jobId: polled.result?.jobId,
+        liveUrl: polled.result?.live_url,
+        runStatus: polled.runStatus,
+        kind: polled.result?.kind,
+        backendReason,
+        authority: { actor: 'anonymous' },
+      });
+      const view = studioGateReceiptView(gated, { backendReason });
+      setGateReceipt(view);
+      const liveUrl = studioGateLiveUrlForDecision(view.decision, polled.result?.live_url);
+      setDeployReceiptUrl(liveUrl);
+      setDeployReceiptVideoId(attemptVideoId);
+      setMessage(
+        studioDeployOutcomeMessage({
+          liveUrl,
+          runStatus: polled.runStatus,
+          error: backendReason || polled.error,
+          kind: polled.result?.kind,
+          message: polled.result?.message,
+          jobId: polled.result?.jobId,
+          jobStatus: polled.result?.jobStatus,
+        }),
+      );
+    } catch (err) {
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      const backendReason = studioDeployOutcomeMessage({
+        error: err instanceof Error ? err.message : 'Deploy failed.',
+        runStatus: 'failed',
+      });
+      const gated = evaluateStudioDeployTransition({
+        transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+        kind: 'handoff',
+        backendReason,
+        authority: { actor: 'anonymous' },
+      });
+      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+      setMessage(backendReason);
+    } finally {
+      setDeployBusy(false);
+    }
+  };
+
   const buildLive = async () => {
     const watchUrl = (selected?.url || url).trim();
     const packVideoId = resolvePackBuildLiveVideoId({
@@ -989,6 +1114,17 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         >
           <Download className="h-4 w-4" aria-hidden />
           {shipCta.label}
+        </button>
+        <button
+          type="button"
+          data-testid="studio-deploy-button"
+          onClick={() => void deploy()}
+          disabled={deployBusy || !hasPayload || Boolean(holdReason)}
+          aria-describedby="studio-preflight-hint"
+          title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+          className="uvai-btn inline-flex shrink-0 items-center gap-1.5 disabled:opacity-40"
+        >
+          {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
         </button>
         {isLive ? (
           <>
@@ -1482,6 +1618,18 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         />
       )}
 
+
+      <p id="studio-preflight-hint" className="sr-only">
+        {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+      </p>
+
+      {gateReceipt ? (
+        <div className="border-t border-[var(--uvai-border)] bg-[var(--uvai-surface)]">
+          <div className="mx-auto max-w-[1360px] px-4 py-2 sm:px-6">
+            <StudioGateReceiptCard receipt={gateReceipt} liveUrl={scopedGateLiveUrl} />
+          </div>
+        </div>
+      ) : null}
 
       {exportToast ? (
         <div
