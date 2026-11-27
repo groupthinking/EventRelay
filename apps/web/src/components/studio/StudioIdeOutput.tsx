@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, Monitor, Play, Quote, Smartphone } from 'lucide-react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import type { StudioOutputSection } from '@/lib/studio-ia-modes';
 import { studioPackExtractedEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
-import { downloadMarkdownFile } from '@/lib/download-file';
+import { downloadMarkdownFile, downloadTextFile } from '@/lib/download-file';
+import { formatSrt, formatVtt, resolveCaptionSourceLabel } from '@/lib/transcript-export';
 import StudioBoundTasks from './StudioBoundTasks';
 
 export type OutputSection = StudioOutputSection;
@@ -33,6 +34,8 @@ export type StudioIdeOutputProps = {
   activeSection?: OutputSection;
   onSectionChange?: (section: OutputSection) => void;
   onSeek?: (seconds: number) => void;
+  /** Quote a transcript line into the chat composer (Quote-to-Chat). */
+  onQuoteToChat?: (text: string, timestampSec?: number) => void;
   /** Remaining-time copy while a transcript fetch is still running. */
   transcriptEta?: string | null;
   /** True when the fetch failed or has run long enough to retry. */
@@ -61,6 +64,7 @@ export default function StudioIdeOutput({
   activeSection,
   onSectionChange,
   onSeek,
+  onQuoteToChat,
   transcriptEta = null,
   showTranscriptRetry = false,
   onRetryTranscript,
@@ -70,6 +74,8 @@ export default function StudioIdeOutput({
   );
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const [transcriptQuery, setTranscriptQuery] = useState('');
+  const [copiedTranscript, setCopiedTranscript] = useState(false);
   const prevPreviewReadyRef = useRef(Boolean(previewReady));
   const appliedFocusPreviewSignalRef = useRef<number | string | null | undefined>(undefined);
 
@@ -157,6 +163,32 @@ export default function StudioIdeOutput({
           }))
         : [];
 
+  const transcriptNeedle = transcriptQuery.trim().toLowerCase();
+  const visibleSegments = transcriptNeedle
+    ? seekableSegments.filter((seg) => seg.text.toLowerCase().includes(transcriptNeedle))
+    : seekableSegments;
+  const exportSegments = seekableSegments.map((seg, index) => {
+    const next = seekableSegments[index + 1];
+    const gap = next ? next.startSeconds - seg.startSeconds : 0;
+    return { text: seg.text, start: seg.startSeconds, ...(gap > 0 ? { duration: gap } : {}) };
+  });
+  const captionSource = resolveCaptionSourceLabel({
+    timedSegmentCount: seekableSegments.length,
+    hasTranscriptText: Boolean(video?.transcript?.trim() || pack?.transcript?.full_text?.trim()),
+  });
+  const transcriptFileBase = resolvedVideoId || 'uvai-transcript';
+  const copyTranscript = async () => {
+    const text = seekableSegments.length > 0 ? seekableSegments.map((seg) => seg.text).join('\n') : video?.transcript ?? '';
+    try {
+      if (text && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopiedTranscript(true);
+        window.setTimeout(() => setCopiedTranscript(false), 1800);
+      }
+    } catch {
+      // Clipboard blocked: leave the button state unchanged.
+    }
+  };
   const hasTasksExtras = Boolean(
     actionItems.length > 0 ||
       chapters.length > 0 ||
@@ -730,10 +762,80 @@ export default function StudioIdeOutput({
 
         {active === 'transcript' && (
           <div data-testid="studio-ide-output-transcript" className="flex flex-col gap-4">
+            {seekableSegments.length > 0 || video?.transcript?.trim() ? (
+              <div
+                data-testid="studio-transcript-toolbar"
+                className="flex flex-wrap items-center gap-2"
+              >
+                <span
+                  data-testid="studio-transcript-caption-source"
+                  className="rounded-full border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 text-[11px] text-[var(--uvai-ink-soft)]"
+                >
+                  {captionSource}
+                </span>
+                {seekableSegments.length > 0 ? (
+                  <>
+                    <label htmlFor="studio-transcript-search" className="sr-only">
+                      Search transcript
+                    </label>
+                    <input
+                      id="studio-transcript-search"
+                      name="studioTranscriptSearch"
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Search transcript"
+                      value={transcriptQuery}
+                      onChange={(event) => setTranscriptQuery(event.target.value)}
+                      className="uvai-input min-w-[10rem] flex-1 !py-1 !text-xs"
+                    />
+                    {transcriptNeedle ? (
+                      <span
+                        data-testid="studio-transcript-match-count"
+                        className="text-[11px] text-[var(--uvai-ink-faint)]"
+                        aria-live="polite"
+                      >
+                        {visibleSegments.length} of {seekableSegments.length}
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  data-testid="studio-transcript-copy"
+                  onClick={() => void copyTranscript()}
+                  className="uvai-btn !px-2.5 !py-1 !text-xs"
+                >
+                  {copiedTranscript ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-download-srt"
+                  disabled={seekableSegments.length === 0}
+                  onClick={() => downloadTextFile(`${transcriptFileBase}.srt`, formatSrt(exportSegments), 'application/x-subrip;charset=utf-8')}
+                  className="uvai-btn !px-2.5 !py-1 !text-xs disabled:opacity-50"
+                >
+                  .srt
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-download-vtt"
+                  disabled={seekableSegments.length === 0}
+                  onClick={() => downloadTextFile(`${transcriptFileBase}.vtt`, formatVtt(exportSegments), 'text/vtt;charset=utf-8')}
+                  className="uvai-btn !px-2.5 !py-1 !text-xs disabled:opacity-50"
+                >
+                  .vtt
+                </button>
+              </div>
+            ) : null}
             <div data-testid="studio-transcript-body" className="uvai-card p-4">
               {seekableSegments.length > 0 ? (
+                visibleSegments.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">
+                    No transcript lines match this search.
+                  </p>
+                ) : (
                 <ol className="flex flex-col gap-2" aria-label="Timestamped transcript">
-                  {seekableSegments.map((seg) => (
+                  {visibleSegments.map((seg) => (
                     <li
                       key={seg.key}
                       className="flex items-start gap-3 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-[var(--uvai-border)] hover:bg-[var(--uvai-surface-warm)]"
@@ -748,9 +850,23 @@ export default function StudioIdeOutput({
                       <span className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
                         {seg.text}
                       </span>
+                      {onQuoteToChat ? (
+                        <button
+                          type="button"
+                          data-testid={`studio-transcript-quote-${seg.idx}`}
+                          aria-label={`Quote transcript at ${formatSeconds(seg.startSeconds)}`}
+                          title="Quote in chat"
+                          onClick={() => onQuoteToChat(seg.text, seg.startSeconds)}
+                          className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--uvai-border)] px-1.5 py-0.5 text-[11px] text-[var(--uvai-ink-soft)] hover:border-[var(--uvai-accent)] hover:text-[var(--uvai-ink)]"
+                        >
+                          <Quote size={10} aria-hidden="true" />
+                          <span>Quote</span>
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
+                )
               ) : video?.transcript?.trim() ? (
                 <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
                   {video.transcript}

@@ -151,6 +151,16 @@ describe('ProjectsLibrary (guest)', () => {
     expect(readLocalProjects().some((project) => project.id === 'seed-0')).toBe(true);
   });
 
+  it('links Open workspace to the project workspace and Open in Studio to the canonical handoff', async () => {
+    const created = createOrUpdateLocalProject({ sourceUrl: URL_A, title: 'Test Video Pack' });
+    if (!created.ok) throw new Error('expected ok');
+    render(<ProjectsLibrary />);
+    const workspace = await screen.findByRole('link', { name: 'Open workspace' });
+    expect(workspace.getAttribute('href')).toBe(`/projects/${encodeURIComponent(created.project.id)}`);
+    const link = screen.getByRole('link', { name: 'Open in Studio' });
+    expect(link.getAttribute('href')).toBe(`/studio?video=${encodeURIComponent(URL_A)}`);
+  });
+
   it('links Open in Studio to the canonical /studio?video= handoff', async () => {
     createOrUpdateLocalProject({ sourceUrl: URL_A, title: 'Test Video Pack' });
     render(<ProjectsLibrary />);
