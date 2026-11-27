@@ -38,7 +38,7 @@ describe('AppShell', () => {
       </AppShell>,
     );
 
-    for (const name of ['New project', 'Studio', 'Skills', 'Connectors', 'Examples']) {
+    for (const name of ['New project', 'Projects', 'Studio', 'Skills', 'Connectors', 'Examples']) {
       expect(screen.getByRole('link', { name })).toBeTruthy();
     }
     expect(screen.getByText('page body')).toBeTruthy();
@@ -61,6 +61,15 @@ describe('AppShell', () => {
     const getPro = screen.getAllByRole('link', { name: 'Get Pro' });
     expect(getPro.length).toBeGreaterThan(0);
     for (const link of getPro) expect(link.getAttribute('href')).toBe('/pricing');
+  });
+
+  it('links Projects to /projects and marks it current on that route', () => {
+    usePathnameMock.mockReturnValue('/projects');
+    render(<AppShell>{null}</AppShell>);
+    const link = screen.getByRole('link', { name: 'Projects' });
+    expect(link.getAttribute('href')).toBe('/projects');
+    expect(link.getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('link', { name: 'New project' }).getAttribute('aria-current')).toBeNull();
   });
 
   it('collapses with the toggle button and the Ctrl+/ shortcut', () => {

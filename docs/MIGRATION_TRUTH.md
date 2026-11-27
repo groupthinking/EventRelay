@@ -35,6 +35,25 @@ There is no `alembic.ini` file in the current repository root, and there is no `
       "rls": "enabled+forced",
       "tenant_boundary": "owner_subject + service_role access",
       "status": "reconciled"
+    },
+    {
+      "service": "apps/web project workspace",
+      "table": "projects",
+      "model_contract_file": "apps/web/src/lib/projects/project-store.ts",
+      "migration_file": "apps/web/supabase/migrations/20261127090000_create_projects.sql",
+      "columns": [
+        "id",
+        "owner_subject",
+        "source_hash",
+        "source_url",
+        "title",
+        "visibility",
+        "created_at",
+        "updated_at"
+      ],
+      "rls": "enabled+forced",
+      "tenant_boundary": "owner_subject + service_role access",
+      "status": "reconciled"
     }
   ],
   "runtime_managed_domains": [
@@ -104,6 +123,8 @@ There is no `alembic.ini` file in the current repository root, and there is no `
 
 Tenant boundary is application-owned `owner_subject` filtering plus uniqueness on `(owner_subject, request_id)`. All read/write paths in `apps/web/src/lib/studio/chat-store.ts` scope queries by `owner_subject`.
 
+`projects` (Plan 005 P2) uses the same hardening (`ENABLE` + `FORCE` RLS, `REVOKE ALL` from `public`/`anon`/`authenticated`, CRUD `GRANT` to `service_role` only). Its tenant boundary is `owner_subject` filtering plus uniqueness on `(owner_subject, source_hash)`, so one owner has at most one Project per canonical YouTube source. All read/write paths in `apps/web/src/lib/projects/project-store.ts` scope queries by `owner_subject`. The optional `studio_chats.project_id` link is deferred to a later phase and is intentionally absent from the migration chain.
+
 ## Production applicability of `SharedSQLStateStore`
 
 `infrastructure/terraform/environments/production/main.tf` injects `DATABASE_URL` without an environment exclusion on `AgentOrchestrator`, so `shared_sessions`, `shared_timeline_events`, and `shared_a2a_messages` are production-reachable runtime `create_all` tables rather than strictly non-production tables. Until either versioned SQL migrations or an explicit non-production boundary is implemented, these tables remain tracked under `runtime_managed_domains` with status `runtime_create_all_unmigrated`.
@@ -114,5 +135,6 @@ Tenant boundary is application-owned `owner_subject` filtering plus uniqueness o
 
 - Discovers all production `CREATE TABLE` / `ALTER TABLE` statements across ordered `apps/web/supabase/migrations/*.sql` files independently of the matrix.
 - Verifies `studio_chats` parity across the ordered migration chain, `rowSchema` in `chat-store.ts`, SELECT `columns` projection, and `MIGRATION_TRUTH.md`.
+- Verifies `projects` parity across the ordered migration chain, `rowSchema` in `project-store.ts`, SELECT `columns` projection, and `MIGRATION_TRUTH.md`, plus RLS, role revocations/grants, `(owner_subject, source_hash)` uniqueness, and `owner_subject` filtering.
 - Validates live SQL-level RLS (`ENABLE` + `FORCE`), `REVOKE ALL` from `public`/`anon`/`authenticated`, `GRANT SELECT, INSERT, UPDATE, DELETE` to `service_role`, `(owner_subject, request_id)` uniqueness, and `owner_subject` filtering.
 - Parses `src/youtube_extension/services/shared_sql_state.py` via AST to verify every `Table(...)`, column list, and `.create_all(...)` invocation matches `runtime_managed_domains` accurately.
