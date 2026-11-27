@@ -442,4 +442,43 @@ describe('StudioIdeOutput playflow', () => {
     fireEvent.click(screen.getByTestId('studio-keyframe-seek-0'));
     expect(onSeek).toHaveBeenCalledWith(42);
   });
+
+  it('keeps Tools/Files/Code after Build live when focusPreviewSignal stays truthy (Cut 4)', () => {
+    // After verification, previewFocusEpoch stays nonzero. Controlled section
+    // changes must not re-apply the stale focus signal and force Canvas/Preview.
+    type Section = 'preview' | 'tasks' | 'code' | 'transcript';
+    let section: Section = 'tasks';
+    const onSectionChange = vi.fn((next: Section) => {
+      section = next;
+    });
+
+    const propsFor = (active: Section, signal: number) => ({
+      video: baseVideo,
+      previewVideoId: 'auJzb1D-fag',
+      previewReady: true as const,
+      focusPreviewSignal: signal,
+      activeSection: active,
+      onSectionChange,
+    });
+
+    const view = render(<StudioIdeOutput {...propsFor(section, 1)} />);
+    expect(onSectionChange).toHaveBeenCalledWith('preview');
+    section = 'preview';
+    view.rerender(<StudioIdeOutput {...propsFor(section, 1)} />);
+    onSectionChange.mockClear();
+
+    for (const next of ['tasks', 'code', 'transcript'] as const) {
+      section = next;
+      view.rerender(<StudioIdeOutput {...propsFor(section, 1)} />);
+      expect(onSectionChange).not.toHaveBeenCalledWith('preview');
+      expect(screen.getByTestId(`studio-ide-output-tab-${next}`).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    }
+
+    // A new focus signal still focuses Preview once.
+    section = 'tasks';
+    view.rerender(<StudioIdeOutput {...propsFor(section, 2)} />);
+    expect(onSectionChange).toHaveBeenCalledWith('preview');
+  });
 });

@@ -84,6 +84,8 @@ export default function StudioIdeOutput({
   const [reviewingAction, setReviewingAction] = useState<string | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
   const prevPreviewReadyRef = useRef(Boolean(previewReady));
+  /** Last focusPreviewSignal value that already forced Preview (Cut 4 latch). */
+  const appliedFocusPreviewSignalRef = useRef<number | string | null | undefined>(undefined);
 
   const active = activeSection ?? internalActive;
 
@@ -105,12 +107,19 @@ export default function StudioIdeOutput({
   }, [previewReady, activeSection, onSectionChange]);
 
   useEffect(() => {
-    if (focusPreviewSignal) {
-      if (activeSection === undefined) {
-        setInternalActive('preview');
-      }
-      onSectionChange?.('preview');
+    // Consume only *new* focus signals. A sticky nonzero epoch after Build live
+    // must not re-force Preview whenever the controlled section changes.
+    if (focusPreviewSignal == null || focusPreviewSignal === '' || focusPreviewSignal === 0) {
+      return;
     }
+    if (Object.is(appliedFocusPreviewSignalRef.current, focusPreviewSignal)) {
+      return;
+    }
+    appliedFocusPreviewSignalRef.current = focusPreviewSignal;
+    if (activeSection === undefined) {
+      setInternalActive('preview');
+    }
+    onSectionChange?.('preview');
   }, [focusPreviewSignal, activeSection, onSectionChange]);
 
   const resolvedVideoId =
