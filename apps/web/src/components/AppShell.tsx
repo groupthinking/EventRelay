@@ -18,11 +18,11 @@ import {
   Plus,
   Sparkles,
 } from 'lucide-react';
-import { ThemeBar } from '@/components/Nav';
+import { ThemeBar, useRailCollapse } from '@/components/Nav';
+import { DASHBOARD_STORAGE_KEY } from '@/store/dashboard-store';
 import '@/styles/theme-tokens.css';
 import '@/styles/app-shell.css';
 
-const DASHBOARD_STORAGE_KEY = 'eventrelay-dashboard-v1';
 const MAX_RECENT_RUNS = 5;
 
 export type RecentRun = { id: string; title: string; url: string };
@@ -61,8 +61,6 @@ export function readRecentRuns(): RecentRun[] {
 
 interface AppShellProps {
   children: ReactNode;
-  /** Collapse the sidebar to its 56px icon dock initially. */
-  defaultCollapsed?: boolean;
 }
 
 /**
@@ -70,44 +68,15 @@ interface AppShellProps {
  * `.uvai-rail-shell` layout contract in theme-tokens.css (page padding,
  * 600-960px icon dock, <600px flattened row) so every route keeps one rhythm.
  */
-export default function AppShell({ children, defaultCollapsed = false }: AppShellProps) {
+export default function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
-  const [userToggled, setUserToggled] = useState(false);
+  const { collapsed, userToggled, toggleCollapsed } = useRailCollapse();
   const [moreOpen, setMoreOpen] = useState(false);
   const [runs, setRuns] = useState<RecentRun[]>([]);
 
   useEffect(() => {
     setRuns(readRecentRuns());
   }, []);
-
-  useEffect(() => {
-    if (
-      !defaultCollapsed &&
-      typeof window !== 'undefined' &&
-      window.innerWidth >= 600 &&
-      window.innerWidth <= 960
-    ) {
-      setCollapsed(true);
-    }
-  }, [defaultCollapsed]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key === '/') {
-        event.preventDefault();
-        setUserToggled(true);
-        setCollapsed((value) => !value);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  const toggleCollapsed = () => {
-    setUserToggled(true);
-    setCollapsed((value) => !value);
-  };
 
   const onNewProject = (event: MouseEvent<HTMLAnchorElement>) => {
     if (pathname !== '/') return;

@@ -135,15 +135,9 @@ export function ThemeBar({ compact }: { compact: boolean }) {
   );
 }
 
-function RailNav({
-  pathname,
-  rightSlot,
-  subtitle,
-  defaultCollapsed = false,
-}: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
+export function useRailCollapse(defaultCollapsed = false) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [userToggled, setUserToggled] = useState(false);
-  const ctaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (
@@ -172,6 +166,19 @@ function RailNav({
     setUserToggled(true);
     setCollapsed((value) => !value);
   };
+
+  return { collapsed, userToggled, toggleCollapsed, setCollapsed, setUserToggled };
+}
+
+function RailNav({
+  pathname,
+  rightSlot,
+  subtitle,
+  defaultCollapsed = false,
+}: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
+  const { collapsed, userToggled, toggleCollapsed, setCollapsed, setUserToggled } =
+    useRailCollapse(defaultCollapsed);
+  const ctaRef = useRef<HTMLDivElement>(null);
 
   const expandToAccount = () => {
     setUserToggled(true);

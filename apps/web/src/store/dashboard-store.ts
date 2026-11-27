@@ -254,6 +254,8 @@ function workflowFailurePatch(url: string, startedAt: string, message: string): 
   };
 }
 
+export const DASHBOARD_STORAGE_KEY = 'eventrelay-dashboard-v1';
+
 let persistenceSucceeded = false;
 export function dashboardPersistenceSucceeded(): boolean {
   return persistenceSucceeded;
@@ -425,7 +427,7 @@ export const useDashboardStore = create<DashboardState>()(
   },
 }),
     {
-      name: 'eventrelay-dashboard-v1',
+      name: DASHBOARD_STORAGE_KEY,
       partialize: (state) => ({
         videos: state.videos,
       }),
