@@ -1290,3 +1290,39 @@
 .uvai-cards.template-studio-shell .studio-artifact-stream {
   border-color: var(--uvai-border-strong);
 }
+
+/* Cut 5 — G.A.T.E. receipt as primary deploy outcome */
+.studio-gate-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 0.75rem;
+  background: var(--uvai-bg);
+}
+
+.studio-gate-chip--pass {
+  border-color: color-mix(in srgb, #059669 45%, transparent);
+  background: color-mix(in srgb, #059669 12%, transparent);
+  color: #047857;
+}
+
+.studio-gate-chip--hold {
+  border-color: color-mix(in srgb, #d97706 45%, transparent);
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #b45309;
+}
+
+.studio-gate-chip--reject {
+  border-color: color-mix(in srgb, #dc2626 45%, transparent);
+  background: color-mix(in srgb, #dc2626 12%, transparent);
+  color: #b91c1c;
+}
+
+.studio-gate-chip--escalate {
+  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+  color: #6d28d9;
+}
