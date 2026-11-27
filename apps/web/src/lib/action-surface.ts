@@ -80,20 +80,13 @@ export type StudioEventLike = {
   description?: string;
 };
 
-export type StudioWorkflowActionLike = {
-  tool?: string;
-  status?: string;
-  result?: string;
-};
-
 /**
- * Export uses this Studio run: Analyze actions, else events, else Act tools.
+ * Export uses this Studio run: Analyze actions, else events.
  * Button is enabled on transcript/events; do not require insights.actions.
  */
 export function actionsFromStudioRun(input: {
   insightActions?: ActionCardLike[] | null;
   events?: StudioEventLike[] | null;
-  workflowActions?: StudioWorkflowActionLike[] | null;
 }): ActionCardLike[] {
   const out: ActionCardLike[] = [];
   const seen = new Set<string>();
@@ -118,17 +111,6 @@ export function actionsFromStudioRun(input: {
       description: event.description,
       category: event.type || 'event',
     });
-  }
-  if (out.length === 0) {
-    for (const action of input.workflowActions || []) {
-      const title = (action.tool || '').trim();
-      if (!title) continue;
-      push({
-        title,
-        description: action.result || action.status,
-        category: 'act',
-      });
-    }
   }
   return out;
 }

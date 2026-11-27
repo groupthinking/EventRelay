@@ -5,18 +5,11 @@ import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from '
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
 import type { StudioOutputSection } from '@/lib/studio-ia-modes';
-import { studioActionCard, studioPackExtractedEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
+import { studioPackExtractedEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
 import { downloadMarkdownFile } from '@/lib/download-file';
 import StudioBoundTasks from './StudioBoundTasks';
-
-export type StudioReviewActionInput = {
-  tool: string;
-  input?: Record<string, unknown>;
-  status: string;
-  result?: string;
-};
 
 export type OutputSection = StudioOutputSection;
 
@@ -32,7 +25,6 @@ export type StudioIdeOutputProps = {
   specReview?: ReactNode;
   eventsEmptyMessage?: string;
   stackChecks?: StudioStackCheckView[];
-  reviewActions?: StudioReviewActionInput[];
   previewVideoId?: string | null;
   previewReady?: boolean;
   onBuildLive?: () => void;
@@ -61,7 +53,6 @@ export default function StudioIdeOutput({
   specReview,
   eventsEmptyMessage,
   stackChecks = [],
-  reviewActions = [],
   previewVideoId,
   previewReady = false,
   onBuildLive,
@@ -78,7 +69,6 @@ export default function StudioIdeOutput({
     previewReady ? 'preview' : 'tasks',
   );
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [reviewingAction, setReviewingAction] = useState<string | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
   const prevPreviewReadyRef = useRef(Boolean(previewReady));
   const appliedFocusPreviewSignalRef = useRef<number | string | null | undefined>(undefined);
@@ -168,8 +158,7 @@ export default function StudioIdeOutput({
         : [];
 
   const hasTasksExtras = Boolean(
-    reviewActions.length > 0 ||
-      actionItems.length > 0 ||
+    actionItems.length > 0 ||
       chapters.length > 0 ||
       events.length > 0 ||
       eventsEmptyMessage ||
@@ -433,62 +422,10 @@ export default function StudioIdeOutput({
           <div data-testid="studio-ide-output-tasks" className="flex flex-col gap-4">
             {showBoundTasks ? <StudioBoundTasks key={video?.id ?? 'empty'} pack={pack} /> : null}
 
-            {(reviewActions.length > 0 || actionItems.length > 0) && (
+            {actionItems.length > 0 && (
               <section aria-label="Next actions" data-testid="studio-ide-output-actions" className="flex flex-col gap-3">
                 <p className="uvai-section-label px-1">Next actions</p>
                 <ul className="flex flex-col gap-3">
-                  {reviewActions.map((action, i) => {
-                    const card = studioActionCard(action);
-                    const actionKey = `${video?.id ?? 'none'}:${action.tool}:${i}`;
-                    return (
-                      <li
-                        key={`${action.tool}-${i}`}
-                        data-testid="studio-review-action-card"
-                        className="uvai-card border-l-4 !border-l-[#146ef5] p-4"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="uvai-metric-icon mt-0.5 shrink-0">
-                            <ArrowIcon />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-accent-ink)]">
-                              {card.statusLabel}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-[var(--uvai-ink)]">{card.title}</p>
-                            <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{card.detail}</p>
-                            {card.kind === 'review' ? (
-                              <button
-                                type="button"
-                                data-testid="studio-review-act-button"
-                                onClick={() => setReviewingAction(reviewingAction === actionKey ? null : actionKey)}
-                                aria-expanded={reviewingAction === actionKey}
-                                className="uvai-btn uvai-btn-primary mt-3"
-                              >
-                                {reviewingAction === actionKey ? 'Hide proposal' : 'Review proposal'}
-                              </button>
-                            ) : null}
-                            {reviewingAction === actionKey ? (
-                              <div
-                                data-testid="studio-proposal-detail"
-                                className="mt-3 rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] p-3 text-xs text-[var(--uvai-ink-soft)]"
-                              >
-                                <p>Proposed tool: {action.tool}</p>
-                                <p>Status: {action.status}. No tool has been executed from this review.</p>
-                                {action.input ? (
-                                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--uvai-border)] bg-[var(--uvai-bg)] p-2 text-[var(--uvai-ink)]">
-                                    {JSON.stringify(action.input, null, 2)}
-                                  </pre>
-                                ) : (
-                                  <p>Proposal arguments are unavailable for this run.</p>
-                                )}
-                                <p>{card.detail}</p>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
                   {actionItems.map((a, i) => (
                     <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-[#146ef5] p-4">
                       <div className="flex items-start gap-3">

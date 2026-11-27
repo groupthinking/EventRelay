@@ -692,44 +692,6 @@ export function studioProposedToolCard(tool: {
   };
 }
 
-export function studioActionCard(action: {
-  tool: string;
-  status: string;
-  result?: string;
-}): {
-  title: string;
-  statusLabel: string;
-  detail: string;
-  kind: 'review' | 'tool';
-} {
-  const isReviewMarker = action.tool === 'review_action';
-  const needsReview = isReviewMarker || action.status === 'pending' || action.status === 'proposed';
-  const statusLabel =
-    action.status === 'proposed' || action.status === 'pending'
-      ? 'Needs review'
-      : action.status === 'completed'
-        ? 'Done'
-        : action.status === 'failed'
-          ? 'Failed'
-          : action.status;
-  const title = isReviewMarker
-    ? 'Review this result'
-    : action.tool
-        .split('_')
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(' ');
-  const detail =
-    action.result?.trim() ||
-    (isReviewMarker ? 'Open the evidence on this page before you act.' : 'No detail from this tool.');
-  return {
-    title,
-    statusLabel,
-    detail,
-    kind: needsReview ? 'review' : 'tool',
-  };
-}
-
 export function studioExportToastMessage(input: {
   ok: boolean;
   kind?: StudioExportToastKind;
