@@ -50,6 +50,27 @@ describe('StudioPackTimeline', () => {
     expect(screen.getByTestId('studio-pack-timeline').getAttribute('data-can-seek')).toBe('false');
   });
 
+  it('ignores mismatched player duration/playhead when canSeek is false (pack-truthful scale)', () => {
+    const { pack } = loadSamplePack();
+    const packSpan = Math.max(...(pack.chapters ?? []).map((c) => c.end));
+    render(
+      <StudioPackTimeline
+        pack={pack}
+        canSeek={false}
+        onSeek={vi.fn()}
+        currentTime={120}
+        playerDuration={9999}
+      />,
+    );
+
+    expect(screen.queryByTestId('studio-pack-timeline-playhead')).toBeNull();
+    const spanText = screen.getByTestId('studio-pack-timeline-span').textContent ?? '';
+    // Pack last chapter ends at 481s → "8:01"; must not become 9999s ("2:46:39").
+    expect(spanText).toMatch(/^8:0[01]$/);
+    expect(spanText).not.toContain('2:46');
+    expect(packSpan).toBeGreaterThanOrEqual(481);
+  });
+
   it('renders nothing when the pack has no time surfaces (no mock filler)', () => {
     const empty: EmittedVideoPack = {
       version: 'v0',

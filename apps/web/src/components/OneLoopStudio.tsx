@@ -1157,8 +1157,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       pack={shellPack}
       canSeek={canSeekActiveVideo}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
-      currentTime={playerCurrentTime}
-      playerDuration={playerDuration}
+      // Selection-scoped: never scale/playhead from a mismatched URL's player.
+      currentTime={canSeekActiveVideo ? playerCurrentTime : 0}
+      playerDuration={canSeekActiveVideo ? playerDuration : null}
     />
   ) : null;
 

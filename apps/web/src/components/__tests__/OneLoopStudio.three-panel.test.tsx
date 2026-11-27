@@ -455,6 +455,17 @@ describe('OneLoopStudio IDE shell', () => {
   it('Cut 2: stage timeline seeks from chapter selection and stays selection-scoped', async () => {
     const { loadSamplePack } = await import('@/lib/sample-pack');
     const citation = loadSamplePack();
+    playerStateMock.mockImplementation(() => ({
+      containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
+      currentTime: 42,
+      duration: 600,
+      isPlaying: true,
+      ready: true,
+      failed: false,
+      seekTo: seekToMock,
+      play: vi.fn(),
+      pause: vi.fn(),
+    }));
     useDashboardStore.setState({
       videos: [
         {
@@ -468,17 +479,34 @@ describe('OneLoopStudio IDE shell', () => {
     render(<OneLoopStudio />);
     expect(screen.getByTestId('studio-pack-timeline')).toBeTruthy();
     expect(screen.getByTestId('studio-timeline-chapter-0')).toBeTruthy();
+    expect(screen.getByTestId('studio-pack-timeline-playhead')).toBeTruthy();
 
     fireEvent.click(screen.getByTestId('studio-timeline-chapter-1'));
     expect(seekToMock).toHaveBeenCalledWith(27);
 
     seekToMock.mockReset();
+    // Mismatched URL player still reports a long duration — must not distort pack timeline.
+    playerStateMock.mockImplementation(() => ({
+      containerRef: (() => undefined) as (node: HTMLDivElement | null) => void,
+      currentTime: 180,
+      duration: 9999,
+      isPlaying: true,
+      ready: true,
+      failed: false,
+      seekTo: seekToMock,
+      play: vi.fn(),
+      pause: vi.fn(),
+    }));
     fireEvent.change(screen.getByLabelText('YouTube URL'), {
       target: { value: 'https://www.youtube.com/watch?v=9PICEmtfpWU' },
     });
     const chapter = screen.getByTestId('studio-timeline-chapter-1') as HTMLButtonElement;
     expect(chapter.disabled).toBe(true);
     expect(screen.getByTestId('studio-pack-timeline').getAttribute('data-can-seek')).toBe('false');
+    expect(screen.queryByTestId('studio-pack-timeline-playhead')).toBeNull();
+    const spanText = screen.getByTestId('studio-pack-timeline-span').textContent ?? '';
+    expect(spanText).toMatch(/^8:0[01]$/);
+    expect(spanText).not.toContain('2:46');
     fireEvent.click(chapter);
     expect(seekToMock).not.toHaveBeenCalled();
   });
