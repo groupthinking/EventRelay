@@ -221,16 +221,13 @@ export default function AppShell({ children, defaultCollapsed = false }: AppShel
             Recent runs
           </h2>
           {runs.length > 0 ? (
-            runs.map((run) => (
-              <Link
-                key={run.id}
-                href={`/studio?video=${encodeURIComponent(run.url)}`}
-                className="uvai-appshell-run"
-                title={run.title}
-              >
-                {run.title}
-              </Link>
-            ))
+            <ul className="uvai-appshell-runs">
+              {runs.map((run) => (
+                <li key={run.id} className="uvai-appshell-run" title={run.title}>
+                  {run.title}
+                </li>
+              ))}
+            </ul>
           ) : (
             <p className="uvai-appshell-empty">No local runs yet</p>
           )}

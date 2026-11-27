@@ -64,6 +64,25 @@ describe('ProjectWorkspaceHome', () => {
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
+  it('shows the sample link by default and hides it when sampleEnabled is false', () => {
+    const { unmount } = render(<ProjectWorkspaceHome />);
+    expect(screen.getByRole('link', { name: /try a sample/i }).getAttribute('href')).toBe(
+      '/studio?sample=1',
+    );
+    unmount();
+
+    mocks.submitHomePaste.mockReturnValue(null);
+    render(<ProjectWorkspaceHome sampleEnabled={false} />);
+    expect(screen.queryByRole('link', { name: /try a sample/i })).toBeNull();
+
+    const input = screen.getByLabelText('YouTube URL');
+    fireEvent.change(input, { target: { value: 'not a YouTube URL' } });
+    fireEvent.submit(input.closest('form')!);
+    expect(screen.getByRole('alert').textContent).toBe(
+      'Paste a valid YouTube URL to start a Video Pack run.',
+    );
+  });
+
   it('uses the Studio-bound fixture video id in the sample URL', () => {
     expect(SHOWCASE_SAMPLE_URL).toContain('auJzb1D-fag');
     expect(SHOWCASE_SAMPLE_URL).not.toContain('dQw4w9WgXcQ');

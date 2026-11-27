@@ -84,8 +84,9 @@ describe('AppShell', () => {
     const url = 'https://www.youtube.com/watch?v=auJzb1D-fag';
     seedRuns([{ id: 'run-1', title: 'Video One', url, progress: 100, status: 'complete' }]);
     render(<AppShell>{null}</AppShell>);
-    const link = await screen.findByRole('link', { name: 'Video One' });
-    expect(link.getAttribute('href')).toBe(`/studio?video=${encodeURIComponent(url)}`);
+    expect(await screen.findByText('Video One')).toBeTruthy();
+    // Read-only until P3: a link to /studio?video= would start a duplicate extraction.
+    expect(screen.queryByRole('link', { name: 'Video One' })).toBeNull();
     expect(screen.queryByText('No local runs yet')).toBeNull();
   });
 

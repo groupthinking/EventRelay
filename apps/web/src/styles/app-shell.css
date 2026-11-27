@@ -61,6 +61,16 @@
   color: var(--uvai-ink-faint);
 }
 
+.uvai-appshell-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Read-only until P3 adds ?run=<id> reopening, so no hover affordance. */
 .uvai-appshell-run {
   display: block;
   padding: 6px 10px;
@@ -70,12 +80,6 @@
   color: var(--uvai-ink-soft);
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: background 150ms ease, color 150ms ease;
-}
-
-.uvai-appshell-run:hover {
-  background: var(--uvai-surface-warm);
-  color: var(--uvai-ink);
 }
 
 .uvai-appshell-empty {

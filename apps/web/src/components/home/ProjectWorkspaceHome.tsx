@@ -20,7 +20,12 @@ import '@/styles/project-workspace-home.css';
  * Plan 005 P1 Home. One source video per run: the dock accepts a YouTube URL
  * plus an intent chip and hands off to Studio. It never opens a general chat.
  */
-export default function ProjectWorkspaceHome() {
+export default function ProjectWorkspaceHome({
+  sampleEnabled = true,
+}: {
+  /** The sample run is only handled by Studio when the liveStudio flag is on. */
+  sampleEnabled?: boolean;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [url, setUrl] = useState('');
@@ -37,7 +42,11 @@ export default function ProjectWorkspaceHome() {
     event.preventDefault();
     const href = submitHomePaste(url);
     if (!href) {
-      setError('Paste a valid YouTube URL to start a Video Pack run, or try the sample below.');
+      setError(
+        sampleEnabled
+          ? 'Paste a valid YouTube URL to start a Video Pack run, or try the sample below.'
+          : 'Paste a valid YouTube URL to start a Video Pack run.',
+      );
       return;
     }
     setError('');
@@ -108,10 +117,12 @@ export default function ProjectWorkspaceHome() {
 
             <div className="pwh-dock-footer">
               <span className="pwh-pill">Auto · Video Pack</span>
-              <Link href="/studio?sample=1" className="pwh-sample">
-                <Sparkles size={14} aria-hidden="true" />
-                Try a sample
-              </Link>
+              {sampleEnabled ? (
+                <Link href="/studio?sample=1" className="pwh-sample">
+                  <Sparkles size={14} aria-hidden="true" />
+                  Try a sample
+                </Link>
+              ) : null}
               <button type="submit" className="uvai-btn uvai-btn-primary pwh-submit">
                 <span>Start in Studio</span>
                 <ArrowRight size={16} aria-hidden="true" />

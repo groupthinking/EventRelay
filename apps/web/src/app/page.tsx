@@ -156,7 +156,7 @@ export default async function HomePage({
     searchParams,
   ]);
   if (projectWorkspaceEnabled && params.shell !== 'classic' && params.shell !== 'live') {
-    return <ProjectWorkspaceHome />;
+    return <ProjectWorkspaceHome sampleEnabled={liveStudioEnabled} />;
   }
   if (liveStudioEnabled && params.shell !== 'classic') return <LiveOnRamp />;
 
