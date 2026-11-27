@@ -59,6 +59,7 @@ describe('StudioArtifactStream', () => {
     const formation = studioPackFormation(citation);
     const model = studioArtifactStreamModel({
       busy: false,
+      stageId: 'ready',
       hasPack: true,
       hasTranscript: true,
       formation,

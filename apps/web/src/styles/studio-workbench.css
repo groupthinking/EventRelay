@@ -207,16 +207,6 @@
   box-shadow: none;
 }
 
-.uvai-cards.template-studio-shell .studio-chat-timeline {
-  border: 1px solid var(--uvai-border-strong);
-  border-radius: 14px;
-  background: var(--uvai-surface);
-  padding: 14px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-
 .uvai-cards.template-studio-shell .studio-chat-prompt-pill {
   display: inline-flex;
   align-items: center;

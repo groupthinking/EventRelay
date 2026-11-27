@@ -82,10 +82,9 @@ describe('studio-artifact-stream', () => {
 
     const model = studioArtifactStreamModel({
       busy: true,
+      stageId: 'pack',
       hasPackIdentity: true,
       hasTranscript: false,
-      elapsedSeconds: 20,
-      progress: 10,
       formation: {
         architecture: {
           summary: null,
@@ -173,8 +172,7 @@ describe('studio-artifact-stream', () => {
 
     const extracting = studioArtifactStreamModel({
       busy: true,
-      elapsedSeconds: 12,
-      progress: 8,
+      stageId: 'captions',
       formation,
     });
     expect(extracting.phase).toBe('filling');
@@ -182,6 +180,7 @@ describe('studio-artifact-stream', () => {
 
     const settled = studioArtifactStreamModel({
       busy: false,
+      stageId: 'ready',
       hasPack: true,
       hasTranscript: true,
       formation,

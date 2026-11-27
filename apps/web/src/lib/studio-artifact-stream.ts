@@ -1,10 +1,4 @@
-/**
- * Cut 3 — derive the Agents-stream pack-forming artifact from real extract
- * stages and real pack formation. No invented stages or mock pack preview.
- */
-
 import type { StudioTranscriptStageId } from '@/lib/studio-pipeline-status';
-import { studioTranscriptStage } from '@/lib/studio-pipeline-status';
 import type {
   VideoPackArchitecture,
   VideoPackArtifact,
@@ -45,6 +39,12 @@ export interface StudioArtifactStreamPreview {
   tools: Array<{ name: string }>;
 }
 
+export type StudioArtifactStreamFormation = {
+  architecture: VideoPackArchitecture | null;
+  artifacts: VideoPackArtifact[];
+  tools: VideoPackStackTool[];
+};
+
 export const STUDIO_ARTIFACT_STREAM_STEPS: ReadonlyArray<{
   id: StudioArtifactStreamStepId;
   label: string;
@@ -64,30 +64,11 @@ const STEP_INDEX: Record<StudioArtifactStreamStepId, number> = {
   ready: 4,
 };
 
-/** Map transcript-stage ids onto the five extract rows (real stages only). */
 export function studioArtifactStreamStepIndex(
   stageId: StudioTranscriptStageId,
 ): number {
-  switch (stageId) {
-    case 'ready':
-      return STEP_INDEX.ready;
-    case 'events':
-      return STEP_INDEX.events;
-    case 'transcript':
-      return STEP_INDEX.transcript;
-    case 'captions':
-      return STEP_INDEX.captions;
-    case 'pack':
-      return STEP_INDEX.pack;
-    case 'failed':
-      return STEP_INDEX.pack;
-    case 'idle':
-      return STEP_INDEX.pack;
-    default: {
-      const _exhaustive: never = stageId;
-      return _exhaustive;
-    }
-  }
+  if (stageId === 'failed' || stageId === 'idle') return STEP_INDEX.pack;
+  return STEP_INDEX[stageId];
 }
 
 export function studioArtifactStreamPhase(input: {
@@ -162,15 +143,9 @@ export function studioArtifactStreamRows(input: {
   });
 }
 
-/**
- * Settled preview from real pack formation only. Returns null when there is
- * nothing real to show — never invents architecture, artifacts, or tools.
- */
-export function studioArtifactStreamPreview(formation: {
-  architecture: VideoPackArchitecture | null | undefined;
-  artifacts: VideoPackArtifact[] | null | undefined;
-  tools: VideoPackStackTool[] | null | undefined;
-} | null | undefined): StudioArtifactStreamPreview | null {
+export function studioArtifactStreamPreview(
+  formation: StudioArtifactStreamFormation | null | undefined,
+): StudioArtifactStreamPreview | null {
   if (!formation) return null;
 
   const architecture = formation.architecture ?? null;
@@ -217,51 +192,35 @@ export function studioArtifactStreamPreview(formation: {
 
 export function studioArtifactStreamModel(input: {
   busy: boolean;
-  elapsedSeconds?: number;
-  progress?: number;
+  stageId: StudioTranscriptStageId;
   hasPack?: boolean;
   hasPackIdentity?: boolean;
   hasTranscript?: boolean;
   hasFailed?: boolean;
-  formation?: {
-    architecture: VideoPackArchitecture | null | undefined;
-    artifacts: VideoPackArtifact[] | null | undefined;
-    tools: VideoPackStackTool[] | null | undefined;
-  } | null;
+  formation?: StudioArtifactStreamFormation | null;
 }): {
   stageId: StudioTranscriptStageId;
   phase: StudioArtifactStreamPhase;
   rows: StudioArtifactStreamRow[];
   preview: StudioArtifactStreamPreview | null;
 } {
-  const stage = studioTranscriptStage({
-    busy: input.busy,
-    elapsedSeconds: input.elapsedSeconds ?? 0,
-    progress: input.progress,
-    hasPack: input.hasPack,
-    hasPackIdentity: input.hasPackIdentity,
-    hasTranscript: input.hasTranscript,
-    hasFailed: input.hasFailed,
-  });
   const phase = studioArtifactStreamPhase({
     busy: input.busy,
     hasFailed: input.hasFailed,
     hasPack: input.hasPack,
     hasPackIdentity: input.hasPackIdentity,
     hasTranscript: input.hasTranscript,
-    stageId: stage.id,
+    stageId: input.stageId,
   });
   const rows = studioArtifactStreamRows({
     phase,
-    stageId: stage.id,
+    stageId: input.stageId,
     hasPackIdentity: input.hasPackIdentity,
   });
   const preview =
-    phase === 'settled' || phase === 'filling'
-      ? studioArtifactStreamPreview(input.formation)
-      : phase === 'failed'
-        ? studioArtifactStreamPreview(input.formation)
-        : null;
+    phase === 'hidden' || phase === 'skeletal'
+      ? null
+      : studioArtifactStreamPreview(input.formation);
 
-  return { stageId: stage.id, phase, rows, preview };
+  return { stageId: input.stageId, phase, rows, preview };
 }
