@@ -25,9 +25,7 @@ import {
   safeProjectName,
 } from '@/lib/action-surface';
 import {
-  pollStudioDeploy,
   startStudioDeploy,
-  studioDeployPollResidual,
   type VideoToActionsResult,
 } from '@/lib/studio-workflow';
 import {
@@ -45,7 +43,6 @@ import {
   studioDeployButtonLabel,
   studioDeployEnabledHint,
   studioDeployOutcomeMessage,
-  studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
   studioExportFilename,
   studioExportProRequiredToast,
@@ -79,7 +76,6 @@ import {
   studioGateReceiptView,
   type StudioGateReceiptView,
 } from '@/lib/gate-transition';
-import { studioGateLiveUrlForDecision } from '@/lib/studio-deploy-unify';
 import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
@@ -245,8 +241,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
   const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
   const [deployBusy, setDeployBusy] = useState(false);
-  const [deployReceiptUrl, setDeployReceiptUrl] = useState<string | null>(null);
-  const [deployReceiptVideoId, setDeployReceiptVideoId] = useState<string | null>(null);
   const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
@@ -282,15 +276,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
       ? workflowActions
       : null;
-  const scopedDeployReceipt = studioDeployReceiptForSelection({
-    selectedVideoId,
-    receiptVideoId: deployReceiptVideoId,
-    liveUrl: deployReceiptUrl,
-  });
-  const scopedGateLiveUrl = studioGateLiveUrlForDecision(
-    gateReceipt?.decision,
-    scopedDeployReceipt,
-  );
   const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -340,8 +325,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setPackLiveReceiptVideoId(null);
     setPackLiveReceiptYoutubeId(null);
     setPackLiveReceiptReasonCode(null);
-    setDeployReceiptUrl(null);
-    setDeployReceiptVideoId(null);
     setGateReceipt(null);
     setExportToast(null);
     setPreferDirectEmbed(false);
@@ -797,7 +780,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     }
   };
 
-  /** Cut 5 — single deploy path: G.A.T.E. preflight + receipt (no new deploy auth). */
   const deploy = async () => {
     const next = (selected?.url || url).trim();
     if (!getYouTubeId(next)) {
@@ -810,70 +792,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     }
     setDeployBusy(true);
     const attemptVideoId = selectedVideoId ?? null;
-    setDeployReceiptUrl(null);
-    setDeployReceiptVideoId(attemptVideoId);
     setGateReceipt(null);
-    try {
-      const started = await startStudioDeploy({ url: next });
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      if (started.status === 401 || started.status === 403) {
-        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
-        return;
-      }
-      if (started.gate) {
-        // Preflight returns a gate decision with no live URL — never invent one.
-        setGateReceipt(started.gate);
-        setDeployReceiptUrl(null);
-        setMessage(started.gate.reason);
-        return;
-      }
-      if (!started.ok || !started.runId) {
-        const backendReason = started.error || started.message || 'Deploy needs sign-in.';
-        const gated = evaluateStudioDeployTransition({
-          transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
-          kind: 'handoff',
-          backendReason,
-          authority: { actor: 'anonymous' },
-        });
-        setGateReceipt(studioGateReceiptView(gated, { backendReason }));
-        setMessage(backendReason);
-        return;
-      }
-      const polled = await pollStudioDeploy(started.runId);
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      const backendReason = studioDeployPollResidual(polled);
-      const gated = evaluateStudioDeployTransition({
-        transitionId: started.runId,
-        runId: started.runId,
-        jobId: polled.result?.jobId,
-        liveUrl: polled.result?.live_url,
-        runStatus: polled.runStatus,
-        kind: polled.result?.kind,
-        backendReason,
-        authority: { actor: 'anonymous' },
-      });
-      const view = studioGateReceiptView(gated, { backendReason });
-      setGateReceipt(view);
-      const liveUrl = studioGateLiveUrlForDecision(view.decision, polled.result?.live_url);
-      setDeployReceiptUrl(liveUrl);
-      setDeployReceiptVideoId(attemptVideoId);
-      setMessage(
-        studioDeployOutcomeMessage({
-          liveUrl,
-          runStatus: polled.runStatus,
-          error: backendReason || polled.error,
-          kind: polled.result?.kind,
-          message: polled.result?.message,
-          jobId: polled.result?.jobId,
-          jobStatus: polled.result?.jobStatus,
-        }),
-      );
-    } catch (err) {
-      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
-      const backendReason = studioDeployOutcomeMessage({
-        error: err instanceof Error ? err.message : 'Deploy failed.',
-        runStatus: 'failed',
-      });
+    const recordHandoff = (backendReason: string) => {
       const gated = evaluateStudioDeployTransition({
         transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
         kind: 'handoff',
@@ -882,6 +802,29 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       });
       setGateReceipt(studioGateReceiptView(gated, { backendReason }));
       setMessage(backendReason);
+    };
+    try {
+      const started = await startStudioDeploy({ url: next });
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      if (started.status === 401 || started.status === 403) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
+        return;
+      }
+      if (started.gate) {
+        setGateReceipt(started.gate);
+        setMessage(started.gate.reason);
+        return;
+      }
+      // POST answers 409 or an error and never includes a runId.
+      recordHandoff(started.error || started.message || 'Deploy needs sign-in.');
+    } catch (err) {
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      recordHandoff(
+        studioDeployOutcomeMessage({
+          error: err instanceof Error ? err.message : 'Deploy failed.',
+          runStatus: 'failed',
+        }),
+      );
     } finally {
       setDeployBusy(false);
     }
@@ -1121,10 +1064,10 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           onClick={() => void deploy()}
           disabled={deployBusy || !hasPayload || Boolean(holdReason)}
           aria-describedby="studio-preflight-hint"
-          title={holdReason || studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+          title={holdReason || studioDeployEnabledHint(false)}
           className="uvai-btn inline-flex shrink-0 items-center gap-1.5 disabled:opacity-40"
         >
-          {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(Boolean(scopedDeployReceipt))}
+          {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(false)}
         </button>
         {isLive ? (
           <>
@@ -1620,13 +1563,13 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
 
 
       <p id="studio-preflight-hint" className="sr-only">
-        {studioDeployEnabledHint(Boolean(scopedDeployReceipt))}
+        {studioDeployEnabledHint(false)}
       </p>
 
       {gateReceipt ? (
         <div className="border-t border-[var(--uvai-border)] bg-[var(--uvai-surface)]">
           <div className="mx-auto max-w-[1360px] px-4 py-2 sm:px-6">
-            <StudioGateReceiptCard receipt={gateReceipt} liveUrl={scopedGateLiveUrl} />
+            <StudioGateReceiptCard receipt={gateReceipt} />
           </div>
         </div>
       ) : null}

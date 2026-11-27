@@ -15,10 +15,7 @@ export type StudioGateReceiptCardProps = {
   className?: string;
 };
 
-/**
- * Primary deploy outcome UI (Cut 5): G.A.T.E. receipt card.
- * Live https link appears only on PASS; non-PASS never claims live.
- */
+/** https link renders only when the decision is PASS and the URL verifies. */
 export default function StudioGateReceiptCard({
   receipt,
   liveUrl,

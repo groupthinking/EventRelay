@@ -81,7 +81,7 @@ describe('UVAI is one product surface', () => {
     expect(studio).not.toMatch(/router\.push\(['"`]\/dashboard/);
   });
 
-  it('does not hold anonymous Ship behind non-runnable stack checks (Cut 5 keeps one deploy path)', () => {
+  it('does not hold anonymous Ship behind non-runnable stack checks', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
     expect(studio).toContain("deployHoldReason(linkedSop, completedChecks, 'anonymous')");
     expect(studio).toContain('stackCheckStatus');
@@ -89,7 +89,6 @@ describe('UVAI is one product surface', () => {
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
     expect(studio).not.toContain('href="/ship"');
-    // Cut 5: one G.A.T.E. deploy path; Ship this stays independent of holdReason disable.
     expect(studio).toContain('studio-deploy-button');
     expect(studio).toContain('StudioGateReceiptCard');
     expect(studio).not.toMatch(/studio-ide-ship[\s\S]{0,200}disabled=\{[^}]*holdReason/);

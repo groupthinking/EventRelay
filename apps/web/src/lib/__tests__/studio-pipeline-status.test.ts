@@ -480,7 +480,6 @@ describe('studio-pipeline-status', () => {
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
     expect(studio).toContain('{shipCta.label}');
-    // Cut 5 restores one deploy path; Ship this stays free of holdReason disable.
     expect(studio).toContain('studio-deploy-button');
     expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
     expect(studio).toMatch(/disabled=\{deployBusy \|\| !hasPayload \|\| Boolean\(holdReason\)\}/);
@@ -578,16 +577,17 @@ describe('studio-pipeline-status', () => {
     }
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    // Cut 5 — one deploy path + G.A.T.E. receipt; preflight still cannot start a job.
     expect(studio).toContain('const deploy = async');
     expect(studio).toContain('studio-deploy-button');
     expect(studio).toContain('StudioGateReceiptCard');
-    expect(studio).toContain('studioGateLiveUrlForDecision');
+    expect(studio).not.toContain('pollStudioDeploy');
+    expect(studio).not.toContain('studioGateLiveUrlForDecision');
     const receiptCard = readFileSync(
       join(process.cwd(), 'src/components/studio/StudioGateReceiptCard.tsx'),
       'utf8',
     );
     expect(receiptCard).toContain('data-testid="studio-gate-receipt"');
+    expect(receiptCard).toContain('studioGateLiveUrlForDecision');
     expect(receiptCard).toContain('studio-gate-live-url');
     const preflight = readFileSync(join(process.cwd(), 'src/app/api/workflows/studio-deploy/route.ts'), 'utf8');
     expect(preflight).toContain('status: 409');
@@ -597,8 +597,8 @@ describe('studio-pipeline-status', () => {
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
     expect(asyncJob).not.toMatch(/isGatewayTimeoutKickoff\(undefined, message\) \{\s*return STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
     expect(studio).toContain('studioDeployButtonLabel');
-    expect(studio).toContain('studioDeployReceiptForSelection');
-    expect(studio).toContain('setDeployReceiptUrl(null)');
+    expect(studio).not.toContain('studioDeployReceiptForSelection');
+    expect(studio).not.toContain('setDeployReceiptUrl(null)');
     expect(studio).toContain('setGateReceipt(null)');
     expect(studio).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
     expect(studio).not.toContain('Deploy attempt started. Waiting for a verified https live URL.');
@@ -799,7 +799,6 @@ describe('studio-pipeline-status', () => {
     expect(studio).toMatch(/stackCheckStatusLabel\(/);
     expect(studio).toMatch(/stackCheckStatus\([^)]*'anonymous'/);
     expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
-    // Cut 5: one G.A.T.E. deploy path (preflight); Build live stays preview-only in output.
     expect(studio).toContain('studio-deploy-button');
     expect(studio).not.toContain('studio-build-live-button');
 

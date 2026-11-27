@@ -11,6 +11,7 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio deploy preflight no longer polls a run id. `POST /api/workflows/studio-deploy` returns a gate or an error, so the unreachable poll, the always-null receipt URL, and the unused live-claim helper are gone. The receipt card remains the only live-URL check. Related: #2328.
 - Studio Deploy unify (Cut 5): one G.A.T.E. preflight path + receipt card as primary outcome UI. PASS may show a verified https live URL; non-PASS never claims live. No deploy/billing/credentials policy change; fixture `auJzb1D-fag`. Related: #2872.
 - `/api/projects` lists the signed-in owner's projects. Unused visibility and text query filters are gone; the library still filters tabs and search on the client. Studio and projects share one private response helper. Related: #2328.
 - Studio IA rename keeps one activity type and one output-section union. The duplicate context-surface mapper, the test-only mode list, and the unused `initialSection` prop are gone. Related: #2328.
