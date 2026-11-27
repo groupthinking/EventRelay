@@ -11,6 +11,7 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio IA rename (Cut 4): Agents/Tools/Files/Canvas/Code activity modes wire to existing chat + four deliverable tabs (Tasks & Tools / Transcript / Preview / Code & Spec). No persona grid; fixture `auJzb1D-fag`. Related: #2868.
 - Studio chat artifact stream uses the transcript stage the shell already computed. The unused `activeStage` prop, the orphaned `.studio-chat-timeline` rule, and the second stage derivation are gone. Related: #2328.
 - Studio Agents chat shows Cut 3 pack-forming artifact stream (skeletal → real extract stages → settled architecture/artifacts/stack preview). No mock pack content; fixture `auJzb1D-fag`. Related: #2862.
 - Studio event display reads pack `events[]` through one parser. The unused display count, sample-events wrapper, and lib task note are gone. Related: #2328.
