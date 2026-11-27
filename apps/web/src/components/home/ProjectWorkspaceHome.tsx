@@ -13,6 +13,7 @@ import {
   SHOWCASE_CATEGORIES,
   SHOWCASE_SAMPLE_URL,
   type IntentId,
+  type ShowcaseCard,
 } from './showcase-data';
 import '@/styles/project-workspace-home.css';
 
@@ -53,9 +54,7 @@ export default function ProjectWorkspaceHome({
     router.push(`${href}&intent=${intent}`);
   };
 
-  const pickCard = (cardId: string) => {
-    const card = SHOWCASE_CARDS.find((item) => item.id === cardId);
-    if (!card) return;
+  const pickCard = (card: ShowcaseCard) => {
     setIntent(card.intent);
     if (!url.trim()) setUrl(SHOWCASE_SAMPLE_URL);
     setError('');
@@ -190,7 +189,7 @@ export default function ProjectWorkspaceHome({
                 data-testid="showcase-card"
                 data-category={card.category}
                 data-tone={card.tone}
-                onClick={() => pickCard(card.id)}
+                onClick={() => pickCard(card)}
               >
                 <span className="pwh-card-head">
                   <span className="pwh-card-category">{card.category}</span>
