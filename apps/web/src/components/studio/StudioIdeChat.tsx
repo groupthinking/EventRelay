@@ -12,20 +12,31 @@ import {
 } from 'react';
 import {
   ArrowUp,
-  CheckCircle2,
-  Circle,
   Loader2,
   Play,
   RotateCcw,
   Sparkles,
 } from 'lucide-react';
+import StudioArtifactStream from '@/components/studio/StudioArtifactStream';
+import { studioArtifactStreamModel } from '@/lib/studio-artifact-stream';
 import { extractYouTubeId, formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
 import type { VideoPlanInterviewAnswers } from '@/lib/video-pack-plan';
+import type {
+  VideoPackArchitecture,
+  VideoPackArtifact,
+  VideoPackStackTool,
+} from '@/lib/video-pack-types';
 
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+};
+
+export type StudioArtifactStreamFormation = {
+  architecture: VideoPackArchitecture | null;
+  artifacts: VideoPackArtifact[];
+  tools: VideoPackStackTool[];
 };
 
 export type StudioIdeChatProps = {
@@ -34,10 +45,22 @@ export type StudioIdeChatProps = {
   disabled?: boolean;
   isWorking?: boolean;
   statusText?: string;
+  /** @deprecated Cut 3 uses artifactStreamInputs; kept for older call sites. */
   activeStage?: string;
   videoTitle?: string | null;
   onSubmitUrl?: (url: string) => void;
   onSeek?: (seconds: number) => void;
+  /** Cut 3 — real extract stage inputs + optional pack formation for settle preview. */
+  artifactStreamInputs?: {
+    busy: boolean;
+    elapsedSeconds?: number;
+    progress?: number;
+    hasPack?: boolean;
+    hasPackIdentity?: boolean;
+    hasTranscript?: boolean;
+    hasFailed?: boolean;
+    formation?: StudioArtifactStreamFormation | null;
+  };
 };
 
 const FREE_QUOTA_MESSAGE = 'Free plan includes 5 AI chat messages per day.';
@@ -52,14 +75,6 @@ type PlanChatResponse = {
   planInterview?: unknown;
   [key: string]: unknown;
 };
-
-const EXTRACTION_TIMELINE_STEPS = [
-  { id: 'pack', label: 'Pack identity' },
-  { id: 'captions', label: 'Captions & audio' },
-  { id: 'transcript', label: 'Building transcript' },
-  { id: 'events', label: 'Extracting events & tasks' },
-  { id: 'ready', label: 'Pack ready' },
-] as const;
 
 const SUGGESTED_PROMPTS = [
   {
@@ -108,17 +123,6 @@ function extractChatYouTubeUrl(raw: string, allowEmbedded: boolean): string | nu
   }
 
   return null;
-}
-
-function resolveTimelineIndex(activeStage?: string): number {
-  const stage = (activeStage ?? '').trim().toLowerCase();
-  if (!stage) return 1;
-  if (stage.includes('ready')) return 4;
-  if (stage.includes('event')) return 3;
-  if (stage.includes('transcript')) return 2;
-  if (stage.includes('caption')) return 1;
-  if (stage.includes('pack')) return 0;
-  return 1;
 }
 
 function cleanVideoLabel(videoTitle: string | null | undefined, videoId: string | null): string {
@@ -405,10 +409,10 @@ export default function StudioIdeChat({
   disabled,
   isWorking,
   statusText,
-  activeStage,
   videoTitle,
   onSubmitUrl,
   onSeek,
+  artifactStreamInputs,
 }: StudioIdeChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
@@ -426,6 +430,21 @@ export default function StudioIdeChat({
   const canSubmitUrlInChat = Boolean(onSubmitUrl) && !isExtracting;
   const composerEnabled = canChat || canSubmitUrlInChat;
 
+  const artifactStream = useMemo(
+    () =>
+      studioArtifactStreamModel({
+        busy: artifactStreamInputs?.busy ?? isExtracting,
+        elapsedSeconds: artifactStreamInputs?.elapsedSeconds,
+        progress: artifactStreamInputs?.progress,
+        hasPack: artifactStreamInputs?.hasPack ?? Boolean(packId),
+        hasPackIdentity: artifactStreamInputs?.hasPackIdentity,
+        hasTranscript: artifactStreamInputs?.hasTranscript,
+        hasFailed: artifactStreamInputs?.hasFailed,
+        formation: artifactStreamInputs?.formation,
+      }),
+    [artifactStreamInputs, isExtracting, packId],
+  );
+
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
       const node = messagesRef.current;
@@ -435,7 +454,7 @@ export default function StudioIdeChat({
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, sending, isExtracting, scrollToBottom]);
+  }, [messages, sending, isExtracting, artifactStream.phase, scrollToBottom]);
 
   // Reset conversation when the selected video or pack changes.
   useEffect(() => {
@@ -620,7 +639,6 @@ export default function StudioIdeChat({
     }
   };
 
-  const timelineActiveIndex = resolveTimelineIndex(activeStage);
   const statusState = isExtracting
     ? 'working'
     : packId
@@ -636,6 +654,13 @@ export default function StudioIdeChat({
         ? 'Video loaded'
         : 'Idle';
   const contextLabel = cleanVideoLabel(videoTitle, videoId);
+  const showArtifactStream = artifactStream.phase !== 'hidden';
+  // Keep welcome/prompts when settled; only suppress during live extract/fail.
+  const suppressWelcome =
+    isExtracting ||
+    artifactStream.phase === 'skeletal' ||
+    artifactStream.phase === 'filling' ||
+    artifactStream.phase === 'failed';
 
   return (
     <section
@@ -694,7 +719,18 @@ export default function StudioIdeChat({
         data-testid="studio-ide-chat-messages"
         className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-4"
       >
-        {messages.length === 0 && !sending && !isExtracting ? (
+        {/* Cut 3 — artifact before later chat turns so scrollToBottom lands on replies */}
+        {showArtifactStream ? (
+          <StudioArtifactStream
+            phase={artifactStream.phase}
+            rows={artifactStream.rows}
+            preview={artifactStream.preview}
+            statusText={statusText}
+            videoId={videoId}
+          />
+        ) : null}
+
+        {messages.length === 0 && !sending && !suppressWelcome ? (
           <div className="template-chat-welcome my-auto flex min-w-0 flex-col gap-4 py-2">
             <div className="flex min-w-0 flex-col gap-1.5">
               <h2 className="text-base font-semibold tracking-tight text-[var(--uvai-ink)]">
@@ -733,7 +769,7 @@ export default function StudioIdeChat({
               </div>
             ) : null}
           </div>
-        ) : (
+        ) : messages.length > 0 || sending ? (
           <div className="flex min-w-0 flex-col gap-4">
             {messages.map((m) => (
               <div
@@ -754,70 +790,6 @@ export default function StudioIdeChat({
                 <span>Thinking…</span>
               </div>
             ) : null}
-          </div>
-        )}
-
-        {/* Inline Live Extraction Timeline Card */}
-        {isExtracting ? (
-          <div
-            data-testid="studio-chat-extraction-card"
-            role="status"
-            aria-live="polite"
-            className="studio-chat-timeline flex flex-col gap-3"
-          >
-            <div className="flex min-w-0 items-start gap-2.5">
-              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-[var(--uvai-accent-soft)] text-[var(--uvai-accent-ink)]">
-                <Loader2 size={14} className="motion-safe:animate-spin" aria-hidden="true" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-[var(--uvai-ink)]">Extracting Video Pack…</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
-                  {statusText?.trim() ||
-                    'Building transcript, chapters, events, and runnable specs. Chat unlocks automatically when ready.'}
-                </p>
-              </div>
-            </div>
-            <ol className="flex min-w-0 flex-col gap-1.5 border-t border-[var(--uvai-border)] pt-2.5">
-              {EXTRACTION_TIMELINE_STEPS.map((step, index) => {
-                const stepState =
-                  index < timelineActiveIndex
-                    ? 'done'
-                    : index === timelineActiveIndex
-                      ? 'active'
-                      : 'pending';
-                return (
-                  <li
-                    key={step.id}
-                    data-step={step.id}
-                    data-state={stepState}
-                    className="flex min-w-0 items-center gap-2 text-xs"
-                  >
-                    {stepState === 'done' ? (
-                      <CheckCircle2 size={13} className="shrink-0 text-[#1e9a80]" aria-hidden="true" />
-                    ) : stepState === 'active' ? (
-                      <Loader2
-                        size={13}
-                        className="shrink-0 text-[var(--uvai-accent-ink)] motion-safe:animate-spin"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <Circle size={13} className="shrink-0 text-[var(--uvai-ink-faint)]" aria-hidden="true" />
-                    )}
-                    <span
-                      className={
-                        stepState === 'active'
-                          ? 'min-w-0 font-medium text-[var(--uvai-ink)]'
-                          : stepState === 'done'
-                            ? 'min-w-0 text-[var(--uvai-ink-soft)]'
-                            : 'min-w-0 text-[var(--uvai-ink-faint)]'
-                      }
-                    >
-                      {step.label}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
           </div>
         ) : null}
       </div>
