@@ -12,8 +12,29 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('Horizontal Webflow + Antigravity Studio navigation', () => {
-  it('switches source/chat/output without losing a conversation draft', () => {
+describe('Hybrid D Studio stage shell (Cut 1)', () => {
+  it('renders activity rail, dominant stage, and Agents context by default', () => {
+    vi.stubGlobal('React', React);
+    render(
+      <StudioIdeShell
+        toolbar={<span>Run controls</span>}
+        videoPane={<p>Source evidence</p>}
+        chatPane={<input aria-label="Draft" defaultValue="" />}
+        outputPane={<p>Deliverables</p>}
+      />,
+    );
+
+    expect(screen.getByTestId('studio-ide-shell').dataset.shell).toBe('hybrid-d');
+    expect(screen.getByTestId('studio-activity-rail')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
+    expect(screen.getByTestId('studio-context-rail')).toBeTruthy();
+    expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(false);
+    expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(true);
+    expect(screen.getByTestId('studio-activity-video').getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByTestId('studio-stage-plane').textContent).toMatch(/proposed/i);
+  });
+
+  it('switches activity modes between Agents chat and Tools output without losing draft', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -26,18 +47,19 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
     fireEvent.change(screen.getByLabelText('Draft'), {
       target: { value: 'Which step is unclear?' },
     });
-    fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
-    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
-    expect(screen.getByRole('tab', { name: 'Source' }).getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
-    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
-    fireEvent.click(screen.getByRole('tab', { name: 'Conversation' }));
+    fireEvent.click(screen.getByTestId('studio-activity-tools'));
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('tools');
+    expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(false);
+    expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(true);
+
+    fireEvent.click(screen.getByTestId('studio-activity-agents'));
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('agents');
     expect((screen.getByLabelText('Draft') as HTMLInputElement).value).toBe(
       'Which step is unclear?',
     );
   });
 
-  it('returns to Conversation after either selected mobile band collapses', () => {
+  it('collapses and restores the context rail', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -47,20 +69,14 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
         outputPane={<p>Files</p>}
       />,
     );
-    for (const [view, collapse] of [
-      ['Source', 'Collapse video pane'],
-      ['Deliverables', 'Collapse output pane'],
-    ]) {
-      fireEvent.click(screen.getByRole('tab', { name: view }));
-      fireEvent.click(screen.getByRole('button', { name: collapse }));
-      expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('chat');
-      expect(screen.getByRole('tab', { name: 'Conversation' }).getAttribute('aria-selected')).toBe(
-        'true',
-      );
-    }
+    fireEvent.click(screen.getByTestId('studio-context-collapse'));
+    expect(screen.getByTestId('studio-ide-shell').dataset.contextCollapsed).toBe('true');
+    expect(screen.getByTestId('studio-context-rail').dataset.collapsed).toBe('true');
+    fireEvent.click(screen.getByTestId('studio-context-restore'));
+    expect(screen.getByTestId('studio-ide-shell').dataset.contextCollapsed).toBeUndefined();
   });
 
-  it('supports arrow and Home/End keys within the view toolbar', () => {
+  it('switches source/chat/output mobile tabs with keyboard', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -70,35 +86,16 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
         outputPane={<p>Files</p>}
       />,
     );
-    fireEvent.keyDown(screen.getByRole('tab', { name: 'Conversation' }), { key: 'ArrowRight' });
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Source' }), { key: 'ArrowRight' });
+    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('chat');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Conversation' }));
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Conversation' }), { key: 'End' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
-    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Deliverables' }));
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Deliverables' }), { key: 'Home' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
   });
 
-  it('restores collapsed bands through restore controls and mobile view tabs', () => {
-    vi.stubGlobal('React', React);
-    render(
-      <StudioIdeShell
-        toolbar={null}
-        videoPane={<p>Source</p>}
-        chatPane={<p>Chat</p>}
-        outputPane={<p>Files</p>}
-      />,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse video pane' }));
-    expect(screen.queryByTestId('studio-ide-video-pane')).toBeNull();
-    fireEvent.click(screen.getByRole('tab', { name: 'Source' }));
-    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse output pane' }));
-    expect(screen.queryByTestId('studio-ide-output-pane')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Show deliverables' }));
-    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
-  });
-
-  it('keeps one main landmark containing the selected horizontal sections', () => {
+  it('keeps one main landmark containing stage and context panels', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -111,18 +108,12 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
 
     const main = screen.getByRole('main');
     expect(screen.getAllByRole('main')).toHaveLength(1);
-    for (const name of ['Source', 'Conversation', 'Deliverables']) {
-      const tab = screen.getByRole('tab', { name });
-      fireEvent.click(tab);
-      const panel = document.getElementById(tab.getAttribute('aria-controls')!);
-      expect(panel?.getAttribute('role')).toBe('tabpanel');
-      expect(panel?.getAttribute('aria-labelledby')).toBe(tab.id);
-      expect(main.contains(panel)).toBe(true);
-      expect(screen.getByRole('main')).toBe(main);
-    }
+    expect(main.contains(screen.getByTestId('studio-ide-video-pane'))).toBe(true);
+    expect(main.contains(screen.getByTestId('studio-activity-rail'))).toBe(true);
+    expect(main.contains(screen.getByTestId('studio-context-rail'))).toBe(true);
   });
 
-  it('omits vertical drag splitters in favor of the split workbench grid', () => {
+  it('omits vertical drag splitters in the stage shell', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -135,16 +126,14 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
     );
     expect(screen.queryByTestId('studio-ide-splitter-left')).toBeNull();
     expect(screen.queryByTestId('studio-ide-splitter-right')).toBeNull();
-    expect(screen.getByTestId('studio-ide-video-pane')).toBeTruthy();
-    expect(screen.getByTestId('studio-ide-chat-pane')).toBeTruthy();
-    expect(screen.getByTestId('studio-ide-output-pane')).toBeTruthy();
     expect(screen.getByTestId('studio-ide-details-rail')).toBeTruthy();
     expect(screen.getByRole('main').dataset.detailsRail).toBe('true');
   });
 
-  it('supports controlled mobilePane and onMobilePaneChange callbacks', () => {
+  it('supports controlled mobilePane and activityMode callbacks', () => {
     vi.stubGlobal('React', React);
     const onMobilePaneChange = vi.fn();
+    const onActivityModeChange = vi.fn();
     render(
       <StudioIdeShell
         toolbar={null}
@@ -152,15 +141,37 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
         chatPane={<p>Chat</p>}
         outputPane={<p>Files</p>}
         mobilePane="video"
+        activityMode="video"
         onMobilePaneChange={onMobilePaneChange}
+        onActivityModeChange={onActivityModeChange}
       />,
     );
-    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
-    fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
+    fireEvent.click(screen.getByTestId('studio-activity-code'));
+    expect(onActivityModeChange).toHaveBeenCalledWith('code');
     expect(onMobilePaneChange).toHaveBeenCalledWith('output');
   });
 
-  it('places Conversation full-height left and splits side-by-side down to 680px', () => {
+  it('reveals Deliverables when mobilePane is output without activityMode', () => {
+    vi.stubGlobal('React', React);
+    render(
+      <StudioIdeShell
+        toolbar={null}
+        videoPane={<p>Source</p>}
+        chatPane={<p>Chat</p>}
+        outputPane={<p>Deliverables body</p>}
+        mobilePane="output"
+      />,
+    );
+
+    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
+    expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(false);
+    expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(true);
+    expect(screen.getByTestId('studio-ide-output-pane').textContent).toContain(
+      'Deliverables body',
+    );
+  });
+
+  it('locks Hybrid D stage-dominant grid CSS (not conversation-left split)', () => {
     const shellSource = readFileSync(
       join(process.cwd(), 'src/components/studio/StudioIdeShell.tsx'),
       'utf8',
@@ -169,11 +180,11 @@ describe('Horizontal Webflow + Antigravity Studio navigation', () => {
       join(process.cwd(), 'src/styles/studio-workbench.css'),
       'utf8',
     );
-    expect(shellSource).toContain('min-[680px]:flex');
-    expect(shellSource).toContain('min-[680px]:!hidden');
-    expect(shellSource).not.toContain('min-[901px]');
-    expect(cssSource).toContain('@media (min-width: 680px)');
-    expect(cssSource).toContain('@media (max-width: 679px)');
-    expect(cssSource).toContain('minmax(290px, 0.9fr)');
+    expect(shellSource).toContain('data-shell="hybrid-d"');
+    expect(shellSource).toContain('studio-activity-rail');
+    expect(cssSource).toContain('minmax(0, 1.45fr)');
+    expect(cssSource).toContain('studio-activity-rail');
+    expect(cssSource).not.toContain('minmax(290px, 0.9fr)');
+    expect(cssSource).not.toContain('font-size: 72px');
   });
 });

@@ -1,12 +1,11 @@
 /* ============================================================
-   UVAI Studio — Antigravity + Webflow-obsidian split workbench.
+   UVAI Studio — Hybrid D stage shell (Cut 1).
 
    Isolated layout layer for StudioIdeShell (imported from the shell).
-   - >= 680px : single-viewport 2-column split.
-                Left  = full-height Conversation (minmax(290px, 0.9fr)).
-                Right = compact Source video (max-height 280px, 16:9 <= 175px)
-                        above full-flex Deliverables (minmax(0, 1fr)).
-                The page itself never scrolls; panes scroll internally.
+   - >= 680px : activity rail + dominant stage + context rail.
+                Stage (video/pack) owns >= ~50% width (Venue/Higgsfield proportions).
+                Context rail shows Agents chat or Tools/Files/Canvas/Code output.
+                Builder-pattern chrome; page itself never scrolls.
    - <= 679px : one pane at a time with a sticky bottom dock tablist
                 (Source | Conversation | Deliverables), no horizontal overflow.
 
@@ -16,7 +15,8 @@
    ============================================================ */
 
 /* Zero out globals.css `.uvai-card` 1.5rem padding on Studio split panes so inner headers & tabs span edge-to-edge. */
-.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card {
+.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card,
+.uvai-cards.template-studio-shell .studio-context-pane {
   padding: 0;
 }
 
@@ -331,8 +331,96 @@
   display: none;
 }
 
+/* ---- Activity rail (Builder-pattern) ---- */
+.uvai-cards.template-studio-shell .studio-activity-rail {
+  display: none;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--uvai-ink-faint);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__btn:hover {
+  color: var(--uvai-ink);
+  background: var(--uvai-surface-warm);
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__btn[data-active='true'] {
+  color: var(--uvai-ink);
+  background: var(--uvai-surface-warm);
+  box-shadow: inset 2px 0 0 var(--uvai-accent);
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__pro {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--uvai-border-strong);
+  color: var(--uvai-ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__pro:hover {
+  border-color: var(--uvai-accent);
+  color: var(--uvai-ink);
+  background: var(--uvai-accent-soft);
+}
+
+.uvai-cards.template-studio-shell .studio-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--uvai-border-strong);
+  background: var(--uvai-surface-warm);
+  color: var(--uvai-ink-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.uvai-cards.template-studio-shell .studio-context-rail__strip {
+  display: none;
+}
+
 /* ============================================================
-   >= 680px: zero-scroll 2-column split workbench (half-screen & desktop)
+   >= 680px: zero-scroll Hybrid D stage shell (desktop first)
    ============================================================ */
 @media (min-width: 680px) {
   /* Page never scrolls: Nav + shell fill exactly one dynamic viewport. */
@@ -359,18 +447,13 @@
     display: none;
   }
 
-  /* Force all uncollapsed panes visible side-by-side (beats openai-template.css <= 900px) */
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
-    display: flex;
-  }
-
   /* Compact sticky toolbar */
   .uvai-cards.template-studio-shell .uvai-toolbar {
     flex-shrink: 0;
     min-height: 46px;
     padding: 6px 12px;
+    background: var(--uvai-bg);
+    border-bottom: 1px solid var(--uvai-border);
   }
   .uvai-cards.template-studio-shell .uvai-toolbar [data-testid='studio-ide-url-form'] {
     flex: 1 1 220px;
@@ -390,65 +473,103 @@
     white-space: nowrap;
   }
 
-  /* Split grid: Full-height Conversation left (~42%), compact Video top-right + Deliverables bottom-right (~58%), filling 100% width beside rail */
+  /* Hybrid D: activity | dominant stage | context */
   .uvai-cards.template-studio-shell .template-studio-bands {
     display: grid;
-    grid-template-columns: minmax(290px, 0.85fr) minmax(0, 1.15fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 56px minmax(0, 1.45fr) minmax(280px, 0.7fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
     flex: 1 1 0%;
     min-height: 0;
     min-width: 0;
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 10px 12px;
+    padding: 0;
     overflow: hidden;
+    background: var(--uvai-bg);
   }
 
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'] {
+  .uvai-cards.template-studio-shell .studio-activity-rail {
+    display: flex;
+    flex-direction: column;
     grid-column: 1;
-    grid-row: 1 / 3;
+    grid-row: 1;
+    gap: 4px;
     min-height: 0;
-    min-width: 0;
-    overflow: hidden;
+    padding: 8px 6px;
+    border-right: 1px solid var(--uvai-border);
+    background: var(--uvai-bg);
   }
+
+  .uvai-cards.template-studio-shell .studio-activity-rail__items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'] {
+    display: flex;
     grid-column: 2;
     grid-row: 1;
     min-height: 0;
     min-width: 0;
-    max-height: 300px;
+    max-height: none;
     overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    border-right: 1px solid var(--uvai-border);
+    background: var(--uvai-surface);
   }
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
-    grid-column: 2;
-    grid-row: 2;
+
+  .uvai-cards.template-studio-shell .studio-context-rail {
+    display: flex;
+    grid-column: 3;
+    grid-row: 1;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
+    background: var(--uvai-surface);
+    border: 0;
+    border-radius: 0;
   }
 
-  /* Collapsed panes: remaining panes reclaim the right or full space cleanly. */
   .uvai-cards.template-studio-shell
-    .template-studio-bands[data-video-collapsed='true']
-    > [data-testid='studio-ide-output-pane'] {
-    grid-column: 2;
-    grid-row: 1 / 3;
+    .template-studio-bands[data-context-collapsed='true'] {
+    grid-template-columns: 56px minmax(0, 1fr) 40px;
   }
-  .uvai-cards.template-studio-shell
-    .template-studio-bands[data-output-collapsed='true']
-    > [data-testid='studio-ide-video-pane'] {
-    grid-column: 2;
-    grid-row: 1 / 3;
-    align-self: start;
-    max-height: 320px;
+
+  .uvai-cards.template-studio-shell .studio-context-rail[data-collapsed='true'] .studio-context-rail__body {
+    display: none;
   }
-  .uvai-cards.template-studio-shell
-    .template-studio-bands[data-output-collapsed='true'][data-video-collapsed='true']
-    > [data-testid='studio-ide-chat-pane'] {
-    grid-column: 1 / 3;
-    grid-row: 1 / 3;
+
+  .uvai-cards.template-studio-shell .studio-context-rail[data-collapsed='true'] .studio-context-rail__strip {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: 0;
+    padding: 8px 4px;
+    border: 0;
+    background: var(--uvai-surface);
+    color: var(--uvai-ink-soft);
+    cursor: pointer;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail__restore-label {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail:not([data-collapsed='true']) .studio-context-rail__strip {
+    display: none;
   }
 
   /* Pane chrome */
@@ -456,6 +577,11 @@
     flex-shrink: 0;
     min-height: 32px;
     padding: 4px 12px;
+    border-bottom: 1px solid var(--uvai-border);
+    background: var(--uvai-bg);
+  }
+  .uvai-cards.template-studio-shell .studio-stage-header {
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-pane-body {
     flex: 1 1 auto;
@@ -471,31 +597,34 @@
     min-width: 0;
   }
 
-  /* Source video: compact 16:9 frame + wrapping steps & metric chips (never clips right/bottom edge) */
+  /* Stage: media-first — theme surface for chrome; cinematic black stays on the player only */
   .uvai-cards.template-studio-shell .studio-pane-body--video {
     padding: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    flex: 0 1 auto;
-    min-height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--uvai-surface);
   }
   .uvai-cards.template-studio-shell .studio-source-stack {
     display: flex;
     flex-direction: column;
     gap: 0;
     min-width: 0;
+    flex: 1 1 auto;
   }
   .uvai-cards.template-studio-shell .studio-video-wrap {
     border: 0;
     border-radius: 0;
     box-shadow: none;
     background: #000;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    width: 100%;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] .aspect-video {
-    max-height: 165px;
-    width: min(100%, 294px);
-    margin-inline: auto;
+    max-height: none;
+    width: 100%;
+    margin-inline: 0;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] [data-testid='studio-player'] iframe {
     position: absolute;
@@ -511,6 +640,7 @@
     padding: 4px 10px;
     flex-wrap: wrap;
     gap: 6px;
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-steps {
     flex-wrap: wrap;
@@ -539,7 +669,7 @@
     border-top: 1px solid var(--uvai-border);
     border-radius: 0;
     box-shadow: none;
-    background: transparent;
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-pack-card > *,
   .uvai-cards.template-studio-shell .studio-pack-card__head,
@@ -574,7 +704,7 @@
     gap: 6px;
   }
 
-  /* Chat: fills entire primary left column, message stream scrolls internally */
+  /* Context chat / output scroll internally */
   .uvai-cards.template-studio-shell [data-testid='studio-ide-chat'] {
     flex: 1 1 auto;
     height: 100%;
@@ -589,7 +719,6 @@
     overflow-x: hidden;
   }
 
-  /* Deliverables: tabs fixed, content scrolls internally */
   .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] {
     flex: 1 1 auto;
     height: 100%;
@@ -602,13 +731,14 @@
   }
 }
 
-/* Half-screen (680px–960px) alongside persistent 48px vertical left sidebar:
-   give Deliverables/Video slightly more width so all 4 tabs + .md fit without clipping. */
+/* Half-screen (680px–960px): keep stage dominant, tighten context */
 @media (min-width: 680px) and (max-width: 960px) {
   .uvai-cards.template-studio-shell .template-studio-bands {
-    grid-template-columns: minmax(244px, 0.82fr) minmax(0, 1.18fr);
-    gap: 8px;
-    padding: 8px 10px;
+    grid-template-columns: 52px minmax(0, 1.35fr) minmax(240px, 0.75fr);
+  }
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-context-collapsed='true'] {
+    grid-template-columns: 52px minmax(0, 1fr) 36px;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] [role='tab'] {
     padding: 4px 5px;
@@ -625,22 +755,25 @@
     flex: 0 1 260px;
   }
   .uvai-cards.template-studio-shell .template-studio-bands {
-    gap: 12px;
-    padding: 12px 16px;
+    grid-template-columns: 56px minmax(0, 1.55fr) minmax(320px, 0.65fr);
+  }
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-context-collapsed='true'] {
+    grid-template-columns: 56px minmax(0, 1fr) 40px;
   }
   .uvai-cards.template-studio-shell .template-studio-bands[data-details-rail='true'] {
-    grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.1fr) 288px;
+    grid-template-columns: 56px minmax(0, 1.35fr) minmax(280px, 0.6fr) 260px;
   }
   .uvai-cards.template-studio-shell .template-details-rail {
     display: flex;
     flex-direction: column;
-    grid-column: 3;
-    grid-row: 1 / 3;
+    grid-column: 4;
+    grid-row: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 12px;
-    border: 1px solid var(--uvai-border);
-    border-radius: 8px;
+    border-left: 1px solid var(--uvai-border);
+    border-radius: 0;
     background: var(--uvai-surface);
     font-size: 12px;
     color: var(--uvai-ink-soft);
@@ -650,38 +783,6 @@
 /* ============================================================
    <= 679px: single pane + sticky bottom dock tablist
    ============================================================ */
-/* Exact Studio refinement overrides. */
-.template-studio-bands {
-  display: inline;
-}
-
-#studio-panel-output {
-  font-family: system-ui;
-  align-items: center;
-  justify-content: space-evenly;
-}
-
-#studio-panel-output > .studio-pane-body:nth-of-type(2) > div.flex > div.flex.flex-nowrap:first-of-type {
-  align-items: stretch;
-}
-
-#studio-ide-output-panel-tasks > div.flex.flex-col > section.flex.flex-col > div.uvai-card.p-6 {
-  font-family: inherit;
-}
-
-#studio-panel-chat > .uvai-pane-header {
-  font-family: system-ui;
-}
-
-#studio-panel-video > .uvai-pane-header,
-#studio-panel-video .studio-steps-bar {
-  display: none;
-}
-
-#studio-ide-output-panel-tasks {
-  font-size: 72px;
-}
-
 @media (max-width: 679px) {
   .uvai-cards.template-studio-shell {
     max-width: 100%;
@@ -689,25 +790,52 @@
     overflow-x: clip;
   }
   .uvai-cards.template-studio-shell .template-studio-bands {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     max-width: 100%;
     padding: 10px 12px;
     padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
 
-  .uvai-cards.template-studio-shell .template-studio-bands > * {
+  .uvai-cards.template-studio-shell .studio-activity-rail {
+    display: none;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail {
+    display: contents;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail__strip,
+  .uvai-cards.template-studio-shell .studio-context-header {
+    display: none;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail__body {
+    display: contents;
+  }
+
+  .uvai-cards.template-studio-shell .template-studio-bands > *,
+  .uvai-cards.template-studio-shell .studio-context-rail__body > * {
     min-width: 0;
     max-width: 100%;
   }
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-output-pane'] {
     display: none;
   }
-  .uvai-cards.template-studio-shell[data-mobile-pane='video'] .template-studio-bands > [data-testid='studio-ide-video-pane'],
-  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] .template-studio-bands > [data-testid='studio-ide-chat-pane'],
-  .uvai-cards.template-studio-shell[data-mobile-pane='output'] .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+  .uvai-cards.template-studio-shell[data-mobile-pane='video'] [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell[data-mobile-pane='output'] [data-testid='studio-ide-output-pane'] {
     display: flex;
+  }
+
+  /* Mobile tab switch must beat activity-mode hidden attribute */
+  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] [data-testid='studio-ide-chat-pane'][hidden],
+  .uvai-cards.template-studio-shell[data-mobile-pane='output'] [data-testid='studio-ide-output-pane'][hidden] {
+    display: flex !important;
   }
 
   .uvai-cards.template-studio-shell .template-studio-restore,
@@ -752,6 +880,11 @@
   }
   .uvai-cards.template-studio-shell .studio-steps {
     gap: 4px;
+  }
+
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] .aspect-video {
+    max-height: none;
+    width: 100%;
   }
 }
 
