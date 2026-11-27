@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
+import type { StudioOutputSection } from '@/lib/studio-ia-modes';
 import { studioActionCard, studioPackExtractedEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
@@ -17,7 +18,7 @@ export type StudioReviewActionInput = {
   result?: string;
 };
 
-export type OutputSection = 'preview' | 'tasks' | 'code' | 'transcript';
+export type OutputSection = StudioOutputSection;
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'preview', label: 'Preview' },
@@ -38,7 +39,6 @@ export type StudioIdeOutputProps = {
   onBuildLive?: () => void;
   buildBusy?: boolean;
   focusPreviewSignal?: number | string | null;
-  initialSection?: OutputSection;
   activeSection?: OutputSection;
   onSectionChange?: (section: OutputSection) => void;
   onSeek?: (seconds: number) => void;
@@ -69,7 +69,6 @@ export default function StudioIdeOutput({
   onBuildLive,
   buildBusy = false,
   focusPreviewSignal,
-  initialSection,
   activeSection,
   onSectionChange,
   onSeek,
@@ -78,13 +77,12 @@ export default function StudioIdeOutput({
   onRetryTranscript,
 }: StudioIdeOutputProps) {
   const [internalActive, setInternalActive] = useState<OutputSection>(
-    initialSection ?? (previewReady ? 'preview' : 'tasks'),
+    previewReady ? 'preview' : 'tasks',
   );
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [reviewingAction, setReviewingAction] = useState<string | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
   const prevPreviewReadyRef = useRef(Boolean(previewReady));
-  /** Last focusPreviewSignal value that already forced Preview (Cut 4 latch). */
   const appliedFocusPreviewSignalRef = useRef<number | string | null | undefined>(undefined);
 
   const active = activeSection ?? internalActive;
@@ -107,8 +105,7 @@ export default function StudioIdeOutput({
   }, [previewReady, activeSection, onSectionChange]);
 
   useEffect(() => {
-    // Consume only *new* focus signals. A sticky nonzero epoch after Build live
-    // must not re-force Preview whenever the controlled section changes.
+    // A sticky focus signal must not re-force Preview when the section changes.
     if (focusPreviewSignal == null || focusPreviewSignal === '' || focusPreviewSignal === 0) {
       return;
     }
