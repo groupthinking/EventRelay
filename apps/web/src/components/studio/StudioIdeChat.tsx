@@ -719,6 +719,17 @@ export default function StudioIdeChat({
         data-testid="studio-ide-chat-messages"
         className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-4"
       >
+        {/* Cut 3 — artifact before later chat turns so scrollToBottom lands on replies */}
+        {showArtifactStream ? (
+          <StudioArtifactStream
+            phase={artifactStream.phase}
+            rows={artifactStream.rows}
+            preview={artifactStream.preview}
+            statusText={statusText}
+            videoId={videoId}
+          />
+        ) : null}
+
         {messages.length === 0 && !sending && !suppressWelcome ? (
           <div className="template-chat-welcome my-auto flex min-w-0 flex-col gap-4 py-2">
             <div className="flex min-w-0 flex-col gap-1.5">
@@ -780,17 +791,6 @@ export default function StudioIdeChat({
               </div>
             ) : null}
           </div>
-        ) : null}
-
-        {/* Cut 3 — pack-forming artifact in the Agents stream (motion #1) */}
-        {showArtifactStream ? (
-          <StudioArtifactStream
-            phase={artifactStream.phase}
-            rows={artifactStream.rows}
-            preview={artifactStream.preview}
-            statusText={statusText}
-            videoId={videoId}
-          />
         ) : null}
       </div>
 

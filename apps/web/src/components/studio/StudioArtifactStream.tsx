@@ -132,10 +132,14 @@ export default function StudioArtifactStream({
           data-testid="studio-artifact-stream-preview"
           className="studio-artifact-stream__preview"
         >
-          {preview.architectureSummary ? (
+          {preview.architectureSummary || preview.architectureStages.length > 0 ? (
             <section data-testid="studio-artifact-stream-architecture">
               <h3 className="studio-artifact-stream__preview-label">Architecture</h3>
-              <p className="studio-artifact-stream__preview-body">{preview.architectureSummary}</p>
+              {preview.architectureSummary ? (
+                <p className="studio-artifact-stream__preview-body">
+                  {preview.architectureSummary}
+                </p>
+              ) : null}
               {preview.architectureStages.length > 0 ? (
                 <ol className="studio-artifact-stream__preview-list">
                   {preview.architectureStages.map((stage) => (

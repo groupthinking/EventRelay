@@ -57,6 +57,68 @@ describe('studio-artifact-stream', () => {
     ).toBe('hidden');
   });
 
+  it('leaves skeletal once pack identity is verified during analysis wait', () => {
+    // Live Studio: hasPackIdentity true + hasTranscript false → transcriptStage stays "pack".
+    expect(
+      studioArtifactStreamPhase({
+        busy: true,
+        hasPackIdentity: true,
+        stageId: 'pack',
+      }),
+    ).toBe('filling');
+
+    const rows = studioArtifactStreamRows({
+      phase: 'filling',
+      stageId: 'pack',
+      hasPackIdentity: true,
+    });
+    expect(rows.map((row) => row.state)).toEqual([
+      'done',
+      'active',
+      'pending',
+      'pending',
+      'pending',
+    ]);
+
+    const model = studioArtifactStreamModel({
+      busy: true,
+      hasPackIdentity: true,
+      hasTranscript: false,
+      elapsedSeconds: 20,
+      progress: 10,
+      formation: {
+        architecture: {
+          summary: null,
+          stages: [{ id: 'ingest', name: 'Multimodal Ingestion' }],
+        },
+        artifacts: [],
+        tools: [],
+      },
+    });
+    expect(model.phase).toBe('filling');
+    expect(model.preview?.architectureStages).toEqual([
+      { id: 'ingest', name: 'Multimodal Ingestion' },
+    ]);
+  });
+
+  it('keeps stage-only architecture in the preview when summary is absent', () => {
+    const preview = studioArtifactStreamPreview({
+      architecture: {
+        summary: null,
+        stages: [
+          { id: 'ingest', name: 'Multimodal Ingestion' },
+          { id: 'output', name: 'Structured Generation' },
+        ],
+      },
+      artifacts: [],
+      tools: [],
+    });
+    expect(preview).not.toBeNull();
+    expect(preview?.architectureSummary).toBeNull();
+    expect(preview?.architectureStages).toHaveLength(2);
+    expect(preview?.architectureStages[0]?.name).toBe('Multimodal Ingestion');
+  });
+
   it('keeps skeletal rows empty of invented labels and fills only real stages', () => {
     const skeletal = studioArtifactStreamRows({
       phase: 'skeletal',

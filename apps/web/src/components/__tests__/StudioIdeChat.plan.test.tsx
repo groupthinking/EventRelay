@@ -186,6 +186,48 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
     );
   });
 
+  it('keeps the settled artifact before chat replies so scroll lands on the latest message', async () => {
+    const citation = loadSamplePack();
+    const formation = studioPackFormation(citation);
+    const network = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ answer: 'Latest grounded reply about the pack.' }),
+    });
+    vi.stubGlobal('fetch', network);
+
+    render(
+      <StudioIdeChat
+        videoId={citation.videoId}
+        packId={citation.packId}
+        artifactStreamInputs={{
+          busy: false,
+          hasPack: true,
+          hasTranscript: true,
+          formation: {
+            architecture: formation.architecture,
+            artifacts: formation.artifacts,
+            tools: formation.tools,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('studio-chat-prompt-summarize'));
+    await screen.findByText('Latest grounded reply about the pack.');
+
+    const stream = screen.getByTestId('studio-ide-chat-messages');
+    const children = Array.from(stream.children);
+    const artifactIdx = children.findIndex(
+      (node) => node.getAttribute('data-testid') === 'studio-artifact-stream',
+    );
+    const messagesIdx = children.findIndex((node) =>
+      Boolean(node.querySelector('[data-testid="chat-msg-assistant"]')),
+    );
+    expect(artifactIdx).toBeGreaterThanOrEqual(0);
+    expect(messagesIdx).toBeGreaterThan(artifactIdx);
+  });
+
   it('renders identity header, 3 suggested prompt pills, clickable timestamp chips, and Clear button', async () => {
     const onSeek = vi.fn();
     const network = vi.fn().mockResolvedValueOnce({

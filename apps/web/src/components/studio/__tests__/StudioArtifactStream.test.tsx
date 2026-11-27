@@ -93,4 +93,28 @@ describe('StudioArtifactStream', () => {
     );
     expect(container.firstChild).toBeNull();
   });
+
+  it('renders Architecture stages when optional summary is absent', () => {
+    render(
+      <StudioArtifactStream
+        phase="settled"
+        rows={studioArtifactStreamRows({ phase: 'settled', stageId: 'ready' })}
+        preview={{
+          architectureSummary: null,
+          architectureStages: [
+            { id: 'ingest', name: 'Multimodal Ingestion' },
+            { id: 'output', name: 'Structured Generation' },
+          ],
+          artifacts: [],
+          tools: [],
+        }}
+        videoId="auJzb1D-fag"
+      />,
+    );
+
+    const architecture = screen.getByTestId('studio-artifact-stream-architecture');
+    expect(architecture.textContent).toMatch(/Multimodal Ingestion/);
+    expect(architecture.textContent).toMatch(/Structured Generation/);
+    expect(architecture.querySelector('.studio-artifact-stream__preview-body')).toBeNull();
+  });
 });

@@ -94,13 +94,21 @@ export function studioArtifactStreamPhase(input: {
   busy: boolean;
   hasFailed?: boolean;
   hasPack?: boolean;
+  hasPackIdentity?: boolean;
   hasTranscript?: boolean;
   stageId: StudioTranscriptStageId;
 }): StudioArtifactStreamPhase {
   if (input.hasFailed) return 'failed';
   if (input.busy) {
-    // Early pack-identity stage keeps the skeletal panel; later stages fill rows.
-    if (input.stageId === 'pack' || input.stageId === 'idle') return 'skeletal';
+    // Unresolved initial identity stays skeletal. Once pack identity is verified
+    // (hasPackIdentity), leave skeletal even if transcriptStage still reports
+    // "pack" during the analysis wait — fill rows and surface available evidence.
+    if (
+      (input.stageId === 'pack' || input.stageId === 'idle') &&
+      !input.hasPackIdentity
+    ) {
+      return 'skeletal';
+    }
     return 'filling';
   }
   if (input.hasPack || (input.hasTranscript && input.stageId === 'ready')) {
@@ -112,6 +120,7 @@ export function studioArtifactStreamPhase(input: {
 export function studioArtifactStreamRows(input: {
   phase: StudioArtifactStreamPhase;
   stageId: StudioTranscriptStageId;
+  hasPackIdentity?: boolean;
 }): StudioArtifactStreamRow[] {
   if (input.phase === 'hidden') return [];
 
@@ -123,7 +132,16 @@ export function studioArtifactStreamRows(input: {
     }));
   }
 
-  const activeIdx = studioArtifactStreamStepIndex(input.stageId);
+  let activeIdx = studioArtifactStreamStepIndex(input.stageId);
+  // Verified identity completes the pack row; advance the active marker to the
+  // next extract stage while transcriptStage may still report "pack".
+  if (
+    input.phase === 'filling' &&
+    input.hasPackIdentity &&
+    input.stageId === 'pack'
+  ) {
+    activeIdx = STEP_INDEX.captions;
+  }
 
   return STUDIO_ARTIFACT_STREAM_STEPS.map((step, index) => {
     let state: StudioArtifactStreamRowState;
@@ -229,10 +247,15 @@ export function studioArtifactStreamModel(input: {
     busy: input.busy,
     hasFailed: input.hasFailed,
     hasPack: input.hasPack,
+    hasPackIdentity: input.hasPackIdentity,
     hasTranscript: input.hasTranscript,
     stageId: stage.id,
   });
-  const rows = studioArtifactStreamRows({ phase, stageId: stage.id });
+  const rows = studioArtifactStreamRows({
+    phase,
+    stageId: stage.id,
+    hasPackIdentity: input.hasPackIdentity,
+  });
   const preview =
     phase === 'settled' || phase === 'filling'
       ? studioArtifactStreamPreview(input.formation)
