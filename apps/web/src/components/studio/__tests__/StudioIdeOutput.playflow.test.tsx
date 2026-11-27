@@ -137,7 +137,7 @@ describe('StudioIdeOutput playflow', () => {
         previewVideoId="auJzb1D-fag"
         previewReady={false}
         onBuildLive={onBuildLive}
-        initialSection="preview"
+        activeSection="preview"
       />,
     );
 
@@ -242,7 +242,7 @@ describe('StudioIdeOutput playflow', () => {
       <StudioIdeOutput
         video={{ ...baseVideo, status: 'processing', transcript: '' }}
         transcriptEta="About 33s left (typical ~45s)"
-        initialSection="transcript"
+        activeSection="transcript"
       />,
     );
     expect(screen.getByTestId('studio-transcript-eta').textContent).toMatch(/33s left/i);
@@ -263,7 +263,7 @@ describe('StudioIdeOutput playflow', () => {
         }}
         showTranscriptRetry
         onRetryTranscript={onRetry}
-        initialSection="transcript"
+        activeSection="transcript"
       />,
     );
     expect(screen.getByTestId('studio-transcript-body').textContent).toMatch(
