@@ -9,6 +9,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DOC_PATH = REPO_ROOT / "docs" / "MIGRATION_TRUTH.md"
 MIGRATIONS_DIR = REPO_ROOT / "apps" / "web" / "supabase" / "migrations"
 CHAT_STORE_PATH = REPO_ROOT / "apps" / "web" / "src" / "lib" / "studio" / "chat-store.ts"
+PROJECT_STORE_PATH = (
+    REPO_ROOT / "apps" / "web" / "src" / "lib" / "projects" / "project-store.ts"
+)
 SHARED_SQL_STATE_PATH = (
     REPO_ROOT / "src" / "youtube_extension" / "services" / "shared_sql_state.py"
 )
@@ -225,6 +228,46 @@ def _extract_shared_sql_tables_from_ast(source_path: Path) -> tuple[dict[str, se
     return discovered, has_create_all
 
 
+def _assert_table_hardening(
+    normalized_stmts: list[str], table: str, unique_constraint: str
+) -> None:
+    """RLS enabled+forced, anon/authenticated revoked, service_role CRUD, tenant uniqueness."""
+    qualified = f"public.{table}"
+    rls_enabled = any(
+        f"alter table {qualified} enable row level security" in norm for norm in normalized_stmts
+    )
+    rls_forced = any(
+        f"alter table {qualified} force row level security" in norm for norm in normalized_stmts
+    )
+    revoked_roles: set[str] = set()
+    service_role_privileges: set[str] = set()
+    for norm in normalized_stmts:
+        revoke_match = re.match(
+            rf"revoke\s+all\s+(?:privileges\s+)?on\s+(?:table\s+)?{re.escape(qualified)}\s+from\s+(.+)$",
+            norm,
+        )
+        if revoke_match:
+            revoked_roles.update(role.strip() for role in revoke_match.group(1).split(","))
+        grant_match = re.match(
+            rf"grant\s+(.+?)\s+on\s+(?:table\s+)?{re.escape(qualified)}\s+to\s+(.+)$",
+            norm,
+        )
+        if grant_match and "service_role" in [r.strip() for r in grant_match.group(2).split(",")]:
+            service_role_privileges.update(p.strip() for p in grant_match.group(1).split(","))
+
+    assert rls_enabled, f"{qualified} must enable row level security in migrations."
+    assert rls_forced, f"{qualified} must force row level security in migrations."
+    assert {"public", "anon", "authenticated"}.issubset(
+        revoked_roles
+    ), f"{qualified} must revoke access from public, anon, and authenticated."
+    assert {"select", "insert", "update", "delete"}.issubset(
+        service_role_privileges
+    ), f"{qualified} must grant CRUD privileges to service_role."
+    assert any(
+        unique_constraint in norm for norm in normalized_stmts
+    ), f"{qualified} must enforce {unique_constraint.upper()}."
+
+
 def test_migration_truth_matrix_reconciles_active_sql_surfaces() -> None:
     doc_text = DOC_PATH.read_text(encoding="utf-8")
     matrix = _extract_matrix(doc_text)
@@ -313,6 +356,34 @@ def test_migration_truth_matrix_reconciles_active_sql_surfaces() -> None:
         "unique (owner_subject, request_id)" in norm for norm in normalized_stmts
     ), "public.studio_chats must enforce UNIQUE (owner_subject, request_id)."
     assert "eq('owner_subject'" in chat_store_text, "chat-store.ts must scope queries by owner_subject."
+
+    # Plan 005 P2: `projects` must reconcile across migrations, project-store.ts, and the matrix.
+    projects_entry = production_by_table["projects"]
+    expected_projects_migration = (
+        MIGRATIONS_DIR / "20261127090000_create_projects.sql"
+    ).relative_to(REPO_ROOT).as_posix()
+    assert projects_entry["migration_file"] == expected_projects_migration
+    assert projects_entry["model_contract_file"] == PROJECT_STORE_PATH.relative_to(
+        REPO_ROOT
+    ).as_posix()
+    assert projects_entry.get("rls") == "enabled+forced"
+    assert projects_entry.get("tenant_boundary") == "owner_subject + service_role access"
+    assert projects_entry.get("status") == "reconciled"
+
+    project_store_text = PROJECT_STORE_PATH.read_text(encoding="utf-8")
+    project_projection = _extract_studio_columns_from_projection(project_store_text)
+    project_row_schema = _extract_studio_columns_from_row_schema(project_store_text)
+    project_migration_columns = discovered_tables["projects"]
+    assert project_row_schema == project_projection
+    assert project_projection == project_migration_columns
+    assert set(projects_entry.get("columns", [])) == project_migration_columns
+    _assert_table_hardening(
+        normalized_stmts, "projects", "unique (owner_subject, source_hash)"
+    )
+    assert "eq('owner_subject'" in project_store_text, "project-store.ts must scope queries by owner_subject."
+    assert (
+        "project_id" not in discovered_tables["studio_chats"]
+    ), "studio_chats.project_id is deferred; it must not enter migrations without chat-store.ts parity."
 
     # Validate runtime-managed SharedSQLStateStore tables independently via AST inspection.
     discovered_runtime_tables, has_create_all = _extract_shared_sql_tables_from_ast(

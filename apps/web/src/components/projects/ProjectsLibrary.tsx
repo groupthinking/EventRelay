@@ -47,6 +47,14 @@ async function callProjects(
   }
 }
 
+const SAFE_VIDEO_ID = /^[A-Za-z0-9_-]{11}$/;
+
+/** Allowlist + encode at the sink: storage-derived ids never reach `src` unchecked. */
+function projectThumbnailSrc(videoId: string): string | null {
+  const match = SAFE_VIDEO_ID.exec(videoId);
+  return match ? `https://i.ytimg.com/vi/${encodeURIComponent(match[0])}/hqdefault.jpg` : null;
+}
+
 function errorMessage(data: Record<string, unknown> | null, fallback: string): string {
   return typeof data?.error === 'string' ? data.error : fallback;
 }
@@ -353,15 +361,16 @@ export default function ProjectsLibrary() {
               </p>
             ) : (
               <ul className="pl-grid">
-                {visible.map((project) => (
+                {visible.map((project) => {
+                  const thumbSrc = projectThumbnailSrc(project.videoId);
+                  return (
                   <li key={project.id} className="pl-card" data-testid="project-card">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      className="pl-thumb"
-                      src={`https://i.ytimg.com/vi/${project.videoId}/hqdefault.jpg`}
-                      alt=""
-                      loading="lazy"
-                    />
+                    {thumbSrc ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="pl-thumb" src={thumbSrc} alt="" loading="lazy" />
+                    ) : (
+                      <div className="pl-thumb" aria-hidden="true" />
+                    )}
                     <div className="pl-card-body">
                       {renamingId === project.id ? (
                         <div className="pl-rename">
@@ -442,7 +451,8 @@ export default function ProjectsLibrary() {
                       </div>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </div>
