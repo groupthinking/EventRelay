@@ -45,11 +45,6 @@ function RowIcon({ state }: { state: StudioArtifactStreamRow['state'] }) {
   }
 }
 
-/**
- * Cut 3 — pack-forming artifact in the Agents chat stream (motion #1).
- * Skeletal panel → extract rows fill from real stages → settle into real
- * architecture / artifacts / stack preview. Never invents pack content.
- */
 export default function StudioArtifactStream({
   phase,
   rows,

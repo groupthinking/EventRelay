@@ -1352,14 +1352,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       disabled={transcriptWorking}
       isWorking={transcriptWorking}
       statusText={statusText}
-      activeStage={transcriptStage.label}
       videoTitle={selected ? formatSavedVideoLabel(selected) : null}
       onSubmitUrl={handleAnalyzeUrl}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
       artifactStreamInputs={{
         busy: transcriptWorking,
-        elapsedSeconds: elapsed,
-        progress: selected?.progress,
+        stageId: transcriptStage.id,
         hasPack: Boolean(selected?.videoPack),
         hasPackIdentity: Boolean(packIdentity),
         hasTranscript: Boolean(selected?.transcript?.trim()),

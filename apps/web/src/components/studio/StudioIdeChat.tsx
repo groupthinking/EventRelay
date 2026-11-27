@@ -18,25 +18,18 @@ import {
   Sparkles,
 } from 'lucide-react';
 import StudioArtifactStream from '@/components/studio/StudioArtifactStream';
-import { studioArtifactStreamModel } from '@/lib/studio-artifact-stream';
+import {
+  studioArtifactStreamModel,
+  type StudioArtifactStreamFormation,
+} from '@/lib/studio-artifact-stream';
+import type { StudioTranscriptStageId } from '@/lib/studio-pipeline-status';
 import { extractYouTubeId, formatSeconds, parseTimestampToSeconds } from '@/lib/timestamp';
 import type { VideoPlanInterviewAnswers } from '@/lib/video-pack-plan';
-import type {
-  VideoPackArchitecture,
-  VideoPackArtifact,
-  VideoPackStackTool,
-} from '@/lib/video-pack-types';
 
 type ChatMessage = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-};
-
-export type StudioArtifactStreamFormation = {
-  architecture: VideoPackArchitecture | null;
-  artifacts: VideoPackArtifact[];
-  tools: VideoPackStackTool[];
 };
 
 export type StudioIdeChatProps = {
@@ -45,16 +38,12 @@ export type StudioIdeChatProps = {
   disabled?: boolean;
   isWorking?: boolean;
   statusText?: string;
-  /** @deprecated Cut 3 uses artifactStreamInputs; kept for older call sites. */
-  activeStage?: string;
   videoTitle?: string | null;
   onSubmitUrl?: (url: string) => void;
   onSeek?: (seconds: number) => void;
-  /** Cut 3 — real extract stage inputs + optional pack formation for settle preview. */
   artifactStreamInputs?: {
     busy: boolean;
-    elapsedSeconds?: number;
-    progress?: number;
+    stageId: StudioTranscriptStageId;
     hasPack?: boolean;
     hasPackIdentity?: boolean;
     hasTranscript?: boolean;
@@ -430,20 +419,22 @@ export default function StudioIdeChat({
   const canSubmitUrlInChat = Boolean(onSubmitUrl) && !isExtracting;
   const composerEnabled = canChat || canSubmitUrlInChat;
 
-  const artifactStream = useMemo(
-    () =>
-      studioArtifactStreamModel({
-        busy: artifactStreamInputs?.busy ?? isExtracting,
-        elapsedSeconds: artifactStreamInputs?.elapsedSeconds,
-        progress: artifactStreamInputs?.progress,
-        hasPack: artifactStreamInputs?.hasPack ?? Boolean(packId),
-        hasPackIdentity: artifactStreamInputs?.hasPackIdentity,
-        hasTranscript: artifactStreamInputs?.hasTranscript,
-        hasFailed: artifactStreamInputs?.hasFailed,
-        formation: artifactStreamInputs?.formation,
-      }),
-    [artifactStreamInputs, isExtracting, packId],
-  );
+  const artifactStream = useMemo(() => {
+    const busy = artifactStreamInputs?.busy ?? isExtracting;
+    const hasPack = artifactStreamInputs?.hasPack ?? Boolean(packId);
+    // No inputs: same stage studioTranscriptStage returns at elapsed 0.
+    const stageId =
+      artifactStreamInputs?.stageId ?? (busy ? (hasPack ? 'captions' : 'pack') : 'idle');
+    return studioArtifactStreamModel({
+      busy,
+      stageId,
+      hasPack,
+      hasPackIdentity: artifactStreamInputs?.hasPackIdentity,
+      hasTranscript: artifactStreamInputs?.hasTranscript,
+      hasFailed: artifactStreamInputs?.hasFailed,
+      formation: artifactStreamInputs?.formation,
+    });
+  }, [artifactStreamInputs, isExtracting, packId]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
@@ -719,7 +710,7 @@ export default function StudioIdeChat({
         data-testid="studio-ide-chat-messages"
         className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-4"
       >
-        {/* Cut 3 — artifact before later chat turns so scrollToBottom lands on replies */}
+        {/* Artifact before later chat turns so scrollToBottom lands on replies */}
         {showArtifactStream ? (
           <StudioArtifactStream
             phase={artifactStream.phase}

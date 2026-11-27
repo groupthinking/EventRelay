@@ -138,8 +138,7 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
         isWorking
         artifactStreamInputs={{
           busy: true,
-          elapsedSeconds: 12,
-          progress: 8,
+          stageId: 'captions',
         }}
       />,
     );
@@ -163,6 +162,7 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
         packId={citation.packId}
         artifactStreamInputs={{
           busy: false,
+          stageId: 'ready',
           hasPack: true,
           hasTranscript: true,
           formation: {
@@ -202,6 +202,7 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
         packId={citation.packId}
         artifactStreamInputs={{
           busy: false,
+          stageId: 'ready',
           hasPack: true,
           hasTranscript: true,
           formation: {
