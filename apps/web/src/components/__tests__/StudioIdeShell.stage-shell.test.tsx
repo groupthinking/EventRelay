@@ -5,9 +5,9 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import StudioIdeShell, {
-  STUDIO_ACTIVITY_MODES,
-} from '@/components/studio/StudioIdeShell';
+import StudioIdeShell from '@/components/studio/StudioIdeShell';
+
+const ACTIVITY_MODES = ['video', 'agents', 'tools', 'files', 'canvas', 'code'] as const;
 
 afterEach(() => {
   cleanup();
@@ -27,17 +27,12 @@ describe('Cut 1 stage shell layout contract', () => {
       />,
     );
 
-    expect(STUDIO_ACTIVITY_MODES).toEqual([
-      'video',
-      'agents',
-      'tools',
-      'files',
-      'canvas',
-      'code',
-    ]);
-    for (const mode of STUDIO_ACTIVITY_MODES) {
-      expect(screen.getByTestId(`studio-activity-${mode}`)).toBeTruthy();
-    }
+    const railButtons = screen
+      .getByTestId('studio-activity-rail')
+      .querySelectorAll('button[data-testid^="studio-activity-"]');
+    expect([...railButtons].map((button) => button.getAttribute('data-testid'))).toEqual(
+      ACTIVITY_MODES.map((mode) => `studio-activity-${mode}`),
+    );
     expect(screen.queryByText(/HIRE/i)).toBeNull();
     expect(screen.queryByRole('button', { name: /hire/i })).toBeNull();
   });
@@ -74,6 +69,8 @@ describe('Cut 1 stage shell layout contract', () => {
 
     for (const mode of ['files', 'canvas', 'code'] as const) {
       fireEvent.click(screen.getByTestId(`studio-activity-${mode}`));
+      expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe(mode);
+      expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
       expect(screen.getByTestId('studio-ide-shell').dataset.contextMode).toBe('output');
       expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(false);
       expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(true);

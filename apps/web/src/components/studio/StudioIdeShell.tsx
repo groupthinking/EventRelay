@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ReactNode, useCallback, useState } from 'react';
+import { ReactNode, useState } from 'react';
 import {
   Code2,
   Film,
@@ -16,16 +16,16 @@ import '@/styles/studio-workbench.css';
 export const MOBILE_PANES = ['video', 'chat', 'output'] as const;
 export type MobilePane = (typeof MOBILE_PANES)[number];
 
-/** Cut 1 activity rail modes — IA labels, not product brands. */
-export const STUDIO_ACTIVITY_MODES = [
-  'video',
-  'agents',
-  'tools',
-  'files',
-  'canvas',
-  'code',
+const ACTIVITY_ITEMS = [
+  { id: 'video', label: 'Video', Icon: Film },
+  { id: 'agents', label: 'Agents', Icon: MessageSquare },
+  { id: 'tools', label: 'Tools', Icon: Wrench },
+  { id: 'files', label: 'Files', Icon: FolderOpen },
+  { id: 'canvas', label: 'Canvas', Icon: LayoutTemplate },
+  { id: 'code', label: 'Code', Icon: Code2 },
 ] as const;
-export type StudioActivityMode = (typeof STUDIO_ACTIVITY_MODES)[number];
+
+type StudioActivityMode = (typeof ACTIVITY_ITEMS)[number]['id'];
 
 export type StudioIdeShellProps = {
   toolbar: ReactNode;
@@ -33,27 +33,39 @@ export type StudioIdeShellProps = {
   chatPane: ReactNode;
   outputPane: ReactNode;
   detailsRail?: ReactNode;
-  mobilePane?: MobilePane;
-  onMobilePaneChange?: (pane: MobilePane) => void;
-  activityMode?: StudioActivityMode;
-  onActivityModeChange?: (mode: StudioActivityMode) => void;
 };
 
-const ACTIVITY_ITEMS: ReadonlyArray<{
-  id: StudioActivityMode;
-  label: string;
-  Icon: typeof Film;
-}> = [
-  { id: 'video', label: 'Video', Icon: Film },
-  { id: 'agents', label: 'Agents', Icon: MessageSquare },
-  { id: 'tools', label: 'Tools', Icon: Wrench },
-  { id: 'files', label: 'Files', Icon: FolderOpen },
-  { id: 'canvas', label: 'Canvas', Icon: LayoutTemplate },
-  { id: 'code', label: 'Code', Icon: Code2 },
-];
+function mobilePaneFor(mode: StudioActivityMode): MobilePane {
+  switch (mode) {
+    case 'video':
+      return 'video';
+    case 'agents':
+      return 'chat';
+    case 'tools':
+    case 'files':
+    case 'canvas':
+    case 'code':
+      return 'output';
+    default: {
+      const _exhaustive: never = mode;
+      return _exhaustive;
+    }
+  }
+}
 
-function contextShowsOutput(mode: StudioActivityMode): boolean {
-  return mode === 'tools' || mode === 'files' || mode === 'canvas' || mode === 'code';
+function activityForMobilePane(pane: MobilePane): StudioActivityMode {
+  switch (pane) {
+    case 'video':
+      return 'video';
+    case 'chat':
+      return 'agents';
+    case 'output':
+      return 'tools';
+    default: {
+      const _exhaustive: never = pane;
+      return _exhaustive;
+    }
+  }
 }
 
 function contextLabel(mode: StudioActivityMode): string {
@@ -88,70 +100,22 @@ export default function StudioIdeShell({
   chatPane,
   outputPane,
   detailsRail,
-  mobilePane: controlledMobilePane,
-  onMobilePaneChange,
-  activityMode: controlledActivityMode,
-  onActivityModeChange,
 }: StudioIdeShellProps) {
-  const [uncontrolledMobilePane, setUncontrolledMobilePane] = useState<MobilePane>('video');
-  const [uncontrolledActivityMode, setUncontrolledActivityMode] =
-    useState<StudioActivityMode>('video');
+  const [activityMode, setActivityMode] = useState<StudioActivityMode>('video');
   const [contextCollapsed, setContextCollapsed] = useState(false);
+  const mobilePane = mobilePaneFor(activityMode);
+  const showOutputContext = mobilePane === 'output';
+  const chatHidden = showOutputContext;
+  const outputHidden = !showOutputContext;
 
-  const mobilePane = controlledMobilePane ?? uncontrolledMobilePane;
-  const activityMode = controlledActivityMode ?? uncontrolledActivityMode;
-  const showOutputContext = contextShowsOutput(activityMode);
-  // Mobile tabs must drive pane `hidden` even when activityMode is omitted / mismatched
-  // (e.g. controlled mobilePane="output" with default activity "video"). Desktop keeps
-  // activity-driven context when the Source tab is selected (mobilePane === 'video').
-  const chatHidden =
-    mobilePane === 'chat' ? false : mobilePane === 'output' ? true : showOutputContext;
-  const outputHidden =
-    mobilePane === 'output' ? false : mobilePane === 'chat' ? true : !showOutputContext;
+  const selectActivity = (mode: StudioActivityMode) => {
+    setActivityMode(mode);
+    setContextCollapsed(false);
+  };
 
-  const setMobilePane = useCallback(
-    (pane: MobilePane) => {
-      if (controlledMobilePane === undefined) {
-        setUncontrolledMobilePane(pane);
-      }
-      onMobilePaneChange?.(pane);
-    },
-    [controlledMobilePane, onMobilePaneChange],
-  );
-
-  const setActivityMode = useCallback(
-    (mode: StudioActivityMode) => {
-      if (controlledActivityMode === undefined) {
-        setUncontrolledActivityMode(mode);
-      }
-      onActivityModeChange?.(mode);
-      setContextCollapsed(false);
-      if (mode === 'video') {
-        setMobilePane('video');
-      } else if (contextShowsOutput(mode)) {
-        setMobilePane('output');
-      } else {
-        setMobilePane('chat');
-      }
-    },
-    [controlledActivityMode, onActivityModeChange, setMobilePane],
-  );
-
-  const selectMobilePane = useCallback(
-    (pane: MobilePane) => {
-      setMobilePane(pane);
-      setContextCollapsed(false);
-      if (controlledActivityMode === undefined) {
-        if (pane === 'video') setUncontrolledActivityMode('video');
-        else if (pane === 'chat') setUncontrolledActivityMode('agents');
-        else setUncontrolledActivityMode('tools');
-      }
-      if (pane === 'video') onActivityModeChange?.('video');
-      else if (pane === 'chat') onActivityModeChange?.('agents');
-      else onActivityModeChange?.('tools');
-    },
-    [controlledActivityMode, onActivityModeChange, setMobilePane],
-  );
+  const selectMobilePane = (pane: MobilePane) => {
+    selectActivity(activityForMobilePane(pane));
+  };
 
   return (
     <div
@@ -241,7 +205,7 @@ export default function StudioIdeShell({
                   aria-label={label}
                   aria-pressed={selected}
                   title={label}
-                  onClick={() => setActivityMode(id)}
+                  onClick={() => selectActivity(id)}
                   className="studio-activity-rail__btn"
                   data-active={selected ? 'true' : undefined}
                 >
