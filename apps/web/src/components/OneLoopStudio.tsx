@@ -1356,6 +1356,20 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       videoTitle={selected ? formatSavedVideoLabel(selected) : null}
       onSubmitUrl={handleAnalyzeUrl}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
+      artifactStreamInputs={{
+        busy: transcriptWorking,
+        elapsedSeconds: elapsed,
+        progress: selected?.progress,
+        hasPack: Boolean(selected?.videoPack),
+        hasPackIdentity: Boolean(packIdentity),
+        hasTranscript: Boolean(selected?.transcript?.trim()),
+        hasFailed: !transcriptWorking && selected?.status === 'failed',
+        formation: {
+          architecture: packFormation.architecture,
+          artifacts: packFormation.artifacts,
+          tools: packFormation.tools,
+        },
+      }}
     />
   );
 

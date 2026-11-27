@@ -3,6 +3,8 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
+import { loadSamplePack } from '@/lib/sample-pack';
+import { studioPackFormation } from '@/lib/studio-pipeline-status';
 
 describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
   beforeEach(() => {
@@ -127,21 +129,61 @@ describe('StudioIdeChat plan interview chaining & Antigravity UX', () => {
     });
   });
 
-  it('shows active extraction timeline card instead of idle prompt while a video run is in progress', () => {
+  it('shows Cut 3 artifact stream instead of idle prompt while a video run is in progress', () => {
     render(
       <StudioIdeChat
-        videoId="6TrjBFW6EKg"
+        videoId="auJzb1D-fag"
         packId={null}
         disabled
-        activeStage="transcript"
+        isWorking
+        artifactStreamInputs={{
+          busy: true,
+          elapsedSeconds: 12,
+          progress: 8,
+        }}
       />,
     );
     expect(screen.getByText('Extracting Video Pack…')).toBeTruthy();
-    expect(screen.getByTestId('studio-chat-extraction-card')).toBeTruthy();
+    const stream = screen.getByTestId('studio-artifact-stream');
+    expect(stream.getAttribute('data-phase')).toMatch(/skeletal|filling/);
+    expect(stream.getAttribute('data-video-id')).toBe('auJzb1D-fag');
     expect(screen.queryByText('Run a video to start chatting')).toBeNull();
     const input = screen.getByTestId('studio-ide-chat-input') as HTMLTextAreaElement;
     expect(input.placeholder).toBe('Extracting video pack…');
     expect(input.disabled).toBe(true);
+  });
+
+  it('settles the artifact stream into real pack preview when formation is ready', () => {
+    const citation = loadSamplePack();
+    expect(citation.videoId).toBe('auJzb1D-fag');
+    const formation = studioPackFormation(citation);
+    render(
+      <StudioIdeChat
+        videoId={citation.videoId}
+        packId={citation.packId}
+        artifactStreamInputs={{
+          busy: false,
+          hasPack: true,
+          hasTranscript: true,
+          formation: {
+            architecture: formation.architecture,
+            artifacts: formation.artifacts,
+            tools: formation.tools,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByTestId('studio-artifact-stream').getAttribute('data-phase')).toBe('settled');
+    expect(screen.getByTestId('studio-artifact-stream-preview')).toBeTruthy();
+    expect(screen.getByTestId('studio-artifact-stream-architecture').textContent).toMatch(
+      /Multimodal ingestion/i,
+    );
+    expect(screen.getByTestId('studio-artifact-stream-artifacts').textContent).toMatch(
+      /SpatialDetector/,
+    );
+    expect(screen.getByTestId('studio-artifact-stream-tools').textContent).toMatch(
+      /Google AI Studio/,
+    );
   });
 
   it('renders identity header, 3 suggested prompt pills, clickable timestamp chips, and Clear button', async () => {

@@ -11,6 +11,7 @@ versioning aims for [SemVer](https://semver.org/).
 
 ## [Unreleased]
 
+- Studio Agents chat shows Cut 3 pack-forming artifact stream (skeletal → real extract stages → settled architecture/artifacts/stack preview). No mock pack content; fixture `auJzb1D-fag`. Related: #2862.
 - Studio event display reads pack `events[]` through one parser. The unused display count, sample-events wrapper, and lib task note are gone. Related: #2328.
 - Studio stage shell keeps one activity mode and derives the mobile pane from it. The second pane state, unused controlled props, and the `[hidden]` `!important` overrides are gone. Related: #2328.
 

@@ -1101,3 +1101,202 @@
   border-top: 1px solid var(--uvai-border);
   background: var(--uvai-bg);
 }
+
+/* Cut 3 — pack-forming artifact stream (motion #1: skeletal → fill → settle) */
+.studio-artifact-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 14px;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 14px;
+  background: var(--uvai-surface);
+  overflow-wrap: anywhere;
+  animation: studio-artifact-stream-enter 280ms ease-out;
+}
+
+@keyframes studio-artifact-stream-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-artifact-stream {
+    animation: none;
+  }
+}
+
+.studio-artifact-stream__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.studio-artifact-stream__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  border-radius: 8px;
+  background: var(--uvai-accent-soft);
+  color: var(--uvai-accent-ink);
+}
+
+.studio-artifact-stream__badge[data-state='failed'] {
+  background: var(--uvai-danger-bg);
+  color: var(--uvai-danger-ink);
+}
+
+.studio-artifact-stream__badge[data-state='settled'] {
+  background: color-mix(in srgb, #1e9a80 18%, var(--uvai-surface));
+  color: #1e9a80;
+}
+
+.studio-artifact-stream__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--uvai-ink);
+}
+
+.studio-artifact-stream__detail {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--uvai-border);
+}
+
+.studio-artifact-stream__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.studio-artifact-stream__row[data-state='active'] .studio-artifact-stream__label {
+  font-weight: 500;
+  color: var(--uvai-ink);
+}
+
+.studio-artifact-stream__row[data-state='done'] .studio-artifact-stream__label {
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__row[data-state='pending'] .studio-artifact-stream__label,
+.studio-artifact-stream__row[data-state='failed'] .studio-artifact-stream__label {
+  color: var(--uvai-ink-faint);
+}
+
+.studio-artifact-stream__row[data-state='failed'] .studio-artifact-stream__label {
+  color: var(--uvai-danger-ink);
+}
+
+.studio-artifact-stream__bone {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--uvai-border) 0%,
+    color-mix(in srgb, var(--uvai-surface-warm) 70%, var(--uvai-border)) 50%,
+    var(--uvai-border) 100%
+  );
+  background-size: 200% 100%;
+  animation: studio-artifact-stream-shimmer 1.2s ease-in-out infinite;
+}
+
+.studio-artifact-stream__bone--icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
+.studio-artifact-stream__bone--label {
+  height: 10px;
+  width: min(180px, 70%);
+}
+
+@keyframes studio-artifact-stream-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-artifact-stream__bone {
+    animation: none;
+  }
+}
+
+.studio-artifact-stream__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--uvai-border);
+  animation: studio-artifact-stream-enter 320ms ease-out;
+}
+
+.studio-artifact-stream__preview-label {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--uvai-ink-faint);
+}
+
+.studio-artifact-stream__preview-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__preview-list {
+  margin: 4px 0 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__preview-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--uvai-ink);
+}
+
+.studio-artifact-stream__preview-soft {
+  color: var(--uvai-ink-faint);
+}
+
+.uvai-cards.template-studio-shell .studio-artifact-stream {
+  border-color: var(--uvai-border-strong);
+}
