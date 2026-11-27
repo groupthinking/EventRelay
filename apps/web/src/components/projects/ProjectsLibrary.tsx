@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import AppShell from '@/components/AppShell';
 import Footer from '@/components/Footer';
 import {
+  MAX_LOCAL_PROJECTS,
   createOrUpdateLocalProject,
   deleteLocalProject,
   readLocalProjects,
@@ -57,6 +58,22 @@ function projectThumbnailSrc(videoId: string): string | null {
 
 function errorMessage(data: Record<string, unknown> | null, fallback: string): string {
   return typeof data?.error === 'string' ? data.error : fallback;
+}
+
+/** Honest copy for guest-storage failures; never reported as success. */
+function localFailureMessage(
+  reason: 'invalid_source_url' | 'limit_reached' | 'storage_unavailable' | 'not_found',
+): string {
+  switch (reason) {
+    case 'invalid_source_url':
+      return 'Enter a valid YouTube video URL to create a project.';
+    case 'limit_reached':
+      return `Browser storage is limited to ${MAX_LOCAL_PROJECTS} local projects. Delete one or sign in to save more.`;
+    case 'not_found':
+      return 'That project no longer exists in this browser.';
+    default:
+      return 'Browser storage is full or blocked. Free space or sign in to save projects.';
+  }
 }
 
 /**
@@ -150,8 +167,8 @@ export default function ProjectsLibrary() {
       setNotice(result.data?.created === false ? 'Project already exists for this video.' : 'Project created.');
     } else {
       const result = createOrUpdateLocalProject({ sourceUrl, title: cleanTitle, visibility });
-      if (!result) {
-        setError('Enter a valid YouTube video URL to create a project.');
+      if (!result.ok) {
+        setError(localFailureMessage(result.reason));
         return;
       }
       setNotice(result.created ? 'Project created in this browser.' : 'Project already exists for this video.');
@@ -170,8 +187,13 @@ export default function ProjectsLibrary() {
         return;
       }
     } else {
-      updateLocalProject(project.id, { visibility: next });
+      const result = updateLocalProject(project.id, { visibility: next });
+      if (!result.ok) {
+        setError(localFailureMessage(result.reason));
+        return;
+      }
     }
+    setError('');
     setNotice(`Project is now ${next}.`);
     await load();
   };
@@ -189,7 +211,11 @@ export default function ProjectsLibrary() {
         return;
       }
     } else {
-      updateLocalProject(project.id, { title: next });
+      const result = updateLocalProject(project.id, { title: next });
+      if (!result.ok) {
+        setError(localFailureMessage(result.reason));
+        return;
+      }
     }
     setError('');
     setRenamingId(null);
@@ -205,8 +231,13 @@ export default function ProjectsLibrary() {
         return;
       }
     } else {
-      deleteLocalProject(project.id);
+      const result = deleteLocalProject(project.id);
+      if (!result.ok) {
+        setError(localFailureMessage(result.reason));
+        return;
+      }
     }
+    setError('');
     setConfirmDeleteId(null);
     setNotice('Project deleted.');
     await load();
@@ -223,8 +254,11 @@ export default function ProjectsLibrary() {
       });
       if (result.ok) imported.push(project.id);
     }
-    removeLocalProjectsByIds(imported);
+    const cleared = removeLocalProjectsByIds(imported);
     setNotice(`Imported ${imported.length} of ${local.length} local project(s).`);
+    if (!cleared) {
+      setError('Imported projects to your account, but local browser copies could not be cleared.');
+    }
     await load();
   };
 

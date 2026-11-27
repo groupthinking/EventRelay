@@ -102,6 +102,55 @@ describe('ProjectsLibrary (guest)', () => {
     expect(readLocalProjects()).toEqual([]);
   });
 
+  it('shows an honest error and keeps the form when browser storage rejects the write', async () => {
+    render(<ProjectsLibrary />);
+    const input = await screen.findByLabelText('YouTube URL');
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError');
+    });
+    fireEvent.change(input, { target: { value: URL_A } });
+    fireEvent.submit(input.closest('form')!);
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Browser storage is full or blocked/);
+    expect(screen.queryByText('Project created in this browser.')).toBeNull();
+    expect((screen.getByLabelText('YouTube URL') as HTMLInputElement).value).toBe(URL_A);
+    expect(screen.queryByTestId('project-card')).toBeNull();
+    vi.restoreAllMocks();
+  });
+
+  it('refuses a 51st local project with an alert and keeps the existing 50', async () => {
+    const now = '2026-11-27T00:00:00.000Z';
+    window.localStorage.setItem(
+      'uvai-local-projects-v1',
+      JSON.stringify(
+        Array.from({ length: 50 }, (_, index) => {
+          const videoId = `vid${String(index).padStart(8, '0')}`;
+          return {
+            id: `seed-${index}`,
+            sourceUrl: `https://www.youtube.com/watch?v=${videoId}`,
+            videoId,
+            title: `Seed ${index}`,
+            visibility: 'private',
+            createdAt: now,
+            updatedAt: now,
+          };
+        }),
+      ),
+    );
+    render(<ProjectsLibrary />);
+    expect(await screen.findAllByTestId('project-card')).toHaveLength(50);
+
+    const input = screen.getByLabelText('YouTube URL');
+    fireEvent.change(input, { target: { value: URL_A } });
+    fireEvent.submit(input.closest('form')!);
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/limited to 50 local projects/);
+    expect(screen.queryByText('Project created in this browser.')).toBeNull();
+    expect(screen.getAllByTestId('project-card')).toHaveLength(50);
+    expect(readLocalProjects()).toHaveLength(50);
+    expect(readLocalProjects().some((project) => project.id === 'seed-0')).toBe(true);
+  });
+
   it('links Open in Studio to the canonical /studio?video= handoff', async () => {
     createOrUpdateLocalProject({ sourceUrl: URL_A, title: 'Test Video Pack' });
     render(<ProjectsLibrary />);
@@ -161,7 +210,9 @@ describe('ProjectsLibrary (signed in)', () => {
   });
 
   it('imports local projects and removes only the ones that succeeded', async () => {
-    const a = createOrUpdateLocalProject({ sourceUrl: URL_A, title: 'Local A' })!.project;
+    const created = createOrUpdateLocalProject({ sourceUrl: URL_A, title: 'Local A' });
+    if (!created.ok) throw new Error('expected ok');
+    const a = created.project;
     createOrUpdateLocalProject({ sourceUrl: URL_B, title: 'Local B' });
     fetchMock
       .mockResolvedValueOnce(json({ projects: [] }))

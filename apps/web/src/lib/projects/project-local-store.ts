@@ -8,7 +8,17 @@ import {
 
 /** Guest (local-first) projects. Browser-only; never throws on bad storage or SSR. */
 export const LOCAL_PROJECTS_STORAGE_KEY = 'uvai-local-projects-v1';
-const MAX_LOCAL_PROJECTS = 50;
+export const MAX_LOCAL_PROJECTS = 50;
+
+export type LocalCreateResult =
+  | { ok: true; project: ProjectRecord; created: boolean }
+  | { ok: false; reason: 'invalid_source_url' | 'limit_reached' | 'storage_unavailable' };
+export type LocalUpdateResult =
+  | { ok: true; project: ProjectRecord }
+  | { ok: false; reason: 'not_found' | 'storage_unavailable' };
+export type LocalDeleteResult =
+  | { ok: true }
+  | { ok: false; reason: 'not_found' | 'storage_unavailable' };
 
 function newId(): string {
   try {
@@ -44,36 +54,36 @@ export function readLocalProjects(): ProjectRecord[] {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(isProject)
-      .map((project) => ({ ...project, sourceHash: '', storage: 'local' as const }))
-      .slice(0, MAX_LOCAL_PROJECTS);
+    return parsed.filter(isProject).map((project) => ({ ...project, sourceHash: '', storage: 'local' as const }));
   } catch {
     return [];
   }
 }
 
-function writeLocalProjects(projects: ProjectRecord[]): void {
+/** Returns false when nothing was persisted (SSR, blocked, or full storage). Never truncates. */
+function writeLocalProjects(projects: ProjectRecord[]): boolean {
   try {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem(LOCAL_PROJECTS_STORAGE_KEY, JSON.stringify(projects.slice(0, MAX_LOCAL_PROJECTS)));
+    if (typeof window === 'undefined') return false;
+    window.localStorage.setItem(LOCAL_PROJECTS_STORAGE_KEY, JSON.stringify(projects));
+    return true;
   } catch {
-    // Storage full or blocked: guest mode degrades to in-memory for this session.
+    return false;
   }
 }
 
 export type LocalProjectInput = { sourceUrl: string; title?: string; visibility?: ProjectVisibility };
 
-/** Create a guest project, or return the existing one for the same video (single-source rule). */
-export function createOrUpdateLocalProject(input: LocalProjectInput): {
-  project: ProjectRecord;
-  created: boolean;
-} | null {
+/**
+ * Create a guest project, or return the existing one for the same video (single-source rule).
+ * At the cap it refuses instead of evicting: the user decides what to delete.
+ */
+export function createOrUpdateLocalProject(input: LocalProjectInput): LocalCreateResult {
   const videoId = resolveYouTubeSourceId(input.sourceUrl);
-  if (!videoId) return null;
+  if (!videoId) return { ok: false, reason: 'invalid_source_url' };
   const projects = readLocalProjects();
   const existing = projects.find((project) => project.videoId === videoId);
-  if (existing) return { project: existing, created: false };
+  if (existing) return { ok: true, project: existing, created: false };
+  if (projects.length >= MAX_LOCAL_PROJECTS) return { ok: false, reason: 'limit_reached' };
 
   const now = new Date().toISOString();
   const project: ProjectRecord = {
@@ -87,17 +97,17 @@ export function createOrUpdateLocalProject(input: LocalProjectInput): {
     updatedAt: now,
     storage: 'local',
   };
-  writeLocalProjects([project, ...projects]);
-  return { project, created: true };
+  if (!writeLocalProjects([project, ...projects])) return { ok: false, reason: 'storage_unavailable' };
+  return { ok: true, project, created: true };
 }
 
 export function updateLocalProject(
   id: string,
   patch: { title?: string; visibility?: ProjectVisibility },
-): ProjectRecord | null {
+): LocalUpdateResult {
   const projects = readLocalProjects();
   const index = projects.findIndex((project) => project.id === id);
-  if (index < 0) return null;
+  if (index < 0) return { ok: false, reason: 'not_found' };
   const title = patch.title?.trim().slice(0, 160);
   const next: ProjectRecord = {
     ...projects[index],
@@ -106,19 +116,21 @@ export function updateLocalProject(
     updatedAt: new Date().toISOString(),
   };
   const rest = projects.filter((project) => project.id !== id);
-  writeLocalProjects([next, ...rest]);
-  return next;
+  if (!writeLocalProjects([next, ...rest])) return { ok: false, reason: 'storage_unavailable' };
+  return { ok: true, project: next };
 }
 
-export function deleteLocalProject(id: string): boolean {
+export function deleteLocalProject(id: string): LocalDeleteResult {
   const projects = readLocalProjects();
   const remaining = projects.filter((project) => project.id !== id);
-  if (remaining.length === projects.length) return false;
-  writeLocalProjects(remaining);
-  return true;
+  if (remaining.length === projects.length) return { ok: false, reason: 'not_found' };
+  if (!writeLocalProjects(remaining)) return { ok: false, reason: 'storage_unavailable' };
+  return { ok: true };
 }
 
-export function removeLocalProjectsByIds(ids: readonly string[]): void {
+/** Returns false if the local copies could not be removed. */
+export function removeLocalProjectsByIds(ids: readonly string[]): boolean {
+  if (ids.length === 0) return true;
   const drop = new Set(ids);
-  writeLocalProjects(readLocalProjects().filter((project) => !drop.has(project.id)));
+  return writeLocalProjects(readLocalProjects().filter((project) => !drop.has(project.id)));
 }
