@@ -1346,16 +1346,16 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     />
   );
 
-  const handleActivityChange = useCallback((mode: StudioActivityMode) => {
+  const handleActivityChange = (mode: StudioActivityMode) => {
     setActivityMode(mode);
     const section = studioOutputSectionForActivity(mode);
     if (section) setOutputSection(section);
-  }, []);
+  };
 
-  const handleOutputSectionChange = useCallback((section: OutputSection) => {
+  const handleOutputSectionChange = (section: OutputSection) => {
     setOutputSection(section);
     setActivityMode(studioActivityForOutputSection(section));
-  }, []);
+  };
 
   const outputNode = (
     <StudioIdeOutput
