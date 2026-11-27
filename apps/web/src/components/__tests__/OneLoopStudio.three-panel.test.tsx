@@ -452,6 +452,37 @@ describe('OneLoopStudio IDE shell', () => {
     expect(seekToMock).not.toHaveBeenCalled();
   });
 
+  it('Cut 2: stage timeline seeks from chapter selection and stays selection-scoped', async () => {
+    const { loadSamplePack } = await import('@/lib/sample-pack');
+    const citation = loadSamplePack();
+    useDashboardStore.setState({
+      videos: [
+        {
+          ...baseVideo,
+          videoPack: citation,
+        },
+      ],
+      selectedVideoId: baseVideo.id,
+    });
+
+    render(<OneLoopStudio />);
+    expect(screen.getByTestId('studio-pack-timeline')).toBeTruthy();
+    expect(screen.getByTestId('studio-timeline-chapter-0')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('studio-timeline-chapter-1'));
+    expect(seekToMock).toHaveBeenCalledWith(27);
+
+    seekToMock.mockReset();
+    fireEvent.change(screen.getByLabelText('YouTube URL'), {
+      target: { value: 'https://www.youtube.com/watch?v=9PICEmtfpWU' },
+    });
+    const chapter = screen.getByTestId('studio-timeline-chapter-1') as HTMLButtonElement;
+    expect(chapter.disabled).toBe(true);
+    expect(screen.getByTestId('studio-pack-timeline').getAttribute('data-can-seek')).toBe('false');
+    fireEvent.click(chapter);
+    expect(seekToMock).not.toHaveBeenCalled();
+  });
+
   it('useYouTubePlayer lowers stall timeout to 3500ms and mounts nocookie fallback iframe', async () => {
     vi.useFakeTimers();
     const actual = await vi.importActual<typeof import('@/lib/use-youtube-player')>(

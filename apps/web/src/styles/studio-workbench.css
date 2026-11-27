@@ -914,3 +914,196 @@
   color: var(--uvai-danger-ink, #8f1d1d);
   border-color: var(--uvai-danger-border, #e7b4b4);
 }
+
+/* ---- Cut 2: pack timeline under the stage ---- */
+.studio-pack-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--uvai-border);
+  background: var(--uvai-bg);
+}
+
+.studio-pack-timeline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-pack-timeline__span {
+  font-size: 11px;
+  color: var(--uvai-ink-faint);
+}
+
+.studio-pack-timeline__track {
+  position: relative;
+  height: 36px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.studio-pack-timeline__rail {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--uvai-border-strong) 70%, transparent);
+}
+
+.studio-pack-timeline__chapter {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  z-index: 1;
+  margin: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--uvai-accent) 45%, var(--uvai-border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--uvai-accent-soft) 80%, transparent);
+  color: var(--uvai-ink);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.studio-pack-timeline__chapter:hover:not(:disabled),
+.studio-pack-timeline__chapter[data-selected='true'] {
+  background: color-mix(in srgb, var(--uvai-accent) 28%, var(--uvai-surface));
+  border-color: var(--uvai-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--uvai-accent) 35%, transparent);
+}
+
+.studio-pack-timeline__chapter:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.studio-pack-timeline__chapter-label {
+  display: block;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.studio-pack-timeline__tick {
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 999px;
+  background: var(--uvai-surface);
+  transform: translateX(-50%);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.studio-pack-timeline__tick[data-kind='keyframe'] {
+  background: var(--uvai-accent-ink, var(--uvai-accent));
+  border-color: transparent;
+}
+
+.studio-pack-timeline__tick[data-kind='moment'],
+.studio-pack-timeline__tick[data-kind='event'] {
+  background: var(--uvai-surface-warm, var(--uvai-surface));
+}
+
+.studio-pack-timeline__tick:hover:not(:disabled),
+.studio-pack-timeline__tick[data-selected='true'] {
+  transform: translateX(-50%) scale(1.35);
+  border-color: var(--uvai-accent);
+}
+
+.studio-pack-timeline__tick:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.studio-pack-timeline__playhead {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  z-index: 3;
+  width: 2px;
+  margin: 0;
+  background: var(--uvai-ink);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.studio-pack-timeline__chapters {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.studio-pack-timeline__chapter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--uvai-border);
+  border-radius: 6px;
+  background: var(--uvai-surface);
+  color: var(--uvai-ink);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.studio-pack-timeline__chapter-row:hover:not(:disabled),
+.studio-pack-timeline__chapter-row[data-selected='true'] {
+  border-color: var(--uvai-accent);
+  background: color-mix(in srgb, var(--uvai-accent-soft) 70%, var(--uvai-surface));
+}
+
+.studio-pack-timeline__chapter-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.studio-pack-timeline__chapter-time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--uvai-accent-ink, var(--uvai-accent));
+}
+
+.studio-pack-timeline__chapter-topic {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.uvai-cards.template-studio-shell .studio-pack-timeline {
+  border-top: 1px solid var(--uvai-border);
+  background: var(--uvai-bg);
+}
