@@ -88,11 +88,14 @@ describe('Hybrid D Studio stage shell (Cut 1)', () => {
     );
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Source' }), { key: 'ArrowRight' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('chat');
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('agents');
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Conversation' }));
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Conversation' }), { key: 'End' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('tools');
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Deliverables' }), { key: 'Home' });
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('video');
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('video');
   });
 
   it('keeps one main landmark containing stage and context panels', () => {
@@ -130,28 +133,24 @@ describe('Hybrid D Studio stage shell (Cut 1)', () => {
     expect(screen.getByRole('main').dataset.detailsRail).toBe('true');
   });
 
-  it('supports controlled mobilePane and activityMode callbacks', () => {
+  it('derives the mobile pane from an activity rail click', () => {
     vi.stubGlobal('React', React);
-    const onMobilePaneChange = vi.fn();
-    const onActivityModeChange = vi.fn();
     render(
       <StudioIdeShell
         toolbar={null}
         videoPane={<p>Source</p>}
         chatPane={<p>Chat</p>}
         outputPane={<p>Files</p>}
-        mobilePane="video"
-        activityMode="video"
-        onMobilePaneChange={onMobilePaneChange}
-        onActivityModeChange={onActivityModeChange}
       />,
     );
     fireEvent.click(screen.getByTestId('studio-activity-code'));
-    expect(onActivityModeChange).toHaveBeenCalledWith('code');
-    expect(onMobilePaneChange).toHaveBeenCalledWith('output');
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('code');
+    expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
+    expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(false);
+    expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(true);
   });
 
-  it('reveals Deliverables when mobilePane is output without activityMode', () => {
+  it('reveals Deliverables from the mobile tab and lands on Tools', () => {
     vi.stubGlobal('React', React);
     render(
       <StudioIdeShell
@@ -159,10 +158,11 @@ describe('Hybrid D Studio stage shell (Cut 1)', () => {
         videoPane={<p>Source</p>}
         chatPane={<p>Chat</p>}
         outputPane={<p>Deliverables body</p>}
-        mobilePane="output"
       />,
     );
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Deliverables' }));
+    expect(screen.getByTestId('studio-ide-shell').dataset.activity).toBe('tools');
     expect(screen.getByTestId('studio-ide-shell').dataset.mobilePane).toBe('output');
     expect(screen.getByTestId('studio-ide-output-pane').hasAttribute('hidden')).toBe(false);
     expect(screen.getByTestId('studio-ide-chat-pane').hasAttribute('hidden')).toBe(true);
@@ -182,9 +182,12 @@ describe('Hybrid D Studio stage shell (Cut 1)', () => {
     );
     expect(shellSource).toContain('data-shell="hybrid-d"');
     expect(shellSource).toContain('studio-activity-rail');
+    const templateCss = readFileSync(join(process.cwd(), 'src/styles/openai-template.css'), 'utf8');
     expect(cssSource).toContain('minmax(0, 1.45fr)');
     expect(cssSource).toContain('studio-activity-rail');
     expect(cssSource).not.toContain('minmax(290px, 0.9fr)');
     expect(cssSource).not.toContain('font-size: 72px');
+    expect(cssSource).not.toMatch(/studio-ide-(?:chat|output)-pane'\]\[hidden\]/);
+    expect(templateCss).not.toMatch(/studio-ide-(?:chat|output)-pane'\]\[hidden\]/);
   });
 });

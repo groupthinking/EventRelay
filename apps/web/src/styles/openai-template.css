@@ -92,11 +92,6 @@ a:focus-visible, button:focus-visible { outline: 2px solid var(--uvai-accent); o
   .template-studio-shell[data-mobile-pane='video'] [data-testid='studio-ide-video-pane'],
   .template-studio-shell[data-mobile-pane='chat'] [data-testid='studio-ide-chat-pane'],
   .template-studio-shell[data-mobile-pane='output'] [data-testid='studio-ide-output-pane'] { display: flex; }
-  /* Beat UA [hidden]{display:none!important} if activityMode lags the mobile tab */
-  .template-studio-shell[data-mobile-pane='chat'] [data-testid='studio-ide-chat-pane'][hidden],
-  .template-studio-shell[data-mobile-pane='output'] [data-testid='studio-ide-output-pane'][hidden] {
-    display: flex !important;
-  }
   .template-studio-shell .uvai-toolbar { padding: 12px; }
   .template-studio-shell [data-testid='studio-ide-url-form'] { flex-basis: 100%; }
 }

@@ -832,12 +832,6 @@
     display: flex;
   }
 
-  /* Mobile tab switch must beat activity-mode hidden attribute */
-  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] [data-testid='studio-ide-chat-pane'][hidden],
-  .uvai-cards.template-studio-shell[data-mobile-pane='output'] [data-testid='studio-ide-output-pane'][hidden] {
-    display: flex !important;
-  }
-
   .uvai-cards.template-studio-shell .template-studio-restore,
   .uvai-cards.template-studio-shell .template-details-rail {
     display: none;
