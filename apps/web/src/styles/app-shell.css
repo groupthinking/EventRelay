@@ -1,0 +1,129 @@
+/*
+ * Plan 005 AppShell: extends the shared `.uvai-rail-shell` contract from
+ * theme-tokens.css (page padding, icon dock, mobile row). Tokens only, so
+ * dark, light and high-contrast themes all keep readable contrast.
+ */
+
+/* Desktop/half-screen sidebar only: on mobile the shared CSS lays links out as a scrolling row. */
+@media (min-width: 600px) {
+  .uvai-rail-shell.uvai-app-shell-rail .uvai-rail-links {
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+}
+
+/* Give "High Contrast" room so its label never touches the cell dividers. */
+.uvai-rail-shell.uvai-app-shell-rail .uvai-theme-cell {
+  padding: 0 10px;
+}
+
+.uvai-rail-shell.uvai-app-shell-rail[data-collapsed='false'][data-user-toggled='true'] .uvai-theme-bar {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+}
+
+@media (min-width: 961px) {
+  .uvai-rail-shell.uvai-app-shell-rail[data-collapsed='false'] .uvai-theme-bar {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) auto;
+  }
+}
+
+.uvai-appshell-more-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.uvai-appshell-more-links:not([hidden]) {
+  display: contents;
+}
+
+.uvai-appshell-section {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 4px 8px 8px;
+  overflow-y: auto;
+  border-top: 1px solid var(--uvai-border);
+  scrollbar-gutter: stable;
+}
+
+.uvai-appshell-heading {
+  margin: 0;
+  padding: 8px 10px 4px;
+  font: 600 11px var(--font-mono), ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--uvai-ink-faint);
+}
+
+.uvai-appshell-run {
+  display: block;
+  padding: 6px 10px;
+  overflow: hidden;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--uvai-ink-soft);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.uvai-appshell-run:hover {
+  background: var(--uvai-surface-warm);
+  color: var(--uvai-ink);
+}
+
+.uvai-appshell-empty {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--uvai-ink-faint);
+}
+
+.uvai-appshell-signin {
+  margin: 0 8px 8px;
+}
+
+/* Collapsed dock: keep icons only, hide the run list and the disclosure toggle. */
+.uvai-rail-shell[data-collapsed='true'] .uvai-appshell-section,
+.uvai-rail-shell[data-collapsed='true'] .uvai-appshell-more-toggle {
+  display: none;
+}
+
+.uvai-rail-shell[data-collapsed='true'] .uvai-appshell-signin {
+  justify-content: center;
+  margin: 0 8px 8px;
+  padding: 8px 0;
+}
+
+/* Half-screen: before hydration the shared CSS already renders the 48px dock. */
+@media (min-width: 600px) and (max-width: 960px) {
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-appshell-section,
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-appshell-more-toggle {
+    display: none;
+  }
+
+  .uvai-rail-shell[data-user-toggled='false'] .uvai-appshell-signin {
+    justify-content: center;
+    padding: 8px 0;
+  }
+}
+
+/* Mobile row: primary links stay, secondary groups fold into the row or hide. */
+@media (max-width: 599px) {
+  .uvai-appshell-section,
+  .uvai-appshell-more-toggle,
+  .uvai-appshell-signin {
+    display: none;
+  }
+
+  .uvai-appshell-more-links,
+  .uvai-appshell-more-links[hidden] {
+    display: contents;
+  }
+}
