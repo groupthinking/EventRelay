@@ -67,9 +67,14 @@ import {
 import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
-import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
+import StudioIdeOutput, { type OutputSection } from '@/components/studio/StudioIdeOutput';
 import StudioPackTimeline from '@/components/studio/StudioPackTimeline';
 import { studioPackTimelineCanSeek } from '@/lib/studio-pack-timeline';
+import {
+  studioActivityForOutputSection,
+  studioOutputSectionForActivity,
+  type StudioActivityMode,
+} from '@/lib/studio-ia-modes';
 import {
   registerStudioWebMcpTools,
   type StudioWebMcpPackSnapshot,
@@ -228,6 +233,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [completedChecks, setCompletedChecks] = useState<string[]>([]);
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
+  const [activityMode, setActivityMode] = useState<StudioActivityMode>('video');
+  const [outputSection, setOutputSection] = useState<OutputSection>('tasks');
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
   );
@@ -1371,6 +1378,17 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     />
   );
 
+  const handleActivityChange = useCallback((mode: StudioActivityMode) => {
+    setActivityMode(mode);
+    const section = studioOutputSectionForActivity(mode);
+    if (section) setOutputSection(section);
+  }, []);
+
+  const handleOutputSectionChange = useCallback((section: OutputSection) => {
+    setOutputSection(section);
+    setActivityMode(studioActivityForOutputSection(section));
+  }, []);
+
   const outputNode = (
     <StudioIdeOutput
       video={selected}
@@ -1389,7 +1407,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       onBuildLive={() => void buildLive()}
       buildBusy={buildBusy}
       focusPreviewSignal={previewFocusEpoch}
-      initialSection="tasks"
+      activeSection={outputSection}
+      onSectionChange={handleOutputSectionChange}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
       reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
         const card = studioActionCard(action);
@@ -1454,6 +1473,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         />
       ) : (
         <StudioIdeShell
+          activityMode={activityMode}
+          onActivityChange={handleActivityChange}
           toolbar={toolbarNode}
           videoPane={videoPaneNode}
           chatPane={chatNode}

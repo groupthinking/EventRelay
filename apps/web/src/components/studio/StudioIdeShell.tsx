@@ -10,11 +10,16 @@ import {
   MessageSquare,
   Wrench,
 } from 'lucide-react';
+import {
+  studioContextSurfaceForActivity,
+  type StudioActivityMode,
+} from '@/lib/studio-ia-modes';
 import '@/styles/studio-cards.css';
 import '@/styles/studio-workbench.css';
 
 export const MOBILE_PANES = ['video', 'chat', 'output'] as const;
 export type MobilePane = (typeof MOBILE_PANES)[number];
+export type { StudioActivityMode };
 
 const ACTIVITY_ITEMS = [
   { id: 'video', label: 'Video', Icon: Film },
@@ -23,9 +28,11 @@ const ACTIVITY_ITEMS = [
   { id: 'files', label: 'Files', Icon: FolderOpen },
   { id: 'canvas', label: 'Canvas', Icon: LayoutTemplate },
   { id: 'code', label: 'Code', Icon: Code2 },
-] as const;
-
-type StudioActivityMode = (typeof ACTIVITY_ITEMS)[number]['id'];
+] as const satisfies ReadonlyArray<{
+  id: StudioActivityMode;
+  label: string;
+  Icon: typeof Film;
+}>;
 
 export type StudioIdeShellProps = {
   toolbar: ReactNode;
@@ -33,6 +40,9 @@ export type StudioIdeShellProps = {
   chatPane: ReactNode;
   outputPane: ReactNode;
   detailsRail?: ReactNode;
+  /** Controlled activity mode (Cut 4 IA rename). */
+  activityMode?: StudioActivityMode;
+  onActivityChange?: (mode: StudioActivityMode) => void;
 };
 
 function mobilePaneFor(mode: StudioActivityMode): MobilePane {
@@ -89,10 +99,11 @@ function contextLabel(mode: StudioActivityMode): string {
 }
 
 /**
- * Hybrid D stage shell (Cut 1):
+ * Hybrid D stage shell (Cut 1) + Cut 4 IA rename wiring:
  * - Desktop: Builder-pattern activity rail + dominant video/pack stage + context rail.
  * - Mobile (<=679px): stage-first tabs (Source | Conversation | Deliverables).
- * Media owns the first viewport; chat never eats the stage.
+ * - Activity modes wire Agents→chat and Tools/Files/Canvas/Code→deliverable tabs (parent-controlled).
+ * Media owns the first viewport; chat never eats the stage; no persona grid.
  */
 export default function StudioIdeShell({
   toolbar,
@@ -100,16 +111,22 @@ export default function StudioIdeShell({
   chatPane,
   outputPane,
   detailsRail,
+  activityMode: controlledActivity,
+  onActivityChange,
 }: StudioIdeShellProps) {
-  const [activityMode, setActivityMode] = useState<StudioActivityMode>('video');
+  const [uncontrolledActivity, setUncontrolledActivity] = useState<StudioActivityMode>('video');
+  const activityMode = controlledActivity ?? uncontrolledActivity;
   const [contextCollapsed, setContextCollapsed] = useState(false);
   const mobilePane = mobilePaneFor(activityMode);
-  const showOutputContext = mobilePane === 'output';
+  const showOutputContext = studioContextSurfaceForActivity(activityMode) === 'output';
   const chatHidden = showOutputContext;
   const outputHidden = !showOutputContext;
 
   const selectActivity = (mode: StudioActivityMode) => {
-    setActivityMode(mode);
+    if (controlledActivity === undefined) {
+      setUncontrolledActivity(mode);
+    }
+    onActivityChange?.(mode);
     setContextCollapsed(false);
   };
 
