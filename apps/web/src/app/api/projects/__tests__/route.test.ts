@@ -65,10 +65,10 @@ const authError = () => new StudioError(401, 'authentication_required', 'Sign in
 
 describe('GET /api/projects', () => {
   it('lists owned projects with private no-store headers', async () => {
-    const response = await listRoute(req('GET', undefined, '/api/projects?visibility=private&q=test'));
+    const response = await listRoute(req());
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ projects: [project] });
-    expect(boundary.list).toHaveBeenCalledWith(owner, { visibility: 'private', query: 'test' });
+    expect(boundary.list).toHaveBeenCalledWith(owner);
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   });
@@ -79,14 +79,6 @@ describe('GET /api/projects', () => {
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: 'Sign in to manage projects.', code: 'authentication_required' });
     expect(boundary.list).not.toHaveBeenCalled();
-  });
-
-  it('rejects invalid query values', async () => {
-    for (const path of ['/api/projects?visibility=public', '/api/projects?bogus=1', `/api/projects?q=${'a'.repeat(161)}`]) {
-      const response = await listRoute(req('GET', undefined, path));
-      expect(response.status).toBe(400);
-      expect((await response.json()).code).toBe('invalid_query');
-    }
   });
 });
 

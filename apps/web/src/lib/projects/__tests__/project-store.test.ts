@@ -89,14 +89,6 @@ describe('private project storage', () => {
     expect(JSON.stringify(project)).not.toContain(owner.subject);
   });
 
-  it('filters by visibility server-side and by query in memory', async () => {
-    fetchMock.mockResolvedValueOnce(reply([row, { ...row, id: '1b0b55ec-81f8-4cbf-91b3-75f67796b9c1', title: 'Other' }]));
-    const projects = await listProjects(owner, { visibility: 'private', query: 'test video' });
-    expect(sent().url.searchParams.get('visibility')).toBe('eq.private');
-    expect(projects).toHaveLength(1);
-    expect(projects[0].title).toBe('Test Video Pack');
-  });
-
   it('gets a project only through the owner-scoped identifier', async () => {
     fetchMock.mockResolvedValueOnce(reply(row));
     await expect(getProject(owner, projectId)).resolves.toMatchObject({ id: projectId });
