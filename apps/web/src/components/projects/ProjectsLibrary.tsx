@@ -439,6 +439,9 @@ export default function ProjectsLibrary() {
                         <span className="pl-badge">{project.videoId}</span>
                       </div>
                       <div className="pl-actions">
+                        <Link className="pl-btn" href={`/projects/${encodeURIComponent(project.id)}`}>
+                          Open workspace
+                        </Link>
                         <Link
                           className="pl-btn"
                           href={`/studio?video=${encodeURIComponent(project.sourceUrl)}`}

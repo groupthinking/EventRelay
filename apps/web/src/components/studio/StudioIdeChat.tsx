@@ -41,6 +41,10 @@ export type StudioIdeChatProps = {
   videoTitle?: string | null;
   onSubmitUrl?: (url: string) => void;
   onSeek?: (seconds: number) => void;
+  /** A transcript quote to append to the composer (consumed once per nonce). */
+  quoteSignal?: { text: string; timestampSec?: number; nonce: number } | null;
+  /** A quick action prompt to send immediately (consumed once per nonce). */
+  quickActionSignal?: { prompt: string; nonce: number } | null;
   artifactStreamInputs?: {
     busy: boolean;
     stageId: StudioTranscriptStageId;
@@ -401,6 +405,8 @@ export default function StudioIdeChat({
   videoTitle,
   onSubmitUrl,
   onSeek,
+  quoteSignal,
+  quickActionSignal,
   artifactStreamInputs,
 }: StudioIdeChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -413,7 +419,8 @@ export default function StudioIdeChat({
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const idCounter = useRef(0);
-
+  const handledQuoteNonceRef = useRef<number | null>(null);
+  const handledQuickActionNonceRef = useRef<number | null>(null);
   const isExtracting = Boolean(isWorking) || (Boolean(videoId) && Boolean(disabled));
   const canChat = Boolean(videoId) && !disabled && !isExtracting;
   const canSubmitUrlInChat = Boolean(onSubmitUrl) && !isExtracting;
@@ -620,6 +627,39 @@ export default function StudioIdeChat({
     event?.preventDefault();
     void sendQuery(draft);
   };
+
+  const sendQueryRef = useRef(sendQuery);
+  useEffect(() => {
+    sendQueryRef.current = sendQuery;
+  }, [sendQuery]);
+
+  useEffect(() => {
+    if (!quoteSignal || handledQuoteNonceRef.current === quoteSignal.nonce) return;
+    handledQuoteNonceRef.current = quoteSignal.nonce;
+    const clean = quoteSignal.text.trim();
+    if (!clean) return;
+    const timestampPrefix =
+      typeof quoteSignal.timestampSec === 'number' &&
+      Number.isFinite(quoteSignal.timestampSec) &&
+      quoteSignal.timestampSec >= 0
+        ? `[${formatSeconds(quoteSignal.timestampSec)}] `
+        : '';
+    const quotedBlock = `> ${timestampPrefix}"${clean}"\n\n`;
+    setDraft((prev) => (prev.trim().length > 0 ? `${prev.trimEnd()}\n\n${quotedBlock}` : quotedBlock));
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    });
+  }, [quoteSignal]);
+
+  useEffect(() => {
+    if (!quickActionSignal || handledQuickActionNonceRef.current === quickActionSignal.nonce) return;
+    handledQuickActionNonceRef.current = quickActionSignal.nonce;
+    void sendQueryRef.current(quickActionSignal.prompt);
+  }, [quickActionSignal]);
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {

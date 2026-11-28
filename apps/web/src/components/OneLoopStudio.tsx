@@ -157,6 +157,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
   const [activityMode, setActivityMode] = useState<StudioActivityMode>('video');
+  const [quoteSignal, setQuoteSignal] = useState<{ text: string; timestampSec?: number; nonce: number } | null>(null);
   const [outputSection, setOutputSection] = useState<OutputSection>('tasks');
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
@@ -1329,6 +1330,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       videoTitle={selected ? formatSavedVideoLabel(selected) : null}
       onSubmitUrl={handleAnalyzeUrl}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
+      quoteSignal={quoteSignal}
       artifactStreamInputs={{
         busy: transcriptWorking,
         stageId: transcriptStage.id,
@@ -1377,6 +1379,10 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       activeSection={outputSection}
       onSectionChange={handleOutputSectionChange}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
+      onQuoteToChat={(text, timestampSec) => {
+        setQuoteSignal((prev) => ({ text, timestampSec, nonce: (prev?.nonce ?? 0) + 1 }));
+        setActivityMode('agents');
+      }}
       specReview={
         selected?.videoPack?.pack ? (
           <GroundedSpecReview
