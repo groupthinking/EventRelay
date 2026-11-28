@@ -1,8 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getCheckoutSession } from '@/lib/billing/stripe-checkout';
-import { getCheckoutActivation } from '@/lib/billing/checkout-session-store';
+import {
+  CHECKOUT_ACTIVATION_TTL_SECONDS,
+  getCheckoutActivation,
+} from '@/lib/billing/checkout-session-store';
 import { activateFromCheckoutSession } from '@/lib/billing/subscription-events';
 import type { EntitlementRecord } from '@/lib/billing/entitlement-store';
+import { getEntitlement } from '@/lib/billing/entitlement-store';
 import { BILLING_EMAIL_COOKIE } from '@/lib/billing/billing-context';
 import { signBillingEmail } from '@/lib/billing/billing-cookie';
 import { kaizenObserve } from '@/lib/billing/kaizen-trace';
@@ -41,13 +45,29 @@ export async function POST(req: NextRequest) {
     const linked = await getCheckoutActivation(sessionId);
 
     if (linked?.plan === 'pro' && (linked.status === 'active' || linked.status === 'trialing')) {
-      entitlement = entitlementFromLink(linked);
-      kaizenObserve('billing', 'activate_session_link', `Activated via checkout link ${sessionId}`, {
-        decision: `email=${linked.email}`,
-      });
+      const current = await getEntitlement(linked.email);
+      if (current && current.plan !== 'pro') {
+        entitlement = current;
+      } else {
+        entitlement = current ?? entitlementFromLink(linked);
+        kaizenObserve('billing', 'activate_session_link', `Activated via checkout link ${sessionId}`, {
+          decision: `email=${linked.email}`,
+        });
+      }
     } else {
       const session = await getCheckoutSession(sessionId);
-      entitlement = await activateFromCheckoutSession(session);
+      const isStaleSession =
+        typeof session.created === 'number' &&
+        Date.now() - session.created * 1000 > CHECKOUT_ACTIVATION_TTL_SECONDS * 1000;
+
+      if (isStaleSession) {
+        kaizenObserve('billing', 'activate_session_expired', `Rejected stale checkout session ${sessionId}`, {
+          decision: 'expired_checkout_session',
+        });
+        entitlement = null;
+      } else {
+        entitlement = await activateFromCheckoutSession(session);
+      }
     }
 
     if (!entitlement || entitlement.plan !== 'pro') {

@@ -8,7 +8,7 @@
  * get honest skip/unknown — they do not hold Deploy.
  */
 
-import type { ChecklistItem, LinkedSop } from '@/lib/linked-sop';
+import { OFFICIAL_CATALOG, type ChecklistItem, type LinkedSop } from '@/lib/linked-sop';
 
 export type StudioViewer = 'anonymous' | 'signed-in';
 export type StackCheckStatus = 'pending' | 'done' | 'skip' | 'unknown';
@@ -96,6 +96,10 @@ export function detectedStacks(sop: LinkedSop | null | undefined): Set<string> {
   for (const item of sop?.checklist || []) {
     if (item.source === 'stack' && item.stack) stacks.add(item.stack);
   }
+  for (const entity of sop?.entities || []) {
+    const entry = OFFICIAL_CATALOG.find((item) => item.name === entity.name);
+    if (entry?.stack) stacks.add(entry.stack);
+  }
   return stacks;
 }
 
@@ -128,7 +132,7 @@ export function stackCheckStatusLabel(status: StackCheckStatus): string {
     case 'skip':
       return 'Skip — not runnable while signed out';
     case 'unknown':
-      return 'Unknown — UVAI cannot run this check';
+      return 'Can be skipped — not a production hold. UVAI cannot run this check.';
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

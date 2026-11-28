@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { verifyIdentityPack } from '@/lib/emit-video-pack';
+import { GOLDEN_IDENTITY_HASHES } from '@/lib/video-pack';
 import {
   STUDIO_PRODUCT_TAGLINE,
-  studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
   studioShipCta,
@@ -14,7 +15,9 @@ import {
   studioDeployReceiptForSelection,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
+  studioPackExtractedEvents,
   studioHasDeployReceipt,
   studioVerifiedLiveUrl,
   studioInvalidHandoffMessage,
@@ -26,7 +29,6 @@ import {
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
-  studioPromotePackWorkbench,
   studioRunQuality,
   studioStatusLabel,
   studioStatusMessage,
@@ -160,9 +162,13 @@ describe('studio-pipeline-status', () => {
     expect(formation.artifacts[0]?.path_hint).toBe('src/mcp_x402_gateway.ts');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
     expect(studio).toContain('studioPackFormation');
-    expect(studio).toContain('data-testid="pack-architecture"');
-    expect(studio).toContain('data-testid="pack-artifacts"');
+    // Cut 6: architecture/artifacts render on Code & Spec, not PackWorkbench.
+    expect(output).toContain('data-testid="studio-pack-architecture"');
+    expect(output).toContain('data-testid="studio-pack-artifacts"');
+    expect(studio).not.toContain('data-testid="pack-architecture"');
+    expect(studio).not.toContain('data-testid="pack-artifacts"');
     expect(studio).toContain('packFormation.checks');
     expect(studio).not.toMatch(/router\.(push|replace)\(['"]\/dashboard/);
   });
@@ -229,13 +235,88 @@ describe('studio-pipeline-status', () => {
     expect(emptyWithPack.toLowerCase()).not.toContain('show up after run');
     expect(emptyWithPack.toLowerCase()).not.toContain('extracting');
     expect(emptyWithPack.toLowerCase()).toMatch(/no extracted events/);
-    expect(emptyWithPack.toLowerCase()).toMatch(/architecture|artifacts|stack/);
-    expect(studioPromotePackWorkbench({ eventCount: 0, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
-      true,
-    );
-    expect(studioPromotePackWorkbench({ eventCount: 3, hasArchitecture: true, artifactCount: 2, toolCount: 1 })).toBe(
-      false,
-    );
+    expect(emptyWithPack.toLowerCase()).toMatch(/code & spec|tasks & tools/);
+    expect(emptyWithPack.toLowerCase()).not.toContain('are below');
+  });
+
+  it('counts only pack events[] — not visual_elements or insight workflow cards', () => {
+    const pack = {
+      architecture: { summary: 'Pipeline', stages: [] },
+      artifacts: [{ path_hint: 'src/a.ts', purpose: 'x', interface: 'y' }],
+      stack: { tools: [{ name: 'SeaDance 2.5' }] },
+      visual_context: {
+        visual_elements: [
+          { timestamp: 1, element_type: 'guest', content: 'Guest' },
+          { timestamp: 2, element_type: 'host', content: 'Host' },
+          { timestamp: 3, element_type: 'studio', content: 'Studio' },
+        ],
+      },
+    };
+    expect(studioPackExtractedEvents(pack)).toEqual([]);
+    expect(
+      studioEventsEmptyMessage({
+        busy: false,
+        hasCompletedRun: true,
+        eventCount: studioPackExtractedEvents(pack).length,
+        hasArchitecture: true,
+        artifactCount: 1,
+        toolCount: 1,
+      }).toLowerCase(),
+    ).toMatch(/no extracted events/);
+
+    const withEvents = {
+      ...pack,
+      events: [{ type: 'action', title: 'Clip signed', label: 'Clip signed', timestamp: 12 }],
+    };
+    const shown = studioPackExtractedEvents(withEvents);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('Clip signed');
+    expect(shown[0]?.type).not.toBe('insight');
+  });
+
+  it('keeps pack events[] after verifyIdentityPack and still ignores insight cards', () => {
+    const canon = 'jNQXAC9IVRw';
+    const hash = GOLDEN_IDENTITY_HASHES[canon];
+    const identity = {
+      version: 'v0',
+      id: `vp:v0:${canon}`,
+      video_id: canon,
+      source_url: `https://www.youtube.com/watch?v=${canon}`,
+      transcript: { full_text: `cite:youtube:${canon}`, segments: [] },
+      provenance: { source_hash: hash },
+      visual_context: {
+        visual_elements: [{ timestamp: 1, element_type: 'guest', content: 'Guest' }],
+      },
+    };
+
+    const emptyCitation = verifyIdentityPack({ status: 'success', data: identity });
+    expect(emptyCitation.pack.events).toBeUndefined();
+    expect(studioPackExtractedEvents(emptyCitation.pack)).toEqual([]);
+
+    const withEvents = verifyIdentityPack({
+      status: 'success',
+      data: {
+        ...identity,
+        events: [{ id: 'evt-clip', type: 'action', title: 'Clip signed', timestamp: 12 }],
+      },
+    });
+    const shown = studioPackExtractedEvents(withEvents.pack);
+    expect(shown).toHaveLength(1);
+    expect(shown[0]?.title).toBe('Clip signed');
+    expect(shown[0]?.type).not.toBe('insight');
+  });
+
+  it('keeps unsigned ZIP export on the page with a Pro-required toast', () => {
+    const toast = studioExportProRequiredToast();
+    expect(toast.tone).toBe('error');
+    expect(toast.text.toLowerCase()).toMatch(/require pro/);
+    expect(toast.text.toLowerCase()).not.toContain('redirecting');
+    expect(toast.text.toLowerCase()).toMatch(/pricing|stay on this page/);
+
+    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
+    expect(studio).toContain('studioExportProRequiredToast');
+    expect(studio).not.toMatch(/window\.location\.href\s*=\s*result\.checkoutUrl/);
+    expect(studio).not.toMatch(/Redirecting to checkout/);
   });
 
   it('does not claim a transcript exists when a completed run only has pack identity', () => {
@@ -364,11 +445,14 @@ describe('studio-pipeline-status', () => {
     // IDE: transcript stage + ETA surface in the toolbar status line.
     expect(studio).toContain('data-testid="studio-ide-status"');
     expect(studio).toContain('data-testid="studio-transcript-retry"');
+    expect(studio).toContain('transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}');
+    expect(studio).toContain('showTranscriptRetry={showTranscriptRetry}');
+    expect(studio).toContain('onRetryTranscript={() => void runAnalysis(url || selected?.url || \'\')}');
     expect(output).toContain("data-testid={`studio-ide-output-tab-${s.id}`}");
     expect(output).toContain("{ id: 'transcript', label: 'Transcript' }");
   });
 
-  it('enables Export from pack exportability and ignores stack-check hold copy', () => {
+  it('enables Ship this from pack exportability and ignores named-tool hold copy', () => {
     expect(studioShipEnabled({ canExport: true, holdReason: null })).toBe(true);
     expect(
       studioShipEnabled({
@@ -377,18 +461,26 @@ describe('studio-pipeline-status', () => {
       }),
     ).toBe(true);
     expect(studioShipEnabled({ canExport: false, holdReason: null })).toBe(false);
-    const cta = studioShipCta({ canExport: true, holdReason: 'Production is held until 4 stack check(s) pass.' });
-    expect(cta.label).toBe('Export');
+    const cta = studioShipCta({
+      canExport: true,
+      holdReason: 'Production is held until 4 stack check(s) pass. Next: Use SeaDance 2.5 as named in the video',
+    });
+    expect(cta.label).toBe('Ship this');
     expect(cta.enabled).toBe(true);
-    expect(cta.hint.toLowerCase()).toMatch(/skip|unknown/);
+    expect(cta.hint).toMatch(/can be skipped/i);
+    expect(cta.hint).toMatch(/not a production hold/i);
+    expect(cta.hint).not.toMatch(/\bpassed\b/i);
     expect(studioShipCta({ canExport: false }).enabled).toBe(false);
+    expect(studioShipCta({ canExport: false }).label).toBe('Ship this');
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
-    expect(studio).toContain('Export');
-    expect(studio).not.toContain('studio-deploy-button');
+    expect(studio).toContain('{shipCta.label}');
+    expect(studio).toContain('studio-deploy-button');
     expect(studio).not.toMatch(/disabled=\{Boolean\(holdReason\)\}/);
+    expect(studio).toMatch(/disabled=\{deployBusy \|\| !hasPayload \|\| Boolean\(holdReason\)\}/);
+    expect(studio).not.toMatch(/data-testid="studio-ide-ship"[\s\S]{0,180}disabled=\{[^}]*holdReason/);
   });
 
   it('does not claim Deploy completed without a verified live receipt', () => {
@@ -482,10 +574,18 @@ describe('studio-pipeline-status', () => {
     }
 
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
-    // The Studio no longer contains a deploy call site.
-    expect(studio).not.toContain('const deploy = async');
-    expect(studio).not.toContain('studio-deploy-button');
+    expect(studio).toContain('const deploy = async');
+    expect(studio).toContain('studio-deploy-button');
+    expect(studio).toContain('StudioGateReceiptCard');
+    expect(studio).not.toContain('pollStudioDeploy');
+    expect(studio).not.toContain('studioGateLiveUrlForDecision');
+    const receiptCard = readFileSync(
+      join(process.cwd(), 'src/components/studio/StudioGateReceiptCard.tsx'),
+      'utf8',
+    );
+    expect(receiptCard).toContain('data-testid="studio-gate-receipt"');
+    expect(receiptCard).toContain('studioGateLiveUrlForDecision');
+    expect(receiptCard).toContain('studio-gate-live-url');
     const preflight = readFileSync(join(process.cwd(), 'src/app/api/workflows/studio-deploy/route.ts'), 'utf8');
     expect(preflight).toContain('status: 409');
     expect(preflight).not.toMatch(/\bstart\(/);
@@ -493,11 +593,10 @@ describe('studio-pipeline-status', () => {
     expect(asyncJob).toMatch(/STUDIO_ORIGIN_KICKOFF_NO_JOB_HOLD/);
     expect(asyncJob).toMatch(/AbortSignal\.timeout\(45_000\)/);
     expect(asyncJob).not.toMatch(/isGatewayTimeoutKickoff\(undefined, message\) \{\s*return STUDIO_ORIGIN_NO_HOSTNAME_HOLD/);
-    // Deploy/preflight flow deleted per product direction (2026-10-07) — redevelopment pending.
-    expect(studio).not.toContain('studioDeployButtonLabel');
+    expect(studio).toContain('studioDeployButtonLabel');
     expect(studio).not.toContain('studioDeployReceiptForSelection');
     expect(studio).not.toContain('setDeployReceiptUrl(null)');
-    expect(studio).not.toContain('setGateReceipt(null)');
+    expect(studio).toContain('setGateReceipt(null)');
     expect(studio).not.toContain('STUDIO_DEPLOY_ATTEMPT_STARTED_HOLD');
     expect(studio).not.toContain('Deploy attempt started. Waiting for a verified https live URL.');
     expect(studio).not.toContain('Deploy ${polled.runStatus');
@@ -521,38 +620,18 @@ describe('studio-pipeline-status', () => {
     expect(shell).toContain('data-testid="studio-ide-shell"');
     expect(shell).toContain('data-testid="studio-ide-toolbar"');
     expect(studio).toContain('StudioIdeShell');
+    const workbench = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    const mobile = workbench.slice(workbench.indexOf('<= 679px'));
+    expect(mobile).toMatch(/template-studio-bands\s*\{[^}]*padding-bottom:\s*calc\(72px \+ env\(safe-area-inset-bottom, 0px\)\)/);
+    const toastCss = readFileSync(join(process.cwd(), 'src/styles/studio-workbench.css'), 'utf8');
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*z-index:\s*60/);
+    expect(toastCss).toMatch(/\.studio-export-toast\s*\{[^}]*bottom:\s*calc\(4\.75rem \+ env\(safe-area-inset-bottom, 0px\)\)/);
     expect(pricing).not.toMatch(/reviewed plan dispatches backend agents/);
     expect(pricing).not.toContain('Durable workflow run history');
     expect(pricing).not.toContain('Review-only action preparation');
     expect(pricing).toContain('Workflow run history');
     expect(pricing).toContain('Proposed work from a Video Pack');
     expect(apiDocs).not.toMatch(/durable Studio analysis workflow/);
-  });
-
-  it('renders review_action as a card with status, title, and detail', () => {
-    const review = studioActionCard({
-      tool: 'review_action',
-      status: 'proposed',
-      result: 'Review evidence',
-    });
-    expect(review.kind).toBe('review');
-    expect(review.title).toMatch(/review this result/i);
-    expect(review.statusLabel).toBe('Needs review');
-    expect(review.detail).toBe('Review evidence');
-
-    const tool = studioActionCard({ tool: 'persist_insight', status: 'completed' });
-    expect(tool.kind).toBe('tool');
-    expect(tool.title).toMatch(/persist insight/i);
-    expect(tool.statusLabel).toBe('Done');
-    expect(tool.detail).toMatch(/no detail/i);
-
-    const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
-    const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
-    expect(studio).toContain('studioActionCard');
-    expect(output).toContain('studioActionCard');
-    expect(output).toContain('data-testid="studio-review-action-card"');
-    // IDE: actions surface in the Tasks & Tools tab.
-    expect(output).toContain("{ id: 'tasks', label: 'Tasks & Tools' }");
   });
 
   it('returns a toast for export success and failure including filename', () => {
@@ -580,6 +659,11 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/setExportToast\(toast\);\s*setMessage\(/);
     expect(studio).toMatch(/role=\{exportToast\.tone === 'error' \? 'alert' : 'status'\}/);
     expect(studio).not.toContain('bottom-20');
+    expect(studio).toContain('studio-export-toast');
+    const toastAt = studio.indexOf('data-testid="studio-export-toast"');
+    const toastBlock = studio.slice(Math.max(0, toastAt - 80), toastAt + 500);
+    expect(toastBlock).not.toContain('bottom-4');
+    expect(toastBlock).toContain('studio-export-toast');
   });
 
   it('covers the player until load and names a load error instead of silent 0:00', () => {
@@ -663,7 +747,7 @@ describe('studio-pipeline-status', () => {
     expect(studio).not.toMatch(/mapKeyframes|fakeEvents|invent.*events/i);
   });
 
-  it('rewires playflow B–G into the IDE (retry, Events≠INSIGHTs, stack skip, review cards)', () => {
+  it('rewires playflow B–G into the IDE (retry, Events≠INSIGHTs, stack skip)', () => {
     const studio = readFileSync(join(process.cwd(), 'src/components/OneLoopStudio.tsx'), 'utf8');
     const output = readFileSync(join(process.cwd(), 'src/components/studio/StudioIdeOutput.tsx'), 'utf8');
 
@@ -678,7 +762,11 @@ describe('studio-pipeline-status', () => {
     expect(output).not.toMatch(/label:\s*['"]Insights['"]/);
     expect(output).toContain('eventsEmptyMessage');
     expect(studio).toMatch(/studioEventsEmptyMessage\(/);
-    expect(studio).toMatch(/<PackWorkbench/);
+    // Cut 6: PackWorkbench deleted — architecture/artifacts live on Code & Spec.
+    expect(studio).not.toMatch(/function PackWorkbench/);
+    expect(studio).not.toContain('pack-workbench');
+    expect(output).toContain('studio-pack-architecture');
+    expect(output).toContain('studio-pack-artifacts');
 
     // F — anonymous stack checks surface skip/unknown; Build live is not held.
     expect(output).toContain('stackChecks');
@@ -686,13 +774,8 @@ describe('studio-pipeline-status', () => {
     expect(studio).toMatch(/stackCheckStatusLabel\(/);
     expect(studio).toMatch(/stackCheckStatus\([^)]*'anonymous'/);
     expect(studio).not.toMatch(/!canAttemptBuildLive\s*\|\|\s*.*holdReason/);
-    expect(studio).not.toContain('studio-deploy-button');
-
-    // E — proposed actions render in the Intent tab.
-    expect(output).toContain('reviewActions');
-    expect(studio).toMatch(/studioActionCard\(/);
-    expect(output).toMatch(/Needs review|statusLabel/);
-    expect(output).toContain('studio-review-act-button');
+    expect(studio).toContain('studio-deploy-button');
+    expect(studio).not.toContain('studio-build-live-button');
   });
 
   it('selects a stored pack for the header without a Stored packs combobox click (#2244)', () => {

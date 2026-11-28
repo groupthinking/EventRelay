@@ -1,23 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Copy, Download, ExternalLink, Monitor, Play, Smartphone } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, Monitor, Play, Quote, Smartphone } from 'lucide-react';
 import type { Video } from '@/store/dashboard-types';
 import type { ExtractedEvent } from '@/lib/types';
-import { studioActionCard } from '@/lib/studio-pipeline-status';
+import type { StudioOutputSection } from '@/lib/studio-ia-modes';
+import { studioPackExtractedEvents, studioProposedToolCard } from '@/lib/studio-pipeline-status';
 import type { StudioStackCheckView } from '@/lib/official-templates';
 import { formatSeconds, parseTimestampToSeconds, parseTranscriptSegments } from '@/lib/timestamp';
-import { downloadMarkdownFile } from '@/lib/download-file';
+import { downloadMarkdownFile, downloadTextFile } from '@/lib/download-file';
+import { formatSrt, formatVtt, resolveCaptionSourceLabel } from '@/lib/transcript-export';
 import StudioBoundTasks from './StudioBoundTasks';
 
-export type StudioReviewActionInput = {
-  tool: string;
-  input?: Record<string, unknown>;
-  status: string;
-  result?: string;
-};
-
-export type OutputSection = 'preview' | 'tasks' | 'code' | 'transcript';
+export type OutputSection = StudioOutputSection;
 
 const SECTIONS: Array<{ id: OutputSection; label: string }> = [
   { id: 'preview', label: 'Preview' },
@@ -31,17 +26,21 @@ export type StudioIdeOutputProps = {
   specReview?: ReactNode;
   eventsEmptyMessage?: string;
   stackChecks?: StudioStackCheckView[];
-  reviewActions?: StudioReviewActionInput[];
-  packWorkbench?: ReactNode;
   previewVideoId?: string | null;
   previewReady?: boolean;
   onBuildLive?: () => void;
   buildBusy?: boolean;
   focusPreviewSignal?: number | string | null;
-  initialSection?: OutputSection;
   activeSection?: OutputSection;
   onSectionChange?: (section: OutputSection) => void;
   onSeek?: (seconds: number) => void;
+  /** Quote a transcript line into the chat composer (Quote-to-Chat). */
+  onQuoteToChat?: (text: string, timestampSec?: number) => void;
+  /** Remaining-time copy while a transcript fetch is still running. */
+  transcriptEta?: string | null;
+  /** True when the fetch failed or has run long enough to retry. */
+  showTranscriptRetry?: boolean;
+  onRetryTranscript?: () => void;
 };
 
 /**
@@ -57,25 +56,28 @@ export default function StudioIdeOutput({
   specReview,
   eventsEmptyMessage,
   stackChecks = [],
-  reviewActions = [],
-  packWorkbench,
   previewVideoId,
   previewReady = false,
   onBuildLive,
   buildBusy = false,
   focusPreviewSignal,
-  initialSection,
   activeSection,
   onSectionChange,
   onSeek,
+  onQuoteToChat,
+  transcriptEta = null,
+  showTranscriptRetry = false,
+  onRetryTranscript,
 }: StudioIdeOutputProps) {
   const [internalActive, setInternalActive] = useState<OutputSection>(
-    initialSection ?? (previewReady ? 'preview' : 'tasks'),
+    previewReady ? 'preview' : 'tasks',
   );
   const [previewDevice, setPreviewDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [reviewingAction, setReviewingAction] = useState<string | null>(null);
   const [copiedSnippet, setCopiedSnippet] = useState<string | null>(null);
+  const [transcriptQuery, setTranscriptQuery] = useState('');
+  const [copiedTranscript, setCopiedTranscript] = useState(false);
   const prevPreviewReadyRef = useRef(Boolean(previewReady));
+  const appliedFocusPreviewSignalRef = useRef<number | string | null | undefined>(undefined);
 
   const active = activeSection ?? internalActive;
 
@@ -97,12 +99,18 @@ export default function StudioIdeOutput({
   }, [previewReady, activeSection, onSectionChange]);
 
   useEffect(() => {
-    if (focusPreviewSignal) {
-      if (activeSection === undefined) {
-        setInternalActive('preview');
-      }
-      onSectionChange?.('preview');
+    // A sticky focus signal must not re-force Preview when the section changes.
+    if (focusPreviewSignal == null || focusPreviewSignal === '' || focusPreviewSignal === 0) {
+      return;
     }
+    if (Object.is(appliedFocusPreviewSignalRef.current, focusPreviewSignal)) {
+      return;
+    }
+    appliedFocusPreviewSignalRef.current = focusPreviewSignal;
+    if (activeSection === undefined) {
+      setInternalActive('preview');
+    }
+    onSectionChange?.('preview');
   }, [focusPreviewSignal, activeSection, onSectionChange]);
 
   const resolvedVideoId =
@@ -112,7 +120,7 @@ export default function StudioIdeOutput({
     '';
 
   const pack = video?.videoPack?.pack;
-  const events: ExtractedEvent[] = video?.events ?? [];
+  const events: ExtractedEvent[] = studioPackExtractedEvents(pack);
   const topics: string[] = video?.insights?.topics ?? [];
   const actionItems = pack?.action_items ?? [];
   const stackTools = pack?.stack?.tools ?? [];
@@ -124,10 +132,11 @@ export default function StudioIdeOutput({
   const chapters = pack?.chapters ?? [];
   const linkedSop = video?.insights?.linkedSop;
 
-  const toolNames: string[] = stackTools
-    .map((t) => t.name?.trim())
-    .filter((t): t is string => Boolean(t))
-    .filter((t, i, arr) => arr.indexOf(t) === i);
+  const proposedTools = stackTools.flatMap((tool) => {
+    const name = tool.name?.trim();
+    return name ? [{ ...tool, name }] : [];
+  }).filter((tool, index, tools) => tools.findIndex((item) => item.name === tool.name) === index);
+  const toolNames: string[] = proposedTools.map((tool) => tool.name);
 
   const isProcessing = video?.status === 'processing' && !video?.videoPack;
   const canRenderPreview = Boolean(
@@ -154,13 +163,37 @@ export default function StudioIdeOutput({
           }))
         : [];
 
+  const transcriptNeedle = transcriptQuery.trim().toLowerCase();
+  const visibleSegments = transcriptNeedle
+    ? seekableSegments.filter((seg) => seg.text.toLowerCase().includes(transcriptNeedle))
+    : seekableSegments;
+  const exportSegments = seekableSegments.map((seg, index) => {
+    const next = seekableSegments[index + 1];
+    const gap = next ? next.startSeconds - seg.startSeconds : 0;
+    return { text: seg.text, start: seg.startSeconds, ...(gap > 0 ? { duration: gap } : {}) };
+  });
+  const captionSource = resolveCaptionSourceLabel({
+    timedSegmentCount: seekableSegments.length,
+    hasTranscriptText: Boolean(video?.transcript?.trim() || pack?.transcript?.full_text?.trim()),
+  });
+  const transcriptFileBase = resolvedVideoId || 'uvai-transcript';
+  const copyTranscript = async () => {
+    const text = seekableSegments.length > 0 ? seekableSegments.map((seg) => seg.text).join('\n') : video?.transcript ?? '';
+    try {
+      if (text && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        setCopiedTranscript(true);
+        window.setTimeout(() => setCopiedTranscript(false), 1800);
+      }
+    } catch {
+      // Clipboard blocked: leave the button state unchanged.
+    }
+  };
   const hasTasksExtras = Boolean(
-    reviewActions.length > 0 ||
-      actionItems.length > 0 ||
+    actionItems.length > 0 ||
       chapters.length > 0 ||
       events.length > 0 ||
       eventsEmptyMessage ||
-      packWorkbench ||
       toolNames.length > 0 ||
       linkedSop?.steps?.length ||
       topics.length > 0,
@@ -421,62 +454,10 @@ export default function StudioIdeOutput({
           <div data-testid="studio-ide-output-tasks" className="flex flex-col gap-4">
             {showBoundTasks ? <StudioBoundTasks key={video?.id ?? 'empty'} pack={pack} /> : null}
 
-            {(reviewActions.length > 0 || actionItems.length > 0) && (
+            {actionItems.length > 0 && (
               <section aria-label="Next actions" data-testid="studio-ide-output-actions" className="flex flex-col gap-3">
                 <p className="uvai-section-label px-1">Next actions</p>
                 <ul className="flex flex-col gap-3">
-                  {reviewActions.map((action, i) => {
-                    const card = studioActionCard(action);
-                    const actionKey = `${video?.id ?? 'none'}:${action.tool}:${i}`;
-                    return (
-                      <li
-                        key={`${action.tool}-${i}`}
-                        data-testid="studio-review-action-card"
-                        className="uvai-card border-l-4 !border-l-[#146ef5] p-4"
-                      >
-                        <div className="flex items-start gap-3">
-                          <span className="uvai-metric-icon mt-0.5 shrink-0">
-                            <ArrowIcon />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-accent-ink)]">
-                              {card.statusLabel}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-[var(--uvai-ink)]">{card.title}</p>
-                            <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{card.detail}</p>
-                            {card.kind === 'review' ? (
-                              <button
-                                type="button"
-                                data-testid="studio-review-act-button"
-                                onClick={() => setReviewingAction(reviewingAction === actionKey ? null : actionKey)}
-                                aria-expanded={reviewingAction === actionKey}
-                                className="uvai-btn uvai-btn-primary mt-3"
-                              >
-                                {reviewingAction === actionKey ? 'Hide proposal' : 'Review proposal'}
-                              </button>
-                            ) : null}
-                            {reviewingAction === actionKey ? (
-                              <div
-                                data-testid="studio-proposal-detail"
-                                className="mt-3 rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] p-3 text-xs text-[var(--uvai-ink-soft)]"
-                              >
-                                <p>Proposed tool: {action.tool}</p>
-                                <p>Status: {action.status}. No tool has been executed from this review.</p>
-                                {action.input ? (
-                                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded border border-[var(--uvai-border)] bg-[var(--uvai-bg)] p-2 text-[var(--uvai-ink)]">
-                                    {JSON.stringify(action.input, null, 2)}
-                                  </pre>
-                                ) : (
-                                  <p>Proposal arguments are unavailable for this run.</p>
-                                )}
-                                <p>{card.detail}</p>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </li>
-                    );
-                  })}
                   {actionItems.map((a, i) => (
                     <li key={a.id ?? i} className="uvai-card border-l-4 !border-l-[#146ef5] p-4">
                       <div className="flex items-start gap-3">
@@ -503,7 +484,7 @@ export default function StudioIdeOutput({
               </section>
             )}
 
-            {(events.length > 0 || eventsEmptyMessage || packWorkbench) && (
+            {(events.length > 0 || eventsEmptyMessage) && (
               <section aria-label="Detected events" className="flex flex-col gap-3" data-testid="studio-ide-output-events">
                 <p className="uvai-section-label px-1">Detected events</p>
                 {events.length === 0 ? (
@@ -544,7 +525,6 @@ export default function StudioIdeOutput({
                     })}
                   </ul>
                 )}
-                {packWorkbench}
               </section>
             )}
 
@@ -585,16 +565,24 @@ export default function StudioIdeOutput({
 
                 {toolNames.length > 0 ? (
                   <div className={`uvai-card p-4 ${chapters.length > 0 ? 'lg:col-span-5' : 'lg:col-span-12'}`}>
-                    <p className="uvai-section-label mb-3">Recommended tools & stack</p>
-                    <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-                      {toolNames.map((t, i) => (
-                        <li key={`${t}-${i}`} className="uvai-metric">
-                          <div className="uvai-metric-icon">
-                            <WrenchIcon />
-                          </div>
-                          <p className="font-mono text-xs font-semibold text-[var(--uvai-ink)]">{t}</p>
-                        </li>
-                      ))}
+                    <p className="uvai-section-label mb-3">Proposed tools</p>
+                    <ul className="flex flex-col gap-2">
+                      {proposedTools.map((tool) => {
+                        const card = studioProposedToolCard(tool);
+                        return (
+                          <li
+                            key={card.title}
+                            data-testid="studio-proposed-tool-card"
+                            className="rounded-md border border-[var(--uvai-border-strong)] bg-[var(--uvai-surface-warm)] p-3"
+                          >
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--uvai-accent-ink)]">
+                              {card.statusLabel}
+                            </p>
+                            <p className="mt-1 font-mono text-xs font-semibold text-[var(--uvai-ink)]">{card.title}</p>
+                            <p className="mt-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">{card.detail}</p>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </div>
                 ) : null}
@@ -774,10 +762,80 @@ export default function StudioIdeOutput({
 
         {active === 'transcript' && (
           <div data-testid="studio-ide-output-transcript" className="flex flex-col gap-4">
+            {seekableSegments.length > 0 || video?.transcript?.trim() ? (
+              <div
+                data-testid="studio-transcript-toolbar"
+                className="flex flex-wrap items-center gap-2"
+              >
+                <span
+                  data-testid="studio-transcript-caption-source"
+                  className="rounded-full border border-[var(--uvai-border)] bg-[var(--uvai-surface-warm)] px-2 py-0.5 text-[11px] text-[var(--uvai-ink-soft)]"
+                >
+                  {captionSource}
+                </span>
+                {seekableSegments.length > 0 ? (
+                  <>
+                    <label htmlFor="studio-transcript-search" className="sr-only">
+                      Search transcript
+                    </label>
+                    <input
+                      id="studio-transcript-search"
+                      name="studioTranscriptSearch"
+                      type="search"
+                      autoComplete="off"
+                      placeholder="Search transcript"
+                      value={transcriptQuery}
+                      onChange={(event) => setTranscriptQuery(event.target.value)}
+                      className="uvai-input min-w-[10rem] flex-1 !py-1 !text-xs"
+                    />
+                    {transcriptNeedle ? (
+                      <span
+                        data-testid="studio-transcript-match-count"
+                        className="text-[11px] text-[var(--uvai-ink-faint)]"
+                        aria-live="polite"
+                      >
+                        {visibleSegments.length} of {seekableSegments.length}
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  data-testid="studio-transcript-copy"
+                  onClick={() => void copyTranscript()}
+                  className="uvai-btn !px-2.5 !py-1 !text-xs"
+                >
+                  {copiedTranscript ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-download-srt"
+                  disabled={seekableSegments.length === 0}
+                  onClick={() => downloadTextFile(`${transcriptFileBase}.srt`, formatSrt(exportSegments), 'application/x-subrip;charset=utf-8')}
+                  className="uvai-btn !px-2.5 !py-1 !text-xs disabled:opacity-50"
+                >
+                  .srt
+                </button>
+                <button
+                  type="button"
+                  data-testid="studio-transcript-download-vtt"
+                  disabled={seekableSegments.length === 0}
+                  onClick={() => downloadTextFile(`${transcriptFileBase}.vtt`, formatVtt(exportSegments), 'text/vtt;charset=utf-8')}
+                  className="uvai-btn !px-2.5 !py-1 !text-xs disabled:opacity-50"
+                >
+                  .vtt
+                </button>
+              </div>
+            ) : null}
             <div data-testid="studio-transcript-body" className="uvai-card p-4">
               {seekableSegments.length > 0 ? (
+                visibleSegments.length === 0 ? (
+                  <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">
+                    No transcript lines match this search.
+                  </p>
+                ) : (
                 <ol className="flex flex-col gap-2" aria-label="Timestamped transcript">
-                  {seekableSegments.map((seg) => (
+                  {visibleSegments.map((seg) => (
                     <li
                       key={seg.key}
                       className="flex items-start gap-3 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-[var(--uvai-border)] hover:bg-[var(--uvai-surface-warm)]"
@@ -792,15 +850,48 @@ export default function StudioIdeOutput({
                       <span className="min-w-0 flex-1 text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
                         {seg.text}
                       </span>
+                      {onQuoteToChat ? (
+                        <button
+                          type="button"
+                          data-testid={`studio-transcript-quote-${seg.idx}`}
+                          aria-label={`Quote transcript at ${formatSeconds(seg.startSeconds)}`}
+                          title="Quote in chat"
+                          onClick={() => onQuoteToChat(seg.text, seg.startSeconds)}
+                          className="inline-flex shrink-0 items-center gap-1 rounded border border-[var(--uvai-border)] px-1.5 py-0.5 text-[11px] text-[var(--uvai-ink-soft)] hover:border-[var(--uvai-accent)] hover:text-[var(--uvai-ink)]"
+                        >
+                          <Quote size={10} aria-hidden="true" />
+                          <span>Quote</span>
+                        </button>
+                      ) : null}
                     </li>
                   ))}
                 </ol>
+                )
               ) : video?.transcript?.trim() ? (
                 <p className="whitespace-pre-wrap text-xs leading-relaxed text-[var(--uvai-ink-soft)]">
                   {video.transcript}
                 </p>
               ) : video?.failure?.message ? (
-                <p className="text-xs text-[var(--uvai-danger-ink)]">{video.failure.message}</p>
+                <div className="flex flex-col items-start gap-2">
+                  <p className="text-xs text-[var(--uvai-danger-ink)]">{video.failure.message}</p>
+                  {showTranscriptRetry && onRetryTranscript ? (
+                    <button
+                      type="button"
+                      data-testid="studio-transcript-pane-retry"
+                      onClick={onRetryTranscript}
+                      className="uvai-btn !px-3 !py-1 !text-xs"
+                    >
+                      Retry transcript
+                    </button>
+                  ) : null}
+                </div>
+              ) : transcriptEta ? (
+                <div className="flex flex-col gap-1 py-2">
+                  <p data-testid="studio-transcript-eta" className="text-sm font-medium text-[var(--uvai-ink)]">
+                    {transcriptEta}
+                  </p>
+                  <p className="text-xs text-[var(--uvai-ink-soft)]">Waiting on captions — no invented text.</p>
+                </div>
               ) : (
                 <p className="py-4 text-center text-xs text-[var(--uvai-ink-faint)]">Nothing yet.</p>
               )}
@@ -924,14 +1015,6 @@ function DotIcon() {
   return (
     <svg width="6" height="6" viewBox="0 0 6 6" fill="currentColor" aria-hidden="true">
       <circle cx="3" cy="3" r="3" />
-    </svg>
-  );
-}
-
-function WrenchIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
     </svg>
   );
 }

@@ -76,12 +76,14 @@ describe('UVAI is one product surface', () => {
   it('keeps stack-check unlock on the same OneLoopStudio page', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
     expect(studio).toContain('packFormation.checks');
-    expect(studio).toContain('setCompletedChecks');
+    // Cut 6: SOP check-off UI deleted; completedChecks stays an empty list for hold helpers.
+    expect(studio).toContain('completedChecks');
+    expect(studio).not.toContain('setCompletedChecks');
     expect(studio).not.toMatch(/window\.location\.(href|assign).*dashboard/);
     expect(studio).not.toMatch(/router\.push\(['"`]\/dashboard/);
   });
 
-  it('does not hold anonymous Deploy behind non-runnable stack checks', () => {
+  it('does not hold anonymous Ship behind non-runnable stack checks', () => {
     const studio = readSource('components/OneLoopStudio.tsx');
     expect(studio).toContain("deployHoldReason(linkedSop, completedChecks, 'anonymous')");
     expect(studio).toContain('stackCheckStatus');
@@ -89,6 +91,8 @@ describe('UVAI is one product surface', () => {
     expect(studio).toContain('studioShipCta');
     expect(studio).toContain('data-testid="studio-ide-ship"');
     expect(studio).not.toContain('href="/ship"');
-    expect(studio).not.toContain('studio-deploy-button');
+    expect(studio).toContain('studio-deploy-button');
+    expect(studio).toContain('StudioGateReceiptCard');
+    expect(studio).not.toMatch(/studio-ide-ship[\s\S]{0,200}disabled=\{[^}]*holdReason/);
   });
 });

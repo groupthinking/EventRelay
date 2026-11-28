@@ -163,12 +163,11 @@ describe('action-surface (F3)', () => {
     ]);
   });
 
-  it('actionsFromStudioRun prefers Analyze actions, then events, then Act tools', () => {
+  it('actionsFromStudioRun prefers Analyze actions, then events', () => {
     expect(
       actionsFromStudioRun({
         insightActions: [{ title: 'Ship scaffold', description: 'from insights', category: 'build' }],
         events: [{ type: 'action', title: 'Duplicate-ish', description: 'event' }],
-        workflowActions: [{ tool: 'save_resource', status: 'ok', result: 'saved' }],
       }),
     ).toEqual([
       { title: 'Ship scaffold', description: 'from insights', category: 'build' },
@@ -179,16 +178,8 @@ describe('action-surface (F3)', () => {
       actionsFromStudioRun({
         insightActions: [],
         events: [{ type: 'topic', title: 'Paste URL', description: 'start here' }],
-        workflowActions: [{ tool: 'create_workflow_task', status: 'ok' }],
       }),
     ).toEqual([{ title: 'Paste URL', description: 'start here', category: 'topic' }]);
-
-    expect(
-      actionsFromStudioRun({
-        events: [],
-        workflowActions: [{ tool: 'save_resource', status: 'ok', result: 'wrote file' }],
-      }),
-    ).toEqual([{ title: 'save_resource', description: 'wrote file', category: 'act' }]);
 
     expect(actionsFromStudioRun({ insightActions: [{ title: '  ' }], events: [] })).toEqual([]);
   });

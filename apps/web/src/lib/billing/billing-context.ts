@@ -44,11 +44,3 @@ export async function resolveTrustedBillingEmail(
 
   return null;
 }
-
-/** @deprecated Use resolveTrustedBillingEmail for entitlement; body email is not trusted. */
-export async function resolveBillingEmailFromRequest(
-  request: Request,
-  _bodyEmail?: string,
-): Promise<string | null> {
-  return resolveTrustedBillingEmail(request);
-}

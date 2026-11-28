@@ -65,8 +65,8 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
   draft-only conformance scope in
   [`docs/mcp-skills-sep-2640-watch.md`](./mcp-skills-sep-2640-watch.md)
   (issue [#1640](https://github.com/groupthinking/EventRelay/issues/1640)).
-- ✅ **Video-processing MCP layer** — `src/youtube_extension/mcp/`,
-  `src/mcp/mcp_ecosystem_coordinator.py`, `src/mcp/mcp_video_processor.py`.
+- ✅ **Video-processing MCP layer** — `src/agents/mcp_ecosystem_coordinator.py`
+  (`MCPVideoProcessorServer`).
 - ✅ **Standalone MCP servers** — `mcp-servers/langextract/`,
   `mcp-servers/vercel/`.
 
@@ -100,9 +100,9 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
 - ✅ **Static analysis** — CodeQL (`codeql-analysis.yml`,
   JavaScript/TypeScript + Python), `ruff`/`black`/`mypy` (Python),
   ESLint (`turbo run lint`, `apps/web`).
-- ✅ **AST-based code analysis tool** — `code_analyzer` in
-  `src/mcp/mcp_ecosystem_coordinator.py` (also referenced in
-  `.github/agents/mcp.agent.md`).
+- ⚠️ **AST-based code analysis tool** — `src/agents/mcp_ecosystem_coordinator.py`
+  does not define `code_analyzer`. The unreferenced
+  `src/analysis/code_structure_analyzer.py` stub is removed.
 - ✅ **Code review** — GitHub Copilot code review, invoked on pull requests;
   described alongside AI-assisted issue triage in
   `.github/copilot-instructions.md`.
@@ -134,7 +134,7 @@ Legend: ✅ implemented and wired up · ⚠️ present but partial/manual-only �
   workflows, triggers, and purposes (CI, coverage, CodeQL, security,
   dependency review, secret scanning, deploy, E2E, gh-aw validation, etc.).
 - ✅ **gh-aw validation** — `gh-aw-validation.yml` pins `gh aw` to
-  `v0.88.7`, compiles the repository's markdown-based agentic workflows,
+  `v1.2.2`, compiles the repository's markdown-based agentic workflows,
   and runs `actionlint` + `zizmor` + `poutine` against the compiled output
   before requiring the `.lock.yml` files to match what's committed.
 

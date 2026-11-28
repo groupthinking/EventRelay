@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LiveStudioWorkspace from '@/components/studio/live/LiveStudioWorkspace';
 import { loadSamplePack, sampleReplaySteps } from '@/lib/sample-pack';
@@ -102,6 +102,61 @@ describe('Live Studio streaming render', () => {
     expect(screen.queryByTestId('live-tasks-skeleton')).toBeNull();
     const stages = screen.getByTestId('live-stages');
     expect([...stages.querySelectorAll('[data-state]')].every((node) => node.getAttribute('data-state') === 'done')).toBe(true);
+    const eventsStage = stages.querySelector('[data-stage="events"]');
+    expect(eventsStage?.textContent).toMatch(/Events\s*0/);
+    expect(eventsStage?.textContent).not.toMatch(/Events\s*3/);
+    expect(citation.pack.visual_context?.visual_elements.length).toBeGreaterThan(0);
+    expect(citation.pack).not.toHaveProperty('events');
+  });
+
+  it('shows a transcript ETA while lines are still arriving and a retry when the fetch fails', () => {
+    const onRetry = vi.fn();
+    const { rerender } = render(
+      <LiveStudioWorkspace
+        header={<span>header</span>}
+        player={<div>player</div>}
+        chat={<div>chat</div>}
+        deliverables={<div>deliverables</div>}
+        video={videoAt(0)}
+        live
+        statusText="Working"
+        transcriptEta="About 20s left (typical ~45s)"
+        onRetryTranscript={onRetry}
+        canSeek
+        onSeek={vi.fn()}
+        onSaveTaskEdits={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('live-transcript-eta').textContent).toMatch(/20s left/i);
+    expect(screen.getByTestId('live-transcript').textContent).not.toMatch(/Paste a YouTube link/);
+
+    const failed = videoAt(0, 'failed');
+    failed.failure = {
+      stage: 'analysis',
+      message: 'Transcript fetch failed for pBsT6v-ciO8.',
+      retryable: true,
+      failedAt: '2026-11-22T00:00:00.000Z',
+    };
+    rerender(
+      <LiveStudioWorkspace
+        header={<span>header</span>}
+        player={<div>player</div>}
+        chat={<div>chat</div>}
+        deliverables={<div>deliverables</div>}
+        video={failed}
+        live={false}
+        statusText="Transcript fetch failed for pBsT6v-ciO8."
+        onRetryTranscript={onRetry}
+        canSeek
+        onSeek={vi.fn()}
+        onSaveTaskEdits={vi.fn()}
+      />,
+    );
+    const transcript = screen.getByTestId('live-transcript');
+    expect(transcript.textContent).toMatch(/Transcript fetch failed for pBsT6v-ciO8/);
+    expect(transcript.textContent).not.toMatch(/Paste a YouTube link/);
+    fireEvent.click(screen.getByTestId('live-transcript-retry'));
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
   it('labels the sample as replayed cached data', () => {

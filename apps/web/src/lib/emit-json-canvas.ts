@@ -11,9 +11,6 @@
 
 import { isDurableCapturedImagePath } from '@/lib/keyframe-image-path';
 
-export const JSON_CANVAS_SPEC = '1.0' as const;
-export const JSON_CANVAS_SPEC_URL =
-  'https://github.com/groupthinking/jsoncanvas/blob/main/spec/1.0.md' as const;
 export const MISSION_CANVAS_FILENAME = 'mission.canvas' as const;
 
 const NODE_TYPES = ['text', 'file', 'link', 'group'] as const;

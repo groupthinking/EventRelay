@@ -99,7 +99,7 @@ function useRootThemeState() {
  * Webflow-style utility bar: Light/Dark, High Contrast, and (rail only) the
  * keyboard hint. Compact mode drops the hint cell for the top bar.
  */
-function ThemeBar({ compact }: { compact: boolean }) {
+export function ThemeBar({ compact }: { compact: boolean }) {
   const { lightMode, highContrast, toggleTheme, toggleContrast } = useRootThemeState();
   const themeLabel = lightMode ? 'Switch to dark mode' : 'Switch to light mode';
 
@@ -135,15 +135,9 @@ function ThemeBar({ compact }: { compact: boolean }) {
   );
 }
 
-function RailNav({
-  pathname,
-  rightSlot,
-  subtitle,
-  defaultCollapsed = false,
-}: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
+export function useRailCollapse(defaultCollapsed = false) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
   const [userToggled, setUserToggled] = useState(false);
-  const ctaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (
@@ -172,6 +166,19 @@ function RailNav({
     setUserToggled(true);
     setCollapsed((value) => !value);
   };
+
+  return { collapsed, userToggled, toggleCollapsed, setCollapsed, setUserToggled };
+}
+
+function RailNav({
+  pathname,
+  rightSlot,
+  subtitle,
+  defaultCollapsed = false,
+}: Pick<NavProps, 'rightSlot' | 'subtitle' | 'defaultCollapsed'> & { pathname: string }) {
+  const { collapsed, userToggled, toggleCollapsed, setCollapsed, setUserToggled } =
+    useRailCollapse(defaultCollapsed);
+  const ctaRef = useRef<HTMLDivElement>(null);
 
   const expandToAccount = () => {
     setUserToggled(true);

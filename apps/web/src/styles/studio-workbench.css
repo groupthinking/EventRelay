@@ -1,12 +1,11 @@
 /* ============================================================
-   UVAI Studio — Antigravity + Webflow-obsidian split workbench.
+   UVAI Studio — Hybrid D stage shell (Cut 1).
 
    Isolated layout layer for StudioIdeShell (imported from the shell).
-   - >= 680px : single-viewport 2-column split.
-                Left  = full-height Conversation (minmax(290px, 0.9fr)).
-                Right = compact Source video (max-height 280px, 16:9 <= 175px)
-                        above full-flex Deliverables (minmax(0, 1fr)).
-                The page itself never scrolls; panes scroll internally.
+   - >= 680px : activity rail + dominant stage + context rail.
+                Stage (video/pack) owns >= ~50% width (Venue/Higgsfield proportions).
+                Context rail shows Agents chat or Tools/Files/Canvas/Code output.
+                Builder-pattern chrome; page itself never scrolls.
    - <= 679px : one pane at a time with a sticky bottom dock tablist
                 (Source | Conversation | Deliverables), no horizontal overflow.
 
@@ -16,7 +15,8 @@
    ============================================================ */
 
 /* Zero out globals.css `.uvai-card` 1.5rem padding on Studio split panes so inner headers & tabs span edge-to-edge. */
-.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card {
+.uvai-cards.template-studio-shell .template-studio-bands > section.uvai-card,
+.uvai-cards.template-studio-shell .studio-context-pane {
   padding: 0;
 }
 
@@ -207,16 +207,6 @@
   box-shadow: none;
 }
 
-.uvai-cards.template-studio-shell .studio-chat-timeline {
-  border: 1px solid var(--uvai-border-strong);
-  border-radius: 14px;
-  background: var(--uvai-surface);
-  padding: 14px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-
 .uvai-cards.template-studio-shell .studio-chat-prompt-pill {
   display: inline-flex;
   align-items: center;
@@ -331,8 +321,96 @@
   display: none;
 }
 
+/* ---- Activity rail (Builder-pattern) ---- */
+.uvai-cards.template-studio-shell .studio-activity-rail {
+  display: none;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-height: 52px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--uvai-ink-faint);
+  cursor: pointer;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__btn:hover {
+  color: var(--uvai-ink);
+  background: var(--uvai-surface-warm);
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__btn[data-active='true'] {
+  color: var(--uvai-ink);
+  background: var(--uvai-surface-warm);
+  box-shadow: inset 2px 0 0 var(--uvai-accent);
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__icon {
+  width: 18px;
+  height: 18px;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__pro {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--uvai-border-strong);
+  color: var(--uvai-ink-soft);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+}
+
+.uvai-cards.template-studio-shell .studio-activity-rail__pro:hover {
+  border-color: var(--uvai-accent);
+  color: var(--uvai-ink);
+  background: var(--uvai-accent-soft);
+}
+
+.uvai-cards.template-studio-shell .studio-stage-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--uvai-border-strong);
+  background: var(--uvai-surface-warm);
+  color: var(--uvai-ink-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.uvai-cards.template-studio-shell .studio-context-rail__strip {
+  display: none;
+}
+
 /* ============================================================
-   >= 680px: zero-scroll 2-column split workbench (half-screen & desktop)
+   >= 680px: zero-scroll Hybrid D stage shell (desktop first)
    ============================================================ */
 @media (min-width: 680px) {
   /* Page never scrolls: Nav + shell fill exactly one dynamic viewport. */
@@ -359,18 +437,13 @@
     display: none;
   }
 
-  /* Force all uncollapsed panes visible side-by-side (beats openai-template.css <= 900px) */
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
-    display: flex;
-  }
-
   /* Compact sticky toolbar */
   .uvai-cards.template-studio-shell .uvai-toolbar {
     flex-shrink: 0;
     min-height: 46px;
     padding: 6px 12px;
+    background: var(--uvai-bg);
+    border-bottom: 1px solid var(--uvai-border);
   }
   .uvai-cards.template-studio-shell .uvai-toolbar [data-testid='studio-ide-url-form'] {
     flex: 1 1 220px;
@@ -390,65 +463,103 @@
     white-space: nowrap;
   }
 
-  /* Split grid: Full-height Conversation left (~42%), compact Video top-right + Deliverables bottom-right (~58%), filling 100% width beside rail */
+  /* Hybrid D: activity | dominant stage | context */
   .uvai-cards.template-studio-shell .template-studio-bands {
     display: grid;
-    grid-template-columns: minmax(290px, 0.85fr) minmax(0, 1.15fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    gap: 10px;
+    grid-template-columns: 56px minmax(0, 1.45fr) minmax(280px, 0.7fr);
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
     flex: 1 1 0%;
     min-height: 0;
     min-width: 0;
     width: 100%;
     max-width: none;
     margin: 0;
-    padding: 10px 12px;
+    padding: 0;
     overflow: hidden;
+    background: var(--uvai-bg);
   }
 
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'] {
+  .uvai-cards.template-studio-shell .studio-activity-rail {
+    display: flex;
+    flex-direction: column;
     grid-column: 1;
-    grid-row: 1 / 3;
+    grid-row: 1;
+    gap: 4px;
     min-height: 0;
-    min-width: 0;
-    overflow: hidden;
+    padding: 8px 6px;
+    border-right: 1px solid var(--uvai-border);
+    background: var(--uvai-bg);
   }
+
+  .uvai-cards.template-studio-shell .studio-activity-rail__items {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
   .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'] {
+    display: flex;
     grid-column: 2;
     grid-row: 1;
     min-height: 0;
     min-width: 0;
-    max-height: 300px;
+    max-height: none;
     overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    border-right: 1px solid var(--uvai-border);
+    background: var(--uvai-surface);
   }
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
-    grid-column: 2;
-    grid-row: 2;
+
+  .uvai-cards.template-studio-shell .studio-context-rail {
+    display: flex;
+    grid-column: 3;
+    grid-row: 1;
     min-height: 0;
     min-width: 0;
     overflow: hidden;
+    background: var(--uvai-surface);
+    border: 0;
+    border-radius: 0;
   }
 
-  /* Collapsed panes: remaining panes reclaim the right or full space cleanly. */
   .uvai-cards.template-studio-shell
-    .template-studio-bands[data-video-collapsed='true']
-    > [data-testid='studio-ide-output-pane'] {
-    grid-column: 2;
-    grid-row: 1 / 3;
+    .template-studio-bands[data-context-collapsed='true'] {
+    grid-template-columns: 56px minmax(0, 1fr) 40px;
   }
-  .uvai-cards.template-studio-shell
-    .template-studio-bands[data-output-collapsed='true']
-    > [data-testid='studio-ide-video-pane'] {
-    grid-column: 2;
-    grid-row: 1 / 3;
-    align-self: start;
-    max-height: 320px;
+
+  .uvai-cards.template-studio-shell .studio-context-rail[data-collapsed='true'] .studio-context-rail__body {
+    display: none;
   }
-  .uvai-cards.template-studio-shell
-    .template-studio-bands[data-output-collapsed='true'][data-video-collapsed='true']
-    > [data-testid='studio-ide-chat-pane'] {
-    grid-column: 1 / 3;
-    grid-row: 1 / 3;
+
+  .uvai-cards.template-studio-shell .studio-context-rail[data-collapsed='true'] .studio-context-rail__strip {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin: 0;
+    padding: 8px 4px;
+    border: 0;
+    background: var(--uvai-surface);
+    color: var(--uvai-ink-soft);
+    cursor: pointer;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail__restore-label {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail:not([data-collapsed='true']) .studio-context-rail__strip {
+    display: none;
   }
 
   /* Pane chrome */
@@ -456,6 +567,11 @@
     flex-shrink: 0;
     min-height: 32px;
     padding: 4px 12px;
+    border-bottom: 1px solid var(--uvai-border);
+    background: var(--uvai-bg);
+  }
+  .uvai-cards.template-studio-shell .studio-stage-header {
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-pane-body {
     flex: 1 1 auto;
@@ -471,31 +587,34 @@
     min-width: 0;
   }
 
-  /* Source video: compact 16:9 frame + wrapping steps & metric chips (never clips right/bottom edge) */
+  /* Stage: media-first — theme surface for chrome; cinematic black stays on the player only */
   .uvai-cards.template-studio-shell .studio-pane-body--video {
     padding: 0;
     overflow-y: auto;
     overflow-x: hidden;
-    flex: 0 1 auto;
-    min-height: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    background: var(--uvai-surface);
   }
   .uvai-cards.template-studio-shell .studio-source-stack {
     display: flex;
     flex-direction: column;
     gap: 0;
     min-width: 0;
+    flex: 1 1 auto;
   }
   .uvai-cards.template-studio-shell .studio-video-wrap {
     border: 0;
     border-radius: 0;
     box-shadow: none;
     background: #000;
-    flex-shrink: 0;
+    flex: 0 0 auto;
+    width: 100%;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] .aspect-video {
-    max-height: 165px;
-    width: min(100%, 294px);
-    margin-inline: auto;
+    max-height: none;
+    width: 100%;
+    margin-inline: 0;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] [data-testid='studio-player'] iframe {
     position: absolute;
@@ -511,6 +630,7 @@
     padding: 4px 10px;
     flex-wrap: wrap;
     gap: 6px;
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-steps {
     flex-wrap: wrap;
@@ -539,7 +659,7 @@
     border-top: 1px solid var(--uvai-border);
     border-radius: 0;
     box-shadow: none;
-    background: transparent;
+    background: var(--uvai-bg);
   }
   .uvai-cards.template-studio-shell .studio-pack-card > *,
   .uvai-cards.template-studio-shell .studio-pack-card__head,
@@ -574,7 +694,7 @@
     gap: 6px;
   }
 
-  /* Chat: fills entire primary left column, message stream scrolls internally */
+  /* Context chat / output scroll internally */
   .uvai-cards.template-studio-shell [data-testid='studio-ide-chat'] {
     flex: 1 1 auto;
     height: 100%;
@@ -589,7 +709,6 @@
     overflow-x: hidden;
   }
 
-  /* Deliverables: tabs fixed, content scrolls internally */
   .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] {
     flex: 1 1 auto;
     height: 100%;
@@ -602,13 +721,14 @@
   }
 }
 
-/* Half-screen (680px–960px) alongside persistent 48px vertical left sidebar:
-   give Deliverables/Video slightly more width so all 4 tabs + .md fit without clipping. */
+/* Half-screen (680px–960px): keep stage dominant, tighten context */
 @media (min-width: 680px) and (max-width: 960px) {
   .uvai-cards.template-studio-shell .template-studio-bands {
-    grid-template-columns: minmax(244px, 0.82fr) minmax(0, 1.18fr);
-    gap: 8px;
-    padding: 8px 10px;
+    grid-template-columns: 52px minmax(0, 1.35fr) minmax(240px, 0.75fr);
+  }
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-context-collapsed='true'] {
+    grid-template-columns: 52px minmax(0, 1fr) 36px;
   }
   .uvai-cards.template-studio-shell [data-testid='studio-ide-output'] [role='tab'] {
     padding: 4px 5px;
@@ -625,22 +745,25 @@
     flex: 0 1 260px;
   }
   .uvai-cards.template-studio-shell .template-studio-bands {
-    gap: 12px;
-    padding: 12px 16px;
+    grid-template-columns: 56px minmax(0, 1.55fr) minmax(320px, 0.65fr);
+  }
+  .uvai-cards.template-studio-shell
+    .template-studio-bands[data-context-collapsed='true'] {
+    grid-template-columns: 56px minmax(0, 1fr) 40px;
   }
   .uvai-cards.template-studio-shell .template-studio-bands[data-details-rail='true'] {
-    grid-template-columns: minmax(290px, 0.9fr) minmax(0, 1.1fr) 288px;
+    grid-template-columns: 56px minmax(0, 1.35fr) minmax(280px, 0.6fr) 260px;
   }
   .uvai-cards.template-studio-shell .template-details-rail {
     display: flex;
     flex-direction: column;
-    grid-column: 3;
-    grid-row: 1 / 3;
+    grid-column: 4;
+    grid-row: 1;
     min-height: 0;
     overflow-y: auto;
     padding: 12px;
-    border: 1px solid var(--uvai-border);
-    border-radius: 8px;
+    border-left: 1px solid var(--uvai-border);
+    border-radius: 0;
     background: var(--uvai-surface);
     font-size: 12px;
     color: var(--uvai-ink-soft);
@@ -657,22 +780,45 @@
     overflow-x: clip;
   }
   .uvai-cards.template-studio-shell .template-studio-bands {
+    display: flex;
+    flex-direction: column;
     min-width: 0;
     max-width: 100%;
     padding: 10px 12px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
   }
-  .uvai-cards.template-studio-shell .template-studio-bands > * {
+
+  .uvai-cards.template-studio-shell .studio-activity-rail {
+    display: none;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail {
+    display: contents;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail__strip,
+  .uvai-cards.template-studio-shell .studio-context-header {
+    display: none;
+  }
+
+  .uvai-cards.template-studio-shell .studio-context-rail__body {
+    display: contents;
+  }
+
+  .uvai-cards.template-studio-shell .template-studio-bands > *,
+  .uvai-cards.template-studio-shell .studio-context-rail__body > * {
     min-width: 0;
     max-width: 100%;
   }
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-video-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-chat-pane'],
-  .uvai-cards.template-studio-shell .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-output-pane'] {
     display: none;
   }
-  .uvai-cards.template-studio-shell[data-mobile-pane='video'] .template-studio-bands > [data-testid='studio-ide-video-pane'],
-  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] .template-studio-bands > [data-testid='studio-ide-chat-pane'],
-  .uvai-cards.template-studio-shell[data-mobile-pane='output'] .template-studio-bands > [data-testid='studio-ide-output-pane'] {
+  .uvai-cards.template-studio-shell[data-mobile-pane='video'] [data-testid='studio-ide-video-pane'],
+  .uvai-cards.template-studio-shell[data-mobile-pane='chat'] [data-testid='studio-ide-chat-pane'],
+  .uvai-cards.template-studio-shell[data-mobile-pane='output'] [data-testid='studio-ide-output-pane'] {
     display: flex;
   }
 
@@ -719,4 +865,463 @@
   .uvai-cards.template-studio-shell .studio-steps {
     gap: 4px;
   }
+
+  .uvai-cards.template-studio-shell [data-testid='studio-ide-video-pane'] .aspect-video {
+    max-height: none;
+    width: 100%;
+  }
+}
+
+.studio-export-toast {
+  position: fixed;
+  left: 50%;
+  z-index: 60;
+  bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+  width: min(36rem, calc(100% - 2rem));
+  transform: translateX(-50%);
+  border-radius: 8px;
+  border: 1px solid var(--uvai-border-strong);
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 10px 30px rgb(0 0 0 / 18%);
+}
+
+.studio-export-toast--success {
+  background: var(--uvai-surface);
+  color: var(--uvai-ink);
+  border-color: var(--uvai-accent);
+}
+
+.studio-export-toast--error {
+  background: var(--uvai-danger-bg, #fff1f1);
+  color: var(--uvai-danger-ink, #8f1d1d);
+  border-color: var(--uvai-danger-border, #e7b4b4);
+}
+
+/* ---- Cut 2: pack timeline under the stage ---- */
+.studio-pack-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-top: 1px solid var(--uvai-border);
+  background: var(--uvai-bg);
+}
+
+.studio-pack-timeline__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.studio-pack-timeline__span {
+  font-size: 11px;
+  color: var(--uvai-ink-faint);
+}
+
+.studio-pack-timeline__track {
+  position: relative;
+  height: 36px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.studio-pack-timeline__rail {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--uvai-border-strong) 70%, transparent);
+}
+
+.studio-pack-timeline__chapter {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  z-index: 1;
+  margin: 0;
+  padding: 0 4px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--uvai-accent) 45%, var(--uvai-border));
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--uvai-accent-soft) 80%, transparent);
+  color: var(--uvai-ink);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.studio-pack-timeline__chapter:hover:not(:disabled),
+.studio-pack-timeline__chapter[data-selected='true'] {
+  background: color-mix(in srgb, var(--uvai-accent) 28%, var(--uvai-surface));
+  border-color: var(--uvai-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--uvai-accent) 35%, transparent);
+}
+
+.studio-pack-timeline__chapter:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.studio-pack-timeline__chapter-label {
+  display: block;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.studio-pack-timeline__tick {
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 999px;
+  background: var(--uvai-surface);
+  transform: translateX(-50%);
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.studio-pack-timeline__tick[data-kind='keyframe'] {
+  background: var(--uvai-accent-ink, var(--uvai-accent));
+  border-color: transparent;
+}
+
+.studio-pack-timeline__tick[data-kind='moment'],
+.studio-pack-timeline__tick[data-kind='event'] {
+  background: var(--uvai-surface-warm, var(--uvai-surface));
+}
+
+.studio-pack-timeline__tick:hover:not(:disabled),
+.studio-pack-timeline__tick[data-selected='true'] {
+  transform: translateX(-50%) scale(1.35);
+  border-color: var(--uvai-accent);
+}
+
+.studio-pack-timeline__tick:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.studio-pack-timeline__playhead {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  z-index: 3;
+  width: 2px;
+  margin: 0;
+  background: var(--uvai-ink);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.studio-pack-timeline__chapters {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-gutter: stable;
+}
+
+.studio-pack-timeline__chapter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 220px;
+  margin: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--uvai-border);
+  border-radius: 6px;
+  background: var(--uvai-surface);
+  color: var(--uvai-ink);
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.studio-pack-timeline__chapter-row:hover:not(:disabled),
+.studio-pack-timeline__chapter-row[data-selected='true'] {
+  border-color: var(--uvai-accent);
+  background: color-mix(in srgb, var(--uvai-accent-soft) 70%, var(--uvai-surface));
+}
+
+.studio-pack-timeline__chapter-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.studio-pack-timeline__chapter-time {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--uvai-accent-ink, var(--uvai-accent));
+}
+
+.studio-pack-timeline__chapter-topic {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 11px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.uvai-cards.template-studio-shell .studio-pack-timeline {
+  border-top: 1px solid var(--uvai-border);
+  background: var(--uvai-bg);
+}
+
+/* Cut 3 — pack-forming artifact stream (motion #1: skeletal → fill → settle) */
+.studio-artifact-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 14px;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 14px;
+  background: var(--uvai-surface);
+  overflow-wrap: anywhere;
+  animation: studio-artifact-stream-enter 280ms ease-out;
+}
+
+@keyframes studio-artifact-stream-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-artifact-stream {
+    animation: none;
+  }
+}
+
+.studio-artifact-stream__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.studio-artifact-stream__badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  margin-top: 2px;
+  border-radius: 8px;
+  background: var(--uvai-accent-soft);
+  color: var(--uvai-accent-ink);
+}
+
+.studio-artifact-stream__badge[data-state='failed'] {
+  background: var(--uvai-danger-bg);
+  color: var(--uvai-danger-ink);
+}
+
+.studio-artifact-stream__badge[data-state='settled'] {
+  background: color-mix(in srgb, #1e9a80 18%, var(--uvai-surface));
+  color: #1e9a80;
+}
+
+.studio-artifact-stream__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--uvai-ink);
+}
+
+.studio-artifact-stream__detail {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 0 0;
+  list-style: none;
+  border-top: 1px solid var(--uvai-border);
+}
+
+.studio-artifact-stream__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+
+.studio-artifact-stream__row[data-state='active'] .studio-artifact-stream__label {
+  font-weight: 500;
+  color: var(--uvai-ink);
+}
+
+.studio-artifact-stream__row[data-state='done'] .studio-artifact-stream__label {
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__row[data-state='pending'] .studio-artifact-stream__label,
+.studio-artifact-stream__row[data-state='failed'] .studio-artifact-stream__label {
+  color: var(--uvai-ink-faint);
+}
+
+.studio-artifact-stream__row[data-state='failed'] .studio-artifact-stream__label {
+  color: var(--uvai-danger-ink);
+}
+
+.studio-artifact-stream__bone {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--uvai-border) 0%,
+    color-mix(in srgb, var(--uvai-surface-warm) 70%, var(--uvai-border)) 50%,
+    var(--uvai-border) 100%
+  );
+  background-size: 200% 100%;
+  animation: studio-artifact-stream-shimmer 1.2s ease-in-out infinite;
+}
+
+.studio-artifact-stream__bone--icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  border-radius: 999px;
+}
+
+.studio-artifact-stream__bone--label {
+  height: 10px;
+  width: min(180px, 70%);
+}
+
+@keyframes studio-artifact-stream-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .studio-artifact-stream__bone {
+    animation: none;
+  }
+}
+
+.studio-artifact-stream__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--uvai-border);
+  animation: studio-artifact-stream-enter 320ms ease-out;
+}
+
+.studio-artifact-stream__preview-label {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--uvai-ink-faint);
+}
+
+.studio-artifact-stream__preview-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__preview-list {
+  margin: 4px 0 0;
+  padding-left: 1.1rem;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--uvai-ink-soft);
+}
+
+.studio-artifact-stream__preview-list code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  color: var(--uvai-ink);
+}
+
+.studio-artifact-stream__preview-soft {
+  color: var(--uvai-ink-faint);
+}
+
+.uvai-cards.template-studio-shell .studio-artifact-stream {
+  border-color: var(--uvai-border-strong);
+}
+
+.studio-gate-receipt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--uvai-border-strong);
+  border-radius: 0.75rem;
+  background: var(--uvai-bg);
+}
+
+.studio-gate-chip--pass {
+  border-color: color-mix(in srgb, #059669 45%, transparent);
+  background: color-mix(in srgb, #059669 12%, transparent);
+  color: #047857;
+}
+
+.studio-gate-chip--hold {
+  border-color: color-mix(in srgb, #d97706 45%, transparent);
+  background: color-mix(in srgb, #d97706 12%, transparent);
+  color: #b45309;
+}
+
+.studio-gate-chip--reject {
+  border-color: color-mix(in srgb, #dc2626 45%, transparent);
+  background: color-mix(in srgb, #dc2626 12%, transparent);
+  color: #b91c1c;
+}
+
+.studio-gate-chip--escalate {
+  border-color: color-mix(in srgb, #7c3aed 45%, transparent);
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+  color: #6d28d9;
 }

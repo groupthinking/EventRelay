@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Copy, Download, FileJson, Play, Sparkles } from 'lucide-react';
 import { parseTimestampToSeconds, extractYouTubeId } from '@/lib/timestamp';
 import { applyPackStackChecks, compileLinkedSop, type LinkedSop } from '@/lib/linked-sop';
@@ -24,7 +24,9 @@ import {
   downloadScaffoldPackage,
   safeProjectName,
 } from '@/lib/action-surface';
-import { type VideoToActionsResult } from '@/lib/studio-workflow';
+import {
+  startStudioDeploy,
+} from '@/lib/studio-workflow';
 import {
   packBuildLiveFailureDetails,
   packBuildLiveOutcomeMessage,
@@ -34,21 +36,24 @@ import {
   type PackBuildLiveFailureDetails,
 } from '@/lib/pack-build-live-client';
 import {
-  studioActionCard,
   studioCanExport,
   studioCanRetryTranscript,
+  studioDeployButtonLabel,
+  studioDeployEnabledHint,
+  studioDeployOutcomeMessage,
   studioEventsEmptyMessage,
   studioExportFilename,
+  studioExportProRequiredToast,
   studioExportToastMessage,
   studioInvalidHandoffMessage,
   studioPackCitation,
+  studioPackExtractedEvents,
   studioPackFormation,
   studioPackIdentity,
   studioResolveAutoSelectedPackId,
   studioPasteOutcomeMessage,
   studioPlayerOverlay,
   studioPlayerPhase,
-  studioPromotePackWorkbench,
   studioRunQuality,
   studioShipCta,
   studioStatusMessage,
@@ -62,10 +67,24 @@ import {
   resolveStudioHandoff,
   studioQueryFromSearchParams,
 } from '@/lib/studio-handoff';
-import type { VideoPackArchitecture, VideoPackArtifact, VideoPackStackTool } from '@/lib/video-pack-types';
+import {
+  evaluateStudioDeployTransition,
+  studioDeployAttemptTransitionId,
+  studioGateReceiptView,
+  type StudioGateReceiptView,
+} from '@/lib/gate-transition';
+import { CANONICAL_STUDIO_PATH } from '@/lib/auth-paths';
 import StudioIdeShell from '@/components/studio/StudioIdeShell';
 import StudioIdeChat from '@/components/studio/StudioIdeChat';
-import StudioIdeOutput from '@/components/studio/StudioIdeOutput';
+import StudioIdeOutput, { type OutputSection } from '@/components/studio/StudioIdeOutput';
+import StudioGateReceiptCard from '@/components/studio/StudioGateReceiptCard';
+import StudioPackTimeline from '@/components/studio/StudioPackTimeline';
+import { studioPackTimelineCanSeek } from '@/lib/studio-pack-timeline';
+import {
+  studioActivityForOutputSection,
+  studioOutputSectionForActivity,
+  type StudioActivityMode,
+} from '@/lib/studio-ia-modes';
 import {
   registerStudioWebMcpTools,
   type StudioWebMcpPackSnapshot,
@@ -113,98 +132,11 @@ function countLabel(count: number, singular: string, plural = `${singular}s`): s
   return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
 }
 
-function PackWorkbench({
-  architecture,
-  artifacts,
-  tools,
-  onExport,
-  canExport,
-}: {
-  architecture: VideoPackArchitecture | null;
-  artifacts: VideoPackArtifact[];
-  tools: VideoPackStackTool[];
-  onExport: () => void;
-  canExport: boolean;
-}) {
-  return (
-    <section
-      data-testid="pack-workbench"
-      className="uvai-card p-4 lg:col-span-2"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--uvai-accent-ink)]">
-          From this pack
-        </h2>
-        <button
-          type="button"
-          onClick={onExport}
-          disabled={!canExport}
-          className="uvai-btn inline-flex items-center gap-2 disabled:opacity-40"
-        >
-          <Download className="h-4 w-4" aria-hidden />
-          Export pack
-        </button>
-      </div>
-      {architecture ? (
-        <div data-testid="pack-architecture" className="mt-4">
-          <h3 className="uvai-section-label">Architecture</h3>
-          {architecture.summary ? (
-            <p className="mt-2 text-sm text-[var(--uvai-ink-soft)]">{architecture.summary}</p>
-          ) : null}
-          {architecture.stages.length > 0 ? (
-            <ol className="mt-2 space-y-1 text-sm text-[var(--uvai-ink-soft)]">
-              {architecture.stages.map((stage) => (
-                <li key={stage.id}>
-                  <span className="font-medium text-[var(--uvai-ink)]">{stage.name}</span>
-                  {stage.description ? ` — ${stage.description}` : ''}
-                </li>
-              ))}
-            </ol>
-          ) : null}
-          {architecture.mermaid ? (
-            <pre className="mt-2 overflow-auto rounded-lg border border-[var(--uvai-border-strong)] bg-[var(--uvai-bg)] p-3 font-mono text-[11px] leading-5 text-[var(--uvai-ink)]">
-              {architecture.mermaid}
-            </pre>
-          ) : null}
-        </div>
-      ) : null}
-      {artifacts.length > 0 ? (
-        <ul data-testid="pack-artifacts" className="mt-4 space-y-2">
-          {artifacts.map((artifact) => (
-            <li
-              key={artifact.path_hint}
-              className="uvai-doc-row"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-mono text-[12px] font-semibold text-[var(--uvai-accent-ink)]">{artifact.path_hint}</div>
-                <div className="mt-0.5 truncate text-sm text-[var(--uvai-ink-soft)]">{artifact.purpose}</div>
-                <div className="mt-0.5 truncate font-mono text-[11px] text-[var(--uvai-ink-faint)]">{artifact.interface}</div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {tools.length > 0 ? (
-        <ul data-testid="pack-stack-tools" className="mt-4 space-y-2">
-          {tools.map((tool) => (
-            <li key={tool.name} className="uvai-doc-row">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[var(--uvai-ink)]">{tool.name}</p>
-                {tool.kind ? <p className="text-xs text-[var(--uvai-ink-faint)]">{tool.kind}</p> : null}
-                {tool.evidence ? <p className="text-xs text-[var(--uvai-ink-soft)]">{tool.evidence}</p> : null}
-              </div>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </section>
-  );
-}
-
 export type StudioLayout = 'live' | 'classic';
 
 export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioLayout } = {}) {
   const isLive = layout === 'live';
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
@@ -214,17 +146,19 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const sampleAbortRef = useRef<AbortController | null>(null);
   const sampleStartedRef = useRef(false);
   const [sampleRunning, setSampleRunning] = useState(false);
-  const [workflowActions, setWorkflowActions] = useState<VideoToActionsResult | null>(null);
-  const [workflowActionSelectionId, setWorkflowActionSelectionId] = useState<string | null>(null);
+  const [deployBusy, setDeployBusy] = useState(false);
+  const [gateReceipt, setGateReceipt] = useState<StudioGateReceiptView | null>(null);
   const [buildBusy, setBuildBusy] = useState(false);
   const [packLiveReceiptUrl, setPackLiveReceiptUrl] = useState<string | null>(null);
   const [packLiveReceiptVideoId, setPackLiveReceiptVideoId] = useState<string | null>(null);
   const [packLiveReceiptYoutubeId, setPackLiveReceiptYoutubeId] = useState<string | null>(null);
   const [packLiveReceiptReasonCode, setPackLiveReceiptReasonCode] = useState<string | null>(null);
-  const [completedChecks, setCompletedChecks] = useState<string[]>([]);
-  const [playerEpoch, setPlayerEpoch] = useState(0);
+  const completedChecks: string[] = [];
   const [preferDirectEmbed, setPreferDirectEmbed] = useState(false);
   const [previewFocusEpoch, setPreviewFocusEpoch] = useState(0);
+  const [activityMode, setActivityMode] = useState<StudioActivityMode>('video');
+  const [quoteSignal, setQuoteSignal] = useState<{ text: string; timestampSec?: number; nonce: number } | null>(null);
+  const [outputSection, setOutputSection] = useState<OutputSection>('tasks');
   const [exportToast, setExportToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(
     null,
   );
@@ -243,12 +177,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const selectedVideoId = useDashboardStore((s) => s.selectedVideoId);
   const videos = useDashboardStore((s) => s.videos);
   const selected = videos.find((v) => v.id === selectedVideoId);
-  const scopedWorkflowActions =
-    workflowActionSelectionId === selectedVideoId &&
-    getYouTubeId(selected?.url || '') === getYouTubeId(workflowActions?.url || '') &&
-    (!url.trim() || getYouTubeId(url) === getYouTubeId(selected?.url || ''))
-      ? workflowActions
-      : null;
   const scopedPackBuildLiveSuccess = studioPackBuildLiveSuccessReceiptForSelection({
     selectedVideoId,
     receiptVideoId: packLiveReceiptVideoId,
@@ -290,14 +218,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const stackChecks = packFormation.checks;
 
   useEffect(() => {
-    setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
-    setCompletedChecks([]);
     setBuildLiveFailure(null);
     setPackLiveReceiptUrl(null);
     setPackLiveReceiptVideoId(null);
     setPackLiveReceiptYoutubeId(null);
     setPackLiveReceiptReasonCode(null);
+    setGateReceipt(null);
     setExportToast(null);
     setPreferDirectEmbed(false);
     if (skipMessageResetForIdRef.current === selectedVideoId) {
@@ -373,8 +299,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setPackLiveReceiptVideoId(null);
     setPackLiveReceiptYoutubeId(null);
     setPackLiveReceiptReasonCode(null);
-    setWorkflowActions(null);
-    setWorkflowActionSelectionId(null);
     selectVideo(null);
     setMessage('Fetching transcript…');
     const tick = window.setInterval(() => {
@@ -467,7 +391,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     setMessage('Replaying the cached sample pack stage by stage…');
     try {
       await replaySamplePack({
-        recordId: id,
         citation,
         signal: controller.signal,
         apply: (patch) => updateVideo(id, patch),
@@ -582,12 +505,19 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
   const watchHref = useMemo(() => safeYouTubeWatchHref(videoId), [videoId]);
   // Destructure at the hook call so render reads booleans + a callback ref,
   // not properties of an object that also carries refs (react-hooks/refs).
-  const { containerRef, ready: playerReady, failed: playerFailed, seekTo } =
-    useYouTubePlayer(videoId);
+  const {
+    containerRef,
+    ready: playerReady,
+    failed: playerFailed,
+    direct: playerDirect,
+    currentTime: playerCurrentTime,
+    duration: playerDuration,
+    seekTo,
+  } = useYouTubePlayer(videoId, { direct: preferDirectEmbed });
 
   useEffect(() => {
     setPreferDirectEmbed(false);
-  }, [videoId, playerEpoch]);
+  }, [videoId]);
 
   const playerPhase = studioPlayerPhase({
     videoId: videoId || null,
@@ -595,13 +525,12 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     failed: playerFailed,
   });
   const playerOverlay = studioPlayerOverlay(playerPhase);
-  const eventCount = selected?.events?.length ?? 0;
-  const promotePack = studioPromotePackWorkbench({
-    eventCount,
-    hasArchitecture: Boolean(packFormation.architecture),
-    artifactCount: packFormation.artifacts.length,
-    toolCount: packFormation.tools.length,
-  });
+  // The hook owns the nocookie iframe and its seek ref. The shell only hides
+  // the cover; it does not swap in a second iframe.
+  const showDirectEmbed = preferDirectEmbed || playerDirect;
+  const showErrorCover = !showDirectEmbed && playerPhase === 'error';
+  const embedErrorText = studioPlayerOverlay('error');
+  const eventCount = studioPackExtractedEvents(selected?.videoPack?.pack).length;
   const eventsEmptyMessage = studioEventsEmptyMessage({
     busy: transcriptWorking,
     hasCompletedRun: Boolean(selected && selected.status !== 'processing'),
@@ -626,12 +555,13 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     selected?.jobId ? { ok: true, status: 200, jobId: selected.jobId } : null,
     false,
     Boolean(videoId || selected),
-    { transcript: selected?.transcript, eventCount: selected?.events?.length ?? 0 },
+    { transcript: selected?.transcript, eventCount },
   );
   const shellPack = selected?.videoPack?.pack;
-  const canSeekActiveVideo = Boolean(
-    videoId && (!shellPack?.video_id || videoId === shellPack.video_id),
-  );
+  const canSeekActiveVideo = studioPackTimelineCanSeek({
+    videoId,
+    packVideoId: shellPack?.video_id,
+  });
   const handleAnalyzeUrl = useCallback(
     (submittedUrl: string) => {
       void runAnalysis(submittedUrl);
@@ -653,7 +583,6 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     const actions = actionsFromStudioRun({
       insightActions,
       events: selected?.events,
-      workflowActions: scopedWorkflowActions?.actions,
     });
     if (
       actions.length === 0 &&
@@ -690,9 +619,8 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       });
       const result = await downloadScaffoldPackage(pkg);
       if (!result.ok) {
-        if (result.status === 402 && result.checkoutUrl) {
-          setExportToast({ tone: 'error', text: 'Workspace ZIP exports require Pro. Redirecting to checkout…' });
-          window.location.href = result.checkoutUrl;
+        if (result.status === 402 || result.upgradeRequired) {
+          setExportToast(studioExportProRequiredToast());
           return;
         }
         const toast = studioExportToastMessage({
@@ -738,6 +666,56 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     }
     if (action.id === 'scroll_pack') {
       document.querySelector('[data-testid="video-pack"]')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const deploy = async () => {
+    const next = (selected?.url || url).trim();
+    if (!getYouTubeId(next)) {
+      setMessage('Analyze a video before deploy.');
+      return;
+    }
+    if (holdReason) {
+      setMessage(holdReason);
+      return;
+    }
+    setDeployBusy(true);
+    const attemptVideoId = selectedVideoId ?? null;
+    setGateReceipt(null);
+    const recordHandoff = (backendReason: string) => {
+      const gated = evaluateStudioDeployTransition({
+        transitionId: studioDeployAttemptTransitionId({ videoId: attemptVideoId }),
+        kind: 'handoff',
+        backendReason,
+        authority: { actor: 'anonymous' },
+      });
+      setGateReceipt(studioGateReceiptView(gated, { backendReason }));
+      setMessage(backendReason);
+    };
+    try {
+      const started = await startStudioDeploy({ url: next });
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      if (started.status === 401 || started.status === 403) {
+        router.push(`/login?callbackUrl=${encodeURIComponent(CANONICAL_STUDIO_PATH)}`);
+        return;
+      }
+      if (started.gate) {
+        setGateReceipt(started.gate);
+        setMessage(started.gate.reason);
+        return;
+      }
+      // POST answers 409 or an error and never includes a runId.
+      recordHandoff(started.error || started.message || 'Deploy needs sign-in.');
+    } catch (err) {
+      if (useDashboardStore.getState().selectedVideoId !== attemptVideoId) return;
+      recordHandoff(
+        studioDeployOutcomeMessage({
+          error: err instanceof Error ? err.message : 'Deploy failed.',
+          runStatus: 'failed',
+        }),
+      );
+    } finally {
+      setDeployBusy(false);
     }
   };
 
@@ -884,7 +862,9 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         },
       },
       { signal: controller.signal },
-    );
+    ).catch((error: unknown) => {
+      console.error('WebMCP tool registration failed:', error);
+    });
     return () => {
       controller.abort();
     };
@@ -965,7 +945,18 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           )}
         >
           <Download className="h-4 w-4" aria-hidden />
-          Export
+          {shipCta.label}
+        </button>
+        <button
+          type="button"
+          data-testid="studio-deploy-button"
+          onClick={() => void deploy()}
+          disabled={deployBusy || !hasPayload || Boolean(holdReason)}
+          aria-describedby="studio-preflight-hint"
+          title={holdReason || studioDeployEnabledHint(false)}
+          className="uvai-btn inline-flex shrink-0 items-center gap-1.5 disabled:opacity-40"
+        >
+          {deployBusy ? 'Checking preflight…' : studioDeployButtonLabel(false)}
         </button>
         {isLive ? (
           <>
@@ -1049,25 +1040,10 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     <div className="studio-video-wrap relative overflow-hidden rounded-lg border border-[var(--uvai-border-strong)] bg-black shadow-sm">
       {videoId ? (
         <div
-          key={`${videoId}-${playerEpoch}`}
-          className={clsx(
-            'relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950',
-            !isLive && 'max-h-[200px] max-w-[356px]',
-          )}
+          key={videoId}
+          className="relative mx-auto aspect-video w-full overflow-hidden bg-neutral-950"
         >
-          {preferDirectEmbed ? (
-            <iframe
-              src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(videoId)}?rel=0&modestbranding=1&autoplay=1`}
-              title="YouTube source player"
-              className="h-full w-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-              referrerPolicy="strict-origin-when-cross-origin"
-              data-testid="studio-player-fallback-iframe"
-            />
-          ) : (
-            <>
-              {!playerReady && !playerFailed ? (
+              {!showDirectEmbed && !playerReady && !playerFailed ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`}
@@ -1089,7 +1065,7 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                 data-testid="studio-player"
                 title="YouTube source"
               />
-              {playerOverlay && playerPhase === 'loading' ? (
+              {!showDirectEmbed && playerOverlay && playerPhase === 'loading' && !showErrorCover ? (
                 <button
                   type="button"
                   data-testid="studio-player-overlay"
@@ -1104,34 +1080,38 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
                     {playerOverlay}
                   </span>
                 </button>
-              ) : playerOverlay && playerPhase === 'error' ? (
+              ) : showErrorCover ? (
                 <div
                   data-testid="studio-player-overlay"
-                  className="pointer-events-none absolute inset-x-2 bottom-2 z-20 flex flex-wrap items-center justify-end gap-1.5"
+                  className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-neutral-950 px-4 text-center"
                 >
-                  <button
-                    type="button"
-                    data-testid="studio-player-retry"
-                    onClick={() => {
-                      setPreferDirectEmbed(false);
-                      setPlayerEpoch((epoch) => epoch + 1);
-                    }}
-                    className="uvai-btn pointer-events-auto !bg-black/75 !px-2.5 !py-1 !text-[11px] text-white backdrop-blur-sm"
-                  >
-                    Retry player
-                  </button>
+                  <p className="max-w-sm text-sm font-medium text-white">{embedErrorText}</p>
+                  <div className="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      data-testid="studio-player-retry"
+                      onClick={() => setPreferDirectEmbed(true)}
+                      className="uvai-btn !bg-white !px-3 !py-1 !text-xs !text-neutral-950"
+                    >
+                      Retry player
+                    </button>
+                    {watchHref ? (
+                      <a
+                        href={watchHref}
+                        target="_blank"
+                        rel="noreferrer"
+                        data-testid="studio-player-open-youtube"
+                        className="uvai-btn !px-3 !py-1 !text-xs text-white"
+                      >
+                        Open on YouTube
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               ) : null}
-            </>
-          )}
         </div>
       ) : (
-        <div
-          className={clsx(
-            'flex aspect-video w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]',
-            !isLive && 'max-h-[200px]',
-          )}
-        >
+        <div className="flex aspect-video w-full flex-col items-center justify-center gap-3 bg-[var(--uvai-surface)] px-6 text-center text-sm text-[var(--uvai-ink-faint)]">
           <p>Paste a YouTube link above or in chat to load the video.</p>
           <button
             type="button"
@@ -1147,9 +1127,21 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
     </div>
   );
 
+  const timelineNode = shellPack ? (
+    <StudioPackTimeline
+      pack={shellPack}
+      canSeek={canSeekActiveVideo}
+      onSeek={canSeekActiveVideo ? seekTo : undefined}
+      // Selection-scoped: never scale/playhead from a mismatched URL's player.
+      currentTime={canSeekActiveVideo ? playerCurrentTime : 0}
+      playerDuration={canSeekActiveVideo ? playerDuration : null}
+    />
+  ) : null;
+
   const videoPaneNode = (
     <div className="studio-source-stack flex min-w-0 flex-col gap-3">
       {playerNode}
+      {timelineNode}
       <div className="studio-steps-bar flex min-w-0 max-w-full flex-wrap items-center justify-between gap-2 px-3 py-1.5">
         <ol
           data-testid="studio-extraction-steps"
@@ -1335,12 +1327,36 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       disabled={transcriptWorking}
       isWorking={transcriptWorking}
       statusText={statusText}
-      activeStage={transcriptStage.label}
       videoTitle={selected ? formatSavedVideoLabel(selected) : null}
       onSubmitUrl={handleAnalyzeUrl}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
+      quoteSignal={quoteSignal}
+      artifactStreamInputs={{
+        busy: transcriptWorking,
+        stageId: transcriptStage.id,
+        hasPack: Boolean(selected?.videoPack),
+        hasPackIdentity: Boolean(packIdentity),
+        hasTranscript: Boolean(selected?.transcript?.trim()),
+        hasFailed: !transcriptWorking && selected?.status === 'failed',
+        formation: {
+          architecture: packFormation.architecture,
+          artifacts: packFormation.artifacts,
+          tools: packFormation.tools,
+        },
+      }}
     />
   );
+
+  const handleActivityChange = (mode: StudioActivityMode) => {
+    setActivityMode(mode);
+    const section = studioOutputSectionForActivity(mode);
+    if (section) setOutputSection(section);
+  };
+
+  const handleOutputSectionChange = (section: OutputSection) => {
+    setOutputSection(section);
+    setActivityMode(studioActivityForOutputSection(section));
+  };
 
   const outputNode = (
     <StudioIdeOutput
@@ -1354,31 +1370,19 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
         null
       }
       previewReady={Boolean(scopedPackBuildLiveSuccess)}
+      transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}
+      showTranscriptRetry={showTranscriptRetry}
+      onRetryTranscript={() => void runAnalysis(url || selected?.url || '')}
       onBuildLive={() => void buildLive()}
       buildBusy={buildBusy}
       focusPreviewSignal={previewFocusEpoch}
-      initialSection="tasks"
+      activeSection={outputSection}
+      onSectionChange={handleOutputSectionChange}
       onSeek={canSeekActiveVideo ? seekTo : undefined}
-      reviewActions={(scopedWorkflowActions?.actions ?? []).map((action) => {
-        const card = studioActionCard(action);
-        return {
-          tool: action.tool,
-          input: action.input,
-          status: action.status,
-          result: action.result ?? card.detail,
-        };
-      })}
-      packWorkbench={
-        promotePack ? (
-          <PackWorkbench
-            architecture={packFormation.architecture}
-            artifacts={packFormation.artifacts}
-            tools={packFormation.tools}
-            onExport={() => void exportPkg()}
-            canExport={hasPayload}
-          />
-        ) : undefined
-      }
+      onQuoteToChat={(text, timestampSec) => {
+        setQuoteSignal((prev) => ({ text, timestampSec, nonce: (prev?.nonce ?? 0) + 1 }));
+        setActivityMode('agents');
+      }}
       specReview={
         selected?.videoPack?.pack ? (
           <GroundedSpecReview
@@ -1414,12 +1418,16 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
           statusText={statusText}
           canSeek={canSeekActiveVideo}
           onSeek={seekTo}
+          transcriptEta={transcriptWorking ? studioTranscriptEtaLabel(elapsed) : null}
+          onRetryTranscript={() => void runAnalysis(url || selected?.url || '')}
           onSaveTaskEdits={(taskEdits) => {
             if (selected) updateVideo(selected.id, { taskEdits });
           }}
         />
       ) : (
         <StudioIdeShell
+          activityMode={activityMode}
+          onActivityChange={handleActivityChange}
           toolbar={toolbarNode}
           videoPane={videoPaneNode}
           chatPane={chatNode}
@@ -1428,15 +1436,25 @@ export default function OneLoopStudio({ layout = 'classic' }: { layout?: StudioL
       )}
 
 
+      <p id="studio-preflight-hint" className="sr-only">
+        {studioDeployEnabledHint(false)}
+      </p>
+
+      {gateReceipt ? (
+        <div className="border-t border-[var(--uvai-border)] bg-[var(--uvai-surface)]">
+          <div className="mx-auto max-w-[1360px] px-4 py-2 sm:px-6">
+            <StudioGateReceiptCard receipt={gateReceipt} />
+          </div>
+        </div>
+      ) : null}
+
       {exportToast ? (
         <div
           data-testid="studio-export-toast"
           role={exportToast.tone === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'fixed bottom-4 left-1/2 z-40 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded-lg border px-4 py-3 text-sm shadow-lg',
-            exportToast.tone === 'success'
-              ? 'border-[#146ef5]/50 bg-[#111a2e]/95 text-[#e8f0ff]'
-              : 'border-red-500/45 bg-[#241012]/95 text-red-200',
+            'studio-export-toast',
+            exportToast.tone === 'success' ? 'studio-export-toast--success' : 'studio-export-toast--error',
           )}
         >
           {exportToast.text}

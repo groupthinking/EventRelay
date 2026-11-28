@@ -13,17 +13,27 @@ export async function POST(req: NextRequest) {
   }
 
   const email = await resolveTrustedBillingEmail(req);
-  const entitlement = email ? await getEntitlement(email) : null;
+  if (!email) {
+    kaizenObserve('billing', 'renewal_rejected', 'Anonymous renewal attempt blocked', {
+      decision: 'unauthenticated_renewal',
+    });
+    return NextResponse.json(
+      { error: 'billing_identity_required', code: 'billing_identity_required' },
+      { status: 401 },
+    );
+  }
+
+  const entitlement = await getEntitlement(email);
   const customerId = entitlement?.stripeCustomerId;
 
   kaizenObserve('billing', 'renewal_start', 'Returning user renewal checkout requested', {
-    decision: `annual=${Boolean(body.annual)} email=${email ?? 'anonymous'} customerId=${customerId ? 'stored' : 'none'}`,
+    decision: `annual=${Boolean(body.annual)} email=${email} customerId=${customerId ? 'stored' : 'none'}`,
   });
 
   try {
     const result = await createProCheckoutSession({
       annual: Boolean(body.annual),
-      customerEmail: email ?? undefined,
+      customerEmail: email,
       customerId,
       flow: 'renewal',
     });

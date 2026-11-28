@@ -23,7 +23,12 @@ export function patchSource(src) {
   const hasAffectedCallSite =
     src.includes('await fetch(') ||
     src.includes('await undiciFetch(') ||
-    src.includes('dispatcher: getDispatcher(');
+    src.includes('dispatcher: getDispatcher(') ||
+    // world-vercel 5.x: instrumentedFetch (http-core.js) passes a bare
+    // `dispatcher,` into `fetch(url, {...})`, and utils.js passes
+    // `dispatcher: undiciDispatcher` into `fetch(undiciRequest, {...})`.
+    /^\s*dispatcher,\s*$/m.test(src) ||
+    /dispatcher:\s*undiciDispatcher\b/.test(src);
   if (!hasAffectedCallSite) {
     return { src, result: 'no-fetch-call' };
   }
@@ -41,6 +46,7 @@ export function patchSource(src) {
   // Do not pass Agent across fetch (#P / #dispatch).
   next = next
     .replace(/\s*dispatcher:\s*getDispatcher\([^)]*\),?/g, '')
+    .replace(/\s*dispatcher:\s*undiciDispatcher,?/g, '')
     .replace(/^\s*dispatcher,\s*$/gm, '');
   if (next === src) {
     return { src, result: 'already-patched' };
